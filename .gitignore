@@ -1,0 +1,4 @@
+/bin/
+/web/node_modules/
+/pod/webdist/dist/
+*.tmp
