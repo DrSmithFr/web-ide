@@ -1,8 +1,10 @@
-// EditorView renders a Doc in a contenteditable <pre> holding a single text node.
-// Every edit is intercepted (beforeinput), applied to the Doc, then mirrored into the text
-// node with replaceData, which keeps the node and the caret in place. Colors come from
-// the CSS Custom Highlight API: one Highlight per token type, no <span> in the DOM. Only
-// the visible lines (plus a margin) get ranges, rebuilt on the next frame after a change.
+// EditorView renders a Doc in a contenteditable <pre>. The text is split into blocks of a
+// few dozen lines (one <div> and one text node each): an edit only lays out its own block,
+// which keeps typing fast in files of several MB. Every edit is intercepted (beforeinput),
+// applied to the Doc, then mirrored into the block with replaceData, which keeps the node
+// and the caret in place. Colors come from the CSS Custom Highlight API: one Highlight per
+// token type, no <span> in the DOM. Only the visible lines (plus a margin) get ranges,
+// rebuilt on the next frame after a change or a scroll. The gutter is virtual too.
 import { Highlighter, type Token } from './tokenizer'
 import { grammar } from './languages'
 import { subwordLeft, subwordRight } from './subword'
@@ -46,6 +48,24 @@ const commentPrefix: Record<string, string> = {
   nginx: '#', sql: '--', redis: '#',
 }
 
+/** Lines per block, and the size above which a block is split again. */
+const BLOCK = 64
+const MAX_BLOCK = 160
+/** Lines rendered (highlights, gutter) around the visible ones. */
+const MARGIN = 40
+
+interface Block {
+  el: HTMLDivElement
+  text: Text
+  lines: number
+  index: number
+}
+
+interface Spans {
+  list: [number, number][]
+  priority: number
+}
+
 let viewSeq = 0
 
 export class EditorView {
@@ -53,17 +73,19 @@ export class EditorView {
   readonly root: HTMLDivElement
   readonly scroller: HTMLDivElement
   readonly content: HTMLPreElement
-  private gutter: HTMLPreElement
+  private gutter: HTMLDivElement
+  private gutterNums: HTMLPreElement
   private curLine: HTMLDivElement
   private boxes: HTMLDivElement
   private tooltip: HTMLDivElement
-  private textNode: Text
+  private blocks: Block[] = []
+  private blockStarts: number[] | null = null
+  private blockOf = new WeakMap<Node, Block>()
   private hl: Highlighter
   private own = new Map<string, AbstractRange[]>()
-  private live = new Map<string, Range[]>()
+  private spans = new Map<string, Spans>()
   private disposers: (() => void)[] = []
   private frame = 0
-  private lineCountShown = -1
   private composing = false
   private lastSel: Selection = { anchor: 0, head: 0 }
   private diagnostics: Diagnostic[] = []
@@ -79,9 +101,12 @@ export class EditorView {
     this.scroller.className = 'ed-scroll'
     const inner = document.createElement('div')
     inner.className = 'ed-inner'
-    this.gutter = document.createElement('pre')
+    this.gutter = document.createElement('div')
     this.gutter.className = 'ed-gutter'
     this.gutter.setAttribute('aria-hidden', 'true')
+    this.gutterNums = document.createElement('pre')
+    this.gutterNums.className = 'ed-gutter-nums'
+    this.gutter.append(this.gutterNums)
     const main = document.createElement('div')
     main.className = 'ed-main'
     this.curLine = document.createElement('div')
@@ -96,8 +121,6 @@ export class EditorView {
     this.content.setAttribute('role', 'textbox')
     this.content.setAttribute('aria-multiline', 'true')
     this.setReadOnly(!!opts.readOnly || doc.readOnly)
-    this.textNode = document.createTextNode(doc.text + '\n')
-    this.content.appendChild(this.textNode)
     this.tooltip = document.createElement('div')
     this.tooltip.className = 'ed-tooltip'
     main.append(this.curLine, this.boxes, this.content)
@@ -105,6 +128,7 @@ export class EditorView {
     this.scroller.append(inner)
     this.root.append(this.scroller, this.tooltip)
     this.root.style.setProperty('--tab-size', String(opts.tabSize))
+    this.buildAll()
 
     this.hl = new Highlighter(grammar(doc.lang), (i) => doc.lineText(i), () => doc.lineCount)
 
@@ -145,6 +169,112 @@ export class EditorView {
     this.schedule()
   }
 
+  // ---------- blocks ----------
+
+  private blockText(first: number, lines: number, last: boolean) {
+    const d = this.doc
+    const a = d.lineStart(first)
+    // Each block ends with the newline of its last line; the last block gets an extra one,
+    // without which the browser would not show an empty last line.
+    return last ? d.text.slice(a) + '\n' : d.text.slice(a, d.lineStart(first + lines))
+  }
+
+  private makeBlock(first: number, lines: number, last: boolean): Block {
+    const el = document.createElement('div')
+    el.className = 'ed-block'
+    const text = document.createTextNode(this.blockText(first, lines, last))
+    el.append(text)
+    const b: Block = { el, text, lines, index: 0 }
+    this.blockOf.set(el, b)
+    this.blockOf.set(text, b)
+    return b
+  }
+
+  private makeBlocks(first: number, total: number, last: boolean): Block[] {
+    const out: Block[] = []
+    for (let line = first; line < first + total; line += BLOCK) {
+      const n = Math.min(BLOCK, first + total - line)
+      out.push(this.makeBlock(line, n, last && line + n >= first + total))
+    }
+    return out
+  }
+
+  private buildAll() {
+    this.clearOwn()
+    this.blocks = this.makeBlocks(0, this.doc.lineCount, true)
+    const frag = document.createDocumentFragment()
+    for (const b of this.blocks) frag.append(b.el)
+    this.content.replaceChildren(frag)
+    this.blockStarts = null
+  }
+
+  /** First line of each block (cached until the next structural change). */
+  private starts(): number[] {
+    if (!this.blockStarts) {
+      const s = new Array<number>(this.blocks.length)
+      let line = 0
+      for (let i = 0; i < this.blocks.length; i++) {
+        s[i] = line
+        this.blocks[i].index = i
+        line += this.blocks[i].lines
+      }
+      this.blockStarts = s
+    }
+    return this.blockStarts
+  }
+
+  private blockIndex(line: number) {
+    const s = this.starts()
+    let lo = 0
+    let hi = s.length - 1
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1
+      if (s[mid] <= line) lo = mid
+      else hi = mid - 1
+    }
+    return lo
+  }
+
+  private blockStartOffset(i: number) {
+    return this.doc.lineStart(this.starts()[i])
+  }
+
+  /** DOM position (text node, offset) of a document offset. */
+  private domAt(offset: number): [Text, number] {
+    const o = Math.max(0, Math.min(offset, this.doc.text.length))
+    const i = this.blockIndex(this.doc.lineAt(o))
+    return [this.blocks[i].text, o - this.blockStartOffset(i)]
+  }
+
+  /** Mirrors a change of the Doc into the blocks. */
+  private applyToBlocks(c: Change, domDone: boolean) {
+    const a = this.blockIndex(c.fromLine)
+    const b = this.blockIndex(c.fromLine + c.oldLines - 1)
+    const delta = c.newLines - c.oldLines
+    if (a === b) {
+      const blk = this.blocks[a]
+      // Lines before the change did not move: the block start offset is still valid.
+      if (!domDone) blk.text.replaceData(c.from - this.blockStartOffset(a), c.to - c.from, c.text)
+      blk.lines += delta
+      this.blockStarts = null
+      if (blk.lines > MAX_BLOCK) this.rebuild(a, a, 0)
+      return
+    }
+    this.rebuild(a, b, delta)
+  }
+
+  /** Recreates blocks a..b from the Doc (edit across blocks, or a block grown too big). */
+  private rebuild(a: number, b: number, delta: number) {
+    const s = this.starts()
+    let total = delta
+    for (let i = a; i <= b; i++) total += this.blocks[i].lines
+    const fresh = this.makeBlocks(s[a], total, b === this.blocks.length - 1)
+    this.blocks[a].el.before(...fresh.map((x) => x.el))
+    for (let i = a; i <= b; i++) this.blocks[i].el.remove()
+    this.blocks.splice(a, b - a + 1, ...fresh)
+    this.blockStarts = null
+  }
+
   // ---------- setup ----------
 
   mount(parent: HTMLElement) {
@@ -161,8 +291,8 @@ export class EditorView {
     this.padTop = parseFloat(cs.paddingTop) || 0
     const probe = document.createElement('span')
     probe.textContent = 'x'.repeat(100)
-    probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;font:inherit'
-    this.content.appendChild(probe)
+    probe.style.cssText = `position:absolute;visibility:hidden;white-space:pre;font:${cs.font}`
+    this.root.appendChild(probe)
     this.charWidth = probe.getBoundingClientRect().width / 100 || 8
     probe.remove()
     this.schedule()
@@ -194,11 +324,6 @@ export class EditorView {
   destroy() {
     cancelAnimationFrame(this.frame)
     this.clearOwn()
-    for (const [name, ranges] of this.live) {
-      const h = highlight(name)
-      for (const r of ranges) h?.delete(r)
-    }
-    this.live.clear()
     for (const d of this.disposers) d()
     this.root.remove()
   }
@@ -215,10 +340,17 @@ export class EditorView {
 
   private domOffset(node: Node | null, off: number): number {
     const len = this.doc.text.length
-    if (node === this.textNode) return Math.min(off, len)
-    if (node === this.content) return off === 0 ? 0 : len
+    const b = node ? this.blockOf.get(node) : undefined
+    if (b && this.blocks[b.index] === b) {
+      this.starts()
+      const start = this.blockStartOffset(b.index)
+      if (node === b.text) return Math.min(start + off, len)
+      if (off === 0) return start
+      return b.index + 1 < this.blocks.length ? this.blockStartOffset(b.index + 1) : len
+    }
+    if (node === this.content) return off >= this.blocks.length ? len : this.blockStartOffset(off)
     if (node && this.content.contains(node)) {
-      // Unexpected structure (during composition): count the text before the node.
+      // Unexpected structure (during a composition): count the text before the node.
       const r = document.createRange()
       r.setStart(this.content, 0)
       r.setEnd(node, off)
@@ -241,8 +373,9 @@ export class EditorView {
     head = Math.max(0, Math.min(head, len))
     this.lastSel = { anchor, head }
     if (document.activeElement !== this.content) this.focus()
-    const sel = document.getSelection()
-    sel?.setBaseAndExtent(this.textNode, anchor, this.textNode, head)
+    const [an, ao] = this.domAt(anchor)
+    const [hn, ho] = this.domAt(head)
+    document.getSelection()?.setBaseAndExtent(an, ao, hn, ho)
     if (scroll) this.scrollToOffset(head)
     this.updateCurLine()
     this.opts.onSelection?.(this.lastSel)
@@ -282,52 +415,90 @@ export class EditorView {
 
   private onDocChange(c: Change) {
     const o = c.origin as any
-    if (!(o && o.view === this && o.domDone)) {
-      this.textNode.replaceData(c.from, c.to - c.from, c.text)
-    }
-    // Keep this view's selection in place when another view or the pod edits.
+    const focused = this.hasFocus()
+    this.applyToBlocks(c, !!(o && o.view === this && o.domDone))
+    // Keep this view's selection and highlighted spans in place when another view or the pod edits.
     const delta = c.text.length - (c.to - c.from)
     const map = (p: number) => (p <= c.from ? p : p >= c.to ? p + delta : c.from + c.text.length)
-    if (o !== this) this.lastSel = { anchor: map(this.lastSel.anchor), head: map(this.lastSel.head) }
+    if (o !== this) {
+      this.lastSel = { anchor: map(this.lastSel.anchor), head: map(this.lastSel.head) }
+      if (focused && !(o && o.view === this)) {
+        const [an, ao] = this.domAt(this.lastSel.anchor)
+        const [hn, ho] = this.domAt(this.lastSel.head)
+        document.getSelection()?.setBaseAndExtent(an, ao, hn, ho)
+      }
+    }
+    for (const s of this.spans.values()) {
+      for (const sp of s.list) {
+        sp[0] = map(sp[0])
+        sp[1] = map(sp[1])
+      }
+    }
+    for (const d of this.diagnostics) {
+      d.from = map(d.from)
+      d.to = map(d.to)
+    }
     if (this.statement) this.statement = null
     this.hl.edit(c.fromLine, c.oldLines, c.newLines)
     this.schedule()
   }
 
+  private intact() {
+    const kids = this.content.childNodes
+    if (kids.length !== this.blocks.length) return false
+    for (let i = 0; i < kids.length; i++) {
+      const b = this.blocks[i]
+      if (kids[i] !== b.el || b.el.childNodes.length !== 1 || b.el.firstChild !== b.text) return false
+    }
+    return true
+  }
+
   /** The DOM changed without going through beforeinput (IME composition, autocorrect). */
   private syncFromDom() {
     if (this.composing) return
-    if (this.content.childNodes.length !== 1 || this.content.firstChild !== this.textNode) {
-      const sel = this.getSelection()
-      const text = this.content.textContent ?? ''
-      this.textNode = document.createTextNode(text.endsWith('\n') ? text : text + '\n')
-      this.content.replaceChildren(this.textNode)
-      this.clearOwn()
-      this.lastSel = sel
-    }
-    const dom = this.textNode.data
-    const expected = this.doc.text + '\n'
-    if (dom === expected) return
     const sel = this.getSelection()
-    let a = 0
-    const max = Math.min(dom.length, expected.length)
-    while (a < max && dom.charCodeAt(a) === expected.charCodeAt(a)) a++
-    let b = 0
-    while (b < max - a && dom.charCodeAt(dom.length - 1 - b) === expected.charCodeAt(expected.length - 1 - b)) b++
-    let inserted = dom.slice(a, dom.length - b)
-    let to = expected.length - b
-    if (to > this.doc.text.length) to = this.doc.text.length
-    if (!dom.endsWith('\n')) {
-      this.textNode.appendData('\n')
-    }
-    inserted = inserted.replace(/\r\n?/g, '\n')
-    if (this.readOnly) {
-      this.textNode.data = expected
+    if (!this.intact()) {
+      // The browser restructured the blocks: take the whole text back, then rebuild.
+      const dom = (this.content.textContent ?? '').replace(/\n$/, '')
+      this.applyDomText(0, this.doc.text.length, dom, true)
+      this.buildAll()
+      this.setSelection(sel.anchor, sel.head, false)
+      this.schedule()
       return
     }
-    this.doc.replace(a, to, inserted, { view: this, domDone: true }, { selAfter: sel })
-    if (this.textNode.data !== this.doc.text + '\n') this.textNode.data = this.doc.text + '\n'
+    // Usually only the block holding the caret changed; else compare them all.
+    const focusBlock = this.blockOf.get(document.getSelection()?.focusNode as Node)
+    const order = focusBlock ? [focusBlock.index, ...this.blocks.keys()] : [...this.blocks.keys()]
+    for (const i of order) {
+      const s = this.starts()
+      const b = this.blocks[i]
+      const last = i === this.blocks.length - 1
+      const expected = this.blockText(s[i], b.lines, last)
+      if (b.text.data === expected) continue
+      const start = this.blockStartOffset(i)
+      const dom = last ? b.text.data.replace(/\n$/, '') : b.text.data
+      const end = last ? this.doc.text.length : this.blockStartOffset(i + 1)
+      if (last && !b.text.data.endsWith('\n')) b.text.appendData('\n')
+      this.applyDomText(start, end, dom, false)
+      break
+    }
     this.setSelection(sel.anchor, sel.head, false)
+  }
+
+  /** Applies a DOM text that replaces [start, end) of the Doc, as the smallest edit. */
+  private applyDomText(start: number, end: number, dom: string, rebuildAfter: boolean) {
+    const old = this.doc.text.slice(start, end)
+    if (this.readOnly) {
+      if (!rebuildAfter) this.buildAll()
+      return
+    }
+    let a = 0
+    const max = Math.min(dom.length, old.length)
+    while (a < max && dom.charCodeAt(a) === old.charCodeAt(a)) a++
+    let z = 0
+    while (z < max - a && dom.charCodeAt(dom.length - 1 - z) === old.charCodeAt(old.length - 1 - z)) z++
+    const inserted = dom.slice(a, dom.length - z).replace(/\r\n?/g, '\n')
+    this.doc.replace(start + a, end - z, inserted, { view: this, domDone: !rebuildAfter }, { selAfter: this.lastSel })
   }
 
   private rangeOffsets(r: StaticRange) {
@@ -589,11 +760,17 @@ export class EditorView {
     this.own.clear()
   }
 
-  private addOwn(name: string, r: AbstractRange) {
+  private addOwn(name: string, r: AbstractRange, priority = 0) {
     let l = this.own.get(name)
     if (!l) this.own.set(name, (l = []))
     l.push(r)
-    highlight(name)?.add(r)
+    highlight(name, priority)?.add(r)
+  }
+
+  private range(from: number, to: number): StaticRange {
+    const [sn, so] = this.domAt(from)
+    const [en, eo] = this.domAt(to)
+    return new StaticRange({ startContainer: sn, startOffset: so, endContainer: en, endOffset: eo })
   }
 
   visibleLines(): [number, number] {
@@ -607,29 +784,48 @@ export class EditorView {
   render() {
     if (!this.root.isConnected) return
     const n = this.doc.lineCount
-    if (n !== this.lineCountShown) {
-      let s = ''
-      for (let i = 1; i <= n; i++) s += i + '\n'
-      this.gutter.textContent = s
-      this.gutter.style.minWidth = `${String(n).length + 2}ch`
-      this.lineCountShown = n
-    }
+    const [first, last] = this.visibleLines()
+    const a = Math.max(0, first - MARGIN)
+    const b = Math.min(n - 1, last + MARGIN)
+
+    // Gutter: only the numbers of the rendered lines, moved to their place.
+    let nums = ''
+    for (let i = a + 1; i <= b + 1; i++) nums += i + '\n'
+    this.gutterNums.textContent = nums
+    this.gutterNums.style.transform = `translateY(${this.padTop + a * this.lineHeight}px)`
+    this.gutter.style.width = `calc(${String(n).length}ch + 24px)`
+
     this.clearOwn()
     if (registry()) {
-      const [first, last] = this.visibleLines()
-      const a = Math.max(0, first - 40)
-      const b = Math.min(n - 1, last + 40)
-      const len = this.textNode.length
+      this.starts()
+      let bi = this.blockIndex(a)
       for (let line = a; line <= b; line++) {
-        const base = this.doc.lineStart(line)
-        const tokens: Token[] = this.hl.get(line)
-        for (const [s, e, type] of tokens) {
+        while (bi + 1 < this.blocks.length && this.blockStarts![bi + 1] <= line) bi++
+        const blk = this.blocks[bi]
+        const base = this.doc.lineStart(line) - this.blockStartOffset(bi)
+        const len = blk.text.length
+        for (const [s, e, type] of this.hl.get(line) as Token[]) {
           if (base + e > len) break
-          this.addOwn('tok-' + type, new StaticRange({ startContainer: this.textNode, startOffset: base + s, endContainer: this.textNode, endOffset: base + e }))
+          this.addOwn('tok-' + type, new StaticRange({ startContainer: blk.text, startOffset: base + s, endContainer: blk.text, endOffset: base + e }))
+        }
+      }
+      // Search results and diagnostics: only those crossing the rendered lines.
+      const from = this.doc.lineStart(a)
+      const to = this.doc.lineEnd(b)
+      for (const [name, sp] of this.spans) {
+        const list = sp.list
+        let lo = 0
+        let hi = list.length
+        while (lo < hi) {
+          const mid = (lo + hi) >> 1
+          if (list[mid][1] < from) lo = mid + 1
+          else hi = mid
+        }
+        for (let i = lo; i < list.length && list[i][0] <= to; i++) {
+          this.addOwn(name, this.range(list[i][0], Math.min(list[i][1], this.doc.text.length)), sp.priority)
         }
       }
     }
-    this.renderDiagnostics()
     this.renderStatement()
     this.updateCurLine()
   }
@@ -644,29 +840,15 @@ export class EditorView {
     }
   }
 
-  /** Ranges that follow the edits by themselves (search results, diagnostics). */
+  /** Highlighted spans (search results...), sorted by start; they follow the edits. */
   setLiveRanges(name: string, spans: [number, number][], priority = 1) {
-    const h = highlight(name, priority)
-    for (const r of this.live.get(name) ?? []) h?.delete(r)
-    const list: Range[] = []
-    const len = this.doc.text.length
-    for (const [from, to] of spans) {
-      if (from > len) continue
-      const r = document.createRange()
-      r.setStart(this.textNode, Math.min(from, len))
-      r.setEnd(this.textNode, Math.min(to, len))
-      list.push(r)
-      h?.add(r)
-    }
-    this.live.set(name, list)
+    if (!spans.length) this.spans.delete(name)
+    else this.spans.set(name, { list: spans.map(([a, b]) => [a, b] as [number, number]), priority })
+    this.schedule()
   }
 
   setDiagnostics(list: Diagnostic[]) {
-    this.diagnostics = list
-    this.renderDiagnostics()
-  }
-
-  private renderDiagnostics() {
+    this.diagnostics = [...list].sort((a, b) => a.from - b.from)
     for (const sev of ['error', 'warning', 'info'] as const) {
       this.setLiveRanges(
         'diag-' + sev,
@@ -764,10 +946,11 @@ export class EditorView {
 
   /** Screen position of an offset (popups anchored at the caret). */
   coordsAt(offset: number) {
-    const r = document.createRange()
     const o = Math.min(offset, this.doc.text.length)
-    r.setStart(this.textNode, o)
-    r.setEnd(this.textNode, Math.min(o + 1, this.textNode.length))
+    const [n, off] = this.domAt(o)
+    const r = document.createRange()
+    r.setStart(n, off)
+    r.setEnd(n, Math.min(off + 1, n.length))
     const rect = r.getClientRects()[0] ?? r.getBoundingClientRect()
     return { left: rect.left, top: rect.top, bottom: rect.bottom }
   }

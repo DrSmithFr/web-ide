@@ -209,8 +209,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .ed { position: relative; flex: 1; display: flex; min-height: 0; min-width: 0; }
 .ed-scroll { flex: 1; overflow: auto; position: relative; }
 .ed-inner { display: flex; min-width: max-content; min-height: 100%; }
-.ed-gutter, .ed-content { margin: 0; font-family: var(--font-code); font-size: var(--font-size-code); line-height: var(--line-height-code); font-variant-ligatures: var(--ligatures); tab-size: var(--tab-size, 4); padding-top: 6px; padding-bottom: 40vh; }
-.ed-gutter { position: sticky; left: 0; z-index: 2; text-align: right; color: var(--gutter); background: var(--bg); padding-left: 10px; padding-right: 12px; user-select: none; border-right: 1px solid var(--line); flex: none; }
+.ed-gutter, .ed-content, .ed-gutter-nums { margin: 0; font-family: var(--font-code); font-size: var(--font-size-code); line-height: var(--line-height-code); font-variant-ligatures: var(--ligatures); tab-size: var(--tab-size, 4); }
+.ed-content { padding-top: 6px; padding-bottom: 40vh; }
+.ed-gutter { position: sticky; left: 0; z-index: 2; background: var(--bg); user-select: none; border-right: 1px solid var(--line); flex: none; overflow: hidden; }
+.ed-gutter-nums { position: absolute; top: 0; right: 12px; text-align: right; color: var(--gutter); will-change: transform; }
+/* Own width: a longer line elsewhere must not re-layout every block. */
+.ed-block { display: block; width: max-content; }
 .ed-main { position: relative; flex: 1; }
 .ed-content { position: relative; z-index: 1; padding-left: 10px; padding-right: 40px; white-space: pre; outline: none; caret-color: var(--accent); min-height: 100%; color: var(--fg); }
 .ed-content::selection { background: var(--sel-bg); }
