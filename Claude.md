@@ -239,7 +239,7 @@ Les définitions peuvent pointer hors du projet (`lib.es5.d.ts` dans `node_modul
 - **Q2** : « accepter les deux » concatène local puis distant.
 - **Q3** : les identifiants ne sont jamais écrits dans `.ide`. Mot de passe mémorisé : `~/.web-ide/secrets.json` (0600, même modèle que `~/.pgpass`, non chiffré) ; sinon gardé en mémoire du pod pour la session.
 - **Q4** : nœud dédié aux clés Redis (type et TTL en détail), sous chaque base `dbN`.
-- **Q5** : lancement manuel (`make run`) pour l'instant ; un service utilisateur systemd est l'étape suivante logique.
+- **Q5** : service utilisateur systemd (`make service` : binaire dans `~/.local/bin`, démarrage avec la session, redémarrage en cas d'échec) ; `make run` pour un lancement ponctuel. Pas d'icône de barre système.
 - **Q6** : pod local (clés SSH locales), écoute sur `127.0.0.1` et refuse les autres machines. `-allow-remote` permet l'accès distant protégé par le jeton seul.
 
 ## 14. Implémentation
@@ -248,6 +248,7 @@ Décisions du 2026-10-02 : pod en Go, état dans `~/.web-ide`, workspace par dé
 
 - **Lancer** : `make build && ./bin/web-ide-pod`, puis ouvrir l'URL affichée (`http://127.0.0.1:4433/?token=…`). Options : `-addr`, `-workspace`, `-data`, `-allow-remote`, `-static`.
 - **Développement** : `make dev` lance le pod avec `-allow-remote` sur `0.0.0.0:4433` (modifiable par `DEV_ADDR`) et Vite sur `0.0.0.0:5173` (proxy `/ws`, `/auth` et les liens `?token=`). Ouvrir `http://<hôte>:5173/?token=…` depuis n'importe quelle machine ; le jeton est alors la seule protection. Le binaire hors dev reste limité à la machine locale par défaut.
+- **Tests navigateur** : `make e2e` (`e2e/run.sh [suite…]`, Chromium sans fenêtre du cache Playwright ou `CHROME=…`). Un pod neuf par suite, avec données et workspace temporaires copiés de `e2e/fixtures` : `editing`, `features`, `restore` (enchaînée sur la précédente), `lsp` (si gopls est installé), `perf` (100 000 lignes, médiane < 50 ms par frappe, réglable par `E2E_PERF_MS`).
 - **Tests** : `make test` (tests Go, dont un test d'intégration WebSocket de bout en bout et un serveur SSH en mémoire pour les projets distants, puis `tsc`). Pilotes Postgres et Redis sur de vrais serveurs, sur demande : `WEBIDE_TEST_PG=hôte:port:user:mdp WEBIDE_TEST_REDIS=hôte:port:mdp go test ./internal/db/`.
 - **`~/.web-ide`** : `config.json` (adresse, workspace), `token`, `projects.json`, `settings.json`, `sessions/<projet>.json`, `secrets.json`, `known_hosts` (TOFU, en plus de `~/.ssh/known_hosts`), `sql-history/`.
 - **`.ide/` du projet** : `connections.json` (connexions BDD sans secret), `project.json` (`lsp` : commande par langage, `tests` : motif par extension, ex. `{".php": "{name}Spec.php"}`).

@@ -1,0 +1,14 @@
+# Service utilisateur du pod (make service). Démarre avec la session, redémarre en cas d'arrêt.
+[Unit]
+Description=Web IDE pod
+After=network.target
+
+[Service]
+ExecStart=%h/.local/bin/web-ide-pod
+# Serveurs de langage et outils installés par l'utilisateur (go install, npm -g, pipx…).
+Environment=PATH=%h/.local/bin:%h/go/bin:%h/.npm-global/bin:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

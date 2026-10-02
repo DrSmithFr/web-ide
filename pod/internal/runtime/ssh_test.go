@@ -2,108 +2,24 @@ package runtime
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
-	"encoding/binary"
 	"errors"
-	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/pkg/sftp"
-	"golang.org/x/crypto/ssh"
 
 	"webide/pod/internal/projects"
 	"webide/pod/internal/search"
+	"webide/pod/internal/sshtest"
 	"webide/pod/internal/sshx"
 	"webide/pod/internal/store"
 )
 
-// startSSH runs a minimal SSH server (password "pw", sftp subsystem, exec) for the tests.
-func startSSH(t *testing.T) int {
-	_, priv, _ := ed25519.GenerateKey(rand.Reader)
-	signer, _ := ssh.NewSignerFromKey(priv)
-	cfg := &ssh.ServerConfig{PasswordCallback: func(c ssh.ConnMetadata, pw []byte) (*ssh.Permissions, error) {
-		if string(pw) == "pw" {
-			return nil, nil
-		}
-		return nil, errors.New("bad password")
-	}}
-	cfg.AddHostKey(signer)
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { l.Close() })
-	go func() {
-		for {
-			conn, err := l.Accept()
-			if err != nil {
-				return
-			}
-			go func() {
-				_, chans, reqs, err := ssh.NewServerConn(conn, cfg)
-				if err != nil {
-					return
-				}
-				go ssh.DiscardRequests(reqs)
-				for nc := range chans {
-					if nc.ChannelType() != "session" {
-						nc.Reject(ssh.UnknownChannelType, "")
-						continue
-					}
-					ch, chReqs, _ := nc.Accept()
-					go serveSession(ch, chReqs)
-				}
-			}()
-		}
-	}()
-	return l.Addr().(*net.TCPAddr).Port
-}
-
-func serveSession(ch ssh.Channel, reqs <-chan *ssh.Request) {
-	for req := range reqs {
-		switch req.Type {
-		case "subsystem":
-			req.Reply(true, nil)
-			srv, _ := sftp.NewServer(ch)
-			srv.Serve()
-			ch.Close()
-			return
-		case "exec":
-			n := binary.BigEndian.Uint32(req.Payload[:4])
-			cmd := exec.Command("sh", "-c", string(req.Payload[4:4+n]))
-			cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
-			cmd.Stdin, cmd.Stdout, cmd.Stderr = ch, ch, ch.Stderr()
-			req.Reply(true, nil)
-			code := 0
-			if err := cmd.Run(); err != nil {
-				code = 1
-				var ee *exec.ExitError
-				if errors.As(err, &ee) {
-					code = ee.ExitCode()
-				}
-			}
-			status := make([]byte, 4)
-			binary.BigEndian.PutUint32(status, uint32(code))
-			ch.SendRequest("exit-status", false, status)
-			ch.Close()
-			return
-		default:
-			if req.WantReply {
-				req.Reply(false, nil)
-			}
-		}
-	}
-}
-
 func TestSSHProject(t *testing.T) {
-	port := startSSH(t)
+	port := sshtest.Start(t)
 	st, _ := store.Open(t.TempDir())
 	pool := sshx.NewPool(sshx.NewHostKeys(st.Path("known_hosts")))
 	t.Cleanup(pool.CloseAll)

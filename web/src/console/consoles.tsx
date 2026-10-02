@@ -243,7 +243,12 @@ function Output() {
 }
 
 export function BottomPanel() {
-  const active = () => session.bottom.active ?? consoles()[0]?.id ?? 'problems'
+  // A console that no longer exists (pod restarted) falls back to the first one.
+  const active = () => {
+    const a = session.bottom.active
+    if (a === 'problems' || a === 'output' || consoles().some((c) => c.id === a)) return a!
+    return consoles()[0]?.id ?? 'problems'
+  }
   const problemCount = () => Object.values(diagnostics).reduce((n, l) => n + (l?.filter((d) => d.severity === 1).length ?? 0), 0)
   const setActive = (id: string) => mutate((s) => (s.bottom.active = id))
 

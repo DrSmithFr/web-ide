@@ -2,7 +2,7 @@
 GO ?= $(shell command -v go || echo $(HOME)/sdk/go/bin/go)
 BIN := bin/web-ide-pod
 
-.PHONY: build web pod run dev test check clean
+.PHONY: build web pod run dev test e2e check clean install service
 
 build: web pod
 
@@ -29,6 +29,22 @@ dev: pod/webdist/dist
 test: pod/webdist/dist
 	cd pod && $(GO) vet ./... && $(GO) test ./...
 	cd web && npm run check
+
+# Browser tests (headless Chromium from the Playwright cache, or CHROME=/path/to/chrome).
+e2e: build
+	./e2e/run.sh
+
+# Installs the binary in ~/.local/bin.
+install: build
+	install -Dm755 $(BIN) $(HOME)/.local/bin/web-ide-pod
+
+# Starts the pod with the user session (systemd user service). The URL with the token is in
+# `journalctl --user -u web-ide-pod`, or in ~/.web-ide/token.
+service: install
+	install -Dm644 pod/web-ide-pod.service $(HOME)/.config/systemd/user/web-ide-pod.service
+	systemctl --user daemon-reload
+	systemctl --user enable --now web-ide-pod
+	systemctl --user restart web-ide-pod
 
 clean:
 	rm -rf bin pod/webdist/dist/assets
