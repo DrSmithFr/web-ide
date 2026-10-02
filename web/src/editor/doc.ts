@@ -46,6 +46,8 @@ export class Doc {
   private redoStack: Step[][] = []
   private lastStepTime = 0
   private grouping = true
+  private txDepth = 0
+  private txGroup: Step[] | null = null
 
   readonly dirty: Accessor<boolean>
   private setDirty: Setter<boolean>
@@ -156,6 +158,13 @@ export class Doc {
       }
       const group = this.undoStack[this.undoStack.length - 1]
       const prev = group?.[group.length - 1]
+      if (this.txDepth > 0) {
+        // Inside transact(): every step joins the same undo group.
+        if (this.txGroup) this.txGroup.push(step)
+        else this.undoStack.push((this.txGroup = [step]))
+        this.redoStack = []
+        this.lastStepTime = now
+      } else {
       // Typing in a row (same place, less than a second apart) is undone in one step.
       const typing = prev && this.grouping && now - this.lastStepTime < 1000 && !text.includes('\n') && text.length <= 1 && removed.length <= 1 &&
         (prev.from + prev.inserted.length === from || from + removed.length === prev.from)
@@ -165,11 +174,48 @@ export class Doc {
       this.redoStack = []
       this.lastStepTime = now
       this.grouping = true
+      }
     }
     const change: Change = { from, to, text, removed, fromLine, oldLines: toLine - fromLine + 1, newLines: inserted.length + 1, origin }
     for (const l of this.listeners) l(change)
     this.setDirty(this.text !== this.base)
     this.setChanged((n) => n + 1)
+  }
+
+  /** Runs several edits as one undo step (completion with imports, rename, formatting). */
+  transact<T>(fn: () => T): T {
+    if (this.txDepth === 0) this.txGroup = null
+    this.txDepth++
+    try {
+      return fn()
+    } finally {
+      this.txDepth--
+      if (this.txDepth === 0) {
+        this.txGroup = null
+        this.grouping = false
+      }
+    }
+  }
+
+  /**
+   * Applies LSP-style edits given as offsets of the current text, as one undo step.
+   * Returns a function mapping an offset of the text before the edits to the text after.
+   */
+  applyEdits(edits: { from: number; to: number; text: string }[], origin: unknown): (p: number) => number {
+    const sorted = [...edits].sort((a, b) => b.from - a.from || b.to - a.to)
+    this.transact(() => {
+      for (const e of sorted) this.replace(e.from, e.to, e.text, origin)
+    })
+    const asc = [...edits].sort((a, b) => a.from - b.from)
+    return (p) => {
+      let delta = 0
+      for (const e of asc) {
+        if (e.to <= p) delta += e.text.length - (e.to - e.from)
+        else if (e.from < p) return e.from + e.text.length + delta
+        else break
+      }
+      return p + delta
+    }
   }
 
   /** Breaks the current undo group (cursor moved, focus lost...). */

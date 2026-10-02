@@ -295,11 +295,29 @@ func (c *Client) enqueue(v any) {
 
 func (c *Client) push(name string, data any) { c.enqueue(event{Event: name, Data: data}) }
 
+// queue runs the messages of a sequential group in order and counts them, so that a
+// request can wait for the notifications received before it (see barrier).
+type queue struct {
+	ch   chan request
+	mu   sync.Mutex
+	cond *sync.Cond
+	enq  int64
+	done int64
+}
+
+// barrier: a language server request waits until the document changes sent before it
+// have reached the server, else a completion could be computed on an old text.
+var barrier = map[string]string{"lsp.request": "lsp"}
+
 func (c *Client) readLoop(ctx context.Context) {
-	queues := map[string]chan request{}
+	queues := map[string]*queue{}
 	defer func() {
 		for _, q := range queues {
-			close(q)
+			close(q.ch)
+			q.mu.Lock()
+			q.done = q.enq // release the waiting requests
+			q.cond.Broadcast()
+			q.mu.Unlock()
 		}
 	}()
 	for {
@@ -322,18 +340,44 @@ func (c *Client) readLoop(ctx context.Context) {
 		if group, ok := sequential[req.Method]; ok {
 			q := queues[group]
 			if q == nil {
-				q = make(chan request, 4096)
+				q = &queue{ch: make(chan request, 4096)}
+				q.cond = sync.NewCond(&q.mu)
 				queues[group] = q
 				go func() {
-					for r := range q {
+					for r := range q.ch {
 						c.dispatch(ctx, r)
+						q.mu.Lock()
+						q.done++
+						q.cond.Broadcast()
+						q.mu.Unlock()
 					}
 				}()
 			}
-			q <- req
-		} else {
-			go c.dispatch(ctx, req)
+			q.mu.Lock()
+			q.enq++
+			q.mu.Unlock()
+			q.ch <- req
+			continue
 		}
+		var wait func()
+		if q := queues[barrier[req.Method]]; q != nil {
+			q.mu.Lock()
+			target := q.enq
+			q.mu.Unlock()
+			wait = func() {
+				q.mu.Lock()
+				for q.done < target {
+					q.cond.Wait()
+				}
+				q.mu.Unlock()
+			}
+		}
+		go func() {
+			if wait != nil {
+				wait()
+			}
+			c.dispatch(ctx, req)
+		}()
 	}
 }
 

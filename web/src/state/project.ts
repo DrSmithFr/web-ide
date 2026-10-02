@@ -393,19 +393,33 @@ export function loadDoc(path: string): Promise<Doc | null> {
 }
 
 /** Wires a document to the pod: shared buffer between windows, language server. */
+const lspFlush = new Map<string, () => void>()
+
+/** Sends the pending document change to the language server now (before a request). */
+export function flushLsp(path: string) {
+  lspFlush.get(path)?.()
+}
+
 function attachDoc(doc: Doc): () => void {
   const lang = lspLanguage(doc.path)
   let syncTimer: number | undefined
   let lspTimer: number | undefined
+  let lspPending = false
+  const sendChange = () => {
+    clearTimeout(lspTimer)
+    if (!lspPending) return
+    lspPending = false
+    notify('lsp.notify', { lang, method: 'textDocument/didChange', params: { textDocument: { uri: uri(doc.path), version: 0 }, contentChanges: [{ text: doc.text }] } })
+  }
+  lspFlush.set(doc.path, sendChange)
   if (lang && !doc.readOnly) {
     notify('lsp.notify', { lang, method: 'textDocument/didOpen', params: { textDocument: { uri: uri(doc.path), languageId: lspLanguageId(doc.path), version: 1, text: doc.text } } })
   }
   const off = doc.onChange((c) => {
     if (lang && !doc.readOnly) {
+      lspPending = true
       clearTimeout(lspTimer)
-      lspTimer = window.setTimeout(() => {
-        notify('lsp.notify', { lang, method: 'textDocument/didChange', params: { textDocument: { uri: uri(doc.path), version: 0 }, contentChanges: [{ text: doc.text }] } })
-      }, 250)
+      lspTimer = window.setTimeout(sendChange, 250)
     }
     if (c.origin === 'remote' || c.origin === 'sync') return
     clearTimeout(syncTimer)
@@ -415,6 +429,7 @@ function attachDoc(doc: Doc): () => void {
   })
   return () => {
     off()
+    lspFlush.delete(doc.path)
     clearTimeout(syncTimer)
     clearTimeout(lspTimer)
     if (lang && !doc.readOnly) notify('lsp.notify', { lang, method: 'textDocument/didClose', params: { textDocument: { uri: uri(doc.path) } } })

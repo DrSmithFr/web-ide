@@ -27,6 +27,10 @@ export interface ViewOptions {
   onCtrlClick?: (offset: number) => void
   onFocus?: () => void
   onScroll?: (top: number) => void
+  /** Sees the keys first (completion list); returning true consumes the key. */
+  onKey?: (e: KeyboardEvent) => boolean
+  /** After a keystroke edit: the typed text, or '' for a deletion. */
+  onType?: (text: string) => void
 }
 
 const registry = () => (CSS as any).highlights as Map<string, any> | undefined
@@ -499,6 +503,8 @@ export class EditorView {
     while (z < max - a && dom.charCodeAt(dom.length - 1 - z) === old.charCodeAt(old.length - 1 - z)) z++
     const inserted = dom.slice(a, dom.length - z).replace(/\r\n?/g, '\n')
     this.doc.replace(start + a, end - z, inserted, { view: this, domDone: !rebuildAfter }, { selAfter: this.lastSel })
+    // A dead key or an IME produced text: same as typing it.
+    if (inserted && !inserted.includes('\n')) queueMicrotask(() => this.opts.onType?.(inserted))
   }
 
   private rangeOffsets(r: StaticRange) {
@@ -524,6 +530,7 @@ export class EditorView {
         const text = e.data ?? e.dataTransfer?.getData('text/plain') ?? ''
         if (t === 'insertReplacementText' && target) ({ from, to } = this.rangeOffsets(target))
         this.edit(from, to, text.replace(/\r\n?/g, '\n'))
+        if (t === 'insertText') this.opts.onType?.(text)
         return
       }
       case 'insertLineBreak':
@@ -572,6 +579,7 @@ export class EditorView {
         if (from > 0 && from < to && /[\udc00-\udfff]/.test(this.doc.text[from]) && /[\ud800-\udbff]/.test(this.doc.text[from - 1])) from--
       }
       if (from !== to) this.edit(from, to, '')
+      this.opts.onType?.('')
     }
   }
 
@@ -632,6 +640,11 @@ export class EditorView {
 
   private onKeyDown(e: KeyboardEvent) {
     if (e.defaultPrevented || this.composing) return
+    if (this.opts.onKey?.(e)) {
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
     if (e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey) {
       e.preventDefault()
       if (this.readOnly) return

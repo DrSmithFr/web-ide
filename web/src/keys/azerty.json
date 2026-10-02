@@ -1,53 +1,168 @@
 {
   "name": "AZERTY",
   "labels": {
-    "KeyQ": "A", "KeyW": "Z", "KeyA": "Q", "KeyZ": "W", "Semicolon": "M", "KeyM": ",",
-    "Comma": ";", "Period": ":", "Slash": "!", "Backquote": "²", "Minus": ")", "Equal": "=",
-    "BracketLeft": "^", "BracketRight": "$", "Quote": "ù", "Backslash": "*", "IntlBackslash": "<",
-    "Digit1": "&", "Digit2": "é", "Digit3": "\"", "Digit4": "'", "Digit5": "(", "Digit6": "-",
-    "Digit7": "è", "Digit8": "_", "Digit9": "ç", "Digit0": "à"
+    "KeyQ": "A",
+    "KeyW": "Z",
+    "KeyA": "Q",
+    "KeyZ": "W",
+    "Semicolon": "M",
+    "KeyM": ",",
+    "Comma": ";",
+    "Period": ":",
+    "Slash": "!",
+    "Backquote": "²",
+    "Minus": ")",
+    "Equal": "=",
+    "BracketLeft": "^",
+    "BracketRight": "$",
+    "Quote": "ù",
+    "Backslash": "*",
+    "IntlBackslash": "<",
+    "Digit1": "&",
+    "Digit2": "é",
+    "Digit3": "\"",
+    "Digit4": "'",
+    "Digit5": "(",
+    "Digit6": "-",
+    "Digit7": "è",
+    "Digit8": "_",
+    "Digit9": "ç",
+    "Digit0": "à"
   },
   "bindings": {
-    "file.save": ["Ctrl+KeyS"],
-    "file.saveAll": ["Ctrl+Shift+KeyS"],
-    "edit.undo": ["Ctrl+KeyW"],
-    "edit.redo": ["Ctrl+Shift+KeyW"],
-    "edit.duplicateLine": ["Ctrl+KeyD"],
-    "edit.deleteLine": ["Ctrl+KeyY"],
-    "edit.toggleComment": ["Ctrl+Shift+Period"],
-    "edit.selectAll": ["Ctrl+KeyQ"],
-    "search.find": ["F3", "Ctrl+KeyF"],
-    "search.global": ["Ctrl+Shift+KeyF"],
-    "nav.gotoFile": ["Ctrl+Shift+KeyN"],
-    "nav.gotoSymbol": ["Ctrl+Alt+Shift+KeyN"],
-    "nav.fileStructure": ["Ctrl+F12"],
-    "nav.gotoLine": ["Ctrl+KeyG"],
-    "nav.back": ["Ctrl+Alt+ArrowLeft"],
-    "nav.forward": ["Ctrl+Alt+ArrowRight"],
-    "nav.subwordLeft": ["Alt+ArrowLeft"],
-    "nav.subwordRight": ["Alt+ArrowRight"],
-    "nav.subwordLeftSelect": ["Alt+Shift+ArrowLeft"],
-    "nav.subwordRightSelect": ["Alt+Shift+ArrowRight"],
-    "nav.related": ["Ctrl+Alt+Home"],
-    "nav.test": ["Ctrl+Shift+KeyT"],
-    "lsp.definition": ["Ctrl+KeyB"],
-    "lsp.implementation": ["Ctrl+Alt+KeyB"],
-    "lsp.typeDefinition": ["Ctrl+Shift+KeyB"],
-    "lsp.superMethod": ["Ctrl+KeyU"],
-    "lsp.references": ["Alt+F7"],
-    "lsp.hover": ["Ctrl+KeyA"],
-    "conflict.resolve": ["Ctrl+Alt+KeyR"],
-    "view.splitRight": ["Ctrl+Backslash"],
-    "view.splitDown": ["Ctrl+Shift+Backslash"],
-    "view.closeTab": ["Alt+KeyZ", "Ctrl+F4"],
-    "view.nextTab": ["Alt+PageDown"],
-    "view.prevTab": ["Alt+PageUp"],
-    "view.toggleLeft": ["Alt+Digit1"],
-    "view.toggleRight": ["Alt+Digit9"],
-    "view.toggleBottom": ["Alt+F12"],
-    "settings.open": ["Ctrl+Alt+KeyS"],
-    "palette.open": ["Ctrl+Shift+KeyQ"],
-    "console.new": ["Ctrl+Shift+Backquote"],
-    "sql.execute": ["Ctrl+Enter"]
+    "file.save": [
+      "Ctrl+KeyS"
+    ],
+    "file.saveAll": [
+      "Ctrl+Shift+KeyS"
+    ],
+    "edit.undo": [
+      "Ctrl+KeyW"
+    ],
+    "edit.redo": [
+      "Ctrl+Shift+KeyW"
+    ],
+    "edit.duplicateLine": [
+      "Ctrl+KeyD"
+    ],
+    "edit.deleteLine": [
+      "Ctrl+KeyY"
+    ],
+    "edit.toggleComment": [
+      "Ctrl+Shift+Period"
+    ],
+    "edit.selectAll": [
+      "Ctrl+KeyQ"
+    ],
+    "edit.complete": [
+      "Ctrl+Space"
+    ],
+    "search.find": [
+      "F3",
+      "Ctrl+KeyF"
+    ],
+    "search.global": [
+      "Ctrl+Shift+KeyF"
+    ],
+    "nav.gotoFile": [
+      "Ctrl+Shift+KeyN"
+    ],
+    "nav.gotoSymbol": [
+      "Ctrl+Alt+Shift+KeyN"
+    ],
+    "nav.fileStructure": [
+      "Ctrl+F12"
+    ],
+    "nav.gotoLine": [
+      "Ctrl+KeyG"
+    ],
+    "nav.back": [
+      "Ctrl+Alt+ArrowLeft"
+    ],
+    "nav.forward": [
+      "Ctrl+Alt+ArrowRight"
+    ],
+    "nav.subwordLeft": [
+      "Alt+ArrowLeft"
+    ],
+    "nav.subwordRight": [
+      "Alt+ArrowRight"
+    ],
+    "nav.subwordLeftSelect": [
+      "Alt+Shift+ArrowLeft"
+    ],
+    "nav.subwordRightSelect": [
+      "Alt+Shift+ArrowRight"
+    ],
+    "nav.related": [
+      "Ctrl+Alt+Home"
+    ],
+    "nav.test": [
+      "Ctrl+Shift+KeyT"
+    ],
+    "lsp.definition": [
+      "Ctrl+KeyB"
+    ],
+    "lsp.implementation": [
+      "Ctrl+Alt+KeyB"
+    ],
+    "lsp.typeDefinition": [
+      "Ctrl+Shift+KeyB"
+    ],
+    "lsp.superMethod": [
+      "Ctrl+KeyU"
+    ],
+    "lsp.references": [
+      "Alt+F7"
+    ],
+    "lsp.hover": [
+      "Ctrl+KeyA"
+    ],
+    "lsp.rename": [
+      "Shift+F6"
+    ],
+    "lsp.format": [
+      "Ctrl+Alt+KeyL"
+    ],
+    "conflict.resolve": [
+      "Ctrl+Alt+KeyR"
+    ],
+    "view.splitRight": [
+      "Ctrl+Backslash"
+    ],
+    "view.splitDown": [
+      "Ctrl+Shift+Backslash"
+    ],
+    "view.closeTab": [
+      "Alt+KeyZ",
+      "Ctrl+F4"
+    ],
+    "view.nextTab": [
+      "Alt+PageDown"
+    ],
+    "view.prevTab": [
+      "Alt+PageUp"
+    ],
+    "view.toggleLeft": [
+      "Alt+Digit1"
+    ],
+    "view.toggleRight": [
+      "Alt+Digit9"
+    ],
+    "view.toggleBottom": [
+      "Alt+F12"
+    ],
+    "settings.open": [
+      "Ctrl+Alt+KeyS"
+    ],
+    "palette.open": [
+      "Ctrl+Shift+KeyQ"
+    ],
+    "console.new": [
+      "Ctrl+Shift+Backquote"
+    ],
+    "sql.execute": [
+      "Ctrl+Enter"
+    ]
   }
 }

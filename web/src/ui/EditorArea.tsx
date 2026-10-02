@@ -19,6 +19,8 @@ import { toast } from './toast'
 import { SqlConsole } from '../db/SqlConsole'
 import { TableView } from '../db/TableView'
 import { setCursorInfo } from './status'
+import { useCompletion } from './Completion'
+import { formatDocument, renameSymbol } from '../lsp/refactor'
 
 export function EditorArea(props: { detached?: boolean }) {
   return (
@@ -230,7 +232,16 @@ function EmptyPane() {
 }
 
 /** Creates an EditorView for a Doc inside a Solid component, following the settings. */
-export function useEditorView(doc: () => Doc | null, host: () => HTMLElement | undefined, opts: { readOnly?: boolean; onSelection?: (v: EditorView) => void; onCtrlClick?: (v: EditorView, offset: number) => void; onFocus?: () => void } = {}) {
+export interface UseViewOptions {
+  readOnly?: boolean
+  onSelection?: (v: EditorView) => void
+  onCtrlClick?: (v: EditorView, offset: number) => void
+  onFocus?: () => void
+  onKey?: (e: KeyboardEvent) => boolean
+  onType?: (text: string) => void
+}
+
+export function useEditorView(doc: () => Doc | null, host: () => HTMLElement | undefined, opts: UseViewOptions = {}) {
   const [view, setView] = createSignal<EditorView | null>(null)
   createEffect(
     on([doc, host], ([d, h]) => {
@@ -240,9 +251,13 @@ export function useEditorView(doc: () => Doc | null, host: () => HTMLElement | u
         insertSpaces: untrack(() => settings.editor.insertSpaces),
         highlightLine: untrack(() => settings.editor.highlightLine),
         readOnly: opts.readOnly,
-        onSelection: () => opts.onSelection?.(v),
-        onCtrlClick: (off) => opts.onCtrlClick?.(v, off),
-        onFocus: opts.onFocus,
+        // Untracked: a callback run inside an effect (setSelection from a jump) must not
+        // subscribe that effect to what the callback reads.
+        onSelection: () => untrack(() => opts.onSelection?.(v)),
+        onCtrlClick: (off) => untrack(() => opts.onCtrlClick?.(v, off)),
+        onFocus: () => untrack(() => opts.onFocus?.()),
+        onKey: (e) => untrack(() => opts.onKey?.(e) ?? false),
+        onType: (t) => untrack(() => opts.onType?.(t)),
       })
       v.mount(h)
       setView(v)
@@ -295,8 +310,13 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
 
   const isActive = () => session.activePane === props.paneId && findLeaf(session.layout, props.paneId)?.active === props.tab.id
 
+  // The completion needs the view, the view forwards keys and keystrokes to the completion.
+  let completion: ReturnType<typeof useCompletion> | null = null
   const view = useEditorView(doc, hostEl, {
+    onKey: (e) => completion?.onKey(e) ?? false,
+    onType: (t) => completion?.onType(t),
     onSelection: (v) => {
+      completion?.onSelection()
       const sel = v.getSelection()
       saveCursor(path, { anchor: sel.anchor, head: sel.head, scroll: v.scroller.scrollTop })
       const { line, col } = v.doc.pos(sel.head)
@@ -305,6 +325,8 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
     onCtrlClick: (v, off) => lspc.gotoDeclaration(v.doc, off),
     onFocus: () => setActivePane(props.paneId),
   })
+  const comp = useCompletion(view, doc)
+  completion = comp
 
   // Restore the cursor and scroll of the file, then focus when this pane is the active one.
   createEffect(
@@ -326,10 +348,12 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
     const r = reveal()
     const v = view()
     if (!r || !v || r.path !== path || !untrack(isActive)) return
-    const t = r.target
-    const from = t.offset ?? v.doc.offset(t.line ?? 0, t.col ?? 0)
-    v.setSelection(from, t.end ?? from, false)
-    v.scrollToOffset(from, true)
+    untrack(() => {
+      const t = r.target
+      const from = t.offset ?? v.doc.offset(t.line ?? 0, t.col ?? 0)
+      v.setSelection(from, t.end ?? from, false)
+      v.scrollToOffset(from, true)
+    })
   })
 
   createEffect(() => {
@@ -376,6 +400,9 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
     registerAction('lsp.typeDefinition', when((v, d) => lspc.gotoTypeDefinition(d, v.getSelection().head))),
     registerAction('lsp.superMethod', when((v, d) => lspc.gotoSuperMethod(d, v.getSelection().head))),
     registerAction('lsp.references', when((v, d) => lspc.findReferences(d, v.getSelection().head))),
+    registerAction('edit.complete', when(() => completion?.open(), true)),
+    registerAction('lsp.rename', when((v, d) => renameSymbol(v, d))),
+    registerAction('lsp.format', when((v, d) => formatDocument(v, d))),
     registerAction('lsp.hover', when(async (v, d) => {
       const off = v.getSelection().head
       try {
@@ -494,6 +521,7 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
         <Show when={findOpen() && view() && doc()}>
           <FindBar view={view()!} doc={doc()!} initial={findInitial()} focusSignal={findFocus()} onClose={() => setFindOpen(false)} />
         </Show>
+        <comp.Popup />
       </div>
     </div>
   )
