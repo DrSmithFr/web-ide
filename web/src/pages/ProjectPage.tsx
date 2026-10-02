@@ -12,6 +12,8 @@ import { BottomPanel, newConsole, setConsoleList } from '../console/consoles'
 import { Explorer } from '../panels/Explorer'
 import { GlobalSearch, focusGlobalSearch } from '../panels/GlobalSearch'
 import { Connections } from '../panels/Connections'
+import { GitPanel } from '../panels/GitPanel'
+import { refreshGit } from '../state/git'
 import { DatabaseTool } from '../db/DatabaseTool'
 import { ConflictsTool, ExtensionsTool, PropertiesTool, StructureTool } from '../tools/tools'
 import { openConflict } from '../conflict/ConflictDialog'
@@ -28,6 +30,7 @@ import { toast } from '../ui/toast'
 export const leftPanels: Record<string, { label: string; icon: string; component: () => JSX.Element }> = {
   explorer: { label: 'Explorateur', icon: 'files', component: Explorer },
   search: { label: 'Recherche', icon: 'search', component: GlobalSearch },
+  git: { label: 'Git', icon: 'branch', component: GitPanel },
   connections: { label: 'Connexions', icon: 'plug', component: Connections },
 }
 
@@ -295,6 +298,7 @@ export function ProjectPage(props: { id: string }) {
     try {
       await openWithAuth(props.id)
       setReady(true)
+      refreshGit(0)
       document.title = `${project()?.name} · Web IDE`
     } catch (e) {
       setError((e as Error).message)

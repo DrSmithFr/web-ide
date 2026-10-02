@@ -7,6 +7,7 @@ import { contextMenu, prompt } from '../ui/overlay'
 import { errorToast, toast } from '../ui/toast'
 import { Icon } from '../ui/icons'
 import { newConsole } from '../console/consoles'
+import { dirChanged, fileState } from '../state/git'
 
 interface Entry {
   name: string
@@ -162,7 +163,7 @@ function Row(props: { entry: Entry; depth: number }) {
           </Show>
         </span>
         <Icon name={e.dir ? 'folder' : 'file'} size={14} />
-        <span class="tree-name">{e.name}</span>
+        <span class={`tree-name git-${(e.dir ? (dirChanged(e.path) ? 'modified' : null) : fileState(e.path)) ?? 'clean'}`}>{e.name}</span>
         <Show when={e.link}>
           <span class="tree-link" title="Lien symbolique">↪</span>
         </Show>

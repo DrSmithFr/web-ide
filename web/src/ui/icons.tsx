@@ -32,6 +32,7 @@ const paths: Record<string, string> = {
   home: 'M3 11 12 4l9 7M5 10v10h14V10',
   menu: 'M4 6h16M4 12h16M4 18h16',
   split: 'M3 4h18v16H3zM12 4v16',
+  branch: 'M6 3v12M6 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9c0 5-6 4-12 6',
 }
 
 export function Icon(props: { name: keyof typeof paths | string; size?: number; title?: string } & JSX.SvgSVGAttributes<SVGSVGElement>) {

@@ -19,6 +19,7 @@ import (
 	"webide/pod/internal/db"
 	"webide/pod/internal/execx"
 	"webide/pod/internal/fsx"
+	"webide/pod/internal/git"
 	"webide/pod/internal/lsp"
 	"webide/pod/internal/projects"
 	"webide/pod/internal/sshx"
@@ -57,6 +58,7 @@ type Runtime struct {
 	Consoles *console.Manager
 	LSP      *lsp.Manager
 	DB       *db.Manager
+	Git      *git.Repo
 
 	emit    Emit
 	watcher fsx.Watcher
@@ -117,6 +119,7 @@ func Open(p projects.Project, creds sshx.Creds, d Deps, emit Emit) (*Runtime, er
 	})
 	exists := func(p string) bool { _, err := r.FS.Stat(p); return err == nil }
 	r.LSP = lsp.NewManager(r.Runner, root, r.Local, r.Config.LSP, exists, func(ev string, data any) { r.emit(ev, data, "") })
+	r.Git = git.New(r.Runner, root)
 	r.DB = db.NewManager(db.Deps{FS: r.FS, Root: root, ProjectID: p.ID, Local: r.Local, Runner: r.Runner, Pool: d.Pool, Store: d.Store})
 	return r, nil
 }

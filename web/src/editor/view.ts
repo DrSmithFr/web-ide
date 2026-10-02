@@ -9,6 +9,7 @@ import { Highlighter, type Token } from './tokenizer'
 import { grammar } from './languages'
 import { subwordLeft, subwordRight } from './subword'
 import type { Change, Doc, Selection } from './doc'
+import type { LineMark } from './linediff'
 
 export interface Diagnostic {
   from: number
@@ -79,6 +80,8 @@ export class EditorView {
   readonly content: HTMLPreElement
   private gutter: HTMLDivElement
   private gutterNums: HTMLPreElement
+  private gutterMarks: HTMLDivElement
+  private marks = new Map<number, LineMark>()
   private curLine: HTMLDivElement
   private boxes: HTMLDivElement
   private tooltip: HTMLDivElement
@@ -110,7 +113,9 @@ export class EditorView {
     this.gutter.setAttribute('aria-hidden', 'true')
     this.gutterNums = document.createElement('pre')
     this.gutterNums.className = 'ed-gutter-nums'
-    this.gutter.append(this.gutterNums)
+    this.gutterMarks = document.createElement('div')
+    this.gutterMarks.className = 'ed-marks'
+    this.gutter.append(this.gutterNums, this.gutterMarks)
     const main = document.createElement('div')
     main.className = 'ed-main'
     this.curLine = document.createElement('div')
@@ -443,6 +448,13 @@ export class EditorView {
       d.to = map(d.to)
     }
     if (this.statement) this.statement = null
+    // Change markers follow the lines until they are recomputed.
+    const shift = c.newLines - c.oldLines
+    if (this.marks.size && shift) {
+      const next = new Map<number, LineMark>()
+      for (const [l, m] of this.marks) next.set(l <= c.fromLine ? l : Math.max(c.fromLine, l + shift), m)
+      this.marks = next
+    }
     this.hl.edit(c.fromLine, c.oldLines, c.newLines)
     this.schedule()
   }
@@ -807,6 +819,12 @@ export class EditorView {
     this.gutterNums.textContent = nums
     this.gutterNums.style.transform = `translateY(${this.padTop + a * this.lineHeight}px)`
     this.gutter.style.width = `calc(${String(n).length}ch + 24px)`
+    let marks = ''
+    for (let i = a; i <= b; i++) {
+      const m = this.marks.get(i)
+      if (m) marks += `<div class="ed-mark mark-${m}" style="top:${this.padTop + i * this.lineHeight}px;height:${this.lineHeight}px"></div>`
+    }
+    this.gutterMarks.innerHTML = marks
 
     this.clearOwn()
     if (registry()) {
@@ -851,6 +869,12 @@ export class EditorView {
       this.curLine.style.transform = `translateY(${this.padTop + line * this.lineHeight}px)`
       this.curLine.style.height = `${this.lineHeight}px`
     }
+  }
+
+  /** Change markers of the gutter (lines added, modified, deleted against the VCS). */
+  setLineMarks(marks: Map<number, LineMark>) {
+    this.marks = marks
+    this.schedule()
   }
 
   /** Highlighted spans (search results...), sorted by start; they follow the edits. */

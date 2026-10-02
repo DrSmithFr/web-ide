@@ -1,6 +1,6 @@
 // Editor area: recursive split tree (split/right, split/down), tab bar per pane, and the
 // content of each tab (file editor, SQL console, table view, read-only text).
-import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from 'solid-js'
+import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from 'solid-js'
 import {
   activateTab, basename, closeTab, docError, findLeaf, getDoc, loadDoc, moveTab, openFile, relPath, reveal, saveCursor,
   saveDoc, session, setActivePane, setSplitSizes, splitPane, diagnostics, type LayoutNode, type TabState, docsVersion,
@@ -20,6 +20,9 @@ import { SqlConsole } from '../db/SqlConsole'
 import { TableView } from '../db/TableView'
 import { setCursorInfo } from './status'
 import { useCompletion } from './Completion'
+import { DiffView } from './DiffView'
+import { gitRevision, gitStatus } from '../state/git'
+import { lineMarks } from '../editor/linediff'
 import { formatDocument, renameSymbol } from '../lsp/refactor'
 
 export function EditorArea(props: { detached?: boolean }) {
@@ -204,6 +207,9 @@ function Pane(props: { id: string }) {
               <Match when={t.kind === 'text'}>
                 <TextViewer tab={t} paneId={props.id} />
               </Match>
+              <Match when={t.kind === 'diff'}>
+                <DiffView tab={t} paneId={props.id} />
+              </Match>
             </Switch>
           )}
         </Show>
@@ -363,6 +369,35 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
     d.changed()
     v.setDiagnostics(toDiagnostics(d, diagnostics[path] ?? []))
   })
+
+  // Change markers against HEAD, recomputed a moment after the edits.
+  const [head] = createResource(
+    () => (gitStatus()?.repo ? { rev: gitRevision(), d: doc() } : null),
+    async ({ d }) => {
+      if (!d || d.readOnly) return null
+      try {
+        return await request<{ content: string; exists: boolean }>('git.show', { path, rev: 'HEAD' })
+      } catch {
+        return null
+      }
+    },
+  )
+  let markTimer: number | undefined
+  createEffect(() => {
+    const v = view()
+    const d = doc()
+    const h = head()
+    if (!v || !d) return
+    d.changed()
+    clearTimeout(markTimer)
+    if (!h) return v.setLineMarks(new Map())
+    const untracked = gitStatus()?.files.some((f) => f.path === path && f.untracked)
+    markTimer = window.setTimeout(() => {
+      if (!h.exists) v.setLineMarks(untracked ? new Map(Array.from({ length: d.lineCount }, (_, i) => [i, 'add' as const])) : new Map())
+      else v.setLineMarks(lineMarks(h.content, d.text))
+    }, 250)
+  })
+  onCleanup(() => clearTimeout(markTimer))
 
   const when = (f: (v: EditorView, d: Doc) => void, needFocus = false) => () => {
     const v = view()

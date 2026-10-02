@@ -9,7 +9,7 @@ import { detectLanguage, lspLanguage, lspLanguageId } from '../editor/languages'
 import { merge3 } from '../editor/merge'
 import { toast } from '../ui/toast'
 
-export type TabKind = 'file' | 'sql' | 'table' | 'text'
+export type TabKind = 'file' | 'sql' | 'table' | 'text' | 'diff'
 
 export interface TabState {
   id: string
@@ -21,6 +21,7 @@ export interface TabState {
   table?: string
   text?: string
   lang?: string
+  staged?: boolean
 }
 
 export type LayoutNode =
@@ -193,6 +194,7 @@ export function openTab(tab: Omit<TabState, 'id'>, paneId = session.activePane):
     if (!t || t.kind !== tab.kind) return false
     if (tab.kind === 'file') return t.path === tab.path
     if (tab.kind === 'table') return t.connId === tab.connId && t.db === tab.db && t.table === tab.table
+    if (tab.kind === 'diff') return t.path === tab.path && !!t.staged === !!tab.staged
     return false
   })
   if (same) {

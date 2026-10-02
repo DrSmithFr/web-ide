@@ -6,7 +6,7 @@ set -u
 cd "$(dirname "$0")"
 ROOT=$(cd .. && pwd)
 SUITES=("$@")
-[ ${#SUITES[@]} -eq 0 ] && SUITES=(editing features restore+ lsp perf)
+[ ${#SUITES[@]} -eq 0 ] && SUITES=(editing features restore+ git lsp perf)
 [ -d node_modules/playwright-core ] || npm install --no-audit --no-fund >/dev/null
 PORT=${E2E_PORT:-4519}
 TMP=$(mktemp -d)

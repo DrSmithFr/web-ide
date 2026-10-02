@@ -224,6 +224,14 @@ Objectif : reproduire le goto de PhpStorm (déclaration/usages, implémentations
 - **Un serveur par projet et par langage présent**, avec la racine du projet comme `rootUri`. Le pod détecte les langages (`composer.json`, `package.json`, `go.mod`, ...), multiplexe selon l'extension du fichier, et arrête les serveurs quand il n'y a plus de session active (certains consomment plusieurs centaines de Mo).
 - Multi-root possible via `workspace/didChangeWorkspaceFolders` pour certains serveurs, toujours une instance par langage.
 
+### Git (ajout)
+
+- Panneau Git dans le rail de gauche : branche (changement, création), avance/retard sur l'amont, message de commit (Ctrl+Entrée, amend), sections Conflits / Indexés / Modifications avec indexer, désindexer, annuler (non suivis supprimés), historique des 30 derniers commits.
+- Pull, push et fetch dans un terminal du panneau du bas (les demandes d'identifiants restent interactives).
+- Onglet de diff côte à côte : copie de travail ↔ index, ou index ↔ HEAD ; parties identiques repliées, navigation entre modifications ; le côté travail suit le buffer ouvert.
+- Gouttière : lignes ajoutées, modifiées, supprimées par rapport à HEAD, recalculées pendant la frappe. Explorateur : fichiers et dossiers modifiés colorés.
+- Côté pod : `git` lancé par le même exécuteur que le reste, donc aussi sur un hôte SSH ; le projet peut être un sous-dossier du dépôt.
+
 ### Accès aux sources hors projet
 
 Les définitions peuvent pointer hors du projet (`lib.es5.d.ts` dans `node_modules/typescript/lib`, stubs PHP, `GOROOT/src`, `.pyi` bundlés avec pyright).

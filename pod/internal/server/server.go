@@ -66,6 +66,7 @@ func (s *Server) Init() {
 	s.registerGlobal()
 	s.registerProject()
 	s.registerDB()
+	s.registerGit()
 }
 
 func (s *Server) handle(name string, h handler) { s.handlers[name] = h }
