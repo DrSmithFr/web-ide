@@ -30,9 +30,7 @@ import {
   type Question,
 } from './state'
 import { MAX_QUESTIONS } from './kanbanTools'
-import { t } from '../i18n'
-
-const MAX_STEPS = 30
+import { t, tn } from '../i18n'
 
 let ctrl: AbortController | null = null
 
@@ -409,7 +407,8 @@ async function run(resume = false) {
     // Instructions and skills may have changed since the last message.
     await loadPromptContext()
     let compactedForError = false
-    for (let step = 0; step < MAX_STEPS; step++) {
+    // No step limit: the agent goes on until it answers without tools or is stopped.
+    for (;;) {
       // Messages written meanwhile join the conversation before the next request.
       if (!attach) drainQueue()
       if (!attach && needsCompaction()) await compact(false, c.signal).catch((e) => console.warn('compaction', e))
@@ -452,10 +451,7 @@ async function run(resume = false) {
             () => true,
             () => false,
           )
-          if (done) {
-            step--
-            continue
-          }
+          if (done) continue
         }
         // Keep what was already written.
         if (live.content || live.reasoning || !canceled) {
@@ -532,7 +528,7 @@ async function run(resume = false) {
             name,
             content: questions.length ? 'Questions asked to the user: waiting for their answers.' : `Error: 1 to ${MAX_QUESTIONS} questions are needed, each with at least one choice.`,
             status: questions.length ? 'ok' : 'error',
-            summary: questions.length ? `${questions.length} question${questions.length > 1 ? 's' : ''}` : 'questions invalides',
+            summary: questions.length ? tn(questions.length, '{n} question', '{n} questions') : t('invalid questions'),
             questions: questions.length ? questions : undefined,
             askState: questions.length ? 'pending' : undefined,
           })
@@ -561,7 +557,6 @@ async function run(resume = false) {
       saveChat()
       if (c.signal.aborted) return
     }
-    pushMessage({ role: 'assistant', content: '', error: t('Stopped after {n} tool steps.', { n: MAX_STEPS }) })
   } finally {
     if (ctrl === c) ctrl = null
     setLive({ busy: false, stream: '', compacting: false, ...resetLive })

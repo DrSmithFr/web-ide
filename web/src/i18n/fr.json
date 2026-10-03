@@ -832,7 +832,6 @@
   "Step running in another window…": "Étape en cours dans une autre fenêtre…",
   "Stop": "Arrêter",
   "Stop (Esc)": "Arrêter (Échap)",
-  "Stopped after {n} tool steps.": "Arrêt après {n} étapes d'outils.",
   "Stopped.": "Arrêté.",
   "String": "Chaîne",
   "Struct": "Struct",
@@ -1081,5 +1080,7 @@
   "{tool}: show the result": "{tool} : afficher le résultat",
   "— choose —": "— choisir —",
   "— server —": "— serveur —",
-  "•••••• (unchanged)": "•••••• (inchangé)"
+  "•••••• (unchanged)": "•••••• (inchangé)",
+  "{n} question": "{n} question",
+  "invalid questions": "questions invalides"
 }
