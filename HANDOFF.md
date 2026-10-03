@@ -17,7 +17,8 @@ Toute la spec est implémentée et testée, plus sept ajouts : autocomplétion, 
 | `dcd370f` | Transcription vocale locale (Whisper dans le navigateur) |
 | `fb780dd` | Agent : CLAUDE.md / AGENTS.md, skills, prompt éditable, compaction, outils IDE et consoles, conversations en SQLite |
 | `0968e76` | Nouvelle interface de l'assistant, historique latéral, Mermaid et stats en direct, conversation restaurée |
-| dernier commit | Diagrammes plein écran, menu du contexte, outil bash, commandes /, mentions @ |
+| `a50b891` | Diagrammes plein écran, menu du contexte, outil bash, commandes /, mentions @ |
+| dernier commit | Reprise après rechargement, file de messages, édition sur place, Ctrl+clic sur @fichier |
 
 ## Commandes
 
@@ -27,7 +28,7 @@ make build          # front (Vite) puis binaire bin/web-ide-pod (front embarqué
 make dev            # pod -allow-remote sur 0.0.0.0:4433 + Vite 0.0.0.0:5173 (HMR)
 make test           # go vet + go test + tsc
 make e2e            # tests navigateur (toutes les suites, ~3-4 min)
-./e2e/run.sh git    # une suite : editing features restore+ git lsp llm agent speech perf
+./e2e/run.sh git    # une suite : editing features restore+ git lsp llm agent chat speech perf
 make service        # service systemd utilisateur (pas activé à ce jour)
 ```
 
@@ -94,6 +95,11 @@ Panneau de droite « Assistant IA » (détachable) : serveurs llama.cpp ou Ollam
 - Mentions : `@` ouvre l'autocomplétion des fichiers et dossiers du projet (`search.files`, cache 15 s, recherche approximative) ; seul le chemin est envoyé (choix de l'utilisateur), le prompt système explique la convention.
 - Diagrammes : bouton ⤢ (ou clic sur le diagramme) → plein écran `DiagramViewer.tsx` (molette, glisser, ajuster plafonné à 150 %, 100 %, export SVG / PNG, copie de la source).
 - Menu du contexte (anneau) : jetons utilisés / taille, barre avec le seuil, messages envoyés et compactés, compaction automatique et seuil, bouton « Compacter maintenant ».
+- Génération qui survit à un rechargement (`pod/internal/llm/jobs.go`) : `llm.chat` lance un job du pod (contexte indépendant de la connexion) ; si la page part, le job continue ; `llm.attach {stream}` renvoie ce qui est déjà écrit (événement `llm.delta` avec `snapshot`) puis la suite et le résultat. Arrêter (`$/cancel` alors que la connexion est vivante) annule le job ; jobs gardés 10 min après leur fin. La conversation enregistre `running: { stream }` ; au rechargement `resumeIfNeeded()` marque « interrompu » les outils en cours (sans les relancer) et se rattache au flux ou continue. `llm.claim` / `llm.release` : une seule fenêtre fait tourner une conversation (libéré à la déconnexion).
+- Pièges : un store Solid fusionne les objets (`setChat('running', {})` ne vide rien : écrire `{ stream: undefined }`) ; les enregistrements de conversation sont enchaînés (`saveChat` : un à la fois, le suivant prend l'état du moment) pour qu'un ancien ne passe pas après un récent ; le regroupement des deltas (40 ms) a une minuterie, sinon un jeton reste bloqué pendant une pause du modèle.
+- File d'attente : un message envoyé pendant une réponse va dans `chat.queue` (enregistrée, affichée au-dessus de la zone de saisie, reprenable ou supprimable) ; il rejoint la conversation à l'étape suivante (après les résultats d'outils) ou relance l'agent à la fin de la réponse.
+- Édition sur place d'un message utilisateur (bulle remplacée par une zone de texte) : la conversation repart de ce message, pièces jointes gardées ; une commande `/` modifiée est exécutée.
+- Ctrl+clic sur un `@fichier` d'une bulle l'ouvre dans l'éditeur. Le fil défile jusqu'en bas tant que son contenu grandit (ResizeObserver : rendus tardifs du Markdown et des diagrammes).
 - Conversation active mémorisée par projet dans le navigateur (`localStorage`, `webide.llm.active.<projet>`) et rouverte au rechargement ; changer de projet repart d'une conversation vide.
 
 ## Transcription vocale locale

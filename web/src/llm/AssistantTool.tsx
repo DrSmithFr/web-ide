@@ -7,6 +7,7 @@ import { errorToast } from '../ui/toast'
 import { route } from '../app/router'
 import { approval, chat, live, loadConfig, modelsError, prefs, resetChat, restoreActive, savePrefs, setPrefs } from './state'
 import { SettingsModal } from './AssistantSettings'
+import { resumeIfNeeded } from './agent'
 import { Thread } from './Thread'
 import { addFiles, Composer, focusComposer, suggest } from './Composer'
 import { Sidebar } from './Sidebar'
@@ -39,8 +40,16 @@ export function AssistantTool() {
     onCleanup(() => ro.disconnect())
     setWidth(rootEl.clientWidth)
     loadConfig().catch(errorToast)
-    restoreActive().catch(() => {})
+    // The conversation of the project, and the answer it was waiting for before a reload.
+    restoreActive()
+      .then(() => loadConfig())
+      .then(() => resumeIfNeeded())
+      .catch(() => {})
     focusComposer()
+    // Late renders (Markdown, diagrams) make the thread grow after a load: stay at the end.
+    const thread = new ResizeObserver(() => stick && (list.scrollTop = list.scrollHeight))
+    thread.observe(list.firstElementChild as Element)
+    onCleanup(() => thread.disconnect())
   })
 
   // Follow the answer while the view is at the bottom.

@@ -33,6 +33,9 @@ let ctrl: AbortController | null = null
 
 interface DeltaEvent {
   stream: string
+  /** First event of llm.attach: everything written so far. */
+  snapshot?: boolean
+  startedAt?: number
   content?: string
   reasoning?: string
   tool?: string
@@ -45,6 +48,22 @@ interface DeltaEvent {
 on('llm.delta', (d: DeltaEvent) => {
   if (d.stream !== live.stream) return
   const now = Date.now()
+  if (d.snapshot) {
+    setLive({
+      content: d.content ?? '',
+      reasoning: d.reasoning ?? '',
+      tool: d.tool ?? '',
+      tokens: d.tokens ?? 0,
+      speed: d.speed ?? 0,
+      promptDone: d.promptDone ?? 0,
+      promptTotal: d.promptTotal ?? 0,
+      startedAt: d.startedAt || now,
+      firstAt: d.content || d.reasoning || d.tool ? d.startedAt || now : 0,
+      thinkStart: d.reasoning ? d.startedAt || now : 0,
+      thinkEnd: d.reasoning && (d.content || d.tool) ? now : 0,
+    })
+    return
+  }
   setLive(
     produce((l) => {
       if (d.reasoning) {
@@ -124,7 +143,10 @@ export function isBusy() {
 
 /** display: what the bubble shows when it differs from the text sent (commands). */
 export async function send(text: string, parts: Part[], attachments: ChatMessage['attachments'], display?: string) {
-  if (live.busy) return
+  if (live.busy) {
+    enqueue(text, parts, attachments, display)
+    return
+  }
   if (!config.server || !config.model) throw new Error('Choisir un serveur et un modèle')
   const content: string | Part[] = parts.length ? [...(text ? [{ type: 'text' as const, text }] : []), ...parts] : text
   setChat(
@@ -136,6 +158,58 @@ export async function send(text: string, parts: Part[], attachments: ChatMessage
   pushMessage({ role: 'user', content, display: display ?? (parts.length ? text : undefined), attachments: attachments?.length ? attachments : undefined })
   saveChat()
   await run()
+}
+
+/** Keeps a message written during an answer: it is sent at the next step of the agent. */
+export function enqueue(text: string, parts: Part[], attachments: ChatMessage['attachments'], display?: string) {
+  setChat(produce((c) => (c.queue ??= []).push({ id: newId(), text, parts, attachments: attachments?.length ? attachments : undefined, display })))
+  saveChat()
+}
+
+export function unqueue(id: string) {
+  setChat(produce((c) => (c.queue = (c.queue ?? []).filter((q) => q.id !== id))))
+  saveChat()
+}
+
+/** Moves the queued messages into the conversation; true when there were some. */
+function drainQueue(): boolean {
+  const q = chat.queue ?? []
+  if (!q.length) return false
+  setChat(
+    produce((c) => {
+      for (const m of q) {
+        const content: string | Part[] = m.parts.length ? [...(m.text ? [{ type: 'text' as const, text: m.text }] : []), ...m.parts] : m.text
+        c.messages.push({ role: 'user', content, display: m.display ?? (m.parts.length ? m.text : undefined), attachments: m.attachments })
+      }
+      c.queue = []
+    }),
+  )
+  return true
+}
+
+/**
+ * After a reload during an answer: the tools that were running are marked interrupted,
+ * then the agent attaches to the completion still running in the pod (or goes on).
+ */
+export async function resumeIfNeeded() {
+  if (!chat.running || live.busy) return
+  setChat(
+    produce((c) => {
+      const done = new Set(c.messages.filter((m) => m.role === 'tool').map((m) => m.tool_call_id))
+      for (const m of c.messages) {
+        if (m.role === 'tool' && !m.status) {
+          m.status = 'error'
+          m.content = 'Interrompu par le rechargement de la page.'
+          m.summary = 'interrompu'
+        }
+      }
+      const last = [...c.messages].reverse().find((m) => m.role === 'assistant')
+      for (const call of last?.tool_calls ?? []) {
+        if (!done.has(call.id)) c.messages.push({ role: 'tool', tool_call_id: call.id, name: call.function.name, content: 'Interrompu par le rechargement de la page.', status: 'error', summary: 'interrompu' })
+      }
+    }),
+  )
+  await run(true)
 }
 
 /** Asks again from the last user message (after an error or a stop). */
@@ -161,35 +235,57 @@ function needsCompaction(): boolean {
 
 const contextError = /context|exceed|too long|too many tokens|n_ctx|num_ctx|longueur/i
 
-async function run() {
+/** resume: continue a run interrupted by a reload (attach to its completion if any). */
+async function run(resume = false) {
+  const chatId = chat.id
+  // Busy at once: the page must not look idle while the claim is asked.
+  setLive({ busy: true, stream: '', ...resetLive })
+  // One window runs a conversation at a time (another window may already resume it).
+  if (!(await request<boolean>('llm.claim', { id: chatId }).catch(() => true))) {
+    setLive('busy', false)
+    if (!resume) pushMessage({ role: 'assistant', content: '', error: 'Cette conversation est déjà en cours dans une autre fenêtre.' })
+    return
+  }
   const c = new AbortController()
   ctrl = c
-  setLive({ busy: true, stream: '', ...resetLive })
+  let attach = resume ? chat.running?.stream : undefined
+  setChat('running', { stream: attach })
+  saveChat()
   try {
     // Instructions and skills may have changed since the last message.
     await loadPromptContext()
     let compactedForError = false
     for (let step = 0; step < MAX_STEPS; step++) {
-      if (needsCompaction()) await compact(false, c.signal).catch((e) => console.warn('compaction', e))
+      // Messages written meanwhile join the conversation before the next request.
+      if (!attach) drainQueue()
+      if (!attach && needsCompaction()) await compact(false, c.signal).catch((e) => console.warn('compaction', e))
       if (c.signal.aborted) return
-      const stream = newId()
+      const stream = attach ?? newId()
       setLive({ ...resetLive, stream, startedAt: Date.now() })
+      if (!attach) {
+        setChat('running', { stream })
+        saveChat()
+      }
       const model = currentModel()
       let res: any
       try {
-        res = await request(
-          'llm.chat',
-          {
-            server: config.server,
-            model: config.model,
-            messages: apiMessages(),
-            tools: useTools() ? toolDefs : undefined,
-            think: model?.caps.thinking ? prefs.think : undefined,
-            stream,
-          },
-          c.signal,
-        )
+        res = attach
+          ? await request('llm.attach', { stream }, c.signal)
+          : await request(
+              'llm.chat',
+              {
+                server: config.server,
+                model: config.model,
+                messages: apiMessages(),
+                tools: useTools() ? toolDefs : undefined,
+                think: model?.caps.thinking ? prefs.think : undefined,
+                stream,
+              },
+              c.signal,
+            )
+        attach = undefined
       } catch (e) {
+        attach = undefined
         const canceled = e instanceof RpcError && e.code === 'canceled'
         // Context exceeded: compact once, then try again.
         if (!canceled && !compactedForError && !live.content && contextError.test((e as Error).message)) {
@@ -227,10 +323,17 @@ async function run() {
         ...timing(),
         error: res.finish === 'length' ? 'Réponse coupée : limite de longueur atteinte.' : undefined,
       })
+      // The answer is in the conversation: a reload from now on does not attach to it.
+      setChat('running', { stream: undefined }) // a store merges objects: clear the field itself
+      saveChat()
       setLive({ ...resetLive })
       // A model loaded on demand tells its context size only once loaded.
       if (!contextSize()) loadModels().catch(() => {})
-      if (!msg.tool_calls?.length) return
+      if (!msg.tool_calls?.length) {
+        // Messages queued during the answer: the agent goes on with them.
+        if (chat.queue?.length && !c.signal.aborted) continue
+        return
+      }
       for (const call of msg.tool_calls) {
         if (c.signal.aborted) {
           pushMessage({ role: 'tool', tool_call_id: call.id, name: call.function.name, content: 'Annulé par l’utilisateur.', status: 'denied', summary: 'annulé' })
@@ -253,7 +356,9 @@ async function run() {
     if (ctrl === c) ctrl = null
     setLive({ busy: false, stream: '', compacting: false, ...resetLive })
     setApproval(null)
-    saveChat()
+    if (chat.id === chatId) setChat('running', undefined)
+    await saveChat()
+    request('llm.release', { id: chatId }).catch(() => {})
   }
 }
 

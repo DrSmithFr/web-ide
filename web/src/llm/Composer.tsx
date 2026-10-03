@@ -1,7 +1,6 @@
 // Message box of the assistant: text that grows with its content, attachments, dictation,
 // model picker, options menu, context gauge, send / stop. The draft survives panel switches.
 import { createEffect, createMemo, createResource, createSignal, For, on, onCleanup, onMount, Show, type JSX } from 'solid-js'
-import { produce } from 'solid-js/store'
 import { Icon } from '../ui/icons'
 import { errorToast, toast } from '../ui/toast'
 import { fuzzy } from '../ui/overlay'
@@ -23,19 +22,17 @@ import {
   select,
   serverKind,
   resetChat,
-  setChat,
   setPrefs,
   type Attachment,
   type Model,
   type Part,
 } from './state'
-import { compactNow, send, stop } from './agent'
+import { compactNow, send, stop, unqueue } from './agent'
 import { prepare } from './attachments'
 import { cancelRecording, canRecord, modelById, speech, startRecording, stopRecording, transcribe } from './transcribe'
 import { AttachmentChip, formatSize, formatTokens, Popover, Switch } from './parts'
 
 const [draft, setDraft] = createSignal('')
-const [editFrom, setEditFrom] = createSignal<number | null>(null)
 const [pending, setPending] = createSignal<{ parts: Part[]; attachment: Attachment }[]>([])
 const [preparing, setPreparing] = createSignal(0)
 let textareaRef: HTMLTextAreaElement | undefined
@@ -66,12 +63,6 @@ export function suggest(text: string) {
   focusComposer()
 }
 
-/** Edits a message already sent: the conversation restarts from it when the box is sent. */
-export function startEdit(index: number, text: string) {
-  setEditFrom(index)
-  setDraft(text)
-  focusComposer()
-}
 
 // ---------- commands and mentions ----------
 
@@ -106,10 +97,14 @@ async function projectPaths(): Promise<string[]> {
 }
 
 /** Runs a /command; returns false when the text is not a command to run here. */
-async function runCommand(text: string, onSettings: () => void): Promise<boolean> {
+export async function runCommand(text: string, onSettings: () => void): Promise<boolean> {
   const m = /^\/(\S+)\s*([\s\S]*)$/.exec(text)
   if (!m) return false
   const [, name, args] = m
+  if (live.busy && ['clear', 'new', 'compact'].includes(name)) {
+    toast(`/${name} : disponible une fois la réponse terminée`, 'warn')
+    return true
+  }
   switch (name) {
     case 'clear':
     case 'new':
@@ -515,7 +510,7 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
   const submit = async () => {
     const text = draft().trim()
     const atts = pending()
-    if (!canSend() || live.busy) return
+    if (!canSend()) return
     if (text.startsWith('/') && !atts.length) {
       setDraft('')
       setHelp(false)
@@ -534,11 +529,6 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
       return
     }
     setHelp(false)
-    const from = editFrom()
-    if (from !== null) {
-      setChat(produce((c) => c.messages.splice(from)))
-      setEditFrom(null)
-    }
     setDraft('')
     setPending([])
     props.onSent()
@@ -583,10 +573,6 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
       if (live.busy) {
         e.preventDefault()
         stop()
-      } else if (editFrom() !== null) {
-        e.preventDefault()
-        setEditFrom(null)
-        setDraft('')
       }
     } else if (e.key === ' ' && e.ctrlKey && !e.shiftKey && !e.altKey) {
       e.preventDefault()
@@ -604,14 +590,37 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
 
   return (
     <div class="ai-composer-wrap">
-      <div class="ai-composer" classList={{ editing: editFrom() !== null }}>
-        <Show when={editFrom() !== null}>
-          <div class="ai-editing">
-            <Icon name="edit" size={12} /> Modification d’un message : la conversation reprendra à partir de lui.
-            <span class="grow" />
-            <button class="link small" onClick={() => (setEditFrom(null), setDraft(''))}>
-              Annuler
-            </button>
+      <div class="ai-composer">
+        <Show when={chat.queue?.length}>
+          <div class="ai-queue" data-testid="ai-queue">
+            <div class="ai-queue-title">
+              <Icon name="history" size={12} /> En file d’attente : {live.busy ? 'envoyé à la prochaine étape de la réponse' : 'envoyé avec le prochain message'}
+            </div>
+            <For each={chat.queue}>
+              {(q) => (
+                <div class="ai-queue-item">
+                  <span class="ellipsis">{q.display ?? q.text}</span>
+                  <Show when={q.attachments?.length}>
+                    <span class="muted small">+{q.attachments!.length} pièce(s) jointe(s)</span>
+                  </Show>
+                  <span class="grow" />
+                  <button
+                    class="ai-act"
+                    title="Reprendre dans la zone de saisie"
+                    onClick={() => {
+                      unqueue(q.id)
+                      setDraft(q.display ?? q.text)
+                      focusComposer()
+                    }}
+                  >
+                    <Icon name="edit" size={12} />
+                  </button>
+                  <button class="ai-act" title="Retirer de la file" onClick={() => unqueue(q.id)}>
+                    <Icon name="close" size={12} />
+                  </button>
+                </div>
+              )}
+            </For>
           </div>
         </Show>
         <Show when={pending().length || preparing()}>
@@ -661,7 +670,7 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
         <textarea
           ref={(el) => (textareaRef = el)}
           rows="1"
-          placeholder={config.model ? `Message à ${config.model}…` : 'Choisir un modèle pour commencer…'}
+          placeholder={live.busy ? 'Écrire la suite : le message attendra la prochaine étape…' : config.model ? `Message à ${config.model}…` : 'Choisir un modèle pour commencer…'}
           value={draft()}
           onInput={(e) => {
             setDraft(e.currentTarget.value)
@@ -701,6 +710,11 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
             <ContextMenu />
           </Show>
           <ModelPicker onSettings={props.onSettings} />
+          <Show when={live.busy && canSend()}>
+            <button class="ai-send queue" onClick={submit} aria-label="Mettre en file d’attente" title="Mettre en file d’attente (Entrée) : envoyé à la prochaine étape" data-testid="enqueue">
+              <Icon name="arrowUp" size={16} />
+            </button>
+          </Show>
           <Show
             when={live.busy}
             fallback={

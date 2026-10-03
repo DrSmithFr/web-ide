@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -88,19 +89,22 @@ func (m *Manager) Chat(ctx context.Context, req ChatRequest, onDelta func(Delta)
 	return m.openaiChat(ctx, s, req, b)
 }
 
-// batcher groups the deltas so that a fast model does not send one message per token.
+// batcher groups the deltas so that a fast model does not send one message per token; a
+// timer sends what is waiting after 40 ms, so a pause of the model does not hold it back.
 type batcher struct {
-	fn   func(Delta)
-	cur  Delta
-	last time.Time
+	fn    func(Delta)
+	mu    sync.Mutex
+	cur   Delta
+	timer *time.Timer
 }
 
-func newBatcher(fn func(Delta)) *batcher { return &batcher{fn: fn, last: time.Now()} }
+func newBatcher(fn func(Delta)) *batcher { return &batcher{fn: fn} }
 
 func (b *batcher) add(d Delta) {
 	if b.fn == nil {
 		return
 	}
+	b.mu.Lock()
 	b.cur.Content += d.Content
 	b.cur.Reasoning += d.Reasoning
 	if d.Tool != "" {
@@ -116,18 +120,27 @@ func (b *batcher) add(d Delta) {
 	if d.PromptTotal > 0 {
 		b.cur.PromptDone, b.cur.PromptTotal = d.PromptDone, d.PromptTotal
 	}
-	if time.Since(b.last) >= 40*time.Millisecond {
-		b.flush()
+	if b.timer == nil {
+		b.timer = time.AfterFunc(40*time.Millisecond, b.flush)
 	}
+	b.mu.Unlock()
 }
 
 func (b *batcher) flush() {
-	if b.fn == nil || b.cur == (Delta{}) {
+	if b.fn == nil {
 		return
 	}
-	b.fn(b.cur)
+	b.mu.Lock()
+	if b.timer != nil {
+		b.timer.Stop()
+		b.timer = nil
+	}
+	d := b.cur
 	b.cur = Delta{}
-	b.last = time.Now()
+	b.mu.Unlock()
+	if d != (Delta{}) {
+		b.fn(d)
+	}
 }
 
 // ---------- OpenAI compatible (llama.cpp) ----------

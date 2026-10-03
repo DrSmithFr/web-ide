@@ -56,12 +56,13 @@ type Manager struct {
 	cfg    Config
 	kinds  map[string]string  // detected kind per server URL
 	dbs    map[string]*sql.DB // conversation bases by path
+	jobs   map[string]*job    // completions running or recently ended, by stream
 }
 
 const configFile = "llm.json"
 
 func New(st *store.Store) *Manager {
-	m := &Manager{st: st, client: &http.Client{}, kinds: map[string]string{}, dbs: map[string]*sql.DB{}}
+	m := &Manager{st: st, client: &http.Client{}, kinds: map[string]string{}, dbs: map[string]*sql.DB{}, jobs: map[string]*job{}}
 	if err := st.ReadJSON(configFile, &m.cfg); err != nil && !store.IsNotExist(err) {
 		m.cfg = Config{}
 	}

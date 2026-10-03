@@ -51,6 +51,10 @@ export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
   }
   return (
     <aside class="ai-sidebar" data-testid="ai-sidebar">
+      <div class="ai-side-search">
+        <Icon name="search" size={13} />
+        <input placeholder="Rechercher" value={q()} onInput={(e) => setQ(e.currentTarget.value)} />
+      </div>
       <button
         class="ai-new-chat"
         disabled={live.busy}
@@ -61,10 +65,6 @@ export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
       >
         <Icon name="plus" size={14} /> Nouvelle conversation
       </button>
-      <div class="ai-side-search">
-        <Icon name="search" size={13} />
-        <input placeholder="Rechercher" value={q()} onInput={(e) => setQ(e.currentTarget.value)} />
-      </div>
       <div class="ai-side-list">
         <Show when={groups().length} fallback={<p class="muted small ai-side-empty">{q() ? 'Aucune conversation trouvée.' : 'Aucune conversation pour ce projet.'}</p>}>
           <For each={groups()}>

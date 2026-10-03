@@ -291,3 +291,16 @@
 .ai-ctx-compact { justify-content: center; }
 .ai-ctx-tip { margin: 0; text-align: center; font-size: 11px; }
 .ai-ctx .ai-switch-row { padding: 4px 8px; }
+
+/* queue of messages written during an answer */
+.ai-queue { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; border: 1px dashed var(--line); border-radius: 10px; background: var(--bg); }
+.ai-queue-title { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--fg-faint); }
+.ai-queue-item { display: flex; align-items: center; gap: 6px; font-size: 13px; min-width: 0; }
+.ai-send.queue { background: var(--bg-active); color: var(--fg); }
+
+/* message edited in place */
+.ai-msg.user.editing { align-self: stretch; max-width: none; }
+.ai-edit { width: 100%; border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line)); border-radius: 14px; background: var(--bg-2); padding: 10px 12px 8px; display: flex; flex-direction: column; gap: 6px; }
+.ai-edit textarea { border: 0 !important; background: transparent !important; padding: 0 !important; resize: none; font-size: 14px; line-height: 1.5; outline: none; }
+.ai-edit-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ai-mention.file { cursor: pointer; }

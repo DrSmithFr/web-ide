@@ -4,11 +4,13 @@ import { createMemo, createSignal, For, onCleanup, Show } from 'solid-js'
 import { Icon } from '../ui/icons'
 import { errorToast, toast } from '../ui/toast'
 import { activeTab, openFile, project, relPath } from '../state/project'
-import { approval, chat, config, live, liveSpeed, savePrefs, setPrefs, type ChatMessage, type Part, type ToolCall } from './state'
+import { approval, chat, config, live, liveSpeed, savePrefs, setChat, setPrefs, type ChatMessage, type Part, type ToolCall } from './state'
 import { retry } from './agent'
 import { AttachmentChip, callLabel, DiffBlock, formatDuration, formatTokens, Markdown, safeArgs, toolIcons, toolVerbs } from './parts'
 import { absPath } from './tools'
-import { startEdit } from './Composer'
+import { runCommand } from './Composer'
+import { send } from './agent'
+import { produce } from 'solid-js/store'
 
 const textOf = (m: ChatMessage) =>
   m.display !== undefined
@@ -77,34 +79,128 @@ function Welcome(props: { onSuggest: (t: string) => void; onSettings: () => void
 
 // ---------- user ----------
 
+/** Index of the user message being edited in place. */
+const [editing, setEditing] = createSignal<number | null>(null)
+
+/** Re-sends an edited message: the conversation restarts from it, attachments kept. */
+async function resend(index: number, text: string) {
+  const m = chat.messages[index]
+  // Attachments: every part except the typed text (the first text part).
+  const parts = Array.isArray(m.content) ? m.content.filter((p, i) => !(i === 0 && p.type === 'text' && m.display !== undefined && p.text === m.display)) : []
+  const attachments = m.attachments
+  setEditing(null)
+  setChat(produce((c) => c.messages.splice(index)))
+  if (text.startsWith('/') && !parts.length && (await runCommand(text, () => {}))) return
+  await send(text, parts, attachments)
+}
+
+function UserText(props: { text: string }) {
+  const open = (e: MouseEvent, token: string) => {
+    if (!(e.ctrlKey || e.metaKey) || !token.startsWith('@') || token.endsWith('/')) return
+    e.preventDefault()
+    openFile(absPath(token.slice(1))).catch(() => toast(`Impossible d’ouvrir ${token.slice(1)}`, 'error'))
+  }
+  return (
+    <div class="ai-user-text">
+      {/* @paths and the /command of the start shown as chips; Ctrl+click opens a file */}
+      <For each={props.text.split(/(^\/\S+|@[^\s@]+)/)}>
+        {(part) =>
+          part.startsWith('@') || /^\/\S+$/.test(part) ? (
+            <span class="ai-mention" classList={{ file: part.startsWith('@') && !part.endsWith('/') }} title={part.startsWith('@') ? 'Ctrl+clic : ouvrir dans l’éditeur' : undefined} onClick={(e) => open(e, part)}>
+              {part}
+            </span>
+          ) : (
+            part
+          )
+        }
+      </For>
+    </div>
+  )
+}
+
+function EditBox(props: { index: number; text: string }) {
+  const [value, setValue] = createSignal(props.text)
+  let el!: HTMLTextAreaElement
+  const grow = () => {
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 360)}px`
+  }
+  const submit = () => {
+    const t = value().trim()
+    if (t) resend(props.index, t).catch(errorToast)
+  }
+  return (
+    <div class="ai-edit" data-testid="ai-edit">
+      <textarea
+        ref={(e) => {
+          el = e
+          queueMicrotask(() => {
+            grow()
+            e.focus()
+            e.setSelectionRange(e.value.length, e.value.length)
+          })
+        }}
+        value={value()}
+        onInput={(e) => {
+          setValue(e.currentTarget.value)
+          grow()
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+            e.preventDefault()
+            submit()
+          } else if (e.key === 'Escape') {
+            e.preventDefault()
+            setEditing(null)
+          }
+        }}
+      />
+      <div class="ai-edit-bar">
+        <span class="muted small">La réponse sera régénérée à partir de ce message.</span>
+        <span class="grow" />
+        <button class="btn small" onClick={() => setEditing(null)}>
+          Annuler
+        </button>
+        <button class="btn small primary" disabled={!value().trim()} onClick={submit}>
+          Envoyer
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function UserMessage(props: { msg: ChatMessage; index: number }) {
   return (
-    <div class="ai-msg user">
-      <div class="ai-user-bubble">
-        <Show when={props.msg.attachments?.length}>
-          <div class="ai-atts">
-            <For each={props.msg.attachments}>{(a) => <AttachmentChip a={a} />}</For>
-          </div>
-        </Show>
-        <Show when={textOf(props.msg)}>
-          <div class="ai-user-text">
-            {/* @paths and the /command of the start shown as chips */}
-            <For each={textOf(props.msg).split(/(^\/\S+|@[^\s@]+)/)}>
-              {(part) => (part.startsWith('@') || /^\/\S+$/.test(part) ? <span class="ai-mention">{part}</span> : part)}
-            </For>
-          </div>
-        </Show>
-      </div>
-      <div class="ai-actions">
-        <button class="ai-act" title="Copier" onClick={() => copy(textOf(props.msg))}>
-          <Icon name="copy" size={13} />
-        </button>
-        <Show when={!live.busy && !props.msg.compacted}>
-          <button class="ai-act" title="Modifier et renvoyer" onClick={() => startEdit(props.index, textOf(props.msg))}>
-            <Icon name="edit" size={13} />
-          </button>
-        </Show>
-      </div>
+    <div class="ai-msg user" classList={{ editing: editing() === props.index }}>
+      <Show
+        when={editing() === props.index}
+        fallback={
+          <>
+            <div class="ai-user-bubble">
+              <Show when={props.msg.attachments?.length}>
+                <div class="ai-atts">
+                  <For each={props.msg.attachments}>{(a) => <AttachmentChip a={a} />}</For>
+                </div>
+              </Show>
+              <Show when={textOf(props.msg)}>
+                <UserText text={textOf(props.msg)} />
+              </Show>
+            </div>
+            <div class="ai-actions">
+              <button class="ai-act" title="Copier" onClick={() => copy(textOf(props.msg))}>
+                <Icon name="copy" size={13} />
+              </button>
+              <Show when={!live.busy && !props.msg.compacted}>
+                <button class="ai-act" title="Modifier" onClick={() => setEditing(props.index)}>
+                  <Icon name="edit" size={13} />
+                </button>
+              </Show>
+            </div>
+          </>
+        }
+      >
+        <EditBox index={props.index} text={textOf(props.msg)} />
+      </Show>
     </div>
   )
 }

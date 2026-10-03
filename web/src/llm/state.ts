@@ -107,6 +107,18 @@ export interface Chat {
   messages: ChatMessage[]
   /** Index from which reported usages count again (after a compaction). */
   resetAt?: number
+  /** Set while the agent runs, with the stream of the completion awaited: a reloaded page resumes it. */
+  running?: { stream?: string }
+  /** Messages written during an answer, sent at the next step. */
+  queue?: QueuedMessage[]
+}
+
+export interface QueuedMessage {
+  id: string
+  text: string
+  parts: Part[]
+  attachments?: Attachment[]
+  display?: string
 }
 
 export interface ChatInfo {
@@ -245,12 +257,17 @@ export function contextUsed(): number {
 }
 
 let loaded = false
-export async function loadConfig(force = false) {
-  if (loaded && !force) return
+let loading: Promise<void> | null = null
+/** Servers and models; later calls wait for the first load instead of skipping it. */
+export function loadConfig(force = false): Promise<void> {
+  if (loading && !force) return loading
   loaded = true
-  const c = await request('llm.config')
-  setConfig(reconcile(c))
-  if (config.server) await loadModels()
+  loading = (async () => {
+    const c = await request('llm.config')
+    setConfig(reconcile(c))
+    if (config.server) await loadModels()
+  })()
+  return loading
 }
 
 /** Configuration returned by the pod (servers saved or deleted from this window or another). */
@@ -306,7 +323,32 @@ export async function refreshChats() {
   }
 }
 
-export async function saveChat() {
+// Saves run one after the other: two saves handled at the same time by the pod could end
+// in the wrong order and leave an older state. A save asked while one is running is merged
+// into a single next save, which takes the state of that moment.
+let saving: Promise<void> | null = null
+let saveAgain = false
+
+export function saveChat(): Promise<void> {
+  if (!chat.messages.length) return Promise.resolve()
+  if (saving) {
+    saveAgain = true
+    return saving
+  }
+  saving = (async () => {
+    try {
+      do {
+        saveAgain = false
+        await saveNow()
+      } while (saveAgain)
+    } finally {
+      saving = null
+    }
+  })()
+  return saving
+}
+
+async function saveNow() {
   if (!chat.messages.length) return
   setChat('updated', Date.now())
   if (!chat.title) {

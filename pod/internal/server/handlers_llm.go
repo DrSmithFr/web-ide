@@ -58,8 +58,35 @@ func (s *Server) registerLLM() {
 		}
 		return s.LLM.Models(ctx, a.Server)
 	})
-	// llm.chat streams llm.delta events to the asking window only; stream is an id
-	// chosen by the page to match them.
+	// llm.chat runs a completion as a job of the pod and streams llm.delta events to the
+	// asking window only; stream is an id chosen by the page. If the window goes away
+	// (reload), the job goes on and llm.attach follows it again; Stop cancels it.
+	push := func(c *Client, stream string) func(llm.Delta) {
+		return func(d llm.Delta) {
+			c.push("llm.delta", struct {
+				Stream string `json:"stream"`
+				llm.Delta
+			}{stream, d})
+		}
+	}
+	wait := func(ctx context.Context, c *Client, stream string, snapshot bool) (any, error) {
+		var onSnap func(llm.Snapshot)
+		if snapshot {
+			onSnap = func(sn llm.Snapshot) {
+				c.push("llm.delta", struct {
+					Stream     string `json:"stream"`
+					IsSnapshot bool   `json:"snapshot"`
+					llm.Snapshot
+				}{stream, true, sn})
+			}
+		}
+		res, err := s.LLM.WaitChat(ctx, stream, onSnap, push(c, stream))
+		if err != nil && ctx.Err() != nil && c.ctx.Err() == nil {
+			// Cancelled by the page itself (button Stop), not by a lost connection.
+			s.LLM.CancelChat(stream)
+		}
+		return res, err
+	}
 	s.handle("llm.chat", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 		a, err := bind[struct {
 			llm.ChatRequest
@@ -68,12 +95,46 @@ func (s *Server) registerLLM() {
 		if err != nil {
 			return nil, err
 		}
-		return s.LLM.Chat(ctx, a.ChatRequest, func(d llm.Delta) {
-			c.push("llm.delta", struct {
-				Stream string `json:"stream"`
-				llm.Delta
-			}{a.Stream, d})
-		})
+		if err := s.LLM.StartChat(a.Stream, a.ChatRequest); err != nil {
+			return nil, err
+		}
+		return wait(ctx, c, a.Stream, false)
+	})
+	s.handle("llm.attach", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		a, err := bind[struct {
+			Stream string `json:"stream"`
+		}](p)
+		if err != nil {
+			return nil, err
+		}
+		return wait(ctx, c, a.Stream, true)
+	})
+	// A conversation is run by one window at a time: the one that claimed it. A claim
+	// ends with llm.release or when its window disconnects.
+	s.handle("llm.claim", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		a, err := bind[struct{ ID string }](p)
+		if err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if owner := s.claims[a.ID]; owner != nil && owner != c {
+			return false, nil
+		}
+		s.claims[a.ID] = c
+		return true, nil
+	})
+	s.handle("llm.release", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		a, err := bind[struct{ ID string }](p)
+		if err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		if s.claims[a.ID] == c {
+			delete(s.claims, a.ID)
+		}
+		s.mu.Unlock()
+		return nil, nil
 	})
 
 	// Speech recognition models cached by the pod (downloaded by the page through it).

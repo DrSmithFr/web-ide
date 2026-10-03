@@ -53,6 +53,7 @@ type Server struct {
 	runtimes map[string]*runtime.Runtime
 	opening  map[string]*sync.Mutex
 	handlers map[string]handler
+	claims   map[string]*Client // conversation of the assistant → window running it
 }
 
 type handler func(ctx context.Context, c *Client, p json.RawMessage) (any, error)
@@ -68,6 +69,7 @@ func (s *Server) Init() {
 	s.runtimes = map[string]*runtime.Runtime{}
 	s.opening = map[string]*sync.Mutex{}
 	s.handlers = map[string]handler{}
+	s.claims = map[string]*Client{}
 	s.registerGlobal()
 	s.registerProject()
 	s.registerDB()
@@ -258,6 +260,11 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 	c.readLoop(ctx)
 	s.mu.Lock()
 	delete(s.clients, c)
+	for id, owner := range s.claims {
+		if owner == c {
+			delete(s.claims, id)
+		}
+	}
 	project := c.project
 	rt := s.runtimes[project]
 	s.mu.Unlock()

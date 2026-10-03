@@ -10,7 +10,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"webide/pod/internal/fsx"
 	"webide/pod/internal/store"
@@ -354,5 +356,69 @@ func TestContext(t *testing.T) {
 	}
 	if _, err := m.ReadSkillFile(p, "pdf", "../../CLAUDE.md"); err == nil {
 		t.Fatal("escape accepted")
+	}
+}
+
+func TestJobSurvivesDetach(t *testing.T) {
+	release := make(chan struct{})
+	var hits atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"début \"}}]}\n\n")
+		w.(http.Flusher).Flush()
+		if hits.Add(1) > 1 {
+			<-r.Context().Done() // second job: never ends by itself
+			return
+		}
+		select {
+		case <-release:
+		case <-r.Context().Done():
+			return
+		}
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"fin\"}}]}\n\ndata: [DONE]\n\n")
+	}))
+	defer ts.Close()
+	m, id := newManager(t, ts.URL, "llamacpp")
+	req := ChatRequest{Server: id, Model: "m", Messages: []Message{{Role: "user", Content: json.RawMessage(`"x"`)}}}
+	if err := m.StartChat("s1", req); err != nil {
+		t.Fatal(err)
+	}
+	// First page: leaves (its context ends) while the answer is being written.
+	ctx, cancel := context.WithCancel(context.Background())
+	got := make(chan struct{}, 1)
+	go func() {
+		_, _ = m.WaitChat(ctx, "s1", nil, func(d Delta) {
+			if d.Content != "" {
+				select {
+				case got <- struct{}{}:
+				default:
+				}
+			}
+		})
+	}()
+	<-got
+	cancel()
+	// Second page: gets what was written, then the end.
+	time.Sleep(50 * time.Millisecond)
+	var snap Snapshot
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		close(release)
+	}()
+	res, err := m.WaitChat(context.Background(), "s1", func(s Snapshot) { snap = s }, func(Delta) {})
+	if err != nil || snap.Content != "début " || string(res.Message.Content) != `"début fin"` || snap.StartedAt == 0 {
+		t.Fatalf("attach: snap=%+v res=%+v err=%v", snap, res, err)
+	}
+	if _, err := m.WaitChat(context.Background(), "inconnu", nil, nil); err == nil {
+		t.Fatal("unknown stream accepted")
+	}
+	// Stop cancels the job.
+	if err := m.StartChat("s2", req); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	m.CancelChat("s2")
+	if _, err := m.WaitChat(context.Background(), "s2", nil, func(Delta) {}); err == nil {
+		t.Fatal("cancelled job ended without error")
 	}
 }
