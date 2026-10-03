@@ -8,7 +8,7 @@ import { errorToast, toast } from '../ui/toast'
 import { applyConfig, config, loadModels, prefs, savePrefs, select, setPrefs, type Model, type ServerView } from './state'
 import { languages, probeGpu, speech, whisperModels } from './transcribe'
 import { formatSize } from './parts'
-import { buildSystemPrompt, DEFAULT_TEMPLATE, loadPromptContext, promptContext, templateOf } from './prompt'
+import { buildSystemPrompt, DEFAULT_PLAN_TEMPLATE, DEFAULT_TEMPLATE, loadPromptContext, promptContext, templateOf } from './prompt'
 
 function size(n: number) {
   return n < 1024 ? `${n} o` : `${(n / 1024).toFixed(1)} Ko`
@@ -16,13 +16,16 @@ function size(n: number) {
 
 export function PromptSettings() {
   const [scope, setScope] = createSignal<'project' | 'global'>('project')
+  const [kind, setKind] = createSignal<'build' | 'plan'>('build')
+  const stored = (c: ReturnType<typeof promptContext>, sc: 'project' | 'global', k: 'build' | 'plan') =>
+    (k === 'plan' ? (sc === 'project' ? c?.projectPlanPrompt : c?.globalPlanPrompt) : sc === 'project' ? c?.projectPrompt : c?.globalPrompt) ?? ''
   const [text, setText] = createSignal('')
   const [busy, setBusy] = createSignal(false)
   // Text typed before the context arrives is not replaced by it.
   let edited = false
   const load = async () => {
     const c = await loadPromptContext()
-    if (!edited) setText((scope() === 'project' ? c.projectPrompt : c.globalPrompt) ?? '')
+    if (!edited) setText(stored(c, scope(), kind()))
   }
   const edit = (v: string) => {
     edited = true
@@ -32,13 +35,18 @@ export function PromptSettings() {
   const switchScope = (s: 'project' | 'global') => {
     edited = false
     setScope(s)
-    const c = promptContext()
-    setText((s === 'project' ? c?.projectPrompt : c?.globalPrompt) ?? '')
+    setText(stored(promptContext(), s, kind()))
   }
+  const switchKind = (k: 'build' | 'plan') => {
+    edited = false
+    setKind(k)
+    setText(stored(promptContext(), scope(), k))
+  }
+  const defaultText = () => (kind() === 'plan' ? DEFAULT_PLAN_TEMPLATE : DEFAULT_TEMPLATE)
   const save = async (content: string) => {
     setBusy(true)
     try {
-      await request('llm.prompt.save', { scope: scope(), content })
+      await request('llm.prompt.save', { scope: scope(), kind: kind(), content })
       edited = false
       await load()
       toast(content.trim() ? 'Prompt enregistré' : 'Prompt par défaut rétabli', 'ok')
@@ -48,14 +56,21 @@ export function PromptSettings() {
       setBusy(false)
     }
   }
-  const source = () => templateOf(promptContext()).source
+  const source = () => templateOf(promptContext(), kind()).source
   return (
     <div class="form" data-testid="prompt-settings">
       <p class="muted small">
-        Le prompt système commence par ce modèle, puis viennent les fichiers d’instructions et la liste des skills, chargés comme Claude Code. Le prompt du projet (<code>.ide/system-prompt.md</code>) remplace le global. En ce moment :{' '}
+        Le prompt système commence par ce modèle, puis viennent les fichiers d’instructions et la liste des skills, chargés comme Claude Code. Le prompt du projet (<code>.ide/system-prompt.md</code>, <code>.ide/plan-prompt.md</code> pour le mode Plan) remplace le global. En ce moment :{' '}
         <strong>{source() === 'project' ? 'prompt du projet' : source() === 'global' ? 'prompt global' : 'prompt par défaut'}</strong>.
       </p>
       <div class="field-row">
+        <button type="button" class="toggle" classList={{ on: kind() === 'build' }} onClick={() => switchKind('build')} data-testid="prompt-build">
+          build
+        </button>
+        <button type="button" class="toggle" classList={{ on: kind() === 'plan' }} onClick={() => switchKind('plan')} data-testid="prompt-plan">
+          plan
+        </button>
+        <span class="sep" />
         <button type="button" class="toggle" classList={{ on: scope() === 'project' }} onClick={() => switchScope('project')}>
           projet
         </button>
@@ -63,16 +78,16 @@ export function PromptSettings() {
           global
         </button>
         <span class="grow" />
-        <button type="button" class="btn small" onClick={() => edit(DEFAULT_TEMPLATE)}>
+        <button type="button" class="btn small" onClick={() => edit(defaultText())}>
           Partir du prompt par défaut
         </button>
       </div>
-      <textarea class="ai-prompt-edit mono" rows="12" value={text()} onInput={(e) => edit(e.currentTarget.value)} placeholder={`Vide : ${scope() === 'project' ? 'prompt global, sinon ' : ''}prompt par défaut.\n\n${DEFAULT_TEMPLATE}`} name="systemPrompt" />
+      <textarea class="ai-prompt-edit mono" rows="12" value={text()} onInput={(e) => edit(e.currentTarget.value)} placeholder={`Vide : ${scope() === 'project' ? 'prompt global, sinon ' : ''}prompt par défaut.\n\n${defaultText()}`} name="systemPrompt" />
       <p class="muted small">
         Variables : <code>{'{{project}}'}</code> <code>{'{{root}}'}</code> <code>{'{{host}}'}</code> <code>{'{{activeFile}}'}</code> <code>{'{{date}}'}</code> <code>{'{{tools}}'}</code> (description des outils, vide si désactivés).
       </p>
       <div class="form-actions">
-        <button type="button" class="btn" onClick={() => openTextTab('Prompt système', buildSystemPrompt(promptContext(), true), 'markdown')}>
+        <button type="button" class="btn" onClick={() => openTextTab(kind() === 'plan' ? 'Prompt système (Plan)' : 'Prompt système', buildSystemPrompt(promptContext(), true, kind()), 'markdown')}>
           Aperçu du prompt complet
         </button>
         <span class="grow" />
@@ -115,6 +130,42 @@ export function PromptSettings() {
           )}
         </For>
       </fieldset>
+    </div>
+  )
+}
+
+export function PlanSettings() {
+  const [list] = createResource(
+    () => prefs.planServer,
+    (server) => (server ? request<{ models: Model[] }>('llm.models', { server }).then((r) => r.models, () => []) : Promise.resolve([] as Model[])),
+  )
+  const set = (k: 'planServer' | 'planModel', v: string) => {
+    setPrefs(k, v)
+    savePrefs()
+  }
+  return (
+    <div class="form" data-testid="plan-settings">
+      <p class="muted small">
+        En mode Plan (Maj+Tab dans la zone de saisie), l’assistant explore et propose un plan sans modifier les fichiers : edit_file et write_file sont retirés, et une commande bash qui ne ressemble pas à une lecture demande ton accord. Son prompt se modifie dans l’onglet « Prompt et instructions » (bouton plan). Quand le plan est prêt, « Exécuter ce plan » passe en Build avec le modèle de la conversation.
+      </p>
+      <div class="field-row">
+        <label class="field grow">
+          <span>Modèle du mode Plan</span>
+          <select value={prefs.planServer} onChange={(e) => (set('planServer', e.currentTarget.value), set('planModel', ''))} name="planServer">
+            <option value="">Le modèle de la conversation</option>
+            <For each={config.servers}>{(s) => <option value={s.id}>{s.name}</option>}</For>
+          </select>
+        </label>
+        <Show when={prefs.planServer}>
+          <label class="field grow">
+            <span>Modèle</span>
+            <select value={prefs.planModel} onChange={(e) => set('planModel', e.currentTarget.value)} name="planModel">
+              <option value="">— choisir —</option>
+              <For each={list() ?? []}>{(m) => <option value={m.id}>{m.id}</option>}</For>
+            </select>
+          </label>
+        </Show>
+      </div>
     </div>
   )
 }
@@ -263,11 +314,12 @@ export function SettingsModal(props: { onClose: () => void }) {
       errorToast(err)
     }
   }
-  type Tab = 'servers' | 'prompt' | 'compaction' | 'speech'
+  type Tab = 'servers' | 'prompt' | 'plan' | 'compaction' | 'speech'
   const [tab, setTab] = createSignal<Tab>('servers')
   const tabs: [Tab, string][] = [
     ['servers', 'Serveurs'],
     ['prompt', 'Prompt et instructions'],
+    ['plan', 'Mode Plan'],
     ['compaction', 'Compaction'],
     ['speech', 'Transcription'],
   ]
@@ -284,6 +336,9 @@ export function SettingsModal(props: { onClose: () => void }) {
       </div>
       <Show when={tab() === 'prompt'}>
         <PromptSettings />
+      </Show>
+      <Show when={tab() === 'plan'}>
+        <PlanSettings />
       </Show>
       <Show when={tab() === 'compaction'}>
         <CompactionSettings />

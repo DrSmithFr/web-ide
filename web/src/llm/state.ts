@@ -90,6 +90,11 @@ export interface ChatMessage {
   /** Time spent thinking, and from the request to the end of the answer (ms). */
   thinkMs?: number
   elapsedMs?: number
+  /** Mode in which an answer was written. */
+  mode?: Mode
+  /** Plan proposed with exit_plan_mode (tool message), and what the user did with it. */
+  plan?: string
+  planState?: 'pending' | 'accepted' | 'dismissed'
 }
 
 export interface DiffLine {
@@ -111,7 +116,11 @@ export interface Chat {
   running?: { stream?: string }
   /** Messages written during an answer, sent at the next step. */
   queue?: QueuedMessage[]
+  /** Plan: explore and propose without changing files; Build (default): act. */
+  mode?: Mode
 }
+
+export type Mode = 'plan' | 'build'
 
 export interface QueuedMessage {
   id: string
@@ -168,12 +177,14 @@ export function liveSpeed(now = Date.now()): number {
   return s > 0.2 ? live.tokens / s : 0
 }
 
-/** Edit waiting for the user (confirmation mode). */
+/** Action waiting for the user: a file change (diff) or a command (Plan mode). */
 export interface Approval {
   call: ToolCall
-  path: string
-  diff: DiffLine[]
-  created: boolean
+  kind: 'edit' | 'command'
+  path?: string
+  diff?: DiffLine[]
+  created?: boolean
+  command?: string
   resolve: (ok: boolean) => void
 }
 export const [approval, setApproval] = createSignal<Approval | null>(null)
@@ -194,6 +205,9 @@ export const [prefs, setPrefs] = createStore({
   compactModel: '',
   /** History side bar open (when it is not always shown). */
   sidebarOpen: false,
+  /** Model of the Plan mode ('' server: the model of the conversation). */
+  planServer: '',
+  planModel: '',
 })
 try {
   const p = JSON.parse(localStorage.getItem('webide.llm.prefs') ?? 'null')

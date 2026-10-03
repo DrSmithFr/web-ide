@@ -3,7 +3,7 @@
 // compacted: the oldest messages are replaced by a summary written by a model.
 import { produce } from 'solid-js/store'
 import { on, request, RpcError } from '../pod/rpc'
-import { runTool, toolDefs, writeTools, type Confirm } from './tools'
+import { runTool, toolsFor, writeTools, type Confirm } from './tools'
 import { buildSystemPrompt, loadPromptContext, promptContext } from './prompt'
 import {
   approval,
@@ -25,6 +25,7 @@ import {
   setLive,
   updateLast,
   type ChatMessage,
+  type Mode,
   type Part,
 } from './state'
 
@@ -102,11 +103,27 @@ function useTools() {
   return prefs.tools && currentModel()?.caps.tools !== false
 }
 
+export function currentMode(): Mode {
+  return chat.mode ?? 'build'
+}
+
+/** Server and model of the next request: the Plan model in Plan mode when one is chosen. */
+function target() {
+  if (currentMode() === 'plan' && prefs.planServer && prefs.planModel) return { server: prefs.planServer, model: prefs.planModel }
+  return { server: config.server, model: config.model }
+}
+
+export function setMode(mode: Mode) {
+  if (currentMode() === mode) return
+  setChat('mode', mode)
+  if (chat.messages.length) saveChat()
+}
+
 const SUMMARY_PREFIX = 'Résumé de la conversation précédente (compaction automatique, les messages résumés ne sont plus visibles) :\n\n'
 
 /** Messages as the API expects them (fields of the page and compacted messages removed). */
 function apiMessages(): any[] {
-  const out: any[] = [{ role: 'system', content: buildSystemPrompt(promptContext(), useTools()) }]
+  const out: any[] = [{ role: 'system', content: buildSystemPrompt(promptContext(), useTools(), currentMode()) }]
   for (const m of chat.messages) {
     if (m.compacted) continue
     if (m.error && m.role === 'assistant' && !m.content && !m.tool_calls?.length) continue
@@ -122,20 +139,31 @@ function apiMessages(): any[] {
   return out
 }
 
-const confirm: Confirm = (call, path, diff, created) => {
-  if (prefs.autoApply) return Promise.resolve(true)
+const confirm: Confirm = (req) => {
+  // "Apply without asking" covers file changes; commands of the Plan mode always ask.
+  if (req.kind === 'edit' && prefs.autoApply) return Promise.resolve(true)
   return new Promise((resolve) => {
     setApproval({
-      call,
-      path,
-      diff,
-      created,
+      ...req,
       resolve: (ok) => {
         setApproval(null)
         resolve(ok)
       },
     })
   })
+}
+
+/** The user accepts the plan of a tool message: Build mode, then its execution. */
+export async function executePlan(index: number) {
+  if (live.busy) return
+  setChat('messages', index, 'planState', 'accepted')
+  setMode('build')
+  await send('Le plan est accepté : exécute-le maintenant, étape par étape.', [], [], 'Exécuter le plan')
+}
+
+export function dismissPlan(index: number) {
+  setChat('messages', index, 'planState', 'dismissed')
+  saveChat()
 }
 
 export function isBusy() {
@@ -333,6 +361,8 @@ async function run(resume = false) {
         saveChat()
       }
       const model = currentModel()
+      const tgt = target()
+      const mode = currentMode()
       let res: any
       try {
         res = attach
@@ -340,10 +370,10 @@ async function run(resume = false) {
           : await request(
               'llm.chat',
               {
-                server: config.server,
-                model: config.model,
+                server: tgt.server,
+                model: tgt.model,
                 messages: apiMessages(),
-                tools: useTools() ? toolDefs : undefined,
+                tools: useTools() ? toolsFor(mode) : undefined,
                 think: model?.caps.thinking ? prefs.think : undefined,
                 stream,
               },
@@ -371,7 +401,8 @@ async function run(resume = false) {
             role: 'assistant',
             content: live.content,
             reasoning_content: live.reasoning || undefined,
-            model: config.model,
+            model: tgt.model,
+            mode,
             ...timing(),
             error: canceled ? 'Arrêté.' : (e as Error).message,
           })
@@ -385,7 +416,8 @@ async function run(resume = false) {
         reasoning_content: msg.reasoning_content || undefined,
         tool_calls: msg.tool_calls?.length ? msg.tool_calls : undefined,
         usage: res.usage,
-        model: config.model,
+        model: tgt.model,
+        mode,
         ...timing(),
         error: res.finish === 'length' ? 'Réponse coupée : limite de longueur atteinte.' : undefined,
       })
@@ -400,13 +432,46 @@ async function run(resume = false) {
         if (chat.queue?.length && !c.signal.aborted) continue
         return
       }
+      let stopAfter = false
       for (const call of msg.tool_calls) {
         if (c.signal.aborted) {
           pushMessage({ role: 'tool', tool_call_id: call.id, name: call.function.name, content: 'Annulé par l’utilisateur.', status: 'denied', summary: 'annulé' })
           continue
         }
-        pushMessage({ role: 'tool', tool_call_id: call.id, name: call.function.name, content: '', summary: writeTools.has(call.function.name) ? 'en attente…' : 'en cours…' })
-        const r = await runTool(call, confirm, c.signal)
+        const name = call.function.name
+        let args: any = {}
+        try {
+          args = JSON.parse(call.function.arguments || '{}')
+        } catch {
+          /* checked by the tools */
+        }
+        if (name === 'exit_plan_mode') {
+          // The plan goes to the user; the turn ends until they decide.
+          const plan = String(args.plan ?? '').trim()
+          pushMessage({
+            role: 'tool',
+            tool_call_id: call.id,
+            name,
+            content: plan ? 'Plan présenté à l’utilisateur, qui va l’accepter ou demander des changements. Attends sa réponse.' : 'Erreur : plan vide.',
+            status: plan ? 'ok' : 'error',
+            summary: plan ? 'plan proposé' : 'plan vide',
+            plan: plan || undefined,
+            planState: plan ? 'pending' : undefined,
+          })
+          if (plan) stopAfter = true
+          continue
+        }
+        pushMessage({ role: 'tool', tool_call_id: call.id, name, content: '', summary: writeTools.has(name) ? 'en attente…' : 'en cours…' })
+        if (name === 'compact_conversation') {
+          // Asked by the model: everything but the last exchange is summarized.
+          const r = await compact(true, c.signal, String(args.instructions ?? '')).then(
+            () => ({ content: 'Conversation compactée : les anciens messages sont remplacés par un résumé.', summary: 'conversation compactée', status: 'ok' as const }),
+            (e) => ({ content: `Erreur : ${(e as Error).message}`, summary: (e as Error).message, status: 'error' as const }),
+          )
+          updateLast((m) => Object.assign(m, r))
+          continue
+        }
+        const r = await runTool(call, confirm, c.signal, mode)
         updateLast((m) => {
           m.content = r.content
           m.summary = r.summary
@@ -414,6 +479,7 @@ async function run(resume = false) {
           m.diff = r.diff
         })
       }
+      if (stopAfter) return
       saveChat()
       if (c.signal.aborted) return
     }

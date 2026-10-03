@@ -253,14 +253,14 @@ func (s *Server) registerLLM() {
 		return s.LLM.ReadSkillFile(proj(rt), a.Name, a.File)
 	}))
 	s.handle("llm.prompt.save", withProject(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
-		a, err := bind[struct{ Scope, Content string }](p)
+		a, err := bind[struct{ Scope, Kind, Content string }](p)
 		if err != nil {
 			return nil, err
 		}
 		if a.Scope == "global" {
-			return nil, s.LLM.SaveGlobalPrompt(a.Content)
+			return nil, s.LLM.SaveGlobalPrompt(a.Kind, a.Content)
 		}
-		target := path.Join(rt.Root, llm.ProjectPromptFile)
+		target := path.Join(rt.Root, llm.ProjectPromptFile(a.Kind))
 		if strings.TrimSpace(a.Content) == "" {
 			if _, err := rt.FS.Stat(target); err != nil {
 				return nil, nil

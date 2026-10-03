@@ -304,3 +304,31 @@
 .ai-edit textarea { border: 0 !important; background: transparent !important; padding: 0 !important; resize: none; font-size: 14px; line-height: 1.5; outline: none; }
 .ai-edit-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .ai-mention.file { cursor: pointer; }
+
+/* Plan / Build */
+.ai-mode { display: inline-flex; align-items: center; gap: 5px; height: 28px; max-width: 200px; padding: 0 9px; margin-left: 2px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--fg-muted); cursor: pointer; font-size: 12px; min-width: 0; }
+.ai-mode:hover { color: var(--fg); background: var(--bg-hover); }
+.ai-mode.plan { color: var(--info); border-color: color-mix(in srgb, var(--info) 55%, var(--line)); background: color-mix(in srgb, var(--info) 12%, transparent); }
+.ai-mode-model { color: var(--fg-muted); }
+.ai-composer.plan { border-color: color-mix(in srgb, var(--info) 45%, var(--line)); }
+.ai-plan-badge { background: color-mix(in srgb, var(--info) 18%, transparent); color: var(--info); margin-left: 4px; }
+.ai-plan { border: 1px solid color-mix(in srgb, var(--info) 50%, var(--line)); border-radius: 12px; background: var(--bg-2); padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
+.ai-plan.done { border-color: var(--line); }
+.ai-plan-head { display: flex; align-items: center; gap: 8px; color: var(--info); }
+.ai-plan.done .ai-plan-head { color: var(--fg-muted); }
+.ai-plan-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 8px; }
+.ai-approval-cmd { margin: 0 12px 8px; width: auto; }
+
+/* Narrow message box: the buttons keep their size, the model pill shrinks first. */
+.ai-composer { container-type: inline-size; }
+.ai-composer-bar > .ai-pop-anchor { flex: none; }
+.ai-composer-bar > .ai-pop-anchor:has(.ai-pill) { flex: 0 1 auto; min-width: 48px; }
+.ai-mode, .ai-ring { flex: none; }
+@container (max-width: 420px) {
+  .ai-mode-model { display: none; }
+  .ai-pill { max-width: 130px; }
+}
+@container (max-width: 360px) {
+  .ai-mode-label { display: none; }
+  .ai-mode { padding: 0 7px; }
+}

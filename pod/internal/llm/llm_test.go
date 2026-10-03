@@ -313,13 +313,17 @@ func TestContext(t *testing.T) {
 	write(filepath.Join(root, ".claude/skills/deploy/SKILL.md"), "---\nname: deploy\ndescription: \"Déployer le projet\"\n---\nmake deploy")
 	write(filepath.Join(root, ".agents/skills/pdf/SKILL.md"), "---\nname: pdf\ndescription: PDF du projet\n---\nlocal")
 	write(filepath.Join(root, ".ide/system-prompt.md"), "Prompt du projet {{project}}")
-	_ = m.SaveGlobalPrompt("Prompt global")
+	_ = m.SaveGlobalPrompt("", "Prompt global")
+	_ = m.SaveGlobalPrompt("plan", "Plan global")
 	write(m.st.Path("AGENTS.md"), "Règles de l'IDE.")
 	write(m.st.Path("skills/notes/SKILL.md"), "---\nname: notes\ndescription: Notes de l'IDE\n---\nnoter")
 	write(m.st.Path("skills/pdf/SKILL.md"), "---\nname: pdf\ndescription: PDF de l'IDE\n---\nide")
 
 	p := Project{Root: root, FS: fsx.Local{}}
 	c := m.LoadContext(p)
+	if c.GlobalPlanPrompt == nil || *c.GlobalPlanPrompt != "Plan global" || c.ProjectPlanPrompt != nil {
+		t.Fatalf("plan prompts: %+v", c)
+	}
 	if c.GlobalPrompt == nil || *c.GlobalPrompt != "Prompt global" || c.ProjectPrompt == nil || !strings.Contains(*c.ProjectPrompt, "{{project}}") {
 		t.Fatalf("prompts: %+v", c)
 	}

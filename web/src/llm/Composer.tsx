@@ -27,7 +27,7 @@ import {
   type Model,
   type Part,
 } from './state'
-import { compactNow, send, stop, unqueue } from './agent'
+import { compactNow, currentMode, send, setMode, stop, unqueue } from './agent'
 import { prepare } from './attachments'
 import { cancelRecording, canRecord, modelById, speech, startRecording, stopRecording, transcribe } from './transcribe'
 import { AttachmentChip, formatSize, formatTokens, Popover, Switch } from './parts'
@@ -578,6 +578,10 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
         e.preventDefault()
         stop()
       }
+    } else if (e.key === 'Tab' && e.shiftKey && !e.ctrlKey && !e.altKey) {
+      // Shift+Tab switches between Plan and Build.
+      e.preventDefault()
+      setMode(currentMode() === 'plan' ? 'build' : 'plan')
     } else if (e.key === ' ' && e.ctrlKey && !e.shiftKey && !e.altKey) {
       e.preventDefault()
       dictate()
@@ -594,7 +598,7 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
 
   return (
     <div class="ai-composer-wrap">
-      <div class="ai-composer">
+      <div class="ai-composer" classList={{ plan: currentMode() === 'plan' }}>
         <Show when={chat.queue?.length}>
           <div class="ai-queue" data-testid="ai-queue">
             <div class="ai-queue-title">
@@ -709,6 +713,19 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
             <Icon name="mic" size={16} />
           </button>
           <Options />
+          <button
+            class="ai-mode"
+            classList={{ plan: currentMode() === 'plan' }}
+            title={currentMode() === 'plan' ? 'Mode Plan : explore et propose un plan, sans modifier les fichiers (Maj+Tab pour passer en Build)' : 'Mode Build : agit sur le projet (Maj+Tab pour passer en Plan)'}
+            onClick={() => setMode(currentMode() === 'plan' ? 'build' : 'plan')}
+            data-testid="ai-mode"
+          >
+            <Icon name={currentMode() === 'plan' ? 'outline' : 'edit'} size={13} />
+            <span class="ai-mode-label">{currentMode() === 'plan' ? 'Plan' : 'Build'}</span>
+            <Show when={currentMode() === 'plan' && prefs.planServer && prefs.planModel}>
+              <span class="ai-mode-model ellipsis">· {prefs.planModel}</span>
+            </Show>
+          </button>
           <span class="grow" />
           <Show when={chat.messages.length}>
             <ContextMenu />

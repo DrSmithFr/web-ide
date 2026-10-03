@@ -19,7 +19,7 @@ export interface ToolResult {
 }
 
 /** Asks the user before a change; resolves false when refused. */
-export type Confirm = (call: ToolCall, path: string, diff: DiffLine[], created: boolean) => Promise<boolean>
+export type Confirm = (req: { call: ToolCall; kind: 'edit' | 'command'; path?: string; diff?: DiffLine[]; created?: boolean; command?: string }) => Promise<boolean>
 
 const str = (description: string) => ({ type: 'string', description })
 const int = (description: string) => ({ type: 'integer', description })
@@ -103,6 +103,76 @@ export const toolDefs = [
 
 export const writeTools = new Set(['edit_file', 'write_file'])
 
+/** Tools handled by the agent loop itself. */
+export const agentToolDefs = {
+  exitPlan: fn(
+    'exit_plan_mode',
+    'Présente le plan terminé à l’utilisateur (mode Plan). Il peut l’accepter, ce qui passe en mode Build pour l’exécuter, ou demander des changements. Après cet appel, attends sa réponse.',
+    { plan: str('Le plan complet en Markdown : objectif, fichiers, étapes numérotées, tests') },
+    ['plan'],
+  ),
+  compact: fn(
+    'compact_conversation',
+    'Résume les anciens messages de la conversation pour libérer du contexte (le dernier échange est gardé). À utiliser quand une tâche est terminée ou que la conversation devient longue.',
+    { instructions: str('Ce que le résumé doit garder en priorité (facultatif)') },
+  ),
+}
+
+/** Tools offered to the model in a mode: no file change in Plan, exit_plan_mode only there. */
+export function toolsFor(mode: 'plan' | 'build') {
+  const base = mode === 'plan' ? toolDefs.filter((t) => !writeTools.has(t.function.name)) : toolDefs
+  return mode === 'plan' ? [...base, agentToolDefs.exitPlan, agentToolDefs.compact] : [...base, agentToolDefs.compact]
+}
+
+// Commands that only read (Plan mode runs them without asking).
+const readCommands = new Set([
+  'ls', 'cat', 'head', 'tail', 'less', 'more', 'grep', 'egrep', 'fgrep', 'rg', 'ag', 'wc', 'file', 'stat', 'pwd', 'echo', 'printf', 'tree', 'du', 'df',
+  'which', 'whereis', 'type', 'env', 'printenv', 'sort', 'uniq', 'cut', 'tr', 'diff', 'cmp', 'jq', 'yq', 'basename', 'dirname', 'realpath', 'readlink',
+  'date', 'whoami', 'id', 'uname', 'hostname', 'ps', 'nl', 'column', 'md5sum', 'sha256sum', 'true', 'false', 'test', '[', 'awk', 'sed', 'find', 'go', 'git',
+  'npm', 'node', 'python', 'python3', 'php', 'composer', 'cargo', 'make', 'docker',
+])
+const readSub: Record<string, RegExp> = {
+  git: /^(status|log|diff|show|blame|ls-files|ls-tree|grep|rev-parse|describe|shortlog|reflog|cat-file|config\s+--get|remote(\s+-v)?$|branch(\s+(-a|-r|-v|-vv|--list|--show-current))*$|tag(\s+(-l|--list))?$|stash\s+list)/,
+  go: /^(vet|list|doc|version|env)\b/,
+  npm: /^(ls|list|view|outdated|explain|why|-v|--version)\b/,
+  node: /^(-v|--version)$/,
+  python: /^(-V|--version)$/,
+  python3: /^(-V|--version)$/,
+  php: /^(-v|--version|-l)\b/,
+  composer: /^(show|outdated|licenses|-V|--version)\b/,
+  cargo: /^(tree|metadata|--version)\b/,
+  make: /^(-n|--dry-run)\b/,
+  docker: /^(ps|images|logs|inspect|version|info)\b/,
+}
+
+/**
+ * Guesses whether a shell command only reads. Conservative: redirections to files,
+ * substitutions and unknown commands count as changes.
+ */
+export function isReadOnlyCommand(command: string): boolean {
+  const c = command.replace(/\\\n/g, ' ')
+  if (/`|\$\(/.test(c)) return false
+  // Output redirections other than to /dev/null or between streams.
+  const noSafe = c.replace(/\d?>&\d/g, '').replace(/\d?>>?\s*\/dev\/null/g, '')
+  if (/>/.test(noSafe)) return false
+  for (const seg of c.split(/&&|\|\||;|\||\n/)) {
+    const words = seg.trim().split(/\s+/).filter(Boolean)
+    // Leading variable assignments (LANG=C cmd).
+    while (words.length && /^\w+=/.test(words[0])) words.shift()
+    if (!words.length) continue
+    const [cmd, ...rest] = words
+    if (!readCommands.has(cmd)) return false
+    const args = rest.join(' ')
+    if (cmd === 'sed' && /(^|\s)-i/.test(args)) return false
+    if (cmd === 'find' && /-(delete|exec|execdir|ok|fprint)/.test(args)) return false
+    if (cmd === 'sort' && /(^|\s)(-o|--output)/.test(args)) return false
+    if (cmd === 'awk' && /system\s*\(|>\s*"/.test(args)) return false
+    const sub = readSub[cmd]
+    if (sub && !sub.test(args)) return false
+  }
+  return true
+}
+
 const MAX_LINES = 1500
 const MAX_CHARS = 120_000
 
@@ -128,10 +198,18 @@ function parseArgs(call: ToolCall): Record<string, any> {
   }
 }
 
-export async function runTool(call: ToolCall, confirm: Confirm, signal?: AbortSignal): Promise<ToolResult> {
+export async function runTool(call: ToolCall, confirm: Confirm, signal?: AbortSignal, mode: 'plan' | 'build' = 'build'): Promise<ToolResult> {
   const name = call.function.name
   try {
     const a = parseArgs(call)
+    if (mode === 'plan') {
+      if (writeTools.has(name)) return fail('mode Plan : les fichiers ne peuvent pas être modifiés. Présente le plan avec exit_plan_mode ; il sera exécuté en mode Build.')
+      // A command that may change something waits for the user.
+      if ((name === 'bash' || name === 'run_command') && !isReadOnlyCommand(String(a.command ?? ''))) {
+        if (!(await confirm({ call, kind: 'command', command: String(a.command ?? '') })))
+          return { content: 'L’utilisateur a refusé cette commande (mode Plan : seules les lectures sont libres).', summary: 'commande refusée', status: 'denied' }
+      }
+    }
     switch (name) {
       case 'list_dir':
         return await listDir(a.path ?? '')
@@ -338,7 +416,7 @@ async function editFile(call: ToolCall, p: string, oldStr: string, newStr: strin
   if (text.indexOf(old, at + 1) >= 0) throw new Error(`old_string apparaît plusieurs fois dans ${relPath(abs)} : ajouter du contexte pour qu’il soit unique`)
   const next = text.slice(0, at) + newStr + text.slice(at + old.length)
   const diff = diffLines(text, next)
-  if (!(await confirm(call, abs, diff, false))) return { content: 'L’utilisateur a refusé cette modification.', summary: 'modification refusée', status: 'denied', diff }
+  if (!(await confirm({ call, kind: 'edit', path: abs, diff, created: false }))) return { content: 'L’utilisateur a refusé cette modification.', summary: 'modification refusée', status: 'denied', diff }
   await commit(abs, next)
   const line = text.slice(0, at).split('\n').length
   const added = diff.filter((d) => d.t === '+').length
@@ -355,7 +433,7 @@ async function writeFile(call: ToolCall, p: string, content: string, confirm: Co
   if (!created && before === content) return ok(`${relPath(abs)} a déjà ce contenu.`, `${relPath(abs)} : inchangé`)
   const diff = diffLines(before, content)
   if (created && diff[0]?.t === '-') diff.shift() // the empty line of "nothing"
-  if (!(await confirm(call, abs, diff, created))) return { content: 'L’utilisateur a refusé cette écriture.', summary: 'écriture refusée', status: 'denied', diff }
+  if (!(await confirm({ call, kind: 'edit', path: abs, diff, created }))) return { content: 'L’utilisateur a refusé cette écriture.', summary: 'écriture refusée', status: 'denied', diff }
   await commit(abs, content)
   const n = content.split('\n').length
   return ok(`${relPath(abs)} ${created ? 'créé' : 'remplacé'} (${plural(n, 'ligne')}).`, `${relPath(abs)} ${created ? 'créé' : 'remplacé'} (${plural(n, 'ligne')})`, diff)

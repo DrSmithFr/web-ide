@@ -8,8 +8,8 @@ import { approval, chat, config, live, liveSpeed, savePrefs, setChat, setPrefs, 
 import { retry } from './agent'
 import { AttachmentChip, callLabel, DiffBlock, formatDuration, formatTokens, Markdown, safeArgs, toolIcons, toolVerbs } from './parts'
 import { absPath } from './tools'
-import { runCommand } from './Composer'
-import { send } from './agent'
+import { focusComposer, runCommand } from './Composer'
+import { dismissPlan, executePlan, send } from './agent'
 import { produce } from 'solid-js/store'
 
 const textOf = (m: ChatMessage) =>
@@ -327,6 +327,9 @@ function Stats(props: { msg: ChatMessage }) {
   }
   return (
     <Show when={parts().length}>
+      <Show when={props.msg.mode === 'plan'}>
+        <span class="badge ai-plan-badge">Plan</span>
+      </Show>
       <span class="ai-usage">{parts().join(' · ')}</span>
     </Show>
   )
@@ -338,8 +341,13 @@ function AssistantMessage(props: { msg: ChatMessage; index: number; lastOfTurn: 
     const out: { msg: ChatMessage; call?: ToolCall }[] = []
     for (let i = props.index + 1; i < chat.messages.length && chat.messages[i].role === 'tool'; i++) {
       const m = chat.messages[i]
-      out.push({ msg: m, call: props.msg.tool_calls?.find((c) => c.id === m.tool_call_id) })
+      if (!m.plan) out.push({ msg: m, call: props.msg.tool_calls?.find((c) => c.id === m.tool_call_id) })
     }
+    return out
+  }
+  const plans = () => {
+    const out: number[] = []
+    for (let i = props.index + 1; i < chat.messages.length && chat.messages[i].role === 'tool'; i++) if (chat.messages[i].plan) out.push(i)
     return out
   }
   const turnText = () =>
@@ -359,6 +367,7 @@ function AssistantMessage(props: { msg: ChatMessage; index: number; lastOfTurn: 
       <Show when={results().length}>
         <ToolSteps items={results()} />
       </Show>
+      <For each={plans()}>{(i) => <PlanCard msg={chat.messages[i]} index={i} />}</For>
       <Show when={props.msg.error}>
         <div class="ai-error">
           <Icon name="conflict" size={13} /> {props.msg.error}
@@ -436,25 +445,76 @@ function ApprovalCard() {
   const a = () => approval()!
   return (
     <div class="ai-approval" data-testid="ai-approval">
-      <div class="ai-approval-head">
-        <Icon name="edit" size={14} />
-        <strong>{a().created ? 'Créer' : 'Modifier'}</strong>
-        <span class="mono ellipsis">{relPath(a().path)}</span>
-      </div>
-      <DiffBlock lines={a().diff} />
+      <Show
+        when={a().kind === 'command'}
+        fallback={
+          <>
+            <div class="ai-approval-head">
+              <Icon name="edit" size={14} />
+              <strong>{a().created ? 'Créer' : 'Modifier'}</strong>
+              <span class="mono ellipsis">{relPath(a().path ?? '')}</span>
+            </div>
+            <DiffBlock lines={a().diff ?? []} />
+          </>
+        }
+      >
+        <div class="ai-approval-head">
+          <Icon name="terminal" size={14} />
+          <strong>Exécuter cette commande ?</strong>
+          <span class="muted small">Mode Plan : elle pourrait modifier quelque chose.</span>
+        </div>
+        <pre class="ai-term ai-approval-cmd">
+          <span class="ai-term-cmd">$ {a().command}</span>
+        </pre>
+      </Show>
       <div class="ai-approval-foot">
-        <label class="check small">
-          <input type="checkbox" onChange={(e) => (setPrefs('autoApply', e.currentTarget.checked), savePrefs())} />
-          Ne plus demander
-        </label>
+        <Show when={a().kind === 'edit'}>
+          <label class="check small">
+            <input type="checkbox" onChange={(e) => (setPrefs('autoApply', e.currentTarget.checked), savePrefs())} />
+            Ne plus demander
+          </label>
+        </Show>
         <span class="grow" />
         <button class="btn" onClick={() => a().resolve(false)}>
           Refuser
         </button>
         <button class="btn primary" onClick={() => a().resolve(true)}>
-          Appliquer
+          {a().kind === 'command' ? 'Exécuter' : 'Appliquer'}
         </button>
       </div>
+    </div>
+  )
+}
+
+/** Plan proposed by the model with exit_plan_mode. */
+function PlanCard(props: { msg: ChatMessage; index: number }) {
+  const state = () => props.msg.planState
+  return (
+    <div class="ai-plan" classList={{ done: state() !== 'pending' }} data-testid="ai-plan">
+      <div class="ai-plan-head">
+        <Icon name="outline" size={14} />
+        <strong>Plan proposé</strong>
+        <span class="grow" />
+        <Show when={state() === 'accepted'}>
+          <span class="badge ok">exécuté</span>
+        </Show>
+        <Show when={state() === 'dismissed'}>
+          <span class="badge">à revoir</span>
+        </Show>
+      </div>
+      <Markdown text={props.msg.plan ?? ''} final />
+      <Show when={state() === 'pending'}>
+        <div class="ai-plan-foot">
+          <span class="muted small">Passe en mode Build pour l’exécuter.</span>
+          <span class="grow" />
+          <button class="btn" disabled={live.busy} onClick={() => (dismissPlan(props.index), focusComposer())}>
+            Continuer à planifier
+          </button>
+          <button class="btn primary" disabled={live.busy} onClick={() => executePlan(props.index).catch(errorToast)}>
+            Exécuter ce plan
+          </button>
+        </div>
+      </Show>
     </div>
   )
 }

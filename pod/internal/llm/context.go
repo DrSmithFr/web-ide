@@ -31,10 +31,13 @@ type Skill struct {
 
 type Context struct {
 	// Prompt templates edited by the user (nil when absent: default template).
-	GlobalPrompt  *string           `json:"globalPrompt"`
-	ProjectPrompt *string           `json:"projectPrompt"`
-	Files         []InstructionFile `json:"files"`
-	Skills        []Skill           `json:"skills"`
+	GlobalPrompt  *string `json:"globalPrompt"`
+	ProjectPrompt *string `json:"projectPrompt"`
+	// Templates of the Plan mode (nil: default plan template).
+	GlobalPlanPrompt  *string           `json:"globalPlanPrompt"`
+	ProjectPlanPrompt *string           `json:"projectPlanPrompt"`
+	Files             []InstructionFile `json:"files"`
+	Skills            []Skill           `json:"skills"`
 }
 
 // Project is what the context needs of a project: its root and its file system.
@@ -44,9 +47,11 @@ type Project struct {
 }
 
 const (
-	globalPromptFile  = "system-prompt.md"
-	projectPromptFile = ".ide/system-prompt.md"
-	maxInstruction    = 64 * 1024
+	globalPromptFile      = "system-prompt.md"
+	projectPromptFile     = ".ide/system-prompt.md"
+	globalPlanPromptFile  = "plan-prompt.md"
+	projectPlanPromptFile = ".ide/plan-prompt.md"
+	maxInstruction        = 64 * 1024
 )
 
 var globalMemory = []string{".claude/CLAUDE.md", ".codex/AGENTS.md"}
@@ -73,6 +78,14 @@ func (m *Manager) LoadContext(p Project) *Context {
 	if data, err := p.FS.Read(path.Join(p.Root, projectPromptFile)); err == nil {
 		s := string(data)
 		c.ProjectPrompt = &s
+	}
+	if data, err := os.ReadFile(m.st.Path(globalPlanPromptFile)); err == nil {
+		s := string(data)
+		c.GlobalPlanPrompt = &s
+	}
+	if data, err := p.FS.Read(path.Join(p.Root, projectPlanPromptFile)); err == nil {
+		s := string(data)
+		c.ProjectPlanPrompt = &s
 	}
 	local := fsx.Local{}
 	h := home()
@@ -293,14 +306,24 @@ func (m *Manager) ReadSkillFile(p Project, name, file string) (string, error) {
 	return string(data), nil
 }
 
-// SaveGlobalPrompt writes (or removes, when empty) the global prompt template. The
-// project one is a project file (.ide/system-prompt.md), written like any other.
-func (m *Manager) SaveGlobalPrompt(content string) error {
-	if strings.TrimSpace(content) == "" {
-		return m.st.Remove(globalPromptFile)
+// SaveGlobalPrompt writes (or removes, when empty) the global prompt template of a mode
+// ("plan" or the default one). The project ones are project files (PromptFile), written
+// like any other.
+func (m *Manager) SaveGlobalPrompt(kind, content string) error {
+	name := globalPromptFile
+	if kind == "plan" {
+		name = globalPlanPromptFile
 	}
-	return m.st.WriteFile(globalPromptFile, []byte(content))
+	if strings.TrimSpace(content) == "" {
+		return m.st.Remove(name)
+	}
+	return m.st.WriteFile(name, []byte(content))
 }
 
-// ProjectPromptFile is the project template, relative to the root.
-const ProjectPromptFile = projectPromptFile
+// ProjectPromptFile returns the project template of a mode, relative to the root.
+func ProjectPromptFile(kind string) string {
+	if kind == "plan" {
+		return projectPlanPromptFile
+	}
+	return projectPromptFile
+}
