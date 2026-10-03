@@ -9,7 +9,7 @@ import { retry } from './agent'
 import { AttachmentChip, callLabel, DiffBlock, formatDuration, formatTokens, Markdown, safeArgs, toolIcons, toolVerbs } from './parts'
 import { absPath } from './tools'
 import { focusComposer, runCommand } from './Composer'
-import { dismissPlan, executePlan, send } from './agent'
+import { answerQuestions, dismissPlan, executePlan, send } from './agent'
 import { produce } from 'solid-js/store'
 
 const textOf = (m: ChatMessage) =>
@@ -341,13 +341,18 @@ function AssistantMessage(props: { msg: ChatMessage; index: number; lastOfTurn: 
     const out: { msg: ChatMessage; call?: ToolCall }[] = []
     for (let i = props.index + 1; i < chat.messages.length && chat.messages[i].role === 'tool'; i++) {
       const m = chat.messages[i]
-      if (!m.plan) out.push({ msg: m, call: props.msg.tool_calls?.find((c) => c.id === m.tool_call_id) })
+      if (!m.plan && !m.questions) out.push({ msg: m, call: props.msg.tool_calls?.find((c) => c.id === m.tool_call_id) })
     }
     return out
   }
   const plans = () => {
     const out: number[] = []
     for (let i = props.index + 1; i < chat.messages.length && chat.messages[i].role === 'tool'; i++) if (chat.messages[i].plan) out.push(i)
+    return out
+  }
+  const asks = () => {
+    const out: number[] = []
+    for (let i = props.index + 1; i < chat.messages.length && chat.messages[i].role === 'tool'; i++) if (chat.messages[i].questions) out.push(i)
     return out
   }
   const turnText = () =>
@@ -368,6 +373,7 @@ function AssistantMessage(props: { msg: ChatMessage; index: number; lastOfTurn: 
         <ToolSteps items={results()} />
       </Show>
       <For each={plans()}>{(i) => <PlanCard msg={chat.messages[i]} index={i} />}</For>
+      <For each={asks()}>{(i) => <AskCard msg={chat.messages[i]} index={i} />}</For>
       <Show when={props.msg.error}>
         <div class="ai-error">
           <Icon name="conflict" size={13} /> {props.msg.error}
@@ -514,6 +520,153 @@ function PlanCard(props: { msg: ChatMessage; index: number }) {
             Exécuter ce plan
           </button>
         </div>
+      </Show>
+    </div>
+  )
+}
+
+/**
+ * Questions of ask_user: one at a time (choices and a free answer), then a recap before
+ * sending. Answered or skipped questions stay folded with their answers.
+ */
+function AskCard(props: { msg: ChatMessage; index: number }) {
+  const qs = () => props.msg.questions ?? []
+  const [step, setStep] = createSignal(0)
+  const [answers, setAnswers] = createSignal<string[][]>(qs().map(() => []))
+  const [free, setFree] = createSignal<string[]>(qs().map(() => ''))
+  const pending = () => props.msg.askState === 'pending'
+  const recap = () => step() >= qs().length
+  const answerOf = (i: number) => [...(answers()[i] ?? []), ...(free()[i]?.trim() ? [free()[i].trim()] : [])]
+  const answered = (i: number) => answerOf(i).length > 0
+  const toggle = (i: number, label: string) => {
+    const q = qs()[i]
+    setAnswers((a) => {
+      const cur = a[i] ?? []
+      const next = q.multiple ? (cur.includes(label) ? cur.filter((x) => x !== label) : [...cur, label]) : cur.includes(label) ? [] : [label]
+      return a.map((x, k) => (k === i ? next : x))
+    })
+    // A single choice moves on by itself.
+    if (!q.multiple && qs().length > 1 && !free()[i]?.trim() && (answers()[i] ?? []).length) setTimeout(() => setStep(i + 1), 120)
+  }
+  const submit = () => answerQuestions(props.index, qs().map((_, i) => answerOf(i))).catch(errorToast)
+  return (
+    <div class="ai-ask" classList={{ done: !pending() }} data-testid="ai-ask">
+      <div class="ai-ask-head">
+        <Icon name="info" size={14} />
+        <strong>{qs().length > 1 ? `${qs().length} questions` : 'Question'}</strong>
+        <span class="grow" />
+        <Show when={pending() && !recap() && qs().length > 1}>
+          <span class="muted small">
+            {step() + 1} / {qs().length}
+          </span>
+        </Show>
+        <Show when={props.msg.askState === 'answered'}>
+          <span class="badge ok">répondu</span>
+        </Show>
+        <Show when={props.msg.askState === 'skipped'}>
+          <span class="badge">sans réponse</span>
+        </Show>
+      </div>
+      <Show
+        when={pending()}
+        fallback={
+          <ol class="ai-ask-recap">
+            <For each={qs()}>
+              {(q, i) => (
+                <li>
+                  <span>{q.question}</span>
+                  <strong>{(props.msg.answers?.[i()] ?? []).join(' ; ') || '—'}</strong>
+                </li>
+              )}
+            </For>
+          </ol>
+        }
+      >
+        <Show
+          when={!recap()}
+          fallback={
+            <>
+              <ol class="ai-ask-recap">
+                <For each={qs()}>
+                  {(q, i) => (
+                    <li>
+                      <button class="link" onClick={() => setStep(i())}>
+                        {q.question}
+                      </button>
+                      <strong>{answerOf(i()).join(' ; ') || '—'}</strong>
+                    </li>
+                  )}
+                </For>
+              </ol>
+              <div class="ai-plan-foot">
+                <button class="btn" onClick={() => setStep(qs().length - 1)}>
+                  Précédent
+                </button>
+                <span class="grow" />
+                <button class="btn primary" disabled={live.busy} onClick={submit} data-testid="ai-ask-send">
+                  Envoyer les réponses
+                </button>
+              </div>
+            </>
+          }
+        >
+          <Show when={qs()[step()]} keyed>
+            {(q) => {
+              const i = step()
+              return (
+                <div class="ai-ask-q" data-testid="ai-ask-question">
+                  <Show when={q.header}>
+                    <span class="badge">{q.header}</span>
+                  </Show>
+                  <p class="ai-ask-text">{q.question}</p>
+                  <div class="ai-ask-options">
+                    <For each={q.options}>
+                      {(o) => (
+                        <button class="ai-ask-option" classList={{ on: (answers()[i] ?? []).includes(o.label) }} onClick={() => toggle(i, o.label)}>
+                          <span class={q.multiple ? 'ai-ask-box' : 'ai-ask-radio'} />
+                          <span>
+                            <strong>{o.label}</strong>
+                            <Show when={o.description}>
+                              <span class="muted small"> — {o.description}</span>
+                            </Show>
+                          </span>
+                        </button>
+                      )}
+                    </For>
+                  </div>
+                  <input
+                    class="input"
+                    placeholder="Autre réponse…"
+                    value={free()[i] ?? ''}
+                    onInput={(e) => setFree((f) => f.map((x, k) => (k === i ? e.currentTarget.value : x)))}
+                    onKeyDown={(e) => e.key === 'Enter' && answered(i) && setStep(i + 1)}
+                    data-testid="ai-ask-free"
+                  />
+                  <div class="ai-plan-foot">
+                    <Show when={i > 0}>
+                      <button class="btn" onClick={() => setStep(i - 1)}>
+                        Précédent
+                      </button>
+                    </Show>
+                    <span class="grow" />
+                    <Show
+                      when={qs().length > 1}
+                      fallback={
+                        <button class="btn primary" disabled={!answered(i) || live.busy} onClick={submit} data-testid="ai-ask-send">
+                          Répondre
+                        </button>
+                      }
+                    >
+                      <button class="btn primary" disabled={!answered(i)} onClick={() => setStep(i + 1)} data-testid="ai-ask-next">
+                        {i === qs().length - 1 ? 'Récapitulatif' : 'Suivant'}
+                      </button>
+                    </Show>
+                  </div>
+                </div>
+              )
+            }}
+          </Show>
+        </Show>
       </Show>
     </div>
   )

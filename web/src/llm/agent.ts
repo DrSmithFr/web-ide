@@ -27,7 +27,9 @@ import {
   type ChatMessage,
   type Mode,
   type Part,
+  type Question,
 } from './state'
+import { MAX_QUESTIONS } from './kanbanTools'
 
 const MAX_STEPS = 30
 
@@ -184,9 +186,66 @@ export async function send(text: string, parts: Part[], attachments: ChatMessage
       c.model = config.model
     }),
   )
+  skipQuestions()
   pushMessage({ role: 'user', content, display: display ?? (parts.length ? text : undefined), attachments: attachments?.length ? attachments : undefined })
   saveChat()
   await run()
+}
+
+// ---------- questions asked with ask_user ----------
+
+function normalizeQuestions(raw: unknown): Question[] {
+  if (!Array.isArray(raw)) return []
+  const out: Question[] = []
+  for (const q of raw.slice(0, MAX_QUESTIONS)) {
+    if (!q || typeof q !== 'object' || !String((q as any).question ?? '').trim()) continue
+    const options = (Array.isArray((q as any).options) ? (q as any).options : [])
+      .map((o: any) => (typeof o === 'string' ? { label: o } : { label: String(o?.label ?? ''), description: o?.description ? String(o.description) : undefined }))
+      .filter((o: { label: string }) => o.label.trim())
+      .slice(0, 6)
+    out.push({ question: String((q as any).question), header: (q as any).header ? String((q as any).header).slice(0, 24) : undefined, options, multiple: !!(q as any).multiple })
+  }
+  return out
+}
+
+/** Text given back to the model for the answers of the user. */
+function answersText(qs: Question[], answers: string[][]): string {
+  return (
+    'Réponses de l’utilisateur :\n' +
+    qs.map((q, i) => `${i + 1}. ${q.question}\n   → ${(answers[i] ?? []).filter((a) => a.trim()).join(' ; ') || '(pas de réponse)'}`).join('\n')
+  )
+}
+
+/** The user answers the questions of a tool message: the agent goes on with them. */
+export async function answerQuestions(index: number, answers: string[][]) {
+  const m = chat.messages[index]
+  if (live.busy || !m?.questions || m.askState !== 'pending') return
+  setChat(
+    produce((c) => {
+      const t = c.messages[index]
+      t.answers = answers
+      t.askState = 'answered'
+      t.content = answersText(m.questions!, answers)
+      t.summary = 'réponses reçues'
+    }),
+  )
+  saveChat()
+  await run()
+}
+
+/** A message sent instead of answering: the pending questions are left aside. */
+function skipQuestions() {
+  if (!chat.messages.some((m) => m.askState === 'pending')) return
+  setChat(
+    produce((c) => {
+      for (const m of c.messages)
+        if (m.askState === 'pending') {
+          m.askState = 'skipped'
+          m.content = 'L’utilisateur n’a pas répondu à ces questions ; son message suit.'
+          m.summary = 'questions sans réponse'
+        }
+    }),
+  )
 }
 
 /** Keeps a message written during an answer: it is sent at the next step of the agent. */
@@ -373,7 +432,7 @@ async function run(resume = false) {
                 server: tgt.server,
                 model: tgt.model,
                 messages: apiMessages(),
-                tools: useTools() ? toolsFor(mode) : undefined,
+                tools: useTools() ? toolsFor(mode, chat.ticket?.id) : undefined,
                 think: model?.caps.thinking ? prefs.think : undefined,
                 stream,
               },
@@ -461,6 +520,22 @@ async function run(resume = false) {
           if (plan) stopAfter = true
           continue
         }
+        if (name === 'ask_user') {
+          // The questions go to the user; the turn ends until they answer (answerQuestions).
+          const questions = normalizeQuestions(args.questions)
+          pushMessage({
+            role: 'tool',
+            tool_call_id: call.id,
+            name,
+            content: questions.length ? 'Questions posées à l’utilisateur : en attente de ses réponses.' : `Erreur : il faut 1 à ${MAX_QUESTIONS} questions, chacune avec au moins un choix.`,
+            status: questions.length ? 'ok' : 'error',
+            summary: questions.length ? `${questions.length} question${questions.length > 1 ? 's' : ''}` : 'questions invalides',
+            questions: questions.length ? questions : undefined,
+            askState: questions.length ? 'pending' : undefined,
+          })
+          if (questions.length) stopAfter = true
+          continue
+        }
         pushMessage({ role: 'tool', tool_call_id: call.id, name, content: '', summary: writeTools.has(name) ? 'en attente…' : 'en cours…' })
         if (name === 'compact_conversation') {
           // Asked by the model: everything but the last exchange is summarized.
@@ -471,7 +546,7 @@ async function run(resume = false) {
           updateLast((m) => Object.assign(m, r))
           continue
         }
-        const r = await runTool(call, confirm, c.signal, mode)
+        const r = await runTool(call, confirm, c.signal, mode, chat.ticket?.id)
         updateLast((m) => {
           m.content = r.content
           m.summary = r.summary

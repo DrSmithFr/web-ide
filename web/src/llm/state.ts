@@ -95,6 +95,17 @@ export interface ChatMessage {
   /** Plan proposed with exit_plan_mode (tool message), and what the user did with it. */
   plan?: string
   planState?: 'pending' | 'accepted' | 'dismissed'
+  /** Questions asked with ask_user (tool message), the answers, and their state. */
+  questions?: Question[]
+  answers?: string[][]
+  askState?: 'pending' | 'answered' | 'skipped'
+}
+
+export interface Question {
+  question: string
+  header?: string
+  options: { label: string; description?: string }[]
+  multiple?: boolean
 }
 
 export interface DiffLine {
@@ -118,7 +129,11 @@ export interface Chat {
   queue?: QueuedMessage[]
   /** Plan: explore and propose without changing files; Build (default): act. */
   mode?: Mode
+  /** Kanban ticket this conversation works on, and its role (docs/kanban.md). */
+  ticket?: { id: number; role: ChatRole }
 }
+
+export type ChatRole = 'briefing' | 'plan' | 'dev' | 'correction' | 'resolve'
 
 export type Mode = 'plan' | 'build'
 

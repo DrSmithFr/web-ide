@@ -8,6 +8,7 @@ import { lspLanguage, lspLanguageId } from '../editor/languages'
 import { lineHunks } from '../editor/linediff'
 import { flatten, symbolKinds, toLocations, type DocumentSymbol, type Location } from '../lsp/client'
 import type { DiffLine, ToolCall } from './state'
+import { askUserDef, kanbanReadDefs, kanbanToolNames, kanbanWriteDefs, runKanbanTool } from './kanbanTools'
 
 export interface ToolResult {
   /** Text given back to the model. */
@@ -118,10 +119,14 @@ export const agentToolDefs = {
   ),
 }
 
-/** Tools offered to the model in a mode: no file change in Plan, exit_plan_mode only there. */
-export function toolsFor(mode: 'plan' | 'build') {
+/**
+ * Tools offered to the model in a mode: no file change in Plan, exit_plan_mode only there.
+ * The kanban tools that change a ticket come with a conversation linked to a ticket.
+ */
+export function toolsFor(mode: 'plan' | 'build', ticket?: number) {
   const base = mode === 'plan' ? toolDefs.filter((t) => !writeTools.has(t.function.name)) : toolDefs
-  return mode === 'plan' ? [...base, agentToolDefs.exitPlan, agentToolDefs.compact] : [...base, agentToolDefs.compact]
+  const kanban = [...kanbanReadDefs, ...(ticket ? kanbanWriteDefs : []), askUserDef]
+  return mode === 'plan' ? [...base, ...kanban, agentToolDefs.exitPlan, agentToolDefs.compact] : [...base, ...kanban, agentToolDefs.compact]
 }
 
 // Commands that only read (Plan mode runs them without asking).
@@ -198,10 +203,11 @@ function parseArgs(call: ToolCall): Record<string, any> {
   }
 }
 
-export async function runTool(call: ToolCall, confirm: Confirm, signal?: AbortSignal, mode: 'plan' | 'build' = 'build'): Promise<ToolResult> {
+export async function runTool(call: ToolCall, confirm: Confirm, signal?: AbortSignal, mode: 'plan' | 'build' = 'build', ticket?: number): Promise<ToolResult> {
   const name = call.function.name
   try {
     const a = parseArgs(call)
+    if (kanbanToolNames.has(name)) return await runKanbanTool(name, a, ticket)
     if (mode === 'plan') {
       if (writeTools.has(name)) return fail('mode Plan : les fichiers ne peuvent pas être modifiés. Présente le plan avec exit_plan_mode ; il sera exécuté en mode Build.')
       // A command that may change something waits for the user.
