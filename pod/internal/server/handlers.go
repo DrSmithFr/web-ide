@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -107,6 +108,8 @@ func (s *Server) registerGlobal() {
 		if err != nil {
 			return nil, err
 		}
+		g, _ := bind[struct{ Remote string }](p)
+		a.Parent, a.Ticket, a.GitSetup = "", 0, &projects.GitSetup{Remote: strings.TrimSpace(g.Remote)}
 		if a.Type == "local" {
 			a.Path = config.ExpandHome(a.Path)
 			if st, err := os.Stat(a.Path); err != nil || !st.IsDir() {
@@ -114,10 +117,22 @@ func (s *Server) registerGlobal() {
 			}
 		}
 		v, err := s.Projects.Create(a)
-		if err == nil {
-			s.broadcast("projects.changed", nil, nil)
+		if err != nil {
+			return nil, err
 		}
-		return v, err
+		// Every project is a git repository. An SSH host not reachable without a password
+		// gets it at the first opening.
+		var gitErr string
+		if rt, err := s.openRuntime(v.ID, sshx.Creds{}); err == nil {
+			if err := s.gitSetup(ctx, rt); err != nil {
+				gitErr = err.Error()
+			}
+		}
+		s.broadcast("projects.changed", nil, nil)
+		return struct {
+			projects.View
+			GitError string `json:"gitError,omitempty"`
+		}{v, gitErr}, nil
 	})
 	s.handle("projects.update", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 		a, err := bind[projects.Project](p)
@@ -205,6 +220,27 @@ func (s *Server) closeRuntime(id string) {
 	}
 }
 
+// gitSetup prepares the repository of a project created with a pending git setup.
+func (s *Server) gitSetup(ctx context.Context, rt *runtime.Runtime) error {
+	p, ok := s.Projects.Get(rt.P.ID)
+	if !ok || p.GitSetup == nil {
+		return nil
+	}
+	empty := true
+	if es, err := rt.FS.List(rt.Root); err == nil {
+		for _, e := range es {
+			if e.Name != ".git" && e.Name != ".ide" {
+				empty = false
+			}
+		}
+	}
+	if err := rt.Git.Setup(ctx, p.GitSetup.Remote, empty); err != nil {
+		return err
+	}
+	s.Projects.SetGitSetup(p.ID, nil)
+	return nil
+}
+
 func (s *Server) openRuntime(id string, creds sshx.Creds) (*runtime.Runtime, error) {
 	s.mu.Lock()
 	if rt := s.runtimes[id]; rt != nil {
@@ -257,6 +293,9 @@ func (s *Server) registerProject() {
 		rt, err := s.openRuntime(a.ID, a.Creds)
 		if err != nil {
 			return nil, err
+		}
+		if err := s.gitSetup(ctx, rt); err != nil {
+			log.Printf("git setup of %s: %v", a.ID, err) // the Git panel still offers the init
 		}
 		s.mu.Lock()
 		prev := s.runtimes[c.project]

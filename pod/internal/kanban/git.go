@@ -68,6 +68,9 @@ func (g Git) IsRepo(ctx context.Context) bool {
 	return err == nil
 }
 
+// HasCommit is false for a repository whose branch has no commit yet.
+func (g Git) HasCommit(ctx context.Context) bool { return g.verify(ctx, g.Root, "HEAD") }
+
 func (g Git) verify(ctx context.Context, dir, ref string) bool {
 	_, err := g.git(ctx, dir, "rev-parse", "--verify", "--quiet", ref+"^{commit}")
 	return err == nil

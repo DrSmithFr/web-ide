@@ -164,8 +164,12 @@ func TestProjectFilesAndRemoteChanges(t *testing.T) {
 		t.Fatalf("derived name = %v", p["name"])
 	}
 	id := p["id"].(string)
+	// Every new project is a git repository (with files: no first commit).
+	if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil || p["gitError"] != nil {
+		t.Fatalf("git not initialized: %v %v", err, p["gitError"])
+	}
 	open := a.call("project.open", map[string]any{"id": id})["result"].(map[string]any)
-	if open["root"] != dir {
+	if open["root"] != dir || open["project"].(map[string]any)["gitSetup"] != nil {
 		t.Fatalf("root = %v", open["root"])
 	}
 	b.call("project.open", map[string]any{"id": id})

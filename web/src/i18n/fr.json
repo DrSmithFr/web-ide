@@ -1086,5 +1086,7 @@
   "Plan mode: explores and proposes a plan, without changing files (Shift+Tab for Briefing)": "Mode Plan : explore et propose un plan, sans modifier les fichiers (Maj+Tab pour passer en Briefing)",
   "Briefing mode: questions you to clarify an idea and writes it in kanban tickets, without changing files (Shift+Tab for Build)": "Mode Briefing : vous interroge pour préciser une idée et l’écrit en tickets du kanban, sans modifier les fichiers (Maj+Tab pour passer en Build)",
   "Build": "Build",
-  "System prompt (Briefing)": "Prompt système (Briefing)"
+  "System prompt (Briefing)": "Prompt système (Briefing)",
+  "git init failed: {error}": "échec du git init : {error}",
+  "Git remote (optional, added as origin)": "Remote git (optionnel, ajouté comme origin)"
 }

@@ -41,6 +41,7 @@ export function Home() {
   const addQuick = async (path: string) => {
     try {
       const p = await request('projects.create', { type: 'local', path, title: '', description: '' })
+      if (p.gitError) toast(t('git init failed: {error}', { error: p.gitError }), 'error')
       navigate(`/project/${p.id}`)
     } catch (e) {
       errorToast(e)
@@ -154,6 +155,7 @@ function ProjectForm(props: { initial: Partial<Project>; workspace: string; onCl
     ssh: { host: '', port: 22, user: '', auth: 'agent', keyPath: '', ...(props.initial.ssh ?? {}) },
   } as Project)
   const [browse, setBrowse] = createSignal(false)
+  const [remote, setRemote] = createSignal('')
   const [sshInfo] = createResource(() => request('ssh.info'))
   const isNew = !props.initial.id
 
@@ -161,8 +163,10 @@ function ProjectForm(props: { initial: Partial<Project>; workspace: string; onCl
     e.preventDefault()
     const body: any = { id: p.id, title: p.title, description: p.description, type: p.type, path: p.path }
     if (p.type === 'ssh') body.ssh = { ...p.ssh }
+    if (isNew) body.remote = remote()
     try {
       const v = await request(isNew ? 'projects.create' : 'projects.update', body)
+      if (v.gitError) toast(t('git init failed: {error}', { error: v.gitError }), 'error')
       props.onSaved(v, isNew)
     } catch (err) {
       errorToast(err)
@@ -234,6 +238,12 @@ function ProjectForm(props: { initial: Partial<Project>; workspace: string; onCl
           <label class="field">
             <span>{t('Remote folder (absolute, or relative to home)')}</span>
             <input class="mono" value={p.path} onInput={(e) => setP('path', e.currentTarget.value)} />
+          </label>
+        </Show>
+        <Show when={isNew}>
+          <label class="field">
+            <span>{t('Git remote (optional, added as origin)')}</span>
+            <input class="mono" value={remote()} placeholder="git@github.com:me/project.git" onInput={(e) => setRemote(e.currentTarget.value)} data-testid="project-remote" />
           </label>
         </Show>
         <label class="field">

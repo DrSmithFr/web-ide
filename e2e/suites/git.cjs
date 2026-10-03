@@ -75,4 +75,17 @@ run(async ({ page }) => {
   await page.keyboard.press('Enter')
   await page.waitForSelector('.git-branch:has-text("feature/e2e")', { timeout: 5000 }).catch(() => {})
   assert(git('branch --show-current').trim() === 'feature/e2e', 'branch created and active')
+
+  // A new project is a git repository, with the optional remote as origin.
+  const fresh = WS + '/fresh'
+  fs.mkdirSync(fresh)
+  await page.click('.menubar button[title="Projects"]')
+  await page.click('.home-bar button:has-text("New project")')
+  await page.fill('.modal .field:has-text("Folder") input', fresh)
+  await page.fill('[data-testid=project-remote]', 'git@example.com:me/fresh.git')
+  await page.click('.modal button:has-text("Create and open")')
+  await page.waitForSelector('.menubar')
+  const git2 = (cmd) => execSync(`git ${cmd}`, { cwd: fresh, env, encoding: 'utf8' }).trim()
+  assert(fs.existsSync(fresh + '/.git') && git2('symbolic-ref --short HEAD') === 'main', 'new project: repository on main')
+  assert(git2('remote get-url origin') === 'git@example.com:me/fresh.git', 'new project: remote origin')
 })

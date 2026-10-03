@@ -33,10 +33,17 @@ type Project struct {
 	SSH         *SSHTarget `json:"ssh,omitempty"`
 	// Parent and Ticket: worktree of a kanban ticket, opened as its own project (hidden
 	// from the project list, its kanban and conversations are those of the parent).
-	Parent    string    `json:"parent,omitempty"`
-	Ticket    int64     `json:"ticket,omitempty"`
+	Parent string `json:"parent,omitempty"`
+	Ticket int64  `json:"ticket,omitempty"`
+	// GitSetup: repository still to prepare (init, remote), when the folder was not
+	// reachable at creation (SSH host needing a password…). Done at the first opening.
+	GitSetup  *GitSetup `json:"gitSetup,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 	OpenedAt  time.Time `json:"openedAt"`
+}
+
+type GitSetup struct {
+	Remote string `json:"remote,omitempty"`
 }
 
 // Name is the title, or a name derived from the path or the host.
@@ -157,7 +164,7 @@ func (r *Registry) Update(p Project) (View, error) {
 	defer r.mu.Unlock()
 	for i, cur := range r.items {
 		if cur.ID == p.ID {
-			p.CreatedAt, p.OpenedAt = cur.CreatedAt, cur.OpenedAt
+			p.CreatedAt, p.OpenedAt, p.GitSetup = cur.CreatedAt, cur.OpenedAt, cur.GitSetup
 			r.items[i] = &p
 			return view(&p), r.save()
 		}
@@ -172,6 +179,18 @@ func (r *Registry) SetPath(id, p string) {
 	for _, cur := range r.items {
 		if cur.ID == id && cur.Path != p {
 			cur.Path = p
+			_ = r.save()
+		}
+	}
+}
+
+// SetGitSetup records (nil: clears) the repository preparation still to do.
+func (r *Registry) SetGitSetup(id string, g *GitSetup) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, cur := range r.items {
+		if cur.ID == id {
+			cur.GitSetup = g
 			_ = r.save()
 		}
 	}

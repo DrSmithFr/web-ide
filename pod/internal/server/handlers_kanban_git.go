@@ -65,6 +65,9 @@ func (s *Server) registerKanbanGit() {
 			if !k.git.IsRepo(ctx) {
 				return nil, &codeError{"not_git", i18n.New("the project is not a git repository: cannot create the branch of the ticket")}
 			}
+			if !k.git.HasCommit(ctx) {
+				return nil, &codeError{"not_git", i18n.New("the repository has no commit yet: cannot create the branch of the ticket")}
+			}
 			if err := s.ignoreWorktrees(k.root, k.rt); err != nil {
 				return nil, err
 			}

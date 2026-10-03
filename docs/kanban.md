@@ -52,7 +52,7 @@ The usual path: a briefing makes the tickets, *Generate the plan* writes the pla
 
 ## Git
 
-- *Start development*: `git fetch` (when there is a remote), then the branch `ticket/<n>-<slug>` is created from the base (default `origin/main`, else `main`, configurable per project and per ticket) in a worktree `<project>/.ide/worktrees/<n>-<slug>`.
+- *Start development*: `git fetch` (when there is a remote), then the branch `ticket/<n>-<slug>` is created from the base (default `origin/main`, else `main`, configurable per project and per ticket) in a worktree `<project>/.ide/worktrees/<n>-<slug>`. Without a repository, or in one without a commit yet, the IDE offers to develop in the project folder instead.
 - A configurable setup command runs in a new worktree (`npm install && cp ../../../.env .`…).
 - The worktree opens as a separate project in its own window: not listed on the home page, opened from its ticket, with a ticket banner.
 - The model manages the branch and its commits (messages start with `#<n>`). The user triggers the merge (`merge --no-ff` by default, or squash) into the local base branch of the main folder (never pushed; refused while the main folder has uncommitted tracked changes) and the rebase on the base.

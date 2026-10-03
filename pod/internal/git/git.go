@@ -266,7 +266,35 @@ func (g *Repo) Switch(ctx context.Context, name string, create bool) error {
 	return err
 }
 
+// Init creates a repository whose first branch is main.
 func (g *Repo) Init(ctx context.Context) error {
-	_, err := g.git(ctx, "init")
+	if _, err := g.git(ctx, "init", "-q"); err != nil {
+		return err
+	}
+	_, err := g.git(ctx, "symbolic-ref", "HEAD", "refs/heads/main")
+	return err
+}
+
+// Setup prepares the repository of a new project: init when the folder is in none, an
+// empty first commit when it is empty (so that main exists for the ticket worktrees),
+// and the remote origin when given and not yet set.
+func (g *Repo) Setup(ctx context.Context, remote string, empty bool) error {
+	if g.Top(ctx) == "" {
+		if err := g.Init(ctx); err != nil {
+			return err
+		}
+		if empty {
+			// Best effort: a machine without a git identity keeps an unborn main.
+			_, _ = g.git(ctx, "commit", "-q", "--allow-empty", "-m", "Initial commit")
+		}
+	}
+	remote = strings.TrimSpace(remote)
+	if remote == "" {
+		return nil
+	}
+	if _, err := g.git(ctx, "remote", "get-url", "origin"); err == nil {
+		return nil
+	}
+	_, err := g.git(ctx, "remote", "add", "origin", remote)
 	return err
 }

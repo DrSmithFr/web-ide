@@ -117,5 +117,6 @@
   "unknown skill: %s": "skill inconnu : %s",
   "unknown SQL console": "console SQL inconnue",
   "unknown status: %s": "état inconnu : %s",
-  "unknown type: %s (%s)": "type inconnu : %s (%s)"
+  "unknown type: %s (%s)": "type inconnu : %s (%s)",
+  "the repository has no commit yet: cannot create the branch of the ticket": "le dépôt n'a encore aucun commit : impossible de créer la branche du ticket"
 }
