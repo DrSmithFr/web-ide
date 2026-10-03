@@ -68,6 +68,10 @@ exports.run = (body, opts) =>
     const t = await exports.start(opts)
     try {
       await body(t)
+    } catch (e) {
+      // A screenshot of the page at the failure helps more than the selector alone.
+      await t.page.screenshot({ path: path.join(exports.OUT, 'failure.png') }).catch(() => {})
+      throw e
     } finally {
       if (t.errors.length) exports.assert(false, 'erreurs de la page :\n    ' + t.errors.join('\n    '))
       await t.browser.close()

@@ -77,6 +77,13 @@ export interface ChatMessage {
   summary?: string
   /** Diff of a file change, shown under the tool call. */
   diff?: DiffLine[]
+  /** Model that wrote this answer (the model can change during a conversation). */
+  model?: string
+  /** Replaced by a summary: kept for display, not sent anymore. */
+  compacted?: boolean
+  /** Summary written by a compaction (role user), and the number of messages it replaces. */
+  kind?: 'summary'
+  summarized?: number
 }
 
 export interface DiffLine {
@@ -92,6 +99,8 @@ export interface Chat {
   server: string
   model: string
   messages: ChatMessage[]
+  /** Index from which reported usages count again (after a compaction). */
+  resetAt?: number
 }
 
 export interface ChatInfo {
@@ -110,7 +119,7 @@ export const [chat, setChat] = createStore<Chat>(emptyChat())
 export const [chatList, setChatList] = createSignal<ChatInfo[]>([])
 
 /** Answer being streamed. */
-export const [live, setLive] = createStore({ busy: false, content: '', reasoning: '', tool: '', stream: '' })
+export const [live, setLive] = createStore({ busy: false, content: '', reasoning: '', tool: '', stream: '', compacting: false })
 
 /** Edit waiting for the user (confirmation mode). */
 export interface Approval {
@@ -131,6 +140,11 @@ export const [prefs, setPrefs] = createStore({
   whisperLang: 'auto',
   /** Send audio files as such to models that accept audio (else transcribed in the page). */
   audioToModel: false,
+  /** Automatic compaction at compactAt % of the context, by the given model ('' = chat model). */
+  autoCompact: true,
+  compactAt: 75,
+  compactServer: '',
+  compactModel: '',
 })
 try {
   const p = JSON.parse(localStorage.getItem('webide.llm.prefs') ?? 'null')
@@ -157,6 +171,42 @@ export function emptyChat(): Chat {
 
 export function currentModel(): Model | undefined {
   return models().find((m) => m.id === config.model)
+}
+
+/** Context size of the current model in tokens (0 when unknown). */
+export function contextSize(): number {
+  const server = config.servers.find((s) => s.id === config.server)
+  if (serverKind() === 'ollama' && server?.context) return server.context
+  return currentModel()?.context ?? 0
+}
+
+/** Rough token count of a message (images count for a fixed amount). */
+export function estimateTokens(m: ChatMessage): number {
+  let chars = 0
+  let media = 0
+  if (typeof m.content === 'string') chars += m.content.length
+  else
+    for (const p of m.content ?? []) {
+      if (p.type === 'text') chars += p.text.length
+      else media++
+    }
+  for (const c of m.tool_calls ?? []) chars += c.function.name.length + c.function.arguments.length
+  return Math.ceil(chars / 3.5) + media * 800 + 8
+}
+
+/** Tokens the next request will use, from the last reported usage plus what came after. */
+export function contextUsed(): number {
+  const msgs = chat.messages
+  let i = msgs.length - 1
+  let extra = 0
+  for (; i >= 0; i--) {
+    const m = msgs[i]
+    if (m.compacted) break
+    // Usages reported before the last compaction counted the replaced messages.
+    if (m.role === 'assistant' && m.usage && i >= (chat.resetAt ?? 0)) return m.usage.prompt + m.usage.completion + extra
+    extra += estimateTokens(m)
+  }
+  return extra + 1500 // system prompt and tool definitions
 }
 
 let loaded = false

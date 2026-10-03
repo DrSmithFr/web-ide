@@ -579,3 +579,16 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .rec-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--danger); flex: none; animation: rec-pulse 1s ease-in-out infinite; }
 @keyframes rec-pulse { 50% { opacity: 0.35; } }
 .ai-mic.rec { color: var(--danger); background: color-mix(in srgb, var(--danger) 18%, transparent); }
+.ai-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: -4px 0 12px; }
+.ai-tab { border: 0; background: none; padding: 6px 12px; color: var(--fg-muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.ai-tab:hover { color: var(--fg); }
+.ai-tab.active { color: var(--fg); border-bottom-color: var(--accent); }
+.ai-prompt-edit { font-size: 12px; line-height: 1.45; resize: vertical; min-height: 160px; }
+.ai-summary { border: 1px dashed var(--line); border-radius: var(--radius); padding: 6px 10px; background: var(--bg-2); }
+.ai-summary > summary { cursor: pointer; color: var(--fg-muted); font-size: 0.92em; }
+.ai-summary .md { margin-top: 6px; }
+.ai-old { opacity: 0.55; }
+.ai-compacted-toggle { align-self: center; }
+.ai-gauge { font-family: var(--font-code); color: var(--fg-faint); padding: 0 4px; }
+.ai-gauge.warn { color: var(--warn); }
+.ai-gauge.danger { color: var(--danger); }

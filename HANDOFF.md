@@ -4,7 +4,7 @@
 
 ## Où on en est
 
-Toute la spec est implémentée et testée, plus six ajouts : autocomplétion, renommage, formatage, panneau Git, assistant IA et transcription vocale locale. Tout est commité sur `main`.
+Toute la spec est implémentée et testée, plus sept ajouts : autocomplétion, renommage, formatage, panneau Git, assistant IA, transcription vocale locale et fonctions d'agent (instructions CLAUDE.md / AGENTS.md, skills, compaction, outils IDE). Tout est commité sur `main`.
 
 | Commit | Contenu |
 |---|---|
@@ -14,7 +14,8 @@ Toute la spec est implémentée et testée, plus six ajouts : autocomplétion, r
 | `e647ede` | Autocomplétion, renommage (Maj+F6), formatage (Ctrl+Alt+L) |
 | `e336135` | Panneau Git, onglet de diff, marqueurs de gouttière |
 | `56159ea` | Assistant IA : chat llama.cpp / Ollama, outils fichiers + LSP |
-| dernier commit | Transcription vocale locale (Whisper dans le navigateur) |
+| `dcd370f` | Transcription vocale locale (Whisper dans le navigateur) |
+| dernier commit | Agent : CLAUDE.md / AGENTS.md, skills, prompt éditable, compaction, outils IDE et consoles, conversations en SQLite |
 
 ## Commandes
 
@@ -24,7 +25,7 @@ make build          # front (Vite) puis binaire bin/web-ide-pod (front embarqué
 make dev            # pod -allow-remote sur 0.0.0.0:4433 + Vite 0.0.0.0:5173 (HMR)
 make test           # go vet + go test + tsc
 make e2e            # tests navigateur (toutes les suites, ~3-4 min)
-./e2e/run.sh git    # une suite : editing features restore+ git lsp llm speech perf
+./e2e/run.sh git    # une suite : editing features restore+ git lsp llm agent speech perf
 make service        # service systemd utilisateur (pas activé à ce jour)
 ```
 
@@ -67,6 +68,17 @@ Panneau de droite « Assistant IA » (détachable) : serveurs llama.cpp ou Ollam
 - Testé : Go (faux serveurs SSE / NDJSON), suite e2e `llm` (faux serveur OpenAI scripté : outils, diff confirmé, Mermaid, historique, image, PDF, arrêt), et à la main avec le vrai llama-server (Qwen3.8-Flash-Next) : lecture, `lsp_references`, modification, relecture.
 - Pièges : DOMPurify supprime les attributs contenant `-->` (source Mermaid stockée encodée en URI) et le HTML des `foreignObject` (Mermaid en `htmlLabels: false`). La fenêtre qui enregistre un serveur n'est pas dans le broadcast `llm.config` : elle applique la réponse elle-même.
 - Limites : vidéo native et audio non essayés sur un vrai modèle ; Ollama testé seulement avec le faux serveur (aucun modèle installé ici). Le llama-server local n'a qu'un slot (`--parallel 1`) partagé avec d'autres clients : une requête peut attendre longtemps (« En attente du modèle… ») quand un autre client y envoie un long prompt.
+
+## Fonctions d'agent de l'assistant
+
+- **Prompt système** (`web/src/llm/prompt.ts`) : modèle éditable (onglet « Prompt et instructions » des réglages) global (`~/.web-ide/system-prompt.md`) ou du projet (`.ide/system-prompt.md`, prioritaire), variables `{{project}} {{root}} {{host}} {{activeFile}} {{date}} {{tools}}`, aperçu du prompt complet dans un onglet. Rechargé à chaque message.
+- **Instructions et skills** comme Claude Code (`pod/internal/llm/context.go`, RPC `llm.context`) : `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md` (machine du pod) puis `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md` du projet, imports `@chemin` suivis (hors blocs de code, profondeur 4). Skills : `.claude/skills` et `.agents/skills`, du projet (prioritaires) puis globaux ; seuls nom et description vont dans le prompt, contenu via les outils `load_skill` / `read_skill_file`. `WEBIDE_INSTRUCTIONS_HOME` remplace le dossier personnel (tests e2e : `e2e/home`).
+- **Outils IDE** (`tools.ts`) : `open_file` (avec sélection de lignes), `focus` (fichier, panneau, console, problèmes), `run_command` (nouvelle console visible, attend la fin ou le délai, renvoie sortie sans séquences ANSI et code ; sans confirmation, choix de l'utilisateur), `list_consoles`, `read_console`, `console_input`.
+- **Modèles** : le modèle peut changer en cours de conversation (chaque réponse garde le sien, affiché sous la réponse) ; jauge de contexte (usage du dernier appel + estimation de la suite).
+- **Compaction** (`agent.ts`) : automatique au-delà du seuil (75 % par défaut) du contexte du modèle, ou bouton « compacter », ou après une erreur de contexte dépassé ; un modèle dédié peut résumer (onglet « Compaction »). Les anciens messages restent visibles repliés (`compacted`), un message `kind: 'summary'` les remplace dans l'API ; environ un quart du contexte est gardé tel quel (sinon le dernier échange). `chat.resetAt` fait ignorer les usages mesurés avant la compaction.
+- **Conversations en SQLite** (`pod/internal/llm/chats.go`) : `<projet>/.ide/chats.db` (tables `chats` et `messages`, avec un `.ide/.gitignore` qui l'exclut) pour un projet local, `~/.web-ide/chats/<projet>.db` pour un projet SSH ; les anciens JSON sont importés puis supprimés.
+- Suite e2e `agent` (faux serveur scripté) : prompt assemblé, instructions et skills, prompt du projet modifié, changement de modèle, les quatre outils IDE, compaction manuelle par un autre modèle puis automatique, relecture depuis SQLite.
+- Piège : `<option>` n'est jamais « visible » pour Playwright (`state: 'attached'`) ; la sélection de l'éditeur se lit dans `.cursor-info`, la sélection DOM est perdue dès qu'un autre élément prend le focus. En cas d'échec, `common.cjs` enregistre `failure.png` dans `E2E_OUT`.
 
 ## Transcription vocale locale
 

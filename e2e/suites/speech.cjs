@@ -23,6 +23,7 @@ run(
 
     // Settings: smallest model, English.
     await page.click('.ai-panel button[title^="Réglages"]')
+    await page.click('.ai-tab:has-text("Transcription")')
     await page.waitForSelector('[data-testid=speech-settings]')
     await page.selectOption('[data-testid=speech-settings] select[name=whisperModel]', 'tiny')
     await page.selectOption('[data-testid=speech-settings] select[name=whisperLang]', 'en')
@@ -52,6 +53,7 @@ run(
 
     // The model is in the pod cache, listed in the settings.
     await page.click('.ai-panel button[title^="Réglages"]')
+    await page.click('.ai-tab:has-text("Transcription")')
     await page.waitForSelector('[data-testid=speech-settings] .ai-server-row:has-text("onnx-community/whisper-tiny")', { timeout: 5000 }).catch(() => {})
     assert(await page.isVisible('[data-testid=speech-settings] .ai-server-row:has-text("onnx-community/whisper-tiny")'), 'modèle listé dans le cache du pod')
     await page.screenshot({ path: OUT + '/speech-settings.png' })

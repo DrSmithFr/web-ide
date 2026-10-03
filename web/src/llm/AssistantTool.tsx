@@ -4,7 +4,7 @@ import { createEffect, createResource, createSignal, For, on, onCleanup, onMount
 import { Modal } from '../ui/overlay'
 import { Icon } from '../ui/icons'
 import { errorToast, toast } from '../ui/toast'
-import { openFile, relPath } from '../state/project'
+import { openFile, relPath, root } from '../state/project'
 import { request } from '../pod/rpc'
 import {
   applyConfig,
@@ -12,6 +12,8 @@ import {
   chat,
   chatList,
   config,
+  contextSize,
+  contextUsed,
   currentModel,
   deleteChat,
   live,
@@ -35,7 +37,8 @@ import {
   type ServerView,
   type ToolCall,
 } from './state'
-import { retry, send, stop } from './agent'
+import { compactNow, retry, send, stop } from './agent'
+import { CompactionSettings, PromptSettings } from './AssistantSettings'
 import { prepare } from './attachments'
 import { onMarkdownClick, renderMarkdown, renderMermaid } from './markdown'
 import { absPath } from './tools'
@@ -87,13 +90,15 @@ function callLabel(call: ToolCall | undefined, name: string) {
   } catch {
     /* shown raw */
   }
-  const target = a.path !== undefined ? relPath(absPath(a.path)) || '.' : a.query ?? a.pattern ?? ''
+  const abs = a.path !== undefined ? absPath(a.path) : ''
+  const target = a.path !== undefined ? (abs === root() ? '.' : relPath(abs)) : a.query ?? a.pattern ?? a.command ?? a.name ?? a.panel ?? a.console_id ?? ''
   const extra = a.symbol ? ` · ${a.symbol}${a.line ? ` (l. ${a.line})` : ''}` : a.start_line ? ` · l. ${a.start_line}${a.end_line ? `-${a.end_line}` : ''}` : ''
   return { name, target: String(target), extra }
 }
 
 const toolIcons: Record<string, string> = {
   list_dir: 'folder', find_files: 'search', read_file: 'file', search_text: 'search', edit_file: 'edit', write_file: 'edit',
+  open_file: 'external', focus: 'locate', run_command: 'terminal', list_consoles: 'terminal', read_console: 'terminal', console_input: 'terminal', load_skill: 'puzzle', read_skill_file: 'puzzle',
 }
 
 function ToolRow(props: { msg: ChatMessage; call?: ToolCall }) {
@@ -204,6 +209,7 @@ function AssistantMessage(props: { msg: ChatMessage; index: number }) {
       </Show>
       <Show when={usage()}>
         <div class="ai-usage">
+          {props.msg.model ? `${props.msg.model} · ` : ''}
           {usage()!.prompt.toLocaleString()} → {usage()!.completion.toLocaleString()} jetons
           {usage()!.cached ? ` · ${usage()!.cached!.toLocaleString()} en cache` : ''}
           {usage()!.perSecond ? ` · ${usage()!.perSecond!.toFixed(1)} jetons/s` : ''}
@@ -211,6 +217,35 @@ function AssistantMessage(props: { msg: ChatMessage; index: number }) {
         </div>
       </Show>
     </div>
+  )
+}
+
+function SummaryCard(props: { msg: ChatMessage }) {
+  return (
+    <details class="ai-summary" data-testid="ai-summary">
+      <summary>
+        Conversation compactée : {props.msg.summarized} messages résumés{props.msg.model ? ` par ${props.msg.model}` : ''}
+      </summary>
+      <Markdown text={typeof props.msg.content === 'string' ? props.msg.content : ''} final />
+    </details>
+  )
+}
+
+function ContextGauge() {
+  const ctx = () => contextSize()
+  const used = () => contextUsed()
+  const ratio = () => (ctx() ? used() / ctx() : 0)
+  const k = (n: number) => (n >= 1000 ? `${Math.round(n / 100) / 10}k` : String(n))
+  return (
+    <span
+      class="ai-gauge small"
+      classList={{ warn: ratio() > prefs.compactAt / 100 * 0.85, danger: ratio() > prefs.compactAt / 100 }}
+      title={ctx() ? `Contexte utilisé (estimation) : ${used().toLocaleString()} / ${ctx().toLocaleString()} jetons. Compaction automatique à ${prefs.compactAt} %.` : 'Taille de contexte du modèle inconnue (connue une fois le modèle chargé)'}
+      data-testid="ai-gauge"
+    >
+      {k(used())}
+      {ctx() ? ` / ${k(ctx())}` : ''}
+    </span>
   )
 }
 
@@ -344,9 +379,35 @@ function ServersModal(props: { onClose: () => void }) {
       errorToast(err)
     }
   }
+  type Tab = 'servers' | 'prompt' | 'compaction' | 'speech'
+  const [tab, setTab] = createSignal<Tab>('servers')
+  const tabs: [Tab, string][] = [
+    ['servers', 'Serveurs'],
+    ['prompt', 'Prompt et instructions'],
+    ['compaction', 'Compaction'],
+    ['speech', 'Transcription'],
+  ]
   return (
-    <Modal title="Réglages de l’assistant" onClose={props.onClose} class="ai-servers">
-      <div class="form">
+    <Modal title="Réglages de l’assistant" onClose={props.onClose} class="ai-servers modal-wide">
+      <div class="ai-tabs" role="tablist">
+        <For each={tabs}>
+          {([id, label]) => (
+            <button type="button" role="tab" class="ai-tab" classList={{ active: tab() === id }} aria-selected={tab() === id} onClick={() => setTab(id)}>
+              {label}
+            </button>
+          )}
+        </For>
+      </div>
+      <Show when={tab() === 'prompt'}>
+        <PromptSettings />
+      </Show>
+      <Show when={tab() === 'compaction'}>
+        <CompactionSettings />
+      </Show>
+      <Show when={tab() === 'speech'}>
+        <SpeechSettings />
+      </Show>
+      <div class="form" style={{ display: tab() === 'servers' ? undefined : 'none' }}>
         <For each={config.servers} fallback={<p class="muted">Aucun serveur. Ajoutez llama.cpp (llama-server) ou Ollama ci-dessous.</p>}>
           {(s) => (
             <div class="ai-server-row">
@@ -415,7 +476,6 @@ function ServersModal(props: { onClose: () => void }) {
             </button>
           </div>
         </form>
-        <SpeechSettings />
       </div>
     </Modal>
   )
@@ -484,6 +544,7 @@ export function AssistantTool() {
   const [pending, setPending] = createSignal<{ parts: Part[]; attachment: Attachment }[]>([])
   const [preparing, setPreparing] = createSignal(0)
   const [dragging, setDragging] = createSignal(false)
+  const [showCompacted, setShowCompacted] = createSignal(false)
   let list!: HTMLDivElement
   let textarea!: HTMLTextAreaElement
   let fileInput!: HTMLInputElement
@@ -715,12 +776,21 @@ export function AssistantTool() {
               </Show>
             </div>
           </Show>
+          <Show when={chat.messages.some((m) => m.compacted)}>
+            <button class="ai-compacted-toggle link small" onClick={() => setShowCompacted(!showCompacted())}>
+              {showCompacted() ? 'Masquer' : 'Afficher'} les {chat.messages.filter((m) => m.compacted).length} messages compactés
+            </button>
+          </Show>
           <For each={chat.messages}>
             {(m, i) => (
-              <Show when={m.role !== 'tool'}>
-                <Show when={m.role === 'user'} fallback={<AssistantMessage msg={m} index={i()} />}>
-                  <UserMessage msg={m} />
-                </Show>
+              <Show when={m.role !== 'tool' && (!m.compacted || showCompacted())}>
+                <div classList={{ 'ai-old': !!m.compacted }}>
+                  <Show when={m.kind === 'summary'} fallback={<Show when={m.role === 'user'} fallback={<AssistantMessage msg={m} index={i()} />}>
+                    <UserMessage msg={m} />
+                  </Show>}>
+                    <SummaryCard msg={m} />
+                  </Show>
+                </div>
               </Show>
             )}
           </For>
@@ -734,7 +804,7 @@ export function AssistantTool() {
               </Show>
               <div class="ai-live muted small">
                 <span class="spinner" />
-                {live.tool ? `Prépare l’appel à ${live.tool}…` : live.content ? 'Écrit…' : live.reasoning ? 'Réfléchit…' : 'En attente du modèle…'}
+                {live.compacting ? 'Compaction de la conversation…' : live.tool ? `Prépare l’appel à ${live.tool}…` : live.content ? 'Écrit…' : live.reasoning ? 'Réfléchit…' : 'En attente du modèle…'}
               </div>
             </div>
           </Show>
@@ -816,6 +886,12 @@ export function AssistantTool() {
             </Show>
             <CapsBadges />
             <span class="grow" />
+            <Show when={chat.messages.length}>
+              <ContextGauge />
+              <button class="toggle" title="Résumer les anciens messages maintenant" disabled={live.busy} onClick={() => compactNow().catch(errorToast)}>
+                compacter
+              </button>
+            </Show>
             <Show
               when={live.busy}
               fallback={

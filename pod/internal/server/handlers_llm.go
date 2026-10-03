@@ -3,9 +3,12 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"path"
+	"path/filepath"
+	"strings"
 
 	"webide/pod/internal/llm"
+	"webide/pod/internal/runtime"
 )
 
 func (s *Server) registerLLM() {
@@ -82,52 +85,87 @@ func (s *Server) registerLLM() {
 		return nil, s.Models.Delete(a.Repo)
 	})
 
-	project := func(c *Client) (string, error) {
-		if c.project == "" {
-			return "", errors.New("aucun projet ouvert")
+	// Conversations, instructions and skills of the project of the connection.
+	withProject := func(f func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error)) handler {
+		return func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+			rt, err := c.runtime()
+			if err != nil {
+				return nil, err
+			}
+			return f(ctx, c, rt, p)
 		}
-		return c.project, nil
 	}
-	s.handle("llm.chats.list", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
-		pid, err := project(c)
+	loc := func(c *Client, rt *runtime.Runtime) llm.ChatLocation {
+		l := llm.ChatLocation{Project: c.project}
+		if rt.Local {
+			l.IdeDir = filepath.Join(rt.Root, ".ide")
+		}
+		return l
+	}
+	proj := func(rt *runtime.Runtime) llm.Project { return llm.Project{Root: rt.Root, FS: rt.FS} }
+	type idArg struct {
+		ID string `json:"id"`
+	}
+
+	s.handle("llm.chats.list", withProject(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
+		return s.LLM.ListChats(loc(c, rt))
+	}))
+	s.handle("llm.chats.get", withProject(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
+		a, err := bind[idArg](p)
 		if err != nil {
 			return nil, err
 		}
-		return s.LLM.ListChats(pid)
-	})
-	s.handle("llm.chats.get", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
-		a, err := bind[struct{ ID string }](p)
-		if err != nil {
-			return nil, err
-		}
-		pid, err := project(c)
-		if err != nil {
-			return nil, err
-		}
-		return s.LLM.GetChat(pid, a.ID)
-	})
-	s.handle("llm.chats.save", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		return s.LLM.GetChat(loc(c, rt), a.ID)
+	}))
+	s.handle("llm.chats.save", withProject(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
 		a, err := bind[struct {
 			Chat json.RawMessage `json:"chat"`
 		}](p)
 		if err != nil {
 			return nil, err
 		}
-		pid, err := project(c)
+		return nil, s.LLM.SaveChat(loc(c, rt), a.Chat)
+	}))
+	s.handle("llm.chats.delete", withProject(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
+		a, err := bind[idArg](p)
 		if err != nil {
 			return nil, err
 		}
-		return nil, s.LLM.SaveChat(pid, a.Chat)
-	})
-	s.handle("llm.chats.delete", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
-		a, err := bind[struct{ ID string }](p)
+		return nil, s.LLM.DeleteChat(loc(c, rt), a.ID)
+	}))
+	s.handle("llm.context", withProject(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
+		return s.LLM.LoadContext(proj(rt)), nil
+	}))
+	s.handle("llm.skill.read", withProject(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
+		a, err := bind[struct{ Name string }](p)
 		if err != nil {
 			return nil, err
 		}
-		pid, err := project(c)
+		return s.LLM.ReadSkill(proj(rt), a.Name)
+	}))
+	s.handle("llm.skill.file", withProject(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
+		a, err := bind[struct{ Name, File string }](p)
 		if err != nil {
 			return nil, err
 		}
-		return nil, s.LLM.DeleteChat(pid, a.ID)
-	})
+		return s.LLM.ReadSkillFile(proj(rt), a.Name, a.File)
+	}))
+	s.handle("llm.prompt.save", withProject(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
+		a, err := bind[struct{ Scope, Content string }](p)
+		if err != nil {
+			return nil, err
+		}
+		if a.Scope == "global" {
+			return nil, s.LLM.SaveGlobalPrompt(a.Content)
+		}
+		target := path.Join(rt.Root, llm.ProjectPromptFile)
+		if strings.TrimSpace(a.Content) == "" {
+			if _, err := rt.FS.Stat(target); err != nil {
+				return nil, nil
+			}
+			return nil, rt.Delete(target)
+		}
+		_, err = rt.Write(target, a.Content, "")
+		return nil, err
+	}))
 }

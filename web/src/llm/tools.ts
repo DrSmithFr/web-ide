@@ -1,7 +1,8 @@
 // Tools the model can call: read and change the project files, search, and ask the
 // language servers. They run in the page with the same RPCs as the rest of the IDE.
-import { request } from '../pod/rpc'
-import { activeTab, applyRemote, diagnostics, fileUri, flushLsp, getDoc, relPath, root } from '../state/project'
+import { on as onPod, request } from '../pod/rpc'
+import { activeTab, applyRemote, diagnostics, fileUri, flushLsp, getDoc, loadDoc, mutate, openFile, relPath, root, session } from '../state/project'
+import { consoles, setConsoleList } from '../console/consoles'
 import { refreshGit } from '../state/git'
 import { lspLanguage, lspLanguageId } from '../editor/languages'
 import { lineHunks } from '../editor/linediff'
@@ -59,6 +60,39 @@ export const toolDefs = [
   fn('lsp_references', 'Trouve les utilisations du symbole écrit à cette ligne.', { path: pathArg, line: lineArg, symbol: symbolArg }, ['path', 'line', 'symbol']),
   fn('lsp_hover', 'Type et documentation du symbole écrit à cette ligne.', { path: pathArg, line: lineArg, symbol: symbolArg }, ['path', 'line', 'symbol']),
   fn('lsp_diagnostics', 'Erreurs et avertissements du serveur de langage, pour un fichier ou pour les fichiers ouverts.', { path: str('Fichier (facultatif)') }),
+  fn('load_skill', 'Charge les instructions complètes d’un skill de la liste (et la liste de ses autres fichiers).', { name: str('Nom du skill') }, ['name']),
+  fn('read_skill_file', 'Lit un autre fichier d’un skill (chemin relatif à son dossier, tel que listé par load_skill).', { name: str('Nom du skill'), file: str('Chemin du fichier dans le skill') }, ['name', 'file']),
+  fn(
+    'open_file',
+    'Ouvre un fichier dans l’éditeur de l’utilisateur pour le lui montrer, en sélectionnant éventuellement des lignes.',
+    { path: pathArg, line: int('Première ligne à montrer (commence à 1)'), end_line: int('Dernière ligne à sélectionner') },
+    ['path'],
+  ),
+  fn(
+    'focus',
+    'Met au premier plan un élément de l’IDE : un fichier déjà ouvert, un panneau (explorer, search, git, connections, database, structure, conflicts, extensions, properties), une console ou la liste des problèmes.',
+    {
+      target: { type: 'string', enum: ['file', 'panel', 'console', 'problems'], description: 'Type d’élément' },
+      path: str('Fichier (target=file)'),
+      panel: str('Panneau (target=panel)'),
+      console_id: str('Identifiant de console (target=console), voir list_consoles'),
+    },
+    ['target'],
+  ),
+  fn(
+    'run_command',
+    'Lance une commande shell (sh -c) dans une nouvelle console visible par l’utilisateur, attend sa fin (ou le délai) et renvoie sa sortie et son code de sortie.',
+    { command: str('Commande, ex. "go test ./..."'), cwd: str('Dossier de travail (racine du projet par défaut)'), timeout: int('Délai d’attente en secondes (120 par défaut, 600 max)') },
+    ['command'],
+  ),
+  fn('list_consoles', 'Liste les consoles ouvertes (terminaux et commandes) avec leur état.', {}),
+  fn('read_console', 'Lit la fin de la sortie d’une console.', { console_id: str('Identifiant de console'), lines: int('Nombre de lignes (200 par défaut)') }, ['console_id']),
+  fn(
+    'console_input',
+    'Tape du texte dans une console (terminal interactif, programme qui attend une réponse). Un retour à la ligne est ajouté sauf si enter=false.',
+    { console_id: str('Identifiant de console'), text: str('Texte à taper'), enter: { type: 'boolean', description: 'Valider avec Entrée (oui par défaut)' } },
+    ['console_id', 'text'],
+  ),
 ]
 
 export const writeTools = new Set(['edit_file', 'write_file'])
@@ -115,6 +149,22 @@ export async function runTool(call: ToolCall, confirm: Confirm): Promise<ToolRes
         return await lspAt(name, a.path, Number(a.line), String(a.symbol ?? ''))
       case 'lsp_diagnostics':
         return await lspDiagnostics(a.path)
+      case 'load_skill':
+        return await loadSkill(String(a.name ?? ''))
+      case 'read_skill_file':
+        return await readSkillFile(String(a.name ?? ''), String(a.file ?? ''))
+      case 'open_file':
+        return await showFile(a.path, a.line, a.end_line)
+      case 'focus':
+        return await focus(a)
+      case 'run_command':
+        return await runCommand(String(a.command ?? ''), a.cwd, a.timeout)
+      case 'list_consoles':
+        return listConsoles()
+      case 'read_console':
+        return await readConsole(String(a.console_id ?? ''), a.lines)
+      case 'console_input':
+        return await consoleInput(String(a.console_id ?? ''), String(a.text ?? ''), a.enter !== false)
     }
     return fail(`outil inconnu : ${name}`)
   } catch (e) {
@@ -435,4 +485,172 @@ async function lspDiagnostics(p?: string): Promise<ToolResult> {
     })
   }
   return ok(rows.join('\n') || `Aucun diagnostic pour ${relPath(abs)}.`, `${relPath(abs)} : ${plural(rows.length, 'diagnostic')}`)
+}
+
+// ---------- skills ----------
+
+async function loadSkill(name: string): Promise<ToolResult> {
+  if (!name) throw new Error('name manquant')
+  const s = await request('llm.skill.read', { name })
+  let text = s.content as string
+  if (s.files?.length) text += `\n\n---\nAutres fichiers du skill (read_skill_file) :\n${(s.files as string[]).map((f) => `- ${f}`).join('\n')}`
+  return ok(text, `skill ${name} chargé`)
+}
+
+async function readSkillFile(name: string, file: string): Promise<ToolResult> {
+  if (!name || !file) throw new Error('name et file sont obligatoires')
+  const text: string = await request('llm.skill.file', { name, file })
+  return ok(text, `${name}/${file}`)
+}
+
+// ---------- IDE ----------
+
+async function showFile(p: string, line?: number, endLine?: number): Promise<ToolResult> {
+  if (!p) throw new Error('path manquant')
+  const abs = absPath(p)
+  if (!line) {
+    await openFile(abs)
+    return ok(`${relPath(abs)} ouvert dans l’éditeur.`, `${relPath(abs)} ouvert`)
+  }
+  const doc = await loadDoc(abs)
+  if (!doc) throw new Error(`${relPath(abs)} ne peut pas être ouvert (binaire, trop gros ou absent)`)
+  const l1 = Math.min(Math.max(1, Math.floor(line)), doc.lineCount) - 1
+  const l2 = Math.min(Math.max(l1 + 1, Math.floor(endLine || line)), doc.lineCount) - 1
+  await openFile({ path: abs, offset: doc.lineStart(l1), end: endLine ? doc.lineEnd(l2) : doc.lineStart(l1) })
+  const range = endLine ? `lignes ${l1 + 1}-${l2 + 1}` : `ligne ${l1 + 1}`
+  return ok(`${relPath(abs)} ouvert dans l’éditeur, ${range}.`, `${relPath(abs)} · ${range}`)
+}
+
+const leftIds = ['explorer', 'search', 'git', 'connections']
+const rightIds = ['database', 'assistant', 'structure', 'conflicts', 'extensions', 'properties']
+
+async function focus(a: Record<string, any>): Promise<ToolResult> {
+  switch (a.target) {
+    case 'file': {
+      if (!a.path) throw new Error('path manquant')
+      await openFile(absPath(a.path))
+      return ok(`${relPath(absPath(a.path))} au premier plan.`, relPath(absPath(a.path)))
+    }
+    case 'panel': {
+      const id = String(a.panel ?? '')
+      if (leftIds.includes(id)) mutate((s) => (s.left.panel = id))
+      else if (rightIds.includes(id)) mutate((s) => (s.right.panel = id))
+      else throw new Error(`panneau inconnu : ${id} (${[...leftIds, ...rightIds].join(', ')})`)
+      return ok(`Panneau ${id} affiché.`, `panneau ${id}`)
+    }
+    case 'console': {
+      const c = consoles().find((x) => x.id === a.console_id)
+      if (!c) throw new Error(`console introuvable : ${a.console_id} (voir list_consoles)`)
+      mutate((s) => {
+        s.bottom.open = true
+        s.bottom.active = c.id
+      })
+      return ok(`Console « ${c.title} » affichée.`, `console ${c.title}`)
+    }
+    case 'problems':
+      mutate((s) => {
+        s.bottom.open = true
+        s.bottom.active = 'problems'
+      })
+      return ok('Liste des problèmes affichée.', 'problèmes')
+  }
+  throw new Error('target doit valoir file, panel, console ou problems')
+}
+
+// ---------- consoles ----------
+
+/** Terminal output as plain text: escape sequences removed, carriage returns applied. */
+export function plainOutput(raw: string): string {
+  const text = raw
+    // eslint-disable-next-line no-control-regex
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+    // eslint-disable-next-line no-control-regex
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
+    // eslint-disable-next-line no-control-regex
+    .replace(/\x1b[()][A-Za-z0-9]|\x1b[=>78NOM]/g, '')
+    .replace(/\r\n/g, '\n')
+  return text
+    .split('\n')
+    .map((l) => (l.includes('\r') ? l.slice(l.lastIndexOf('\r', l.length - 2) + 1).replace(/\r$/, '') : l))
+    .join('\n')
+}
+
+function decodeB64(s: string) {
+  return new TextDecoder().decode(Uint8Array.from(atob(s), (c) => c.charCodeAt(0)))
+}
+
+async function consoleText(id: string): Promise<{ text: string; info: any }> {
+  const r = await request('console.attach', { id })
+  return { text: plainOutput(decodeB64(r.data)), info: r.info }
+}
+
+function tail(text: string, lines: number, chars = 12_000) {
+  let t = text.replace(/\s+$/, '')
+  const all = t.split('\n')
+  let cut = false
+  if (all.length > lines) {
+    t = all.slice(-lines).join('\n')
+    cut = true
+  }
+  if (t.length > chars) {
+    t = t.slice(-chars)
+    cut = true
+  }
+  return (cut ? '… (début coupé)\n' : '') + t
+}
+
+const exits = new Map<string, number>()
+onPod('console.exit', (e: { id: string; code: number }) => exits.set(e.id, e.code))
+
+async function runCommand(command: string, cwd?: string, timeout?: number): Promise<ToolResult> {
+  if (!command.trim()) throw new Error('command manquante')
+  const limit = Math.min(Math.max(Number(timeout) || 120, 1), 600) * 1000
+  const info = await request('console.create', {
+    kind: 'task',
+    title: command.length > 60 ? command.slice(0, 57) + '…' : command,
+    command: ['sh', '-c', command],
+    cwd: cwd ? absPath(cwd) : undefined,
+    cols: 160,
+    rows: 40,
+  })
+  setConsoleList([...consoles().filter((c) => c.id !== info.id), info])
+  mutate((s) => {
+    s.bottom.open = true
+    s.bottom.active = info.id
+  })
+  const until = Date.now() + limit
+  while (!exits.has(info.id) && Date.now() < until) await new Promise((r) => setTimeout(r, 150))
+  const { text, info: now } = await consoleText(info.id)
+  const code = exits.get(info.id) ?? (now?.exited ? now.code : undefined)
+  const out = tail(text, 300)
+  if (code === undefined) {
+    return ok(`La commande tourne toujours (console ${info.id}). Sortie jusqu’ici :\n${out}\n\nSuivre avec read_console, interagir avec console_input.`, `${command} : toujours en cours`)
+  }
+  exits.delete(info.id)
+  return {
+    content: `Code de sortie : ${code} (console ${info.id})\n${out || '(aucune sortie)'}`,
+    summary: `code ${code}`,
+    status: code === 0 ? 'ok' : 'error',
+  }
+}
+
+function listConsoles(): ToolResult {
+  const list = consoles()
+  const rows = list.map((c) => `${c.id} · ${c.kind === 'task' ? 'commande' : 'terminal'} · ${c.title}${c.exited ? ` · terminée (code ${c.code})` : ' · en cours'}${session.bottom.active === c.id ? ' · affichée' : ''}`)
+  return ok(rows.join('\n') || 'Aucune console ouverte.', `${list.length} console${list.length > 1 ? 's' : ''}`)
+}
+
+async function readConsole(id: string, lines?: number): Promise<ToolResult> {
+  if (!id) throw new Error('console_id manquant')
+  const { text, info } = await consoleText(id)
+  const state = info?.exited ? `terminée (code ${info.code})` : 'en cours'
+  return ok(`Console « ${info?.title ?? id} », ${state} :\n${tail(text, Math.max(1, Number(lines) || 200)) || '(aucune sortie)'}`, `${info?.title ?? id} · ${state}`)
+}
+
+async function consoleInput(id: string, text: string, enter: boolean): Promise<ToolResult> {
+  if (!consoles().some((c) => c.id === id)) throw new Error(`console introuvable : ${id}`)
+  await request('console.input', { id, data: text + (enter ? '\r' : '') })
+  await new Promise((r) => setTimeout(r, 800))
+  const { text: out } = await consoleText(id)
+  return ok(`Texte envoyé. Fin de la sortie :\n${tail(out, 40)}`, `saisie dans ${id}`)
 }

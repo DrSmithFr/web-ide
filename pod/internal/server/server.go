@@ -483,4 +483,5 @@ func (s *Server) Shutdown() {
 	}
 	s.Sessions.FlushAll()
 	s.Pool.CloseAll()
+	s.LLM.Close()
 }

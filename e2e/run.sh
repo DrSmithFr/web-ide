@@ -6,7 +6,7 @@ set -u
 cd "$(dirname "$0")"
 ROOT=$(cd .. && pwd)
 SUITES=("$@")
-[ ${#SUITES[@]} -eq 0 ] && SUITES=(editing features restore+ git lsp llm speech perf)
+[ ${#SUITES[@]} -eq 0 ] && SUITES=(editing features restore+ git lsp llm agent speech perf)
 [ -d node_modules/playwright-core ] || npm install --no-audit --no-fund >/dev/null
 PORT=${E2E_PORT:-4519}
 MODELS=${E2E_MODELS:-$HOME/.cache/web-ide-e2e/models}
@@ -34,7 +34,9 @@ CREATE TABLE orders(id INTEGER PRIMARY KEY, user_id INTEGER REFERENCES users(id)
 c.executemany('INSERT INTO users(name, email) VALUES (?, ?)', [('user%d' % i, 'u%d@x.org' % i) for i in range(250)])
 c.commit()
 PY
-  PATH="$HOME/go/bin:$HOME/sdk/go/bin:$PATH" "$ROOT/bin/web-ide-pod" -addr "127.0.0.1:$PORT" -data "$TMP/data" -workspace "$TMP/ws" \
+  # Global instructions and skills of the assistant come from the fixtures, not ~/.claude.
+  rm -rf "$TMP/home" && cp -r home "$TMP/home"
+  WEBIDE_INSTRUCTIONS_HOME="$TMP/home" PATH="$HOME/go/bin:$HOME/sdk/go/bin:$PATH" "$ROOT/bin/web-ide-pod" -addr "127.0.0.1:$PORT" -data "$TMP/data" -workspace "$TMP/ws" \
     -static "$ROOT/pod/webdist/dist" >"$TMP/pod.log" 2>&1 </dev/null &
   POD_PID=$!
   for _ in $(seq 50); do [ -s "$TMP/data/token" ] && curl -s -o /dev/null "http://127.0.0.1:$PORT/" && break; sleep 0.1; done

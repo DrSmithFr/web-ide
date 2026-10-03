@@ -6,6 +6,7 @@ package llm
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -53,13 +54,14 @@ type Manager struct {
 	client *http.Client
 	mu     sync.Mutex
 	cfg    Config
-	kinds  map[string]string // detected kind per server URL
+	kinds  map[string]string  // detected kind per server URL
+	dbs    map[string]*sql.DB // conversation bases by path
 }
 
 const configFile = "llm.json"
 
 func New(st *store.Store) *Manager {
-	m := &Manager{st: st, client: &http.Client{}, kinds: map[string]string{}}
+	m := &Manager{st: st, client: &http.Client{}, kinds: map[string]string{}, dbs: map[string]*sql.DB{}}
 	if err := st.ReadJSON(configFile, &m.cfg); err != nil && !store.IsNotExist(err) {
 		m.cfg = Config{}
 	}

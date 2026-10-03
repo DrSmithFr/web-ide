@@ -7,9 +7,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"webide/pod/internal/fsx"
 	"webide/pod/internal/store"
 )
 
@@ -215,26 +218,115 @@ func TestModels(t *testing.T) {
 
 func TestChats(t *testing.T) {
 	m, _ := newManager(t, "h:1", "llamacpp")
-	if err := m.SaveChat("p1", json.RawMessage(`{"id":"c1","title":"Un","updated":1,"messages":[]}`)); err != nil {
+	// A conversation of the JSON era is imported.
+	_ = m.st.WriteFile("chats/p1/old.json", []byte(`{"id":"old","title":"Ancienne","updated":0,"messages":[{"role":"user","content":"hé"}]}`))
+	root := t.TempDir()
+	loc := ChatLocation{Project: "p1", IdeDir: filepath.Join(root, ".ide")}
+	if err := m.SaveChat(loc, json.RawMessage(`{"id":"c1","title":"Un","created":1,"updated":1,"model":"m","pinned":true,"messages":[{"role":"user","content":"a"},{"role":"assistant","content":"b","usage":{"prompt":3}}]}`)); err != nil {
 		t.Fatal(err)
 	}
-	_ = m.SaveChat("p1", json.RawMessage(`{"id":"c2","title":"Deux","updated":2}`))
-	if err := m.SaveChat("p1", json.RawMessage(`{"id":"../x"}`)); err == nil {
+	_ = m.SaveChat(loc, json.RawMessage(`{"id":"c2","title":"Deux","updated":2,"messages":[]}`))
+	if err := m.SaveChat(loc, json.RawMessage(`{"id":"../x"}`)); err == nil {
 		t.Fatal("bad id accepted")
 	}
-	list, _ := m.ListChats("p1")
-	if len(list) != 2 || list[0].ID != "c2" {
+	list, _ := m.ListChats(loc)
+	if len(list) != 3 || list[0].ID != "c2" || list[2].ID != "old" {
 		t.Fatalf("list: %+v", list)
 	}
-	data, err := m.GetChat("p1", "c1")
-	if err != nil || !strings.Contains(string(data), `"messages"`) {
+	if _, err := os.Stat(m.st.Path("chats/p1/old.json")); !os.IsNotExist(err) {
+		t.Fatal("JSON file not removed after import")
+	}
+	data, err := m.GetChat(loc, "c1")
+	var c struct {
+		Model    string
+		Pinned   bool
+		Messages []map[string]any
+	}
+	if err != nil || json.Unmarshal(data, &c) != nil || c.Model != "m" || !c.Pinned || len(c.Messages) != 2 || c.Messages[1]["usage"] == nil {
 		t.Fatalf("get: %s %v", data, err)
 	}
-	_ = m.DeleteChat("p1", "c1")
-	if list, _ := m.ListChats("p1"); len(list) != 1 {
+	// Saving again replaces the messages.
+	_ = m.SaveChat(loc, json.RawMessage(`{"id":"c1","title":"Un","updated":3,"messages":[{"role":"user","content":"a"}]}`))
+	data, _ = m.GetChat(loc, "c1")
+	_ = json.Unmarshal(data, &c)
+	if len(c.Messages) != 1 {
+		t.Fatalf("resave: %s", data)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".ide/chats.db")); err != nil {
+		t.Fatal("base not in .ide:", err)
+	}
+	gi, _ := os.ReadFile(filepath.Join(root, ".ide/.gitignore"))
+	if !strings.Contains(string(gi), "chats.db") {
+		t.Fatalf(".gitignore: %q", gi)
+	}
+	_ = m.DeleteChat(loc, "c1")
+	if list, _ := m.ListChats(loc); len(list) != 2 {
 		t.Fatalf("after delete: %+v", list)
 	}
-	if list, err := m.ListChats("p2"); err != nil || len(list) != 0 {
-		t.Fatalf("empty project: %v %v", list, err)
+	// Remote project: base in the pod data.
+	if list, err := m.ListChats(ChatLocation{Project: "p2"}); err != nil || len(list) != 0 {
+		t.Fatalf("remote project: %v %v", list, err)
+	}
+	if _, err := os.Stat(m.st.Path("chats/p2.db")); err != nil {
+		t.Fatal(err)
+	}
+	m.Close()
+}
+
+func TestContext(t *testing.T) {
+	m, _ := newManager(t, "h:1", "llamacpp")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	root := t.TempDir()
+	write := func(p, s string) {
+		_ = os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.WriteFile(p, []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(home, ".claude/CLAUDE.md"), "Toujours en français.")
+	write(filepath.Join(home, ".claude/skills/pdf/SKILL.md"), "---\nname: pdf\ndescription: >\n  Lire et créer\n  des PDF\n---\n# PDF\nUtiliser pdftotext.")
+	write(filepath.Join(home, ".claude/skills/pdf/scripts/x.py"), "print(1)")
+	write(filepath.Join(root, "CLAUDE.md"), "Projet Go. Voir @docs/style.md et `@ignored`.\n```\n@docs/none.md\n```")
+	write(filepath.Join(root, "docs/style.md"), "Tabulations.")
+	write(filepath.Join(root, "AGENTS.md"), "Tests avec make test.")
+	write(filepath.Join(root, ".claude/skills/deploy/SKILL.md"), "---\nname: deploy\ndescription: \"Déployer le projet\"\n---\nmake deploy")
+	write(filepath.Join(root, ".agents/skills/pdf/SKILL.md"), "---\nname: pdf\ndescription: PDF du projet\n---\nlocal")
+	write(filepath.Join(root, ".ide/system-prompt.md"), "Prompt du projet {{project}}")
+	_ = m.SaveGlobalPrompt("Prompt global")
+
+	p := Project{Root: root, FS: fsx.Local{}}
+	c := m.LoadContext(p)
+	if c.GlobalPrompt == nil || *c.GlobalPrompt != "Prompt global" || c.ProjectPrompt == nil || !strings.Contains(*c.ProjectPrompt, "{{project}}") {
+		t.Fatalf("prompts: %+v", c)
+	}
+	var paths []string
+	for _, f := range c.Files {
+		paths = append(paths, f.Scope+":"+filepath.Base(f.Path))
+	}
+	if strings.Join(paths, ",") != "global:CLAUDE.md,project:CLAUDE.md,project:style.md,project:AGENTS.md" {
+		t.Fatalf("files: %v", paths)
+	}
+	if len(c.Skills) != 2 || c.Skills[0].Name != "deploy" || c.Skills[0].Description != "Déployer le projet" || c.Skills[1].Scope != "project" || c.Skills[1].Description != "PDF du projet" {
+		t.Fatalf("skills: %+v", c.Skills)
+	}
+	sk, err := m.ReadSkill(p, "deploy")
+	if err != nil || sk["content"] != "make deploy" {
+		t.Fatalf("read skill: %v %v", sk, err)
+	}
+	// Global skill once the project one is gone.
+	_ = os.RemoveAll(filepath.Join(root, ".agents"))
+	sk, err = m.ReadSkill(p, "pdf")
+	if err != nil || sk["content"] != "# PDF\nUtiliser pdftotext." || len(sk["files"].([]string)) != 1 {
+		t.Fatalf("global skill: %v %v", sk, err)
+	}
+	if desc := m.LoadContext(p).Skills[1].Description; desc != "Lire et créer des PDF" {
+		t.Fatalf("folded description: %q", desc)
+	}
+	if txt, err := m.ReadSkillFile(p, "pdf", "scripts/x.py"); err != nil || txt != "print(1)" {
+		t.Fatalf("skill file: %q %v", txt, err)
+	}
+	if _, err := m.ReadSkillFile(p, "pdf", "../../CLAUDE.md"); err == nil {
+		t.Fatal("escape accepted")
 	}
 }

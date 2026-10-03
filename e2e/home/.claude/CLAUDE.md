@@ -1,0 +1,1 @@
+Instruction globale : réponds poliment.
