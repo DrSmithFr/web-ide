@@ -76,6 +76,14 @@ const fake = http.createServer(async (req, res) => {
     }
     return finish(res, 'stop')
   }
+  if (userText(lastUser).includes('think long')) {
+    for (let i = 1; i <= 60 && !res.destroyed; i++) {
+      chunk(res, { reasoning_content: `step ${i} of the reasoning\n` })
+      await sleep(40)
+    }
+    chunk(res, { content: 'Thought enough.' })
+    return finish(res, 'stop')
+  }
   if (Array.isArray(lastUser.content) && lastUser === last && lastUser.content.some((p) => p.type === 'text' && p.text.includes('PDF "doc.pdf"'))) {
     const pdfText = lastUser.content.find((p) => p.text?.includes('PDF "doc.pdf"')).text
     chunk(res, { content: pdfText.includes('Hello from the PDF') ? 'The PDF says hello.' : 'Empty PDF.' })
@@ -208,6 +216,14 @@ run(async ({ page }) => {
     await page.waitForFunction(() => document.querySelectorAll('.ai-msg.assistant .md').length >= 2, null, { timeout: 10000 }).catch(() => {})
     const pdfAnswer = await page.$$eval('.ai-msg.assistant .md, .ai-error', (e) => e[e.length - 1]?.textContent)
     assert(pdfAnswer?.trim() === 'The PDF says hello.', 'text of the PDF extracted and sent: ' + pdfAnswer)
+
+    // The live reasoning box follows the end of the text.
+    await page.fill('.ai-composer textarea', 'think long')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('.ai-msg.live [data-testid=ai-reasoning-text]:has-text("step 40 ")', { timeout: 10000 })
+    const follows = await page.$eval('.ai-msg.live [data-testid=ai-reasoning-text]', (b) => b.scrollHeight > b.clientHeight && b.scrollHeight - b.scrollTop - b.clientHeight < 30)
+    assert(follows, 'the live reasoning scrolls to its end')
+    await page.waitForSelector('.ai-msg.assistant .md:has-text("Thought enough.")', { timeout: 10000 })
 
     // Stop a slow answer.
     await page.fill('.ai-composer textarea', 'answer slowly')

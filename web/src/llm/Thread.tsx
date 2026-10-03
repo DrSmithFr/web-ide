@@ -1,6 +1,6 @@
 // Messages of the conversation: welcome screen, user messages, answers with their reasoning
 // and tool steps, the answer being written with its live counters, edit confirmation.
-import { createMemo, createSignal, For, onCleanup, Show } from 'solid-js'
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js'
 import { Icon } from '../ui/icons'
 import { errorToast, toast } from '../ui/toast'
 import { activeTab, openFile, project, relPath } from '../state/project'
@@ -214,13 +214,28 @@ function Reasoning(props: { text: string; live?: boolean; ms?: number }) {
     if (props.live) return `${t('Thinking')}${live.thinkStart ? ` · ${formatDuration(now() - live.thinkStart)}` : ''}…`
     return props.ms ? `${t('Thinking')} · ${formatDuration(props.ms)}` : t('Thinking')
   }
+  // The box has its own scroll: while the model thinks, it follows the end of the text
+  // unless the user scrolled up in it.
+  let box: HTMLDivElement | undefined
+  let stick = true
+  createEffect(() => {
+    props.text
+    if (props.live && stick && box) box.scrollTop = box.scrollHeight
+  })
   return (
     <details class="ai-reasoning" classList={{ live: !!props.live }} open={props.live}>
       <summary>
         <Icon name="chevron" size={11} />
         <span class={props.live ? 'ai-shimmer' : ''}>{label()}</span>
       </summary>
-      <div class="ai-reasoning-text">{props.text}</div>
+      <div
+        ref={box}
+        class="ai-reasoning-text"
+        data-testid="ai-reasoning-text"
+        onScroll={() => (stick = box!.scrollHeight - box!.scrollTop - box!.clientHeight < 30)}
+      >
+        {props.text}
+      </div>
     </details>
   )
 }
