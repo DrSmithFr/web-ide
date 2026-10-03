@@ -82,6 +82,7 @@ func (s *Server) Init() {
 	s.registerLLM()
 	s.registerExec()
 	s.registerKanban()
+	s.registerKanbanGit()
 }
 
 func (s *Server) handle(name string, h handler) { s.handlers[name] = h }

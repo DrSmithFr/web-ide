@@ -8,6 +8,7 @@ import (
 	"errors"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -197,4 +198,34 @@ func (r *Registry) Delete(id string) error {
 		}
 	}
 	return errors.New("projet introuvable")
+}
+
+// ChildID is the id of the project opened on the worktree of a ticket.
+func ChildID(parent string, ticket int64) string {
+	return parent + "-t" + strconv.FormatInt(ticket, 10)
+}
+
+// PutChild registers (or updates) the project of the worktree of a ticket.
+func (r *Registry) PutChild(parent *Project, ticket int64, title, dir string) (View, error) {
+	p := Project{ID: ChildID(parent.ID, ticket), Title: title, Type: parent.Type, Path: dir, Parent: parent.ID, Ticket: ticket}
+	if parent.SSH != nil {
+		ssh := *parent.SSH
+		p.SSH = &ssh
+	}
+	if err := validate(&p); err != nil {
+		return View{}, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i, cur := range r.items {
+		if cur.ID == p.ID {
+			p.CreatedAt, p.OpenedAt = cur.CreatedAt, cur.OpenedAt
+			r.items[i] = &p
+			return view(&p), r.save()
+		}
+	}
+	p.CreatedAt = time.Now()
+	p.OpenedAt = p.CreatedAt
+	r.items = append(r.items, &p)
+	return view(&p), r.save()
 }

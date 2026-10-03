@@ -5,7 +5,7 @@ import { Icon } from '../ui/icons'
 import { Modal } from '../ui/overlay'
 import { errorToast } from '../ui/toast'
 import {
-  board, createTicket, ensureBoard, newTicketOpen, openTicket, priorityLabels, setNewTicketOpen, statusLabels, typeLabels,
+  board, createTicket, ensureBoard, setMeta, newTicketOpen, openTicket, priorityLabels, setNewTicketOpen, statusLabels, typeLabels,
   type Priority, type Status, type Summary, type TicketType,
 } from './state'
 import './kanban.css'
@@ -17,6 +17,7 @@ export function Board() {
   const [query, setQuery] = createSignal('')
   const [type, setType] = createSignal<'' | TicketType>('')
   const [showClosed, setShowClosed] = createSignal(false)
+  const [settingsOpen, setSettingsOpen] = createSignal(false)
   const filtered = createMemo(() => {
     const q = query().trim().toLowerCase()
     return board.tickets.filter(
@@ -37,12 +38,18 @@ export function Board() {
           <For each={Object.entries(typeLabels)}>{([v, l]) => <option value={v}>{l}</option>}</For>
         </select>
         <span class="grow" />
+        <button class="btn small" onClick={() => setSettingsOpen(true)} data-testid="kanban-settings">
+          <Icon name="gear" size={13} /> Réglages
+        </button>
         <button class="btn small" classList={{ on: showClosed() }} onClick={() => setShowClosed(!showClosed())}>
           Terminés et abandonnés ({board.tickets.filter((t) => t.status === 'done' || t.status === 'abandoned').length})
         </button>
       </div>
       <Show when={board.error}>
         <p class="danger pad">{board.error}</p>
+      </Show>
+      <Show when={settingsOpen()}>
+        <KanbanSettings onClose={() => setSettingsOpen(false)} />
       </Show>
       <div class="kb-columns">
         <For each={active}>
@@ -113,6 +120,48 @@ export function Card(props: { t: Summary; compact?: boolean }) {
         </div>
       </Show>
     </button>
+  )
+}
+
+/** Settings of the kanban of the project (kept in its base). */
+function KanbanSettings(props: { onClose: () => void }) {
+  const [base, setBase] = createSignal(board.meta.base ?? '')
+  const [setup, setSetup] = createSignal(board.meta.setup ?? '')
+  const save = async () => {
+    try {
+      await setMeta({ base: base().trim(), setup: setup().trim() })
+      props.onClose()
+    } catch (e) {
+      errorToast(e)
+    }
+  }
+  return (
+    <Modal
+      title="Réglages du kanban"
+      onClose={props.onClose}
+      footer={
+        <>
+          <button class="btn" onClick={props.onClose}>
+            Annuler
+          </button>
+          <button class="btn primary" onClick={() => void save()} data-testid="kanban-settings-save">
+            Enregistrer
+          </button>
+        </>
+      }
+    >
+      <div class="form">
+        <label class="field">
+          <span>Base des branches de tickets (vide : origin/main, sinon main)</span>
+          <input class="mono" placeholder="origin/main" value={base()} onInput={(e) => setBase(e.currentTarget.value)} data-testid="kanban-base" />
+        </label>
+        <label class="field">
+          <span>Commande d'initialisation d'un worktree (lancée dans le worktree à sa création)</span>
+          <textarea class="mono" rows={3} placeholder="npm install && cp ../../../.env ." value={setup()} onInput={(e) => setSetup(e.currentTarget.value)} data-testid="kanban-setup" />
+        </label>
+        <p class="muted small">Les worktrees sont créés dans <code>.ide/worktrees/</code>, ignoré par git.</p>
+      </div>
+    </Modal>
   )
 }
 

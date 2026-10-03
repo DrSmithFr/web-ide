@@ -184,6 +184,38 @@ export async function attachmentBlob(id: number, aid: number): Promise<{ name: s
   return { name: r.attachment.name, blob: new Blob([bytes], { type: r.attachment.mime || 'application/octet-stream' }) }
 }
 
+// ---------- git: worktree, changes, end of the ticket ----------
+
+export interface Diff {
+  base: string
+  from: string
+  head: string
+  files: DiffFile[]
+  source: 'worktree' | 'branch' | 'snapshot'
+  ahead: number
+  behind: number
+  dirty: boolean
+}
+
+/** Creates the branch and the worktree of a ticket if needed; returns the project opened on it. */
+export const startWork = (id: number, base = '') => request<{ ticket: Ticket; project: string }>('kanban.start', { id, base })
+export const worktreeProject = (id: number) => request<{ project: string }>('kanban.open', { id })
+export const ticketDiff = (id: number, base = '') => request<Diff | null>('kanban.diff', { id, base })
+export const filePatch = (id: number, path: string, from: string, source: string) => request<string>('kanban.diff.file', { id, path, from, source })
+export const finishTicket = (id: number, status: 'done' | 'abandoned', comment = '', deleteBranch = false) =>
+  request<Ticket>('kanban.finish', { id, status, comment, deleteBranch })
+
+/** Id of the project opened on the worktree of a ticket (see projects.ChildID). */
+export function childProject(ticket: number) {
+  const p = project()
+  return `${p?.parent || p?.id}-t${ticket}`
+}
+
+/** Opens the worktree of a ticket in its own window. */
+export function openWorktreeWindow(projectId: string, assistant = false) {
+  window.open(`/project/${encodeURIComponent(projectId)}${assistant ? '?assistant=1' : ''}`, `project-${projectId}`)
+}
+
 // ---------- tabs ----------
 
 export function openBoard() {

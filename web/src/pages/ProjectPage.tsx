@@ -15,7 +15,7 @@ import { Connections } from '../panels/Connections'
 import { GitPanel } from '../panels/GitPanel'
 import { KanbanPanel } from '../kanban/Panel'
 import { NewTicketHost } from '../kanban/Board'
-import { openBoard } from '../kanban/state'
+import { ensureBoard, openBoard, openTicket, statusLabels, summary } from '../kanban/state'
 import { refreshGit } from '../state/git'
 import { DatabaseTool } from '../db/DatabaseTool'
 import { AssistantTool } from '../llm/AssistantTool'
@@ -224,6 +224,23 @@ function MenuBar() {
           <span class="badge">ssh</span>
         </Show>
       </span>
+      <Show when={project()?.ticket}>
+        {(n) => {
+          ensureBoard()
+          const t = () => summary(n())
+          return (
+            <button class="wt-banner" title="Worktree de ce ticket : ouvrir le ticket" onClick={() => openTicket(n())} data-testid="worktree-banner">
+              <Icon name="kanban" size={12} />
+              <span class="ellipsis">
+                Ticket #{n()} {t()?.title ?? ''}
+              </span>
+              <Show when={t()}>
+                <span class={`kb-status st-${t()!.status}`}>{statusLabels[t()!.status]}</span>
+              </Show>
+            </button>
+          )
+        }}
+      </Show>
       <span class="grow" />
       <Show when={conflicts()}>
         <button class="badge warn" onClick={() => mutate((s) => (s.right.panel = 'conflicts'))}>
@@ -304,6 +321,11 @@ export function ProjectPage(props: { id: string }) {
   onMount(async () => {
     try {
       await openWithAuth(props.id)
+      // Opened from a ticket to run its conversation: show the assistant.
+      if (new URLSearchParams(location.search).has('assistant')) {
+        mutate((s) => (s.right.panel = 'assistant'))
+        history.replaceState(null, '', location.pathname)
+      }
       setReady(true)
       refreshGit(0)
       document.title = `${project()?.name} · Web IDE`

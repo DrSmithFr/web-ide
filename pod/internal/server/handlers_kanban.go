@@ -148,6 +148,18 @@ func (s *Server) registerKanban() {
 		if err != nil {
 			return nil, err
 		}
+		// The worktree of the ticket goes with it (its branch stays).
+		if t, err := s.Kanban.Get(k.loc, a.ID); err == nil && t.Worktree != "" {
+			if rt, err := c.runtime(); err == nil {
+				wt := t.Worktree
+				if _, err := rt.FS.Stat(wt); err != nil {
+					wt = ""
+				}
+				if err := s.removeWorktree(ctx, k.loc, k.root, kanban.Git{Run: rt.Runner, Root: k.root.Path}, t, wt); err != nil {
+					return nil, err
+				}
+			}
+		}
 		if err := s.Kanban.Delete(k.loc, a.ID); err != nil {
 			return nil, err
 		}

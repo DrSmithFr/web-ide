@@ -91,3 +91,30 @@ input.tk-title { padding: 2px 6px; }
 .tk-row .link { padding: 0; text-align: left; }
 .tk-row .icon-btn { opacity: 0.5; }
 .tk-row:hover .icon-btn { opacity: 1; }
+
+/* ---------- git of a ticket ---------- */
+.tk-git { display: flex; flex-direction: column; gap: 6px; }
+.tk-git-row { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
+.tk-git-row .link { padding: 0; }
+.tk-git-summary { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tk-setup { font-size: 12px; color: var(--fg-muted); }
+.tk-setup.error summary { color: var(--danger); }
+.tk-setup pre { max-height: 220px; overflow: auto; background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 8px; margin: 4px 0 0; font-size: 11.5px; white-space: pre-wrap; }
+.tk-files { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.tk-file + .tk-file { border-top: 1px solid var(--line); }
+.tk-file-head { display: flex; align-items: center; gap: 6px; padding: 3px 8px; cursor: pointer; min-width: 0; }
+.tk-file-head:hover { background: var(--bg-2); }
+.tk-file-head .mono { font-size: 12px; }
+.tk-fst { font-family: var(--font-code); font-size: 11px; font-weight: 700; width: 14px; text-align: center; flex: none; color: var(--warn); }
+.tk-fst.s-A, .tk-fst.s-U { color: var(--ok); }
+.tk-fst.s-D { color: var(--danger); }
+.tk-fst.s-R { color: var(--info); }
+.tk-patch { margin: 0; max-height: 480px; overflow: auto; font-family: var(--font-code); font-size: 12px; line-height: 1.45; background: var(--bg-2); border-top: 1px solid var(--line); padding: 4px 0; }
+.tk-patch div { padding: 0 10px; white-space: pre; }
+.tk-patch .add { background: color-mix(in srgb, var(--ok) 14%, transparent); }
+.tk-patch .del { background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.tk-patch .hunk { color: var(--info); background: var(--bg-3); }
+
+/* ---------- window of a ticket worktree ---------- */
+.wt-banner { display: inline-flex; align-items: center; gap: 6px; border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line)); border-radius: 12px; padding: 0 8px; height: 22px; background: color-mix(in srgb, var(--warn) 10%, transparent); color: var(--fg); cursor: pointer; font-size: 12px; max-width: 420px; }
+.wt-banner:hover { border-color: var(--warn); }

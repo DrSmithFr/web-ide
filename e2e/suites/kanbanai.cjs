@@ -167,10 +167,9 @@ run(async ({ page }) => {
     assert(true, 'conversation listée dans le ticket')
 
     // Development session: goals checked, the model cannot close, moves to review.
-    await page.click('[data-testid=ticket-start]')
-    await page.waitForSelector('[data-testid=ticket-status]:has-text("En cours")')
+    // Not a git repository: after confirmation, development in the project folder itself.
     const before2 = requests.length
-    await page.click('[data-testid=ticket-session]')
+    await page.click('[data-testid=ticket-start]')
     await page.waitForSelector('[data-testid=ticket-status]:has-text("À tester")', { timeout: 15000 })
     const rd = requests[before2]
     assert(rd.messages[0].content.includes('Tu **développes** ce ticket') && toolNames(rd).includes('edit_file'), 'rôle dev en mode Build')

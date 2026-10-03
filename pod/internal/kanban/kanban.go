@@ -213,8 +213,16 @@ func EnsureIgnored(dir string) error {
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
+	if text, changed := WithIgnored(string(data)); changed {
+		return os.WriteFile(gi, []byte(text), 0o644)
+	}
+	return nil
+}
+
+// WithIgnored returns the .gitignore text with the kanban entries, and whether it changed.
+func WithIgnored(text string) (string, bool) {
 	lines := map[string]bool{}
-	for _, l := range strings.Split(string(data), "\n") {
+	for _, l := range strings.Split(text, "\n") {
 		lines[strings.TrimSpace(l)] = true
 	}
 	var missing []string
@@ -224,14 +232,12 @@ func EnsureIgnored(dir string) error {
 		}
 	}
 	if len(missing) == 0 {
-		return nil
+		return text, false
 	}
-	text := string(data)
 	if text != "" && !strings.HasSuffix(text, "\n") {
 		text += "\n"
 	}
-	text += "# Kanban of the IDE and worktrees of its tickets (local only)\n" + strings.Join(missing, "\n") + "\n"
-	return os.WriteFile(gi, []byte(text), 0o644)
+	return text + "# Kanban of the IDE and worktrees of its tickets (local only)\n" + strings.Join(missing, "\n") + "\n", true
 }
 
 // Close closes the bases.

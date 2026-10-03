@@ -13,7 +13,7 @@ import {
   priorityLabels, roleLabels, statusLabels, ticketVersion, typeLabels, unlinkChat, unlinkCommit, updateTicket,
   type Priority, type Status, type Ticket, type TicketType,
 } from './state'
-import { ticketActions, TicketChats, TicketGit } from './actions'
+import { abandonTicket, ticketActions, TicketChats, TicketGit } from './actions'
 import './kanban.css'
 
 export function TicketView(props: { tab: TabState; paneId: string }) {
@@ -105,7 +105,7 @@ function TicketBody(props: { t: Ticket; apply: Apply; paneId: string; tabId: str
             title="Autres actions"
             onClick={(e) =>
               contextMenu(e, [
-                ...(!closed() ? [{ label: 'Abandonner le ticket', action: () => void abandon(t(), props.apply) }] : []),
+                ...(!closed() ? [{ label: 'Abandonner le ticket', action: () => void abandonTicket(t(), props.apply) }] : []),
                 { label: 'Supprimer le ticket', action: () => void remove() },
               ])
             }
@@ -288,12 +288,6 @@ function TicketBody(props: { t: Ticket; apply: Apply; paneId: string; tabId: str
       </div>
     </div>
   )
-}
-
-async function abandon(t: Ticket, apply: Apply) {
-  const why = await prompt({ title: `Abandonner le ticket #${t.id}`, label: 'Raison (facultatif)' })
-  if (why === null) return
-  await apply(moveTicket(t.id, 'abandoned', 'user', why))
 }
 
 function absolute(p: string) {

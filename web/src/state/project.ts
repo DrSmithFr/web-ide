@@ -56,6 +56,9 @@ export interface ProjectInfo {
   title: string
   description: string
   ssh?: { host: string; port: number; user: string; auth: string; keyPath?: string }
+  /** Worktree of a kanban ticket: project it belongs to, and ticket number. */
+  parent?: string
+  ticket?: number
 }
 
 const uid = () => Math.random().toString(36).slice(2, 10)
