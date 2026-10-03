@@ -157,6 +157,7 @@ func (s *Server) registerGlobal() {
 		}
 		s.closeRuntime(a.ID)
 		s.Sessions.Delete(a.ID)
+		_ = s.Store.Remove(iconCache(a.ID))
 		// The worktrees of its tickets stay on disk, their projects go.
 		for _, id := range children {
 			_ = s.Projects.Delete(id)

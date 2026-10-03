@@ -31,6 +31,7 @@ import * as lspc from '../lsp/client'
 import { lspLanguage } from '../editor/languages'
 import { toast } from '../ui/toast'
 import { t, tn } from '../i18n'
+import { useProjectFavicon } from '../ui/projectIcon'
 
 export const leftPanels: Record<string, { label: string; icon: string; component: () => JSX.Element }> = {
   explorer: { label: 'Explorer', icon: 'files', component: Explorer },
@@ -335,6 +336,7 @@ export function ProjectPage(props: { id: string }) {
     }
   })
   useProjectActions()
+  useProjectFavicon(project)
   const offs = [
     registerAction('view.toggleLeft', () => mutate((s) => (s.left.panel = s.left.panel ? null : 'explorer'))),
     registerAction('view.toggleRight', () => mutate((s) => (s.right.panel = s.right.panel ? null : 'database'))),

@@ -1,5 +1,5 @@
 // Home page: project list, creation of local or SSH projects, workspace folders not yet added.
-import { createResource, createSignal, For, onCleanup, onMount, Show } from 'solid-js'
+import { createEffect, createResource, createSignal, For, onCleanup, onMount, Show } from 'solid-js'
 import { createStore } from 'solid-js/store'
 import { on as onPod, request } from '../pod/rpc'
 import { navigate } from '../app/router'
@@ -9,6 +9,8 @@ import { Icon } from '../ui/icons'
 import { PodStatus } from './ProjectPage'
 import { openSettings } from '../settings/SettingsModal'
 import { t } from '../i18n'
+import { iconOf, iconURL, type IconSpec, loadIcon, loadIcons, setFavicon } from '../ui/projectIcon'
+import { IconEditor } from '../ui/IconEditor'
 
 interface Project {
   id: string
@@ -31,7 +33,22 @@ export function Home() {
     refetchDirs()
   })
   onCleanup(off)
-  onMount(() => (document.title = `${t('Projects')} · Web IDE`))
+  onMount(() => {
+    document.title = `${t('Projects')} · Web IDE`
+    setFavicon(null)
+  })
+  createEffect(() => {
+    const list = projects()
+    if (list) loadIcons(list)
+  })
+  const [iconFor, setIconFor] = createSignal<{ p: Project; spec: IconSpec | null } | null>(null)
+  const editIcon = async (p: Project) => {
+    try {
+      setIconFor({ p, spec: (await loadIcon(p.id)).spec })
+    } catch (e) {
+      errorToast(e)
+    }
+  }
 
   const available = () => {
     const used = new Set((projects() ?? []).filter((p) => p.type === 'local').map((p) => p.path))
@@ -89,16 +106,24 @@ export function Home() {
                     navigate(`/project/${p.id}`)
                   }}
                 >
-                  <div class="project-title">
-                    {p.name} <span class="badge">{p.type === 'ssh' ? 'SSH' : 'local'}</span>
-                  </div>
-                  <Show when={p.description}>
-                    <div class="project-desc">{p.description}</div>
+                  <Show when={iconOf(p.id)} fallback={<span class="project-icon" />}>
+                    <img class="project-icon" src={iconURL(iconOf(p.id))} alt="" data-testid="project-icon" />
                   </Show>
-                  <div class="muted small mono ellipsis">{p.type === 'ssh' ? `${p.ssh?.user ? p.ssh.user + '@' : ''}${p.ssh?.host}:${p.path}` : p.path}</div>
+                  <div class="project-info">
+                    <div class="project-title">
+                      {p.name} <span class="badge">{p.type === 'ssh' ? 'SSH' : 'local'}</span>
+                    </div>
+                    <Show when={p.description}>
+                      <div class="project-desc">{p.description}</div>
+                    </Show>
+                    <div class="muted small mono ellipsis">{p.type === 'ssh' ? `${p.ssh?.user ? p.ssh.user + '@' : ''}${p.ssh?.host}:${p.path}` : p.path}</div>
+                  </div>
                 </a>
                 <div class="project-actions">
                   <span class="muted small">{p.openedAt ? new Date(p.openedAt).toLocaleDateString() : ''}</span>
+                  <button class="icon-btn" title={t('Change the icon')} onClick={() => editIcon(p)} data-testid="project-icon-edit">
+                    <Icon name="sparkle" />
+                  </button>
                   <button class="icon-btn" title={t('Edit')} onClick={() => setEditing(structuredClone(p))}>
                     <Icon name="edit" />
                   </button>
@@ -124,6 +149,9 @@ export function Home() {
           </div>
         </Show>
       </main>
+      <Show when={iconFor()}>
+        {(f) => <IconEditor id={f().p.id} name={f().p.name} spec={f().spec} onClose={() => setIconFor(null)} />}
+      </Show>
       <Show when={editing()}>
         <ProjectForm
           initial={editing()!}

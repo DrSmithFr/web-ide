@@ -135,6 +135,7 @@ Large modal with navigation on the left: themes, fonts, keyboard shortcuts, synt
 - Simple project list. A project is **local** or **SSH**, with an optional title and description (name derived from the path or the host otherwise).
 - The project registry lives in the pod. Each project has its own URL, `/project/:id`, with its own pod session.
 - Every project is a git repository: creating a project runs `git init` (first branch `main`, an empty first commit when the folder is empty) unless the folder is already in a repository, and adds the optional remote as `origin`. An SSH host not reachable at creation (password) gets it at the first opening (`gitSetup` pending in the registry).
+- **Project icon**: a glyph (a subset of Lucide) or 1 to 3 characters on a shape (circle, rounded square, square, hexagon, diamond) filled with a colour or a two-colour gradient in one of 8 directions. Shown on the home page, and as the favicon of every window of the project so that browser tabs tell the projects apart; the worktree of a ticket shows the icon of its project with a dot. The page draws the SVG and saves it in `.ide/icon.svg` with its description in `.ide/icon.json`; a project without one gets one generated (initials, colour and shape from its id).
 - Each project has a `.ide` folder: project settings, database connections (without secrets), conversations of the assistant and the kanban (both ignored by git).
 
 ### Detached windows

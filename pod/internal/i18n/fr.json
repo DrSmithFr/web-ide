@@ -118,5 +118,7 @@
   "unknown SQL console": "console SQL inconnue",
   "unknown status: %s": "état inconnu : %s",
   "unknown type: %s (%s)": "type inconnu : %s (%s)",
-  "the repository has no commit yet: cannot create the branch of the ticket": "le dépôt n'a encore aucun commit : impossible de créer la branche du ticket"
+  "the repository has no commit yet: cannot create the branch of the ticket": "le dépôt n'a encore aucun commit : impossible de créer la branche du ticket",
+  "invalid icon": "icône invalide",
+  "open the project to change its icon": "ouvrez le projet pour changer son icône"
 }

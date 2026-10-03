@@ -46,6 +46,8 @@ func (s *Store) WriteJSON(name string, v any) error {
 	return s.WriteFile(name, data)
 }
 
+func (s *Store) ReadFile(name string) ([]byte, error) { return os.ReadFile(s.Path(name)) }
+
 func (s *Store) WriteFile(name string, data []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
