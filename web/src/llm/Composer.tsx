@@ -1,9 +1,13 @@
 // Message box of the assistant: text that grows with its content, attachments, dictation,
 // model picker, options menu, context gauge, send / stop. The draft survives panel switches.
-import { createEffect, createSignal, For, onCleanup, Show, type JSX } from 'solid-js'
+import { createEffect, createMemo, createResource, createSignal, For, on, onCleanup, onMount, Show, type JSX } from 'solid-js'
 import { produce } from 'solid-js/store'
 import { Icon } from '../ui/icons'
 import { errorToast, toast } from '../ui/toast'
+import { fuzzy } from '../ui/overlay'
+import { request } from '../pod/rpc'
+import { relPath } from '../state/project'
+import { loadPromptContext, promptContext } from './prompt'
 import {
   chat,
   config,
@@ -18,6 +22,7 @@ import {
   savePrefs,
   select,
   serverKind,
+  resetChat,
   setChat,
   setPrefs,
   type Attachment,
@@ -66,6 +71,123 @@ export function startEdit(index: number, text: string) {
   setEditFrom(index)
   setDraft(text)
   focusComposer()
+}
+
+// ---------- commands and mentions ----------
+
+export const commands: { name: string; args?: string; hint: string }[] = [
+  { name: 'compact', args: '[consignes]', hint: 'Résume les anciens messages, avec des consignes facultatives' },
+  { name: 'clear', hint: 'Nouvelle conversation' },
+  { name: 'model', args: '[nom]', hint: 'Change de modèle' },
+  { name: 'help', hint: 'Liste des commandes et des skills' },
+]
+
+interface CompletionItem {
+  kind: 'command' | 'skill' | 'file' | 'dir'
+  label: string
+  detail?: string
+  insert: string
+}
+
+let pathsCache: { at: number; list: string[] } | null = null
+
+/** Files and folders of the project, relative to its root (cached 15 s). */
+async function projectPaths(): Promise<string[]> {
+  if (pathsCache && Date.now() - pathsCache.at < 15_000) return pathsCache.list
+  const files = (await request<string[]>('search.files').catch(() => [])).map((f) => relPath(f))
+  const dirs = new Set<string>()
+  for (const f of files) {
+    const parts = f.split('/')
+    for (let i = 1; i < parts.length; i++) dirs.add(parts.slice(0, i).join('/') + '/')
+  }
+  const list = [...dirs, ...files]
+  pathsCache = { at: Date.now(), list }
+  return list
+}
+
+/** Runs a /command; returns false when the text is not a command to run here. */
+async function runCommand(text: string, onSettings: () => void): Promise<boolean> {
+  const m = /^\/(\S+)\s*([\s\S]*)$/.exec(text)
+  if (!m) return false
+  const [, name, args] = m
+  switch (name) {
+    case 'clear':
+    case 'new':
+      resetChat()
+      return true
+    case 'compact':
+      await compactNow(args.trim())
+      return true
+    case 'help':
+      setHelp(true)
+      return true
+    case 'model': {
+      const q = args.trim().toLowerCase()
+      if (!q) {
+        toast(`Modèles : ${models().map((x) => x.id).join(', ') || 'aucun'}`, 'info', undefined, 8000)
+        return true
+      }
+      const found = models().find((x) => x.id.toLowerCase() === q) ?? models().find((x) => x.id.toLowerCase().includes(q))
+      if (!found) {
+        toast(`Aucun modèle « ${args.trim()} »`, 'warn')
+        return true
+      }
+      await select(config.server, found.id)
+      toast(`Modèle : ${found.id}`, 'ok')
+      return true
+    }
+  }
+  const skill = promptContext()?.skills.find((x) => x.name === name)
+  if (skill) {
+    if (!config.server || !config.model) {
+      onSettings()
+      return true
+    }
+    const ask = `Utilise le skill « ${skill.name} » : charge ses instructions avec load_skill puis applique-les.${args.trim() ? `\n\n${args.trim()}` : ''}`
+    await send(ask, [], [], text.trim())
+    return true
+  }
+  toast(`Commande inconnue : /${name} (voir /help)`, 'warn')
+  return true
+}
+
+const [help, setHelp] = createSignal(false)
+
+function HelpCard() {
+  return (
+    <div class="ai-help" data-testid="ai-help">
+      <div class="ai-help-head">
+        <strong>Commandes</strong>
+        <span class="grow" />
+        <button class="icon-btn small" title="Fermer" onClick={() => setHelp(false)}>
+          <Icon name="close" size={12} />
+        </button>
+      </div>
+      <For each={commands}>
+        {(c) => (
+          <div class="ai-help-row">
+            <code>
+              /{c.name}
+              {c.args ? ` ${c.args}` : ''}
+            </code>
+            <span>{c.hint}</span>
+          </div>
+        )}
+      </For>
+      <Show when={promptContext()?.skills.length}>
+        <strong class="ai-help-sub">Skills</strong>
+        <For each={promptContext()!.skills}>
+          {(sk) => (
+            <div class="ai-help-row">
+              <code>/{sk.name} [demande]</code>
+              <span>{sk.description}</span>
+            </div>
+          )}
+        </For>
+      </Show>
+      <div class="ai-help-foot muted">@chemin désigne un fichier ou un dossier du projet (autocomplétion en tapant @).</div>
+    </div>
+  )
 }
 
 function capsText(m: Model) {
@@ -172,28 +294,75 @@ function ModelPicker(props: { onSettings: () => void }) {
   )
 }
 
-function ContextRing() {
+function ContextMenu() {
   const ctx = () => contextSize()
   const used = () => contextUsed()
   const ratio = () => (ctx() ? Math.min(1, used() / ctx()) : 0)
+  const level = () => (ratio() > prefs.compactAt / 100 ? 'danger' : ratio() > (prefs.compactAt / 100) * 0.85 ? 'warn' : '')
+  const active = () => chat.messages.filter((m) => !m.compacted).length
+  const compacted = () => chat.messages.filter((m) => m.compacted).length
   const r = 7
   const c = 2 * Math.PI * r
   return (
-    <span
-      class="ai-ring"
-      classList={{ warn: ratio() > (prefs.compactAt / 100) * 0.85, danger: ratio() > prefs.compactAt / 100 }}
-      title={
-        ctx()
-          ? `Contexte utilisé (estimation) : ${used().toLocaleString()} / ${ctx().toLocaleString()} jetons (${Math.round(ratio() * 100)} %). Compaction automatique à ${prefs.compactAt} %.`
-          : 'Taille de contexte du modèle inconnue (connue une fois le modèle chargé)'
-      }
-      data-testid="ai-gauge"
+    <Popover
+      align="right"
+      class="ai-ctx-pop"
+      trigger={(toggle, open) => (
+        <button
+          class={`ai-ring ${level()}`}
+          classList={{ on: open }}
+          onClick={toggle}
+          title={ctx() ? `Contexte : ${used().toLocaleString()} / ${ctx().toLocaleString()} jetons (${Math.round(ratio() * 100)} %)` : 'Contexte : taille inconnue'}
+          data-testid="ai-gauge"
+        >
+          <svg width="18" height="18" viewBox="0 0 18 18">
+            <circle cx="9" cy="9" r={r} class="ai-ring-bg" />
+            <circle cx="9" cy="9" r={r} class="ai-ring-fg" stroke-dasharray={`${c * ratio()} ${c}`} transform="rotate(-90 9 9)" />
+          </svg>
+        </button>
+      )}
     >
-      <svg width="18" height="18" viewBox="0 0 18 18">
-        <circle cx="9" cy="9" r={r} class="ai-ring-bg" />
-        <circle cx="9" cy="9" r={r} class="ai-ring-fg" stroke-dasharray={`${c * ratio()} ${c}`} transform="rotate(-90 9 9)" />
-      </svg>
-    </span>
+      {(close) => (
+        <div class="ai-ctx" data-testid="ai-context-menu">
+          <div class="ai-ctx-title">Contexte</div>
+          <Show when={ctx()} fallback={<p class="muted small">Taille de contexte inconnue : elle est connue une fois le modèle chargé. Environ {formatTokens(used())} jetons utilisés.</p>}>
+            <div class="ai-ctx-num">
+              <strong>{formatTokens(used())}</strong> / {formatTokens(ctx())} jetons <span class="muted">· {Math.round(ratio() * 100)} %</span>
+            </div>
+            <div class={`ai-ctx-bar ${level()}`}>
+              <span style={{ width: `${ratio() * 100}%` }} />
+              <i style={{ left: `${prefs.compactAt}%` }} title={`Seuil de compaction : ${prefs.compactAt} %`} />
+            </div>
+          </Show>
+          <div class="ai-ctx-rows small">
+            <span>Messages envoyés au modèle</span>
+            <span>{active()}</span>
+            <Show when={compacted()}>
+              <span>Messages compactés</span>
+              <span>{compacted()}</span>
+            </Show>
+          </div>
+          <div class="ai-pop-sep" />
+          <Switch label="Compaction automatique" hint={`Au-delà de ${prefs.compactAt} % du contexte`} checked={prefs.autoCompact} onChange={(v) => (setPrefs('autoCompact', v), savePrefs())} />
+          <label class="ai-ctx-range small">
+            <span>Seuil</span>
+            <input type="range" min="40" max="95" step="5" value={prefs.compactAt} onInput={(e) => (setPrefs('compactAt', Number(e.currentTarget.value)), savePrefs())} />
+            <span>{prefs.compactAt} %</span>
+          </label>
+          <button
+            class="btn small primary ai-ctx-compact"
+            disabled={live.busy || chat.messages.length < 2}
+            onClick={() => {
+              close()
+              compactNow().catch(errorToast)
+            }}
+          >
+            <Icon name="history" size={13} /> Compacter maintenant
+          </button>
+          <p class="muted small ai-ctx-tip">Ou tapez /compact suivi de consignes pour le résumé.</p>
+        </div>
+      )}
+    </Popover>
   )
 }
 
@@ -211,24 +380,13 @@ function Options() {
         </button>
       )}
     >
-      {(close) => (
+      {() => (
         <>
           <Switch label="Outils" hint="Fichiers, recherche, serveurs de langage, consoles" checked={prefs.tools} onChange={(v) => set('tools', v)} testid="opt-tools" />
           <Switch label="Appliquer sans demander" hint="Modifications de fichiers sans confirmation" checked={prefs.autoApply} onChange={(v) => set('autoApply', v)} testid="opt-auto" />
           <Show when={currentModel()?.caps.thinking}>
             <Switch label="Réflexion" hint="Le modèle réfléchit avant de répondre" checked={prefs.think} onChange={(v) => set('think', v)} testid="opt-think" />
           </Show>
-          <div class="ai-pop-sep" />
-          <button
-            class="ai-menu-item"
-            disabled={live.busy || chat.messages.length < 2}
-            onClick={() => {
-              close()
-              compactNow().catch(errorToast)
-            }}
-          >
-            <Icon name="history" size={14} /> Compacter la conversation
-          </button>
         </>
       )}
     </Popover>
@@ -296,16 +454,86 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
     return ''
   }
 
+  // Completion of /commands (at the start) and @paths (anywhere), from the caret.
+  const [caret, setCaret] = createSignal(0)
+  const [selIndex, setSelIndex] = createSignal(0)
+  const [dismissed, setDismissed] = createSignal('')
+  onMount(() => {
+    if (!promptContext()) loadPromptContext().catch(() => {})
+  })
+  const trackCaret = () => setCaret(textareaRef?.selectionStart ?? draft().length)
+  const query = createMemo(() => {
+    const v = draft()
+    const before = v.slice(0, caret())
+    let m = /^\/(\S*)$/.exec(before)
+    if (m) return { mode: 'slash' as const, q: m[1], start: 0, end: caret() }
+    m = /(^|\s)@([^\s@]*)$/.exec(before)
+    if (m) return { mode: 'mention' as const, q: m[2], start: caret() - m[2].length - 1, end: caret() }
+    return null
+  })
+  const [paths] = createResource(() => (query()?.mode === 'mention' ? true : null), projectPaths)
+  const items = createMemo<CompletionItem[]>(() => {
+    const qy = query()
+    if (!qy) return []
+    if (qy.mode === 'slash') {
+      const all: CompletionItem[] = [
+        ...commands.map((c) => ({ kind: 'command' as const, label: `/${c.name}`, detail: c.hint, insert: `/${c.name} ` })),
+        ...(promptContext()?.skills ?? []).map((sk) => ({ kind: 'skill' as const, label: `/${sk.name}`, detail: sk.description, insert: `/${sk.name} ` })),
+      ]
+      return all
+        .map((it) => ({ it, score: fuzzy(qy.q, it.label.slice(1)) }))
+        .filter((x) => x.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .map((x) => x.it)
+    }
+    return (paths() ?? [])
+      .map((p) => ({ p, score: fuzzy(qy.q, p) - (p.endsWith('/') ? 0.5 : 0) }))
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score || a.p.length - b.p.length)
+      .slice(0, 40)
+      .map(({ p }) => ({ kind: p.endsWith('/') ? ('dir' as const) : ('file' as const), label: p, insert: p.endsWith('/') ? `@${p}` : `@${p} ` }))
+  })
+  const queryKey = () => (query() ? `${query()!.mode}:${query()!.start}` : '')
+  const completionOpen = () => !!query() && items().length > 0 && dismissed() !== queryKey()
+  createEffect(on(items, () => setSelIndex(0)))
+  const accept = (it: CompletionItem) => {
+    const qy = query()
+    if (!qy) return
+    const v = draft()
+    const next = v.slice(0, qy.start) + it.insert + v.slice(qy.end)
+    const pos = qy.start + it.insert.length
+    setDraft(next)
+    queueMicrotask(() => {
+      textareaRef?.focus()
+      textareaRef?.setSelectionRange(pos, pos)
+      setCaret(pos)
+    })
+  }
+
   const canSend = () => (!!draft().trim() || pending().length > 0) && !preparing()
 
   const submit = async () => {
     const text = draft().trim()
     const atts = pending()
     if (!canSend() || live.busy) return
+    if (text.startsWith('/') && !atts.length) {
+      setDraft('')
+      setHelp(false)
+      try {
+        if (await runCommand(text, props.onSettings)) {
+          props.onSent()
+          return
+        }
+      } catch (e) {
+        errorToast(e)
+        return
+      }
+    }
     if (!config.server || !config.model) {
       props.onSettings()
       return
     }
+    setHelp(false)
     const from = editFrom()
     if (from !== null) {
       setChat(produce((c) => c.messages.splice(from)))
@@ -326,6 +554,28 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
   }
 
   const onKey: JSX.EventHandler<HTMLTextAreaElement, KeyboardEvent> = (e) => {
+    if (completionOpen()) {
+      const n = items().length
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        setSelIndex((i) => (i + (e.key === 'ArrowDown' ? 1 : n - 1)) % n)
+        return
+      }
+      const it = items()[selIndex()]
+      const qy = query()!
+      // Enter on a token already complete (e.g. "/clear") sends the message.
+      const complete = it.insert.trimEnd() === draft().slice(qy.start, qy.end)
+      if ((e.key === 'Enter' && !e.shiftKey && !complete) || e.key === 'Tab') {
+        e.preventDefault()
+        accept(it)
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setDismissed(queryKey())
+        return
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
       e.preventDefault()
       submit()
@@ -380,12 +630,45 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
             <span class="ellipsis">{speechLabel()}</span>
           </div>
         </Show>
+        <Show when={help()}>
+          <HelpCard />
+        </Show>
+        <Show when={completionOpen()}>
+          <div class="ai-complete" role="listbox" data-testid="ai-complete">
+            <For each={items()}>
+              {(it, i) => (
+                <div
+                  class="ai-complete-item"
+                  classList={{ active: i() === selIndex() }}
+                  role="option"
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    accept(it)
+                  }}
+                  onMouseEnter={() => setSelIndex(i())}
+                  ref={(el) => createEffect(() => i() === selIndex() && el.scrollIntoView({ block: 'nearest' }))}
+                >
+                  <Icon name={it.kind === 'dir' ? 'folder' : it.kind === 'file' ? 'file' : it.kind === 'skill' ? 'puzzle' : 'chevron'} size={13} />
+                  <span class="ai-complete-label">{it.label}</span>
+                  <Show when={it.detail}>
+                    <span class="ai-complete-detail ellipsis">{it.detail}</span>
+                  </Show>
+                </div>
+              )}
+            </For>
+          </div>
+        </Show>
         <textarea
           ref={(el) => (textareaRef = el)}
           rows="1"
           placeholder={config.model ? `Message à ${config.model}…` : 'Choisir un modèle pour commencer…'}
           value={draft()}
-          onInput={(e) => setDraft(e.currentTarget.value)}
+          onInput={(e) => {
+            setDraft(e.currentTarget.value)
+            trackCaret()
+          }}
+          onKeyUp={(e) => (!completionOpen() || !['ArrowDown', 'ArrowUp', 'Enter', 'Tab', 'Escape'].includes(e.key)) && trackCaret()}
+          onClick={trackCaret}
           onKeyDown={onKey}
           onPaste={onPaste}
         />
@@ -415,7 +698,7 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
           <Options />
           <span class="grow" />
           <Show when={chat.messages.length}>
-            <ContextRing />
+            <ContextMenu />
           </Show>
           <ModelPicker onSettings={props.onSettings} />
           <Show

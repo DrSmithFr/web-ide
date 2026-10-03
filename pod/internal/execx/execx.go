@@ -298,3 +298,20 @@ func (r SSH) Has(name string) bool {
 	out, err := r.Output(context.Background(), []string{"sh", "-c", "command -v " + Quote(name)}, "")
 	return err == nil && len(strings.TrimSpace(string(out))) > 0
 }
+
+// ExitCode returns the exit status carried by the error of Wait (local or SSH), -1 when
+// the process did not exit normally, 0 without error.
+func ExitCode(err error) int {
+	if err == nil {
+		return 0
+	}
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		return ee.ExitCode()
+	}
+	var se *ssh.ExitError
+	if errors.As(err, &se) {
+		return se.ExitStatus()
+	}
+	return -1
+}

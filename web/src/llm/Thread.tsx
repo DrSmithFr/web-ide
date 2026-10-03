@@ -87,7 +87,12 @@ function UserMessage(props: { msg: ChatMessage; index: number }) {
           </div>
         </Show>
         <Show when={textOf(props.msg)}>
-          <div class="ai-user-text">{textOf(props.msg)}</div>
+          <div class="ai-user-text">
+            {/* @paths and the /command of the start shown as chips */}
+            <For each={textOf(props.msg).split(/(^\/\S+|@[^\s@]+)/)}>
+              {(part) => (part.startsWith('@') || /^\/\S+$/.test(part) ? <span class="ai-mention">{part}</span> : part)}
+            </For>
+          </div>
         </Show>
       </div>
       <div class="ai-actions">
@@ -160,12 +165,25 @@ function ToolRow(props: { msg: ChatMessage; call?: ToolCall }) {
               Ouvrir {relPath(path())}
             </button>
           </Show>
-          <Show when={props.call}>
-            <div class="ai-tool-args mono">
-              {props.msg.name}({props.call!.function.arguments.length > 300 ? props.call!.function.arguments.slice(0, 300) + '…' : props.call!.function.arguments})
-            </div>
+          <Show
+            when={props.msg.name === 'bash'}
+            fallback={
+              <>
+                <Show when={props.call}>
+                  <div class="ai-tool-args mono">
+                    {props.msg.name}({props.call!.function.arguments.length > 300 ? props.call!.function.arguments.slice(0, 300) + '…' : props.call!.function.arguments})
+                  </div>
+                </Show>
+                <pre class="ai-tool-out">{typeof props.msg.content === 'string' ? props.msg.content : ''}</pre>
+              </>
+            }
+          >
+            {/* A terminal-like block: the command, then its output. */}
+            <pre class="ai-term">
+              <span class="ai-term-cmd">$ {safeArgs(props.call).command}</span>
+              {'\n' + (typeof props.msg.content === 'string' ? props.msg.content : '')}
+            </pre>
           </Show>
-          <pre class="ai-tool-out">{typeof props.msg.content === 'string' ? props.msg.content : ''}</pre>
         </div>
       </Show>
     </div>

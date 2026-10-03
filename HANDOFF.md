@@ -16,7 +16,8 @@ Toute la spec est implémentée et testée, plus sept ajouts : autocomplétion, 
 | `56159ea` | Assistant IA : chat llama.cpp / Ollama, outils fichiers + LSP |
 | `dcd370f` | Transcription vocale locale (Whisper dans le navigateur) |
 | `fb780dd` | Agent : CLAUDE.md / AGENTS.md, skills, prompt éditable, compaction, outils IDE et consoles, conversations en SQLite |
-| dernier commit | Nouvelle interface de l'assistant, historique latéral, Mermaid et stats en direct, conversation restaurée |
+| `0968e76` | Nouvelle interface de l'assistant, historique latéral, Mermaid et stats en direct, conversation restaurée |
+| dernier commit | Diagrammes plein écran, menu du contexte, outil bash, commandes /, mentions @ |
 
 ## Commandes
 
@@ -74,7 +75,7 @@ Panneau de droite « Assistant IA » (détachable) : serveurs llama.cpp ou Ollam
 
 - **Prompt système** (`web/src/llm/prompt.ts`) : modèle éditable (onglet « Prompt et instructions » des réglages) global (`~/.web-ide/system-prompt.md`) ou du projet (`.ide/system-prompt.md`, prioritaire), variables `{{project}} {{root}} {{host}} {{activeFile}} {{date}} {{tools}}`, aperçu du prompt complet dans un onglet. Rechargé à chaque message.
 - **Instructions et skills** comme Claude Code (`pod/internal/llm/context.go`, RPC `llm.context`) : `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, puis `CLAUDE.md` / `AGENTS.md` du dossier de données (`~/.web-ide`), tous sur la machine du pod, puis `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md` du projet, imports `@chemin` suivis (hors blocs de code, profondeur 4). Skills : `.claude/skills` et `.agents/skills` du projet (prioritaires), puis `~/.web-ide/skills`, puis `~/.claude/skills` et `~/.agents/skills` ; seuls nom et description vont dans le prompt, contenu via les outils `load_skill` / `read_skill_file`. `WEBIDE_INSTRUCTIONS_HOME` remplace le dossier personnel (tests e2e : `e2e/home`).
-- **Outils IDE** (`tools.ts`) : `open_file` (avec sélection de lignes), `focus` (fichier, panneau, console, problèmes), `run_command` (nouvelle console visible, attend la fin ou le délai, renvoie sortie sans séquences ANSI et code ; sans confirmation, choix de l'utilisateur), `list_consoles`, `read_console`, `console_input`.
+- **Outils IDE** (`tools.ts`) : `open_file` (avec sélection de lignes), `focus` (fichier, panneau, console, problèmes), `bash` (RPC `exec.run` du pod, `sh -c` sans terminal, stdout+stderr, code, délai 120 s, arrêtée par le bouton Arrêter, sortie gardée début + fin ; affichée seulement dans la conversation), `run_command` (console visible par l'utilisateur, pour un serveur de dev : rend la main après la fin ou 20 s), `list_consoles`, `read_console`, `console_input`. Aucune confirmation pour les commandes (choix de l'utilisateur).
 - **Modèles** : le modèle peut changer en cours de conversation (chaque réponse garde le sien, affiché sous la réponse) ; jauge de contexte (usage du dernier appel + estimation de la suite).
 - **Compaction** (`agent.ts`) : automatique au-delà du seuil (75 % par défaut) du contexte du modèle, ou bouton « compacter », ou après une erreur de contexte dépassé ; un modèle dédié peut résumer (onglet « Compaction »). Les anciens messages restent visibles repliés (`compacted`), un message `kind: 'summary'` les remplace dans l'API ; environ un quart du contexte est gardé tel quel (sinon le dernier échange). `chat.resetAt` fait ignorer les usages mesurés avant la compaction.
 - **Conversations en SQLite** (`pod/internal/llm/chats.go`) : `<projet>/.ide/chats.db` (tables `chats` et `messages`, avec un `.ide/.gitignore` qui l'exclut) pour un projet local, `~/.web-ide/chats/<projet>.db` pour un projet SSH ; les anciens JSON sont importés puis supprimés.
@@ -89,6 +90,10 @@ Panneau de droite « Assistant IA » (détachable) : serveurs llama.cpp ou Ollam
 - Zone de saisie : hauteur automatique, choix du modèle en popover (serveur, capacités, contexte), menu d'options (outils, appliquer sans demander, réflexion, compacter), anneau de contexte, bouton rond envoyer / arrêter.
 - Pendant la réponse : `llm.delta` porte `tokens`, `speed` (llama.cpp `timings_per_token`) et `promptDone/promptTotal` (`return_progress`) ; sans timings, un jeton par fragment. Affiché : lecture du prompt en %, puis état · jetons/s · jetons · temps écoulé.
 - Mermaid pendant le stream : un bloc est dessiné dès que sa clôture ``` est arrivée (`data-closed`), les SVG sont gardés en cache par source et thème et remis à chaque rendu sans clignoter.
+- Commandes (`Composer.tsx`) : `/compact [consignes]`, `/clear` (ou `/new`), `/model [nom]`, `/help`, et `/<skill> [demande]` (message qui demande de charger le skill ; la bulle montre la commande). Autocomplétion à la frappe de `/` en début de message ; Entrée sur une commande déjà complète l'envoie.
+- Mentions : `@` ouvre l'autocomplétion des fichiers et dossiers du projet (`search.files`, cache 15 s, recherche approximative) ; seul le chemin est envoyé (choix de l'utilisateur), le prompt système explique la convention.
+- Diagrammes : bouton ⤢ (ou clic sur le diagramme) → plein écran `DiagramViewer.tsx` (molette, glisser, ajuster plafonné à 150 %, 100 %, export SVG / PNG, copie de la source).
+- Menu du contexte (anneau) : jetons utilisés / taille, barre avec le seuil, messages envoyés et compactés, compaction automatique et seuil, bouton « Compacter maintenant ».
 - Conversation active mémorisée par projet dans le navigateur (`localStorage`, `webide.llm.active.<projet>`) et rouverte au rechargement ; changer de projet repart d'une conversation vide.
 
 ## Transcription vocale locale

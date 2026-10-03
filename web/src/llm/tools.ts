@@ -80,9 +80,15 @@ export const toolDefs = [
     ['target'],
   ),
   fn(
+    'bash',
+    'Exécute une commande shell (sh -c, dans le projet) et renvoie sa sortie (stdout et stderr) et son code de sortie. À utiliser pour toutes tes opérations : tests, compilation, git, outils en ligne de commande. Pas de terminal ni d’entrée : pas de commande interactive.',
+    { command: str('Commande, ex. "go test ./..."'), cwd: str('Dossier de travail (racine du projet par défaut)'), timeout: int('Délai en secondes (120 par défaut, 1800 max)') },
+    ['command'],
+  ),
+  fn(
     'run_command',
-    'Lance une commande shell (sh -c) dans une nouvelle console visible par l’utilisateur, attend sa fin (ou le délai) et renvoie sa sortie et son code de sortie.',
-    { command: str('Commande, ex. "go test ./..."'), cwd: str('Dossier de travail (racine du projet par défaut)'), timeout: int('Délai d’attente en secondes (120 par défaut, 600 max)') },
+    'Lance une commande dans une nouvelle console de l’IDE, visible par l’utilisateur (serveur de développement, watcher, commande qu’il veut suivre ou utiliser). Attend sa fin ou le délai, puis renvoie le début de sa sortie ; elle continue de tourner ensuite. Pour tes propres opérations, utilise bash.',
+    { command: str('Commande, ex. "npm run dev"'), cwd: str('Dossier de travail (racine du projet par défaut)'), timeout: int('Secondes à attendre avant de rendre la main (20 par défaut, 600 max)') },
     ['command'],
   ),
   fn('list_consoles', 'Liste les consoles ouvertes (terminaux et commandes) avec leur état.', {}),
@@ -122,7 +128,7 @@ function parseArgs(call: ToolCall): Record<string, any> {
   }
 }
 
-export async function runTool(call: ToolCall, confirm: Confirm): Promise<ToolResult> {
+export async function runTool(call: ToolCall, confirm: Confirm, signal?: AbortSignal): Promise<ToolResult> {
   const name = call.function.name
   try {
     const a = parseArgs(call)
@@ -157,6 +163,8 @@ export async function runTool(call: ToolCall, confirm: Confirm): Promise<ToolRes
         return await showFile(a.path, a.line, a.end_line)
       case 'focus':
         return await focus(a)
+      case 'bash':
+        return await bash(String(a.command ?? ''), a.cwd, a.timeout, signal)
       case 'run_command':
         return await runCommand(String(a.command ?? ''), a.cwd, a.timeout)
       case 'list_consoles':
@@ -604,7 +612,7 @@ onPod('console.exit', (e: { id: string; code: number }) => exits.set(e.id, e.cod
 
 async function runCommand(command: string, cwd?: string, timeout?: number): Promise<ToolResult> {
   if (!command.trim()) throw new Error('command manquante')
-  const limit = Math.min(Math.max(Number(timeout) || 120, 1), 600) * 1000
+  const limit = Math.min(Math.max(Number(timeout) || 20, 1), 600) * 1000
   const info = await request('console.create', {
     kind: 'task',
     title: command.length > 60 ? command.slice(0, 57) + '…' : command,
@@ -653,4 +661,19 @@ async function consoleInput(id: string, text: string, enter: boolean): Promise<T
   await new Promise((r) => setTimeout(r, 800))
   const { text: out } = await consoleText(id)
   return ok(`Texte envoyé. Fin de la sortie :\n${tail(out, 40)}`, `saisie dans ${id}`)
+}
+
+// ---------- bash ----------
+
+async function bash(command: string, cwd?: string, timeout?: number, signal?: AbortSignal): Promise<ToolResult> {
+  if (!command.trim()) throw new Error('command manquante')
+  const r = await request('exec.run', { command, cwd: cwd ? absPath(cwd) : '', timeout: Number(timeout) || 120 }, signal)
+  const secs = (r.durationMs / 1000).toFixed(1)
+  const out = plainOutput(r.output ?? '').replace(/\s+$/, '')
+  const state = r.canceled ? 'annulée' : r.timedOut ? `arrêtée après le délai (${secs} s)` : `code de sortie ${r.code}`
+  return {
+    content: `${state[0].toUpperCase() + state.slice(1)}${r.truncated ? ' (sortie coupée au milieu)' : ''}\n${out || '(aucune sortie)'}`,
+    summary: r.timedOut ? 'délai dépassé' : r.canceled ? 'annulée' : `code ${r.code} · ${secs} s`,
+    status: r.code === 0 && !r.timedOut && !r.canceled ? 'ok' : 'error',
+  }
 }

@@ -31,7 +31,8 @@ Réponds dans la langue de l'utilisateur, en Markdown. Les blocs de code indique
 
 {{tools}}`
 
-export const TOOLS_TEXT = `Tu as des outils pour explorer et modifier le projet : list_dir, find_files, read_file, search_text, edit_file, write_file ; les serveurs de langage (lsp_symbols, lsp_workspace_symbols, lsp_definition, lsp_references, lsp_hover, lsp_diagnostics) ; l'IDE (open_file pour montrer un fichier à l'utilisateur, focus pour afficher un panneau ou une console) ; les consoles (run_command, list_consoles, read_console, console_input).
+export const TOOLS_TEXT = `Tu as des outils pour explorer et modifier le projet : list_dir, find_files, read_file, search_text, edit_file, write_file ; les serveurs de langage (lsp_symbols, lsp_workspace_symbols, lsp_definition, lsp_references, lsp_hover, lsp_diagnostics) ; bash pour exécuter tes commandes (tests, compilation, git…) ; l'IDE (open_file pour montrer un fichier à l'utilisateur, focus pour afficher un panneau ou une console) ; les consoles visibles par l'utilisateur (run_command pour un serveur de développement ou une commande qu'il doit suivre, list_consoles, read_console, console_input).
+Dans les messages de l'utilisateur, @chemin désigne un fichier ou un dossier du projet (chemin relatif à la racine) : lis-le avec les outils si besoin.
 Lis un fichier avant de le modifier. Préfère edit_file (remplacement exact et unique) à write_file pour changer un fichier existant. Les chemins sont relatifs à la racine du projet.
 N'invente pas le contenu des fichiers : vérifie avec les outils. Après une modification, résume ce qui a changé.`
 

@@ -109,7 +109,8 @@ export const toolVerbs: Record<string, string> = {
   read_skill_file: 'Lit le skill',
   open_file: 'Ouvre',
   focus: 'Affiche',
-  run_command: 'Exécute',
+  run_command: 'Lance dans une console',
+  bash: 'Exécute',
   list_consoles: 'Liste les consoles',
   read_console: 'Lit la console',
   console_input: 'Tape dans la console',
@@ -117,7 +118,7 @@ export const toolVerbs: Record<string, string> = {
 
 export const toolIcons: Record<string, string> = {
   list_dir: 'folder', find_files: 'search', read_file: 'file', search_text: 'search', edit_file: 'edit', write_file: 'edit',
-  open_file: 'external', focus: 'locate', run_command: 'terminal', list_consoles: 'terminal', read_console: 'terminal', console_input: 'terminal',
+  open_file: 'external', focus: 'locate', run_command: 'terminal', bash: 'terminal', list_consoles: 'terminal', read_console: 'terminal', console_input: 'terminal',
   load_skill: 'puzzle', read_skill_file: 'puzzle', lsp_symbols: 'outline', lsp_workspace_symbols: 'outline', lsp_definition: 'outline',
   lsp_references: 'outline', lsp_hover: 'info', lsp_diagnostics: 'conflict',
 }

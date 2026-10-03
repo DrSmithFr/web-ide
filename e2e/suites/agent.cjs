@@ -55,9 +55,15 @@ const fake = http.createServer(async (req, res) => {
   if (ask.includes('outils')) {
     if (last.role === 'user')
       return sse(res, { tool_calls: calls([['s1', 'load_skill', { name: 'greet' }], ['s2', 'open_file', { path: 'src/main.go', line: 8, end_line: 10 }]]) }), end(res, 'tool_calls')
-    if (toolsDone === 2)
+    if (toolsDone === 2 && last.role === 'tool')
       return (
-        sse(res, { tool_calls: calls([['s3', 'run_command', { command: 'echo bonjour-console && exit 3' }], ['s4', 'focus', { target: 'panel', panel: 'git' }]]) }),
+        sse(res, {
+          tool_calls: calls([
+            ['s3', 'run_command', { command: 'echo bonjour-console && exit 3' }],
+            ['s4', 'focus', { target: 'panel', panel: 'git' }],
+            ['s5', 'bash', { command: 'echo depuis-bash; ls src; exit 2' }],
+          ]),
+        }),
         end(res, 'tool_calls')
       )
     sse(res, { content: 'Outils essayés.' })
@@ -131,12 +137,14 @@ run(async ({ page }) => {
     // IDE tools.
     await ask(page, 'Essaie les outils', 'Outils essayés.')
     const tools = await page.$$eval('.ai-tool', (e) => e.map((x) => ({ cls: x.className, text: x.textContent })))
-    assert(tools.length === 4, 'quatre appels d’outils : ' + JSON.stringify(tools.map((t) => t.text)))
+    assert(tools.length === 5, 'cinq appels d’outils : ' + JSON.stringify(tools.map((t) => t.text)))
     const results = requests.flatMap((r) => r.messages.filter((m) => m.role === 'tool'))
     const byId = (id) => results.find((m) => m.tool_call_id === id)?.content ?? ''
     assert(byId('s1').includes('Bien le bonjour'), 'load_skill renvoie le contenu du skill')
     assert(byId('s3').includes('Code de sortie : 3') && byId('s3').includes('bonjour-console'), 'run_command renvoie la sortie et le code : ' + JSON.stringify(byId('s3').slice(0, 80)))
     assert(tools[2].cls.includes('error'), 'commande en échec signalée')
+    assert(byId('s5').startsWith('Code de sortie 2') && byId('s5').includes('depuis-bash') && byId('s5').includes('main.go'), 'bash renvoie sortie et code : ' + JSON.stringify(byId('s5').slice(0, 60)))
+    assert(!(await page.isVisible('.bottom .btab:has-text("depuis-bash")')), 'bash n’ouvre pas de console')
     const pos = await page.textContent('.cursor-info')
     assert((await page.textContent('.pane.active .tab.active')).includes('main.go') && /^10:2 \(\d+ car\.\)/.test(pos), 'open_file ouvre main.go et sélectionne les lignes 8 à 10 : ' + pos)
     assert(await page.isVisible('.git-panel'), 'focus affiche le panneau Git')
@@ -150,8 +158,10 @@ run(async ({ page }) => {
     await page.waitForSelector('[data-testid=compaction-settings] select[name=compactModel] option[value="fake-small"]', { state: 'attached' })
     await page.selectOption('[data-testid=compaction-settings] select[name=compactModel]', 'fake-small')
     await page.click('.ai-servers .modal-head button')
-    await page.click('[data-testid=ai-options]')
-    await page.click('.ai-menu-item:has-text("Compacter")')
+    await page.click('[data-testid=ai-gauge]')
+    await page.waitForSelector('[data-testid=ai-context-menu]')
+    assert((await page.textContent('[data-testid=ai-context-menu]')).includes('Messages envoyés au modèle'), 'menu du contexte ouvert')
+    await page.click('[data-testid=ai-context-menu] button:has-text("Compacter maintenant")')
     await page.waitForSelector('[data-testid=ai-summary]:has-text("fake-small")', { timeout: 10000 })
     assert(summaries.length === 1 && summaries[0].model === 'fake-small' && text(summaries[0].messages[1]).includes('Et toi ?') && !text(summaries[0].messages[1]).includes('Essaie les outils'), 'résumé demandé au modèle de compaction (tout sauf le dernier échange)')
     assert(await page.isVisible('.ai-compacted-toggle'), 'messages compactés repliés')
@@ -165,6 +175,45 @@ run(async ({ page }) => {
     const r4 = requests[requests.length - 1]
     assert(text(r4.messages[1]).includes('RÉSUMÉ-2'), 'la tâche continue après la compaction automatique')
     await page.screenshot({ path: OUT + '/agent-compaction.png' })
+
+    // Commands: completion, /help, /model, a skill as a command, /compact with instructions.
+    await page.click('.ai-composer textarea')
+    await page.keyboard.type('/he')
+    await page.waitForSelector('[data-testid=ai-complete] .ai-complete-item.active:has-text("/help")')
+    await page.keyboard.press('Enter')
+    assert((await page.inputValue('.ai-composer textarea')) === '/help ', 'complétion de commande')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid=ai-help]')
+    const helpText = await page.textContent('[data-testid=ai-help]')
+    assert(helpText.includes('/compact') && helpText.includes('/greet'), '/help liste les commandes et les skills')
+    await page.fill('.ai-composer textarea', '/model fake-small')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid=model-pill]:has-text("fake-small")')
+    assert(true, '/model change de modèle')
+    await page.fill('.ai-composer textarea', '/model fake-other')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid=model-pill]:has-text("fake-other")')
+    await ask(page, '/greet Marie', 'Réponse de fake-other.')
+    const skillAsk = requests[requests.length - 1].messages.at(-1)
+    assert(text(skillAsk).includes('load_skill') && text(skillAsk).includes('« greet »') && text(skillAsk).includes('Marie'), 'skill en commande : ' + text(skillAsk).slice(0, 80))
+    assert(await page.isVisible('.ai-msg.user .ai-mention:has-text("/greet")'), 'la bulle montre la commande')
+
+    // @ mention with completion: only the path is sent.
+    await page.click('.ai-composer textarea')
+    await page.keyboard.type('Regarde @mai')
+    await page.waitForSelector('[data-testid=ai-complete] .ai-complete-item.active:has-text("src/main.go")')
+    await page.keyboard.press('Tab')
+    assert((await page.inputValue('.ai-composer textarea')) === 'Regarde @src/main.go ', 'complétion du chemin')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('.ai-msg.user .ai-mention:has-text("@src/main.go")')
+    await page.waitForSelector('[data-testid=send]')
+    assert(text(requests[requests.length - 1].messages.at(-1)) === 'Regarde @src/main.go', 'le message garde le chemin seul')
+
+    await page.fill('.ai-composer textarea', '/compact garde les noms de fichiers')
+    await page.keyboard.press('Enter')
+    for (let t = 0; t < 100 && summaries.length < 3; t++) await page.waitForTimeout(100)
+    await page.waitForSelector('[data-testid=send]')
+    assert(summaries.length === 3 && summaries[2].messages[0].content.includes('garde les noms de fichiers'), '/compact avec consignes')
 
     // Conversations in the project SQLite base, ignored by git.
     await page.waitForTimeout(500)
@@ -180,7 +229,7 @@ run(async ({ page }) => {
     const visible = (await page.$$('[data-testid=ai-summary]')).length
     await page.click('.ai-compacted-toggle')
     const all = (await page.$$('[data-testid=ai-summary]')).length
-    assert(visible === 1 && all === 2, `conversation active rechargée depuis SQLite, premier résumé replié (${visible}/${all})`)
+    assert(visible === 1 && all === 3, `conversation active rechargée depuis SQLite, anciens résumés repliés (${visible}/${all})`)
 
     // Detached window, wide: the history is always shown.
     const projectPath = new URL(page.url()).pathname
@@ -190,6 +239,10 @@ run(async ({ page }) => {
     assert((await page.isVisible('[data-testid=ai-sidebar]')) && !(await page.isVisible('.ai-side-wrap.overlay')) && !(await page.isVisible('.ai-panel button[title="Conversations du projet"]')), 'fenêtre détachée large : historique toujours affiché')
     assert(await page.isVisible('.ai-chat-item.active:has-text("Bonjour")'), 'la conversation active est sélectionnée dans l’historique')
     await page.screenshot({ path: OUT + '/agent-detached.png' })
+    await page.fill('.ai-composer textarea', '/clear')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('.ai-empty')
+    assert(true, '/clear ouvre une nouvelle conversation')
   } finally {
     fake.close()
   }

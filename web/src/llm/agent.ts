@@ -122,7 +122,8 @@ export function isBusy() {
   return live.busy
 }
 
-export async function send(text: string, parts: Part[], attachments: ChatMessage['attachments']) {
+/** display: what the bubble shows when it differs from the text sent (commands). */
+export async function send(text: string, parts: Part[], attachments: ChatMessage['attachments'], display?: string) {
   if (live.busy) return
   if (!config.server || !config.model) throw new Error('Choisir un serveur et un modèle')
   const content: string | Part[] = parts.length ? [...(text ? [{ type: 'text' as const, text }] : []), ...parts] : text
@@ -132,7 +133,7 @@ export async function send(text: string, parts: Part[], attachments: ChatMessage
       c.model = config.model
     }),
   )
-  pushMessage({ role: 'user', content, display: parts.length ? text : undefined, attachments: attachments?.length ? attachments : undefined })
+  pushMessage({ role: 'user', content, display: display ?? (parts.length ? text : undefined), attachments: attachments?.length ? attachments : undefined })
   saveChat()
   await run()
 }
@@ -236,7 +237,7 @@ async function run() {
           continue
         }
         pushMessage({ role: 'tool', tool_call_id: call.id, name: call.function.name, content: '', summary: writeTools.has(call.function.name) ? 'en attente…' : 'en cours…' })
-        const r = await runTool(call, confirm)
+        const r = await runTool(call, confirm, c.signal)
         updateLast((m) => {
           m.content = r.content
           m.summary = r.summary
@@ -285,7 +286,7 @@ function transcriptOf(m: ChatMessage, budget: number): string {
  * Replaces the oldest messages by a summary, keeping the recent ones (about a quarter of
  * the context). manual: compact even a short conversation (all but the last exchange).
  */
-export async function compact(manual: boolean, signal?: AbortSignal): Promise<void> {
+export async function compact(manual: boolean, signal?: AbortSignal, instructions = ''): Promise<void> {
   const msgs = chat.messages
   let start = 0
   while (start < msgs.length && msgs[start].compacted) start++
@@ -337,7 +338,7 @@ export async function compact(manual: boolean, signal?: AbortSignal): Promise<vo
         server,
         model,
         messages: [
-          { role: 'system', content: SUMMARY_SYSTEM },
+          { role: 'system', content: SUMMARY_SYSTEM + (instructions ? `\n\nConsignes de l'utilisateur pour ce résumé : ${instructions}` : '') },
           { role: 'user', content: `Conversation à résumer :\n\n${transcript}` },
         ],
         think: false,
@@ -362,12 +363,12 @@ export async function compact(manual: boolean, signal?: AbortSignal): Promise<vo
   }
 }
 
-/** Manual compaction from the panel. */
-export async function compactNow() {
+/** Manual compaction from the panel or /compact (with optional instructions). */
+export async function compactNow(instructions = '') {
   if (live.busy) return
   setLive('busy', true)
   try {
-    await compact(true)
+    await compact(true, undefined, instructions)
   } finally {
     setLive('busy', false)
   }

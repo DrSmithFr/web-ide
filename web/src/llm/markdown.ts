@@ -3,6 +3,7 @@
 import { Marked, type Tokens } from 'marked'
 import DOMPurify from 'dompurify'
 import { grammar, grammarDefs } from '../editor/languages'
+import { openDiagram } from './DiagramViewer'
 
 const aliases: Record<string, string> = {
   js: 'javascript', jsx: 'javascript', mjs: 'javascript', ts: 'typescript', tsx: 'typescript', py: 'python', golang: 'go',
@@ -90,6 +91,12 @@ function place(b: HTMLElement, r: { svg?: string; error?: string }) {
     const box = document.createElement('div')
     box.className = 'md-mermaid-svg'
     box.innerHTML = r.svg
+    const open = document.createElement('button')
+    open.type = 'button'
+    open.className = 'md-mermaid-open'
+    open.title = 'Ouvrir en plein écran'
+    open.textContent = '⤢'
+    box.append(open)
     b.prepend(box)
     b.querySelector('pre')?.classList.add('md-mermaid-src')
   } else {
@@ -144,8 +151,16 @@ export async function renderMermaid(el: HTMLElement, final = true) {
   }
 }
 
-/** Click handler of a rendered answer: copy buttons. */
+/** Click handler of a rendered answer: copy buttons, full screen diagrams. */
 export function onMarkdownClick(e: MouseEvent) {
+  const target = e.target as HTMLElement
+  const diagram = target.closest('.md-mermaid-open, .md-mermaid-svg svg')
+  if (diagram) {
+    const block = diagram.closest('.md-mermaid') as HTMLElement
+    const svg = block?.querySelector('.md-mermaid-svg svg')
+    if (svg) openDiagram(svg.outerHTML, decodeURIComponent(block.dataset.src ?? ''))
+    return
+  }
   const btn = (e.target as HTMLElement).closest('.md-copy') as HTMLButtonElement | null
   if (!btn) return
   const code = btn.closest('.md-codeblock')?.querySelector('code')?.textContent ?? ''

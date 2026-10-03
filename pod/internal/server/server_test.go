@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -201,5 +202,38 @@ func TestProjectFilesAndRemoteChanges(t *testing.T) {
 	at := a.call("console.attach", map[string]any{"id": c["id"]})["result"].(map[string]any)
 	if at["data"] == "" {
 		t.Fatal("empty scrollback")
+	}
+}
+
+func TestCappedOutput(t *testing.T) {
+	c := &capped{}
+	big := bytes.Repeat([]byte("x"), execHead+execTail+1000)
+	if n, _ := c.Write(big); n != len(big) {
+		t.Fatalf("write returned %d", n)
+	}
+	_, _ = c.Write([]byte("FIN"))
+	text, cut := c.String()
+	if !cut || !strings.HasSuffix(text, "FIN") || !strings.Contains(text, "sortie coupée") || len(text) > execHead+execTail+100 {
+		t.Fatalf("capped: cut=%v len=%d", cut, len(text))
+	}
+}
+
+func TestExecRun(t *testing.T) {
+	_, ts := newServer(t)
+	a, err := dial(t, ts, "secret-token-0123456789abcdef0123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "f.txt"), []byte("contenu"), 0o644)
+	id := a.call("projects.create", map[string]any{"type": "local", "path": dir})["result"].(map[string]any)["id"].(string)
+	a.call("project.open", map[string]any{"id": id})
+	r := a.call("exec.run", map[string]any{"command": "cat f.txt; echo erreur >&2; exit 4"})["result"].(map[string]any)
+	if r["output"] != "contenuerreur\n" || r["code"] != float64(4) || r["timedOut"] != false {
+		t.Fatalf("exec: %+v", r)
+	}
+	r = a.call("exec.run", map[string]any{"command": "sleep 5; echo trop tard", "timeout": 1})["result"].(map[string]any)
+	if r["timedOut"] != true || strings.Contains(r["output"].(string), "trop tard") {
+		t.Fatalf("timeout: %+v", r)
 	}
 }

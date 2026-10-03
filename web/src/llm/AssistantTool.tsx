@@ -10,6 +10,7 @@ import { SettingsModal } from './AssistantSettings'
 import { Thread } from './Thread'
 import { addFiles, Composer, focusComposer, suggest } from './Composer'
 import { Sidebar } from './Sidebar'
+import { DiagramViewer } from './DiagramViewer'
 import './assistant.css'
 
 /** Width from which the side bar sits next to the conversation instead of over it. */
@@ -137,6 +138,7 @@ export function AssistantTool() {
       <Show when={settings()}>
         <SettingsModal onClose={() => setSettings(false)} />
       </Show>
+      <DiagramViewer />
     </div>
   )
 }
