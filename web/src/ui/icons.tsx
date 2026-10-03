@@ -32,6 +32,7 @@ const paths: Record<string, string> = {
   home: 'M3 11 12 4l9 7M5 10v10h14V10',
   menu: 'M4 6h16M4 12h16M4 18h16',
   split: 'M3 4h18v16H3zM12 4v16',
+  sparkle: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z',
   branch: 'M6 3v12M6 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9c0 5-6 4-12 6',
 }
 

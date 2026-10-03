@@ -73,7 +73,7 @@ exports.run = (body) =>
       await t.browser.close()
     }
   })().catch((e) => {
-    console.log('  FAIL ' + e.message.split('\n')[0])
+    console.log('  FAIL ' + e.message.split('\n').slice(0, 3).join(' | '))
     process.exit(1)
   })
 

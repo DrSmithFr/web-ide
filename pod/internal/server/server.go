@@ -21,6 +21,7 @@ import (
 
 	"webide/pod/internal/config"
 	"webide/pod/internal/db"
+	"webide/pod/internal/llm"
 	"webide/pod/internal/projects"
 	"webide/pod/internal/runtime"
 	"webide/pod/internal/sessions"
@@ -39,6 +40,7 @@ type Server struct {
 	Settings *settings.Settings
 	Sessions *sessions.Sessions
 	Pool     *sshx.Pool
+	LLM      *llm.Manager
 	Static   fs.FS
 	// AllowRemote accepts connections from other machines (the token is then the only protection).
 	AllowRemote bool
@@ -67,6 +69,7 @@ func (s *Server) Init() {
 	s.registerProject()
 	s.registerDB()
 	s.registerGit()
+	s.registerLLM()
 }
 
 func (s *Server) handle(name string, h handler) { s.handlers[name] = h }

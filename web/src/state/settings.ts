@@ -97,7 +97,9 @@ createRoot(() => {
       const color = overrides[tok] ?? t.tokens[tok]
       if (!color) continue
       const extra = tok === 'comment' || tok === 'emphasis' ? 'font-style: italic;' : tok === 'link' ? 'text-decoration: underline;' : ''
-      css += `::highlight(tok-${tok}) { color: ${color}; ${extra} }\n`
+      // Separate rules: a browser without ::highlight would drop a shared one. The spans
+      // (code blocks of the assistant) use the same colors as the editor.
+      css += `::highlight(tok-${tok}) { color: ${color}; ${extra} }\n.tok-${tok} { color: ${color}; ${extra} }\n`
     }
     style.textContent = css
   })

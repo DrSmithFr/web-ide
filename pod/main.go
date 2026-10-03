@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"webide/pod/internal/config"
+	"webide/pod/internal/llm"
 	"webide/pod/internal/projects"
 	"webide/pod/internal/server"
 	"webide/pod/internal/sessions"
@@ -58,6 +59,7 @@ func main() {
 		Projects:    reg,
 		Settings:    sets,
 		Sessions:    sessions.New(st),
+		LLM:         llm.New(st),
 		Pool:        sshx.NewPool(sshx.NewHostKeys(st.Path("known_hosts"))),
 		Static:      webdist.FS(),
 		AllowRemote: *allowRemote,

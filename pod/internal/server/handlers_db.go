@@ -204,4 +204,3 @@ func (s *Server) registerDB() {
 		return m.History(a.ConnID), nil
 	}))
 }
-

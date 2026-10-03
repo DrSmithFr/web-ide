@@ -15,6 +15,7 @@ import { Connections } from '../panels/Connections'
 import { GitPanel } from '../panels/GitPanel'
 import { refreshGit } from '../state/git'
 import { DatabaseTool } from '../db/DatabaseTool'
+import { AssistantTool } from '../llm/AssistantTool'
 import { ConflictsTool, ExtensionsTool, PropertiesTool, StructureTool } from '../tools/tools'
 import { openConflict } from '../conflict/ConflictDialog'
 import { openSettings } from '../settings/SettingsModal'
@@ -36,6 +37,7 @@ export const leftPanels: Record<string, { label: string; icon: string; component
 
 export const rightPanels: Record<string, { label: string; icon: string; component: () => JSX.Element }> = {
   database: { label: 'Database explorer', icon: 'database', component: DatabaseTool },
+  assistant: { label: 'Assistant IA', icon: 'sparkle', component: AssistantTool },
   structure: { label: 'Structure', icon: 'outline', component: StructureTool },
   conflicts: { label: 'Conflits', icon: 'conflict', component: ConflictsTool },
   extensions: { label: 'Extensions', icon: 'puzzle', component: ExtensionsTool },
