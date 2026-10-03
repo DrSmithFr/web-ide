@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"webide/pod/internal/runtime"
+	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
 )
 
 func (s *Server) registerGit() {

@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"webide/pod/internal/projects"
-	"webide/pod/internal/search"
-	"webide/pod/internal/sshtest"
-	"webide/pod/internal/sshx"
-	"webide/pod/internal/store"
+	"github.com/DrSmithFr/web-ide/pod/internal/projects"
+	"github.com/DrSmithFr/web-ide/pod/internal/search"
+	"github.com/DrSmithFr/web-ide/pod/internal/sshtest"
+	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
+	"github.com/DrSmithFr/web-ide/pod/internal/store"
 )
 
 func TestSSHProject(t *testing.T) {

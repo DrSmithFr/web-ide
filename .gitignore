@@ -1,5 +1,13 @@
+# Build output
 /bin/
-/web/node_modules/
 /pod/webdist/dist/
-*.tmp
+
+# Dependencies
+/web/node_modules/
 /e2e/node_modules/
+
+# Local data of the IDE when it edits itself (conversations, kanban, connections)
+/.ide/
+
+*.tmp
+*.db

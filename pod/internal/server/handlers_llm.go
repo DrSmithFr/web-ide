@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"webide/pod/internal/llm"
-	"webide/pod/internal/runtime"
+	"github.com/DrSmithFr/web-ide/pod/internal/llm"
+	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
 )
 
 func (s *Server) registerLLM() {

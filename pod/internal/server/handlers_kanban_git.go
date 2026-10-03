@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"webide/pod/internal/execx"
-	"webide/pod/internal/kanban"
-	"webide/pod/internal/projects"
-	"webide/pod/internal/runtime"
+	"github.com/DrSmithFr/web-ide/pod/internal/execx"
+	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
+	"github.com/DrSmithFr/web-ide/pod/internal/projects"
+	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
 )
 
 // Git side of the tickets: worktree and branch of a ticket, its changes, and the end of

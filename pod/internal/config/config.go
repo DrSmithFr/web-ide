@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"webide/pod/internal/store"
+	"github.com/DrSmithFr/web-ide/pod/internal/store"
 )
 
 const DefaultAddr = "127.0.0.1:4433"

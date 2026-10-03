@@ -10,13 +10,13 @@ import (
 	"strings"
 	"sync"
 
-	"webide/pod/internal/config"
-	"webide/pod/internal/fsx"
-	"webide/pod/internal/lsp"
-	"webide/pod/internal/projects"
-	"webide/pod/internal/runtime"
-	"webide/pod/internal/search"
-	"webide/pod/internal/sshx"
+	"github.com/DrSmithFr/web-ide/pod/internal/config"
+	"github.com/DrSmithFr/web-ide/pod/internal/fsx"
+	"github.com/DrSmithFr/web-ide/pod/internal/lsp"
+	"github.com/DrSmithFr/web-ide/pod/internal/projects"
+	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
+	"github.com/DrSmithFr/web-ide/pod/internal/search"
+	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
 )
 
 func bind[T any](p json.RawMessage) (T, error) {

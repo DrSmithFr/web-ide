@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"webide/pod/internal/execx"
+	"github.com/DrSmithFr/web-ide/pod/internal/execx"
 )
 
 type Repo struct {

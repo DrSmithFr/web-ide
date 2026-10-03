@@ -14,16 +14,16 @@ import (
 	"syscall"
 	"time"
 
-	"webide/pod/internal/config"
-	"webide/pod/internal/hfcache"
-	"webide/pod/internal/llm"
-	"webide/pod/internal/projects"
-	"webide/pod/internal/server"
-	"webide/pod/internal/sessions"
-	"webide/pod/internal/settings"
-	"webide/pod/internal/sshx"
-	"webide/pod/internal/store"
-	"webide/pod/webdist"
+	"github.com/DrSmithFr/web-ide/pod/internal/config"
+	"github.com/DrSmithFr/web-ide/pod/internal/hfcache"
+	"github.com/DrSmithFr/web-ide/pod/internal/llm"
+	"github.com/DrSmithFr/web-ide/pod/internal/projects"
+	"github.com/DrSmithFr/web-ide/pod/internal/server"
+	"github.com/DrSmithFr/web-ide/pod/internal/sessions"
+	"github.com/DrSmithFr/web-ide/pod/internal/settings"
+	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
+	"github.com/DrSmithFr/web-ide/pod/internal/store"
+	"github.com/DrSmithFr/web-ide/pod/webdist"
 )
 
 func main() {

@@ -16,10 +16,10 @@ import (
 	"sync"
 	"time"
 
-	"webide/pod/internal/execx"
-	"webide/pod/internal/fsx"
-	"webide/pod/internal/sshx"
-	"webide/pod/internal/store"
+	"github.com/DrSmithFr/web-ide/pod/internal/execx"
+	"github.com/DrSmithFr/web-ide/pod/internal/fsx"
+	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
+	"github.com/DrSmithFr/web-ide/pod/internal/store"
 )
 
 type SSHTunnel struct {

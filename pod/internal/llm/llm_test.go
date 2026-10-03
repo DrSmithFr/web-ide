@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"webide/pod/internal/fsx"
-	"webide/pod/internal/store"
+	"github.com/DrSmithFr/web-ide/pod/internal/fsx"
+	"github.com/DrSmithFr/web-ide/pod/internal/store"
 )
 
 func newManager(t *testing.T, url, kind string) (*Manager, string) {

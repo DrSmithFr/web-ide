@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"webide/pod/internal/execx"
+	"github.com/DrSmithFr/web-ide/pod/internal/execx"
 )
 
 func run(t *testing.T, dir string, args ...string) {

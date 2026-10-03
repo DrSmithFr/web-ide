@@ -15,7 +15,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"webide/pod/internal/store"
+	"github.com/DrSmithFr/web-ide/pod/internal/store"
 )
 
 // Statuses of a ticket.

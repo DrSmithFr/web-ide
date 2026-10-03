@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"webide/pod/internal/store"
+	"github.com/DrSmithFr/web-ide/pod/internal/store"
 )
 
 func newManager(t *testing.T) (*Manager, Location) {

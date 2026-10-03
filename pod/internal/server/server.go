@@ -19,17 +19,17 @@ import (
 
 	"github.com/coder/websocket"
 
-	"webide/pod/internal/config"
-	"webide/pod/internal/db"
-	"webide/pod/internal/hfcache"
-	"webide/pod/internal/kanban"
-	"webide/pod/internal/llm"
-	"webide/pod/internal/projects"
-	"webide/pod/internal/runtime"
-	"webide/pod/internal/sessions"
-	"webide/pod/internal/settings"
-	"webide/pod/internal/sshx"
-	"webide/pod/internal/store"
+	"github.com/DrSmithFr/web-ide/pod/internal/config"
+	"github.com/DrSmithFr/web-ide/pod/internal/db"
+	"github.com/DrSmithFr/web-ide/pod/internal/hfcache"
+	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
+	"github.com/DrSmithFr/web-ide/pod/internal/llm"
+	"github.com/DrSmithFr/web-ide/pod/internal/projects"
+	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
+	"github.com/DrSmithFr/web-ide/pod/internal/sessions"
+	"github.com/DrSmithFr/web-ide/pod/internal/settings"
+	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
+	"github.com/DrSmithFr/web-ide/pod/internal/store"
 )
 
 const cookieName = "webide_token"

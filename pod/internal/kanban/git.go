@@ -12,7 +12,7 @@ import (
 
 	"golang.org/x/text/unicode/norm"
 
-	"webide/pod/internal/execx"
+	"github.com/DrSmithFr/web-ide/pod/internal/execx"
 )
 
 // Git runs the git operations of the tickets in the main folder of a project (locally or

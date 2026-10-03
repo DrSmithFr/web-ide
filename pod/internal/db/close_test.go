@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"webide/pod/internal/execx"
-	"webide/pod/internal/fsx"
-	"webide/pod/internal/store"
+	"github.com/DrSmithFr/web-ide/pod/internal/execx"
+	"github.com/DrSmithFr/web-ide/pod/internal/fsx"
+	"github.com/DrSmithFr/web-ide/pod/internal/store"
 )
 
 // Closing the manager must not wait for the connections held by the SQL consoles.

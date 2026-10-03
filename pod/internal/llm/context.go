@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"webide/pod/internal/fsx"
+	"github.com/DrSmithFr/web-ide/pod/internal/fsx"
 )
 
 // Instructions given to the assistant, compatible with Claude Code and the AGENTS.md

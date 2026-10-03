@@ -11,7 +11,7 @@ web:
 
 # go:embed needs the folder, even before the first front build.
 pod/webdist/dist:
-	mkdir -p $@ && [ -e $@/index.html ] || echo '<!doctype html><p>Front non compilé : make web</p>' > $@/index.html
+	mkdir -p $@ && [ -e $@/index.html ] || echo '<!doctype html><p>Front end not built: run make web</p>' > $@/index.html
 
 pod: pod/webdist/dist
 	cd pod && $(GO) build -trimpath -ldflags "-s -w" -o ../$(BIN) .

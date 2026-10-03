@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"webide/pod/internal/store"
+	"github.com/DrSmithFr/web-ide/pod/internal/store"
 )
 
 type SSHTarget struct {

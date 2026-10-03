@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"webide/pod/internal/db"
+	"github.com/DrSmithFr/web-ide/pod/internal/db"
 )
 
 func (s *Server) registerDB() {

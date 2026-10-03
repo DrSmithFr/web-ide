@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: pod/go.mod
+          cache-dependency-path: pod/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Check Go formatting
+        run: test -z "$(gofmt -l pod)" || (gofmt -l pod && exit 1)
+      - name: Build
+        run: make build
+      - name: Unit tests
+        run: make test
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: pod/go.mod
+          cache-dependency-path: pod/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            e2e/package-lock.json
+      - name: Install gopls and Chromium
+        run: |
+          go install golang.org/x/tools/gopls@latest
+          cd e2e && npm ci && npx playwright-core install --with-deps chromium
+      - name: Build
+        run: make build
+      - name: Browser tests
+        run: PATH="$(go env GOPATH)/bin:$PATH" E2E_OUT="$RUNNER_TEMP/e2e" ./e2e/run.sh
+      - name: Keep the failure screenshot
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure
+          path: |
+            ${{ runner.temp }}/e2e
+            /tmp/web-ide-e2e-pod.log
+          if-no-files-found: ignore

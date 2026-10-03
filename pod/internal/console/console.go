@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"webide/pod/internal/execx"
+	"github.com/DrSmithFr/web-ide/pod/internal/execx"
 )
 
 const scrollbackMax = 512 * 1024

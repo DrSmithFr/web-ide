@@ -7,8 +7,8 @@ import (
 	"errors"
 	"path/filepath"
 
-	"webide/pod/internal/kanban"
-	"webide/pod/internal/projects"
+	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
+	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 )
 
 // kanbanProject is the project whose kanban (and conversations) a project uses: itself,

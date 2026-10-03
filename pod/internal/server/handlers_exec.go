@@ -8,8 +8,8 @@ import (
 	"io"
 	"time"
 
-	"webide/pod/internal/execx"
-	"webide/pod/internal/runtime"
+	"github.com/DrSmithFr/web-ide/pod/internal/execx"
+	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
 )
 
 // Output kept of a command run for the assistant: its start and its end.

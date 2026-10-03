@@ -15,7 +15,7 @@ import (
 	"unicode/utf16"
 	"unicode/utf8"
 
-	"webide/pod/internal/execx"
+	"github.com/DrSmithFr/web-ide/pod/internal/execx"
 )
 
 var skipDirs = map[string]bool{".git": true, "node_modules": true, ".ide": true, ".idea": true, "__pycache__": true, ".venv": true, ".cache": true}

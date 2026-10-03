@@ -1,48 +1,58 @@
-# Kanban par projet · conception
+# Kanban
 
-Décisions prises avec l'utilisateur le 2026-10-03. Le kanban est un outil de l'IDE, source d'interaction entre l'utilisateur et les agents (assistant IA).
+Each project has a kanban, a tool of the IDE that is also where the user and the AI agents work together: tickets are written, specified, planned, developed and tested through linked conversations of the assistant.
 
-## Stockage
+## Storage
 
-- Base SQLite non versionnée : `<projet>/.ide/kanban.db` pour un projet local, `~/.web-ide/kanban/<projet>.db` pour un projet SSH (comme `chats.db`). `.ide/.gitignore` exclut `kanban.db*` et `worktrees/`.
-- Pièces jointes dans la base (table `attachments`, 20 Mo max par fichier).
-- Un worktree de ticket ouvert comme projet utilise la base (kanban **et** conversations) de son projet parent.
+- A SQLite base that is not versioned: `<project>/.ide/kanban.db` for a local project, `~/.web-ide/kanban/<project>.db` for an SSH one (like the conversations). `.ide/.gitignore` excludes `kanban.db*` and `worktrees/`.
+- Attachments are stored in the base (20 MB max per file).
+- The worktree of a ticket, opened as its own project, uses the kanban and the conversations of its parent project.
 
 ## Ticket
 
-Numéro (#1, #2… par projet), titre, type (Fonctionnalité, Bug, Refacto, Tâche), priorité (Basse, Normale, Haute, Critique), description (Markdown), fichiers liés (simples chemins), pièces jointes, notes, plan (Markdown), goals (objectifs vérifiables à cocher), résumé de test, conversations liées (avec leur rôle), branche, base de comparaison, worktree, commits liés, historique (événements).
+Number (#1, #2… per project), title, type (feature, bug, refactor, task), priority (low, normal, high, critical), description (Markdown), linked files (paths), attachments, notes, plan (Markdown), goals (checkable objectives), test summary, linked conversations (with their role), branch, comparison base, worktree, linked commits, history.
 
-## États et transitions (boutons seulement, pas de glisser-déposer)
+## Statuses and transitions
 
-| État | Boutons de l'utilisateur | Le modèle peut |
+Tickets move with buttons only (no drag and drop).
+
+| Status | User buttons | The model may |
 |---|---|---|
-| Nouveau | Briefing, Générer le plan, Passer à développer (si plan), Abandonner | passer à « À développer » (après avoir écrit le plan et les goals) |
-| À développer | Lancer une session de dev (→ En cours), Abandonner | — |
-| En cours | Nouvelle session, Envoyer en test, Abandonner | passer à « À tester » (avec le résumé de test) |
-| À tester | Ajouter un retour (→ Correction), Fermer (→ Terminé), Abandonner | — |
-| Correction | Nouvelle session de correction, Envoyer en test, Abandonner | passer à « À tester » |
-| Terminé / Abandonné | Rouvrir | — |
+| New | Briefing, Generate the plan, Ready for development (once there is a plan or goals), Abandon | move to *Ready* (after writing the plan and goals) |
+| Ready | Start development (→ In progress), Abandon | — |
+| In progress | New session, Send to testing, Abandon | move to *To test* (with a test summary) |
+| To test | Add feedback (→ Fix), Close (→ Done), Abandon | — |
+| Fix | Fix session, Send to testing, Abandon | move to *To test* |
+| Done / Abandoned | Reopen (Done → Fix, Abandoned → New) | — |
 
-Les retours de test deviennent des goals (source `feedback`). Fermer ou abandonner supprime le worktree ; la branche est gardée (proposée à la suppression pour l'abandon). À la fermeture, la liste des fichiers et le diff sont figés dans le ticket.
+Test feedback becomes goals (source `feedback`). Closing or abandoning removes the worktree; the branch is kept (abandoning offers to delete it). The change is frozen in the ticket when it is merged, or else when it is closed.
 
-## Conversations liées
+## Linked conversations
 
-Champ `chat.ticket = { id, role }` ; rôles : `briefing` (mode Plan, Nouveau), `plan` (mode Plan, génère plan + goals), `dev` (Build, dans le worktree), `correction` (Build, dans le worktree, retours en contexte), `resolve` (résolution de conflits de rebase). Le prompt système reçoit le ticket à jour (description, notes, plan, goals, retours) et des consignes selon le rôle.
+`chat.ticket = { id, role }`; roles:
 
-## Outils de l'agent
+- `briefing` (Plan mode, New): clarify the need with the user, questions with `ask_user`, findings written into the ticket;
+- `plan` (Plan mode): writes the plan and the goals, then moves the ticket to *Ready*;
+- `dev` (Build mode, in the worktree): follows the plan, checks goals, commits on the ticket branch, moves to *To test*;
+- `correction` (Build mode, in the worktree): handles the test feedback;
+- `resolve`: resolves the conflicts of a rebase (worktree) or a merge (main folder).
 
-- Dans toutes les conversations : `kanban_list`, `kanban_get`, `kanban_create` (un nouveau ticket), `ask_user` (1 à 10 questions à choix + réponse libre, carte dans le fil, une question à la fois).
-- Seulement dans une conversation liée à un ticket, et seulement sur ce ticket : `kanban_update` (titre, description, type, priorité, fichiers), `kanban_add_note`, `kanban_set_plan` (plan + goals), `kanban_goal` (cocher / ajouter), `kanban_move` (transitions permises au modèle ; `À tester` exige un résumé de test), `kanban_link_commit`.
+The system prompt receives the ticket as it is now and the instructions of the role.
+
+## Assistant tools
+
+- In every conversation: `kanban_list`, `kanban_get`, `kanban_create` (a new ticket in the backlog), `ask_user` (1 to 10 multiple-choice questions with a free answer, shown one at a time in the thread).
+- Only in a conversation linked to a ticket, and only on that ticket: `kanban_update` (title, description, type, priority, files), `kanban_add_note`, `kanban_set_plan` (plan and goals), `kanban_goal` (check, uncheck, add), `kanban_move` (transitions allowed to the model; *To test* requires a test summary), `kanban_link_commit`.
 
 ## Git
 
-- Au passage en « En cours » : `git fetch` (si remote), puis branche `ticket/<n>-<slug>` créée depuis la base (défaut `origin/main`, sinon `main` local, modifiable par ticket) dans un worktree `<projet>/.ide/worktrees/<n>-<slug>`.
-- Commande d'initialisation du worktree configurable (`npm install && cp ../.env .`…), lancée à la création.
-- Le worktree s'ouvre comme un projet à part (option a) : non listé sur l'accueil, ouvert depuis son ticket, bandeau « Ticket #n » en haut.
-- Le modèle gère la branche et les commits (messages préfixés `#n `) ; l'utilisateur déclenche la fusion (`merge --no-ff` par défaut ou `squash`, dans la branche de base locale du dossier principal, jamais de push, refusée si le dossier principal a des modifications suivies non commitées) et le rebase.
-- Conflits : pas d'abort automatique ; le ticket montre les fichiers en conflit avec Continuer / Abandonner / Lancer une session de résolution.
-- Sur « En cours », « À tester », « Correction » et « Terminé » : fichiers affectés et diff par rapport à la base choisie (merge-base) + modifications non commitées du worktree.
+- *Start development*: `git fetch` (when there is a remote), then the branch `ticket/<n>-<slug>` is created from the base (default `origin/main`, else `main`, configurable per project and per ticket) in a worktree `<project>/.ide/worktrees/<n>-<slug>`.
+- A configurable setup command runs in a new worktree (`npm install && cp ../../../.env .`…).
+- The worktree opens as a separate project in its own window: not listed on the home page, opened from its ticket, with a ticket banner.
+- The model manages the branch and its commits (messages start with `#<n>`). The user triggers the merge (`merge --no-ff` by default, or squash) into the local base branch of the main folder (never pushed; refused while the main folder has uncommitted tracked changes) and the rebase on the base.
+- Conflicts: no automatic abort; the ticket lists the conflicted files with *Continue*, *Abort* and *Resolution session*.
+- From *In progress* on: changed files and their diff against the chosen base (from the merge base), including uncommitted changes and untracked files of the worktree.
 
 ## Interface
 
-- Tableau en onglet de l'éditeur (une colonne par état, Terminé et Abandonné repliables), détail d'un ticket en onglet, liste compacte dans un panneau latéral. Synchronisé entre fenêtres (événement `kanban.changed`).
+Board in an editor tab (one column per status, Done and Abandoned folded), ticket detail in an editor tab, compact list in a side panel, kanban settings (default base, worktree setup command). Every window follows the changes (`kanban.changed` event).

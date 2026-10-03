@@ -12,7 +12,7 @@ function chrome() {
     if (fs.existsSync(p)) return p
   }
   for (const p of ['/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome']) if (fs.existsSync(p)) return p
-  throw new Error('Chromium introuvable : définir CHROME=/chemin/vers/chrome')
+  throw new Error('Chromium not found: set CHROME=/path/to/chrome')
 }
 
 exports.WS = process.env.E2E_WS
@@ -73,7 +73,7 @@ exports.run = (body, opts) =>
       await t.page.screenshot({ path: path.join(exports.OUT, 'failure.png') }).catch(() => {})
       throw e
     } finally {
-      if (t.errors.length) exports.assert(false, 'erreurs de la page :\n    ' + t.errors.join('\n    '))
+      if (t.errors.length) exports.assert(false, 'page errors:\n    ' + t.errors.join('\n    '))
       await t.browser.close()
     }
   })().catch((e) => {

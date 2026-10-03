@@ -11,7 +11,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"webide/pod/internal/execx"
+	"github.com/DrSmithFr/web-ide/pod/internal/execx"
 )
 
 // querier runs one statement. Local SQLite uses database/sql, a file on an SSH host

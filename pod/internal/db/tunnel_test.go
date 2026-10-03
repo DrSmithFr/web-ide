@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"webide/pod/internal/sshtest"
-	"webide/pod/internal/sshx"
-	"webide/pod/internal/store"
+	"github.com/DrSmithFr/web-ide/pod/internal/sshtest"
+	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
+	"github.com/DrSmithFr/web-ide/pod/internal/store"
 )
 
 // The database connection goes through the SSH host: the pod opens the tunnel, then dials the

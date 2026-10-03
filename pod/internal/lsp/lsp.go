@@ -18,7 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"webide/pod/internal/execx"
+	"github.com/DrSmithFr/web-ide/pod/internal/execx"
 )
 
 type Spec struct {

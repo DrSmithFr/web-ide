@@ -42,6 +42,7 @@ PY
   for _ in $(seq 50); do [ -s "$TMP/data/token" ] && curl -s -o /dev/null "http://127.0.0.1:$PORT/" && break; sleep 0.1; done
 }
 export E2E_URL="http://127.0.0.1:$PORT" E2E_WS="$TMP/ws" E2E_OUT="${E2E_OUT:-$TMP}"
+mkdir -p "$E2E_OUT"
 status=0
 for s in "${SUITES[@]}"; do
   if [[ $s == *+ ]]; then s=${s%+}; else stop_pod; start_pod; fi
@@ -49,5 +50,5 @@ for s in "${SUITES[@]}"; do
   echo "== $s"
   node "suites/$s.cjs" || status=1
 done
-[ $status -eq 0 ] && echo "e2e : tout est passé" || { echo "e2e : échecs (journal du pod : $TMP/pod.log)"; cp "$TMP/pod.log" /tmp/web-ide-e2e-pod.log 2>/dev/null; }
+[ $status -eq 0 ] && echo "e2e: all passed" || { echo "e2e: failures (pod log: /tmp/web-ide-e2e-pod.log)"; cp "$TMP/pod.log" /tmp/web-ide-e2e-pod.log 2>/dev/null; }
 exit $status

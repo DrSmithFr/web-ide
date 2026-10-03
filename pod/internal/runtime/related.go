@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"webide/pod/internal/search"
+	"github.com/DrSmithFr/web-ide/pod/internal/search"
 )
 
 // Files lists the project files, cached for a few seconds.

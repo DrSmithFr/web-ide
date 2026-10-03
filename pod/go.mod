@@ -1,4 +1,4 @@
-module webide/pod
+module github.com/DrSmithFr/web-ide/pod
 
 go 1.27.0
 

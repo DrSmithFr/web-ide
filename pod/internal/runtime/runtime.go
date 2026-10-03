@@ -15,15 +15,15 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"webide/pod/internal/console"
-	"webide/pod/internal/db"
-	"webide/pod/internal/execx"
-	"webide/pod/internal/fsx"
-	"webide/pod/internal/git"
-	"webide/pod/internal/lsp"
-	"webide/pod/internal/projects"
-	"webide/pod/internal/sshx"
-	"webide/pod/internal/store"
+	"github.com/DrSmithFr/web-ide/pod/internal/console"
+	"github.com/DrSmithFr/web-ide/pod/internal/db"
+	"github.com/DrSmithFr/web-ide/pod/internal/execx"
+	"github.com/DrSmithFr/web-ide/pod/internal/fsx"
+	"github.com/DrSmithFr/web-ide/pod/internal/git"
+	"github.com/DrSmithFr/web-ide/pod/internal/lsp"
+	"github.com/DrSmithFr/web-ide/pod/internal/projects"
+	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
+	"github.com/DrSmithFr/web-ide/pod/internal/store"
 )
 
 const maxFile = 10 << 20
