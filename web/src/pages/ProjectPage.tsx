@@ -15,7 +15,7 @@ import { Connections } from '../panels/Connections'
 import { GitPanel } from '../panels/GitPanel'
 import { KanbanPanel } from '../kanban/Panel'
 import { NewTicketHost } from '../kanban/Board'
-import { ensureBoard, openBoard, openTicket, statusLabels, summary } from '../kanban/state'
+import { openBoard } from '../kanban/state'
 import { refreshGit } from '../state/git'
 import { DatabaseTool } from '../db/DatabaseTool'
 import { AssistantTool } from '../llm/AssistantTool'
@@ -31,7 +31,7 @@ import * as lspc from '../lsp/client'
 import { lspLanguage } from '../editor/languages'
 import { toast } from '../ui/toast'
 import { t, tn } from '../i18n'
-import { useProjectFavicon } from '../ui/projectIcon'
+import { ProjectBar } from './ProjectBar'
 
 export const leftPanels: Record<string, { label: string; icon: string; component: () => JSX.Element }> = {
   explorer: { label: 'Explorer', icon: 'files', component: Explorer },
@@ -205,12 +205,10 @@ function MenuBar() {
   const conflicts = () => (docsVersion(), conflictedDocs().length)
   return (
     <header class="menubar">
-      <button class="icon-btn" title={`${t('Settings')} (${shortcutOf('settings.open')})`} onClick={() => openSettings()}>
-        <Icon name="gear" />
-      </button>
       <button class="icon-btn" title={t('Projects')} onClick={() => navigate('/')}>
         <Icon name="home" />
       </button>
+      <ProjectBar />
       <nav class="menus">
         <For each={menus}>
           {([label, ids]) => (
@@ -220,29 +218,6 @@ function MenuBar() {
           )}
         </For>
       </nav>
-      <span class="project-name" title={project()?.path}>
-        {project()?.name}
-        <Show when={project()?.type === 'ssh'}>
-          <span class="badge">ssh</span>
-        </Show>
-      </span>
-      <Show when={project()?.ticket}>
-        {(n) => {
-          ensureBoard()
-          const tk = () => summary(n())
-          return (
-            <button class="wt-banner" title={t('Worktree of this ticket: open the ticket')} onClick={() => openTicket(n())} data-testid="worktree-banner">
-              <Icon name="kanban" size={12} />
-              <span class="ellipsis">
-                {t('Ticket #{id} {title}', { id: n(), title: tk()?.title ?? '' })}
-              </span>
-              <Show when={tk()}>
-                <span class={`kb-status st-${tk()!.status}`}>{statusLabels[tk()!.status]}</span>
-              </Show>
-            </button>
-          )
-        }}
-      </Show>
       <span class="grow" />
       <Show when={conflicts()}>
         <button class="badge warn" onClick={() => mutate((s) => (s.right.panel = 'conflicts'))}>
@@ -258,6 +233,9 @@ function MenuBar() {
         )}
       </Show>
       <PodStatus />
+      <button class="icon-btn" title={`${t('Settings')} (${shortcutOf('settings.open')})`} onClick={() => openSettings()}>
+        <Icon name="gear" />
+      </button>
     </header>
   )
 }
@@ -330,13 +308,12 @@ export function ProjectPage(props: { id: string }) {
       }
       setReady(true)
       refreshGit(0)
-      document.title = `${project()?.name} · Web IDE`
+      window.name = `project-${props.id}` // see openWorktreeWindow
     } catch (e) {
       setError((e as Error).message)
     }
   })
   useProjectActions()
-  useProjectFavicon(project)
   const offs = [
     registerAction('view.toggleLeft', () => mutate((s) => (s.left.panel = s.left.panel ? null : 'explorer'))),
     registerAction('view.toggleRight', () => mutate((s) => (s.right.panel = s.right.panel ? null : 'database'))),

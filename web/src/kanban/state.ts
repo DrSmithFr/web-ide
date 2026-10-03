@@ -257,9 +257,16 @@ export function childProject(ticket: number) {
   return `${p?.parent || p?.id}-t${ticket}`
 }
 
-/** Opens the worktree of a ticket in its own window. */
+/**
+ * Opens a project (the worktree of a ticket…) in its own window, or brings back the window
+ * already open on it (project windows are named after their project).
+ */
 export function openWorktreeWindow(projectId: string, assistant = false) {
-  window.open(`/project/${encodeURIComponent(projectId)}${assistant ? '?assistant=1' : ''}`, `project-${projectId}`)
+  const url = `/project/${encodeURIComponent(projectId)}${assistant ? '?assistant=1' : ''}`
+  const w = window.open('', `project-${projectId}`)
+  if (!w) return
+  if (assistant || w.location.href === 'about:blank') w.location.href = url
+  w.focus()
 }
 
 // ---------- tabs ----------

@@ -54,7 +54,7 @@ The usual path: a briefing makes the tickets, *Generate the plan* writes the pla
 
 - *Start development*: `git fetch` (when there is a remote), then the branch `ticket/<n>-<slug>` is created from the base (default `origin/main`, else `main`, configurable per project and per ticket) in a worktree `<project>/.ide/worktrees/<n>-<slug>`. Without a repository, or in one without a commit yet, the IDE offers to develop in the project folder instead.
 - A configurable setup command runs in a new worktree (`npm install && cp ../../../.env .`…).
-- The worktree opens as a separate project in its own window: not listed on the home page, opened from its ticket, with a ticket banner.
+- The worktree opens as a separate project in its own window: not listed on the home page, opened from its ticket or from the worktree selector of the menu bar, which shows the ticket and its status in place of the branch.
 - The model manages the branch and its commits (messages start with `#<n>`). The user triggers the merge (`merge --no-ff` by default, or squash) into the local base branch of the main folder (never pushed; uncommitted changes of the main folder are put aside with `--autostash` and applied again after the merge, also after a conflict once it is committed or aborted) and the rebase on the base (`--autostash` as well for the changes of the worktree).
 - Conflicts: no automatic abort; the ticket lists the conflicted files with *Continue*, *Abort* and *Resolution session*.
 - From *In progress* on: changed files and their diff against the chosen base (from the merge base), including uncommitted changes and untracked files of the worktree.

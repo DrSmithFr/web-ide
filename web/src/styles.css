@@ -99,7 +99,17 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .menus { display: flex; gap: 2px; margin-left: 4px; }
 .menu-btn { border: 0; background: transparent; padding: 3px 9px; border-radius: 4px; cursor: pointer; color: var(--fg); }
 .menu-btn:hover { background: var(--bg-hover); }
-.project-name { margin-left: 12px; font-weight: 600; display: inline-flex; gap: 6px; align-items: center; }
+.mb-project { display: flex; align-items: center; gap: 6px; margin: 0 6px 0 4px; min-width: 0; }
+.mb-icon { display: flex; padding: 2px; border: 0; border-radius: 5px; background: transparent; cursor: pointer; }
+.mb-icon:hover { background: var(--bg-hover); }
+.mb-icon img { display: block; }
+.mb-title { font-weight: 600; display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+.mb-branch { display: inline-flex; align-items: center; gap: 5px; max-width: 340px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--fg-muted); font-size: 12px; cursor: pointer; min-width: 0; }
+.mb-branch:hover { border-color: var(--accent); color: var(--fg); }
+.mb-branch > svg:last-child { transform: rotate(90deg); flex: none; }
+.mb-ticket { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.mb-branch.wt { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); background: color-mix(in srgb, var(--warn) 10%, transparent); color: var(--fg); max-width: 420px; }
+.mb-branch.wt:hover { border-color: var(--warn); }
 .cursor-info { color: var(--fg-muted); font-family: var(--font-code); font-size: 12px; margin-right: 10px; }
 .pod-status { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--fg-muted); font-variant-numeric: tabular-nums; }
 .pod-status .rate { min-width: 72px; }

@@ -4,6 +4,7 @@ package projects
 
 import (
 	"crypto/rand"
+	"crypto/sha1"
 	"encoding/hex"
 	"path"
 	"sort"
@@ -226,7 +227,27 @@ func ChildID(parent string, ticket int64) string {
 
 // PutChild registers (or updates) the project of the worktree of a ticket.
 func (r *Registry) PutChild(parent *Project, ticket int64, title, dir string) (View, error) {
-	p := Project{ID: ChildID(parent.ID, ticket), Title: title, Type: parent.Type, Path: dir, Parent: parent.ID, Ticket: ticket}
+	return r.put(Project{ID: ChildID(parent.ID, ticket), Title: title, Path: dir, Ticket: ticket}, parent)
+}
+
+// PutWorktree registers the project of another worktree of the repository of parent
+// (a branch opened from the menu bar), or returns the one already opened on dir.
+func (r *Registry) PutWorktree(parent *Project, title, dir string) (View, error) {
+	r.mu.Lock()
+	for _, cur := range r.items {
+		if cur.Parent == parent.ID && cur.Path == path.Clean(dir) {
+			cp := *cur
+			r.mu.Unlock()
+			return view(&cp), nil
+		}
+	}
+	r.mu.Unlock()
+	sum := sha1.Sum([]byte(dir))
+	return r.put(Project{ID: parent.ID + "-w" + hex.EncodeToString(sum[:4]), Title: title, Path: dir}, parent)
+}
+
+func (r *Registry) put(p Project, parent *Project) (View, error) {
+	p.Type, p.Parent = parent.Type, parent.ID
 	if parent.SSH != nil {
 		ssh := *parent.SSH
 		p.SSH = &ssh
@@ -247,6 +268,18 @@ func (r *Registry) PutChild(parent *Project, ticket int64, title, dir string) (V
 	p.OpenedAt = p.CreatedAt
 	r.items = append(r.items, &p)
 	return view(&p), r.save()
+}
+
+// ChildAt is the worktree project of parent opened on dir, if any.
+func (r *Registry) ChildAt(parent, dir string) (string, int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, p := range r.items {
+		if p.Parent == parent && p.Path == path.Clean(dir) {
+			return p.ID, p.Ticket
+		}
+	}
+	return "", 0
 }
 
 // Children lists the worktree projects of a project.

@@ -48,7 +48,7 @@ To treat local and SSH projects the same way, the pod exposes one interface (`li
 
 ```
 +--------------------------------------------------+
-| Menu bar (settings)            pod status / rate |
+| Menu bar (project, branch)  pod status, settings |
 +----+-----------+-----------------------+---+-----+
 | ic | Explorer  |  Tabs                 | T | ic  |
 | on |           |  Editor               | o | on  |
@@ -59,7 +59,8 @@ To treat local and SSH projects the same way, the pod exposes one interface (`li
 +--------------------------------------------------+
 ```
 
-- **Menu bar**: settings on the left, pod status on the right (connection state, download and upload rate in bytes/s over a sliding window of about one second).
+- **Menu bar**, from left to right: home button; project icon (click: icon editor), project title and the **worktree selector** (current branch, or the ticket of a worktree window); the File, Edit, Navigate… menus; then on the right conflicts, cursor position, pod status (connection state, download and upload rate in bytes/s over a sliding window of about one second) and settings.
+- **Worktree selector**: lists the main folder, the worktrees of the tickets (with their status) and the other worktrees of the repository; choosing one opens its window, or brings back the one already open. *Open a branch…* checks an existing or new branch out in its own worktree (`.ide/worktrees/b-<branch>`) opened in its own window: the main folder is never switched, so its uncommitted changes never get in the way.
 - **Editor window**: explorer panel on the left, central editor with a tab bar, tools panel on the right.
 - **Icon rails** on both sides: each icon toggles a panel; clicking the active icon hides it.
   - Left: file explorer, global search, Git, kanban, connections (local/SSH).

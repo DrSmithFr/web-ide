@@ -119,5 +119,7 @@
   "the repository has no commit yet: cannot create the branch of the ticket": "le dépôt n'a encore aucun commit : impossible de créer la branche du ticket",
   "invalid icon": "icône invalide",
   "open the project to change its icon": "ouvrez le projet pour changer son icône",
-  "your uncommitted changes could not be applied again: they are kept in the git stash": "vos modifications non commitées n'ont pas pu être réappliquées : elles sont gardées dans le stash git"
+  "your uncommitted changes could not be applied again: they are kept in the git stash": "vos modifications non commitées n'ont pas pu être réappliquées : elles sont gardées dans le stash git",
+  "branch name missing": "nom de branche manquant",
+  "worktree not found: %s": "worktree introuvable : %s"
 }

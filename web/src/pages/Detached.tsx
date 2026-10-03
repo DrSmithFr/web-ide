@@ -9,7 +9,7 @@ import { NewTicketHost } from '../kanban/Board'
 import { leftPanels, openWithAuth, rightPanels, useProjectActions, PodStatus } from './ProjectPage'
 import { on as onPod, request } from '../pod/rpc'
 import { t } from '../i18n'
-import { useProjectFavicon } from '../ui/projectIcon'
+import { useProjectIcon } from '../ui/projectIcon'
 
 function useProject(id: string, title: (name: string) => string) {
   const [ready, setReady] = createSignal(false)
@@ -31,7 +31,7 @@ function useProject(id: string, title: (name: string) => string) {
     off()
     closeProject()
   })
-  useProjectFavicon(project)
+  useProjectIcon(project)
   return { ready, error }
 }
 

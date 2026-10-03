@@ -1106,5 +1106,12 @@
   "Rounded square": "Carré arrondi",
   "Square": "Carré",
   "Hexagon": "Hexagone",
-  "Diamond": "Losange"
+  "Diamond": "Losange",
+  "Open the ticket #{id}": "Ouvrir le ticket #{id}",
+  "main folder": "dossier principal",
+  "this window": "cette fenêtre",
+  "Open a branch…": "Ouvrir une branche…",
+  "in its own worktree": "dans son propre worktree",
+  "Worktrees and branches": "Worktrees et branches",
+  "no git": "pas de git"
 }

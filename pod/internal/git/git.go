@@ -298,3 +298,64 @@ func (g *Repo) Setup(ctx context.Context, remote string, empty bool) error {
 	_, err := g.git(ctx, "remote", "add", "origin", remote)
 	return err
 }
+
+type Worktree struct {
+	Path   string `json:"path"`
+	Branch string `json:"branch,omitempty"` // empty: detached HEAD
+	Main   bool   `json:"main,omitempty"`   // the main folder of the repository
+}
+
+// Worktrees parses `git worktree list --porcelain`; the main folder comes first.
+func (g *Repo) Worktrees(ctx context.Context) ([]Worktree, error) {
+	out, err := g.git(ctx, "worktree", "list", "--porcelain")
+	if err != nil {
+		return nil, err
+	}
+	list := []Worktree{}
+	for _, block := range strings.Split(strings.TrimSpace(out), "\n\n") {
+		var w Worktree
+		prunable := false
+		for _, line := range strings.Split(block, "\n") {
+			k, v, _ := strings.Cut(line, " ")
+			switch k {
+			case "worktree":
+				w.Path = v
+			case "branch":
+				w.Branch = strings.TrimPrefix(v, "refs/heads/")
+			case "prunable":
+				prunable = true
+			}
+		}
+		if w.Path != "" && !prunable {
+			w.Main = len(list) == 0
+			list = append(list, w)
+		}
+	}
+	return list, nil
+}
+
+// AddWorktree checks a branch out in a new worktree: a local branch, a branch of a remote
+// ("origin/x": local branch x tracking it), or a new branch from HEAD when create is set.
+func (g *Repo) AddWorktree(ctx context.Context, dir, branch string, create bool) error {
+	var err error
+	switch {
+	case create:
+		_, err = g.git(ctx, "worktree", "add", "-b", branch, dir)
+	case g.ref(ctx, "refs/heads/"+branch):
+		_, err = g.git(ctx, "worktree", "add", dir, branch)
+	case g.ref(ctx, "refs/remotes/"+branch):
+		_, local, _ := strings.Cut(branch, "/")
+		_, err = g.git(ctx, "worktree", "add", "--track", "-b", local, dir, branch)
+	default:
+		return i18n.Errorf("branch not found: %s", branch)
+	}
+	return err
+}
+
+// HasLocal tells whether a local branch exists.
+func (g *Repo) HasLocal(ctx context.Context, name string) bool { return g.ref(ctx, "refs/heads/"+name) }
+
+func (g *Repo) ref(ctx context.Context, ref string) bool {
+	_, err := g.git(ctx, "rev-parse", "--verify", "--quiet", ref)
+	return err == nil
+}

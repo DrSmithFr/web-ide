@@ -136,3 +136,34 @@ func TestSetup(t *testing.T) {
 		t.Fatalf("unexpected commit: %+v", log)
 	}
 }
+
+func TestWorktrees(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git absent")
+	}
+	t.Setenv("GIT_AUTHOR_NAME", "t")
+	t.Setenv("GIT_AUTHOR_EMAIL", "t@x")
+	t.Setenv("GIT_COMMITTER_NAME", "t")
+	t.Setenv("GIT_COMMITTER_EMAIL", "t@x")
+	ctx := context.Background()
+	dir := t.TempDir()
+	g := New(execx.Local{}, dir)
+	if err := g.Setup(ctx, "", true); err != nil {
+		t.Fatal(err)
+	}
+	run(t, dir, "branch", "feature")
+	wt := filepath.Join(dir, ".ide", "worktrees", "b-feature")
+	if err := g.AddWorktree(ctx, wt, "feature", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.AddWorktree(ctx, filepath.Join(dir, ".ide", "worktrees", "b-new"), "new", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.AddWorktree(ctx, filepath.Join(dir, "x"), "missing", false); err == nil {
+		t.Fatal("missing branch accepted")
+	}
+	list, err := g.Worktrees(ctx)
+	if err != nil || len(list) != 3 || !list[0].Main || list[0].Branch != "main" || list[1].Path != wt || list[1].Branch != "feature" || list[2].Branch != "new" {
+		t.Fatalf("worktrees = %+v %v", list, err)
+	}
+}

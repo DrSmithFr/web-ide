@@ -82,6 +82,7 @@ func (s *Server) Init() {
 	s.registerDB()
 	s.registerGit()
 	s.registerIcons()
+	s.registerWorktrees()
 	s.registerLLM()
 	s.registerExec()
 	s.registerKanban()

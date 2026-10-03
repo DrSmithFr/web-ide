@@ -82,7 +82,7 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 
 ### Kanban
 
-See [kanban.md](kanban.md). A ticket worktree is registered as a hidden child project `<parent>-t<n>` (`projects.PutChild`); its kanban and conversations are those of the parent. A development session started from the main window saves the conversation with `running: {}` and opens the worktree window with `?assistant=1`, which resumes it.
+See [kanban.md](kanban.md). A ticket worktree is registered as a hidden child project `<parent>-t<n>` (`projects.PutChild`); its kanban and conversations are those of the parent. Another worktree opened from the menu bar is a child project `<parent>-w<hash of its path>` (`projects.PutWorktree`, `server/handlers_worktrees.go`). Project windows are named `project-<id>` so that opening a project again brings back its window. A development session started from the main window saves the conversation with `running: {}` and opens the worktree window with `?assistant=1`, which resumes it.
 
 ## Languages
 

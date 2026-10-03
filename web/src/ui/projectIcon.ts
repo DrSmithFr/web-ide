@@ -2,7 +2,7 @@
 // gradient. The page draws the SVG; the pod keeps it in <project>/.ide/icon.svg (with the
 // description in icon.json). Shown on the home page, in the menu bar and as the favicon of
 // every window of the project, so that browser tabs tell the projects apart.
-import { createEffect, createSignal } from 'solid-js'
+import { createEffect, createSignal, onCleanup } from 'solid-js'
 import { on, request } from '../pod/rpc'
 
 export type IconShape = 'circle' | 'rounded' | 'square' | 'hexagon' | 'diamond'
@@ -113,8 +113,15 @@ export async function loadIcons(list: { id: string; name: string }[]) {
   setIcons((m) => ({ ...m, ...got }))
 }
 
+export interface IconOwner {
+  /** The project whose icon is shown: the project, or the parent of a worktree. */
+  owner: string
+  name: string
+  spec: IconSpec | null
+}
+
 /** Loads the icon of a project (its parent's for a worktree), generating it when missing. */
-export async function loadIcon(id: string): Promise<{ owner: string; spec: IconSpec | null }> {
+export async function loadIcon(id: string): Promise<IconOwner> {
   const r = await request<{ owner: string; name: string; spec: IconSpec | null; svg: string }>('projects.icon', { id })
   let { spec, svg } = r
   if (!svg) {
@@ -123,7 +130,7 @@ export async function loadIcon(id: string): Promise<{ owner: string; spec: IconS
     saveIcon(id, spec, svg).catch(() => {})
   }
   setIcons((m) => ({ ...m, [r.owner]: svg }))
-  return { owner: r.owner, spec }
+  return { owner: r.owner, name: r.name, spec }
 }
 
 let appIcon: string | null = null
@@ -140,15 +147,21 @@ export function setFavicon(svg: string | null) {
   link.href = svg ? iconURL(svg) : appIcon
 }
 
-/** Keeps the favicon of a project window on the icon of the project (with a dot for a worktree). */
-export function useProjectFavicon(project: () => { id: string; parent?: string } | null) {
-  const [owner, setOwner] = createSignal('')
-  createEffect(() => {
+/**
+ * Keeps the favicon of a project window on the icon of the project (with a dot for a
+ * worktree); returns the owner of the icon (with its name and description).
+ */
+export function useProjectIcon(project: () => { id: string; parent?: string } | null) {
+  const [owner, setOwner] = createSignal<IconOwner | null>(null)
+  const load = () => {
     const p = project()
-    if (p) loadIcon(p.id).then((r) => setOwner(r.owner), () => {})
-  })
+    if (p) loadIcon(p.id).then(setOwner, () => {})
+  }
+  createEffect(load)
+  // The description changed in another window: read it again.
+  onCleanup(on('projects.iconChanged', (d: { id: string }) => d.id === owner()?.owner && load()))
   createEffect(() => {
-    const svg = iconOf(owner())
+    const svg = iconOf(owner()?.owner ?? '')
     if (svg) setFavicon(project()?.parent ? withBadge(svg) : svg)
   })
   return owner
