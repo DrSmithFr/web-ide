@@ -77,9 +77,10 @@ func TestOpenAIChatStream(t *testing.T) {
 			}
 			_ = json.NewDecoder(r.Body).Decode(&got)
 			sse(w,
+				`{"choices":[{"delta":{"content":null}}],"prompt_progress":{"total":40,"processed":20}}`,
 				`{"choices":[{"delta":{"reasoning_content":"Je "}}]}`,
 				`{"choices":[{"delta":{"reasoning_content":"réfléchis"}}]}`,
-				`{"choices":[{"delta":{"content":"Voici"}}]}`,
+				`{"choices":[{"delta":{"content":"Voici"}}],"timings":{"predicted_n":7,"predicted_per_second":31.5}}`,
 				`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a","type":"function","function":{"name":"read_file","arguments":"{\"pa"}}]}}]}`,
 				`{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"th\":\"x\"}"}}]}}]}`,
 				`{"choices":[{"delta":{"tool_calls":[{"index":1,"id":"b","type":"function","function":{"name":"list_dir","arguments":""}}]}}]}`,
@@ -116,6 +117,17 @@ func TestOpenAIChatStream(t *testing.T) {
 	}
 	if all.Content != "Voici" || all.Reasoning != "Je réfléchis" {
 		t.Fatalf("deltas: %+v", deltas)
+	}
+	var tokens, total int
+	var speed float64
+	for _, d := range deltas {
+		tokens, speed, total = max(tokens, d.Tokens), max(speed, d.Speed), max(total, d.PromptTotal)
+	}
+	if tokens < 7 || speed != 31.5 || total != 40 {
+		t.Fatalf("stats: tokens=%d speed=%v prompt=%d %+v", tokens, speed, total, deltas)
+	}
+	if got["timings_per_token"] != true || got["return_progress"] != true {
+		t.Fatalf("llama.cpp options missing: %v", got)
 	}
 }
 
@@ -259,6 +271,12 @@ func TestChats(t *testing.T) {
 	if !strings.Contains(string(gi), "chats.db") {
 		t.Fatalf(".gitignore: %q", gi)
 	}
+	if err := m.RenameChat(loc, "c2", " Renommée "); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ := m.ListChats(loc); list[1].Title != "Renommée" {
+		t.Fatalf("rename: %+v", list)
+	}
 	_ = m.DeleteChat(loc, "c1")
 	if list, _ := m.ListChats(loc); len(list) != 2 {
 		t.Fatalf("after delete: %+v", list)
@@ -294,6 +312,9 @@ func TestContext(t *testing.T) {
 	write(filepath.Join(root, ".agents/skills/pdf/SKILL.md"), "---\nname: pdf\ndescription: PDF du projet\n---\nlocal")
 	write(filepath.Join(root, ".ide/system-prompt.md"), "Prompt du projet {{project}}")
 	_ = m.SaveGlobalPrompt("Prompt global")
+	write(m.st.Path("AGENTS.md"), "Règles de l'IDE.")
+	write(m.st.Path("skills/notes/SKILL.md"), "---\nname: notes\ndescription: Notes de l'IDE\n---\nnoter")
+	write(m.st.Path("skills/pdf/SKILL.md"), "---\nname: pdf\ndescription: PDF de l'IDE\n---\nide")
 
 	p := Project{Root: root, FS: fsx.Local{}}
 	c := m.LoadContext(p)
@@ -304,10 +325,10 @@ func TestContext(t *testing.T) {
 	for _, f := range c.Files {
 		paths = append(paths, f.Scope+":"+filepath.Base(f.Path))
 	}
-	if strings.Join(paths, ",") != "global:CLAUDE.md,project:CLAUDE.md,project:style.md,project:AGENTS.md" {
+	if strings.Join(paths, ",") != "global:CLAUDE.md,global:AGENTS.md,project:CLAUDE.md,project:style.md,project:AGENTS.md" {
 		t.Fatalf("files: %v", paths)
 	}
-	if len(c.Skills) != 2 || c.Skills[0].Name != "deploy" || c.Skills[0].Description != "Déployer le projet" || c.Skills[1].Scope != "project" || c.Skills[1].Description != "PDF du projet" {
+	if len(c.Skills) != 3 || c.Skills[0].Name != "deploy" || c.Skills[0].Description != "Déployer le projet" || c.Skills[1].Name != "notes" || c.Skills[2].Scope != "project" || c.Skills[2].Description != "PDF du projet" {
 		t.Fatalf("skills: %+v", c.Skills)
 	}
 	sk, err := m.ReadSkill(p, "deploy")
@@ -316,11 +337,16 @@ func TestContext(t *testing.T) {
 	}
 	// Global skill once the project one is gone.
 	_ = os.RemoveAll(filepath.Join(root, ".agents"))
+	// The IDE folder wins over ~/.claude.
+	if sk, err = m.ReadSkill(p, "pdf"); err != nil || sk["content"] != "ide" {
+		t.Fatalf("IDE skill: %v %v", sk, err)
+	}
+	_ = os.RemoveAll(m.st.Path("skills/pdf"))
 	sk, err = m.ReadSkill(p, "pdf")
 	if err != nil || sk["content"] != "# PDF\nUtiliser pdftotext." || len(sk["files"].([]string)) != 1 {
 		t.Fatalf("global skill: %v %v", sk, err)
 	}
-	if desc := m.LoadContext(p).Skills[1].Description; desc != "Lire et créer des PDF" {
+	if desc := m.LoadContext(p).Skills[2].Description; desc != "Lire et créer des PDF" {
 		t.Fatalf("folded description: %q", desc)
 	}
 	if txt, err := m.ReadSkillFile(p, "pdf", "scripts/x.py"); err != nil || txt != "print(1)" {

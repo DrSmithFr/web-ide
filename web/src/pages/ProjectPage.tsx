@@ -279,7 +279,7 @@ function Resizer(props: { onDrag: (delta: number) => void; dir: 'x' | 'y' }) {
 
 function SidePanel(props: { side: 'left' | 'right'; panels: typeof leftPanels }) {
   const id = () => session[props.side].panel!
-  const detach = () => window.open(`/project/${project()!.id}/tool/${id()}`, `tool-${id()}`, 'popup,width=420,height=760')
+  const detach = () => window.open(`/project/${project()!.id}/tool/${id()}`, `tool-${id()}`, id() === 'assistant' ? 'popup,width=1100,height=820' : 'popup,width=420,height=760')
   return (
     <aside class={`side side-${props.side}`} style={{ width: `${session[props.side].width}px` }}>
       <button class="icon-btn detach" title="Ouvrir dans une fenêtre" onClick={detach}>

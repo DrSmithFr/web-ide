@@ -192,7 +192,7 @@ async function listDir(p: string): Promise<ToolResult> {
   entries.sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name))
   const lines = entries.slice(0, 500).map((e) => (e.dir ? `${e.name}/` : `${e.name}  (${e.size} o)`))
   if (entries.length > 500) lines.push(`… ${entries.length - 500} autres entrées`)
-  return ok(lines.join('\n') || '(dossier vide)', `${relPath(abs) || '.'} : ${plural(entries.length, 'entrée')}`)
+  return ok(lines.join('\n') || '(dossier vide)', `${abs === root() ? '.' : relPath(abs)} : ${plural(entries.length, 'entrée')}`)
 }
 
 function globToRegExp(glob: string): RegExp {

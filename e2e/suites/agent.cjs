@@ -8,6 +8,11 @@ const { execFileSync } = require('child_process')
 const { run, openProject, assert, WS, OUT } = require('../common.cjs')
 
 const demo = WS + '/demo'
+const data = WS + '/../data'
+// Global instructions and skill of the IDE data folder (~/.web-ide).
+fs.writeFileSync(data + '/AGENTS.md', 'Instruction de l’IDE : commits en français.\n')
+fs.mkdirSync(data + '/skills/release', { recursive: true })
+fs.writeFileSync(data + '/skills/release/SKILL.md', '---\nname: release\ndescription: Publier une version\n---\nTaguer puis pousser.\n')
 fs.writeFileSync(demo + '/CLAUDE.md', 'Règle du projet : tests avec make test. Voir @docs/regles.md\n')
 fs.mkdirSync(demo + '/docs', { recursive: true })
 fs.writeFileSync(demo + '/docs/regles.md', 'Règle importée : indentation par tabulations.\n')
@@ -72,7 +77,7 @@ async function ask(page, message, expect) {
   await page.fill('.ai-composer textarea', message)
   await page.keyboard.press('Enter')
   await page.waitForSelector(`.ai-msg.assistant .md:has-text("${expect}")`, { timeout: 20000 })
-  await page.waitForSelector('.ai-composer .btn:has-text("Envoyer")', { timeout: 10000 })
+  await page.waitForSelector('[data-testid=send]', { timeout: 10000 })
 }
 
 run(async ({ page }) => {
@@ -90,20 +95,21 @@ run(async ({ page }) => {
     await page.click('.ai-tab:has-text("Prompt")')
     await page.waitForSelector('[data-testid=instruction-file]')
     const files = await page.$$eval('[data-testid=instruction-file]', (e) => e.map((x) => x.textContent))
-    assert(files.length === 3 && files[0].includes('global') && files[1].includes('CLAUDE.md') && files[2].includes('docs/regles.md'), 'fichiers d’instructions listés : ' + JSON.stringify(files))
+    assert(files.length === 4 && files[0].includes('global') && files[1].includes('data/AGENTS.md') && files[2].includes('CLAUDE.md') && files[3].includes('docs/regles.md'), 'fichiers d’instructions listés (dont ~/.web-ide/AGENTS.md) : ' + JSON.stringify(files))
     const skills = await page.$$eval('[data-testid=skill]', (e) => e.map((x) => x.textContent))
-    assert(skills.length === 2 && skills.some((s) => s.includes('greet')) && skills.some((s) => s.includes('deploy') && s.includes('projet')), 'skills listés : ' + JSON.stringify(skills))
+    assert(skills.length === 3 && skills.some((s) => s.includes('greet')) && skills.some((s) => s.includes('release')) && skills.some((s) => s.includes('deploy') && s.includes('projet')), 'skills listés (dont ~/.web-ide/skills) : ' + JSON.stringify(skills))
     await page.click('.ai-servers .modal-head button')
-    await page.waitForFunction(() => document.querySelector('.ai-modelbar select.grow')?.value === 'fake-model')
+    await page.waitForSelector('[data-testid=model-pill]:has-text("fake-model")')
 
     // First message: system prompt with template, instructions and skills.
     await ask(page, 'Bonjour', 'Réponse de fake-model.')
     const sys = requests[0].messages[0].content
     assert(sys.includes('Projet ouvert : « demo »') && sys.includes('read_file'), 'prompt par défaut avec les variables remplacées')
-    assert(sys.includes('Instruction globale : réponds poliment.') && sys.includes('Règle du projet') && sys.includes('Règle importée'), 'CLAUDE.md global, du projet et import @ dans le prompt')
+    assert(sys.includes('Instruction globale : réponds poliment.') && sys.includes('Instruction de l’IDE') && sys.includes('Règle du projet') && sys.includes('Règle importée'), 'CLAUDE.md global, AGENTS.md de ~/.web-ide, du projet et import @ dans le prompt')
     assert(sys.includes('- greet : Saluer') && sys.includes('- deploy : Déployer') && !sys.includes('Bien le bonjour'), 'skills listés sans leur contenu')
     assert(await page.isVisible('.ai-usage:has-text("fake-model")'), 'modèle affiché sous la réponse')
-    assert(await page.isVisible('[data-testid=ai-gauge]:has-text("/ 8.2k")'), 'jauge de contexte affichée')
+    const gauge = (await page.getAttribute('[data-testid=ai-gauge]', 'title')) ?? ''
+    assert(gauge.replace(/[^\d/]/g, '').includes('/8192'), 'jauge de contexte affichée : ' + gauge)
 
     // Project prompt edited in the settings.
     await page.click('.ai-panel button[title^="Réglages"]')
@@ -115,7 +121,8 @@ run(async ({ page }) => {
     await page.click('.ai-servers .modal-head button')
 
     // Model switched in the middle of the conversation.
-    await page.selectOption('.ai-modelbar select.grow', 'fake-other')
+    await page.click('[data-testid=model-pill]')
+    await page.click('.ai-model-item:has-text("fake-other")')
     await ask(page, 'Et toi ?', 'Réponse de fake-other.')
     const r2 = requests[requests.length - 1]
     assert(r2.model === 'fake-other' && r2.messages.length === 4, 'la conversation continue avec l’autre modèle')
@@ -143,7 +150,8 @@ run(async ({ page }) => {
     await page.waitForSelector('[data-testid=compaction-settings] select[name=compactModel] option[value="fake-small"]', { state: 'attached' })
     await page.selectOption('[data-testid=compaction-settings] select[name=compactModel]', 'fake-small')
     await page.click('.ai-servers .modal-head button')
-    await page.click('.ai-composer button:has-text("compacter")')
+    await page.click('[data-testid=ai-options]')
+    await page.click('.ai-menu-item:has-text("Compacter")')
     await page.waitForSelector('[data-testid=ai-summary]:has-text("fake-small")', { timeout: 10000 })
     assert(summaries.length === 1 && summaries[0].model === 'fake-small' && text(summaries[0].messages[1]).includes('Et toi ?') && !text(summaries[0].messages[1]).includes('Essaie les outils'), 'résumé demandé au modèle de compaction (tout sauf le dernier échange)')
     assert(await page.isVisible('.ai-compacted-toggle'), 'messages compactés repliés')
@@ -165,18 +173,23 @@ run(async ({ page }) => {
     assert(fs.readFileSync(demo + '/.ide/.gitignore', 'utf8').includes('chats.db'), '.ide/.gitignore ignore la base')
     const count = execFileSync('python3', ['-c', `import sqlite3;c=sqlite3.connect('${db}');print(c.execute('select count(*) from chats').fetchone()[0], c.execute('select count(*) from messages').fetchone()[0])`], { encoding: 'utf8' }).trim().split(' ').map(Number)
     assert(count[0] === 1 && count[1] > 10, 'conversation et messages dans SQLite : ' + count.join(' '))
+    // Reload: the active conversation comes back by itself.
     await page.reload()
     await page.waitForSelector('.menubar')
-    await page.click('.ai-panel button[title="Conversations du projet"]').catch(async () => {
-      await page.click('.rail-right .rail-btn[title="Assistant IA"]')
-      await page.click('.ai-panel button[title="Conversations du projet"]')
-    })
-    await page.click('.ai-history-open:has-text("Bonjour")')
-    await page.waitForSelector('.ai-summary')
+    await page.waitForSelector('.ai-summary', { timeout: 10000 })
     const visible = (await page.$$('[data-testid=ai-summary]')).length
     await page.click('.ai-compacted-toggle')
     const all = (await page.$$('[data-testid=ai-summary]')).length
-    assert(visible === 1 && all === 2, `conversation relue depuis SQLite : le premier résumé est replié avec les messages compactés (${visible}/${all})`)
+    assert(visible === 1 && all === 2, `conversation active rechargée depuis SQLite, premier résumé replié (${visible}/${all})`)
+
+    // Detached window, wide: the history is always shown.
+    const projectPath = new URL(page.url()).pathname
+    await page.goto(new URL(projectPath + '/tool/assistant', page.url()).href)
+    await page.waitForSelector('.ai-panel.detached')
+    await page.waitForSelector('[data-testid=ai-sidebar]', { timeout: 5000 }).catch(() => {})
+    assert((await page.isVisible('[data-testid=ai-sidebar]')) && !(await page.isVisible('.ai-side-wrap.overlay')) && !(await page.isVisible('.ai-panel button[title="Conversations du projet"]')), 'fenêtre détachée large : historique toujours affiché')
+    assert(await page.isVisible('.ai-chat-item.active:has-text("Bonjour")'), 'la conversation active est sélectionnée dans l’historique')
+    await page.screenshot({ path: OUT + '/agent-detached.png' })
   } finally {
     fake.close()
   }

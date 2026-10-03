@@ -15,7 +15,8 @@ Toute la spec est implémentée et testée, plus sept ajouts : autocomplétion, 
 | `e336135` | Panneau Git, onglet de diff, marqueurs de gouttière |
 | `56159ea` | Assistant IA : chat llama.cpp / Ollama, outils fichiers + LSP |
 | `dcd370f` | Transcription vocale locale (Whisper dans le navigateur) |
-| dernier commit | Agent : CLAUDE.md / AGENTS.md, skills, prompt éditable, compaction, outils IDE et consoles, conversations en SQLite |
+| `fb780dd` | Agent : CLAUDE.md / AGENTS.md, skills, prompt éditable, compaction, outils IDE et consoles, conversations en SQLite |
+| dernier commit | Nouvelle interface de l'assistant, historique latéral, Mermaid et stats en direct, conversation restaurée |
 
 ## Commandes
 
@@ -72,13 +73,23 @@ Panneau de droite « Assistant IA » (détachable) : serveurs llama.cpp ou Ollam
 ## Fonctions d'agent de l'assistant
 
 - **Prompt système** (`web/src/llm/prompt.ts`) : modèle éditable (onglet « Prompt et instructions » des réglages) global (`~/.web-ide/system-prompt.md`) ou du projet (`.ide/system-prompt.md`, prioritaire), variables `{{project}} {{root}} {{host}} {{activeFile}} {{date}} {{tools}}`, aperçu du prompt complet dans un onglet. Rechargé à chaque message.
-- **Instructions et skills** comme Claude Code (`pod/internal/llm/context.go`, RPC `llm.context`) : `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md` (machine du pod) puis `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md` du projet, imports `@chemin` suivis (hors blocs de code, profondeur 4). Skills : `.claude/skills` et `.agents/skills`, du projet (prioritaires) puis globaux ; seuls nom et description vont dans le prompt, contenu via les outils `load_skill` / `read_skill_file`. `WEBIDE_INSTRUCTIONS_HOME` remplace le dossier personnel (tests e2e : `e2e/home`).
+- **Instructions et skills** comme Claude Code (`pod/internal/llm/context.go`, RPC `llm.context`) : `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, puis `CLAUDE.md` / `AGENTS.md` du dossier de données (`~/.web-ide`), tous sur la machine du pod, puis `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md` du projet, imports `@chemin` suivis (hors blocs de code, profondeur 4). Skills : `.claude/skills` et `.agents/skills` du projet (prioritaires), puis `~/.web-ide/skills`, puis `~/.claude/skills` et `~/.agents/skills` ; seuls nom et description vont dans le prompt, contenu via les outils `load_skill` / `read_skill_file`. `WEBIDE_INSTRUCTIONS_HOME` remplace le dossier personnel (tests e2e : `e2e/home`).
 - **Outils IDE** (`tools.ts`) : `open_file` (avec sélection de lignes), `focus` (fichier, panneau, console, problèmes), `run_command` (nouvelle console visible, attend la fin ou le délai, renvoie sortie sans séquences ANSI et code ; sans confirmation, choix de l'utilisateur), `list_consoles`, `read_console`, `console_input`.
 - **Modèles** : le modèle peut changer en cours de conversation (chaque réponse garde le sien, affiché sous la réponse) ; jauge de contexte (usage du dernier appel + estimation de la suite).
 - **Compaction** (`agent.ts`) : automatique au-delà du seuil (75 % par défaut) du contexte du modèle, ou bouton « compacter », ou après une erreur de contexte dépassé ; un modèle dédié peut résumer (onglet « Compaction »). Les anciens messages restent visibles repliés (`compacted`), un message `kind: 'summary'` les remplace dans l'API ; environ un quart du contexte est gardé tel quel (sinon le dernier échange). `chat.resetAt` fait ignorer les usages mesurés avant la compaction.
 - **Conversations en SQLite** (`pod/internal/llm/chats.go`) : `<projet>/.ide/chats.db` (tables `chats` et `messages`, avec un `.ide/.gitignore` qui l'exclut) pour un projet local, `~/.web-ide/chats/<projet>.db` pour un projet SSH ; les anciens JSON sont importés puis supprimés.
 - Suite e2e `agent` (faux serveur scripté) : prompt assemblé, instructions et skills, prompt du projet modifié, changement de modèle, les quatre outils IDE, compaction manuelle par un autre modèle puis automatique, relecture depuis SQLite.
 - Piège : `<option>` n'est jamais « visible » pour Playwright (`state: 'attached'`) ; la sélection de l'éditeur se lit dans `.cursor-info`, la sélection DOM est perdue dès qu'un autre élément prend le focus. En cas d'échec, `common.cjs` enregistre `failure.png` dans `E2E_OUT`.
+
+## Interface de l'assistant
+
+- Fichiers : `AssistantTool.tsx` (mise en page), `Thread.tsx` (messages), `Composer.tsx` (zone de saisie, brouillon et pièces jointes au niveau du module), `Sidebar.tsx` (historique), `AssistantSettings.tsx` (fenêtre de réglages à onglets), `parts.tsx` (Markdown, diff, popover…), styles dans `assistant.css`.
+- Historique : panneau latéral (regroupé par date, recherche, renommer via `llm.chats.rename`, supprimer). Par-dessus la conversation sous 720 px de large, à côté au-delà ; toujours affiché (sans bouton) dans une fenêtre détachée assez large (`route().name === 'tool'`). La fenêtre détachée de l'assistant s'ouvre en 1100×820.
+- Messages : bulles utilisateur (copier, modifier et renvoyer : la conversation reprend à ce message), réponses pleine largeur, étapes d'outils regroupées au-delà de deux, réflexion repliable avec sa durée, actions au bas de chaque tour (copier, régénérer, modèle · jetons/s · durée · jetons). Écran d'accueil avec suggestions.
+- Zone de saisie : hauteur automatique, choix du modèle en popover (serveur, capacités, contexte), menu d'options (outils, appliquer sans demander, réflexion, compacter), anneau de contexte, bouton rond envoyer / arrêter.
+- Pendant la réponse : `llm.delta` porte `tokens`, `speed` (llama.cpp `timings_per_token`) et `promptDone/promptTotal` (`return_progress`) ; sans timings, un jeton par fragment. Affiché : lecture du prompt en %, puis état · jetons/s · jetons · temps écoulé.
+- Mermaid pendant le stream : un bloc est dessiné dès que sa clôture ``` est arrivée (`data-closed`), les SVG sont gardés en cache par source et thème et remis à chaque rendu sans clignoter.
+- Conversation active mémorisée par projet dans le navigateur (`localStorage`, `webide.llm.active.<projet>`) et rouverte au rechargement ; changer de projet repart d'une conversation vide.
 
 ## Transcription vocale locale
 

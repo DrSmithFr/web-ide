@@ -3,6 +3,7 @@
 import { createSignal } from 'solid-js'
 import { createStore, produce, reconcile } from 'solid-js/store'
 import { on, request } from '../pod/rpc'
+import { project } from '../state/project'
 
 export interface ServerView {
   id: string
@@ -68,6 +69,8 @@ export interface ChatMessage {
   tool_call_id?: string
   name?: string
   // Fields of the page only (removed before sending).
+  /** What the user typed (content also holds the text of the attachments). */
+  display?: string
   attachments?: Attachment[]
   usage?: Usage
   error?: string
@@ -84,6 +87,9 @@ export interface ChatMessage {
   /** Summary written by a compaction (role user), and the number of messages it replaces. */
   kind?: 'summary'
   summarized?: number
+  /** Time spent thinking, and from the request to the end of the answer (ms). */
+  thinkMs?: number
+  elapsedMs?: number
 }
 
 export interface DiffLine {
@@ -107,6 +113,7 @@ export interface ChatInfo {
   id: string
   title: string
   updated: number
+  model?: string
 }
 
 export const [config, setConfig] = createStore<{ servers: ServerView[]; server: string; model: string }>({ servers: [], server: '', model: '' })
@@ -118,8 +125,34 @@ export const [serverKind, setServerKind] = createSignal('')
 export const [chat, setChat] = createStore<Chat>(emptyChat())
 export const [chatList, setChatList] = createSignal<ChatInfo[]>([])
 
-/** Answer being streamed. */
-export const [live, setLive] = createStore({ busy: false, content: '', reasoning: '', tool: '', stream: '', compacting: false })
+/**
+ * Answer being streamed, with its counters: request start, first token, reasoning span,
+ * tokens so far, speed told by the server, progress of the prompt reading.
+ */
+export const [live, setLive] = createStore({
+  busy: false,
+  content: '',
+  reasoning: '',
+  tool: '',
+  stream: '',
+  compacting: false,
+  startedAt: 0,
+  firstAt: 0,
+  thinkStart: 0,
+  thinkEnd: 0,
+  tokens: 0,
+  speed: 0,
+  promptDone: 0,
+  promptTotal: 0,
+})
+
+/** Live speed in tokens per second (server value, else measured since the first token). */
+export function liveSpeed(now = Date.now()): number {
+  if (live.speed) return live.speed
+  if (!live.firstAt || live.tokens < 2) return 0
+  const s = (now - live.firstAt) / 1000
+  return s > 0.2 ? live.tokens / s : 0
+}
 
 /** Edit waiting for the user (confirmation mode). */
 export interface Approval {
@@ -145,6 +178,8 @@ export const [prefs, setPrefs] = createStore({
   compactAt: 75,
   compactServer: '',
   compactModel: '',
+  /** History side bar open (when it is not always shown). */
+  sidebarOpen: false,
 })
 try {
   const p = JSON.parse(localStorage.getItem('webide.llm.prefs') ?? 'null')
@@ -276,11 +311,12 @@ export async function saveChat() {
   setChat('updated', Date.now())
   if (!chat.title) {
     const first = chat.messages.find((m) => m.role === 'user')
-    const text = typeof first?.content === 'string' ? first.content : first?.content?.find((p) => p.type === 'text')?.text
+    const text = first?.display ?? (typeof first?.content === 'string' ? first.content : first?.content?.find((p) => p.type === 'text')?.text)
     setChat('title', (text ?? first?.attachments?.[0]?.name ?? 'Conversation').replace(/\s+/g, ' ').trim().slice(0, 80))
   }
   try {
     await request('llm.chats.save', { chat: JSON.parse(JSON.stringify(chat)) })
+    rememberActive()
     refreshChats()
   } catch {
     /* kept in memory */
@@ -290,10 +326,51 @@ export async function saveChat() {
 export async function openChat(id: string) {
   const c = await request<Chat>('llm.chats.get', { id })
   setChat(reconcile(c))
+  rememberActive()
 }
 
 export function resetChat() {
   setChat(reconcile(emptyChat()))
+  rememberActive()
+}
+
+// ---------- active conversation (restored after a reload) ----------
+
+let chatProject = ''
+const activeKey = () => `webide.llm.active.${project()?.id ?? ''}`
+
+function rememberActive() {
+  try {
+    if (chat.messages.length) localStorage.setItem(activeKey(), chat.id)
+    else localStorage.removeItem(activeKey())
+  } catch {
+    /* private mode */
+  }
+}
+
+/**
+ * Shows the conversation of the open project: the one last active in this browser, or a
+ * new one. Called when the panel opens; nothing changes when the project is the same.
+ */
+export async function restoreActive() {
+  const pid = project()?.id ?? ''
+  if (!pid || pid === chatProject) return
+  const changed = chatProject !== ''
+  chatProject = pid
+  if (changed) setChat(reconcile(emptyChat()))
+  let id: string | null = null
+  try {
+    id = localStorage.getItem(activeKey())
+  } catch {
+    /* private mode */
+  }
+  if (id && !chat.messages.length) await openChat(id).catch(() => {})
+}
+
+export async function renameChat(id: string, title: string) {
+  await request('llm.chats.rename', { id, title })
+  if (chat.id === id) setChat('title', title)
+  refreshChats()
 }
 
 export async function deleteChat(id: string) {

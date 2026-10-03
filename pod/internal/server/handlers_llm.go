@@ -69,7 +69,10 @@ func (s *Server) registerLLM() {
 			return nil, err
 		}
 		return s.LLM.Chat(ctx, a.ChatRequest, func(d llm.Delta) {
-			c.push("llm.delta", map[string]any{"stream": a.Stream, "content": d.Content, "reasoning": d.Reasoning, "tool": d.Tool})
+			c.push("llm.delta", struct {
+				Stream string `json:"stream"`
+				llm.Delta
+			}{a.Stream, d})
 		})
 	})
 
@@ -132,6 +135,13 @@ func (s *Server) registerLLM() {
 			return nil, err
 		}
 		return nil, s.LLM.DeleteChat(loc(c, rt), a.ID)
+	}))
+	s.handle("llm.chats.rename", withProject(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
+		a, err := bind[struct{ ID, Title string }](p)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.LLM.RenameChat(loc(c, rt), a.ID, a.Title)
 	}))
 	s.handle("llm.context", withProject(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
 		return s.LLM.LoadContext(proj(rt)), nil

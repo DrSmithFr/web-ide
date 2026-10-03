@@ -31,16 +31,52 @@ const MAX_STEPS = 30
 
 let ctrl: AbortController | null = null
 
-on('llm.delta', (d: { stream: string; content: string; reasoning: string; tool: string }) => {
+interface DeltaEvent {
+  stream: string
+  content?: string
+  reasoning?: string
+  tool?: string
+  tokens?: number
+  speed?: number
+  promptDone?: number
+  promptTotal?: number
+}
+
+on('llm.delta', (d: DeltaEvent) => {
   if (d.stream !== live.stream) return
+  const now = Date.now()
   setLive(
     produce((l) => {
-      l.content += d.content
-      l.reasoning += d.reasoning
-      if (d.tool) l.tool = d.tool
+      if (d.reasoning) {
+        if (!l.thinkStart) l.thinkStart = now
+        l.reasoning += d.reasoning
+      }
+      if (d.content || d.tool) {
+        if (l.thinkStart && !l.thinkEnd) l.thinkEnd = now
+        if (d.content) l.content += d.content
+        if (d.tool) l.tool = d.tool
+      }
+      if (!l.firstAt && (d.content || d.reasoning || d.tool)) l.firstAt = now
+      if (d.tokens) l.tokens = d.tokens
+      if (d.speed) l.speed = d.speed
+      if (d.promptTotal) {
+        l.promptDone = d.promptDone ?? 0
+        l.promptTotal = d.promptTotal
+      }
     }),
   )
 })
+
+const resetLive = { content: '', reasoning: '', tool: '', startedAt: 0, firstAt: 0, thinkStart: 0, thinkEnd: 0, tokens: 0, speed: 0, promptDone: 0, promptTotal: 0 }
+
+/** Timing of the answer just finished, kept on its message. */
+function timing() {
+  const now = Date.now()
+  return {
+    thinkMs: live.thinkStart ? (live.thinkEnd || now) - live.thinkStart : undefined,
+    elapsedMs: live.startedAt ? now - live.startedAt : undefined,
+  }
+}
 
 function useTools() {
   return prefs.tools && currentModel()?.caps.tools !== false
@@ -96,7 +132,7 @@ export async function send(text: string, parts: Part[], attachments: ChatMessage
       c.model = config.model
     }),
   )
-  pushMessage({ role: 'user', content, attachments: attachments?.length ? attachments : undefined })
+  pushMessage({ role: 'user', content, display: parts.length ? text : undefined, attachments: attachments?.length ? attachments : undefined })
   saveChat()
   await run()
 }
@@ -127,7 +163,7 @@ const contextError = /context|exceed|too long|too many tokens|n_ctx|num_ctx|long
 async function run() {
   const c = new AbortController()
   ctrl = c
-  setLive({ busy: true, content: '', reasoning: '', tool: '', stream: '' })
+  setLive({ busy: true, stream: '', ...resetLive })
   try {
     // Instructions and skills may have changed since the last message.
     await loadPromptContext()
@@ -136,7 +172,7 @@ async function run() {
       if (needsCompaction()) await compact(false, c.signal).catch((e) => console.warn('compaction', e))
       if (c.signal.aborted) return
       const stream = newId()
-      setLive({ content: '', reasoning: '', tool: '', stream })
+      setLive({ ...resetLive, stream, startedAt: Date.now() })
       const model = currentModel()
       let res: any
       try {
@@ -173,6 +209,7 @@ async function run() {
             content: live.content,
             reasoning_content: live.reasoning || undefined,
             model: config.model,
+            ...timing(),
             error: canceled ? 'Arrêté.' : (e as Error).message,
           })
         }
@@ -186,9 +223,10 @@ async function run() {
         tool_calls: msg.tool_calls?.length ? msg.tool_calls : undefined,
         usage: res.usage,
         model: config.model,
+        ...timing(),
         error: res.finish === 'length' ? 'Réponse coupée : limite de longueur atteinte.' : undefined,
       })
-      setLive({ content: '', reasoning: '', tool: '' })
+      setLive({ ...resetLive })
       // A model loaded on demand tells its context size only once loaded.
       if (!contextSize()) loadModels().catch(() => {})
       if (!msg.tool_calls?.length) return
@@ -212,7 +250,7 @@ async function run() {
     pushMessage({ role: 'assistant', content: '', error: `Arrêt après ${MAX_STEPS} étapes d’outils.` })
   } finally {
     if (ctrl === c) ctrl = null
-    setLive({ busy: false, content: '', reasoning: '', tool: '', stream: '', compacting: false })
+    setLive({ busy: false, stream: '', compacting: false, ...resetLive })
     setApproval(null)
     saveChat()
   }

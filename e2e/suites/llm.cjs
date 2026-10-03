@@ -69,10 +69,10 @@ const fake = http.createServer(async (req, res) => {
 
   if (userText(lastUser).includes('lent')) {
     res.on('close', () => (slowClosed = true))
-    chunk(res, { content: 'Je commence' })
+    chunk(res, { content: 'Je commence\n\n```mermaid\ngraph TD\n  A-->B\n```\n\n' })
     for (let i = 0; i < 100 && !res.destroyed; i++) {
       await sleep(100)
-      chunk(res, { content: '.' })
+      chunk(res, { content: '.' }, { timings: { predicted_n: i + 5, predicted_per_second: 10 } })
     }
     return finish(res, 'stop')
   }
@@ -121,9 +121,11 @@ run(async ({ page }) => {
     await page.click('.ai-servers button:has-text("Ajouter")')
     await page.waitForSelector('.ai-server-row:has-text("127.0.0.1")')
     await page.click('.ai-servers .modal-head button')
-    await page.waitForFunction(() => document.querySelector('.ai-modelbar select.grow')?.value === 'fake-model', null, { timeout: 5000 })
+    await page.waitForSelector('[data-testid=model-pill]:has-text("fake-model")', { timeout: 5000 })
     assert(true, 'serveur ajouté, modèle choisi automatiquement')
-    assert(await page.isVisible('.ai-caps .badge:has-text("image")'), 'capacités du modèle affichées')
+    await page.click('[data-testid=model-pill]')
+    assert(await page.isVisible('.ai-model-item.active .badge:has-text("image")'), 'capacités du modèle affichées dans le choix du modèle')
+    await page.keyboard.press('Escape')
     const stored = JSON.parse(fs.readFileSync(process.env.E2E_WS + '/../data/llm.json', 'utf8'))
     assert(stored.servers[0].url === `http://127.0.0.1:${port}` && stored.model === 'fake-model', 'configuration enregistrée dans llm.json')
 
@@ -136,8 +138,13 @@ run(async ({ page }) => {
     assert(fs.readFileSync(WS + '/demo/src/main.go', 'utf8').includes('Bonjour'), 'rien n’est écrit avant confirmation')
     await page.screenshot({ path: OUT + '/llm-approval.png' })
     await page.click('[data-testid=ai-approval] button:has-text("Appliquer")')
-    await page.waitForSelector('.ai-msg.assistant .md-codeblock', { timeout: 10000 })
-    await page.waitForSelector('.md-mermaid-svg svg', { timeout: 15000 }).catch(() => {})
+    // The final answer (not the one being written) with its diagram.
+    await page.waitForSelector('.ai-msg.assistant:not(.live) .md-codeblock', { timeout: 15000 })
+    await page.waitForSelector('.ai-msg.assistant:not(.live) .md-mermaid-svg svg', { timeout: 30000 }).catch(() => {})
+    if (!(await page.isVisible('.md-mermaid-svg svg'))) {
+      await page.screenshot({ path: OUT + '/llm-mermaid-fail.png' })
+      console.log('    DOM :', await page.$$eval('.ai-msg.assistant', (e) => e.map((x) => x.className + ' ' + x.querySelector('.md')?.innerHTML.slice(0, 300)).join('\n    ')))
+    }
     assert(await page.isVisible('.md-mermaid-svg svg'), 'diagramme Mermaid rendu')
     const labels = await page.$$eval('.md-mermaid-svg svg text, .md-mermaid-svg svg tspan', (e) => e.map((x) => x.textContent).join(' '))
     assert(labels.includes('main') && labels.includes('Hello'), 'libellés du diagramme visibles : ' + labels)
@@ -148,7 +155,7 @@ run(async ({ page }) => {
 
     const tools = await page.$$eval('.ai-tool', (els) => els.map((e) => ({ cls: e.className, text: e.textContent })))
     assert(tools.length === 3 && tools.every((t) => t.cls.includes('ok')), 'trois appels d’outils réussis : ' + JSON.stringify(tools.map((t) => t.text)))
-    assert(tools[0].text.includes('read_file') && tools[0].text.includes('lignes 1-'), 'read_file résumé')
+    assert(tools[0].text.includes('Lit') && tools[0].text.includes('src/main.go') && tools[0].text.includes('lignes 1-'), 'read_file résumé : ' + tools[0].text)
     const second = requests[1]
     const readResult = second.messages.find((m) => m.role === 'tool' && m.tool_call_id === 'c1')
     const symResult = second.messages.find((m) => m.role === 'tool' && m.tool_call_id === 'c2')
@@ -163,13 +170,13 @@ run(async ({ page }) => {
     // Saved conversation: history, new chat, reopen.
     await page.waitForTimeout(300)
     await page.click('.ai-panel button[title="Conversations du projet"]')
-    await page.waitForSelector('.ai-history-row:has-text("Remplace Bonjour")')
-    assert(true, 'conversation listée dans l’historique')
-    await page.click('.ai-panel button[title="Conversations du projet"]')
-    await page.click('.ai-panel button[title="Nouvelle conversation"]')
+    await page.waitForSelector('.ai-chat-item.active:has-text("Remplace Bonjour")')
+    assert(await page.isVisible('.ai-side-wrap.overlay'), 'historique en panneau latéral (par-dessus quand le panneau est étroit)')
+    await page.click('.ai-new-chat')
     await page.waitForSelector('.ai-empty')
+    assert(!(await page.isVisible('.ai-side-wrap')), 'le panneau se replie après le choix')
     await page.click('.ai-panel button[title="Conversations du projet"]')
-    await page.click('.ai-history-open:has-text("Remplace Bonjour")')
+    await page.click('.ai-chat-open:has-text("Remplace Bonjour")')
     await page.waitForSelector('.ai-msg.assistant .md-codeblock')
     assert((await page.$$('.ai-tool')).length === 3, 'conversation rouverte avec ses appels d’outils')
 
@@ -179,7 +186,7 @@ run(async ({ page }) => {
     await page.setInputFiles('.ai-composer input[type=file]', { name: 'pixel.png', mimeType: 'image/png', buffer: png })
     await page.waitForSelector('.ai-composer .ai-att:has-text("pixel.png")')
     await page.fill('.ai-composer textarea', 'Que vois-tu ?')
-    await page.click('.ai-composer button:has-text("Envoyer")')
+    await page.click('[data-testid=send]')
     await page.waitForSelector('.ai-msg.assistant .md:has-text("Je vois une image.")', { timeout: 10000 })
     assert(await page.isVisible('.ai-msg.user .ai-att img'), 'vignette de la pièce jointe dans le message')
     assert(true, 'image envoyée en image_url au modèle')
@@ -187,7 +194,7 @@ run(async ({ page }) => {
     // PDF attachment: its text is extracted by pdf.js (worker loaded on demand).
     await page.setInputFiles('.ai-composer input[type=file]', { name: 'doc.pdf', mimeType: 'application/pdf', buffer: tinyPdf('Bonjour du PDF') })
     await page.waitForSelector('.ai-composer .ai-att:has-text("doc.pdf")', { timeout: 10000 })
-    await page.click('.ai-composer button:has-text("Envoyer")')
+    await page.click('[data-testid=send]')
     await page.waitForFunction(() => document.querySelectorAll('.ai-msg.assistant .md').length >= 2, null, { timeout: 10000 }).catch(() => {})
     const pdfAnswer = await page.$$eval('.ai-msg.assistant .md, .ai-error', (e) => e[e.length - 1]?.textContent)
     assert(pdfAnswer?.trim() === 'Le PDF dit bonjour.', 'texte du PDF extrait et envoyé : ' + pdfAnswer)
@@ -196,12 +203,17 @@ run(async ({ page }) => {
     await page.fill('.ai-composer textarea', 'réponds lentement')
     await page.keyboard.press('Enter')
     await page.waitForSelector('.ai-msg.live .md:has-text("Je commence")', { timeout: 5000 })
-    await page.click('.ai-composer button:has-text("Arrêter")')
+    const drawn = await page.waitForSelector('.ai-msg.live .md-mermaid-svg svg', { timeout: 8000 }).then(() => true, () => false)
+    assert(drawn, 'diagramme Mermaid dessiné pendant le stream')
+    const stats = await page.waitForFunction(() => /10\.0 jetons\/s · \d+ jetons · [\d.]+ s/.test(document.querySelector('[data-testid=ai-live-stats]')?.textContent ?? ''), null, { timeout: 5000 }).then(() => true, () => false)
+    assert(stats, 'vitesse, jetons et temps écoulé pendant la réponse : ' + (await page.textContent('[data-testid=ai-live-stats]').catch(() => '')))
+    await page.screenshot({ path: OUT + '/llm-live.png' })
+    await page.click('[data-testid=stop]')
     await page.waitForSelector('.ai-error:has-text("Arrêté")', { timeout: 5000 })
     await page.waitForTimeout(300)
     assert(slowClosed, 'la requête au serveur de modèles est annulée')
     assert((await page.$$eval('.ai-msg.assistant .md', (e) => e[e.length - 1].textContent)).startsWith('Je commence'), 'le début de la réponse est gardé')
-    assert(await page.isVisible('.ai-retry button'), 'bouton Relancer proposé')
+    assert(await page.isVisible('.ai-act[title="Régénérer la réponse"]'), 'bouton Régénérer proposé')
   } finally {
     fake.close()
   }

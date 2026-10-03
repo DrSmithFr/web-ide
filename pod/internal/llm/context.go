@@ -80,6 +80,10 @@ func (m *Manager) LoadContext(p Project) *Context {
 	for _, rel := range globalMemory {
 		c.Files = append(c.Files, readMemory(local, "global", filepath.Join(h, rel), seen, 0)...)
 	}
+	// The data folder of the IDE (~/.web-ide) can hold its own global instructions.
+	for _, name := range []string{"CLAUDE.md", "AGENTS.md"} {
+		c.Files = append(c.Files, readMemory(local, "global", m.st.Path(name), seen, 0)...)
+	}
 	for _, rel := range projectMemory {
 		c.Files = append(c.Files, readMemory(p.FS, "project", path.Join(p.Root, rel), seen, 0)...)
 	}
@@ -88,6 +92,8 @@ func (m *Manager) LoadContext(p Project) *Context {
 	for _, d := range skillDirs {
 		c.Skills = append(c.Skills, listSkills(p.FS, "project", path.Join(p.Root, d), names)...)
 	}
+	// Global skills: those of the IDE data folder first, then the Claude Code ones.
+	c.Skills = append(c.Skills, listSkills(local, "global", m.st.Path("skills"), names)...)
 	for _, d := range skillDirs {
 		c.Skills = append(c.Skills, listSkills(local, "global", filepath.Join(h, d), names)...)
 	}

@@ -245,6 +245,15 @@ func saveChat(db *sql.DB, data json.RawMessage) error {
 	return tx.Commit()
 }
 
+func (m *Manager) RenameChat(loc ChatLocation, id, title string) error {
+	db, err := m.chatDB(loc)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`UPDATE chats SET title = ? WHERE id = ?`, strings.TrimSpace(title), id)
+	return err
+}
+
 func (m *Manager) DeleteChat(loc ChatLocation, id string) error {
 	db, err := m.chatDB(loc)
 	if err != nil {

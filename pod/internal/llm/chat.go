@@ -58,11 +58,17 @@ type ChatResult struct {
 }
 
 // Delta is a piece of the answer pushed while it streams. Tool is the name of a tool
-// call being written (its arguments are not streamed).
+// call being written (its arguments are not streamed). The counters are totals so far:
+// tokens generated, speed told by the server (0: the page computes it), and the progress
+// of the prompt reading (llama.cpp).
 type Delta struct {
-	Content   string `json:"content,omitempty"`
-	Reasoning string `json:"reasoning,omitempty"`
-	Tool      string `json:"tool,omitempty"`
+	Content     string  `json:"content,omitempty"`
+	Reasoning   string  `json:"reasoning,omitempty"`
+	Tool        string  `json:"tool,omitempty"`
+	Tokens      int     `json:"tokens,omitempty"`
+	Speed       float64 `json:"speed,omitempty"`
+	PromptDone  int     `json:"promptDone,omitempty"`
+	PromptTotal int     `json:"promptTotal,omitempty"`
 }
 
 // Chat runs one completion. onDelta receives the pieces grouped every ~40 ms.
@@ -100,6 +106,16 @@ func (b *batcher) add(d Delta) {
 	if d.Tool != "" {
 		b.cur.Tool = d.Tool
 	}
+	// Counters are totals: the last value wins.
+	if d.Tokens > 0 {
+		b.cur.Tokens = d.Tokens
+	}
+	if d.Speed > 0 {
+		b.cur.Speed = d.Speed
+	}
+	if d.PromptTotal > 0 {
+		b.cur.PromptDone, b.cur.PromptTotal = d.PromptDone, d.PromptTotal
+	}
 	if time.Since(b.last) >= 40*time.Millisecond {
 		b.flush()
 	}
@@ -132,6 +148,10 @@ func (m *Manager) openaiChat(ctx context.Context, s Server, req ChatRequest, b *
 	if req.Think != nil {
 		body["chat_template_kwargs"] = map[string]bool{"enable_thinking": *req.Think}
 	}
+	// llama.cpp: timings in every chunk and progress of the prompt reading (other servers
+	// ignore these fields; tokens are then counted from the chunks).
+	body["timings_per_token"] = true
+	body["return_progress"] = true
 	resp, err := m.do(ctx, s, http.MethodPost, "/v1/chat/completions", body)
 	if err != nil {
 		return nil, err
@@ -141,6 +161,7 @@ func (m *Manager) openaiChat(ctx context.Context, s Server, req ChatRequest, b *
 	var content, reasoning strings.Builder
 	var calls []ToolCall
 	res := &ChatResult{}
+	chunks, serverTokens := 0, 0
 	sc := bufio.NewScanner(resp.Body)
 	sc.Buffer(make([]byte, 64*1024), 16<<20)
 	for sc.Scan() {
@@ -177,10 +198,15 @@ func (m *Manager) openaiChat(ctx context.Context, s Server, req ChatRequest, b *
 				} `json:"prompt_tokens_details"`
 			} `json:"usage"`
 			Timings *struct {
+				PredictedN         int     `json:"predicted_n"`
 				PredictedMs        float64 `json:"predicted_ms"`
 				PromptMs           float64 `json:"prompt_ms"`
 				PredictedPerSecond float64 `json:"predicted_per_second"`
 			} `json:"timings"`
+			Progress *struct {
+				Total     int `json:"total"`
+				Processed int `json:"processed"`
+			} `json:"prompt_progress"`
 			Error json.RawMessage `json:"error"`
 		}
 		if json.Unmarshal(data, &chunk) != nil {
@@ -189,11 +215,27 @@ func (m *Manager) openaiChat(ctx context.Context, s Server, req ChatRequest, b *
 		if len(chunk.Error) > 0 {
 			return nil, errors.New(errorMessage(data))
 		}
+		stats := Delta{}
+		if t := chunk.Timings; t != nil && t.PredictedN > 0 {
+			serverTokens = t.PredictedN
+			stats.Speed = t.PredictedPerSecond
+		}
+		stats.Tokens = serverTokens
+		if p := chunk.Progress; p != nil && p.Total > 0 {
+			stats.PromptDone, stats.PromptTotal = p.Processed, p.Total
+		}
 		for _, c := range chunk.Choices {
 			d := c.Delta
 			content.WriteString(d.Content)
 			reasoning.WriteString(d.Reasoning)
-			delta := Delta{Content: d.Content, Reasoning: d.Reasoning}
+			delta := stats
+			delta.Content, delta.Reasoning = d.Content, d.Reasoning
+			if d.Content != "" || d.Reasoning != "" || len(d.ToolCalls) > 0 {
+				chunks++
+				if serverTokens == 0 {
+					delta.Tokens = chunks // no timings from this server: about one token per chunk
+				}
+			}
 			for _, tc := range d.ToolCalls {
 				for len(calls) <= tc.Index {
 					calls = append(calls, ToolCall{Type: "function"})
@@ -212,6 +254,9 @@ func (m *Manager) openaiChat(ctx context.Context, s Server, req ChatRequest, b *
 			if c.FinishReason != "" {
 				res.Finish = c.FinishReason
 			}
+		}
+		if len(chunk.Choices) == 0 && stats != (Delta{}) {
+			b.add(stats)
 		}
 		if chunk.Usage != nil {
 			u := &Usage{Prompt: chunk.Usage.Prompt, Completion: chunk.Usage.Completion}
@@ -355,6 +400,7 @@ func (m *Manager) ollamaChat(ctx context.Context, s Server, req ChatRequest, b *
 	var content, reasoning strings.Builder
 	var calls []ToolCall
 	res := &ChatResult{}
+	chunks := 0
 	dec := json.NewDecoder(resp.Body)
 	for {
 		var chunk struct {
@@ -383,6 +429,10 @@ func (m *Manager) ollamaChat(ctx context.Context, s Server, req ChatRequest, b *
 		content.WriteString(mm.Content)
 		reasoning.WriteString(mm.Thinking)
 		delta := Delta{Content: mm.Content, Reasoning: mm.Thinking}
+		if mm.Content != "" || mm.Thinking != "" {
+			chunks++ // Ollama sends one token per chunk
+			delta.Tokens = chunks
+		}
 		for _, tc := range mm.ToolCalls {
 			call := ToolCall{Type: "function"}
 			call.Function.Name = tc.Function.Name

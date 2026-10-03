@@ -3,8 +3,11 @@
 import { createResource, createSignal, For, onMount, Show } from 'solid-js'
 import { request } from '../pod/rpc'
 import { openTextTab, relPath } from '../state/project'
+import { Modal } from '../ui/overlay'
 import { errorToast, toast } from '../ui/toast'
-import { config, prefs, savePrefs, setPrefs, type Model } from './state'
+import { applyConfig, config, loadModels, prefs, savePrefs, select, setPrefs, type Model, type ServerView } from './state'
+import { languages, probeGpu, speech, whisperModels } from './transcribe'
+import { formatSize } from './parts'
 import { buildSystemPrompt, DEFAULT_TEMPLATE, loadPromptContext, promptContext, templateOf } from './prompt'
 
 function size(n: number) {
@@ -160,5 +163,204 @@ export function CompactionSettings() {
         <p class="warn small">Choisir le modèle qui résume, sinon la compaction échouera.</p>
       </Show>
     </div>
+  )
+}
+
+function SpeechSettings() {
+  const [cached, { refetch }] = createResource(() => request<{ repo: string; size: number }[]>('models.list').catch(() => []))
+  onMount(probeGpu)
+  const set = (k: 'whisperModel' | 'whisperLang', v: string) => {
+    setPrefs(k, v)
+    savePrefs()
+  }
+  return (
+    <fieldset class="fieldset" data-testid="speech-settings">
+      <legend>Transcription locale (Whisper)</legend>
+      <p class="muted small">
+        Dictée au micro et fichiers audio transcrits dans le navigateur : le son ne quitte pas cette machine. Le modèle est téléchargé une fois par le pod (dossier <code>models</code> des données) puis fonctionne hors ligne.
+        {speech.device ? ` Moteur : ${speech.device === 'webgpu' ? 'WebGPU (carte graphique)' : 'WebAssembly (processeur)'}.` : ''}
+      </p>
+      <div class="field-row">
+        <label class="field grow">
+          <span>Modèle</span>
+          <select value={prefs.whisperModel} onChange={(e) => set('whisperModel', e.currentTarget.value)} name="whisperModel">
+            <For each={whisperModels}>
+              {(m) => (
+                <option value={m.id} disabled={m.webgpuOnly && !(speech.device === 'webgpu' && speech.f16)}>
+                  {m.label} · {speech.device === 'webgpu' ? m.size.webgpu : m.size.wasm || m.size.webgpu}
+                </option>
+              )}
+            </For>
+          </select>
+        </label>
+        <label class="field">
+          <span>Langue parlée</span>
+          <select value={prefs.whisperLang} onChange={(e) => set('whisperLang', e.currentTarget.value)} name="whisperLang">
+            <For each={languages}>{([id, label]) => <option value={id}>{label}</option>}</For>
+          </select>
+        </label>
+      </div>
+      <label class="check small">
+        <input type="checkbox" checked={prefs.audioToModel} onChange={(e) => (setPrefs('audioToModel', e.currentTarget.checked), savePrefs())} />
+        Envoyer les fichiers audio tels quels aux modèles qui écoutent l’audio (sinon : transcription locale)
+      </label>
+      <Show when={(cached() ?? []).length}>
+        <div class="small">
+          <For each={cached()}>
+            {(c) => (
+              <div class="ai-server-row">
+                <span class="grow mono">{c.repo}</span>
+                <span class="muted">{formatSize(c.size)}</span>
+                <button
+                  type="button"
+                  class="btn small danger"
+                  onClick={async () => {
+                    await request('models.delete', { repo: c.repo }).catch(errorToast)
+                    refetch()
+                  }}
+                >
+                  Supprimer
+                </button>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+    </fieldset>
+  )
+}
+
+export function SettingsModal(props: { onClose: () => void }) {
+  const blank = { id: '', name: '', kind: 'auto' as ServerView['kind'], url: '', apiKey: '', context: 0, hasKey: false, clearKey: false }
+  const [form, setForm] = createSignal({ ...blank })
+  const [busy, setBusy] = createSignal(false)
+  const edit = (s: ServerView) => setForm({ ...blank, ...s, apiKey: '', context: s.context ?? 0 })
+  const field = (k: keyof ReturnType<typeof form>) => (e: Event) => setForm({ ...form(), [k]: (e.currentTarget as HTMLInputElement).value })
+  const save = async (e: Event) => {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      const f = form()
+      const view = await request('llm.server.save', { id: f.id, name: f.name.trim(), kind: f.kind, url: f.url, apiKey: f.apiKey, context: Number(f.context) || 0, clearKey: f.clearKey })
+      applyConfig(view)
+      const saved = f.id ? view.servers.find((s: ServerView) => s.id === f.id) : view.servers[view.servers.length - 1]
+      setForm({ ...blank })
+      if (saved && !config.server) await select(saved.id, '')
+      else if (saved?.id === config.server) await loadModels()
+      toast('Serveur enregistré', 'ok')
+    } catch (err) {
+      errorToast(err)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const remove = async (s: ServerView) => {
+    if (!confirm(`Supprimer le serveur « ${s.name} » ?`)) return
+    try {
+      applyConfig(await request('llm.server.delete', { id: s.id }))
+      if (config.server === s.id) await select('', '')
+    } catch (err) {
+      errorToast(err)
+    }
+  }
+  type Tab = 'servers' | 'prompt' | 'compaction' | 'speech'
+  const [tab, setTab] = createSignal<Tab>('servers')
+  const tabs: [Tab, string][] = [
+    ['servers', 'Serveurs'],
+    ['prompt', 'Prompt et instructions'],
+    ['compaction', 'Compaction'],
+    ['speech', 'Transcription'],
+  ]
+  return (
+    <Modal title="Réglages de l’assistant" onClose={props.onClose} class="ai-servers modal-wide">
+      <div class="ai-tabs" role="tablist">
+        <For each={tabs}>
+          {([id, label]) => (
+            <button type="button" role="tab" class="ai-tab" classList={{ active: tab() === id }} aria-selected={tab() === id} onClick={() => setTab(id)}>
+              {label}
+            </button>
+          )}
+        </For>
+      </div>
+      <Show when={tab() === 'prompt'}>
+        <PromptSettings />
+      </Show>
+      <Show when={tab() === 'compaction'}>
+        <CompactionSettings />
+      </Show>
+      <Show when={tab() === 'speech'}>
+        <SpeechSettings />
+      </Show>
+      <div class="form" style={{ display: tab() === 'servers' ? undefined : 'none' }}>
+        <For each={config.servers} fallback={<p class="muted">Aucun serveur. Ajoutez llama.cpp (llama-server) ou Ollama ci-dessous.</p>}>
+          {(s) => (
+            <div class="ai-server-row">
+              <div class="grow">
+                <strong>{s.name}</strong>
+                <div class="muted small mono">
+                  {s.url} · {s.kind === 'auto' ? 'détection auto' : s.kind === 'ollama' ? 'Ollama' : 'llama.cpp / OpenAI'}
+                  {s.hasKey ? ' · clé API' : ''}
+                </div>
+              </div>
+              <button class="btn small" onClick={() => edit(s)}>
+                Modifier
+              </button>
+              <button class="btn small danger" onClick={() => remove(s)}>
+                Supprimer
+              </button>
+            </div>
+          )}
+        </For>
+        <form class="fieldset" onSubmit={save}>
+          <legend>{form().id ? 'Modifier le serveur' : 'Ajouter un serveur'}</legend>
+          <div class="field-row">
+            <label class="field grow">
+              <span>Adresse (IP:port ou URL)</span>
+              <input value={form().url} onInput={field('url')} placeholder="127.0.0.1:8080" required name="url" />
+            </label>
+            <label class="field">
+              <span>Type</span>
+              <select value={form().kind} onChange={field('kind')} name="kind">
+                <option value="auto">Détection auto</option>
+                <option value="llamacpp">llama.cpp / OpenAI</option>
+                <option value="ollama">Ollama</option>
+              </select>
+            </label>
+          </div>
+          <div class="field-row">
+            <label class="field grow">
+              <span>Nom (facultatif)</span>
+              <input value={form().name} onInput={field('name')} name="name" />
+            </label>
+            <label class="field grow">
+              <span>Clé API (facultative)</span>
+              <input type="password" value={form().apiKey} onInput={field('apiKey')} placeholder={form().hasKey ? 'inchangée' : ''} autocomplete="off" name="apiKey" />
+            </label>
+          </div>
+          <Show when={form().kind !== 'llamacpp'}>
+            <label class="field">
+              <span>Contexte demandé à Ollama (num_ctx, 0 = défaut du modèle)</span>
+              <input type="number" min="0" step="1024" value={form().context} onInput={field('context')} class="w-next" name="context" />
+            </label>
+          </Show>
+          <Show when={form().hasKey}>
+            <label class="check small">
+              <input type="checkbox" checked={form().clearKey} onChange={(e) => setForm({ ...form(), clearKey: e.currentTarget.checked })} />
+              Supprimer la clé enregistrée
+            </label>
+          </Show>
+          <div class="form-actions">
+            <Show when={form().id}>
+              <button type="button" class="btn" onClick={() => setForm({ ...blank })}>
+                Annuler
+              </button>
+            </Show>
+            <button class="btn primary" disabled={busy()}>
+              {form().id ? 'Enregistrer' : 'Ajouter'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </Modal>
   )
 }

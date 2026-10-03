@@ -49,10 +49,14 @@ const md = new Marked({
   gfm: true,
   breaks: false,
   renderer: {
-    code({ text, lang }: Tokens.Code) {
+    code({ text, lang, raw }: Tokens.Code) {
       const l = (lang ?? '').trim().split(/\s+/)[0]
       // URI-encoded: DOMPurify drops attributes containing "-->", the arrow of Mermaid.
-      if (l === 'mermaid') return `<div class="md-mermaid" data-src="${encodeURIComponent(text)}"><pre class="md-code"><code>${escape(text)}</code></pre></div>`
+      // data-closed: the closing fence has arrived (a streamed diagram can be drawn).
+      if (l === 'mermaid') {
+        const closed = /\n\s*(```|~~~)\s*$/.test(raw)
+        return `<div class="md-mermaid${closed ? '' : ' md-mermaid-pending'}" data-src="${encodeURIComponent(text)}"${closed ? ' data-closed="1"' : ''}><div class="md-mermaid-wait">Diagramme en cours d’écriture…</div><pre class="md-code"><code>${escape(text)}</code></pre></div>`
+      }
       return `<div class="md-codeblock"><div class="md-code-head"><span>${escape(l)}</span><button class="md-copy" type="button">Copier</button></div><pre class="md-code"><code>${highlightCode(text, l)}</code></pre></div>`
     },
     link({ href, title, tokens }: Tokens.Link) {
@@ -71,38 +75,72 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
 
 export function renderMarkdown(text: string): string {
   const html = md.parse(text, { async: false }) as string
-  return DOMPurify.sanitize(html, { ADD_ATTR: ['target', 'data-src'], FORBID_TAGS: ['style', 'form', 'input'] })
+  return DOMPurify.sanitize(html, { ADD_ATTR: ['target', 'data-src', 'data-closed'], FORBID_TAGS: ['style', 'form', 'input'] })
 }
 
 let mermaidSeq = 0
 let mermaidLoad: Promise<any> | null = null
+/** Diagrams already drawn, by source and theme: re-inserted at once on each render. */
+const svgCache = new Map<string, { svg?: string; error?: string }>()
+const drawing = new Map<string, Promise<void>>()
 
-/** Replaces the mermaid blocks of el by their diagram (the source stays on error). */
-export async function renderMermaid(el: HTMLElement) {
-  const blocks = [...el.querySelectorAll<HTMLElement>('.md-mermaid:not([data-done])')]
-  if (!blocks.length) return
+function place(b: HTMLElement, r: { svg?: string; error?: string }) {
+  b.dataset.done = '1'
+  if (r.svg) {
+    const box = document.createElement('div')
+    box.className = 'md-mermaid-svg'
+    box.innerHTML = r.svg
+    b.prepend(box)
+    b.querySelector('pre')?.classList.add('md-mermaid-src')
+  } else {
+    const err = document.createElement('div')
+    err.className = 'md-mermaid-error'
+    err.textContent = `Diagramme Mermaid invalide : ${r.error}`
+    b.prepend(err)
+  }
+}
+
+async function draw(key: string, src: string, dark: boolean) {
   mermaidLoad ??= import('mermaid').then((m) => m.default)
   const mermaid = await mermaidLoad
-  const dark = document.documentElement.dataset.theme !== 'light'
   // SVG text labels: the HTML ones (foreignObject) would not survive DOMPurify.
   mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default', securityLevel: 'strict', fontFamily: 'inherit', htmlLabels: false, flowchart: { htmlLabels: false } })
+  const id = `mermaid-${++mermaidSeq}`
+  try {
+    const { svg } = await mermaid.render(id, src)
+    svgCache.set(key, { svg: DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } }) })
+  } catch (e) {
+    svgCache.set(key, { error: (e as Error).message?.split('\n')[0] ?? String(e) })
+    // Mermaid leaves its error drawing in the body.
+    document.getElementById(`d${id}`)?.remove()
+  }
+  if (svgCache.size > 100) svgCache.delete(svgCache.keys().next().value!)
+}
+
+/**
+ * Draws the mermaid blocks of el (the source stays on error). While streaming (final
+ * false), only the blocks whose closing fence has arrived; diagrams already drawn are put
+ * back synchronously, so a re-render does not blink.
+ */
+export async function renderMermaid(el: HTMLElement, final = true) {
+  const dark = document.documentElement.dataset.theme !== 'light'
+  const blocks = [...el.querySelectorAll<HTMLElement>('.md-mermaid:not([data-done])')].filter((b) => final || b.dataset.closed)
+  const todo: [HTMLElement, string, string][] = []
   for (const b of blocks) {
-    b.dataset.done = '1'
-    try {
-      const { svg } = await mermaid.render(`mermaid-${++mermaidSeq}`, decodeURIComponent(b.dataset.src ?? ''))
-      const box = document.createElement('div')
-      box.className = 'md-mermaid-svg'
-      box.innerHTML = DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } })
-      b.prepend(box)
-      b.querySelector('pre')?.classList.add('md-mermaid-src')
-    } catch (e) {
-      const err = document.createElement('div')
-      err.className = 'md-mermaid-error'
-      err.textContent = `Diagramme Mermaid invalide : ${(e as Error).message?.split('\n')[0] ?? e}`
-      b.prepend(err)
-      // Mermaid leaves its error drawing in the body.
-      document.getElementById(`dmermaid-${mermaidSeq}`)?.remove()
+    const src = decodeURIComponent(b.dataset.src ?? '')
+    const key = `${dark ? 'd' : 'l'}:${src}`
+    const hit = svgCache.get(key)
+    if (hit) place(b, hit)
+    else todo.push([b, key, src])
+  }
+  for (const [b, key, src] of todo) {
+    let p = drawing.get(key)
+    if (!p) {
+      p = draw(key, src, dark).finally(() => drawing.delete(key))
+      drawing.set(key, p)
     }
+    await p
+    if (b.isConnected && !b.dataset.done) place(b, svgCache.get(key)!)
   }
 }
 
