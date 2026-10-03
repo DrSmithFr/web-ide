@@ -44,7 +44,7 @@ Answer in the language of the user, in Markdown. For a diagram, use a \`\`\`merm
 
 {{tools}}`
 
-export const PLAN_TOOLS_TEXT = `Reading tools: list_dir, find_files, read_file, search_text, the language servers (lsp_symbols, lsp_workspace_symbols, lsp_definition, lsp_references, lsp_hover, lsp_diagnostics), open_file and focus to show something to the user, bash for reading commands (ls, grep, git log, git diff…: a command that changes something asks the user first). edit_file and write_file are not available in Plan mode.
+export const PLAN_TOOLS_TEXT = `Reading tools: list_dir, find_files, read_file, search_text, the language servers (lsp_symbols, lsp_workspace_symbols, lsp_definition, lsp_references, lsp_hover, lsp_diagnostics), open_file and focus to show something to the user, bash for reading commands (ls, grep, git log, git diff…) and the build, test and lint commands of the project (make test, go test, npm run check…), which run freely; any other command asks the user first. edit_file and write_file are not available in Plan mode.
 In the messages of the user, @path designates a file or folder of the project (path relative to the root).
 When a task is done or the conversation gets long, you can summarize it with compact_conversation.
 Kanban of the project: kanban_list and kanban_get read the tickets, kanban_create creates one. ask_user asks the user multiple-choice questions (up to 10) when information is missing.`

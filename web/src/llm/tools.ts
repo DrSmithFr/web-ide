@@ -9,6 +9,7 @@ import { lineHunks } from '../editor/linediff'
 import { flatten, symbolKinds, toLocations, type DocumentSymbol, type Location } from '../lsp/client'
 import type { DiffLine, ToolCall } from './state'
 import { askUserDef, kanbanReadDefs, kanbanToolNames, kanbanWriteDefs, runKanbanTool } from './kanbanTools'
+import { runsFreely } from './commands'
 import { t, tn } from '../i18n'
 
 export interface ToolResult {
@@ -84,13 +85,13 @@ export const toolDefs = [
   fn(
     'bash',
     'Runs a shell command (sh -c, in the project) and returns its output (stdout and stderr) and exit code. Use it for all your operations: tests, builds, git, command-line tools. No terminal and no input: no interactive command.',
-    { command: str('Commande, ex. "go test ./..."'), cwd: str('Working directory (project root by default)'), timeout: int('Timeout in seconds (120 by default, 1800 max)') },
+    { command: str('Command, e.g. "go test ./..."'), cwd: str('Working directory (project root by default)'), timeout: int('Timeout in seconds (120 by default, 1800 max)') },
     ['command'],
   ),
   fn(
     'run_command',
     'Runs a command in a new console of the IDE, visible to the user (development server, watcher, command they want to follow or use). Waits for its end or the timeout, then returns the start of its output; it keeps running afterwards. For your own operations, use bash.',
-    { command: str('Commande, ex. "npm run dev"'), cwd: str('Working directory (project root by default)'), timeout: int('Seconds to wait before returning (20 by default, 600 max)') },
+    { command: str('Command, e.g. "npm run dev"'), cwd: str('Working directory (project root by default)'), timeout: int('Seconds to wait before returning (20 by default, 600 max)') },
     ['command'],
   ),
   fn('list_consoles', 'Lists the open consoles (terminals and commands) with their state.', {}),
@@ -132,55 +133,6 @@ export function toolsFor(mode: 'plan' | 'build', ticket?: { id: number; role: st
   return [...base, ...kanban, ...exit, agentToolDefs.compact]
 }
 
-// Commands that only read (Plan mode runs them without asking).
-const readCommands = new Set([
-  'ls', 'cat', 'head', 'tail', 'less', 'more', 'grep', 'egrep', 'fgrep', 'rg', 'ag', 'wc', 'file', 'stat', 'pwd', 'echo', 'printf', 'tree', 'du', 'df',
-  'which', 'whereis', 'type', 'env', 'printenv', 'sort', 'uniq', 'cut', 'tr', 'diff', 'cmp', 'jq', 'yq', 'basename', 'dirname', 'realpath', 'readlink',
-  'date', 'whoami', 'id', 'uname', 'hostname', 'ps', 'nl', 'column', 'md5sum', 'sha256sum', 'true', 'false', 'test', '[', 'awk', 'sed', 'find', 'go', 'git',
-  'npm', 'node', 'python', 'python3', 'php', 'composer', 'cargo', 'make', 'docker',
-])
-const readSub: Record<string, RegExp> = {
-  git: /^(status|log|diff|show|blame|ls-files|ls-tree|grep|rev-parse|describe|shortlog|reflog|cat-file|config\s+--get|remote(\s+-v)?$|branch(\s+(-a|-r|-v|-vv|--list|--show-current))*$|tag(\s+(-l|--list))?$|stash\s+list)/,
-  go: /^(vet|list|doc|version|env)\b/,
-  npm: /^(ls|list|view|outdated|explain|why|-v|--version)\b/,
-  node: /^(-v|--version)$/,
-  python: /^(-V|--version)$/,
-  python3: /^(-V|--version)$/,
-  php: /^(-v|--version|-l)\b/,
-  composer: /^(show|outdated|licenses|-V|--version)\b/,
-  cargo: /^(tree|metadata|--version)\b/,
-  make: /^(-n|--dry-run)\b/,
-  docker: /^(ps|images|logs|inspect|version|info)\b/,
-}
-
-/**
- * Guesses whether a shell command only reads. Conservative: redirections to files,
- * substitutions and unknown commands count as changes.
- */
-export function isReadOnlyCommand(command: string): boolean {
-  const c = command.replace(/\\\n/g, ' ')
-  if (/`|\$\(/.test(c)) return false
-  // Output redirections other than to /dev/null or between streams.
-  const noSafe = c.replace(/\d?>&\d/g, '').replace(/\d?>>?\s*\/dev\/null/g, '')
-  if (/>/.test(noSafe)) return false
-  for (const seg of c.split(/&&|\|\||;|\||\n/)) {
-    const words = seg.trim().split(/\s+/).filter(Boolean)
-    // Leading variable assignments (LANG=C cmd).
-    while (words.length && /^\w+=/.test(words[0])) words.shift()
-    if (!words.length) continue
-    const [cmd, ...rest] = words
-    if (!readCommands.has(cmd)) return false
-    const args = rest.join(' ')
-    if (cmd === 'sed' && /(^|\s)-i/.test(args)) return false
-    if (cmd === 'find' && /-(delete|exec|execdir|ok|fprint)/.test(args)) return false
-    if (cmd === 'sort' && /(^|\s)(-o|--output)/.test(args)) return false
-    if (cmd === 'awk' && /system\s*\(|>\s*"/.test(args)) return false
-    const sub = readSub[cmd]
-    if (sub && !sub.test(args)) return false
-  }
-  return true
-}
-
 const MAX_LINES = 1500
 const MAX_CHARS = 120_000
 
@@ -214,9 +166,13 @@ export async function runTool(call: ToolCall, confirm: Confirm, signal?: AbortSi
     if (mode === 'plan') {
       if (writeTools.has(name)) return fail('Plan mode: files cannot be changed. Present the plan with exit_plan_mode; it will be carried out in Build mode.')
       // A command that may change something waits for the user.
-      if ((name === 'bash' || name === 'run_command') && !isReadOnlyCommand(String(a.command ?? ''))) {
+      if ((name === 'bash' || name === 'run_command') && !runsFreely(String(a.command ?? ''), root(), a.cwd ? absPath(a.cwd) : root())) {
         if (!(await confirm({ call, kind: 'command', command: String(a.command ?? '') })))
-          return { content: 'The user refused this command (Plan mode: only reading commands run freely).', summary: t('command refused'), status: 'denied' }
+          return {
+            content: 'The user refused this command (Plan mode: only reading commands, and the build and test commands of the project, run freely).',
+            summary: t('command refused'),
+            status: 'denied',
+          }
       }
     }
     switch (name) {

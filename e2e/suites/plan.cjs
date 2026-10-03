@@ -1,5 +1,5 @@
 // AI assistant, Plan / Build modes: Shift+Tab, Plan prompt and tools (no file change,
-// exit_plan_mode), dedicated Plan model, bash read-only guess (reading runs, a change asks),
+// exit_plan_mode), dedicated Plan model, bash guess (reading and project builds run, a change asks),
 // plan card and its execution in Build, compaction asked by the model.
 const fs = require('fs')
 const http = require('http')
@@ -41,7 +41,7 @@ const fake = http.createServer(async (req, res) => {
       return (
         sse(res, {
           tool_calls: calls([
-            ['p1', 'bash', { command: 'git status; ls src' }],
+            ['p1', 'bash', { command: 'git status; ls $(pwd)/src && cd src && go vet . 2>&1 | tail -3' }],
             ['p2', 'bash', { command: 'rm -rf src' }],
             ['p3', 'edit_file', { path: 'src/main.go', old_string: 'Bonjour', new_string: 'Salut' }],
           ]),
@@ -97,7 +97,7 @@ run(async ({ page }) => {
     await page.waitForSelector('[data-testid=ai-plan]', { timeout: 10000 })
     const res1 = requests[1].messages.filter((m) => m.role === 'tool')
     const byId = (id) => text(res1.find((m) => m.tool_call_id === id) ?? { content: '' })
-    assert(byId('p1').startsWith('Exit code 0'), 'reading command run without asking')
+    assert(byId('p1').startsWith('Exit code 0'), 'reading and build commands in the project run without asking: ' + byId('p1').slice(0, 80))
     assert(byId('p2').includes('refused') && fs.existsSync(WS + '/demo/src/main.go'), 'changing command refused, nothing deleted')
     assert(byId('p3').includes('Plan mode') && fs.readFileSync(WS + '/demo/src/main.go', 'utf8').includes('Bonjour'), 'edit_file refused in Plan mode')
     const card = await page.waitForSelector('[data-testid=ai-plan] .md:has-text("Replace Bonjour with Salut")', { timeout: 5000 }).then(() => true, () => false)

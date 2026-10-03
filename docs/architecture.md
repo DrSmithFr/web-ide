@@ -77,7 +77,7 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 - Module-level state (`llm/state.ts`) survives panel switches; conversations are saved in the pod one save at a time.
 - `llm/agent.ts`: tool loop without step limit, compaction (automatic past a threshold, manual, or asked by the model), Plan / Build modes, `ask_user` (the turn stops until the answers come), message queue, resume after reload (`llm.attach`), one window runs a conversation (`llm.claim`) while others follow it.
 - `llm/prompt.ts`: editable system prompt template, instruction files and skills (loaded like Claude Code), linked ticket and role instructions.
-- `llm/tools.ts`, `llm/kanbanTools.ts`: tools the model can call. File changes are confirmed with a diff unless "apply without asking" is on; shell commands run without confirmation (Plan mode asks for commands that may change something).
+- `llm/tools.ts`, `llm/kanbanTools.ts`: tools the model can call. File changes are confirmed with a diff unless "apply without asking" is on; shell commands run without confirmation (Plan mode runs reading commands and the build, test and lint commands of the project freely, and asks for the others: `llm/commands.ts`).
 - Speech recognition runs in a Web Worker (transformers.js, WebGPU or WebAssembly); model files come through the pod cache.
 
 ### Kanban
