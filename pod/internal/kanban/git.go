@@ -267,3 +267,148 @@ func (g Git) Patch(ctx context.Context, worktree, branch, from string, max int) 
 	}
 	return out
 }
+
+// LocalBranch is the local branch a ticket merges into: main for origin/main.
+func (g Git) LocalBranch(ctx context.Context, base string) string {
+	if out, err := g.git(ctx, g.Root, "remote"); err == nil {
+		for _, r := range strings.Fields(out) {
+			if strings.HasPrefix(base, r+"/") {
+				return strings.TrimPrefix(base, r+"/")
+			}
+		}
+	}
+	return base
+}
+
+// State tells what is in progress in a folder: rebase, merge, and the files in conflict.
+type State struct {
+	Rebase bool `json:"rebase"`
+	Merge  bool `json:"merge"`
+	// Squash: a merge --squash stopped by a conflict (no MERGE_HEAD, a SQUASH_MSG and
+	// changes in the index).
+	Squash    bool     `json:"squash"`
+	Conflicts []string `json:"conflicts"`
+}
+
+// Busy tells whether a rebase or a merge waits in the folder.
+func (s State) Busy() bool { return s.Rebase || s.Merge || s.Squash }
+
+func (g Git) State(ctx context.Context, dir string) State {
+	st := State{Conflicts: []string{}}
+	test := `test -d "$(git rev-parse --git-path rebase-merge)" -o -d "$(git rev-parse --git-path rebase-apply)"`
+	if _, err := g.Run.Output(ctx, []string{"sh", "-c", test}, dir); err == nil {
+		st.Rebase = true
+	}
+	if _, err := g.git(ctx, dir, "rev-parse", "-q", "--verify", "MERGE_HEAD"); err == nil {
+		st.Merge = true
+	}
+	if out, err := g.git(ctx, dir, "diff", "--name-only", "--diff-filter=U", "-z"); err == nil {
+		for _, p := range strings.Split(out, "\x00") {
+			if p != "" {
+				st.Conflicts = append(st.Conflicts, p)
+			}
+		}
+	}
+	if !st.Merge && !st.Rebase {
+		if _, err := g.Run.Output(ctx, []string{"sh", "-c", `test -f "$(git rev-parse --git-path SQUASH_MSG)"`}, dir); err == nil {
+			_, staged := g.git(ctx, dir, "diff", "--cached", "--quiet")
+			st.Squash = len(st.Conflicts) > 0 || staged != nil
+		}
+	}
+	return st
+}
+
+// Merged tells whether a branch is contained in another one.
+func (g Git) Merged(ctx context.Context, branch, into string) bool {
+	_, err := g.git(ctx, g.Root, "merge-base", "--is-ancestor", branch, into)
+	return err == nil
+}
+
+func (g Git) clean(ctx context.Context, dir string) bool {
+	out, err := g.git(ctx, dir, "status", "--porcelain", "--untracked-files=no")
+	return err == nil && strings.TrimSpace(out) == ""
+}
+
+// Merge merges the branch of a ticket into the local base branch, in the main folder.
+// A conflict leaves the merge in progress (no automatic abort).
+func (g Git) Merge(ctx context.Context, branch, into, message string, squash bool) (State, error) {
+	cur, _ := g.git(ctx, g.Root, "branch", "--show-current")
+	if cur = strings.TrimSpace(cur); cur != into {
+		return State{}, fmt.Errorf("le dossier principal est sur la branche « %s » : passer sur « %s » pour fusionner", cur, into)
+	}
+	if st := g.State(ctx, g.Root); st.Busy() {
+		return st, errors.New("une fusion ou un rebase est déjà en cours dans le dossier principal")
+	}
+	if !g.clean(ctx, g.Root) {
+		return State{}, errors.New("le dossier principal a des modifications non commitées : les commiter ou les mettre de côté avant de fusionner")
+	}
+	var err error
+	if squash {
+		if _, err = g.git(ctx, g.Root, "merge", "--squash", branch); err == nil {
+			_, err = g.git(ctx, g.Root, "commit", "-m", message)
+		}
+	} else {
+		_, err = g.git(ctx, g.Root, "merge", "--no-ff", "-m", message, branch)
+	}
+	st := g.State(ctx, g.Root)
+	if err != nil && len(st.Conflicts) == 0 {
+		return st, err
+	}
+	return st, nil
+}
+
+// Rebase replays the branch of a ticket on its base, in its worktree.
+func (g Git) Rebase(ctx context.Context, worktree, base string) (State, error) {
+	if st := g.State(ctx, worktree); st.Busy() {
+		return st, errors.New("un rebase est déjà en cours dans le worktree")
+	}
+	if !g.clean(ctx, worktree) {
+		return State{}, errors.New("le worktree a des modifications non commitées : les commiter avant le rebase")
+	}
+	_, err := g.git(ctx, worktree, "-c", "core.editor=true", "-c", "core.commentChar=auto", "rebase", base)
+	st := g.State(ctx, worktree)
+	if err != nil && len(st.Conflicts) == 0 && !st.Rebase {
+		return st, err
+	}
+	return st, nil
+}
+
+// Continue goes on with the rebase or the merge in progress in a folder (conflicts fixed
+// and added); Abort cancels it.
+func (g Git) Continue(ctx context.Context, dir string) (State, error) {
+	st := g.State(ctx, dir)
+	if len(st.Conflicts) > 0 {
+		return st, fmt.Errorf("%d fichier(s) encore en conflit : les corriger puis git add", len(st.Conflicts))
+	}
+	var err error
+	switch {
+	case st.Rebase:
+		// Ticket commits start with "#<n>": "#" must not be the comment character.
+		_, err = g.git(ctx, dir, "-c", "core.editor=true", "-c", "core.commentChar=auto", "rebase", "--continue")
+	case st.Merge, st.Squash:
+		_, err = g.git(ctx, dir, "-c", "core.commentChar=auto", "commit", "--no-edit")
+	default:
+		return st, errors.New("aucun rebase ni fusion en cours")
+	}
+	st = g.State(ctx, dir)
+	if err != nil && len(st.Conflicts) == 0 {
+		return st, err
+	}
+	return st, nil
+}
+
+func (g Git) Abort(ctx context.Context, dir string) error {
+	st := g.State(ctx, dir)
+	var err error
+	switch {
+	case st.Rebase:
+		_, err = g.git(ctx, dir, "rebase", "--abort")
+	case st.Merge:
+		_, err = g.git(ctx, dir, "merge", "--abort")
+	case st.Squash:
+		if _, err = g.git(ctx, dir, "reset", "--merge"); err == nil {
+			_, _ = g.Run.Output(ctx, []string{"sh", "-c", `rm -f "$(git rev-parse --git-path SQUASH_MSG)"`}, dir)
+		}
+	}
+	return err
+}

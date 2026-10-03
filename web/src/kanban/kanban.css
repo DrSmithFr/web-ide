@@ -118,3 +118,7 @@ input.tk-title { padding: 2px 6px; }
 /* ---------- window of a ticket worktree ---------- */
 .wt-banner { display: inline-flex; align-items: center; gap: 6px; border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line)); border-radius: 12px; padding: 0 8px; height: 22px; background: color-mix(in srgb, var(--warn) 10%, transparent); color: var(--fg); cursor: pointer; font-size: 12px; max-width: 420px; }
 .wt-banner:hover { border-color: var(--warn); }
+
+.tk-gitops { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.tk-conflicts { border: 1px solid color-mix(in srgb, var(--danger) 50%, var(--line)); background: color-mix(in srgb, var(--danger) 7%, transparent); border-radius: var(--radius); padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.tk-conflicts .icon { color: var(--danger); }

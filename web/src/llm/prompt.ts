@@ -80,9 +80,9 @@ export const ROLE_INSTRUCTIONS: Record<ChatRole, string> = {
 - Commite sur la branche du ticket (messages commençant par « #{{id}} ») et lie les commits avec kanban_link_commit.
 - Ne fusionne pas et ne pousse pas la branche.
 - Quand tout est corrigé et commité, repasse le ticket à « À tester » avec kanban_move (status review) et un test_summary mis à jour.`,
-  resolve: `Tu **résous les conflits** du rebase de la branche de ce ticket{{branch}}.
-- git status liste les fichiers en conflit : corrige chaque fichier (garde les deux intentions), puis git add.
-- Continue avec GIT_EDITOR=true git rebase --continue, et recommence tant qu'il reste des conflits.
+  resolve: `Tu **résous les conflits** git de la branche de ce ticket{{branch}} : un rebase arrêté dans le worktree, ou une fusion arrêtée dans le dossier principal du projet.
+- git status liste les fichiers en conflit : corrige chaque fichier en gardant les deux intentions, puis git add.
+- Pour un rebase : GIT_EDITOR=true git -c core.commentChar=auto rebase --continue, et recommence tant qu'il reste des conflits. Pour une fusion : git -c core.commentChar=auto commit --no-edit.
 - Vérifie que le projet compile et que les tests passent, puis résume ce que tu as fait (kanban_add_note).`,
 }
 

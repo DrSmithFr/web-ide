@@ -125,11 +125,18 @@ func (s *Server) registerGlobal() {
 		if err != nil {
 			return nil, err
 		}
+		children := s.Projects.Children(a.ID)
 		if err := s.Projects.Delete(a.ID); err != nil {
 			return nil, err
 		}
 		s.closeRuntime(a.ID)
 		s.Sessions.Delete(a.ID)
+		// The worktrees of its tickets stay on disk, their projects go.
+		for _, id := range children {
+			_ = s.Projects.Delete(id)
+			s.closeRuntime(id)
+			s.Sessions.Delete(id)
+		}
 		s.broadcast("projects.changed", nil, nil)
 		return nil, nil
 	})

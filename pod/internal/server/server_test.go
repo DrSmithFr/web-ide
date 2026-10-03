@@ -78,6 +78,25 @@ func dial(t *testing.T, ts *httptest.Server, token string) (*wsClient, error) {
 	return w, nil
 }
 
+// callRaw returns the response, error included.
+func (w *wsClient) callRaw(method string, params any) map[string]any {
+	w.nextID++
+	id := w.nextID
+	ch := make(chan map[string]any, 1)
+	w.resps[id] = ch
+	data, _ := json.Marshal(map[string]any{"id": id, "method": method, "params": params})
+	if err := w.c.Write(context.Background(), websocket.MessageText, data); err != nil {
+		w.t.Fatal(err)
+	}
+	select {
+	case m := <-ch:
+		return m
+	case <-time.After(5 * time.Second):
+		w.t.Fatalf("%s: timeout", method)
+	}
+	return nil
+}
+
 func (w *wsClient) call(method string, params any) map[string]any {
 	w.nextID++
 	id := w.nextID

@@ -113,6 +113,26 @@ run(async ({ page, ctx }) => {
     assert((await page.textContent('.tk-events')).includes('Worktree initialisé') || (await page.textContent('.tk-events')).includes('Initialisation du worktree terminée'), 'initialisation dans l’historique')
     await page.screenshot({ path: OUT + '/kanban-git.png' })
 
+    // Rebase with a conflict, resolved by hand, then merge into main.
+    fs.writeFileSync(repo + '/notes.txt', 'main\n')
+    git('commit -q -am "notes sur main"')
+    fs.writeFileSync(wt + '/notes.txt', 'ticket\n')
+    git('commit -q -am "#1 notes"', wt)
+    await page.click('[data-testid=ticket-rebase]')
+    await page.waitForSelector('[data-testid=ticket-conflicts-worktree]:has-text("notes.txt")', { timeout: 10000 })
+    assert(true, 'rebase arrêté sur un conflit, fichier listé')
+    assert(await page.isVisible('[data-testid=ticket-resolve]'), 'session de résolution proposée')
+    fs.writeFileSync(wt + '/notes.txt', 'main\nticket\n')
+    git('add notes.txt', wt)
+    await page.click('[data-testid=ticket-continue]')
+    await page.waitForSelector('[data-testid=ticket-conflicts-worktree]', { state: 'detached', timeout: 10000 })
+    assert(git('log -1 --format=%s', wt) === '#1 notes', 'rebase terminé, message « #1 » gardé')
+    await page.click('[data-testid=ticket-merge]')
+    await page.waitForSelector('[data-testid=ticket-merged]', { timeout: 10000 })
+    assert(fs.existsSync(repo + '/export.txt') && fs.readFileSync(repo + '/notes.txt', 'utf8') === 'main\nticket\n', 'branche fusionnée dans main')
+    assert(git('log -1 --format=%s').startsWith('Merge #1 Export des données'), 'commit de fusion')
+    await page.screenshot({ path: OUT + '/kanban-merge.png' })
+
     // Close: worktree removed, its window leaves, the change stays readable.
     await page.click('[data-testid=ticket-close]')
     await page.waitForSelector('[data-testid=ticket-status]:has-text("Terminé")', { timeout: 10000 })

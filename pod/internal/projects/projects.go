@@ -229,3 +229,16 @@ func (r *Registry) PutChild(parent *Project, ticket int64, title, dir string) (V
 	r.items = append(r.items, &p)
 	return view(&p), r.save()
 }
+
+// Children lists the worktree projects of a project.
+func (r *Registry) Children(parent string) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var ids []string
+	for _, p := range r.items {
+		if p.Parent == parent {
+			ids = append(ids, p.ID)
+		}
+	}
+	return ids
+}

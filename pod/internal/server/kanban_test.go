@@ -153,7 +153,78 @@ func TestKanbanWorktree(t *testing.T) {
 		t.Fatal("branch deleted")
 	}
 	d = a.call("kanban.diff", map[string]any{"id": 1})["result"].(map[string]any)
-	if d["source"] != "branch" || len(d["files"].([]any)) != 1 {
+	if d["source"] != "snapshot" || len(d["files"].([]any)) != 3 {
 		t.Fatalf("diff after close: %+v", d)
+	}
+}
+
+func TestKanbanMergeRebase(t *testing.T) {
+	for k, v := range map[string]string{"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@x", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@x"} {
+		t.Setenv(k, v)
+	}
+	_, ts := newServer(t)
+	a, _ := dial(t, ts, "secret-token-0123456789abcdef0123")
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("un\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b\n"), 0o644)
+	gitIn(t, dir, "init", "-q", "-b", "main")
+	gitIn(t, dir, "add", "-A")
+	gitIn(t, dir, "commit", "-q", "-m", "init")
+	id := a.call("projects.create", map[string]any{"type": "local", "path": dir})["result"].(map[string]any)["id"].(string)
+	a.call("project.open", map[string]any{"id": id})
+	start := func(n int, title string) string {
+		a.call("kanban.create", map[string]any{"title": title})
+		a.call("kanban.plan", map[string]any{"id": n, "plan": "p", "goals": []string{"g"}})
+		a.call("kanban.move", map[string]any{"id": n, "status": "ready"})
+		return a.call("kanban.start", map[string]any{"id": n})["result"].(map[string]any)["ticket"].(map[string]any)["worktree"].(string)
+	}
+	wt := start(1, "A")
+	os.WriteFile(filepath.Join(wt, "a.txt"), []byte("deux\n"), 0o644)
+	gitIn(t, wt, "commit", "-q", "-am", "#1 deux")
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("trois\n"), 0o644)
+	gitIn(t, dir, "commit", "-q", "-am", "trois")
+
+	// Rebase: conflict left in progress.
+	st := a.call("kanban.rebase", map[string]any{"id": 1})["result"].(map[string]any)
+	w := st["worktree"].(map[string]any)
+	if w["rebase"] != true || len(w["conflicts"].([]any)) != 1 || st["into"] != "main" {
+		t.Fatalf("rebase: %+v", st)
+	}
+	os.WriteFile(filepath.Join(wt, "a.txt"), []byte("trois\ndeux\n"), 0o644)
+	gitIn(t, wt, "add", "a.txt")
+	st = a.call("kanban.continue", map[string]any{"id": 1, "where": "worktree"})["result"].(map[string]any)
+	if w := st["worktree"].(map[string]any); w["rebase"] != false || len(w["conflicts"].([]any)) != 0 {
+		t.Fatalf("continue: %+v", st)
+	}
+	// Merge into main.
+	st = a.call("kanban.merge", map[string]any{"id": 1})["result"].(map[string]any)
+	if st["merged"] != true {
+		t.Fatalf("merge: %+v", st)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "a.txt")); string(got) != "trois\ndeux\n" {
+		t.Fatalf("merged content: %q", got)
+	}
+	if !strings.HasPrefix(gitIn(t, dir, "log", "-1", "--format=%s"), "Merge #1 A") {
+		t.Fatal("merge commit message")
+	}
+
+	// Squash with a conflict, then abort.
+	wt2 := start(2, "B")
+	os.WriteFile(filepath.Join(wt2, "b.txt"), []byte("b2\n"), 0o644)
+	gitIn(t, wt2, "commit", "-q", "-am", "#2 b2")
+	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b3\n"), 0o644)
+	gitIn(t, dir, "commit", "-q", "-am", "b3")
+	st = a.call("kanban.merge", map[string]any{"id": 2, "squash": true})["result"].(map[string]any)
+	if m := st["main"].(map[string]any); m["squash"] != true || len(m["conflicts"].([]any)) != 1 {
+		t.Fatalf("squash conflict: %+v", st)
+	}
+	st = a.call("kanban.abort", map[string]any{"id": 2, "where": "main"})["result"].(map[string]any)
+	if m := st["main"].(map[string]any); m["squash"] != false || len(m["conflicts"].([]any)) != 0 || gitIn(t, dir, "status", "--porcelain", "--untracked-files=no") != "" {
+		t.Fatalf("abort: %+v", st)
+	}
+	// A dirty main folder refuses the merge.
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("sale\n"), 0o644)
+	if r := a.callRaw("kanban.merge", map[string]any{"id": 2}); r["error"] == nil {
+		t.Fatal("merge with a dirty main folder")
 	}
 }

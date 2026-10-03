@@ -20,7 +20,8 @@ Toute la spec est implémentée et testée, plus sept ajouts : autocomplétion, 
 | `a50b891` | Diagrammes plein écran, menu du contexte, outil bash, commandes /, mentions @ |
 | `97737d7` | Reprise après rechargement, file de messages, édition sur place, Ctrl+clic sur @fichier |
 | `b5ed972` | Une autre fenêtre suit la réponse en cours (spectatrice), arrêt à distance, reprise de la main |
-| dernier commit | Modes Plan / Build, modèle et prompt du mode Plan, exit_plan_mode, compact_conversation |
+| `e306165` | Modes Plan / Build, modèle et prompt du mode Plan, exit_plan_mode, compact_conversation |
+| `d6719c2` → dernier | Kanban par projet (6 commits) : base SQLite, tableau et ticket, outils de l'agent et ask_user, conversations liées, worktree par ticket et diff, fusion / rebase / conflits |
 
 ## Commandes
 
@@ -30,7 +31,7 @@ make build          # front (Vite) puis binaire bin/web-ide-pod (front embarqué
 make dev            # pod -allow-remote sur 0.0.0.0:4433 + Vite 0.0.0.0:5173 (HMR)
 make test           # go vet + go test + tsc
 make e2e            # tests navigateur (toutes les suites, ~3-4 min)
-./e2e/run.sh git    # une suite : editing features restore+ git lsp llm agent chat plan speech perf
+./e2e/run.sh git    # une suite : editing features restore+ git lsp llm agent chat plan kanban kanbanai kanbangit speech perf
 make service        # service systemd utilisateur (pas activé à ce jour)
 ```
 
@@ -116,11 +117,23 @@ Dictée (bouton micro ou Ctrl+Espace dans la zone de message) et fichiers audio 
 - Suite e2e `speech` : micro simulé de Chromium qui joue `e2e/audio/jfk.wav` (domaine public, 16 kHz mono), whisper-tiny en WebAssembly ; vérifie qu'aucune requête ne sort du pod et qu'il n'y a aucun envoi HTTP. Les modèles des tests sont gardés dans `~/.cache/web-ide-e2e/models` (`E2E_MODELS`) : le premier lancement a besoin du réseau (hors bac à sable), les suivants non.
 - Limites : micro seulement en contexte sécurisé (localhost ou https) : avec `-allow-remote` en http sur une IP du réseau, la dictée est désactivée (les fichiers audio restent transcrits). WebGPU et le modèle turbo non essayés (Chromium headless sans GPU) ; transcription du français non testée automatiquement.
 
+## Kanban
+
+Conception et décisions de l'utilisateur : **`docs/kanban.md`** (à lire avant d'y toucher).
+
+- Pod : `internal/kanban` (`kanban.go` base et transitions permises selon l'acteur user / model, `tickets.go` tickets, goals, notes, liens, pièces jointes, `git.go` worktree, diff, fusion, rebase, état des conflits), RPC dans `server/handlers_kanban.go` (`kanban.*`, événement `kanban.changed` aux fenêtres du projet et de ses worktrees) et `handlers_kanban_git.go` (`kanban.start`, `open`, `diff`, `diff.file`, `gitstate`, `merge`, `rebase`, `continue`, `abort`, `finish`).
+- Worktree d'un ticket : projet enfant `<parent>-t<n>` (`projects.PutChild`, champs `parent` / `ticket`, absent de `projects.list`) ; ses conversations et son kanban sont ceux du parent (`kanbanProject`, `loc` de `handlers_llm.go`).
+- Front `web/src/kanban/` : `state.ts` (liste partagée, API), `Board.tsx` (onglet `kanban`, réglages : base, commande d'initialisation), `TicketView.tsx` (onglet `ticket`), `actions.tsx` (boutons par état, section Git, diff, fusion, conflits), `sessions.ts` (conversations liées : briefing / plan dans la fenêtre, dev / correction / résolution dans la fenêtre du worktree via une conversation enregistrée avec `running: {}` puis `?assistant=1`), `Panel.tsx`.
+- Assistant : `llm/kanbanTools.ts` (outils kanban, `ticketMarkdown`), `ask_user` géré par `agent.ts` (le tour s'arrête, `answerQuestions` relance), carte `AskCard` dans `Thread.tsx`, consignes par rôle `ROLE_INSTRUCTIONS` dans `prompt.ts`, `chat.ticket = { id, role }`.
+- Pièges : les commits de ticket commencent par `#n` → `core.commentChar=auto` pour `rebase --continue` / `commit --no-edit` ; préfixes de diff forcés (`--src-prefix=a/`) car la config de l'utilisateur a `diff.mnemonicPrefix` ; après une fusion le diff contre la base est vide : le changement est figé (`snapshot`) au moment de la fusion, sinon à la fermeture.
+- Suites e2e : `kanban` (IHM), `kanbanai` (ask_user, outils, plan, dev), `kanbangit` (worktree, fenêtre du worktree, diff, rebase en conflit, fusion, fermeture).
+
 ## Prochaines étapes proposées
 
-1. Complétion dans la console SQL (mots-clés, tables, colonnes de la connexion).
-2. Recherche et remplacement dans tout le projet.
-3. Essayer intelephense / pyright / typescript-language-server sur de vrais projets de `~/Apps`.
+1. Kanban : glisser une capture dans un ticket depuis le presse-papiers, pièces jointes envoyées au modèle, notifications quand un agent passe un ticket « À tester ».
+2. Complétion dans la console SQL (mots-clés, tables, colonnes de la connexion).
+3. Recherche et remplacement dans tout le projet.
+4. Essayer intelephense / pyright / typescript-language-server sur de vrais projets de `~/Apps`.
 
 ## Méthode de travail retenue
 

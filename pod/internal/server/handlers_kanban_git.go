@@ -148,16 +148,20 @@ func (s *Server) registerKanbanGit() {
 		if base == "" {
 			base = k.git.DefaultBase(ctx)
 		}
+		// A closed ticket shows the change frozen at its closing (its branch may be merged).
 		switch {
 		case exists(k, t.Worktree):
-			return k.git.Changes(ctx, t.Worktree, t.Branch, base)
-		case t.Branch != "" && k.git.IsRepo(ctx):
-			if d, err := k.git.Changes(ctx, "", t.Branch, base); err == nil || t.Snapshot == nil {
+			d, err := k.git.Changes(ctx, t.Worktree, t.Branch, base)
+			// Merged: nothing left against the base, the change is the one frozen by the merge
+			// (with what the worktree may still hold, uncommitted).
+			if err != nil || t.Snapshot == nil || d.Ahead > 0 || !k.git.Merged(ctx, t.Branch, k.git.LocalBranch(ctx, base)) {
 				return d, err
 			}
-		}
-		if t.Snapshot != nil {
-			return &kanban.Diff{Base: t.Snapshot.Base, From: t.Snapshot.Base, Head: t.Snapshot.Head, Files: t.Snapshot.Files, Source: "snapshot"}, nil
+			return &kanban.Diff{Base: base, From: t.Snapshot.Base, Head: t.Snapshot.Head, Files: t.Snapshot.Files, Source: "snapshot", Dirty: d.Dirty}, nil
+		case t.Snapshot != nil:
+			return &kanban.Diff{Base: base, From: t.Snapshot.Base, Head: t.Snapshot.Head, Files: t.Snapshot.Files, Source: "snapshot"}, nil
+		case t.Branch != "" && k.git.IsRepo(ctx):
+			return k.git.Changes(ctx, "", t.Branch, base)
 		}
 		return nil, nil
 	}))
@@ -185,6 +189,172 @@ func (s *Server) registerKanbanGit() {
 		}
 		return k.git.FilePatch(ctx, wt, t.Branch, a.From, a.Path)
 	}))
+
+	// State of the branch of a ticket: rebase in its worktree, merge in the main folder.
+	type gitInfo struct {
+		Worktree *kanban.State `json:"worktree,omitempty"`
+		Main     kanban.State  `json:"main"`
+		Into     string        `json:"into"`
+		Merged   bool          `json:"merged"`
+	}
+	info := func(ctx context.Context, k gctx, t *kanban.Ticket) gitInfo {
+		base := firstOf(t.Base)
+		if base == "" {
+			base = k.git.DefaultBase(ctx)
+		}
+		gi := gitInfo{Main: k.git.State(ctx, k.root.Path), Into: k.git.LocalBranch(ctx, base)}
+		if exists(k, t.Worktree) {
+			st := k.git.State(ctx, t.Worktree)
+			gi.Worktree = &st
+		}
+		if t.Branch != "" {
+			gi.Merged = k.git.Merged(ctx, t.Branch, gi.Into)
+		}
+		return gi
+	}
+	ticketOf := func(k gctx, p json.RawMessage) (*kanban.Ticket, error) {
+		a, err := bind[idArg](p)
+		if err != nil {
+			return nil, err
+		}
+		return s.Kanban.Get(k.loc, a.ID)
+	}
+	s.handle("kanban.gitstate", h(func(ctx context.Context, c *Client, k gctx, p json.RawMessage) (any, error) {
+		t, err := ticketOf(k, p)
+		if err != nil {
+			return nil, err
+		}
+		if t.Branch == "" || !k.git.IsRepo(ctx) {
+			return nil, nil
+		}
+		return info(ctx, k, t), nil
+	}))
+	// After a git operation: event in the history, windows told (git panels included).
+	done := func(c *Client, k gctx, t *kanban.Ticket, text string) {
+		_ = s.Kanban.Event(k.loc, t.ID, kanban.ByUser, text)
+		s.emitKanban(k.root.ID, t.ID, nil)
+		s.emitter(k.root.ID)("git.changed", nil, "")
+		s.emitter(projects.ChildID(k.root.ID, t.ID))("git.changed", nil, "")
+	}
+	s.handle("kanban.merge", h(func(ctx context.Context, c *Client, k gctx, p json.RawMessage) (any, error) {
+		a, err := bind[struct {
+			ID     int64 `json:"id"`
+			Squash bool  `json:"squash"`
+		}](p)
+		if err != nil {
+			return nil, err
+		}
+		t, err := s.Kanban.Get(k.loc, a.ID)
+		if err != nil {
+			return nil, err
+		}
+		if t.Branch == "" {
+			return nil, errors.New("ce ticket n'a pas de branche")
+		}
+		gi := info(ctx, k, t)
+		msg := "Merge #" + itoa(t.ID) + " " + t.Title + " (" + t.Branch + ")"
+		if a.Squash {
+			msg = "#" + itoa(t.ID) + " " + t.Title
+		}
+		// The change is frozen before the merge: afterwards the branch has nothing left
+		// against its base.
+		var snap *kanban.Snapshot
+		if d, err := k.git.Changes(ctx, "", t.Branch, gi.Into); err == nil && len(d.Files) > 0 {
+			snap = &kanban.Snapshot{Base: d.From, Head: d.Head, Files: d.Files, Patch: k.git.Patch(ctx, "", t.Branch, d.From, 2<<20)}
+		}
+		st, err := k.git.Merge(ctx, t.Branch, gi.Into, msg, a.Squash)
+		if err != nil {
+			return nil, err
+		}
+		if snap != nil && len(st.Conflicts) == 0 {
+			_ = s.Kanban.SetGit(k.loc, t.ID, kanban.GitState{Snapshot: snap})
+		}
+		how := "merge --no-ff"
+		if a.Squash {
+			how = "squash"
+		}
+		if len(st.Conflicts) > 0 {
+			done(c, k, t, "Fusion dans "+gi.Into+" ("+how+") arrêtée : "+itoa(int64(len(st.Conflicts)))+" fichier(s) en conflit")
+		} else {
+			done(c, k, t, "Branche fusionnée dans "+gi.Into+" ("+how+")")
+		}
+		return info(ctx, k, t), nil
+	}))
+	s.handle("kanban.rebase", h(func(ctx context.Context, c *Client, k gctx, p json.RawMessage) (any, error) {
+		t, err := ticketOf(k, p)
+		if err != nil {
+			return nil, err
+		}
+		if !exists(k, t.Worktree) {
+			return nil, errors.New("ce ticket n'a pas de worktree")
+		}
+		_ = k.git.Fetch(ctx)
+		base := firstOf(t.Base)
+		if base == "" {
+			base = k.git.DefaultBase(ctx)
+		}
+		st, err := k.git.Rebase(ctx, t.Worktree, base)
+		if err != nil {
+			return nil, err
+		}
+		if len(st.Conflicts) > 0 {
+			done(c, k, t, "Rebase sur "+base+" arrêté : "+itoa(int64(len(st.Conflicts)))+" fichier(s) en conflit")
+		} else {
+			done(c, k, t, "Branche rebasée sur "+base)
+		}
+		return info(ctx, k, t), nil
+	}))
+	// Continue or abort the operation in progress: where is "worktree" or "main".
+	folder := func(k gctx, t *kanban.Ticket, where string) (string, error) {
+		if where == "main" {
+			return k.root.Path, nil
+		}
+		if !exists(k, t.Worktree) {
+			return "", errors.New("ce ticket n'a pas de worktree")
+		}
+		return t.Worktree, nil
+	}
+	for _, op := range []string{"continue", "abort"} {
+		op := op
+		s.handle("kanban."+op, h(func(ctx context.Context, c *Client, k gctx, p json.RawMessage) (any, error) {
+			a, err := bind[struct {
+				ID    int64  `json:"id"`
+				Where string `json:"where"`
+			}](p)
+			if err != nil {
+				return nil, err
+			}
+			t, err := s.Kanban.Get(k.loc, a.ID)
+			if err != nil {
+				return nil, err
+			}
+			dir, err := folder(k, t, a.Where)
+			if err != nil {
+				return nil, err
+			}
+			what := "Rebase"
+			if a.Where == "main" {
+				what = "Fusion"
+			}
+			if op == "abort" {
+				if err := k.git.Abort(ctx, dir); err != nil {
+					return nil, err
+				}
+				done(c, k, t, what+" annulé(e)")
+				return info(ctx, k, t), nil
+			}
+			st, err := k.git.Continue(ctx, dir)
+			if err != nil {
+				return nil, err
+			}
+			if len(st.Conflicts) > 0 {
+				done(c, k, t, what+" : nouveaux conflits ("+itoa(int64(len(st.Conflicts)))+" fichier(s))")
+			} else if !st.Busy() {
+				done(c, k, t, what+" terminé(e)")
+			}
+			return info(ctx, k, t), nil
+		}))
+	}
 
 	// kanban.finish closes (done) or abandons a ticket: the change is frozen in the ticket,
 	// the worktree and its project are removed; the branch is kept unless asked.
@@ -217,7 +387,9 @@ func (s *Server) registerKanbanGit() {
 			if base == "" {
 				base = k.git.DefaultBase(ctx)
 			}
-			if d, err := k.git.Changes(ctx, wt, t.Branch, base); err == nil {
+			// Already merged: keep the change frozen by the merge.
+			merged := t.Snapshot != nil && k.git.Merged(ctx, t.Branch, k.git.LocalBranch(ctx, base))
+			if d, err := k.git.Changes(ctx, wt, t.Branch, base); err == nil && !merged {
 				snap := &kanban.Snapshot{Base: d.From, Head: d.Head, Files: d.Files, Patch: k.git.Patch(ctx, wt, t.Branch, d.From, 2<<20)}
 				_ = s.Kanban.SetGit(k.loc, t.ID, kanban.GitState{Snapshot: snap})
 			}

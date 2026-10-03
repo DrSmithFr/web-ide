@@ -205,6 +205,24 @@ export const filePatch = (id: number, path: string, from: string, source: string
 export const finishTicket = (id: number, status: 'done' | 'abandoned', comment = '', deleteBranch = false) =>
   request<Ticket>('kanban.finish', { id, status, comment, deleteBranch })
 
+export interface GitOpState {
+  rebase: boolean
+  merge: boolean
+  squash: boolean
+  conflicts: string[]
+}
+export interface GitInfo {
+  worktree?: GitOpState
+  main: GitOpState
+  into: string
+  merged: boolean
+}
+export const gitInfo = (id: number) => request<GitInfo | null>('kanban.gitstate', { id })
+export const mergeTicket = (id: number, squash: boolean) => request<GitInfo>('kanban.merge', { id, squash })
+export const rebaseTicket = (id: number) => request<GitInfo>('kanban.rebase', { id })
+export const continueGit = (id: number, where: 'worktree' | 'main') => request<GitInfo>('kanban.continue', { id, where })
+export const abortGit = (id: number, where: 'worktree' | 'main') => request<GitInfo>('kanban.abort', { id, where })
+
 /** Id of the project opened on the worktree of a ticket (see projects.ChildID). */
 export function childProject(ticket: number) {
   const p = project()
