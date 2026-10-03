@@ -18,7 +18,8 @@ Toute la spec est implémentée et testée, plus sept ajouts : autocomplétion, 
 | `fb780dd` | Agent : CLAUDE.md / AGENTS.md, skills, prompt éditable, compaction, outils IDE et consoles, conversations en SQLite |
 | `0968e76` | Nouvelle interface de l'assistant, historique latéral, Mermaid et stats en direct, conversation restaurée |
 | `a50b891` | Diagrammes plein écran, menu du contexte, outil bash, commandes /, mentions @ |
-| dernier commit | Reprise après rechargement, file de messages, édition sur place, Ctrl+clic sur @fichier |
+| `97737d7` | Reprise après rechargement, file de messages, édition sur place, Ctrl+clic sur @fichier |
+| dernier commit | Une autre fenêtre suit la réponse en cours (spectatrice), arrêt à distance, reprise de la main |
 
 ## Commandes
 
@@ -96,6 +97,7 @@ Panneau de droite « Assistant IA » (détachable) : serveurs llama.cpp ou Ollam
 - Diagrammes : bouton ⤢ (ou clic sur le diagramme) → plein écran `DiagramViewer.tsx` (molette, glisser, ajuster plafonné à 150 %, 100 %, export SVG / PNG, copie de la source).
 - Menu du contexte (anneau) : jetons utilisés / taille, barre avec le seuil, messages envoyés et compactés, compaction automatique et seuil, bouton « Compacter maintenant ».
 - Génération qui survit à un rechargement (`pod/internal/llm/jobs.go`) : `llm.chat` lance un job du pod (contexte indépendant de la connexion) ; si la page part, le job continue ; `llm.attach {stream}` renvoie ce qui est déjà écrit (événement `llm.delta` avec `snapshot`) puis la suite et le résultat. Arrêter (`$/cancel` alors que la connexion est vivante) annule le job ; jobs gardés 10 min après leur fin. La conversation enregistre `running: { stream }` ; au rechargement `resumeIfNeeded()` marque « interrompu » les outils en cours (sans les relancer) et se rattache au flux ou continue. `llm.claim` / `llm.release` : une seule fenêtre fait tourner une conversation (libéré à la déconnexion).
+- Plusieurs fenêtres : une fenêtre qui ouvre une conversation tenue par une autre (`llm.claim` refusé) la suit en spectatrice (`live.watching`) : `llm.attach` avec `watch` (sa fin n'annule jamais le job), rechargement de la conversation à chaque `llm.saved` (émis aux autres fenêtres du projet après un enregistrement), saisie désactivée, Arrêter → `llm.stop` relayé à la fenêtre propriétaire. Quand celle-ci libère ou se déconnecte (`llm.released`), la spectatrice relit la conversation et la reprend si elle tourne encore.
 - Pièges : un store Solid fusionne les objets (`setChat('running', {})` ne vide rien : écrire `{ stream: undefined }`) ; les enregistrements de conversation sont enchaînés (`saveChat` : un à la fois, le suivant prend l'état du moment) pour qu'un ancien ne passe pas après un récent ; le regroupement des deltas (40 ms) a une minuterie, sinon un jeton reste bloqué pendant une pause du modèle.
 - File d'attente : un message envoyé pendant une réponse va dans `chat.queue` (enregistrée, affichée au-dessus de la zone de saisie, reprenable ou supprimable) ; il rejoint la conversation à l'étape suivante (après les résultats d'outils) ou relance l'agent à la fin de la réponse.
 - Édition sur place d'un message utilisateur (bulle remplacée par une zone de texte) : la conversation repart de ce message, pièces jointes gardées ; une commande `/` modifiée est exécutée.

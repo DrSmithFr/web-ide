@@ -81,7 +81,7 @@ async function ask(page, message, expect) {
 
 const atEnd = (page) => page.$eval('.ai-messages', (el) => el.scrollHeight - el.scrollTop - el.clientHeight)
 
-run(async ({ page }) => {
+run(async ({ page, ctx }) => {
   await new Promise((r) => fake.listen(0, '127.0.0.1', r))
   page.on('dialog', (d) => d.accept())
   try {
@@ -176,6 +176,43 @@ run(async ({ page }) => {
     const resumed = await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Reprise : Interrompu par le rechargement")', { timeout: 15000 }).then(() => true, () => false)
     const rows = await page.$$eval('.ai-tool', (e) => e.filter((x) => x.textContent.includes('sleep 3')).map((x) => x.className))
     assert(resumed && rows.length === 1 && rows[0].includes('error') && byScenario['outil-lent'] === 2, `outil interrompu par le rechargement (sans relance), puis l’agent continue (${rows.length} outil, ${byScenario['outil-lent']} requêtes)`)
+
+    // Another window opened during an answer follows its stream.
+    await page.waitForSelector('[data-testid=send]')
+    const toolUrl = new URL(new URL(page.url()).pathname + '/tool/assistant', page.url()).href
+    const other = await ctx.newPage()
+    await other.goto(toolUrl)
+    await other.waitForSelector('.ai-panel.detached .ai-composer')
+    const lentBefore = byScenario.lent
+    await page.click('.ai-composer textarea')
+    await page.fill('.ai-composer textarea', 'lent un')
+    await page.keyboard.press('Enter')
+    await other.waitForSelector('.ai-msg.live .md:has-text("Partie 1. x")', { timeout: 10000 })
+    assert(true, 'l’autre fenêtre suit la réponse en cours')
+    assert((await other.getAttribute('.ai-composer textarea', 'placeholder')).includes('autre fenêtre'), 'zone de saisie de l’autre fenêtre en lecture seule')
+    await other.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Fin.")', { timeout: 15000 })
+    assert(byScenario.lent === lentBefore + 1, 'réponse reçue dans l’autre fenêtre sans nouvelle requête')
+
+    // Stop from the window that follows.
+    await page.waitForSelector('[data-testid=send]')
+    await page.fill('.ai-composer textarea', 'lent deux')
+    await page.keyboard.press('Enter')
+    await other.waitForSelector('.ai-msg.live .md:has-text("Partie 1. x")', { timeout: 10000 })
+    await other.click('[data-testid=stop]')
+    await page.waitForSelector('.ai-error:has-text("Arrêté")', { timeout: 10000 })
+    assert(true, 'Arrêter depuis l’autre fenêtre arrête la réponse')
+
+    // The running window closes: the other one takes over and gets the end.
+    await page.waitForSelector('[data-testid=send]')
+    await other.waitForSelector('[data-testid=send]', { timeout: 10000 })
+    await page.fill('.ai-composer textarea', 'lent trois')
+    await page.keyboard.press('Enter')
+    await other.waitForSelector('.ai-msg.live .md:has-text("Partie 1. x")', { timeout: 10000 })
+    await page.close()
+    await other.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Fin.")', { timeout: 15000 })
+    const ends = await other.$$eval('.ai-msg.assistant:not(.live) .md', (e) => e.filter((x) => x.textContent.includes('Fin.')).length)
+    assert(ends >= 2, 'la fenêtre restante reprend la conversation et reçoit la fin')
+    await other.screenshot({ path: OUT + '/chat-other-window.png' })
   } finally {
     fake.close()
   }

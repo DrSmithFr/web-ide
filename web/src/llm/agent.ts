@@ -8,6 +8,7 @@ import { buildSystemPrompt, loadPromptContext, promptContext } from './prompt'
 import {
   approval,
   chat,
+  openChat,
   config,
   contextSize,
   contextUsed,
@@ -192,7 +193,13 @@ function drainQueue(): boolean {
  * then the agent attaches to the completion still running in the pod (or goes on).
  */
 export async function resumeIfNeeded() {
-  if (!chat.running || live.busy) return
+  if (!chat.running || (live.busy && !live.watching)) return
+  // Another window may run it: then this one only follows.
+  if (!(await request<boolean>('llm.claim', { id: chat.id }).catch(() => true))) {
+    syncWatch()
+    return
+  }
+  stopWatch()
   setChat(
     produce((c) => {
       const done = new Set(c.messages.filter((m) => m.role === 'tool').map((m) => m.tool_call_id))
@@ -223,9 +230,68 @@ export async function retry() {
 }
 
 export function stop() {
+  // Following another window: ask it to stop.
+  if (live.watching) {
+    request('llm.stop', { id: chat.id }).catch(() => {})
+    return
+  }
   ctrl?.abort()
   approval()?.resolve(false)
 }
+
+// ---------- following an answer run by another window ----------
+
+let watchCtrl: AbortController | null = null
+let watchedStream = ''
+
+/** Shows the answer another window is running: its stream, read only. */
+function syncWatch() {
+  if (ctrl) return // this window runs the conversation
+  if (!chat.running) {
+    stopWatch()
+    return
+  }
+  setLive({ busy: true, watching: true })
+  const stream = chat.running.stream
+  if (!stream || stream === watchedStream) {
+    if (!stream) setLive({ ...resetLive })
+    return
+  }
+  watchCtrl?.abort()
+  watchCtrl = new AbortController()
+  watchedStream = stream
+  setLive({ ...resetLive, stream, startedAt: Date.now() })
+  // The answer joins the conversation when the other window saves it (llm.saved).
+  request('llm.attach', { stream, watch: true }, watchCtrl.signal).catch(() => {})
+}
+
+/** Stops following (the window shows another conversation). */
+export function stopWatch() {
+  watchCtrl?.abort()
+  watchCtrl = null
+  watchedStream = ''
+  if (live.watching) setLive({ busy: false, watching: false, stream: '', ...resetLive })
+}
+
+/** Another window saved this conversation: show its state. */
+on('llm.saved', async (e: { id: string }) => {
+  if (e.id !== chat.id || ctrl) return
+  await openChat(e.id).catch(() => {})
+  syncWatch()
+})
+
+/** The window running this conversation is gone (or done): take over if it still runs. */
+on('llm.released', async (e: { id: string }) => {
+  if (e.id !== chat.id || ctrl) return
+  await openChat(e.id).catch(() => {})
+  stopWatch()
+  await resumeIfNeeded()
+})
+
+/** The window following this conversation asks to stop. */
+on('llm.stop', (e: { id: string }) => {
+  if (e.id === chat.id && ctrl) stop()
+})
 
 function needsCompaction(): boolean {
   const ctx = contextSize()

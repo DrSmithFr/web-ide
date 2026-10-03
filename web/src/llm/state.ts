@@ -143,6 +143,8 @@ export const [chatList, setChatList] = createSignal<ChatInfo[]>([])
  */
 export const [live, setLive] = createStore({
   busy: false,
+  /** This window only follows an answer run by another window. */
+  watching: false,
   content: '',
   reasoning: '',
   tool: '',

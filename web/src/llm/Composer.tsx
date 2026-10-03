@@ -511,6 +511,10 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
     const text = draft().trim()
     const atts = pending()
     if (!canSend()) return
+    if (live.watching) {
+      toast('Réponse en cours dans une autre fenêtre : attendre sa fin pour écrire ici', 'info')
+      return
+    }
     if (text.startsWith('/') && !atts.length) {
       setDraft('')
       setHelp(false)
@@ -670,7 +674,7 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
         <textarea
           ref={(el) => (textareaRef = el)}
           rows="1"
-          placeholder={live.busy ? 'Écrire la suite : le message attendra la prochaine étape…' : config.model ? `Message à ${config.model}…` : 'Choisir un modèle pour commencer…'}
+          placeholder={live.watching ? 'Réponse en cours dans une autre fenêtre…' : live.busy ? 'Écrire la suite : le message attendra la prochaine étape…' : config.model ? `Message à ${config.model}…` : 'Choisir un modèle pour commencer…'}
           value={draft()}
           onInput={(e) => {
             setDraft(e.currentTarget.value)
@@ -710,7 +714,7 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
             <ContextMenu />
           </Show>
           <ModelPicker onSettings={props.onSettings} />
-          <Show when={live.busy && canSend()}>
+          <Show when={live.busy && !live.watching && canSend()}>
             <button class="ai-send queue" onClick={submit} aria-label="Mettre en file d’attente" title="Mettre en file d’attente (Entrée) : envoyé à la prochaine étape" data-testid="enqueue">
               <Icon name="arrowUp" size={16} />
             </button>

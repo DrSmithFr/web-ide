@@ -260,14 +260,20 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 	c.readLoop(ctx)
 	s.mu.Lock()
 	delete(s.clients, c)
+	var released []string
 	for id, owner := range s.claims {
 		if owner == c {
 			delete(s.claims, id)
+			released = append(released, id)
 		}
 	}
 	project := c.project
 	rt := s.runtimes[project]
 	s.mu.Unlock()
+	// A window following a conversation this one was running takes it over.
+	for _, id := range released {
+		s.emitter(project)("llm.released", map[string]string{"id": id}, c.id)
+	}
 	if rt != nil {
 		rt.Detach()
 	}

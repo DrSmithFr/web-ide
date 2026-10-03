@@ -7,7 +7,7 @@ import { errorToast } from '../ui/toast'
 import { route } from '../app/router'
 import { approval, chat, live, loadConfig, modelsError, prefs, resetChat, restoreActive, savePrefs, setPrefs } from './state'
 import { SettingsModal } from './AssistantSettings'
-import { resumeIfNeeded } from './agent'
+import { resumeIfNeeded, stopWatch } from './agent'
 import { Thread } from './Thread'
 import { addFiles, Composer, focusComposer, suggest } from './Composer'
 import { Sidebar } from './Sidebar'
@@ -74,7 +74,8 @@ export function AssistantTool() {
   )
 
   const newChat = () => {
-    if (live.busy) return
+    if (live.busy && !live.watching) return
+    stopWatch()
     resetChat()
     focusComposer()
   }
@@ -91,7 +92,7 @@ export function AssistantTool() {
           {chat.title || 'Nouvelle conversation'}
         </span>
         <span class="grow" />
-        <button class="icon-btn" title="Nouvelle conversation" disabled={live.busy} onClick={newChat}>
+        <button class="icon-btn" title="Nouvelle conversation" disabled={live.busy && !live.watching} onClick={newChat}>
           <Icon name="plus" size={15} />
         </button>
         <button class="icon-btn" title="Réglages (serveurs, prompt, compaction, transcription)" onClick={() => setSettings(true)}>

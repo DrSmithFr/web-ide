@@ -69,7 +69,7 @@ func (s *Server) registerLLM() {
 			}{stream, d})
 		}
 	}
-	wait := func(ctx context.Context, c *Client, stream string, snapshot bool) (any, error) {
+	wait := func(ctx context.Context, c *Client, stream string, snapshot, watch bool) (any, error) {
 		var onSnap func(llm.Snapshot)
 		if snapshot {
 			onSnap = func(sn llm.Snapshot) {
@@ -81,7 +81,7 @@ func (s *Server) registerLLM() {
 			}
 		}
 		res, err := s.LLM.WaitChat(ctx, stream, onSnap, push(c, stream))
-		if err != nil && ctx.Err() != nil && c.ctx.Err() == nil {
+		if err != nil && !watch && ctx.Err() != nil && c.ctx.Err() == nil {
 			// Cancelled by the page itself (button Stop), not by a lost connection.
 			s.LLM.CancelChat(stream)
 		}
@@ -98,16 +98,19 @@ func (s *Server) registerLLM() {
 		if err := s.LLM.StartChat(a.Stream, a.ChatRequest); err != nil {
 			return nil, err
 		}
-		return wait(ctx, c, a.Stream, false)
+		return wait(ctx, c, a.Stream, false, false)
 	})
 	s.handle("llm.attach", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 		a, err := bind[struct {
 			Stream string `json:"stream"`
+			// Watch: a window that only follows (another one runs the conversation); its
+			// end never cancels the completion.
+			Watch bool `json:"watch"`
 		}](p)
 		if err != nil {
 			return nil, err
 		}
-		return wait(ctx, c, a.Stream, true)
+		return wait(ctx, c, a.Stream, true, a.Watch)
 	})
 	// A conversation is run by one window at a time: the one that claimed it. A claim
 	// ends with llm.release or when its window disconnects.
@@ -130,10 +133,29 @@ func (s *Server) registerLLM() {
 			return nil, err
 		}
 		s.mu.Lock()
-		if s.claims[a.ID] == c {
+		released := s.claims[a.ID] == c
+		if released {
 			delete(s.claims, a.ID)
 		}
 		s.mu.Unlock()
+		if released {
+			s.emitter(c.project)("llm.released", map[string]string{"id": a.ID}, c.id)
+		}
+		return nil, nil
+	})
+	// llm.stop asks the window running a conversation to stop (button of a window that
+	// only follows it).
+	s.handle("llm.stop", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		a, err := bind[struct{ ID string }](p)
+		if err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		owner := s.claims[a.ID]
+		s.mu.Unlock()
+		if owner != nil {
+			owner.push("llm.stop", map[string]string{"id": a.ID})
+		}
 		return nil, nil
 	})
 
@@ -188,7 +210,16 @@ func (s *Server) registerLLM() {
 		if err != nil {
 			return nil, err
 		}
-		return nil, s.LLM.SaveChat(loc(c, rt), a.Chat)
+		if err := s.LLM.SaveChat(loc(c, rt), a.Chat); err != nil {
+			return nil, err
+		}
+		// The other windows showing this conversation reload it.
+		var id struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(a.Chat, &id)
+		s.emitter(c.project)("llm.saved", id, c.id)
+		return nil, nil
 	}))
 	s.handle("llm.chats.delete", withProject(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
 		a, err := bind[idArg](p)

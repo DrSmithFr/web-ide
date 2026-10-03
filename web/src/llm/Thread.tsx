@@ -405,11 +405,12 @@ function LiveStats() {
     const t = now()
     const parts: string[] = []
     if (live.compacting) return 'Compaction de la conversation…'
+    if (live.watching && !live.stream) return 'Étape en cours dans une autre fenêtre…'
     if (!live.firstAt) {
       if (live.promptTotal) {
         const pct = Math.round((live.promptDone / live.promptTotal) * 100)
         parts.push(`Lecture du prompt · ${pct} % (${formatTokens(live.promptDone)} / ${formatTokens(live.promptTotal)})`)
-      } else parts.push('En attente du modèle')
+      } else parts.push(live.watching ? 'Réponse en cours dans une autre fenêtre' : 'En attente du modèle')
     } else {
       parts.push(live.tool ? `Prépare l’appel à ${live.tool}` : live.content ? 'Écrit' : 'Réfléchit')
       const speed = liveSpeed(t)

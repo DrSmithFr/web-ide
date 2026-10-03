@@ -4,6 +4,7 @@ import { createMemo, createSignal, For, onMount, Show } from 'solid-js'
 import { Icon } from '../ui/icons'
 import { prompt } from '../ui/overlay'
 import { errorToast } from '../ui/toast'
+import { stopWatch } from './agent'
 import { chat, chatList, deleteChat, live, openChat, refreshChats, renameChat, resetChat, type ChatInfo } from './state'
 
 function groupOf(t: number): string {
@@ -33,8 +34,9 @@ export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
     return out
   })
   const open = async (id: string) => {
-    if (live.busy) return
+    if (live.busy && !live.watching) return
     try {
+      stopWatch()
       await openChat(id)
       props.onPicked()
     } catch (e) {
@@ -57,8 +59,9 @@ export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
       </div>
       <button
         class="ai-new-chat"
-        disabled={live.busy}
+        disabled={live.busy && !live.watching}
         onClick={() => {
+          stopWatch()
           resetChat()
           props.onNew()
         }}
