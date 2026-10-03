@@ -87,14 +87,12 @@
   "stream already in use": "flux déjà utilisé",
   "stream id is missing": "identifiant de flux manquant",
   "the destination already exists": "la destination existe déjà",
-  "the main folder has uncommitted changes: commit or stash them before merging": "le dossier principal a des modifications non commitées : les commiter ou les mettre de côté avant de fusionner",
   "the main folder is on the branch “%s”: switch to “%s” to merge": "le dossier principal est sur la branche « %s » : passer sur « %s » pour fusionner",
   "the model cannot move the ticket from “%s” to “%s”": "le modèle ne peut pas passer le ticket de « %s » à « %s »",
   "the project is not a git repository: cannot create the branch of the ticket": "le projet n'est pas un dépôt git : impossible de créer la branche du ticket",
   "the project path must be absolute": "le chemin du projet doit être absolu",
   "the project target is not a folder": "la cible du projet n'est pas un dossier",
   "the ticket must be “Ready”, “In progress” or in fix": "le ticket doit être « À développer », « En cours » ou en correction",
-  "the worktree has uncommitted changes: commit them before the rebase": "le worktree a des modifications non commitées : les commiter avant le rebase",
   "this ticket cannot move to this status": "ce ticket ne peut pas passer à cet état",
   "this ticket has no branch": "ce ticket n'a pas de branche",
   "this ticket has no worktree": "ce ticket n'a pas de worktree",
@@ -120,5 +118,6 @@
   "unknown type: %s (%s)": "type inconnu : %s (%s)",
   "the repository has no commit yet: cannot create the branch of the ticket": "le dépôt n'a encore aucun commit : impossible de créer la branche du ticket",
   "invalid icon": "icône invalide",
-  "open the project to change its icon": "ouvrez le projet pour changer son icône"
+  "open the project to change its icon": "ouvrez le projet pour changer son icône",
+  "your uncommitted changes could not be applied again: they are kept in the git stash": "vos modifications non commitées n'ont pas pu être réappliquées : elles sont gardées dans le stash git"
 }

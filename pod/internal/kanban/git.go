@@ -327,11 +327,6 @@ func (g Git) Merged(ctx context.Context, branch, into string) bool {
 	return err == nil
 }
 
-func (g Git) clean(ctx context.Context, dir string) bool {
-	out, err := g.git(ctx, dir, "status", "--porcelain", "--untracked-files=no")
-	return err == nil && strings.TrimSpace(out) == ""
-}
-
 // Merge merges the branch of a ticket into the local base branch, in the main folder.
 // A conflict leaves the merge in progress (no automatic abort).
 func (g Git) Merge(ctx context.Context, branch, into, message string, squash bool) (State, error) {
@@ -342,16 +337,15 @@ func (g Git) Merge(ctx context.Context, branch, into, message string, squash boo
 	if st := g.State(ctx, g.Root); st.Busy() {
 		return st, i18n.New("a merge or a rebase is already in progress in the main folder")
 	}
-	if !g.clean(ctx, g.Root) {
-		return State{}, i18n.New("the main folder has uncommitted changes: commit or stash them before merging")
-	}
+	// Uncommitted changes of the main folder are put aside and applied again after the
+	// merge (by git, also after a conflict once the merge is committed or aborted).
 	var err error
 	if squash {
-		if _, err = g.git(ctx, g.Root, "merge", "--squash", branch); err == nil {
+		if _, err = g.git(ctx, g.Root, "merge", "--squash", "--autostash", branch); err == nil {
 			_, err = g.git(ctx, g.Root, "commit", "-m", message)
 		}
 	} else {
-		_, err = g.git(ctx, g.Root, "merge", "--no-ff", "-m", message, branch)
+		_, err = g.git(ctx, g.Root, "merge", "--no-ff", "--autostash", "-m", message, branch)
 	}
 	st := g.State(ctx, g.Root)
 	if err != nil && len(st.Conflicts) == 0 {
@@ -365,10 +359,7 @@ func (g Git) Rebase(ctx context.Context, worktree, base string) (State, error) {
 	if st := g.State(ctx, worktree); st.Busy() {
 		return st, i18n.New("a rebase is already in progress in the worktree")
 	}
-	if !g.clean(ctx, worktree) {
-		return State{}, i18n.New("the worktree has uncommitted changes: commit them before the rebase")
-	}
-	_, err := g.git(ctx, worktree, "-c", "core.editor=true", "-c", "core.commentChar=auto", "rebase", base)
+	_, err := g.git(ctx, worktree, "-c", "core.editor=true", "-c", "core.commentChar=auto", "rebase", "--autostash", base)
 	st := g.State(ctx, worktree)
 	if err != nil && len(st.Conflicts) == 0 && !st.Rebase {
 		return st, err
@@ -409,8 +400,22 @@ func (g Git) Abort(ctx context.Context, dir string) error {
 	case st.Merge:
 		_, err = g.git(ctx, dir, "merge", "--abort")
 	case st.Squash:
+		// reset --merge would move the changes put aside by the merge to the stash list:
+		// they are applied again here (kept in the stash list on a conflict).
+		stash, _ := g.git(ctx, dir, "rev-parse", "-q", "--verify", "MERGE_AUTOSTASH")
+		if stash = strings.TrimSpace(stash); stash != "" {
+			_, _ = g.git(ctx, dir, "update-ref", "-d", "MERGE_AUTOSTASH")
+		}
 		if _, err = g.git(ctx, dir, "reset", "--merge"); err == nil {
 			_, _ = g.Run.Output(ctx, []string{"sh", "-c", `rm -f "$(git rev-parse --git-path SQUASH_MSG)"`}, dir)
+		}
+		if stash != "" {
+			if _, aerr := g.git(ctx, dir, "stash", "apply", stash); aerr != nil {
+				_, _ = g.git(ctx, dir, "stash", "store", "-m", "web-ide: changes put aside by the merge", stash)
+				if err == nil {
+					err = i18n.New("your uncommitted changes could not be applied again: they are kept in the git stash")
+				}
+			}
 		}
 	}
 	return err

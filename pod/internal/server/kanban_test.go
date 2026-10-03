@@ -226,17 +226,35 @@ func TestKanbanMergeRebase(t *testing.T) {
 	gitIn(t, wt2, "commit", "-q", "-am", "#2 b2")
 	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b3\n"), 0o644)
 	gitIn(t, dir, "commit", "-q", "-am", "b3")
+	// Uncommitted changes of the main folder are put aside during the merge.
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("sale\n"), 0o644)
 	st = a.call("kanban.merge", map[string]any{"id": 2, "squash": true})["result"].(map[string]any)
 	if m := st["main"].(map[string]any); m["squash"] != true || len(m["conflicts"].([]any)) != 1 {
 		t.Fatalf("squash conflict: %+v", st)
 	}
 	st = a.call("kanban.abort", map[string]any{"id": 2, "where": "main"})["result"].(map[string]any)
-	if m := st["main"].(map[string]any); m["squash"] != false || len(m["conflicts"].([]any)) != 0 || gitIn(t, dir, "status", "--porcelain", "--untracked-files=no") != "" {
-		t.Fatalf("abort: %+v", st)
+	if m := st["main"].(map[string]any); m["squash"] != false || len(m["conflicts"].([]any)) != 0 || gitIn(t, dir, "status", "--porcelain", "--untracked-files=no") != "M a.txt" {
+		t.Fatalf("abort: %+v / %q", st, gitIn(t, dir, "status", "--porcelain", "--untracked-files=no"))
 	}
-	// A dirty main folder refuses the merge.
-	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("sale\n"), 0o644)
-	if r := a.callRaw("kanban.merge", map[string]any{"id": 2}); r["error"] == nil {
-		t.Fatal("merge with a dirty main folder")
+	if got, _ := os.ReadFile(filepath.Join(dir, "a.txt")); string(got) != "sale\n" {
+		t.Fatalf("changes of the main folder after the abort: %q", got)
+	}
+	// Rebase of a worktree with uncommitted changes, then merge into the dirty main folder.
+	os.WriteFile(filepath.Join(wt2, "a.txt"), []byte("wip\n"), 0o644)
+	a.call("kanban.rebase", map[string]any{"id": 2})
+	os.WriteFile(filepath.Join(wt2, "b.txt"), []byte("b3\nb2\n"), 0o644)
+	gitIn(t, wt2, "add", "b.txt")
+	a.call("kanban.continue", map[string]any{"id": 2, "where": "worktree"})
+	if got, _ := os.ReadFile(filepath.Join(wt2, "a.txt")); string(got) != "wip\n" {
+		t.Fatalf("changes of the worktree after the rebase: %q", got)
+	}
+	st = a.call("kanban.merge", map[string]any{"id": 2})["result"].(map[string]any)
+	if st["merged"] != true {
+		t.Fatalf("merge with a dirty main folder: %+v", st)
+	}
+	got, _ := os.ReadFile(filepath.Join(dir, "a.txt"))
+	got2, _ := os.ReadFile(filepath.Join(dir, "b.txt"))
+	if string(got) != "sale\n" || string(got2) != "b3\nb2\n" {
+		t.Fatalf("after the merge: a=%q b=%q", got, got2)
 	}
 }
