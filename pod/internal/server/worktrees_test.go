@@ -10,7 +10,7 @@ func TestWorktrees(t *testing.T) {
 	for k, v := range map[string]string{"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@x", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@x"} {
 		t.Setenv(k, v)
 	}
-	_, ts := newServer(t)
+	srv, ts := newServer(t)
 	a, _ := dial(t, ts, "secret-token-0123456789abcdef0123")
 	dir := t.TempDir()
 	id := a.call("projects.create", map[string]any{"type": "local", "path": dir})["result"].(map[string]any)["id"].(string)
@@ -52,5 +52,26 @@ func TestWorktrees(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(filepath.Join(dir, "wip.txt")); string(got) != "wip" {
 		t.Fatal("changes of the main folder")
+	}
+
+	// Removal: refused with uncommitted changes unless forced; the branch stays.
+	os.WriteFile(filepath.Join(wt, "draft.txt"), []byte("x"), 0o644)
+	if r := b.callRaw("worktrees.remove", map[string]any{"path": first["path"]}); r["error"] == nil {
+		t.Fatal("dirty worktree removed")
+	}
+	b.call("worktrees.remove", map[string]any{"path": first["path"], "force": true})
+	if _, err := os.Stat(wt); !os.IsNotExist(err) {
+		t.Fatal("worktree still there")
+	}
+	if _, ok := srv.Projects.Get(child); ok {
+		t.Fatal("project of the worktree kept")
+	}
+	if gitIn(t, dir, "branch", "--list", "feature/x") == "" {
+		t.Fatal("branch deleted")
+	}
+	// The setup command of the kanban comes with a new worktree.
+	a.call("kanban.meta.set", map[string]any{"values": map[string]string{"setup": "npm install"}})
+	if r := a.call("worktrees.add", map[string]any{"branch": "feature/x"})["result"].(map[string]any); r["setup"] != "npm install" {
+		t.Fatalf("add = %+v", r)
 	}
 }

@@ -259,13 +259,15 @@ export function childProject(ticket: number) {
 
 /**
  * Opens a project (the worktree of a ticket…) in its own window, or brings back the window
- * already open on it (project windows are named after their project).
+ * already open on it (project windows are named after their project). setup: a new
+ * worktree, the window runs the setup command of the kanban.
  */
-export function openWorktreeWindow(projectId: string, assistant = false) {
-  const url = `/project/${encodeURIComponent(projectId)}${assistant ? '?assistant=1' : ''}`
+export function openWorktreeWindow(projectId: string, assistant = false, setup = false) {
+  const query = assistant ? '?assistant=1' : setup ? '?setup=1' : ''
+  const url = `/project/${encodeURIComponent(projectId)}${query}`
   const w = window.open('', `project-${projectId}`)
   if (!w) return
-  if (assistant || w.location.href === 'about:blank') w.location.href = url
+  if (query || w.location.href === 'about:blank') w.location.href = url
   w.focus()
 }
 

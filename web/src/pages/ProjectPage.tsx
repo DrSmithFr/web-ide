@@ -15,7 +15,7 @@ import { Connections } from '../panels/Connections'
 import { GitPanel } from '../panels/GitPanel'
 import { KanbanPanel } from '../kanban/Panel'
 import { NewTicketHost } from '../kanban/Board'
-import { openBoard } from '../kanban/state'
+import { board, ensureBoard, openBoard, refreshBoard } from '../kanban/state'
 import { refreshGit } from '../state/git'
 import { DatabaseTool } from '../db/DatabaseTool'
 import { AssistantTool } from '../llm/AssistantTool'
@@ -305,6 +305,14 @@ export function ProjectPage(props: { id: string }) {
       if (new URLSearchParams(location.search).has('assistant')) {
         mutate((s) => (s.right.panel = 'assistant'))
         history.replaceState(null, '', location.pathname)
+      }
+      // A worktree just created from the menu bar: run the setup command of the kanban.
+      if (new URLSearchParams(location.search).has('setup')) {
+        history.replaceState(null, '', location.pathname)
+        ensureBoard()
+        await refreshBoard()
+        const cmd = board.meta.setup?.trim()
+        if (cmd) void newConsole({ kind: 'task', command: ['sh', '-c', cmd], title: t('Worktree setup') })
       }
       setReady(true)
       refreshGit(0)

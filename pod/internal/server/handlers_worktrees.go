@@ -136,9 +136,61 @@ func (s *Server) registerWorktrees() {
 			}
 		}
 		v, err := s.Projects.PutWorktree(root, local, dir)
-		if err == nil {
-			s.emitter(root.ID)("git.changed", nil, "")
+		if err != nil {
+			return nil, err
 		}
-		return map[string]string{"project": v.ID}, err
+		s.emitter(root.ID)("git.changed", nil, "")
+		// The setup command of the kanban (npm install…) runs in the window of the worktree.
+		meta, _ := s.Kanban.Meta(kanbanLoc(root))
+		return map[string]string{"project": v.ID, "setup": strings.TrimSpace(meta["setup"])}, nil
+	})
+	// Removes a worktree opened from the menu bar (a ticket one goes with its ticket) and
+	// its project; the branch is kept. Uncommitted changes need force.
+	s.handle("worktrees.remove", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		a, err := bind[struct {
+			Path  string
+			Force bool
+		}](p)
+		if err != nil {
+			return nil, err
+		}
+		root, rt, err := s.rootOf(c)
+		if err != nil {
+			return nil, err
+		}
+		list, err := rt.Git.Worktrees(ctx)
+		if err != nil {
+			return nil, err
+		}
+		found := false
+		for _, w := range list {
+			found = found || (w.Path == a.Path && !w.Main)
+		}
+		if !found {
+			return nil, i18n.Errorf("worktree not found: %s", a.Path)
+		}
+		child, ticket := s.Projects.ChildAt(root.ID, a.Path)
+		if ticket != 0 {
+			return nil, i18n.New("this worktree belongs to a ticket: it is removed when the ticket is closed or abandoned")
+		}
+		if !a.Force && rt.Git.Dirty(ctx, a.Path) {
+			return nil, &codeError{"dirty", i18n.New("the worktree has uncommitted changes")}
+		}
+		if child != "" {
+			// The asking window leaves the project itself (it goes to the main folder).
+			s.mu.Lock()
+			if c.project == child {
+				c.project = ""
+			}
+			s.mu.Unlock()
+			s.closeRuntime(child)
+			_ = s.Projects.Delete(child)
+			s.Sessions.Delete(child)
+		}
+		if err := rt.Git.RemoveWorktree(ctx, a.Path); err != nil {
+			return nil, err
+		}
+		s.emitter(root.ID)("git.changed", nil, "")
+		return nil, nil
 	})
 }

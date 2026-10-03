@@ -121,5 +121,7 @@
   "open the project to change its icon": "ouvrez le projet pour changer son icône",
   "your uncommitted changes could not be applied again: they are kept in the git stash": "vos modifications non commitées n'ont pas pu être réappliquées : elles sont gardées dans le stash git",
   "branch name missing": "nom de branche manquant",
-  "worktree not found: %s": "worktree introuvable : %s"
+  "worktree not found: %s": "worktree introuvable : %s",
+  "this worktree belongs to a ticket: it is removed when the ticket is closed or abandoned": "ce worktree appartient à un ticket : il est supprimé quand le ticket est fermé ou abandonné",
+  "the worktree has uncommitted changes": "le worktree a des modifications non commitées"
 }

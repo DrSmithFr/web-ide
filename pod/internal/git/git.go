@@ -359,3 +359,15 @@ func (g *Repo) ref(ctx context.Context, ref string) bool {
 	_, err := g.git(ctx, "rev-parse", "--verify", "--quiet", ref)
 	return err == nil
 }
+
+// Dirty tells whether a worktree has uncommitted changes (untracked files included).
+func (g *Repo) Dirty(ctx context.Context, dir string) bool {
+	out, err := g.inTop(ctx, dir, "status", "--porcelain")
+	return err != nil || strings.TrimSpace(out) != ""
+}
+
+// RemoveWorktree deletes a worktree (its uncommitted changes with it); the branch stays.
+func (g *Repo) RemoveWorktree(ctx context.Context, dir string) error {
+	_, err := g.git(ctx, "worktree", "remove", "--force", dir)
+	return err
+}

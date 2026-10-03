@@ -56,6 +56,13 @@ run(async ({ page, ctx }) => {
   assert((await page.textContent('[data-testid=branch-selector]')).includes('main'), 'current branch in the menu bar')
   assert((await page.title()) === 'demo · main', 'window title: ' + (await page.title()))
 
+  // The setup command of the kanban runs in the new worktrees.
+  await page.click('.rail-left .rail-btn[title="Kanban"]')
+  await page.click('[data-testid=kanban-open-board]')
+  await page.click('[data-testid=kanban-settings]')
+  await page.fill('[data-testid=kanban-setup]', 'echo installed > setup.log')
+  await page.click('[data-testid=kanban-settings-save]')
+
   // Open the branch "feature": a worktree in its own window, the main folder untouched.
   await page.click('[data-testid=branch-selector]')
   await page.waitForSelector('.pick-item:has-text("main folder")')
@@ -71,6 +78,10 @@ run(async ({ page, ctx }) => {
   await win.waitForFunction(() => decodeURIComponent(document.querySelector('link[rel="icon"]').href).includes('r="12"'), null, { timeout: 5000 }).catch(() => {})
   assert((await favicon(win)).includes('linearGradient') && (await favicon(win)).includes('r="12"'), 'worktree favicon: icon of the project with a dot')
   await win.screenshot({ path: OUT + '/worktree-window.png' })
+  const wt = WS + '/demo/.ide/worktrees/b-feature'
+  const deadline2 = Date.now() + 8000
+  while (!fs.existsSync(wt + '/setup.log') && Date.now() < deadline2) await win.waitForTimeout(100)
+  assert(fs.existsSync(wt + '/setup.log'), 'setup command run in the new worktree')
 
   // From the worktree window, the list shows both; the main folder brings back its window.
   await win.click('[data-testid=branch-selector]')
@@ -81,4 +92,16 @@ run(async ({ page, ctx }) => {
   await win.click('.pick-item:has-text("main folder")')
   await win.waitForTimeout(500)
   assert(ctx.pages().length === pages, 'the window of the main folder is reused')
+
+  // Remove the worktree from its own window (uncommitted changes: confirmed): back to the
+  // main folder, the branch kept.
+  win.on('dialog', (d) => d.accept())
+  await win.click('[data-testid=branch-selector]')
+  await win.click('.pick-item:has-text("Remove a worktree")')
+  await win.waitForSelector('.pick-item:has-text("feature")')
+  await Promise.all([win.waitForURL((u) => !u.pathname.includes('-w'), { timeout: 8000 }), win.click('.pick-item:has-text("feature")')])
+  await win.waitForSelector('.menubar')
+  assert(!fs.existsSync(wt) && git('branch --list feature') !== '', 'worktree removed, branch kept')
+  await win.waitForFunction(() => document.querySelector('[data-testid=branch-selector]')?.textContent.includes('main'), null, { timeout: 5000 }).catch(() => {})
+  assert((await win.textContent('[data-testid=branch-selector]')).includes('main'), 'the window is back on the main folder')
 })

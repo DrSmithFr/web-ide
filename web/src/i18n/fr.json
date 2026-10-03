@@ -1113,5 +1113,10 @@
   "Open a branch…": "Ouvrir une branche…",
   "in its own worktree": "dans son propre worktree",
   "Worktrees and branches": "Worktrees et branches",
-  "no git": "pas de git"
+  "no git": "pas de git",
+  "Remove a worktree…": "Supprimer un worktree…",
+  "the branch is kept": "la branche est conservée",
+  "Remove the worktree of {branch}? The branch is kept.": "Supprimer le worktree de {branch} ? La branche est conservée.",
+  "The worktree has uncommitted changes: they will be lost with it. Remove anyway?": "Le worktree a des modifications non commitées : elles seront perdues avec lui. Supprimer quand même ?",
+  "Worktree setup": "Préparation du worktree"
 }
