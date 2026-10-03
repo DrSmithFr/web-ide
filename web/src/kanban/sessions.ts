@@ -1,18 +1,19 @@
 // Conversations of the assistant linked to a ticket: briefing and plan in the window of
 // the project, development and corrections in the worktree of the ticket (docs/kanban.md).
 import { mutate, project } from '../state/project'
-import { request } from '../pod/rpc'
+import { request, RpcError } from '../pod/rpc'
 import { toast, errorToast } from '../ui/toast'
 import { chat, config, emptyChat, live, loadConfig, openChat, resetChat, setChat, type Chat, type ChatRole } from '../llm/state'
 import { resumeIfNeeded, send, stopWatch } from '../llm/agent'
 import { moveTicket, openWorktreeWindow, roleLabels, startWork, worktreeProject, type Ticket } from './state'
+import { t } from '../i18n'
 
-const firstMessage: Record<ChatRole, (t: Ticket) => string> = {
-  briefing: (t) => `Faisons le briefing du ticket #${t.id} « ${t.title} » : aide-moi à le préciser.`,
-  plan: (t) => `Rédige le plan d'implémentation du ticket #${t.id} « ${t.title} » et ses goals, puis passe-le à « À développer ».`,
-  dev: (t) => `Développe le ticket #${t.id} « ${t.title} » en suivant son plan.`,
-  correction: (t) => `Corrige le ticket #${t.id} « ${t.title} » d'après les retours de test.`,
-  resolve: (t) => `Résous les conflits du rebase de la branche du ticket #${t.id}.`,
+const firstMessage: Record<ChatRole, (tk: Ticket) => string> = {
+  briefing: (k) => t("Let's do the briefing of ticket #{id} “{title}”: help me clarify it.", { id: k.id, title: k.title }),
+  plan: (k) => t('Write the implementation plan of ticket #{id} “{title}” and its goals, then move it to “Ready”.', { id: k.id, title: k.title }),
+  dev: (k) => t('Develop ticket #{id} “{title}” following its plan.', { id: k.id, title: k.title }),
+  correction: (k) => t('Fix ticket #{id} “{title}” according to the test feedback.', { id: k.id, title: k.title }),
+  resolve: (k) => t('Resolve the git conflicts of the branch of ticket #{id}.', { id: k.id }),
 }
 
 function showAssistant() {
@@ -21,7 +22,7 @@ function showAssistant() {
 
 function assistantFree(): boolean {
   if (live.busy && !live.watching) {
-    toast('Une réponse est en cours dans l’assistant : attendre sa fin ou l’arrêter.', 'warn')
+    toast(t('An answer is running in the assistant: wait for it to end or stop it.'), 'warn')
     showAssistant()
     return false
   }
@@ -29,19 +30,19 @@ function assistantFree(): boolean {
 }
 
 /** Starts a conversation linked to a ticket in this window, with its first message. */
-export async function startTicketChat(t: Ticket, role: ChatRole, text?: string) {
+export async function startTicketChat(tk: Ticket, role: ChatRole, text?: string) {
   if (!assistantFree()) return
   stopWatch()
   resetChat()
-  setChat({ ticket: { id: t.id, role }, mode: role === 'briefing' || role === 'plan' ? 'plan' : 'build', title: `#${t.id} ${roleLabels[role]} · ${t.title}`.slice(0, 80) })
+  setChat({ ticket: { id: tk.id, role }, mode: role === 'briefing' || role === 'plan' ? 'plan' : 'build', title: `#${tk.id} ${roleLabels[role]} · ${tk.title}`.slice(0, 80) })
   showAssistant()
   try {
     await loadConfig()
     if (!config.server || !config.model) {
-      toast('Choisir un serveur et un modèle dans l’assistant, puis relancer.', 'warn')
+      toast(t('Choose a server and a model in the assistant, then try again.'), 'warn')
       return
     }
-    await send(text ?? firstMessage[role](t), [], [])
+    await send(text ?? firstMessage[role](tk), [], [])
   } catch (e) {
     errorToast(e)
   }
@@ -67,16 +68,16 @@ export async function openTicketChat(chatId: string) {
  * from another one, the conversation is saved with its first message and the worktree
  * window opens on it and runs it.
  */
-export async function startWorkSession(t: Ticket, role: ChatRole) {
-  if (project()?.ticket === t.id) return startTicketChat(t, role)
+export async function startWorkSession(tk: Ticket, role: ChatRole) {
+  if (project()?.ticket === tk.id) return startTicketChat(tk, role)
   let target: string
   try {
-    target = (await startWork(t.id)).project
+    target = (await startWork(tk.id)).project
   } catch (e) {
     const msg = (e as Error).message
-    if (/pas un dépôt git/.test(msg) && confirm(`${msg}.\n\nDévelopper dans le dossier du projet, sans branche ni worktree ?`)) {
-      if (t.status === 'ready') await moveTicket(t.id, 'in_progress').catch(() => {})
-      return startTicketChat(t, role)
+    if (e instanceof RpcError && e.code === 'not_git' && confirm(t('{error}.\n\nDevelop in the project folder, without branch or worktree?', { error: msg }))) {
+      if (tk.status === 'ready') await moveTicket(tk.id, 'in_progress').catch(() => {})
+      return startTicketChat(tk, role)
     }
     errorToast(e)
     return
@@ -84,26 +85,26 @@ export async function startWorkSession(t: Ticket, role: ChatRole) {
   try {
     await loadConfig()
     if (!config.server || !config.model) {
-      toast('Choisir un serveur et un modèle dans l’assistant, puis relancer.', 'warn')
+      toast(t('Choose a server and a model in the assistant, then try again.'), 'warn')
       openWorktreeWindow(target)
       return
     }
     const now = Date.now()
     const c: Chat = {
       ...emptyChat(),
-      title: `#${t.id} ${roleLabels[role]} · ${t.title}`.slice(0, 80),
+      title: `#${tk.id} ${roleLabels[role]} · ${tk.title}`.slice(0, 80),
       server: config.server,
       model: config.model,
       mode: 'build',
-      ticket: { id: t.id, role },
-      messages: [{ role: 'user', content: firstMessage[role](t) }],
+      ticket: { id: tk.id, role },
+      messages: [{ role: 'user', content: firstMessage[role](tk) }],
       // Picked up by the worktree window as an answer to resume (resumeIfNeeded).
       running: {},
       created: now,
       updated: now,
     }
     await request('llm.chats.save', { chat: c })
-    await request('kanban.chat.link', { id: t.id, chatId: c.id, role, title: c.title }).catch(() => {})
+    await request('kanban.chat.link', { id: tk.id, chatId: c.id, role, title: c.title }).catch(() => {})
     try {
       localStorage.setItem(`webide.llm.active.${target}`, c.id)
     } catch {
@@ -116,10 +117,10 @@ export async function startWorkSession(t: Ticket, role: ChatRole) {
 }
 
 /** Opens the window of the worktree of a ticket. */
-export async function openWorktree(t: Ticket) {
-  if (project()?.ticket === t.id) return
+export async function openWorktree(tk: Ticket) {
+  if (project()?.ticket === tk.id) return
   try {
-    openWorktreeWindow((await worktreeProject(t.id)).project)
+    openWorktreeWindow((await worktreeProject(tk.id)).project)
   } catch (e) {
     errorToast(e)
   }

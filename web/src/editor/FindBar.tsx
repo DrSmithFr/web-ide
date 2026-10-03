@@ -4,6 +4,7 @@
 import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js'
 import type { Doc } from './doc'
 import type { EditorView } from './view'
+import { t } from '../i18n'
 
 const MAX = 20000
 
@@ -98,7 +99,7 @@ export function FindBar(props: { view: EditorView; doc: Doc; initial: string; on
     if (error()) return null
     const n = matches().length
     if (!query()) return ''
-    if (!n) return 'Aucun résultat'
+    if (!n) return t('No result')
     return `${current() + 1} / ${n}${n >= MAX ? '+' : ''}`
   }
 
@@ -107,8 +108,8 @@ export function FindBar(props: { view: EditorView; doc: Doc; initial: string; on
       <input
         ref={input}
         class="find-input"
-        placeholder="Rechercher"
-        aria-label="Rechercher dans le fichier"
+        placeholder={t('Find')}
+        aria-label={t('Find in the file')}
         value={query()}
         onInput={(e) => setQuery(e.currentTarget.value)}
         onKeyDown={(e) => {
@@ -122,13 +123,13 @@ export function FindBar(props: { view: EditorView; doc: Doc; initial: string; on
           }
         }}
       />
-      <button class="toggle" classList={{ on: caseSensitive() }} aria-pressed={caseSensitive()} title="Respecter la casse" onClick={() => setCase(!caseSensitive())}>
+      <button class="toggle" classList={{ on: caseSensitive() }} aria-pressed={caseSensitive()} title={t('Match case')} onClick={() => setCase(!caseSensitive())}>
         Aa
       </button>
-      <button class="toggle" classList={{ on: word() }} aria-pressed={word()} title="Mot entier" onClick={() => setWord(!word())}>
+      <button class="toggle" classList={{ on: word() }} aria-pressed={word()} title={t('Whole word')} onClick={() => setWord(!word())}>
         ab|
       </button>
-      <button class="toggle" classList={{ on: regex() }} aria-pressed={regex()} title="Expression régulière" onClick={() => setRegex(!regex())}>
+      <button class="toggle" classList={{ on: regex() }} aria-pressed={regex()} title={t('Regular expression')} onClick={() => setRegex(!regex())}>
         .*
       </button>
       <Show when={error()} fallback={<span class="find-count">{counter()}</span>}>
@@ -136,13 +137,13 @@ export function FindBar(props: { view: EditorView; doc: Doc; initial: string; on
           {error()}
         </span>
       </Show>
-      <button class="icon-btn" title="Précédent (Maj+Entrée)" disabled={!matches().length} onClick={() => go(-1)}>
+      <button class="icon-btn" title={t('Previous (Shift+Enter)')} disabled={!matches().length} onClick={() => go(-1)}>
         ↑
       </button>
-      <button class="icon-btn" title="Suivant (Entrée)" disabled={!matches().length} onClick={() => go(1)}>
+      <button class="icon-btn" title={t('Next (Enter)')} disabled={!matches().length} onClick={() => go(1)}>
         ↓
       </button>
-      <button class="icon-btn" title="Fermer (Échap)" onClick={() => close(false)}>
+      <button class="icon-btn" title={t('Close (Esc)')} onClick={() => close(false)}>
         ✕
       </button>
     </div>

@@ -25,11 +25,11 @@ export interface CompletionItem {
 }
 
 export const completionKinds: Record<number, [string, string]> = {
-  1: ['texte', 'abc'], 2: ['méthode', 'm'], 3: ['fonction', 'ƒ'], 4: ['constructeur', 'm'], 5: ['champ', 'f'], 6: ['variable', 'v'],
-  7: ['classe', 'C'], 8: ['interface', 'I'], 9: ['module', '{}'], 10: ['propriété', 'p'], 11: ['unité', 'u'], 12: ['valeur', '='],
-  13: ['enum', 'E'], 14: ['mot-clé', 'k'], 15: ['snippet', '⌘'], 16: ['couleur', '#'], 17: ['fichier', '📄'], 18: ['référence', '&'],
-  19: ['dossier', '📁'], 20: ['membre d’enum', 'e'], 21: ['constante', 'c'], 22: ['struct', 'S'], 23: ['événement', '⚡'],
-  24: ['opérateur', '±'], 25: ['paramètre de type', 'T'],
+  1: ['Text', 'abc'], 2: ['Method', 'm'], 3: ['Function', 'ƒ'], 4: ['Constructor', 'm'], 5: ['Field', 'f'], 6: ['Variable', 'v'],
+  7: ['Class', 'C'], 8: ['Interface', 'I'], 9: ['Module', '{}'], 10: ['Property', 'p'], 11: ['Unit', 'u'], 12: ['Value', '='],
+  13: ['Enum', 'E'], 14: ['Keyword', 'k'], 15: ['Snippet', '⌘'], 16: ['Color', '#'], 17: ['File', '📄'], 18: ['Reference', '&'],
+  19: ['Folder', '📁'], 20: ['Enum member', 'e'], 21: ['Constant', 'c'], 22: ['Struct', 'S'], 23: ['Event', '⚡'],
+  24: ['Operator', '±'], 25: ['Type parameter', 'T'],
 }
 
 /** Characters of an identifier, by language ($ belongs to PHP and JS names). */

@@ -1,5 +1,5 @@
 // Side-by-side diff of a file (tab of the editor): working tree against the index
-// ("modifications"), or the index against HEAD ("indexé"). The working side follows the
+// ("changes"), or the index against HEAD ("staged"). The working side follows the
 // open buffer while it is edited.
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, Show, Switch } from 'solid-js'
 import { request } from '../pod/rpc'
@@ -7,6 +7,7 @@ import { docsVersion, getDoc, openFile, relPath, setActivePane, type TabState } 
 import { gitRevision, gitStatus, refreshGit } from '../state/git'
 import { lineHunks } from '../editor/linediff'
 import { errorToast } from './toast'
+import { t, tn } from '../i18n'
 
 const CONTEXT = 3
 
@@ -115,7 +116,7 @@ export function DiffView(props: { tab: TabState; paneId: string }) {
     <div class="diff-view" onMouseDown={() => setActivePane(props.paneId)}>
       <div class="toolbar">
         <span class="small">
-          {relPath(path)} · {staged ? 'indexé ↔ HEAD' : 'copie de travail ↔ index'}
+          {relPath(path)} · {staged ? t('index ↔ HEAD') : t('working tree ↔ index')}
         </span>
         <Show when={diff() && !diff()!.tooBig}>
           <span class="diff-stats">
@@ -123,17 +124,17 @@ export function DiffView(props: { tab: TabState; paneId: string }) {
           </span>
         </Show>
         <span class="grow" />
-        <button class="icon-btn" title="Modification précédente" disabled={!diff()?.hunks} onClick={() => go(-1)}>
+        <button class="icon-btn" title={t('Previous change')} disabled={!diff()?.hunks} onClick={() => go(-1)}>
           ↑
         </button>
-        <button class="icon-btn" title="Modification suivante" disabled={!diff()?.hunks} onClick={() => go(1)}>
+        <button class="icon-btn" title={t('Next change')} disabled={!diff()?.hunks} onClick={() => go(1)}>
           ↓
         </button>
         <button class="btn small" onClick={() => openFile(path)}>
-          Ouvrir le fichier
+          {t('Open the file')}
         </button>
         <button class="btn small" onClick={toggleStage}>
-          {staged ? 'Désindexer' : isStagedNow() ? 'Indexer à nouveau' : 'Indexer'}
+          {staged ? t('Unstage') : isStagedNow() ? t('Stage again') : t('Stage')}
         </button>
       </div>
       <div class="diff-body" ref={body}>
@@ -142,13 +143,13 @@ export function DiffView(props: { tab: TabState; paneId: string }) {
             <p class="danger pad">{String(texts.error?.message ?? texts.error)}</p>
           </Match>
           <Match when={!diff()}>
-            <p class="muted pad">Chargement…</p>
+            <p class="muted pad">{t('Loading…')}</p>
           </Match>
           <Match when={diff()!.tooBig}>
-            <p class="muted pad">Différences trop étendues pour être affichées ligne à ligne.</p>
+            <p class="muted pad">{t('Differences too large to show line by line.')}</p>
           </Match>
           <Match when={!diff()!.hunks}>
-            <p class="muted pad">Aucune différence.</p>
+            <p class="muted pad">{t('No difference.')}</p>
           </Match>
           <Match when={true}>
             <table class="diff">
@@ -157,7 +158,7 @@ export function DiffView(props: { tab: TabState; paneId: string }) {
                   {(r) =>
                     r.kind === 'fold' ? (
                       <tr class="diff-fold" onClick={() => setExpanded(new Set([...expanded(), r.id]))}>
-                        <td colspan="4">⋯ {r.count} ligne(s) identique(s)</td>
+                        <td colspan="4">⋯ {tn(r.count, '{n} identical line', '{n} identical lines')}</td>
                       </tr>
                     ) : r.kind === 'same' ? (
                       <tr>

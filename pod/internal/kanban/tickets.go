@@ -5,8 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
+
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
 
 type Goal struct {
@@ -93,7 +94,7 @@ type Ticket struct {
 	Attachments []Attachment `json:"attachments"`
 }
 
-var ErrNotFound = errors.New("ticket introuvable")
+var ErrNotFound = i18n.New("ticket not found")
 
 const summaryCols = `t.id, t.title, t.type, t.priority, t.status, t.branch, t.worktree, t.created, t.updated, t.closed,
   (SELECT COUNT(*) FROM goals g WHERE g.ticket_id = t.id AND g.done = 1),
@@ -229,13 +230,13 @@ type Patch struct {
 
 func (p *Patch) validate() error {
 	if p.Title != nil && strings.TrimSpace(*p.Title) == "" {
-		return errors.New("titre vide")
+		return i18n.New("empty title")
 	}
 	if p.Type != nil && !contains(Types, *p.Type) {
-		return fmt.Errorf("type inconnu : %s (%s)", *p.Type, strings.Join(Types, ", "))
+		return i18n.Errorf("unknown type: %s (%s)", *p.Type, strings.Join(Types, ", "))
 	}
 	if p.Priority != nil && !contains(Priorities, *p.Priority) {
-		return fmt.Errorf("priorité inconnue : %s (%s)", *p.Priority, strings.Join(Priorities, ", "))
+		return i18n.Errorf("unknown priority: %s (%s)", *p.Priority, strings.Join(Priorities, ", "))
 	}
 	return nil
 }
@@ -267,15 +268,27 @@ func (m *Manager) tx(loc Location, id int64, f func(tx *sql.Tx, now int64) error
 	return tx.Commit()
 }
 
-func event(tx *sql.Tx, id int64, by, text string, now int64) error {
-	_, err := tx.Exec(`INSERT INTO notes (ticket_id, kind, author, text, created) VALUES (?, 'event', ?, ?, ?)`, id, by, text, now)
+// Params are the values of a history line; EventText stores it as {"key", "params"}: the
+// page translates the key (English text with {name} placeholders).
+type Params map[string]any
+
+func EventText(key string, p Params) string {
+	data, _ := json.Marshal(struct {
+		Key    string `json:"key"`
+		Params Params `json:"params,omitempty"`
+	}{key, p})
+	return string(data)
+}
+
+func event(tx *sql.Tx, id int64, by, key string, p Params, now int64) error {
+	_, err := tx.Exec(`INSERT INTO notes (ticket_id, kind, author, text, created) VALUES (?, 'event', ?, ?, ?)`, id, by, EventText(key, p), now)
 	return err
 }
 
 // Create adds a ticket in the New status and returns its number.
 func (m *Manager) Create(loc Location, p Patch, by string) (int64, error) {
 	if p.Title == nil {
-		return 0, errors.New("titre manquant")
+		return 0, i18n.New("title is missing")
 	}
 	if err := p.validate(); err != nil {
 		return 0, err
@@ -302,7 +315,7 @@ func (m *Manager) Create(loc Location, p Patch, by string) (int64, error) {
 		if err := setFiles(tx, id, p); err != nil {
 			return err
 		}
-		return event(tx, id, by, "Ticket créé", now)
+		return event(tx, id, by, "Ticket created", nil, now)
 	})
 	return id, err
 }
@@ -355,15 +368,15 @@ func (m *Manager) Update(loc Location, id int64, p Patch, by string) error {
 	})
 }
 
-// StatusLabels are the French names of the statuses (history of the ticket).
-var StatusLabels = map[string]string{
-	New: "Nouveau", Ready: "À développer", InProgress: "En cours", Review: "À tester", Fix: "Correction", Done: "Terminé", Abandoned: "Abandonné",
+// StatusNames are the English names of the statuses (translated in messages).
+var StatusNames = map[string]string{
+	New: "New", Ready: "Ready", InProgress: "In progress", Review: "To test", Fix: "Fix", Done: "Done", Abandoned: "Abandoned",
 }
 
 // Move changes the status of a ticket if the actor may do this transition.
 func (m *Manager) Move(loc Location, id int64, to, by, comment string) error {
 	if !contains(Statuses, to) {
-		return fmt.Errorf("état inconnu : %s", to)
+		return i18n.Errorf("unknown status: %s", to)
 	}
 	return m.tx(loc, id, func(tx *sql.Tx, now int64) error {
 		var from string
@@ -374,11 +387,10 @@ func (m *Manager) Move(loc Location, id int64, to, by, comment string) error {
 			return nil
 		}
 		if !CanMove(from, to, by) {
-			who := "l'utilisateur"
 			if by == ByModel {
-				who = "le modèle"
+				return i18n.Errorf("the model cannot move the ticket from “%s” to “%s”", i18n.Text(StatusNames[from]), i18n.Text(StatusNames[to]))
 			}
-			return fmt.Errorf("passage de « %s » à « %s » impossible pour %s", StatusLabels[from], StatusLabels[to], who)
+			return i18n.Errorf("a ticket cannot go from “%s” to “%s”", i18n.Text(StatusNames[from]), i18n.Text(StatusNames[to]))
 		}
 		closed := int64(0)
 		if to == Done || to == Abandoned {
@@ -387,11 +399,10 @@ func (m *Manager) Move(loc Location, id int64, to, by, comment string) error {
 		if _, err := tx.Exec(`UPDATE tickets SET status = ?, closed = ? WHERE id = ?`, to, closed, id); err != nil {
 			return err
 		}
-		text := StatusLabels[from] + " → " + StatusLabels[to]
 		if comment = strings.TrimSpace(comment); comment != "" {
-			text += " : " + comment
+			return event(tx, id, by, "{from} → {to}: {comment}", Params{"from": from, "to": to, "comment": comment}, now)
 		}
-		return event(tx, id, by, text, now)
+		return event(tx, id, by, "{from} → {to}", Params{"from": from, "to": to}, now)
 	})
 }
 
@@ -415,10 +426,10 @@ func (m *Manager) Delete(loc Location, id int64) error {
 func (m *Manager) AddNote(loc Location, id int64, kind, text, by string) error {
 	text = strings.TrimSpace(text)
 	if text == "" {
-		return errors.New("note vide")
+		return i18n.New("empty note")
 	}
 	if kind != "note" && kind != "feedback" {
-		return errors.New("type de note inconnu")
+		return i18n.New("unknown note kind")
 	}
 	err := m.tx(loc, id, func(tx *sql.Tx, now int64) error {
 		if _, err := tx.Exec(`INSERT INTO notes (ticket_id, kind, author, text, created) VALUES (?, ?, ?, ?, ?)`, id, kind, by, text, now); err != nil {
@@ -473,7 +484,7 @@ func (m *Manager) SetPlan(loc Location, id int64, plan string, goals []string, b
 				}
 			}
 		}
-		return event(tx, id, by, "Plan mis à jour", now)
+		return event(tx, id, by, "Plan updated", nil, now)
 	})
 }
 
@@ -493,7 +504,7 @@ func (m *Manager) Goal(loc Location, id int64, op GoalOp) error {
 		switch op.Op {
 		case "add":
 			if strings.TrimSpace(op.Text) == "" {
-				return errors.New("goal vide")
+				return i18n.New("empty goal")
 			}
 			src := op.Source
 			if src == "" {
@@ -504,19 +515,19 @@ func (m *Manager) Goal(loc Location, id int64, op GoalOp) error {
 			res, err = tx.Exec(`UPDATE goals SET done = ? WHERE ticket_id = ? AND id = ?`, op.Done, id, op.ID)
 		case "edit":
 			if strings.TrimSpace(op.Text) == "" {
-				return errors.New("goal vide")
+				return i18n.New("empty goal")
 			}
 			res, err = tx.Exec(`UPDATE goals SET text = ? WHERE ticket_id = ? AND id = ?`, strings.TrimSpace(op.Text), id, op.ID)
 		case "delete":
 			res, err = tx.Exec(`DELETE FROM goals WHERE ticket_id = ? AND id = ?`, id, op.ID)
 		default:
-			return errors.New("opération inconnue : " + op.Op)
+			return i18n.Errorf("unknown operation: %s", op.Op)
 		}
 		if err != nil {
 			return err
 		}
 		if n, _ := res.RowsAffected(); n == 0 {
-			return fmt.Errorf("goal %d introuvable", op.ID)
+			return i18n.Errorf("goal %d not found", op.ID)
 		}
 		return nil
 	})
@@ -524,7 +535,7 @@ func (m *Manager) Goal(loc Location, id int64, op GoalOp) error {
 
 func (m *Manager) LinkChat(loc Location, id int64, chatID, role, title string) error {
 	if !contains(ChatRoles, role) {
-		return errors.New("rôle de conversation inconnu : " + role)
+		return i18n.Errorf("unknown conversation role: %s", role)
 	}
 	return m.tx(loc, id, func(tx *sql.Tx, now int64) error {
 		_, err := tx.Exec(`INSERT INTO chats (ticket_id, chat_id, role, title, created) VALUES (?, ?, ?, ?, ?)
@@ -551,7 +562,7 @@ func (m *Manager) RenameChat(loc Location, chatID, title string) {
 func (m *Manager) LinkCommit(loc Location, id int64, hash, subject string) error {
 	hash = strings.TrimSpace(hash)
 	if hash == "" {
-		return errors.New("commit vide")
+		return i18n.New("empty commit")
 	}
 	return m.tx(loc, id, func(tx *sql.Tx, now int64) error {
 		_, err := tx.Exec(`INSERT INTO commits (ticket_id, hash, subject, created) VALUES (?, ?, ?, ?)
@@ -571,7 +582,7 @@ const MaxAttachment = 20 << 20
 
 func (m *Manager) AddAttachment(loc Location, id int64, name, mime string, data []byte) (int64, error) {
 	if len(data) > MaxAttachment {
-		return 0, errors.New("pièce jointe trop grosse (20 Mo max)")
+		return 0, i18n.New("attachment too large (20 MB max)")
 	}
 	var aid int64
 	err := m.tx(loc, id, func(tx *sql.Tx, now int64) error {
@@ -593,7 +604,7 @@ func (m *Manager) Attachment(loc Location, id, aid int64) (*Attachment, []byte, 
 	var data []byte
 	err = db.QueryRow(`SELECT id, name, mime, size, created, data FROM attachments WHERE ticket_id = ? AND id = ?`, id, aid).Scan(&a.ID, &a.Name, &a.Mime, &a.Size, &a.Created, &data)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil, errors.New("pièce jointe introuvable")
+		return nil, nil, i18n.New("attachment not found")
 	}
 	return a, data, err
 }
@@ -634,9 +645,9 @@ func (m *Manager) SetGit(loc Location, id int64, g GitState) error {
 	})
 }
 
-// Event adds a line to the history of a ticket.
-func (m *Manager) Event(loc Location, id int64, by, text string) error {
-	return m.tx(loc, id, func(tx *sql.Tx, now int64) error { return event(tx, id, by, text, now) })
+// Event adds a line to the history of a ticket (see EventText).
+func (m *Manager) Event(loc Location, id int64, by, key string, p Params) error {
+	return m.tx(loc, id, func(tx *sql.Tx, now int64) error { return event(tx, id, by, key, p, now) })
 }
 
 // Meta reads and writes the settings of the kanban of a project (worktree setup command…).

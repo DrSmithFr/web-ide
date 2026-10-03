@@ -10,6 +10,7 @@ import { prompt } from '../ui/overlay'
 import { toast } from '../ui/toast'
 import { applyWorkspaceEdit, capabilities, toOffsets } from './edits'
 import { wordStart, isWordChar } from './completion'
+import { t } from '../i18n'
 
 function lsp(doc: Doc, method: string, params: object) {
   return request('lsp.request', { lang: lspLanguage(doc.path), method, params })
@@ -18,7 +19,7 @@ function lsp(doc: Doc, method: string, params: object) {
 export async function renameSymbol(v: EditorView, doc: Doc) {
   const caps = await capabilities(doc.path)
   if (!caps?.renameProvider) {
-    toast('Le serveur de langage de ce fichier ne sait pas renommer', 'info')
+    toast(t('The language server of this file cannot rename'), 'info')
     return
   }
   flushLsp(doc.path)
@@ -31,7 +32,7 @@ export async function renameSymbol(v: EditorView, doc: Doc) {
     if (typeof caps.renameProvider === 'object' && caps.renameProvider.prepareProvider) {
       const r = await lsp(doc, 'textDocument/prepareRename', { textDocument, position })
       if (!r) {
-        toast("Rien à renommer à cet endroit", 'info')
+        toast(t('Nothing to rename here'), 'info')
         return
       }
       if (r.placeholder) current = r.placeholder
@@ -50,24 +51,24 @@ export async function renameSymbol(v: EditorView, doc: Doc) {
     while (end < doc.text.length && isWordChar(doc.text[end], doc.lang)) end++
     current = doc.text.slice(wordStart(doc, offset), end)
   }
-  const name = await prompt({ title: 'Renommer', label: `Nouveau nom pour « ${current} »`, value: current })
+  const name = await prompt({ title: t('Rename'), label: t('New name for “{name}”', { name: current }), value: current })
   v.focus()
   if (!name || name === current) return
   try {
     const edit = await lsp(doc, 'textDocument/rename', { textDocument, position, newName: name })
     if (!edit) {
-      toast('Renommage refusé par le serveur', 'info')
+      toast(t('Rename refused by the server'), 'info')
       return
     }
     const sel = v.getSelection()
     const r = await applyWorkspaceEdit(edit, 'rename')
     v.setSelection(Math.min(sel.anchor, doc.text.length), Math.min(sel.head, doc.text.length), false)
-    let msg = `${current} → ${name} : ${r.edits} modification(s) dans ${r.files} fichier(s)`
-    if (r.written.length) msg += ` (dont ${r.written.length} fichier(s) non ouverts enregistrés : ${r.written.map(relPath).slice(0, 3).join(', ')}${r.written.length > 3 ? '…' : ''})`
+    let msg = `${current} → ${name}: ${t('{edits} change(s) in {files} file(s)', { edits: r.edits, files: r.files })}`
+    if (r.written.length) msg += ` (${t('including {n} closed file(s) saved: {list}', { n: r.written.length, list: r.written.map(relPath).slice(0, 3).join(', ') + (r.written.length > 3 ? '…' : '') })})`
     toast(msg, 'ok', undefined, 6000)
-    if (r.skipped.length) toast(`Non appliqué : ${r.skipped.join(', ')}`, 'warn')
+    if (r.skipped.length) toast(t('Not applied: {list}', { list: r.skipped.join(', ') }), 'warn')
   } catch (e) {
-    toast(`Renommage impossible : ${(e as Error).message}`, 'error')
+    toast(t('Rename failed: {message}', { message: (e as Error).message }), 'error')
   }
 }
 
@@ -77,7 +78,7 @@ export async function formatDocument(v: EditorView, doc: Doc) {
   const sel = v.getSelection()
   const ranged = sel.anchor !== sel.head && caps?.documentRangeFormattingProvider
   if (!caps?.documentFormattingProvider && !ranged) {
-    toast('Pas de formateur pour ce fichier (serveur de langage)', 'info')
+    toast(t('No formatter for this file (language server)'), 'info')
     return
   }
   flushLsp(doc.path)
@@ -92,17 +93,17 @@ export async function formatDocument(v: EditorView, doc: Doc) {
       edits = await lsp(doc, 'textDocument/rangeFormatting', { textDocument, options, range: { start: { line: a.line, character: a.col }, end: { line: b.line, character: b.col } } })
     } else edits = await lsp(doc, 'textDocument/formatting', { textDocument, options })
     if (doc.version !== version) {
-      toast('Le texte a changé pendant le formatage : relancer', 'warn')
+      toast(t('The text changed during the formatting: try again'), 'warn')
       return
     }
     if (!edits?.length) {
-      toast('Déjà bien formaté', 'info', undefined, 1500)
+      toast(t('Already well formatted'), 'info', undefined, 1500)
       return
     }
     const map = doc.applyEdits(toOffsets(doc.text, edits), 'format')
     v.setSelection(map(sel.anchor), map(sel.head), false)
-    toast(`Code reformaté (${edits.length} modification(s))`, 'ok', undefined, 2000)
+    toast(t('Code reformatted ({n} change(s))', { n: edits.length }), 'ok', undefined, 2000)
   } catch (e) {
-    toast(`Formatage impossible : ${(e as Error).message}`, 'error')
+    toast(t('Formatting failed: {message}', { message: (e as Error).message }), 'error')
   }
 }

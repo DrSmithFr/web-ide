@@ -375,7 +375,7 @@ const yaml: GrammarDef = {
   },
 }
 
-const plain: GrammarDef = { id: 'plaintext', name: 'Texte', extensions: ['.txt', '.log'], states: { root: [] } }
+const plain: GrammarDef = { id: 'plaintext', name: 'Text', extensions: ['.txt', '.log'], states: { root: [] } }
 
 export const builtinGrammars: GrammarDef[] = [
   php,

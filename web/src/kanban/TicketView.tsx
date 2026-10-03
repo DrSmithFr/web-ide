@@ -9,11 +9,12 @@ import { Markdown } from '../llm/parts'
 import { request } from '../pod/rpc'
 import { basename, closeTab, leaves, openFile, relPath, root, type TabState } from '../state/project'
 import {
-  addAttachment, addNote, attachmentBlob, deleteAttachment, deleteNote, deleteTicket, ensureBoard, getTicket, goalOp, linkCommit, moveTicket,
+  addAttachment, addNote, eventText, attachmentBlob, deleteAttachment, deleteNote, deleteTicket, ensureBoard, getTicket, goalOp, linkCommit, moveTicket,
   priorityLabels, roleLabels, statusLabels, ticketVersion, typeLabels, unlinkChat, unlinkCommit, updateTicket,
   type Priority, type Status, type Ticket, type TicketType,
 } from './state'
 import { abandonTicket, ticketActions, TicketChats, TicketGit } from './actions'
+import { fmtDate, fmtSize, t } from '../i18n'
 import './kanban.css'
 
 export function TicketView(props: { tab: TabState; paneId: string }) {
@@ -38,9 +39,9 @@ export function TicketView(props: { tab: TabState; paneId: string }) {
     }
   }
   return (
-    <Show when={ticket()} fallback={<p class="muted pad">Chargement du ticket…</p>}>
+    <Show when={ticket()} fallback={<p class="muted pad">{t('Loading the ticket…')}</p>}>
       <Show when={!ticket().error} fallback={<p class="danger pad">{ticket().error}</p>}>
-        <TicketBody t={ticket() as Ticket} apply={apply} paneId={props.paneId} tabId={props.tab.id} />
+        <TicketBody tk={ticket() as Ticket} apply={apply} paneId={props.paneId} tabId={props.tab.id} />
       </Show>
     </Show>
   )
@@ -48,50 +49,50 @@ export function TicketView(props: { tab: TabState; paneId: string }) {
 
 export type Apply = (p: Promise<Ticket>) => Promise<void>
 
-function TicketBody(props: { t: Ticket; apply: Apply; paneId: string; tabId: string }) {
-  const t = () => props.t
+function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: string }) {
+  const tk = () => props.tk
   const [noteText, setNoteText] = createSignal('')
   let noteArea!: HTMLTextAreaElement
-  const notes = () => t().notes.filter((n) => n.kind !== 'event')
-  const events = () => t().notes.filter((n) => n.kind === 'event')
-  const closed = () => t().status === 'done' || t().status === 'abandoned'
+  const notes = () => tk().notes.filter((n) => n.kind !== 'event')
+  const events = () => tk().notes.filter((n) => n.kind === 'event')
+  const closed = () => tk().status === 'done' || tk().status === 'abandoned'
 
-  const move = (s: Status, comment = '') => props.apply(moveTicket(t().id, s, 'user', comment))
+  const move = (s: Status, comment = '') => props.apply(moveTicket(tk().id, s, 'user', comment))
   const focusFeedback = () => {
     noteArea?.focus()
     noteArea?.scrollIntoView({ block: 'center' })
   }
 
   const remove = async () => {
-    if (!confirm(`Supprimer définitivement le ticket #${t().id} ?`)) return
+    if (!confirm(t('Delete ticket #{id} for good?', { id: tk().id }))) return
     try {
-      await deleteTicket(t().id)
+      await deleteTicket(tk().id)
       for (const l of leaves()) if (l.tabs.includes(props.tabId)) closeTab(l.id, props.tabId, true)
     } catch (e) {
       errorToast(e)
     }
   }
 
-  const buttons = () => ticketActions(t(), { move, apply: props.apply, focusFeedback })
+  const buttons = () => ticketActions(tk(), { move, apply: props.apply, focusFeedback })
 
   return (
-    <div class="tk" data-testid="ticket-view" data-status={t().status}>
+    <div class="tk" data-testid="ticket-view" data-status={tk().status}>
       <header class="tk-head">
         <div class="tk-title-row">
-          <span class="tk-num">#{t().id}</span>
-          <EditableText value={t().title} class="tk-title" onSave={(v) => props.apply(updateTicket(t().id, { title: v }))} testid="ticket-title" />
-          <span class={`kb-status st-${t().status}`} data-testid="ticket-status">
-            {statusLabels[t().status]}
+          <span class="tk-num">#{tk().id}</span>
+          <EditableText value={tk().title} class="tk-title" onSave={(v) => props.apply(updateTicket(tk().id, { title: v }))} testid="ticket-title" />
+          <span class={`kb-status st-${tk().status}`} data-testid="ticket-status">
+            {statusLabels[tk().status]}
           </span>
         </div>
         <div class="tk-meta-row">
-          <select class="small" value={t().type} onChange={(e) => props.apply(updateTicket(t().id, { type: e.currentTarget.value as TicketType }))} title="Type">
+          <select class="small" value={tk().type} onChange={(e) => props.apply(updateTicket(tk().id, { type: e.currentTarget.value as TicketType }))} title={t('Type')}>
             <For each={Object.entries(typeLabels)}>{([v, l]) => <option value={v}>{l}</option>}</For>
           </select>
-          <select class="small" value={t().priority} onChange={(e) => props.apply(updateTicket(t().id, { priority: e.currentTarget.value as Priority }))} title="Priorité">
-            <For each={Object.entries(priorityLabels)}>{([v, l]) => <option value={v}>Priorité {l.toLowerCase()}</option>}</For>
+          <select class="small" value={tk().priority} onChange={(e) => props.apply(updateTicket(tk().id, { priority: e.currentTarget.value as Priority }))} title={t('Priority')}>
+            <For each={Object.entries(priorityLabels)}>{([v, l]) => <option value={v}>{t('{priority} priority', { priority: l })}</option>}</For>
           </select>
-          <span class="muted small">créé le {new Date(t().created).toLocaleString()}</span>
+          <span class="muted small">{t('created on {date}', { date: fmtDate(tk().created) })}</span>
           <span class="grow" />
           <For each={buttons()}>
             {(b) => (
@@ -102,11 +103,11 @@ function TicketBody(props: { t: Ticket; apply: Apply; paneId: string; tabId: str
           </For>
           <button
             class="icon-btn"
-            title="Autres actions"
+            title={t('More actions')}
             onClick={(e) =>
               contextMenu(e, [
-                ...(!closed() ? [{ label: 'Abandonner le ticket', action: () => void abandonTicket(t(), props.apply) }] : []),
-                { label: 'Supprimer le ticket', action: () => void remove() },
+                ...(!closed() ? [{ label: t('Abandon the ticket'), action: () => void abandonTicket(tk(), props.apply) }] : []),
+                { label: t('Delete the ticket'), action: () => void remove() },
               ])
             }
           >
@@ -117,39 +118,39 @@ function TicketBody(props: { t: Ticket; apply: Apply; paneId: string; tabId: str
 
       <div class="tk-body">
         <div class="tk-main">
-          <Section title="Description">
-            <EditableMarkdown value={t().description} empty="Aucune description." onSave={(v) => props.apply(updateTicket(t().id, { description: v }))} testid="ticket-description" />
+          <Section title={t('Description')}>
+            <EditableMarkdown value={tk().description} empty={t('No description.')} onSave={(v) => props.apply(updateTicket(tk().id, { description: v }))} testid="ticket-description" />
           </Section>
 
-          <Section title="Plan d'implémentation">
-            <EditableMarkdown value={t().plan} empty="Pas encore de plan." onSave={(v) => props.apply(updateTicket(t().id, { plan: v }))} testid="ticket-plan" />
+          <Section title={t('Implementation plan')}>
+            <EditableMarkdown value={tk().plan} empty={t('No plan yet.')} onSave={(v) => props.apply(updateTicket(tk().id, { plan: v }))} testid="ticket-plan" />
           </Section>
 
-          <Section title={`Goals ${t().goals ? `· ${t().goalsDone}/${t().goals}` : ''}`}>
-            <Goals t={t()} apply={props.apply} />
+          <Section title={`${t('Goals')} ${tk().goals ? `· ${tk().goalsDone}/${tk().goals}` : ''}`}>
+            <Goals tk={tk()} apply={props.apply} />
           </Section>
 
-          <Show when={t().testSummary || ['review', 'fix', 'done'].includes(t().status)}>
-            <Section title="À tester">
-              <EditableMarkdown value={t().testSummary} empty="Pas de résumé de test." onSave={(v) => props.apply(updateTicket(t().id, { testSummary: v }))} testid="ticket-test" />
+          <Show when={tk().testSummary || ['review', 'fix', 'done'].includes(tk().status)}>
+            <Section title={t('To test')}>
+              <EditableMarkdown value={tk().testSummary} empty={t('No test summary.')} onSave={(v) => props.apply(updateTicket(tk().id, { testSummary: v }))} testid="ticket-test" />
             </Section>
           </Show>
 
-          <TicketGit t={t()} apply={props.apply} />
+          <TicketGit tk={tk()} apply={props.apply} />
 
-          <Section title="Notes et retours">
-            <For each={notes()} fallback={<p class="muted small">Aucune note.</p>}>
+          <Section title={t('Notes and feedback')}>
+            <For each={notes()} fallback={<p class="muted small">{t('No note.')}</p>}>
               {(n) => (
                 <div class="tk-note" classList={{ feedback: n.kind === 'feedback' }} data-testid="ticket-note">
                   <div class="tk-note-head">
                     <span class="badge" classList={{ warn: n.kind === 'feedback' }}>
-                      {n.kind === 'feedback' ? 'Retour de test' : 'Note'}
+                      {n.kind === 'feedback' ? t('Test feedback') : t('Note')}
                     </span>
                     <span class="muted small">
-                      {n.author === 'model' ? 'Assistant' : 'Vous'} · {new Date(n.created).toLocaleString()}
+                      {n.author === 'model' ? t('Assistant') : t('You')} · {fmtDate(n.created)}
                     </span>
                     <span class="grow" />
-                    <button class="icon-btn small" title="Supprimer" onClick={() => props.apply(deleteNote(t().id, n.id))}>
+                    <button class="icon-btn small" title={t('Delete')} onClick={() => props.apply(deleteNote(tk().id, n.id))}>
                       <Icon name="close" size={11} />
                     </button>
                   </div>
@@ -161,47 +162,47 @@ function TicketBody(props: { t: Ticket; apply: Apply; paneId: string; tabId: str
               ref={noteArea}
               class="tk-note-input"
               rows={3}
-              placeholder={t().status === 'review' ? 'Retour de test ou note…' : 'Ajouter du contexte, une note…'}
+              placeholder={tk().status === 'review' ? t('Test feedback or note…') : t('Add context, a note…')}
               value={noteText()}
               onInput={(e) => setNoteText(e.currentTarget.value)}
               data-testid="ticket-note-input"
             />
             <div class="form-actions">
-              <Show when={t().status === 'review'}>
+              <Show when={tk().status === 'review'}>
                 <button
                   class="btn small primary"
                   disabled={!noteText().trim()}
                   onClick={async () => {
-                    await props.apply(addNote(t().id, 'feedback', noteText()))
+                    await props.apply(addNote(tk().id, 'feedback', noteText()))
                     setNoteText('')
                   }}
                   data-testid="ticket-feedback-add"
                 >
-                  Envoyer comme retour (→ Correction)
+                  {t('Send as feedback (→ Fix)')}
                 </button>
               </Show>
               <button
                 class="btn small"
                 disabled={!noteText().trim()}
                 onClick={async () => {
-                  await props.apply(addNote(t().id, 'note', noteText()))
+                  await props.apply(addNote(tk().id, 'note', noteText()))
                   setNoteText('')
                 }}
                 data-testid="ticket-note-add"
               >
-                Ajouter une note
+                {t('Add a note')}
               </button>
             </div>
           </Section>
 
-          <Section title={`Historique (${events().length})`} folded>
+          <Section title={t('History ({n})', { n: events().length })} folded>
             <ul class="tk-events">
               <For each={events()}>
                 {(n) => (
                   <li>
-                    <span class="muted small">{new Date(n.created).toLocaleString()}</span> · {n.text}
+                    <span class="muted small">{fmtDate(n.created)}</span> · {eventText(n.text)}
                     <Show when={n.author === 'model'}>
-                      <span class="badge">assistant</span>
+                      <span class="badge">{t('assistant')}</span>
                     </Show>
                   </li>
                 )}
@@ -211,8 +212,8 @@ function TicketBody(props: { t: Ticket; apply: Apply; paneId: string; tabId: str
         </div>
 
         <aside class="tk-side">
-          <Section title="Fichiers liés">
-            <For each={t().files} fallback={<p class="muted small">Aucun fichier.</p>}>
+          <Section title={t('Linked files')}>
+            <For each={tk().files} fallback={<p class="muted small">{t('No file.')}</p>}>
               {(f) => (
                 <div class="tk-row">
                   <Icon name="file" size={12} />
@@ -220,35 +221,35 @@ function TicketBody(props: { t: Ticket; apply: Apply; paneId: string; tabId: str
                     {f}
                   </button>
                   <span class="grow" />
-                  <button class="icon-btn small" title="Retirer" onClick={() => props.apply(updateTicket(t().id, { removeFiles: [f] }))}>
+                  <button class="icon-btn small" title={t('Remove')} onClick={() => props.apply(updateTicket(tk().id, { removeFiles: [f] }))}>
                     <Icon name="close" size={11} />
                   </button>
                 </div>
               )}
             </For>
-            <button class="btn small" onClick={() => void addFile(t(), props.apply)} data-testid="ticket-file-add">
-              <Icon name="plus" size={12} /> Ajouter un fichier
+            <button class="btn small" onClick={() => void addFile(tk(), props.apply)} data-testid="ticket-file-add">
+              <Icon name="plus" size={12} /> {t('Add a file')}
             </button>
           </Section>
 
-          <Section title="Pièces jointes">
-            <For each={t().attachments} fallback={<p class="muted small">Aucune pièce jointe.</p>}>
+          <Section title={t('Attachments')}>
+            <For each={tk().attachments} fallback={<p class="muted small">{t('No attachment.')}</p>}>
               {(a) => (
                 <div class="tk-row">
                   <Icon name="paperclip" size={12} />
-                  <button class="link ellipsis" title={a.name} onClick={() => void openAttachment(t().id, a.id)}>
+                  <button class="link ellipsis" title={a.name} onClick={() => void openAttachment(tk().id, a.id)}>
                     {a.name}
                   </button>
-                  <span class="muted small nowrap">{formatSize(a.size)}</span>
+                  <span class="muted small nowrap">{fmtSize(a.size)}</span>
                   <span class="grow" />
-                  <button class="icon-btn small" title="Supprimer" onClick={() => props.apply(deleteAttachment(t().id, a.id))}>
+                  <button class="icon-btn small" title={t('Delete')} onClick={() => props.apply(deleteAttachment(tk().id, a.id))}>
                     <Icon name="close" size={11} />
                   </button>
                 </div>
               )}
             </For>
             <label class="btn small">
-              <Icon name="plus" size={12} /> Joindre un fichier
+              <Icon name="plus" size={12} /> {t('Attach a file')}
               <input
                 type="file"
                 multiple
@@ -256,17 +257,17 @@ function TicketBody(props: { t: Ticket; apply: Apply; paneId: string; tabId: str
                 onChange={async (e) => {
                   const files = [...(e.currentTarget.files ?? [])]
                   e.currentTarget.value = ''
-                  for (const f of files) await props.apply(addAttachment(t().id, f))
+                  for (const f of files) await props.apply(addAttachment(tk().id, f))
                 }}
                 data-testid="ticket-attach"
               />
             </label>
           </Section>
 
-          <TicketChats t={t()} apply={props.apply} onUnlink={(chatId) => props.apply(unlinkChat(t().id, chatId))} roleLabels={roleLabels} />
+          <TicketChats tk={tk()} apply={props.apply} onUnlink={(chatId) => props.apply(unlinkChat(tk().id, chatId))} roleLabels={roleLabels} />
 
-          <Section title="Commits liés">
-            <For each={t().commits} fallback={<p class="muted small">Aucun commit.</p>}>
+          <Section title={t('Linked commits')}>
+            <For each={tk().commits} fallback={<p class="muted small">{t('No commit.')}</p>}>
               {(c) => (
                 <div class="tk-row">
                   <span class="mono small">{c.hash.slice(0, 8)}</span>
@@ -274,14 +275,14 @@ function TicketBody(props: { t: Ticket; apply: Apply; paneId: string; tabId: str
                     {c.subject}
                   </span>
                   <span class="grow" />
-                  <button class="icon-btn small" title="Retirer" onClick={() => props.apply(unlinkCommit(t().id, c.hash))}>
+                  <button class="icon-btn small" title={t('Remove')} onClick={() => props.apply(unlinkCommit(tk().id, c.hash))}>
                     <Icon name="close" size={11} />
                   </button>
                 </div>
               )}
             </For>
-            <button class="btn small" onClick={() => void addCommit(t(), props.apply)}>
-              <Icon name="plus" size={12} /> Lier un commit
+            <button class="btn small" onClick={() => void addCommit(tk(), props.apply)}>
+              <Icon name="plus" size={12} /> {t('Link a commit')}
             </button>
           </Section>
         </aside>
@@ -294,20 +295,15 @@ function absolute(p: string) {
   return p.startsWith('/') ? p : `${root()}/${p}`
 }
 
-function formatSize(n: number) {
-  if (n < 1024) return `${n} o`
-  if (n < 1 << 20) return `${(n / 1024).toFixed(0)} Ko`
-  return `${(n / (1 << 20)).toFixed(1)} Mo`
-}
 
 let fileCache: { at: number; files: string[] } | null = null
-async function addFile(t: Ticket, apply: Apply) {
+async function addFile(tk: Ticket, apply: Apply) {
   const files = async () => {
     if (!fileCache || Date.now() - fileCache.at > 15000) fileCache = { at: Date.now(), files: await request<string[]>('search.files') }
     return fileCache.files
   }
   const p = await pick<string>({
-    placeholder: 'Fichier à lier au ticket',
+    placeholder: t('File to link to the ticket'),
     provider: async (q) => {
       const list = await files()
       return list
@@ -318,16 +314,16 @@ async function addFile(t: Ticket, apply: Apply) {
         .map(({ f }) => ({ label: basename(f), detail: relPath(f), value: relPath(f) }))
     },
   })
-  if (p) await apply(updateTicket(t.id, { addFiles: [p] }))
+  if (p) await apply(updateTicket(tk.id, { addFiles: [p] }))
 }
 
-async function addCommit(t: Ticket, apply: Apply) {
+async function addCommit(tk: Ticket, apply: Apply) {
   const log = await request<{ hash: string; short: string; subject: string; when: string }[]>('git.log', { n: 100 }).catch(() => [])
   const c = await pick({
-    placeholder: 'Commit à lier au ticket',
+    placeholder: t('Commit to link to the ticket'),
     items: log.map((c) => ({ label: c.subject, detail: `${c.short} · ${c.when}`, value: c })),
   })
-  if (c) await apply(linkCommit(t.id, c.hash, c.subject))
+  if (c) await apply(linkCommit(tk.id, c.hash, c.subject))
 }
 
 async function openAttachment(id: number, aid: number) {
@@ -382,7 +378,7 @@ function EditableText(props: { value: string; class?: string; onSave: (v: string
     <Show
       when={editing()}
       fallback={
-        <h1 class={props.class} title="Cliquer pour modifier" onClick={() => setEditing(true)} data-testid={props.testid}>
+        <h1 class={props.class} title={t('Click to edit')} onClick={() => setEditing(true)} data-testid={props.testid}>
           {props.value}
         </h1>
       }
@@ -425,7 +421,7 @@ export function EditableMarkdown(props: { value: string; empty: string; onSave: 
               <Markdown text={props.value} final />
             </Show>
             <button class="btn small tk-edit" onClick={start} data-testid={props.testid && `${props.testid}-edit`}>
-              <Icon name="edit" size={12} /> Modifier
+              <Icon name="edit" size={12} /> {t('Edit')}
             </button>
           </>
         }
@@ -442,12 +438,12 @@ export function EditableMarkdown(props: { value: string; empty: string; onSave: 
           ref={(el) => queueMicrotask(() => el.focus())}
         />
         <div class="form-actions">
-          <span class="muted small">Ctrl+Entrée pour enregistrer</span>
+          <span class="muted small">{t('Ctrl+Enter to save')}</span>
           <button class="btn small" onClick={() => setEditing(false)}>
-            Annuler
+            {t('Cancel')}
           </button>
           <button class="btn small primary" onClick={() => void save()} data-testid={props.testid && `${props.testid}-save`}>
-            Enregistrer
+            {t('Save')}
           </button>
         </div>
       </Show>
@@ -455,42 +451,42 @@ export function EditableMarkdown(props: { value: string; empty: string; onSave: 
   )
 }
 
-function Goals(props: { t: Ticket; apply: Apply }) {
+function Goals(props: { tk: Ticket; apply: Apply }) {
   const [text, setText] = createSignal('')
   const add = async () => {
     if (!text().trim()) return
-    await props.apply(goalOp(props.t.id, { op: 'add', text: text() }))
+    await props.apply(goalOp(props.tk.id, { op: 'add', text: text() }))
     setText('')
   }
   return (
     <div class="tk-goals">
-      <For each={props.t.goalList} fallback={<p class="muted small">Aucun goal : le plan les définit, vous pouvez aussi en ajouter.</p>}>
+      <For each={props.tk.goalList} fallback={<p class="muted small">{t('No goal: the plan defines them, you can also add some.')}</p>}>
         {(g) => (
           <div class="tk-goal" classList={{ done: g.done }} data-testid="ticket-goal">
-            <input type="checkbox" checked={g.done} onChange={(e) => props.apply(goalOp(props.t.id, { op: 'check', id: g.id, done: e.currentTarget.checked }))} />
+            <input type="checkbox" checked={g.done} onChange={(e) => props.apply(goalOp(props.tk.id, { op: 'check', id: g.id, done: e.currentTarget.checked }))} />
             <span
               class="tk-goal-text"
               onDblClick={async () => {
-                const v = await prompt({ title: 'Modifier le goal', value: g.text })
-                if (v?.trim()) await props.apply(goalOp(props.t.id, { op: 'edit', id: g.id, text: v }))
+                const v = await prompt({ title: t('Edit the goal'), value: g.text })
+                if (v?.trim()) await props.apply(goalOp(props.tk.id, { op: 'edit', id: g.id, text: v }))
               }}
             >
               {g.text}
             </span>
             <Show when={g.source === 'feedback'}>
-              <span class="badge warn">retour</span>
+              <span class="badge warn">{t('feedback')}</span>
             </Show>
             <span class="grow" />
-            <button class="icon-btn small" title="Supprimer" onClick={() => props.apply(goalOp(props.t.id, { op: 'delete', id: g.id }))}>
+            <button class="icon-btn small" title={t('Delete')} onClick={() => props.apply(goalOp(props.tk.id, { op: 'delete', id: g.id }))}>
               <Icon name="close" size={11} />
             </button>
           </div>
         )}
       </For>
       <div class="tk-goal-add">
-        <input class="input small" placeholder="Nouveau goal" value={text()} onInput={(e) => setText(e.currentTarget.value)} onKeyDown={(e) => e.key === 'Enter' && void add()} data-testid="ticket-goal-input" />
+        <input class="input small" placeholder={t('New goal')} value={text()} onInput={(e) => setText(e.currentTarget.value)} onKeyDown={(e) => e.key === 'Enter' && void add()} data-testid="ticket-goal-input" />
         <button class="btn small" disabled={!text().trim()} onClick={() => void add()}>
-          Ajouter
+          {t('Add')}
         </button>
       </div>
     </div>

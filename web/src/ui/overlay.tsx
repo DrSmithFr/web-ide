@@ -1,6 +1,7 @@
 // Generic overlays: modal, prompt, keyboard-driven pick list, context menu.
 import { createEffect, createSignal, For, type JSX, onCleanup, onMount, Show } from 'solid-js'
 import { Portal } from 'solid-js/web'
+import { t } from '../i18n'
 
 export function Modal(props: { title: string; onClose: () => void; children: JSX.Element; class?: string; footer?: JSX.Element }) {
   const key = (e: KeyboardEvent) => {
@@ -15,7 +16,7 @@ export function Modal(props: { title: string; onClose: () => void; children: JSX
         <div class={`modal ${props.class ?? ''}`} role="dialog" aria-modal="true" aria-label={props.title}>
           <header class="modal-head">
             <h2>{props.title}</h2>
-            <button class="icon-btn" title="Fermer (Échap)" onClick={props.onClose}>
+            <button class="icon-btn" title={t('Close (Esc)')} onClick={props.onClose}>
               ✕
             </button>
           </header>
@@ -73,10 +74,10 @@ function PromptHost() {
             </label>
             <div class="form-actions">
               <button type="button" class="btn" onClick={() => close(null)}>
-                Annuler
+                {t('Cancel')}
               </button>
               <button type="submit" class="btn primary">
-                Valider
+                {t('OK')}
               </button>
             </div>
           </form>
@@ -227,7 +228,7 @@ function PickHost() {
             >
               <input ref={input} class="pick-input" placeholder={r().placeholder} value={query()} onInput={(e) => setQuery(e.currentTarget.value)} />
               <div class="pick-list" ref={list} role="listbox">
-                <For each={items()} fallback={<div class="pick-empty">{busy() ? 'Recherche…' : 'Aucun résultat'}</div>}>
+                <For each={items()} fallback={<div class="pick-empty">{busy() ? t('Searching…') : t('No result')}</div>}>
                   {(it, i) => (
                     <div
                       class="pick-item"

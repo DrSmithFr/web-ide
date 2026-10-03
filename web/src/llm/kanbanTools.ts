@@ -1,9 +1,11 @@
 // Kanban tools of the assistant: every conversation can read the tickets, create one and
 // ask the user questions; a conversation linked to a ticket can also change that ticket
-// (plan, goals, notes, status). See docs/kanban.md.
+// (plan, goals, notes, status). See docs/kanban.md. What the model reads is in English;
+// the summaries shown in the conversation are translated.
 import { request } from '../pod/rpc'
+import { t, tn } from '../i18n'
 import {
-  addNote, createTicket, getTicket, goalOp, linkCommit, moveTicket, priorityLabels, refreshBoard, roleLabels, setPlan, statusLabels, typeLabels, updateTicket,
+  addNote, createTicket, getTicket, goalOp, linkCommit, moveTicket, priorityNames, refreshBoard, roleNames, setPlan, statusLabels, statusNames, typeNames, updateTicket,
   board, type Priority, type Status, type Ticket, type TicketType,
 } from '../kanban/state'
 import type { ToolResult } from './tools'
@@ -19,22 +21,22 @@ export const MAX_QUESTIONS = 10
 
 export const askUserDef = fn(
   'ask_user',
-  `Pose une ou plusieurs questions à l'utilisateur (1 à ${MAX_QUESTIONS}) quand une information manque ou qu'un choix lui revient. Chaque question propose 2 à 4 choix ; l'utilisateur peut aussi répondre librement. Après cet appel, le tour s'arrête jusqu'à ses réponses (renvoyées comme résultat de l'outil).`,
+  `Asks the user one or more questions (1 to ${MAX_QUESTIONS}) when information is missing or a choice is theirs. Each question offers 2 to 4 choices; the user can also answer freely. After this call the turn stops until the answers come back (as the tool result). Write the questions in the user's language.`,
   {
     questions: {
       type: 'array',
-      description: 'Les questions, posées une à une',
+      description: 'The questions, asked one at a time',
       items: {
         type: 'object',
         properties: {
-          question: str('La question complète, terminée par un point d’interrogation'),
-          header: str('Étiquette très courte (12 caractères max), ex. « Format »'),
+          question: str('The full question, ending with a question mark'),
+          header: str('Very short label (12 characters max), e.g. "Format"'),
           options: {
             type: 'array',
-            description: '2 à 4 choix ; mettre l’option recommandée en premier avec « (recommandé) »',
-            items: { type: 'object', properties: { label: str('Choix (1 à 5 mots)'), description: str('Ce que ce choix implique') }, required: ['label'] },
+            description: '2 to 4 choices; put the recommended option first with "(recommended)"',
+            items: { type: 'object', properties: { label: str('Choice (1 to 5 words)'), description: str('What this choice implies') }, required: ['label'] },
           },
-          multiple: { type: 'boolean', description: 'Plusieurs choix possibles' },
+          multiple: { type: 'boolean', description: 'Several choices allowed' },
         },
         required: ['question', 'options'],
       },
@@ -43,21 +45,21 @@ export const askUserDef = fn(
   ['questions'],
 )
 
-const statusEnum = { type: 'string', enum: Object.keys(statusLabels), description: 'État' }
+const statusEnum = { type: 'string', enum: Object.keys(statusNames), description: 'Status' }
 
 /** Tools of every conversation. */
 export const kanbanReadDefs = [
-  fn('kanban_list', 'Liste les tickets du kanban du projet (numéro, état, type, priorité, titre, goals).', { status: statusEnum, query: str('Filtre sur le titre (facultatif)') }),
-  fn('kanban_get', 'Lit un ticket complet : description, plan, goals (avec leurs id), notes et retours de test, fichiers liés, conversations, branche.', { id: { type: 'integer', description: 'Numéro du ticket' } }, ['id']),
+  fn('kanban_list', 'Lists the tickets of the kanban of the project (number, status, type, priority, title, goals).', { status: statusEnum, query: str('Filter on the title (optional)') }),
+  fn('kanban_get', 'Reads a whole ticket: description, plan, goals (with their ids), notes and test feedback, linked files, conversations, branch.', { id: { type: 'integer', description: 'Ticket number' } }, ['id']),
   fn(
     'kanban_create',
-    'Crée un ticket dans le backlog (état Nouveau). À utiliser quand l’utilisateur le demande ou accepte de noter une tâche pour plus tard.',
+    'Creates a ticket in the backlog (status New). Use it when the user asks for it or agrees to note a task for later.',
     {
-      title: str('Titre court'),
-      description: str('Description en Markdown : contexte, besoin, critères'),
-      type: { type: 'string', enum: Object.keys(typeLabels) },
-      priority: { type: 'string', enum: Object.keys(priorityLabels) },
-      files: strList('Chemins des fichiers concernés (relatifs à la racine)'),
+      title: str('Short title'),
+      description: str('Description in Markdown: context, need, criteria'),
+      type: { type: 'string', enum: Object.keys(typeNames) },
+      priority: { type: 'string', enum: Object.keys(priorityNames) },
+      files: strList('Paths of the files concerned (relative to the root)'),
     },
     ['title'],
   ),
@@ -67,65 +69,65 @@ export const kanbanReadDefs = [
 export const kanbanWriteDefs = [
   fn(
     'kanban_update',
-    'Modifie le ticket lié à cette conversation (champs donnés seulement).',
+    'Changes the ticket linked to this conversation (only the given fields).',
     {
-      title: str('Nouveau titre'),
-      description: str('Nouvelle description complète (Markdown)'),
-      type: { type: 'string', enum: Object.keys(typeLabels) },
-      priority: { type: 'string', enum: Object.keys(priorityLabels) },
-      add_files: strList('Fichiers à lier'),
-      remove_files: strList('Fichiers à délier'),
+      title: str('New title'),
+      description: str('New full description (Markdown)'),
+      type: { type: 'string', enum: Object.keys(typeNames) },
+      priority: { type: 'string', enum: Object.keys(priorityNames) },
+      add_files: strList('Files to link'),
+      remove_files: strList('Files to unlink'),
     },
   ),
-  fn('kanban_add_note', 'Ajoute une note au ticket lié (contexte découvert, décision, réponse de l’utilisateur à garder).', { text: str('Note en Markdown') }, ['text']),
+  fn('kanban_add_note', 'Adds a note to the linked ticket (context found, decision, answer of the user worth keeping).', { text: str('Note in Markdown') }, ['text']),
   fn(
     'kanban_set_plan',
-    'Écrit le plan d’implémentation du ticket lié et ses goals (objectifs vérifiables, cochés pendant le développement). Remplace le plan et les goals issus d’un plan précédent (les retours de test restent).',
-    { plan: str('Plan en Markdown : approche, fichiers, étapes, risques, tests'), goals: strList('Goals : chacun vérifiable, une phrase') },
+    'Writes the implementation plan of the linked ticket and its goals (verifiable objectives, checked during development). Replaces the plan and the goals of a previous plan (test feedback goals stay).',
+    { plan: str('Plan in Markdown: approach, files, steps, risks, tests'), goals: strList('Goals: each one verifiable, one sentence') },
     ['plan', 'goals'],
   ),
   fn(
     'kanban_goal',
-    'Coche, décoche ou ajoute un goal du ticket lié. Coche chaque goal dès qu’il est atteint et vérifié.',
-    { action: { type: 'string', enum: ['check', 'uncheck', 'add'] }, id: { type: 'integer', description: 'Id du goal (check / uncheck), voir kanban_get' }, text: str('Texte du goal (add)') },
+    'Checks, unchecks or adds a goal of the linked ticket. Check each goal as soon as it is reached and verified.',
+    { action: { type: 'string', enum: ['check', 'uncheck', 'add'] }, id: { type: 'integer', description: 'Goal id (check / uncheck), see kanban_get' }, text: str('Text of the goal (add)') },
     ['action'],
   ),
   fn(
     'kanban_move',
-    'Change l’état du ticket lié. Permis : Nouveau → ready (À développer, après kanban_set_plan) ; En cours ou Correction → review (À tester, avec test_summary). Les autres changements reviennent à l’utilisateur.',
+    'Changes the status of the linked ticket. Allowed: New → ready (after kanban_set_plan); In progress or Fix → review (To test, with test_summary). Other changes belong to the user.',
     {
       status: { type: 'string', enum: ['ready', 'review'] },
-      test_summary: str('Pour review : ce qu’il faut tester et comment (étapes, commandes, résultats attendus), en Markdown'),
-      comment: str('Commentaire pour l’historique (facultatif)'),
+      test_summary: str('For review: what to test and how (steps, commands, expected results), in Markdown'),
+      comment: str('Comment for the history (optional)'),
     },
     ['status'],
   ),
-  fn('kanban_link_commit', 'Lie un commit au ticket lié (après un git commit).', { hash: str('Hash du commit (court ou complet)') }, ['hash']),
+  fn('kanban_link_commit', 'Links a commit to the linked ticket (after a git commit).', { hash: str('Commit hash (short or full)') }, ['hash']),
 ]
 
-export const kanbanToolNames = new Set([...kanbanReadDefs, ...kanbanWriteDefs].map((t) => t.function.name))
+export const kanbanToolNames = new Set([...kanbanReadDefs, ...kanbanWriteDefs].map((d) => d.function.name))
 
 function ok(content: string, summary: string): ToolResult {
   return { content, summary, status: 'ok' }
 }
 
-const fmtDate = (t: number) => new Date(t).toLocaleString('fr-FR')
+const isoDate = (ms: number) => new Date(ms).toISOString().slice(0, 16).replace('T', ' ')
 
 /** A ticket as the model reads it. */
-export function ticketMarkdown(t: Ticket): string {
-  const out: string[] = [`# Ticket #${t.id} · ${t.title}`]
-  out.push(`État : ${statusLabels[t.status]} · type : ${typeLabels[t.type]} · priorité : ${priorityLabels[t.priority]}${t.branch ? ` · branche : ${t.branch}` : ''}${t.base ? ` · base : ${t.base}` : ''}`)
-  out.push(`\n## Description\n${t.description.trim() || '(vide)'}`)
-  if (t.files.length) out.push(`\n## Fichiers liés\n${t.files.map((f) => `- ${f}`).join('\n')}`)
-  if (t.attachments.length) out.push(`\n## Pièces jointes\n${t.attachments.map((a) => `- ${a.name} (${a.mime || 'fichier'})`).join('\n')}`)
-  out.push(`\n## Plan\n${t.plan.trim() || '(pas encore de plan)'}`)
-  if (t.goalList.length) out.push(`\n## Goals\n${t.goalList.map((g) => `- [${g.done ? 'x' : ' '}] (id ${g.id}${g.source === 'feedback' ? ', retour de test' : ''}) ${g.text}`).join('\n')}`)
-  if (t.testSummary.trim()) out.push(`\n## À tester\n${t.testSummary.trim()}`)
-  const notes = t.notes.filter((n) => n.kind !== 'event')
+export function ticketMarkdown(tk: Ticket): string {
+  const out: string[] = [`# Ticket #${tk.id} · ${tk.title}`]
+  out.push(`Status: ${statusNames[tk.status]} · type: ${typeNames[tk.type]} · priority: ${priorityNames[tk.priority]}${tk.branch ? ` · branch: ${tk.branch}` : ''}${tk.base ? ` · base: ${tk.base}` : ''}`)
+  out.push(`\n## Description\n${tk.description.trim() || '(empty)'}`)
+  if (tk.files.length) out.push(`\n## Linked files\n${tk.files.map((f) => `- ${f}`).join('\n')}`)
+  if (tk.attachments.length) out.push(`\n## Attachments\n${tk.attachments.map((a) => `- ${a.name} (${a.mime || 'file'})`).join('\n')}`)
+  out.push(`\n## Plan\n${tk.plan.trim() || '(no plan yet)'}`)
+  if (tk.goalList.length) out.push(`\n## Goals\n${tk.goalList.map((g) => `- [${g.done ? 'x' : ' '}] (id ${g.id}${g.source === 'feedback' ? ', test feedback' : ''}) ${g.text}`).join('\n')}`)
+  if (tk.testSummary.trim()) out.push(`\n## To test\n${tk.testSummary.trim()}`)
+  const notes = tk.notes.filter((n) => n.kind !== 'event')
   if (notes.length)
-    out.push(`\n## Notes et retours\n${notes.map((n) => `- ${n.kind === 'feedback' ? '**Retour de test**' : 'Note'} (${n.author === 'model' ? 'assistant' : 'utilisateur'}, ${fmtDate(n.created)}) : ${n.text.trim()}`).join('\n')}`)
-  if (t.chatList.length) out.push(`\n## Conversations liées\n${t.chatList.map((c) => `- ${roleLabels[c.role]} : ${c.title || c.chatId}`).join('\n')}`)
-  if (t.commits.length) out.push(`\n## Commits liés\n${t.commits.map((c) => `- ${c.hash.slice(0, 10)} ${c.subject}`).join('\n')}`)
+    out.push(`\n## Notes and feedback\n${notes.map((n) => `- ${n.kind === 'feedback' ? '**Test feedback**' : 'Note'} (${n.author === 'model' ? 'assistant' : 'user'}, ${isoDate(n.created)}): ${n.text.trim()}`).join('\n')}`)
+  if (tk.chatList.length) out.push(`\n## Linked conversations\n${tk.chatList.map((c) => `- ${roleNames[c.role]}: ${c.title || c.chatId}`).join('\n')}`)
+  if (tk.commits.length) out.push(`\n## Linked commits\n${tk.commits.map((c) => `- ${c.hash.slice(0, 10)} ${c.subject}`).join('\n')}`)
   return out.join('\n')
 }
 
@@ -134,28 +136,29 @@ export async function runKanbanTool(name: string, a: Record<string, any>, ticket
     case 'kanban_list': {
       await refreshBoard()
       const q = String(a.query ?? '').toLowerCase()
-      const list = board.tickets.filter((t) => (!a.status || t.status === a.status) && (!q || t.title.toLowerCase().includes(q)))
-      if (!list.length) return ok('Aucun ticket.', '0 ticket')
-      const lines = list.map((t) => `#${t.id} [${statusLabels[t.status]}] (${typeLabels[t.type]}, ${priorityLabels[t.priority]}) ${t.title}${t.goals ? ` · goals ${t.goalsDone}/${t.goals}` : ''}`)
-      return ok(lines.join('\n'), `${list.length} ticket${list.length > 1 ? 's' : ''}`)
+      const list = board.tickets.filter((tk) => (!a.status || tk.status === a.status) && (!q || tk.title.toLowerCase().includes(q)))
+      if (!list.length) return ok('No ticket.', tn(0, '{n} ticket', '{n} tickets'))
+      const lines = list.map((tk) => `#${tk.id} [${statusNames[tk.status]}] (${typeNames[tk.type]}, ${priorityNames[tk.priority]}) ${tk.title}${tk.goals ? ` · goals ${tk.goalsDone}/${tk.goals}` : ''}`)
+      return ok(lines.join('\n'), tn(list.length, '{n} ticket', '{n} tickets'))
     }
     case 'kanban_get': {
-      const t = await getTicket(Number(a.id))
-      return ok(ticketMarkdown(t), `#${t.id} ${t.title}`)
+      const tk = await getTicket(Number(a.id))
+      return ok(ticketMarkdown(tk), `#${tk.id} ${tk.title}`)
     }
     case 'kanban_create': {
-      if (!String(a.title ?? '').trim()) throw new Error('title manquant')
-      const t = await createTicket(
+      if (!String(a.title ?? '').trim()) throw new Error('title is missing')
+      const tk = await createTicket(
         { title: String(a.title), description: a.description ? String(a.description) : '', type: a.type as TicketType, priority: a.priority as Priority, addFiles: Array.isArray(a.files) ? a.files.map(String) : undefined },
         'model',
       )
-      return ok(`Ticket #${t.id} créé dans le backlog (état Nouveau).`, `#${t.id} créé`)
+      return ok(`Ticket #${tk.id} created in the backlog (status New).`, t('#{id} created', { id: tk.id }))
     }
   }
-  if (!ticket) return { content: 'Erreur : cette conversation n’est liée à aucun ticket ; seuls kanban_list, kanban_get et kanban_create sont disponibles.', summary: 'aucun ticket lié', status: 'error' }
+  if (!ticket)
+    return { content: 'Error: this conversation is not linked to a ticket; only kanban_list, kanban_get and kanban_create are available.', summary: t('no linked ticket'), status: 'error' }
   switch (name) {
     case 'kanban_update': {
-      const t = await updateTicket(
+      const tk = await updateTicket(
         ticket,
         {
           title: a.title,
@@ -167,48 +170,48 @@ export async function runKanbanTool(name: string, a: Record<string, any>, ticket
         },
         'model',
       )
-      return ok(`Ticket #${t.id} modifié.`, `#${t.id} modifié`)
+      return ok(`Ticket #${tk.id} updated.`, t('#{id} updated', { id: tk.id }))
     }
     case 'kanban_add_note':
       await addNote(ticket, 'note', String(a.text ?? ''), 'model')
-      return ok('Note ajoutée.', 'note ajoutée')
+      return ok('Note added.', t('note added'))
     case 'kanban_set_plan': {
       const goals = Array.isArray(a.goals) ? a.goals.map(String).filter((g: string) => g.trim()) : []
-      if (!String(a.plan ?? '').trim()) throw new Error('plan vide')
-      const t = await setPlan(ticket, String(a.plan), goals, 'model')
-      return ok(`Plan enregistré avec ${goals.length} goal(s) :\n${t.goalList.map((g) => `- (id ${g.id}) ${g.text}`).join('\n')}`, `plan · ${goals.length} goals`)
+      if (!String(a.plan ?? '').trim()) throw new Error('empty plan')
+      const tk = await setPlan(ticket, String(a.plan), goals, 'model')
+      return ok(`Plan saved with ${goals.length} goal(s):\n${tk.goalList.map((g) => `- (id ${g.id}) ${g.text}`).join('\n')}`, tn(goals.length, 'plan · {n} goal', 'plan · {n} goals'))
     }
     case 'kanban_goal': {
       const action = String(a.action ?? '')
       if (action === 'add') {
-        const t = await goalOp(ticket, { op: 'add', text: String(a.text ?? ''), source: 'plan' }, 'model')
-        const g = t.goalList[t.goalList.length - 1]
-        return ok(`Goal ajouté (id ${g?.id}).`, 'goal ajouté')
+        const tk = await goalOp(ticket, { op: 'add', text: String(a.text ?? ''), source: 'plan' }, 'model')
+        const g = tk.goalList[tk.goalList.length - 1]
+        return ok(`Goal added (id ${g?.id}).`, t('goal added'))
       }
-      if (action !== 'check' && action !== 'uncheck') throw new Error('action inconnue : ' + action)
-      const t = await goalOp(ticket, { op: 'check', id: Number(a.id), done: action === 'check' }, 'model')
-      const g = t.goalList.find((x) => x.id === Number(a.id))
-      const left = t.goalList.filter((x) => !x.done).length
-      return ok(`Goal ${action === 'check' ? 'coché' : 'décoché'} : ${g?.text}. Reste ${left} goal(s) à atteindre.`, `${action === 'check' ? '☑' : '☐'} ${g?.text ?? a.id}`)
+      if (action !== 'check' && action !== 'uncheck') throw new Error('unknown action: ' + action)
+      const tk = await goalOp(ticket, { op: 'check', id: Number(a.id), done: action === 'check' }, 'model')
+      const g = tk.goalList.find((x) => x.id === Number(a.id))
+      const left = tk.goalList.filter((x) => !x.done).length
+      return ok(`Goal ${action === 'check' ? 'checked' : 'unchecked'}: ${g?.text}. ${left} goal(s) left.`, `${action === 'check' ? '☑' : '☐'} ${g?.text ?? a.id}`)
     }
     case 'kanban_move': {
       const status = String(a.status ?? '') as Status
       if (status === 'review') {
         const summary = String(a.test_summary ?? '').trim()
-        if (!summary) throw new Error('test_summary est obligatoire pour passer « À tester »')
+        if (!summary) throw new Error('test_summary is required to move to "To test"')
         await updateTicket(ticket, { testSummary: summary }, 'model')
       }
-      const t = await moveTicket(ticket, status, 'model', String(a.comment ?? ''))
-      return ok(`Ticket #${t.id} passé à « ${statusLabels[t.status]} ».`, `→ ${statusLabels[t.status]}`)
+      const tk = await moveTicket(ticket, status, 'model', String(a.comment ?? ''))
+      return ok(`Ticket #${tk.id} moved to "${statusNames[tk.status]}".`, `→ ${statusLabels[tk.status]}`)
     }
     case 'kanban_link_commit': {
       const hash = String(a.hash ?? '').trim()
       const r = await request<{ output: string; code: number }>('exec.run', { command: `git log -1 --format='%H%x1f%s' ${JSON.stringify(hash)}`, timeout: 20 })
       const [full, subject] = r.output.trim().split('\x1f')
-      if (r.code !== 0 || !full) throw new Error(`commit introuvable : ${hash}`)
+      if (r.code !== 0 || !full) throw new Error(`commit not found: ${hash}`)
       await linkCommit(ticket, full, subject ?? '', 'model')
-      return ok(`Commit ${full.slice(0, 10)} lié au ticket.`, `commit ${full.slice(0, 8)}`)
+      return ok(`Commit ${full.slice(0, 10)} linked to the ticket.`, t('commit {hash}', { hash: full.slice(0, 8) }))
     }
   }
-  throw new Error('outil inconnu : ' + name)
+  throw new Error('unknown tool: ' + name)
 }

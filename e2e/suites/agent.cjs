@@ -10,14 +10,14 @@ const { run, openProject, assert, WS, OUT } = require('../common.cjs')
 const demo = WS + '/demo'
 const data = WS + '/../data'
 // Global instructions and skill of the IDE data folder (~/.web-ide).
-fs.writeFileSync(data + '/AGENTS.md', 'Instruction de l’IDE : commits en français.\n')
+fs.writeFileSync(data + '/AGENTS.md', 'Instruction of the IDE: commit messages in English.\n')
 fs.mkdirSync(data + '/skills/release', { recursive: true })
-fs.writeFileSync(data + '/skills/release/SKILL.md', '---\nname: release\ndescription: Publier une version\n---\nTaguer puis pousser.\n')
-fs.writeFileSync(demo + '/CLAUDE.md', 'Règle du projet : tests avec make test. Voir @docs/regles.md\n')
+fs.writeFileSync(data + '/skills/release/SKILL.md', '---\nname: release\ndescription: Publish a release\n---\nTag, then push.\n')
+fs.writeFileSync(demo + '/CLAUDE.md', 'Project rule: tests with make test. See @docs/rules.md\n')
 fs.mkdirSync(demo + '/docs', { recursive: true })
-fs.writeFileSync(demo + '/docs/regles.md', 'Règle importée : indentation par tabulations.\n')
+fs.writeFileSync(demo + '/docs/rules.md', 'Imported rule: indent with tabs.\n')
 fs.mkdirSync(demo + '/.claude/skills/deploy', { recursive: true })
-fs.writeFileSync(demo + '/.claude/skills/deploy/SKILL.md', '---\nname: deploy\ndescription: Déployer le projet en production\n---\nLancer make deploy.\n')
+fs.writeFileSync(demo + '/.claude/skills/deploy/SKILL.md', '---\nname: deploy\ndescription: Deploy the project to production\n---\nRun make deploy.\n')
 
 const requests = []
 const summaries = []
@@ -41,41 +41,41 @@ const fake = http.createServer(async (req, res) => {
   for await (const c of req) body += c
   const r = JSON.parse(body)
   res.writeHead(200, { 'Content-Type': 'text/event-stream' })
-  if (text(r.messages[0]).startsWith('Tu résumes')) {
+  if (text(r.messages[0]).startsWith('You summarize')) {
     summaries.push(r)
-    sse(res, { content: `RÉSUMÉ-${summaries.length} : l’utilisateur teste l’agent.` })
+    sse(res, { content: `SUMMARY-${summaries.length}: the user tests the agent.` })
     return end(res, 'stop')
   }
   requests.push(r)
   const msgs = r.messages
   const last = msgs[msgs.length - 1]
-  const lastUser = [...msgs].reverse().find((m) => m.role === 'user' && !text(m).startsWith('Résumé de la conversation'))
+  const lastUser = [...msgs].reverse().find((m) => m.role === 'user' && !text(m).startsWith('Summary of the earlier conversation'))
   const ask = text(lastUser ?? { content: '' })
   const toolsDone = msgs.filter((m) => m.role === 'tool').length
-  if (ask.includes('outils')) {
+  if (ask.includes('tools')) {
     if (last.role === 'user')
       return sse(res, { tool_calls: calls([['s1', 'load_skill', { name: 'greet' }], ['s2', 'open_file', { path: 'src/main.go', line: 8, end_line: 10 }]]) }), end(res, 'tool_calls')
     if (toolsDone === 2 && last.role === 'tool')
       return (
         sse(res, {
           tool_calls: calls([
-            ['s3', 'run_command', { command: 'echo bonjour-console && exit 3' }],
+            ['s3', 'run_command', { command: 'echo hello-console && exit 3' }],
             ['s4', 'focus', { target: 'panel', panel: 'git' }],
-            ['s5', 'bash', { command: 'echo depuis-bash; ls src; exit 2' }],
+            ['s5', 'bash', { command: 'echo from-bash; ls src; exit 2' }],
           ]),
         }),
         end(res, 'tool_calls')
       )
-    sse(res, { content: 'Outils essayés.' })
+    sse(res, { content: 'Tools tried.' })
     return end(res, 'stop', { prompt_tokens: 900, completion_tokens: 10 })
   }
-  if (ask.includes('longue')) {
+  if (ask.includes('long')) {
     // Big usage: the next step must be preceded by an automatic compaction.
     if (last.role === 'user') return sse(res, { tool_calls: calls([['l1', 'list_dir', { path: '.' }]]) }), end(res, 'tool_calls', { prompt_tokens: 7000, completion_tokens: 20 })
-    sse(res, { content: 'Après compaction.' })
+    sse(res, { content: 'After compaction.' })
     return end(res, 'stop', { prompt_tokens: 1200, completion_tokens: 5 })
   }
-  sse(res, { content: `Réponse de ${r.model}.` })
+  sse(res, { content: `Answer of ${r.model}.` })
   end(res, 'stop', { prompt_tokens: 500, completion_tokens: 5 })
 })
 
@@ -91,68 +91,68 @@ run(async ({ page }) => {
   page.on('dialog', (d) => d.accept())
   try {
     await openProject(page)
-    await page.click('.rail-right .rail-btn[title="Assistant IA"]')
-    await page.click('.ai-empty button:has-text("Ajouter un serveur")')
+    await page.click('.rail-right .rail-btn[title="AI assistant"]')
+    await page.click('.ai-empty button:has-text("Add a model server")')
     await page.fill('.ai-servers input[name=url]', `127.0.0.1:${fake.address().port}`)
-    await page.click('.ai-servers button:has-text("Ajouter")')
+    await page.click('.ai-servers button:has-text("Add")')
     await page.waitForSelector('.ai-server-row:has-text("127.0.0.1")')
 
     // Instructions and skills listed in the settings.
     await page.click('.ai-tab:has-text("Prompt")')
     await page.waitForSelector('[data-testid=instruction-file]')
     const files = await page.$$eval('[data-testid=instruction-file]', (e) => e.map((x) => x.textContent))
-    assert(files.length === 4 && files[0].includes('global') && files[1].includes('data/AGENTS.md') && files[2].includes('CLAUDE.md') && files[3].includes('docs/regles.md'), 'fichiers d’instructions listés (dont ~/.web-ide/AGENTS.md) : ' + JSON.stringify(files))
+    assert(files.length === 4 && files[0].includes('global') && files[1].includes('data/AGENTS.md') && files[2].includes('CLAUDE.md') && files[3].includes('docs/rules.md'), 'instruction files listed (with ~/.web-ide/AGENTS.md): ' + JSON.stringify(files))
     const skills = await page.$$eval('[data-testid=skill]', (e) => e.map((x) => x.textContent))
-    assert(skills.length === 3 && skills.some((s) => s.includes('greet')) && skills.some((s) => s.includes('release')) && skills.some((s) => s.includes('deploy') && s.includes('projet')), 'skills listés (dont ~/.web-ide/skills) : ' + JSON.stringify(skills))
+    assert(skills.length === 3 && skills.some((s) => s.includes('greet')) && skills.some((s) => s.includes('release')) && skills.some((s) => s.includes('deploy') && s.includes('project')), 'skills listed (with ~/.web-ide/skills): ' + JSON.stringify(skills))
     await page.click('.ai-servers .modal-head button')
     await page.waitForSelector('[data-testid=model-pill]:has-text("fake-model")')
 
     // First message: system prompt with template, instructions and skills.
-    await ask(page, 'Bonjour', 'Réponse de fake-model.')
+    await ask(page, 'Hello', 'Answer of fake-model.')
     const sys = requests[0].messages[0].content
-    assert(sys.includes('Projet ouvert : « demo »') && sys.includes('read_file'), 'prompt par défaut avec les variables remplacées')
-    assert(sys.includes('Instruction globale : réponds poliment.') && sys.includes('Instruction de l’IDE') && sys.includes('Règle du projet') && sys.includes('Règle importée'), 'CLAUDE.md global, AGENTS.md de ~/.web-ide, du projet et import @ dans le prompt')
-    assert(sys.includes('- greet : Saluer') && sys.includes('- deploy : Déployer') && !sys.includes('Bien le bonjour'), 'skills listés sans leur contenu')
-    assert(await page.isVisible('.ai-usage:has-text("fake-model")'), 'modèle affiché sous la réponse')
+    assert(sys.includes('Open project: "demo"') && sys.includes('read_file'), 'default prompt with the variables replaced')
+    assert(sys.includes('Global instruction: answer politely.') && sys.includes('Instruction of the IDE') && sys.includes('Project rule') && sys.includes('Imported rule'), 'global CLAUDE.md, AGENTS.md of ~/.web-ide, project file and @ import in the prompt')
+    assert(sys.includes('- greet: Greet') && sys.includes('- deploy: Deploy') && !sys.includes('Good day to you'), 'skills listed without their content')
+    assert(await page.isVisible('.ai-usage:has-text("fake-model")'), 'model shown under the answer')
     const gauge = (await page.getAttribute('[data-testid=ai-gauge]', 'title')) ?? ''
-    assert(gauge.replace(/[^\d/]/g, '').includes('/8192'), 'jauge de contexte affichée : ' + gauge)
+    assert(gauge.replace(/[^\d/]/g, '').includes('/8192'), 'context gauge shown: ' + gauge)
 
     // Project prompt edited in the settings.
-    await page.click('.ai-panel button[title^="Réglages"]')
+    await page.click('.ai-panel button[title^="Settings"]')
     await page.click('.ai-tab:has-text("Prompt")')
-    await page.fill('[data-testid=prompt-settings] textarea', 'Tu es le robot du projet {{project}}.\n{{tools}}')
-    await page.click('[data-testid=prompt-settings] button:has-text("Enregistrer")')
-    await page.waitForSelector('[data-testid=prompt-settings] strong:has-text("prompt du projet")')
-    assert(fs.readFileSync(demo + '/.ide/system-prompt.md', 'utf8').includes('robot du projet'), 'prompt du projet enregistré dans .ide/system-prompt.md')
+    await page.fill('[data-testid=prompt-settings] textarea', 'You are the robot of the project {{project}}.\n{{tools}}')
+    await page.click('[data-testid=prompt-settings] button:has-text("Save")')
+    await page.waitForSelector('[data-testid=prompt-settings] strong:has-text("project prompt")')
+    assert(fs.readFileSync(demo + '/.ide/system-prompt.md', 'utf8').includes('robot of the project'), 'project prompt saved in .ide/system-prompt.md')
     await page.click('.ai-servers .modal-head button')
 
     // Model switched in the middle of the conversation.
     await page.click('[data-testid=model-pill]')
     await page.click('.ai-model-item:has-text("fake-other")')
-    await ask(page, 'Et toi ?', 'Réponse de fake-other.')
+    await ask(page, 'And you?', 'Answer of fake-other.')
     const r2 = requests[requests.length - 1]
-    assert(r2.model === 'fake-other' && r2.messages.length === 4, 'la conversation continue avec l’autre modèle')
-    assert(r2.messages[0].content.startsWith('Tu es le robot du projet demo.') && r2.messages[0].content.includes('Règle du projet'), 'nouveau prompt utilisé, instructions toujours ajoutées')
+    assert(r2.model === 'fake-other' && r2.messages.length === 4, 'the conversation goes on with the other model')
+    assert(r2.messages[0].content.startsWith('You are the robot of the project demo.') && r2.messages[0].content.includes('Project rule'), 'new prompt used, instructions still added')
 
     // IDE tools.
-    await ask(page, 'Essaie les outils', 'Outils essayés.')
+    await ask(page, 'Try the tools', 'Tools tried.')
     const tools = await page.$$eval('.ai-tool', (e) => e.map((x) => ({ cls: x.className, text: x.textContent })))
-    assert(tools.length === 5, 'cinq appels d’outils : ' + JSON.stringify(tools.map((t) => t.text)))
+    assert(tools.length === 5, 'five tool calls: ' + JSON.stringify(tools.map((t) => t.text)))
     const results = requests.flatMap((r) => r.messages.filter((m) => m.role === 'tool'))
     const byId = (id) => results.find((m) => m.tool_call_id === id)?.content ?? ''
-    assert(byId('s1').includes('Bien le bonjour'), 'load_skill renvoie le contenu du skill')
-    assert(byId('s3').includes('Code de sortie : 3') && byId('s3').includes('bonjour-console'), 'run_command renvoie la sortie et le code : ' + JSON.stringify(byId('s3').slice(0, 80)))
-    assert(tools[2].cls.includes('error'), 'commande en échec signalée')
-    assert(byId('s5').startsWith('Code de sortie 2') && byId('s5').includes('depuis-bash') && byId('s5').includes('main.go'), 'bash renvoie sortie et code : ' + JSON.stringify(byId('s5').slice(0, 60)))
-    assert(!(await page.isVisible('.bottom .btab:has-text("depuis-bash")')), 'bash n’ouvre pas de console')
+    assert(byId('s1').includes('Good day to you'), 'load_skill returns the content of the skill')
+    assert(byId('s3').includes('Exit code: 3') && byId('s3').includes('hello-console'), 'run_command returns the output and the code: ' + JSON.stringify(byId('s3').slice(0, 80)))
+    assert(tools[2].cls.includes('error'), 'failed command reported')
+    assert(byId('s5').startsWith('Exit code 2') && byId('s5').includes('from-bash') && byId('s5').includes('main.go'), 'bash returns the output and the code: ' + JSON.stringify(byId('s5').slice(0, 60)))
+    assert(!(await page.isVisible('.bottom .btab:has-text("from-bash")')), 'bash does not open a console')
     const pos = await page.textContent('.cursor-info')
-    assert((await page.textContent('.pane.active .tab.active')).includes('main.go') && /^10:2 \(\d+ car\.\)/.test(pos), 'open_file ouvre main.go et sélectionne les lignes 8 à 10 : ' + pos)
-    assert(await page.isVisible('.git-panel'), 'focus affiche le panneau Git')
-    assert(await page.isVisible('.bottom .btab.active:has-text("echo bonjour-console")'), 'console de la commande au premier plan')
+    assert((await page.textContent('.pane.active .tab.active')).includes('main.go') && /^10:2 \(\d+ chars\)/.test(pos), 'open_file opens main.go and selects the lines 8 to 10: ' + pos)
+    assert(await page.isVisible('.git-panel'), 'focus shows the Git panel')
+    assert(await page.isVisible('.bottom .btab.active:has-text("echo hello-console")'), 'console of the command in front')
     await page.screenshot({ path: OUT + '/agent-tools.png' })
 
     // Manual compaction by a different model.
-    await page.click('.ai-panel button[title^="Réglages"]')
+    await page.click('.ai-panel button[title^="Settings"]')
     await page.click('.ai-tab:has-text("Compaction")')
     await page.selectOption('[data-testid=compaction-settings] select[name=compactServer]', { index: 1 })
     await page.waitForSelector('[data-testid=compaction-settings] select[name=compactModel] option[value="fake-small"]', { state: 'attached' })
@@ -160,20 +160,20 @@ run(async ({ page }) => {
     await page.click('.ai-servers .modal-head button')
     await page.click('[data-testid=ai-gauge]')
     await page.waitForSelector('[data-testid=ai-context-menu]')
-    assert((await page.textContent('[data-testid=ai-context-menu]')).includes('Messages envoyés au modèle'), 'menu du contexte ouvert')
-    await page.click('[data-testid=ai-context-menu] button:has-text("Compacter maintenant")')
+    assert((await page.textContent('[data-testid=ai-context-menu]')).includes('Messages sent to the model'), 'context menu open')
+    await page.click('[data-testid=ai-context-menu] button:has-text("Compact now")')
     await page.waitForSelector('[data-testid=ai-summary]:has-text("fake-small")', { timeout: 10000 })
-    assert(summaries.length === 1 && summaries[0].model === 'fake-small' && text(summaries[0].messages[1]).includes('Et toi ?') && !text(summaries[0].messages[1]).includes('Essaie les outils'), 'résumé demandé au modèle de compaction (tout sauf le dernier échange)')
-    assert(await page.isVisible('.ai-compacted-toggle'), 'messages compactés repliés')
-    await ask(page, 'Encore', 'Réponse de fake-other.')
+    assert(summaries.length === 1 && summaries[0].model === 'fake-small' && text(summaries[0].messages[1]).includes('And you?') && !text(summaries[0].messages[1]).includes('Try the tools'), 'summary asked to the compaction model (all but the last exchange)')
+    assert(await page.isVisible('.ai-compacted-toggle'), 'compacted messages folded')
+    await ask(page, 'Again', 'Answer of fake-other.')
     const r3 = requests[requests.length - 1]
-    assert(text(r3.messages[1]).includes('RÉSUMÉ-1') && text(r3.messages[2]).includes('Essaie les outils') && !r3.messages.some((m) => text(m).includes('Et toi')), 'après compaction : résumé + dernier échange seulement')
+    assert(text(r3.messages[1]).includes('SUMMARY-1') && text(r3.messages[2]).includes('Try the tools') && !r3.messages.some((m) => text(m).includes('And you')), 'after compaction: summary + last exchange only')
 
     // Automatic compaction when the usage passes 75 % of the context.
-    await ask(page, 'Une tâche longue', 'Après compaction.')
-    assert(summaries.length === 2, 'compaction automatique déclenchée au-delà du seuil')
+    await ask(page, 'A long task', 'After compaction.')
+    assert(summaries.length === 2, 'automatic compaction past the threshold')
     const r4 = requests[requests.length - 1]
-    assert(text(r4.messages[1]).includes('RÉSUMÉ-2'), 'la tâche continue après la compaction automatique')
+    assert(text(r4.messages[1]).includes('SUMMARY-2'), 'the task goes on after the automatic compaction')
     await page.screenshot({ path: OUT + '/agent-compaction.png' })
 
     // Commands: completion, /help, /model, a skill as a command, /compact with instructions.
@@ -181,47 +181,47 @@ run(async ({ page }) => {
     await page.keyboard.type('/he')
     await page.waitForSelector('[data-testid=ai-complete] .ai-complete-item.active:has-text("/help")')
     await page.keyboard.press('Enter')
-    assert((await page.inputValue('.ai-composer textarea')) === '/help ', 'complétion de commande')
+    assert((await page.inputValue('.ai-composer textarea')) === '/help ', 'command completion')
     await page.keyboard.press('Enter')
     await page.waitForSelector('[data-testid=ai-help]')
     const helpText = await page.textContent('[data-testid=ai-help]')
-    assert(helpText.includes('/compact') && helpText.includes('/greet'), '/help liste les commandes et les skills')
+    assert(helpText.includes('/compact') && helpText.includes('/greet'), '/help lists the commands and the skills')
     await page.fill('.ai-composer textarea', '/model fake-small')
     await page.keyboard.press('Enter')
     await page.waitForSelector('[data-testid=model-pill]:has-text("fake-small")')
-    assert(true, '/model change de modèle')
+    assert(true, '/model changes the model')
     await page.fill('.ai-composer textarea', '/model fake-other')
     await page.keyboard.press('Enter')
     await page.waitForSelector('[data-testid=model-pill]:has-text("fake-other")')
-    await ask(page, '/greet Marie', 'Réponse de fake-other.')
+    await ask(page, '/greet Marie', 'Answer of fake-other.')
     const skillAsk = requests[requests.length - 1].messages.at(-1)
-    assert(text(skillAsk).includes('load_skill') && text(skillAsk).includes('« greet »') && text(skillAsk).includes('Marie'), 'skill en commande : ' + text(skillAsk).slice(0, 80))
-    assert(await page.isVisible('.ai-msg.user .ai-mention:has-text("/greet")'), 'la bulle montre la commande')
+    assert(text(skillAsk).includes('load_skill') && text(skillAsk).includes('"greet"') && text(skillAsk).includes('Marie'), 'skill as a command: ' + text(skillAsk).slice(0, 80))
+    assert(await page.isVisible('.ai-msg.user .ai-mention:has-text("/greet")'), 'the bubble shows the command')
 
     // @ mention with completion: only the path is sent.
     await page.click('.ai-composer textarea')
-    await page.keyboard.type('Regarde @mai')
+    await page.keyboard.type('Look at @mai')
     await page.waitForSelector('[data-testid=ai-complete] .ai-complete-item.active:has-text("src/main.go")')
     await page.keyboard.press('Tab')
-    assert((await page.inputValue('.ai-composer textarea')) === 'Regarde @src/main.go ', 'complétion du chemin')
+    assert((await page.inputValue('.ai-composer textarea')) === 'Look at @src/main.go ', 'path completion')
     await page.keyboard.press('Enter')
     await page.waitForSelector('.ai-msg.user .ai-mention:has-text("@src/main.go")')
     await page.waitForSelector('[data-testid=send]')
-    assert(text(requests[requests.length - 1].messages.at(-1)) === 'Regarde @src/main.go', 'le message garde le chemin seul')
+    assert(text(requests[requests.length - 1].messages.at(-1)) === 'Look at @src/main.go', 'the message keeps the path only')
 
-    await page.fill('.ai-composer textarea', '/compact garde les noms de fichiers')
+    await page.fill('.ai-composer textarea', '/compact keep the file names')
     await page.keyboard.press('Enter')
     for (let t = 0; t < 100 && summaries.length < 3; t++) await page.waitForTimeout(100)
     await page.waitForSelector('[data-testid=send]')
-    assert(summaries.length === 3 && summaries[2].messages[0].content.includes('garde les noms de fichiers'), '/compact avec consignes')
+    assert(summaries.length === 3 && summaries[2].messages[0].content.includes('keep the file names'), '/compact with instructions')
 
     // Conversations in the project SQLite base, ignored by git.
     await page.waitForTimeout(500)
     const db = demo + '/.ide/chats.db'
-    assert(fs.existsSync(db), 'base .ide/chats.db créée')
-    assert(fs.readFileSync(demo + '/.ide/.gitignore', 'utf8').includes('chats.db'), '.ide/.gitignore ignore la base')
+    assert(fs.existsSync(db), '.ide/chats.db base created')
+    assert(fs.readFileSync(demo + '/.ide/.gitignore', 'utf8').includes('chats.db'), '.ide/.gitignore ignores the base')
     const count = execFileSync('python3', ['-c', `import sqlite3;c=sqlite3.connect('${db}');print(c.execute('select count(*) from chats').fetchone()[0], c.execute('select count(*) from messages').fetchone()[0])`], { encoding: 'utf8' }).trim().split(' ').map(Number)
-    assert(count[0] === 1 && count[1] > 10, 'conversation et messages dans SQLite : ' + count.join(' '))
+    assert(count[0] === 1 && count[1] > 10, 'conversation and messages in SQLite: ' + count.join(' '))
     // Reload: the active conversation comes back by itself.
     await page.reload()
     await page.waitForSelector('.menubar')
@@ -229,20 +229,20 @@ run(async ({ page }) => {
     const visible = (await page.$$('[data-testid=ai-summary]')).length
     await page.click('.ai-compacted-toggle')
     const all = (await page.$$('[data-testid=ai-summary]')).length
-    assert(visible === 1 && all === 3, `conversation active rechargée depuis SQLite, anciens résumés repliés (${visible}/${all})`)
+    assert(visible === 1 && all === 3, `active conversation reloaded from SQLite, older summaries folded (${visible}/${all})`)
 
     // Detached window, wide: the history is always shown.
     const projectPath = new URL(page.url()).pathname
     await page.goto(new URL(projectPath + '/tool/assistant', page.url()).href)
     await page.waitForSelector('.ai-panel.detached')
     await page.waitForSelector('[data-testid=ai-sidebar]', { timeout: 5000 }).catch(() => {})
-    assert((await page.isVisible('[data-testid=ai-sidebar]')) && !(await page.isVisible('.ai-side-wrap.overlay')) && !(await page.isVisible('.ai-panel button[title="Conversations du projet"]')), 'fenêtre détachée large : historique toujours affiché')
-    assert(await page.isVisible('.ai-chat-item.active:has-text("Bonjour")'), 'la conversation active est sélectionnée dans l’historique')
+    assert((await page.isVisible('[data-testid=ai-sidebar]')) && !(await page.isVisible('.ai-side-wrap.overlay')) && !(await page.isVisible('.ai-panel button[title="Conversations of the project"]')), 'wide detached window: history always shown')
+    assert(await page.isVisible('.ai-chat-item.active:has-text("Hello")'), 'the active conversation is selected in the history')
     await page.screenshot({ path: OUT + '/agent-detached.png' })
     await page.fill('.ai-composer textarea', '/clear')
     await page.keyboard.press('Enter')
     await page.waitForSelector('.ai-empty')
-    assert(true, '/clear ouvre une nouvelle conversation')
+    assert(true, '/clear opens a new conversation')
   } finally {
     fake.close()
   }

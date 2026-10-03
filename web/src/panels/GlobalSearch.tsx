@@ -3,6 +3,7 @@ import { createEffect, createSignal, For, on, onCleanup, Show } from 'solid-js'
 import { request } from '../pod/rpc'
 import { openFile, relPath } from '../state/project'
 import { registerAction } from '../keys/bindings'
+import { t } from '../i18n'
 
 interface Match {
   path: string
@@ -51,7 +52,7 @@ export function GlobalSearch() {
         const r = await request('search.grep', opts, c.signal)
         setResults(r.matches)
         const files = new Set(r.matches.map((m: Match) => m.path)).size
-        setInfo(`${r.matches.length}${r.truncated ? '+' : ''} résultat(s) dans ${files} fichier(s)`)
+        setInfo(t('{n} result(s) in {files} file(s)', { n: `${r.matches.length}${r.truncated ? '+' : ''}`, files }))
       } catch (e) {
         if (!c.signal.aborted) setInfo((e as Error).message)
       } finally {
@@ -92,23 +93,23 @@ export function GlobalSearch() {
   return (
     <div class="panel search-panel">
       <div class="panel-head">
-        <span class="panel-title">Recherche</span>
+        <span class="panel-title">{t('Search')}</span>
       </div>
       <div class="search-form">
         <div class="search-row">
-          <input ref={input} class="input" placeholder="Rechercher dans le projet" value={query()} onInput={(e) => setQuery(e.currentTarget.value)} />
-          <button class="toggle" classList={{ on: caseSensitive() }} title="Respecter la casse" onClick={() => setCase(!caseSensitive())}>
+          <input ref={input} class="input" placeholder={t('Search in the project')} value={query()} onInput={(e) => setQuery(e.currentTarget.value)} />
+          <button class="toggle" classList={{ on: caseSensitive() }} title={t('Match case')} onClick={() => setCase(!caseSensitive())}>
             Aa
           </button>
-          <button class="toggle" classList={{ on: word() }} title="Mot entier" onClick={() => setWord(!word())}>
+          <button class="toggle" classList={{ on: word() }} title={t('Whole word')} onClick={() => setWord(!word())}>
             ab|
           </button>
-          <button class="toggle" classList={{ on: regex() }} title="Expression régulière (syntaxe RE2)" onClick={() => setRegex(!regex())}>
+          <button class="toggle" classList={{ on: regex() }} title={t('Regular expression (RE2 syntax)')} onClick={() => setRegex(!regex())}>
             .*
           </button>
         </div>
-        <input class="input small" placeholder="Fichiers : *.go, *.ts" value={include()} onInput={(e) => setInclude(e.currentTarget.value)} />
-        <div class="muted small">{busy() ? 'Recherche…' : info()}</div>
+        <input class="input small" placeholder={t('Files: *.go, *.ts')} value={include()} onInput={(e) => setInclude(e.currentTarget.value)} />
+        <div class="muted small">{busy() ? t('Searching…') : info()}</div>
       </div>
       <div class="panel-body search-results">
         <For each={groups()}>

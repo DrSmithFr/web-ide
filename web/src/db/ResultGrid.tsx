@@ -1,5 +1,6 @@
 import { createSignal, For, Show } from 'solid-js'
 import type { Result } from './api'
+import { t } from '../i18n'
 
 function cell(v: unknown) {
   if (v === null || v === undefined) return null
@@ -19,7 +20,7 @@ export function ResultGrid(props: { result: Result; offset?: number }) {
   }
   return (
     <div class="grid-wrap" tabIndex={0} onKeyDown={copy}>
-      <Show when={props.result.columns?.length} fallback={<div class="muted pad">Aucune colonne retournée.</div>}>
+      <Show when={props.result.columns?.length} fallback={<div class="muted pad">{t('No column returned.')}</div>}>
         <table class="grid">
           <thead>
             <tr>

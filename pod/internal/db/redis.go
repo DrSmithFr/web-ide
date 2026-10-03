@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
 
 type redisDriver struct {
@@ -90,7 +92,7 @@ func (d *redisDriver) Children(ctx context.Context, n Node) ([]Node, error) {
 			}
 			detail := "vide"
 			if has {
-				detail = k + " clés"
+				detail = k + " keys"
 			}
 			name := "db" + strconv.Itoa(i)
 			out = append(out, Node{ID: "db:" + name, Label: name, Kind: "database", Detail: detail, DB: name})
@@ -134,11 +136,11 @@ func (d *redisDriver) Children(ctx context.Context, n Node) ([]Node, error) {
 }
 
 func (d *redisDriver) DDL(context.Context, string, string) (string, error) {
-	return "", errors.New("pas de DDL pour Redis")
+	return "", i18n.New("no DDL for Redis")
 }
 
 func (d *redisDriver) IndexDef(context.Context, string, string, string) (string, error) {
-	return "", errors.New("pas d'index pour Redis")
+	return "", i18n.New("no index for Redis")
 }
 
 // Page shows the content of a key, paginated for the collection types.
@@ -213,9 +215,9 @@ func (d *redisDriver) Page(ctx context.Context, db, key string, offset, limit in
 			res.Rows = append(res.Rows, []any{m.ID, fmt.Sprint(m.Values)})
 		}
 	case "none":
-		return nil, errors.New("clé introuvable")
+		return nil, i18n.New("key not found")
 	default:
-		return nil, fmt.Errorf("type %s non pris en charge", typ)
+		return nil, i18n.Errorf("type %s not supported", typ)
 	}
 	res.DurationMs = ms(start)
 	return res, nil
@@ -278,7 +280,7 @@ func splitArgs(s string) ([]any, error) {
 		}
 	}
 	if quote != 0 {
-		return nil, errors.New("guillemet non fermé")
+		return nil, i18n.New("unclosed quote")
 	}
 	if in {
 		out = append(out, cur.String())
@@ -292,7 +294,7 @@ func (s *redisSession) Exec(ctx context.Context, q string) (*Result, error) {
 		return nil, err
 	}
 	if len(args) == 0 {
-		return nil, errors.New("commande vide")
+		return nil, i18n.New("empty command")
 	}
 	start := time.Now()
 	name := strings.ToUpper(fmt.Sprint(args[0]))
@@ -313,7 +315,7 @@ func formatReply(v any) *Result {
 	res := &Result{Total: -1, Rows: [][]any{}}
 	switch t := v.(type) {
 	case nil:
-		res.Columns, res.Rows = []string{"réponse"}, [][]any{{"(nil)"}}
+		res.Columns, res.Rows = []string{"reply"}, [][]any{{"(nil)"}}
 	case []any:
 		res.Columns = []string{"#", "valeur"}
 		for i, e := range t {
@@ -324,7 +326,7 @@ func formatReply(v any) *Result {
 			res.Rows = append(res.Rows, []any{i + 1, value(e)})
 		}
 	case map[any]any:
-		res.Columns = []string{"clé", "valeur"}
+		res.Columns = []string{"key", "value"}
 		keys := make([]string, 0, len(t))
 		vals := map[string]any{}
 		for k, e := range t {
@@ -337,7 +339,7 @@ func formatReply(v any) *Result {
 			res.Rows = append(res.Rows, []any{k, value(vals[k])})
 		}
 	default:
-		res.Columns, res.Rows = []string{"réponse"}, [][]any{{value(t)}}
+		res.Columns, res.Rows = []string{"reply"}, [][]any{{value(t)}}
 	}
 	res.Affected = int64(len(res.Rows))
 	return res
@@ -345,7 +347,7 @@ func formatReply(v any) *Result {
 
 func (s *redisSession) SetAutoCommit(on bool) error {
 	if !on {
-		return errors.New("Redis : pas de transaction manuelle (utiliser MULTI / EXEC dans la console)")
+		return i18n.New("Redis: no manual transaction (use MULTI / EXEC in the console)")
 	}
 	return nil
 }

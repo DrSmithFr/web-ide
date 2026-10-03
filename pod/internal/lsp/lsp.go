@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/execx"
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
 
 type Spec struct {
@@ -132,7 +133,7 @@ func (m *Manager) Status() []Status {
 		if st.Detected || srv != nil {
 			st.Command = m.command(s.Lang)
 			if st.Command == nil && st.Error == "" {
-				st.Error = "aucun serveur installé (" + candidates(s) + ")"
+				st.Error = "no server installed (" + candidates(s) + ")"
 			}
 		}
 		out = append(out, st)
@@ -159,7 +160,7 @@ func (m *Manager) get(lang string) (*server, error) {
 	cmd := m.command(lang)
 	if cmd == nil {
 		s, _ := spec(lang)
-		return nil, fmt.Errorf("pas de serveur de langage pour %s (installer %s)", lang, candidates(s))
+		return nil, i18n.Errorf("no language server for %s (install %s)", lang, candidates(s))
 	}
 	m.mu.Lock()
 	if cur := m.servers[lang]; cur != nil && cur != srv && cur.alive() {
@@ -337,7 +338,7 @@ func (s *server) initialize() {
 	defer cancel()
 	res, err := s.request(ctx, "initialize", raw)
 	if err != nil {
-		s.initErr = fmt.Errorf("initialisation de %s : %w", s.lang, err)
+		s.initErr = i18n.Errorf("initialization of %s: %w", s.lang, err)
 		s.stop()
 		return
 	}
@@ -359,7 +360,7 @@ func (s *server) send(msg *message) error {
 	s.wmu.Lock()
 	defer s.wmu.Unlock()
 	if s.proc == nil {
-		return errors.New("serveur arrêté")
+		return i18n.New("server stopped")
 	}
 	_, err = fmt.Fprintf(s.proc.Stdin(), "Content-Length: %d\r\n\r\n%s", len(data), data)
 	return err
@@ -372,7 +373,7 @@ func (s *server) request(ctx context.Context, method string, params json.RawMess
 	select {
 	case <-s.done:
 		s.pmu.Unlock()
-		return nil, errors.New("serveur de langage arrêté")
+		return nil, i18n.New("language server stopped")
 	default:
 	}
 	s.pending[id] = ch
@@ -387,7 +388,7 @@ func (s *server) request(ctx context.Context, method string, params json.RawMess
 	select {
 	case msg, ok := <-ch:
 		if !ok {
-			return nil, errors.New("serveur de langage arrêté")
+			return nil, i18n.New("language server stopped")
 		}
 		if msg.Error != nil {
 			return nil, errors.New(msg.Error.Message)

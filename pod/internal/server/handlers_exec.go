@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"time"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/execx"
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
 )
 
@@ -45,7 +45,7 @@ func (c *capped) String() (string, bool) {
 	}
 	var b bytes.Buffer
 	b.Write(c.head)
-	b.WriteString("\n… (sortie coupée) …\n")
+	b.WriteString("\n… (output cut) …\n")
 	b.Write(c.tail)
 	return b.String(), true
 }
@@ -75,7 +75,7 @@ func (s *Server) registerExec() {
 			return nil, err
 		}
 		if a.Command == "" {
-			return nil, errors.New("commande vide")
+			return nil, i18n.New("empty command")
 		}
 		dir := rt.Root
 		if a.Cwd != "" {

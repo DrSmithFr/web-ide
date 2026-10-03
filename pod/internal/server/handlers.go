@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/DrSmithFr/web-ide/pod/internal/config"
 	"github.com/DrSmithFr/web-ide/pod/internal/fsx"
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/lsp"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
@@ -33,7 +33,7 @@ func (c *Client) runtime() (*runtime.Runtime, error) {
 	defer c.srv.mu.Unlock()
 	rt := c.srv.runtimes[c.project]
 	if rt == nil {
-		return nil, errors.New("aucun projet ouvert sur cette connexion")
+		return nil, i18n.New("no project open on this connection")
 	}
 	return rt, nil
 }
@@ -41,6 +41,17 @@ func (c *Client) runtime() (*runtime.Runtime, error) {
 // ---------- global: workspace, projects, settings ----------
 
 func (s *Server) registerGlobal() {
+	// The window tells its language: the messages sent to it are translated.
+	s.handle("client.lang", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		a, err := bind[struct{ Lang string }](p)
+		if err != nil {
+			return nil, err
+		}
+		if i18n.Supported(a.Lang) {
+			c.lang.Store(a.Lang)
+		}
+		return nil, nil
+	})
 	s.handle("workspace.get", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 		home, _ := os.UserHomeDir()
 		return map[string]string{"workspace": s.Cfg.Workspace, "home": home, "dataDir": s.Store.Dir()}, nil
@@ -52,7 +63,7 @@ func (s *Server) registerGlobal() {
 		}
 		dir := config.ExpandHome(strings.TrimSpace(a.Path))
 		if st, err := os.Stat(dir); err != nil || !st.IsDir() {
-			return nil, errors.New("dossier introuvable : " + dir)
+			return nil, i18n.Errorf("folder not found: %s", dir)
 		}
 		s.Cfg.Workspace = dir
 		return nil, s.Cfg.Save(s.Store)
@@ -99,7 +110,7 @@ func (s *Server) registerGlobal() {
 		if a.Type == "local" {
 			a.Path = config.ExpandHome(a.Path)
 			if st, err := os.Stat(a.Path); err != nil || !st.IsDir() {
-				return nil, errors.New("dossier introuvable : " + a.Path)
+				return nil, i18n.Errorf("folder not found: %s", a.Path)
 			}
 		}
 		v, err := s.Projects.Create(a)
@@ -216,7 +227,7 @@ func (s *Server) openRuntime(id string, creds sshx.Creds) (*runtime.Runtime, err
 	s.mu.Unlock()
 	p, ok := s.Projects.Get(id)
 	if !ok {
-		return nil, errors.New("projet introuvable")
+		return nil, i18n.New("project not found")
 	}
 	rt, err := runtime.Open(*p, creds, runtime.Deps{Pool: s.Pool, Store: s.Store}, s.emitter(id))
 	if err != nil {
@@ -274,7 +285,7 @@ func (s *Server) registerProject() {
 			return nil, err
 		}
 		if c.project == "" {
-			return nil, errors.New("aucun projet ouvert")
+			return nil, i18n.New("no open project")
 		}
 		s.Sessions.Put(c.project, a.Session)
 		s.emitter(c.project)("session.changed", a.Session, c.id)

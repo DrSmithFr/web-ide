@@ -6,6 +6,7 @@ import { on as onPod, request } from '../pod/rpc'
 import { themeById, tokenTypes } from '../settings/themes'
 import { setGrammarOverrides } from '../editor/languages'
 import type { GrammarDef } from '../editor/tokenizer'
+import { setLang, type LangSetting } from '../i18n'
 
 export interface Settings {
   theme: string
@@ -14,6 +15,7 @@ export interface Settings {
   editor: { tabSize: number; insertSpaces: boolean; highlightLine: boolean }
   keyboard: { layout: 'auto' | 'qwerty' | 'azerty'; overrides: Record<string, string[]> }
   syntax: Record<string, GrammarDef>
+  language: LangSetting
 }
 
 export const defaultSettings: Settings = {
@@ -23,6 +25,7 @@ export const defaultSettings: Settings = {
   editor: { tabSize: 4, insertSpaces: true, highlightLine: true },
   keyboard: { layout: 'auto', overrides: {} },
   syntax: {},
+  language: 'auto',
 }
 
 function merge(raw: any): Settings {
@@ -35,6 +38,7 @@ function merge(raw: any): Settings {
     editor: { ...d.editor, ...(raw.editor ?? {}) },
     keyboard: { ...d.keyboard, ...(raw.keyboard ?? {}), overrides: raw.keyboard?.overrides ?? {} },
     syntax: raw.syntax ?? {},
+    language: raw.language === 'en' || raw.language === 'fr' ? raw.language : 'auto',
   }
 }
 
@@ -103,6 +107,7 @@ createRoot(() => {
     }
     style.textContent = css
   })
+  createEffect(() => setLang(settings.language))
   // JSON.stringify reads the whole store, so the effect tracks every nested rule.
   createEffect(() => setGrammarOverrides(JSON.parse(JSON.stringify(settings.syntax))))
 })

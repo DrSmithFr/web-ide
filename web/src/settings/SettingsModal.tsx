@@ -14,15 +14,17 @@ import { errorToast, toast } from '../ui/toast'
 import { Doc } from '../editor/doc'
 import { EditorView } from '../editor/view'
 import { samples } from './samples'
+import { browserLang, fmtDate, languages, t, tn, type LangSetting } from '../i18n'
 
 const sections = [
-  ['themes', 'Thèmes'],
-  ['fonts', 'Polices'],
-  ['editor', 'Éditeur'],
-  ['keys', 'Raccourcis clavier'],
-  ['syntax', 'Colorisation syntaxique'],
-  ['workspace', 'Workspace et pod'],
-  ['history', 'Historique des réglages'],
+  ['language', 'Language'],
+  ['themes', 'Themes'],
+  ['fonts', 'Fonts'],
+  ['editor', 'Editor'],
+  ['keys', 'Keyboard shortcuts'],
+  ['syntax', 'Syntax highlighting'],
+  ['workspace', 'Workspace and pod'],
+  ['history', 'Settings history'],
 ] as const
 
 const [open, setOpen] = createSignal<string | null>(null)
@@ -33,18 +35,21 @@ export function openSettings(section = 'themes') {
 export function SettingsHost() {
   return (
     <Show when={open()}>
-      <Modal title="Réglages" onClose={() => setOpen(null)} class="modal-settings">
+      <Modal title={t('Settings')} onClose={() => setOpen(null)} class="modal-settings">
         <div class="settings">
           <nav class="settings-nav">
             <For each={sections}>
               {([id, label]) => (
                 <button classList={{ active: open() === id }} onClick={() => setOpen(id)}>
-                  {label}
+                  {t(label)}
                 </button>
               )}
             </For>
           </nav>
           <div class="settings-body">
+            <Show when={open() === 'language'}>
+              <LanguageSettings />
+            </Show>
             <Show when={open() === 'themes'}>
               <Themes />
             </Show>
@@ -86,26 +91,26 @@ function Preview(props: { lang: string }) {
 }
 
 function Themes() {
-  const t = () => themeById(settings.theme)
-  const color = (tok: string) => settings.tokenColors[settings.theme]?.[tok] ?? t().tokens[tok]
+  const theme = () => themeById(settings.theme)
+  const color = (tok: string) => settings.tokenColors[settings.theme]?.[tok] ?? theme().tokens[tok]
   return (
     <section>
-      <h3>Thème</h3>
+      <h3>{t('Theme')}</h3>
       <div class="theme-grid">
         <For each={themes}>
           {(th) => (
-            <button class="theme-card" classList={{ active: settings.theme === th.id }} onClick={() => updateSettings((s) => (s.theme = th.id), `Thème ${th.name}`)}>
+            <button class="theme-card" classList={{ active: settings.theme === th.id }} onClick={() => updateSettings((s) => (s.theme = th.id), `Theme ${th.name}`)}>
               <span class="theme-swatch" style={{ background: th.ui.bg, color: th.ui.fg, 'border-color': th.ui.line }}>
                 <span style={{ color: th.tokens.keyword }}>fn</span> <span style={{ color: th.tokens.function }}>main</span>
                 <span style={{ color: th.tokens.punctuation }}>()</span> <span style={{ color: th.tokens.string }}>"ok"</span>
               </span>
-              <span>{th.name}</span>
+              <span>{t(th.name)}</span>
             </button>
           )}
         </For>
       </div>
-      <h3>Couleurs des tokens · {t().name}</h3>
-      <p class="muted small">Pas de gras : l'API de surlignage ne gère que la couleur, le fond, le soulignement et l'italique.</p>
+      <h3>{t('Token colors · {theme}', { theme: t(theme().name) })}</h3>
+      <p class="muted small">{t('No bold: the highlighting API only handles the color, the background, the underline and italics.')}</p>
       <div class="token-grid">
         <For each={tokenTypes}>
           {(tok) => (
@@ -117,16 +122,16 @@ function Themes() {
                   const v = e.currentTarget.value
                   updateSettings((s) => {
                     s.tokenColors[s.theme] = { ...(s.tokenColors[s.theme] ?? {}), [tok]: v }
-                  }, 'Couleur de token')
+                  }, 'Token color')
                 }}
               />
-              <span style={{ color: color(tok) }}>{tokenLabels[tok]}</span>
+              <span style={{ color: color(tok) }}>{t(tokenLabels[tok])}</span>
             </label>
           )}
         </For>
       </div>
-      <button class="btn small" disabled={!settings.tokenColors[settings.theme]} onClick={() => updateSettings((s) => delete s.tokenColors[s.theme], 'Couleurs par défaut')}>
-        Couleurs par défaut du thème
+      <button class="btn small" disabled={!settings.tokenColors[settings.theme]} onClick={() => updateSettings((s) => delete s.tokenColors[s.theme], 'Default colors')}>
+        {t('Default colors of the theme')}
       </button>
       <Preview lang="php" />
     </section>
@@ -136,31 +141,31 @@ function Themes() {
 function Fonts() {
   const num = (path: 'size' | 'lineHeight' | 'uiSize', v: string) => {
     const n = parseFloat(v)
-    if (n > 0) updateSettings((s) => ((s.font as any)[path] = n), 'Police')
+    if (n > 0) updateSettings((s) => ((s.font as any)[path] = n), 'Font')
   }
   return (
     <section class="form">
       <label class="field">
-        <span>Police du code (pile CSS)</span>
-        <input value={settings.font.family} onChange={(e) => updateSettings((s) => (s.font.family = e.currentTarget.value), 'Police')} />
+        <span>{t('Code font (CSS stack)')}</span>
+        <input value={settings.font.family} onChange={(e) => updateSettings((s) => (s.font.family = e.currentTarget.value), 'Font')} />
       </label>
       <div class="field-row">
         <label class="field">
-          <span>Taille du code (px)</span>
+          <span>{t('Code size (px)')}</span>
           <input type="number" min="8" max="32" value={settings.font.size} onChange={(e) => num('size', e.currentTarget.value)} />
         </label>
         <label class="field">
-          <span>Interligne</span>
+          <span>{t('Line height')}</span>
           <input type="number" min="1" max="2.5" step="0.05" value={settings.font.lineHeight} onChange={(e) => num('lineHeight', e.currentTarget.value)} />
         </label>
         <label class="field">
-          <span>Taille de l'interface (px)</span>
+          <span>{t('Interface size (px)')}</span>
           <input type="number" min="10" max="20" value={settings.font.uiSize} onChange={(e) => num('uiSize', e.currentTarget.value)} />
         </label>
       </div>
       <label class="check">
         <input type="checkbox" checked={settings.font.ligatures} onChange={(e) => updateSettings((s) => (s.font.ligatures = e.currentTarget.checked), 'Ligatures')} />
-        Ligatures
+        {t('Ligatures')}
       </label>
       <Preview lang="typescript" />
     </section>
@@ -172,17 +177,17 @@ function EditorSettings() {
     <section class="form">
       <div class="field-row">
         <label class="field">
-          <span>Taille de tabulation</span>
-          <input type="number" min="1" max="8" value={settings.editor.tabSize} onChange={(e) => updateSettings((s) => (s.editor.tabSize = parseInt(e.currentTarget.value, 10) || 4), 'Tabulation')} />
+          <span>{t('Tab size')}</span>
+          <input type="number" min="1" max="8" value={settings.editor.tabSize} onChange={(e) => updateSettings((s) => (s.editor.tabSize = parseInt(e.currentTarget.value, 10) || 4), 'Tab size')} />
         </label>
       </div>
       <label class="check">
         <input type="checkbox" checked={settings.editor.insertSpaces} onChange={(e) => updateSettings((s) => (s.editor.insertSpaces = e.currentTarget.checked), 'Indentation')} />
-        Indenter avec des espaces
+        {t('Indent with spaces')}
       </label>
       <label class="check">
-        <input type="checkbox" checked={settings.editor.highlightLine} onChange={(e) => updateSettings((s) => (s.editor.highlightLine = e.currentTarget.checked), 'Ligne courante')} />
-        Surligner la ligne courante
+        <input type="checkbox" checked={settings.editor.highlightLine} onChange={(e) => updateSettings((s) => (s.editor.highlightLine = e.currentTarget.checked), 'Current line')} />
+        {t('Highlight the current line')}
       </label>
     </section>
   )
@@ -213,46 +218,46 @@ function Keys() {
   const assign = (action: string, combo: string) => {
     const others = actionsFor(combo).filter((a) => a !== action)
     if (others.length) {
-      const names = others.map((a) => actionById.get(a)?.label ?? a).join(', ')
-      if (!confirm(`${comboLabel(combo)} est déjà utilisé par : ${names}.\nLe retirer de ces actions et l'assigner ici ?`)) return
+      const names = others.map((a) => t(actionById.get(a)?.label ?? a)).join(', ')
+      if (!confirm(t('{combo} is already used by: {actions}.\nRemove it from these actions and assign it here?', { combo: comboLabel(combo), actions: names }))) return
     }
     const eff = structuredClone(effectiveBindings())
     updateSettings((s) => {
       for (const a of others) s.keyboard.overrides[a] = eff[a].filter((c) => c !== combo)
       const cur = s.keyboard.overrides[action] ?? eff[action] ?? []
       if (!cur.includes(combo)) s.keyboard.overrides[action] = [...cur, combo]
-    }, 'Raccourci')
+    }, 'Shortcut')
   }
   const removeCombo = (action: string, combo: string) => {
     const cur = effectiveBindings()[action] ?? []
-    updateSettings((s) => (s.keyboard.overrides[action] = cur.filter((c) => c !== combo)), 'Raccourci')
+    updateSettings((s) => (s.keyboard.overrides[action] = cur.filter((c) => c !== combo)), 'Shortcut')
   }
-  const reset = (action: string) => updateSettings((s) => delete s.keyboard.overrides[action], 'Raccourci réinitialisé')
+  const reset = (action: string) => updateSettings((s) => delete s.keyboard.overrides[action], 'Shortcut reset')
 
   const list = createMemo(() => {
     const f = filter().toLowerCase()
-    return actions.filter((a) => !f || a.label.toLowerCase().includes(f) || a.category.toLowerCase().includes(f) || (effectiveBindings()[a.id] ?? []).some((c) => comboLabel(c).toLowerCase().includes(f)))
+    return actions.filter((a) => !f || t(a.label).toLowerCase().includes(f) || t(a.category).toLowerCase().includes(f) || (effectiveBindings()[a.id] ?? []).some((c) => comboLabel(c).toLowerCase().includes(f)))
   })
 
   return (
     <section>
       <div class="field-row">
         <label class="field">
-          <span>Disposition du clavier</span>
-          <select value={settings.keyboard.layout} onChange={(e) => updateSettings((s) => (s.keyboard.layout = e.currentTarget.value as any), 'Disposition')}>
-            <option value="auto">Automatique ({detectedLayout() ? `détectée : ${presets[detectedLayout()!].name}` : `suggérée : ${presets[suggestedLayout()].name}`})</option>
+          <span>{t('Keyboard layout')}</span>
+          <select value={settings.keyboard.layout} onChange={(e) => updateSettings((s) => (s.keyboard.layout = e.currentTarget.value as any), 'Keyboard layout')}>
+            <option value="auto">{detectedLayout() ? t('Automatic (detected: {layout})', { layout: presets[detectedLayout()!].name }) : t('Automatic (suggested: {layout})', { layout: presets[suggestedLayout()].name })}</option>
             <option value="qwerty">QWERTY</option>
             <option value="azerty">AZERTY</option>
           </select>
         </label>
         <label class="field grow">
-          <span>Filtrer</span>
-          <input placeholder="action, catégorie ou touche" value={filter()} onInput={(e) => setFilter(e.currentTarget.value)} />
+          <span>{t('Filter')}</span>
+          <input placeholder={t('action, category or key')} value={filter()} onInput={(e) => setFilter(e.currentTarget.value)} />
         </label>
       </div>
       <p class="muted small">
-        Preset actif : {presets[activeLayout()].name}. Les raccourcis sont liés à la position physique des touches ; vos changements sont enregistrés comme dérogations au preset.
-        {detectedLayout() ? '' : ' Détection automatique indisponible dans ce navigateur : la langue sert de suggestion.'}
+        {t('Active preset: {layout}. Shortcuts are bound to the physical position of the keys; your changes are saved as overrides of the preset.', { layout: presets[activeLayout()].name })}
+        {detectedLayout() ? '' : ` ${t('Automatic detection is not available in this browser: the language is used as a suggestion.')}`}
       </p>
       <table class="keys-table">
         <tbody>
@@ -260,28 +265,28 @@ function Keys() {
             {(a) => (
               <tr classList={{ overridden: !!settings.keyboard.overrides[a.id] }}>
                 <td>
-                  <div>{a.label}</div>
-                  <div class="muted small">{a.category}</div>
+                  <div>{t(a.label)}</div>
+                  <div class="muted small">{t(a.category)}</div>
                 </td>
                 <td class="keys-cell">
                   <For each={effectiveBindings()[a.id] ?? []}>
                     {(c) => (
                       <span class="chip">
                         <kbd>{comboLabel(c)}</kbd>
-                        <button class="chip-x" title="Retirer" onClick={() => removeCombo(a.id, c)}>
+                        <button class="chip-x" title={t('Remove')} onClick={() => removeCombo(a.id, c)}>
                           ✕
                         </button>
                       </span>
                     )}
                   </For>
                   <Show when={capturing() === a.id} fallback={<button class="btn small" onClick={() => startCapture(a.id)}>+</button>}>
-                    <span class="capture">Appuyez sur la combinaison… (Échap pour annuler)</span>
+                    <span class="capture">{t('Press the combination… (Esc to cancel)')}</span>
                   </Show>
                 </td>
                 <td>
                   <Show when={settings.keyboard.overrides[a.id]}>
-                    <button class="btn small" onClick={() => reset(a.id)} title="Revenir au preset">
-                      Réinitialiser
+                    <button class="btn small" onClick={() => reset(a.id)} title={t('Back to the preset')}>
+                      {t('Reset')}
                     </button>
                   </Show>
                 </td>
@@ -327,12 +332,12 @@ function Syntax() {
     try {
       const data = JSON.parse(await file.text())
       const list: GrammarDef[] = Array.isArray(data) ? data : data.states ? [data] : Object.values(data)
-      if (!list.every((g) => g && g.id && g.states)) throw new Error('format attendu : une grammaire {id, name, extensions, states} ou une liste')
-      await request('settings.snapshot', { label: 'Avant import de colorisation' })
+      if (!list.every((g) => g && g.id && g.states)) throw new Error(t('expected format: a grammar {id, name, extensions, states} or a list'))
+      await request('settings.snapshot', { label: 'Before highlighting import' })
       updateSettings((s) => {
         for (const g of list) s.syntax[g.id] = g
-      }, `Import de ${list.length} grammaire(s)`)
-      toast(`${list.length} grammaire(s) importée(s) ; l'état précédent est dans l'historique`, 'ok')
+      }, `Import of ${list.length} grammar(s)`)
+      toast(tn(list.length, '{n} grammar imported; the previous state is in the history', '{n} grammars imported; the previous state is in the history'), 'ok')
     } catch (e) {
       errorToast(e)
     }
@@ -342,38 +347,38 @@ function Syntax() {
     <section>
       <div class="field-row">
         <label class="field">
-          <span>Langage</span>
+          <span>{t('code|Language')}</span>
           <select value={lang()} onChange={(e) => setLang(e.currentTarget.value)}>
-            <For each={grammarDefs()}>{(g) => <option value={g.id}>{g.name}{settings.syntax[g.id] ? ' (modifié)' : ''}</option>}</For>
+            <For each={grammarDefs()}>{(g) => <option value={g.id}>{g.name}{settings.syntax[g.id] ? ` (${t('changed')})` : ''}</option>}</For>
           </select>
         </label>
         <span class="grow" />
-        <button class="btn small" onClick={() => download(`colorisation-${lang()}.json`, def())}>
-          Exporter
+        <button class="btn small" onClick={() => download(`highlighting-${lang()}.json`, def())}>
+          {t('Export')}
         </button>
-        <button class="btn small" onClick={() => download('colorisation.json', grammarDefs())}>
-          Tout exporter
+        <button class="btn small" onClick={() => download('highlighting.json', grammarDefs())}>
+          {t('Export all')}
         </button>
         <label class="btn small">
-          Importer…
+          {t('Import…')}
           <input type="file" accept="application/json,.json" hidden onChange={(e) => e.currentTarget.files?.[0] && importFile(e.currentTarget.files[0])} />
         </label>
-        <button class="btn small" disabled={!settings.syntax[lang()]} onClick={() => updateSettings((s) => delete s.syntax[lang()], `Colorisation ${def().name} par défaut`)}>
-          Réinitialiser
+        <button class="btn small" disabled={!settings.syntax[lang()]} onClick={() => updateSettings((s) => delete s.syntax[lang()], `Default ${def().name} highlighting`)}>
+          {t('Reset')}
         </button>
       </div>
       <div class="field-row">
         <label class="field grow">
-          <span>Extensions</span>
+          <span>{t('Extensions')}</span>
           <input value={def().extensions.join(', ')} onChange={(e) => edit((g) => (g.extensions = e.currentTarget.value.split(',').map((x) => x.trim()).filter(Boolean)))} />
         </label>
         <label class="field grow">
-          <span>Détection par contenu (regex)</span>
+          <span>{t('Detection by content (regex)')}</span>
           <input class="mono" value={def().detect ?? ''} onChange={(e) => edit((g) => (g.detect = e.currentTarget.value || undefined))} />
         </label>
       </div>
       <p class="muted small">
-        Règles ordonnées : à chaque position, la première regex qui correspond gagne. « État suivant » empile un état (commentaire, chaîne multiligne…) ; « @pop » revient à l'état précédent.
+        {t('Ordered rules: at each position, the first matching regex wins. “Next state” pushes a state (comment, multi-line string…); “@pop” goes back to the previous state.')}
       </p>
       <Show when={errors().length}>
         <div class="test-result danger">
@@ -384,15 +389,15 @@ function Syntax() {
         {(state) => (
           <div class="grammar-state">
             <h4>
-              État <code>{state}</code>
+              {t('State')} <code>{state}</code>
             </h4>
             <table class="rules">
               <thead>
                 <tr>
-                  <th>Token</th>
-                  <th>Regex</th>
-                  <th>Drapeaux</th>
-                  <th>État suivant</th>
+                  <th>{t('Token')}</th>
+                  <th>{t('Regex')}</th>
+                  <th>{t('Flags')}</th>
+                  <th>{t('Next state')}</th>
                   <th />
                 </tr>
               </thead>
@@ -402,15 +407,15 @@ function Syntax() {
                     <tr>
                       <td>
                         <select value={r().include ? '@include' : r().token} onChange={(e) => setRule(state, i, { token: e.currentTarget.value })} disabled={!!r().include}>
-                          <option value="text">(texte)</option>
+                          <option value="text">{t('(text)')}</option>
                           <For each={tokenTypes}>{(t) => <option value={t}>{t}</option>}</For>
                           <Show when={r().include}>
-                            <option value="@include">inclure</option>
+                            <option value="@include">{t('include')}</option>
                           </Show>
                         </select>
                       </td>
                       <td>
-                        <Show when={!r().include} fallback={<span class="muted">inclut l'état « {r().include} »</span>}>
+                        <Show when={!r().include} fallback={<span class="muted">{t('includes the state “{state}”', { state: r().include ?? '' })}</span>}>
                           <input class="mono" value={r().regex} onChange={(e) => setRule(state, i, { regex: e.currentTarget.value })} />
                         </Show>
                       </td>
@@ -421,13 +426,13 @@ function Syntax() {
                         <input class="mono w-next" value={r().next ?? ''} placeholder="—" onChange={(e) => setRule(state, i, { next: e.currentTarget.value || undefined })} />
                       </td>
                       <td class="nowrap">
-                        <button class="icon-btn" title="Monter" onClick={() => move(state, i, -1)}>
+                        <button class="icon-btn" title={t('Up')} onClick={() => move(state, i, -1)}>
                           ↑
                         </button>
-                        <button class="icon-btn" title="Descendre" onClick={() => move(state, i, 1)}>
+                        <button class="icon-btn" title={t('Down')} onClick={() => move(state, i, 1)}>
                           ↓
                         </button>
-                        <button class="icon-btn" title="Supprimer" onClick={() => edit((g) => g.states[state].splice(i, 1))}>
+                        <button class="icon-btn" title={t('Delete')} onClick={() => edit((g) => g.states[state].splice(i, 1))}>
                           ✕
                         </button>
                       </td>
@@ -437,10 +442,10 @@ function Syntax() {
               </tbody>
             </table>
             <button class="btn small" onClick={() => edit((g) => g.states[state].unshift({ token: 'keyword', regex: '\\bmot\\b' }))}>
-              + Règle en tête
+              {t('+ Rule at the top')}
             </button>
             <button class="btn small" onClick={() => edit((g) => g.states[state].push({ token: 'keyword', regex: '\\bmot\\b' }))}>
-              + Règle à la fin
+              {t('+ Rule at the end')}
             </button>
           </div>
         )}
@@ -448,15 +453,30 @@ function Syntax() {
       <button
         class="btn small"
         onClick={() => {
-          const name = window.prompt("Nom du nouvel état")
+          const name = window.prompt(t('Name of the new state'))
           if (name) edit((g) => (g.states[name] = []))
         }}
       >
-        + État
+        {t('+ State')}
       </button>
       <Show when={samples[lang()]} keyed>
         <Preview lang={lang()} />
       </Show>
+    </section>
+  )
+}
+
+function LanguageSettings() {
+  return (
+    <section class="form">
+      <label class="field">
+        <span>{t('Language of the interface')}</span>
+        <select value={settings.language} onChange={(e) => updateSettings((s) => (s.language = e.currentTarget.value as LangSetting), 'Language')} data-testid="settings-language">
+          <option value="auto">{t('Automatic (browser: {name})', { name: languages.find((l) => l.id === browserLang())?.name ?? 'English' })}</option>
+          <For each={languages}>{(l) => <option value={l.id}>{l.name}</option>}</For>
+        </select>
+      </label>
+      <p class="muted small">{t('The assistant answers in the language you write in, whatever this setting.')}</p>
     </section>
   )
 }
@@ -467,7 +487,7 @@ function Workspace() {
   return (
     <section class="form">
       <label class="field">
-        <span>Workspace (dossier proposé pour les nouveaux projets locaux)</span>
+        <span>{t('Workspace (folder suggested for new local projects)')}</span>
         <div class="field-row">
           <input class="grow" value={value() || info()?.workspace || ''} onInput={(e) => setValue(e.currentTarget.value)} />
           <button
@@ -476,26 +496,35 @@ function Workspace() {
               try {
                 await request('workspace.set', { path: value() || info()?.workspace })
                 refetch()
-                toast('Workspace enregistré', 'ok')
+                toast(t('Workspace saved'), 'ok')
               } catch (e) {
                 errorToast(e)
               }
             }}
           >
-            Enregistrer
+            {t('Save')}
           </button>
         </div>
       </label>
       <dl class="props">
-        <dt>Données du pod</dt>
+        <dt>{t('Pod data')}</dt>
         <dd class="mono">{info()?.dataDir}</dd>
-        <dt>Contenu</dt>
-        <dd class="small">config.json, projects.json, settings.json (historique), sessions/, secrets.json (mots de passe mémorisés, 0600), known_hosts, token</dd>
-        <dt>Appairage</dt>
-        <dd class="small">Jeton dans {info()?.dataDir}/token ; supprimer ce fichier puis redémarrer le pod pour en générer un nouveau.</dd>
+        <dt>{t('Content')}</dt>
+        <dd class="small">{t('config.json, projects.json, settings.json (history), sessions/, secrets.json (remembered passwords, 0600), known_hosts, token')}</dd>
+        <dt>{t('Pairing')}</dt>
+        <dd class="small">{t('Token in {path}; delete this file and restart the pod to get a new one.', { path: `${info()?.dataDir ?? ''}/token` })}</dd>
       </dl>
     </section>
   )
+}
+
+/** Label of a settings snapshot (saved in English, some with a value). */
+function historyLabel(label: string) {
+  let m = /^Back to #(\d+)$/.exec(label)
+  if (m) return t('Back to #{id}', { id: m[1] })
+  m = /^Theme (.+)$/.exec(label)
+  if (m) return t('Theme {name}', { name: t(m[1]) })
+  return t(label)
 }
 
 function History() {
@@ -505,24 +534,24 @@ function History() {
       const e = await request('settings.rollback', { id })
       replaceSettings(e.settings)
       refetch()
-      toast(`Réglages restaurés (#${id}) ; ce retour peut lui-même être annulé`, 'ok')
+      toast(t('Settings restored (#{id}); this can itself be undone', { id }), 'ok')
     } catch (e) {
       errorToast(e)
     }
   }
   return (
     <section>
-      <p class="muted small">Chaque modification enregistre un instantané complet. Revenir à une version crée une nouvelle entrée : un retour arrière s'annule de la même façon.</p>
+      <p class="muted small">{t('Each change saves a full snapshot. Going back to a version creates a new entry: going back can be undone the same way.')}</p>
       <div class="history-table">
         <For each={list() ?? []}>
           {(e) => (
             <div class="history-entry" classList={{ current: e.current }}>
               <span class="mono muted">#{e.id}</span>
-              <span>{e.label}</span>
-              <span class="muted small">{new Date(e.ts).toLocaleString()}</span>
-              <Show when={!e.current} fallback={<span class="badge ok">actuel</span>}>
+              <span>{historyLabel(e.label)}</span>
+              <span class="muted small">{fmtDate(e.ts)}</span>
+              <Show when={!e.current} fallback={<span class="badge ok">{t('current')}</span>}>
                 <button class="btn small" onClick={() => rollback(e.id)}>
-                  Revenir à cette version
+                  {t('Back to this version')}
                 </button>
               </Show>
             </div>

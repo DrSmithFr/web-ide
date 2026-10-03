@@ -4,55 +4,56 @@ import { request } from '../pod/rpc'
 import { isLocal, project, root } from '../state/project'
 import { newConsole } from '../console/consoles'
 import { podState } from '../pod/rpc'
+import { t } from '../i18n'
 
 export function Connections() {
   const [info, { refetch }] = createResource(() => request('ssh.info'))
   return (
     <div class="panel">
       <div class="panel-head">
-        <span class="panel-title">Connexions</span>
+        <span class="panel-title">{t('Connections')}</span>
         <span class="grow" />
-        <button class="icon-btn" title="Rafraîchir" onClick={refetch}>
+        <button class="icon-btn" title={t('Refresh')} onClick={refetch}>
           ↻
         </button>
       </div>
       <div class="panel-body pad">
         <section class="card">
-          <h3>Projet</h3>
+          <h3>{t('Project')}</h3>
           <dl class="props">
-            <dt>Type</dt>
+            <dt>{t('Type')}</dt>
             <dd>{isLocal() ? 'Local' : 'SSH'}</dd>
             <Show when={!isLocal() && project()?.ssh}>
-              <dt>Hôte</dt>
+              <dt>{t('Host')}</dt>
               <dd>
                 {project()!.ssh!.user ? `${project()!.ssh!.user}@` : ''}
                 {project()!.ssh!.host}:{project()!.ssh!.port}
               </dd>
-              <dt>Authentification</dt>
-              <dd>{{ agent: 'Agent + clés par défaut', key: 'Clé dédiée', password: 'Mot de passe' }[project()!.ssh!.auth] ?? project()!.ssh!.auth}</dd>
+              <dt>{t('Authentication')}</dt>
+              <dd>{t({ agent: 'Agent + default keys', key: 'Dedicated key', password: 'Password' }[project()!.ssh!.auth] ?? project()!.ssh!.auth)}</dd>
             </Show>
-            <dt>Racine</dt>
+            <dt>{t('Root')}</dt>
             <dd class="mono">{root()}</dd>
             <dt>Pod</dt>
             <dd>
-              <span class={`dot dot-${podState()}`} /> {podState() === 'connected' ? 'connecté' : podState() === 'connecting' ? 'connexion…' : 'déconnecté'}
+              <span class={`dot dot-${podState()}`} /> {t(podState())}
             </dd>
           </dl>
         </section>
         <section class="card">
-          <h3>Clés SSH locales</h3>
-          <p class="muted small">Les clés privées restent sur la machine du pod ; seuls leurs noms sont affichés.</p>
-          <p class="small">Agent SSH : {info()?.agent ? 'disponible' : 'absent'}</p>
+          <h3>{t('Local SSH keys')}</h3>
+          <p class="muted small">{t('Private keys stay on the machine of the pod; only their names are shown.')}</p>
+          <p class="small">{info()?.agent ? t('SSH agent: available') : t('SSH agent: missing')}</p>
           <ul class="plain-list mono small">
-            <For each={info()?.keys ?? []} fallback={<li class="muted">Aucune clé dans ~/.ssh</li>}>
+            <For each={info()?.keys ?? []} fallback={<li class="muted">{t('No key in ~/.ssh')}</li>}>
               {(k: string) => <li>{k}</li>}
             </For>
           </ul>
         </section>
         <section class="card">
-          <h3>Hôtes de ~/.ssh/config</h3>
+          <h3>{t('Hosts of ~/.ssh/config')}</h3>
           <ul class="plain-list">
-            <For each={info()?.hosts ?? []} fallback={<li class="muted small">Aucun hôte déclaré</li>}>
+            <For each={info()?.hosts ?? []} fallback={<li class="muted small">{t('No host declared')}</li>}>
               {(h: any) => (
                 <li class="host-row">
                   <div>
@@ -64,8 +65,8 @@ export function Connections() {
                     </div>
                   </div>
                   <Show when={isLocal()}>
-                    <button class="btn small" title={`Ouvrir un terminal : ssh ${h.alias}`} onClick={() => newConsole({ command: ['ssh', h.alias], title: `ssh ${h.alias}` })}>
-                      Terminal
+                    <button class="btn small" title={t('Open a terminal: ssh {host}', { host: h.alias })} onClick={() => newConsole({ command: ['ssh', h.alias], title: `ssh ${h.alias}` })}>
+                      {t('Terminal')}
                     </button>
                   </Show>
                 </li>

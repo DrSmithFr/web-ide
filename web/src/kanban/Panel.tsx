@@ -3,6 +3,7 @@ import { For, onMount, Show } from 'solid-js'
 import { Icon } from '../ui/icons'
 import { Card } from './Board'
 import { board, ensureBoard, openBoard, refreshBoard, setNewTicketOpen, statusLabels, type Status } from './state'
+import { t } from '../i18n'
 import './kanban.css'
 
 const shown: Status[] = ['in_progress', 'fix', 'review', 'ready', 'new']
@@ -15,13 +16,13 @@ export function KanbanPanel() {
       <div class="panel-head">
         <span class="panel-title">Kanban</span>
         <span class="grow" />
-        <button class="icon-btn" title="Nouveau ticket" onClick={() => setNewTicketOpen(true)}>
+        <button class="icon-btn" title={t('New ticket')} onClick={() => setNewTicketOpen(true)}>
           <Icon name="plus" size={14} />
         </button>
-        <button class="icon-btn" title="Rafraîchir" onClick={() => refreshBoard()}>
+        <button class="icon-btn" title={t('Refresh')} onClick={() => refreshBoard()}>
           <Icon name="refresh" size={14} />
         </button>
-        <button class="icon-btn" title="Ouvrir le tableau" onClick={openBoard} data-testid="kanban-open-board">
+        <button class="icon-btn" title={t('Open the board')} onClick={openBoard} data-testid="kanban-open-board">
           <Icon name="kanban" size={14} />
         </button>
       </div>
@@ -30,7 +31,7 @@ export function KanbanPanel() {
           <p class="danger pad small">{board.error}</p>
         </Show>
         <Show when={board.loaded && !shown.some((s) => of(s).length)}>
-          <p class="muted pad small">Aucun ticket ouvert.</p>
+          <p class="muted pad small">{t('No open ticket.')}</p>
         </Show>
         <For each={shown}>
           {(s) => (
@@ -38,7 +39,7 @@ export function KanbanPanel() {
               <div class="kb-panel-group">
                 <span class={`kb-dot st-${s}`} /> {statusLabels[s]} <span class="kb-count">{of(s).length}</span>
               </div>
-              <For each={of(s)}>{(t) => <Card t={t} compact />}</For>
+              <For each={of(s)}>{(t) => <Card tk={t} compact />}</For>
             </Show>
           )}
         </For>

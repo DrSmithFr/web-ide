@@ -6,11 +6,11 @@ package settings
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/store"
 )
 
@@ -49,7 +49,7 @@ func Load(st *store.Store) (*Settings, error) {
 	}
 	if len(s.h.Entries) == 0 {
 		s.h.NextID = 1
-		s.append(json.RawMessage(`{}`), "Réglages initiaux")
+		s.append(json.RawMessage(`{}`), "Initial settings")
 	}
 	return s, nil
 }
@@ -96,7 +96,7 @@ func (s *Settings) Current() Entry {
 // Save records a new snapshot, unless it is identical to the current one.
 func (s *Settings) Save(data json.RawMessage, label string) (Entry, error) {
 	if !json.Valid(data) {
-		return Entry{}, errors.New("réglages invalides")
+		return Entry{}, i18n.New("invalid settings")
 	}
 	data = compact(data)
 	s.mu.Lock()
@@ -105,7 +105,7 @@ func (s *Settings) Save(data json.RawMessage, label string) (Entry, error) {
 		return cur, nil
 	}
 	if label == "" {
-		label = "Modification"
+		label = "Change"
 	}
 	return s.append(data, label), nil
 }
@@ -123,9 +123,9 @@ func (s *Settings) Rollback(id int) (Entry, error) {
 	defer s.mu.Unlock()
 	old, ok := s.find(id)
 	if !ok {
-		return Entry{}, errors.New("entrée d'historique introuvable")
+		return Entry{}, i18n.New("history entry not found")
 	}
-	return s.append(old.Settings, "Retour à #"+strconv.Itoa(old.ID)), nil
+	return s.append(old.Settings, "Back to #"+strconv.Itoa(old.ID)), nil
 }
 
 type Summary struct {

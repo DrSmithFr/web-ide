@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/store"
 )
 
@@ -85,7 +86,7 @@ func (m *Manager) View() map[string]any {
 func (m *Manager) SaveServer(s Server, keepKey bool) error {
 	s.URL = NormalizeURL(s.URL)
 	if s.URL == "" {
-		return errors.New("adresse du serveur manquante")
+		return i18n.New("server address is missing")
 	}
 	if s.Kind == "" {
 		s.Kind = "auto"
@@ -150,7 +151,7 @@ func (m *Manager) server(id string) (Server, error) {
 			return s, nil
 		}
 	}
-	return Server{}, errors.New("serveur de modèles inconnu")
+	return Server{}, i18n.New("unknown model server")
 }
 
 // NormalizeURL accepts "host:port", "http://host:port/" or "host:port/v1".
@@ -191,12 +192,12 @@ func (m *Manager) do(ctx context.Context, s Server, method, path string, body an
 	if err != nil {
 		var ue interface{ Timeout() bool }
 		if errors.As(err, &ue) && ue.Timeout() {
-			return nil, fmt.Errorf("%s : pas de réponse", s.URL)
+			return nil, i18n.Errorf("%s: no answer", s.URL)
 		}
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		return nil, fmt.Errorf("%s injoignable : %v", s.URL, unwrapNet(err))
+		return nil, i18n.Errorf("%s cannot be reached: %v", s.URL, unwrapNet(err))
 	}
 	if resp.StatusCode >= 300 {
 		defer resp.Body.Close()

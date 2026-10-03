@@ -9,6 +9,7 @@ import {
   applyItem, complete, completionKinds, docText, filterItems, isWordChar, resolveItem, triggerCharacters, wordStart, type CompletionItem,
 } from '../lsp/completion'
 import { toast } from './toast'
+import { t } from '../i18n'
 
 interface State {
   items: CompletionItem[]
@@ -61,7 +62,7 @@ export function useCompletion(view: () => EditorView | null, doc: () => Doc | nu
       if (now < from || d.lineAt(now) !== d.lineAt(from) || ![...prefix].every((ch) => isWordChar(ch, d.lang))) return
       const list = filterItems(res.items, prefix)
       if (!list.length) {
-        if (manual) toast('Aucune proposition', 'info', undefined, 1500)
+        if (manual) toast(t('No suggestion'), 'info', undefined, 1500)
         setState(null)
         return
       }
@@ -202,7 +203,7 @@ export function useCompletion(view: () => EditorView | null, doc: () => Doc | nu
                       onMouseMove={(e) => (e.movementX || e.movementY) && i() !== s().index && setState({ ...s(), index: i() })}
                       onClick={() => accept(i())}
                     >
-                      <span class={`completion-kind kind-${it.kind ?? 1}`} title={completionKinds[it.kind ?? 1]?.[0]}>
+                      <span class={`completion-kind kind-${it.kind ?? 1}`} title={t(completionKinds[it.kind ?? 1]?.[0] ?? "")}>
                         {completionKinds[it.kind ?? 1]?.[1] ?? '·'}
                       </span>
                       <span class="completion-label">
@@ -211,7 +212,7 @@ export function useCompletion(view: () => EditorView | null, doc: () => Doc | nu
                           <span class="muted">{it.labelDetails!.detail}</span>
                         </Show>
                       </span>
-                      <span class="completion-detail">{it.labelDetails?.description ?? (it.local ? 'mot du fichier' : it.detail ?? '')}</span>
+                      <span class="completion-detail">{it.labelDetails?.description ?? (it.local ? t('word of the file') : it.detail ?? '')}</span>
                     </div>
                   )}
                 </For>

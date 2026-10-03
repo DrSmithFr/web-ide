@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
 
 // Message is an OpenAI chat message. Content is a string or an array of parts
@@ -79,7 +81,7 @@ func (m *Manager) Chat(ctx context.Context, req ChatRequest, onDelta func(Delta)
 		return nil, err
 	}
 	if req.Model == "" {
-		return nil, errors.New("aucun modèle choisi")
+		return nil, i18n.New("no model chosen")
 	}
 	b := newBatcher(onDelta)
 	defer b.flush()

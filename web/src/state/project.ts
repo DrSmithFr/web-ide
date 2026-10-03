@@ -8,6 +8,7 @@ import { Doc } from '../editor/doc'
 import { detectLanguage, lspLanguage, lspLanguageId } from '../editor/languages'
 import { merge3 } from '../editor/merge'
 import { toast } from '../ui/toast'
+import { t, tn } from '../i18n'
 
 export type TabKind = 'file' | 'sql' | 'table' | 'text' | 'diff' | 'kanban' | 'ticket'
 
@@ -227,7 +228,7 @@ export function closeTab(paneId: string, tabId: string, force = false): boolean 
   if (!force && tab.kind === 'file' && tab.path) {
     const doc = docs.get(tab.path)?.doc
     const elsewhere = leaves().some((l) => l.tabs.some((t) => t !== tabId && session.tabs[t]?.path === tab.path))
-    if (doc?.dirty() && !elsewhere && !confirm(`${basename(tab.path)} a des modifications non enregistrées. Fermer quand même ?`)) return false
+    if (doc?.dirty() && !elsewhere && !confirm(t('{file} has unsaved changes. Close anyway?', { file: basename(tab.path) }))) return false
   }
   mutate((s) => {
     const l = findLeaf(s.layout, paneId)
@@ -461,11 +462,11 @@ export function syncDocsWithTabs() {
 
 export async function saveDoc(doc: Doc): Promise<boolean> {
   if (doc.readOnly) {
-    toast('Fichier en lecture seule (hors du projet)', 'warn')
+    toast(t('Read-only file (outside the project)'), 'warn')
     return false
   }
   if (doc.conflict()) {
-    toast(`${basename(doc.path)} est en conflit : le résoudre avant d'enregistrer (Ctrl+Alt+R)`, 'warn')
+    toast(t('{file} is in conflict: resolve it before saving (Ctrl+Alt+R)', { file: basename(doc.path) }), 'warn')
     return false
   }
   const text = doc.text
@@ -477,7 +478,7 @@ export async function saveDoc(doc: Doc): Promise<boolean> {
     if (lang) notify('lsp.notify', { lang, method: 'textDocument/didSave', params: { textDocument: { uri: uri(doc.path) } } })
     return true
   } catch (e) {
-    toast(`Enregistrement de ${basename(doc.path)} impossible : ${(e as Error).message}`, 'error')
+    toast(t('Cannot save {file}: {message}', { file: basename(doc.path), message: (e as Error).message }), 'error')
     return false
   }
 }
@@ -485,7 +486,7 @@ export async function saveDoc(doc: Doc): Promise<boolean> {
 export async function saveAll() {
   let n = 0
   for (const d of openDocs()) if (d.dirty() && (await saveDoc(d))) n++
-  if (n) toast(`${n} fichier${n > 1 ? 's' : ''} enregistré${n > 1 ? 's' : ''}`, 'ok')
+  if (n) toast(tn(n, '{n} file saved', '{n} files saved'), 'ok')
 }
 
 /**
@@ -505,7 +506,7 @@ export function applyRemote(doc: Doc, content: string, rev: number, saved = fals
     doc.setText(content, 'remote')
     doc.setBase(content, rev)
     doc.setConflict(null)
-    if (!saved) toast(`${basename(doc.path)} mis à jour`, 'info')
+    if (!saved) toast(t('{file} updated', { file: basename(doc.path) }), 'info')
     return
   }
   const m = merge3(local, doc.base, content)
@@ -513,11 +514,11 @@ export function applyRemote(doc: Doc, content: string, rev: number, saved = fals
     doc.setText(m.text, 'remote')
     doc.setBase(content, rev)
     doc.setConflict(null)
-    toast(`Nouvelle version de ${basename(doc.path)} fusionnée avec vos modifications`, 'ok')
+    toast(t('New version of {file} merged with your changes', { file: basename(doc.path) }), 'ok')
   } else {
     doc.setConflict({ remote: content, rev })
-    toast(`Conflit sur ${basename(doc.path)} : vos modifications sont conservées`, 'warn', {
-      label: 'Résoudre',
+    toast(t('Conflict on {file}: your changes are kept', { file: basename(doc.path) }), 'warn', {
+      label: t('Resolve'),
       run: () => openConflictHook?.(doc),
     })
   }
@@ -549,7 +550,7 @@ on('fs.deleted', (e: { path: string }) => {
   const d = getDoc(e.path)
   if (d) {
     d.setDeleted(true)
-    toast(`${basename(e.path)} a été supprimé du disque`, 'warn')
+    toast(t('{file} was deleted from the disk', { file: basename(e.path) }), 'warn')
   }
 })
 on('buffer.synced', (e: { path: string; content: string | null }) => {

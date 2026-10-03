@@ -8,6 +8,7 @@ import { TermView, consoles, setConsoleList } from '../console/consoles'
 import { NewTicketHost } from '../kanban/Board'
 import { leftPanels, openWithAuth, rightPanels, useProjectActions, PodStatus } from './ProjectPage'
 import { on as onPod, request } from '../pod/rpc'
+import { t } from '../i18n'
 
 function useProject(id: string, title: (name: string) => string) {
   const [ready, setReady] = createSignal(false)
@@ -41,7 +42,7 @@ function Frame(props: { title: string; ready: boolean; error: string; children: 
         <PodStatus />
       </header>
       <div class="detached-body">
-        <Show when={props.ready} fallback={<div class="center-msg">{props.error ? <p class="danger">{props.error}</p> : <p class="muted">Connexion…</p>}</div>}>
+        <Show when={props.ready} fallback={<div class="center-msg">{props.error ? <p class="danger">{props.error}</p> : <p class="muted">{t('Connecting…')}</p>}</div>}>
           {props.children}
         </Show>
       </div>
@@ -50,10 +51,10 @@ function Frame(props: { title: string; ready: boolean; error: string; children: 
 }
 
 export function DetachedEditor(props: { id: string }) {
-  const s = useProject(props.id, (n) => `${n} · éditeur`)
+  const s = useProject(props.id, (n) => t('{name} · editor', { name: n }))
   useProjectActions()
   return (
-    <Frame title={`${project()?.name ?? ''} · éditeur`} ready={s.ready()} error={s.error()}>
+    <Frame title={`${project()?.name ?? ''} · ${t('editor')}`} ready={s.ready()} error={s.error()}>
       <EditorArea detached />
     </Frame>
   )
@@ -64,7 +65,7 @@ export function DetachedConsole(props: { id: string; consoleId: string }) {
   const info = () => consoles().find((c) => c.id === props.consoleId)
   return (
     <Frame title={info()?.title ?? 'Console'} ready={s.ready()} error={s.error()}>
-      <Show when={info()} fallback={<p class="muted pad">Cette console n'existe plus.</p>}>
+      <Show when={info()} fallback={<p class="muted pad">{t('This console does not exist anymore.')}</p>}>
         <div class="term-full">
           <TermView id={props.consoleId} focus />
         </div>
@@ -78,8 +79,8 @@ export function DetachedTool(props: { id: string; toolId: string }) {
   useProjectActions()
   const tool = () => rightPanels[props.toolId] ?? leftPanels[props.toolId]
   return (
-    <Frame title={`${tool()?.label ?? props.toolId} · ${project()?.name ?? ''}`} ready={s.ready()} error={s.error()}>
-      <Show when={tool()} fallback={<p class="muted pad">Tool inconnu.</p>}>
+    <Frame title={`${tool() ? t(tool()!.label) : props.toolId} · ${project()?.name ?? ''}`} ready={s.ready()} error={s.error()}>
+      <Show when={tool()} fallback={<p class="muted pad">{t('Unknown tool.')}</p>}>
         <div class="tool-full">
           <Dynamic component={tool()!.component} />
         </div>

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/db"
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
 
 func (s *Server) registerDB() {
@@ -63,7 +64,11 @@ func (s *Server) registerDB() {
 		if err != nil {
 			return nil, err
 		}
-		return m.Test(ctx, a.Config, a.Secret)
+		ms, err := m.Test(ctx, a.Config, a.Secret)
+		if err != nil {
+			return nil, err
+		}
+		return i18n.T(c.language(), "Connection successful (%d ms)", ms), nil
 	}))
 	s.handle("db.connect", h(func(ctx context.Context, c *Client, m *db.Manager, p json.RawMessage) (any, error) {
 		a, err := bind[connArg](p)

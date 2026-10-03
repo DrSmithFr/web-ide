@@ -35,6 +35,18 @@ func TestKanbanRPC(t *testing.T) {
 	if tk["status"] != "ready" {
 		t.Fatalf("move: %+v", tk)
 	}
+	// Errors are translated for the language of the window; history lines stay neutral.
+	if r := a.callRaw("kanban.move", map[string]any{"id": 1, "by": "model", "status": "done"}); r["error"].(map[string]any)["message"] != "the model cannot move the ticket from “Ready” to “Done”" {
+		t.Fatalf("english error: %+v", r)
+	}
+	a.call("client.lang", map[string]any{"lang": "fr"})
+	if r := a.callRaw("kanban.move", map[string]any{"id": 1, "by": "model", "status": "done"}); r["error"].(map[string]any)["message"] != "le modèle ne peut pas passer le ticket de « À développer » à « Terminé »" {
+		t.Fatalf("french error: %+v", r)
+	}
+	notes := tk["notes"].([]any)
+	if last := notes[len(notes)-1].(map[string]any)["text"]; last != `{"key":"{from} → {to}","params":{"from":"new","to":"ready"}}` {
+		t.Fatalf("event: %v", last)
+	}
 	tk = a.call("kanban.attachment.add", map[string]any{"id": 1, "name": "n.txt", "mime": "text/plain", "data": "aGVsbG8="})["result"].(map[string]any)
 	aid := tk["attachments"].([]any)[0].(map[string]any)["id"]
 	got := a.call("kanban.attachment.get", map[string]any{"id": 1, "aid": aid})["result"].(map[string]any)
@@ -74,15 +86,15 @@ func TestKanbanWorktree(t *testing.T) {
 	gitIn(t, dir, "commit", "-q", "-m", "init")
 	id := a.call("projects.create", map[string]any{"type": "local", "path": dir})["result"].(map[string]any)["id"].(string)
 	a.call("project.open", map[string]any{"id": id})
-	a.call("kanban.meta.set", map[string]any{"values": map[string]string{"setup": "echo prêt > setup.log"}})
-	a.call("kanban.create", map[string]any{"title": "Été à l'export !"})
+	a.call("kanban.meta.set", map[string]any{"values": map[string]string{"setup": "echo ready > setup.log"}})
+	a.call("kanban.create", map[string]any{"title": "Café à l'export !"})
 	a.call("kanban.plan", map[string]any{"id": 1, "plan": "p", "goals": []string{"g"}})
 	a.call("kanban.move", map[string]any{"id": 1, "status": "ready"})
 
 	r := a.call("kanban.start", map[string]any{"id": 1})["result"].(map[string]any)
 	tk := r["ticket"].(map[string]any)
 	wt := tk["worktree"].(string)
-	if tk["branch"] != "ticket/1-ete-a-l-export" || tk["base"] != "main" || tk["status"] != "in_progress" || wt != filepath.Join(dir, ".ide", "worktrees", "1-ete-a-l-export") {
+	if tk["branch"] != "ticket/1-cafe-a-l-export" || tk["base"] != "main" || tk["status"] != "in_progress" || wt != filepath.Join(dir, ".ide", "worktrees", "1-cafe-a-l-export") {
 		t.Fatalf("start: %+v", tk)
 	}
 	child := r["project"].(string)
@@ -149,7 +161,7 @@ func TestKanbanWorktree(t *testing.T) {
 	if _, ok := s.Projects.Get(child); ok {
 		t.Fatal("worktree project not removed")
 	}
-	if gitIn(t, dir, "branch", "--list", "ticket/1-ete-a-l-export") == "" {
+	if gitIn(t, dir, "branch", "--list", "ticket/1-cafe-a-l-export") == "" {
 		t.Fatal("branch deleted")
 	}
 	d = a.call("kanban.diff", map[string]any{"id": 1})["result"].(map[string]any)

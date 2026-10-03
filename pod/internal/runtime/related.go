@@ -124,7 +124,7 @@ func rank(p string, list []string) {
 }
 
 // FindRelated finds the tests of a source file, the sources of a test file, and the files
-// sharing its name (navigation "symboles liés" and "tests").
+// sharing its name (navigation "related symbols" and "tests").
 func (r *Runtime) FindRelated(ctx context.Context, p string) (*Related, error) {
 	files, err := r.Files(ctx)
 	if err != nil {

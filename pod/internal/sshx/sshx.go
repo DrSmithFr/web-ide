@@ -17,6 +17,8 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/crypto/ssh/knownhosts"
+
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
 
 type Target struct {
@@ -39,11 +41,11 @@ type Creds struct {
 
 // AuthRequired asks the web page to prompt for a secret, then retry.
 type AuthRequired struct {
-	Kind   string // password | passphrase
-	Prompt string
+	Kind string // password | passphrase
+	Msg  error  // the prompt, translated for the page
 }
 
-func (a *AuthRequired) Error() string { return a.Prompt }
+func (a *AuthRequired) Error() string { return a.Msg.Error() }
 
 func home() string {
 	h, _ := os.UserHomeDir()
@@ -98,7 +100,7 @@ func loadKey(path, passphrase string) (ssh.Signer, error) {
 	var missing *ssh.PassphraseMissingError
 	if errors.As(err, &missing) {
 		if passphrase == "" {
-			return nil, &AuthRequired{Kind: "passphrase", Prompt: "Phrase de passe de la clé " + path}
+			return nil, &AuthRequired{Kind: "passphrase", Msg: i18n.Errorf("Passphrase of the key %s", path)}
 		}
 		return ssh.ParsePrivateKeyWithPassphrase(data, []byte(passphrase))
 	}
@@ -111,7 +113,7 @@ func authMethods(t Target, c Creds) ([]ssh.AuthMethod, error) {
 	switch t.Auth {
 	case "password":
 		if c.Password == "" {
-			return nil, &AuthRequired{Kind: "password", Prompt: fmt.Sprintf("Mot de passe de %s@%s", t.User, t.Host)}
+			return nil, &AuthRequired{Kind: "password", Msg: i18n.Errorf("Password of %s@%s", t.User, t.Host)}
 		}
 		return []ssh.AuthMethod{ssh.Password(c.Password)}, nil
 	case "key":
@@ -140,7 +142,7 @@ func authMethods(t Target, c Creds) ([]ssh.AuthMethod, error) {
 		}
 	}
 	if len(signers) == 0 {
-		return nil, errors.New("aucune clé SSH disponible (agent vide et pas de clé par défaut lisible)")
+		return nil, i18n.New("no SSH key available (empty agent and no readable default key)")
 	}
 	return []ssh.AuthMethod{ssh.PublicKeys(signers...)}, nil
 }
@@ -174,7 +176,7 @@ func (h *HostKeys) callback(hostname string, remote net.Addr, key ssh.PublicKey)
 			return nil
 		}
 		if !errors.As(err, &ke) || len(ke.Want) > 0 {
-			return fmt.Errorf("clé d'hôte refusée pour %s : %w", hostname, err)
+			return i18n.Errorf("host key refused for %s: %w", hostname, err)
 		}
 	}
 	f, err := os.OpenFile(h.file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
@@ -200,7 +202,7 @@ func Dial(t Target, c Creds, hk *HostKeys) (*ssh.Client, error) {
 	}
 	client, err := ssh.Dial("tcp", net.JoinHostPort(t.Host, strconv.Itoa(t.Port)), cfg)
 	if err != nil && t.Auth == "password" && strings.Contains(err.Error(), "unable to authenticate") {
-		return nil, &AuthRequired{Kind: "password", Prompt: "Mot de passe refusé, nouvel essai pour " + t.User + "@" + t.Host}
+		return nil, &AuthRequired{Kind: "password", Msg: i18n.Errorf("Password refused, try again for %s@%s", t.User, t.Host)}
 	}
 	return client, err
 }

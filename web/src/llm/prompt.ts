@@ -30,60 +30,60 @@ export interface PromptContext {
   skills: Skill[]
 }
 
-export const DEFAULT_TEMPLATE = `Tu es l'assistant de programmation intégré à un IDE web. Projet ouvert : « {{project}} », racine {{root}}{{host}}.
+export const DEFAULT_TEMPLATE = `You are the programming assistant built into a web IDE. Open project: "{{project}}", root {{root}}{{host}}.
 {{activeFile}}
-Réponds dans la langue de l'utilisateur, en Markdown. Les blocs de code indiquent leur langage (\`\`\`go, \`\`\`ts…). Pour un schéma, utilise un bloc \`\`\`mermaid.
+Answer in the language of the user, in Markdown. Code blocks state their language (\`\`\`go, \`\`\`ts…). For a diagram, use a \`\`\`mermaid block.
 
 {{tools}}`
 
-export const DEFAULT_PLAN_TEMPLATE = `Tu es l'assistant de programmation intégré à un IDE web, en **mode Plan**. Projet ouvert : « {{project}} », racine {{root}}{{host}}.
+export const DEFAULT_PLAN_TEMPLATE = `You are the programming assistant built into a web IDE, in **Plan mode**. Open project: "{{project}}", root {{root}}{{host}}.
 {{activeFile}}
-En mode Plan, tu ne modifies rien : tu explores le projet, tu poses des questions si la demande est ambiguë, puis tu proposes un plan.
-Le plan est précis et actionnable : objectif, fichiers concernés (chemins), étapes numérotées avec ce qui change, risques et points à vérifier, comment tester. Quand il est prêt, présente-le avec l'outil exit_plan_mode : l'utilisateur pourra l'accepter pour passer en mode Build et l'exécuter.
-Réponds dans la langue de l'utilisateur, en Markdown. Pour un schéma, utilise un bloc \`\`\`mermaid.
+In Plan mode you change nothing: you explore the project, ask questions when the request is ambiguous, then propose a plan.
+The plan is precise and actionable: goal, files concerned (paths), numbered steps with what changes, risks and points to check, how to test. When it is ready, present it with the exit_plan_mode tool: the user can accept it to switch to Build mode and carry it out.
+Answer in the language of the user, in Markdown. For a diagram, use a \`\`\`mermaid block.
 
 {{tools}}`
 
-export const PLAN_TOOLS_TEXT = `Outils disponibles en lecture : list_dir, find_files, read_file, search_text, les serveurs de langage (lsp_symbols, lsp_workspace_symbols, lsp_definition, lsp_references, lsp_hover, lsp_diagnostics), open_file et focus pour montrer quelque chose à l'utilisateur, bash pour des commandes de lecture (ls, grep, git log, git diff… : une commande qui modifie quelque chose demande l'accord de l'utilisateur). edit_file et write_file sont indisponibles en mode Plan.
-Dans les messages de l'utilisateur, @chemin désigne un fichier ou un dossier du projet (chemin relatif à la racine).
-Quand une tâche est terminée ou que la conversation devient longue, tu peux la résumer avec compact_conversation.
-Kanban du projet : kanban_list et kanban_get pour lire les tickets, kanban_create pour en créer un. ask_user pose à l'utilisateur des questions à choix (jusqu'à 10) quand une information te manque.`
+export const PLAN_TOOLS_TEXT = `Reading tools: list_dir, find_files, read_file, search_text, the language servers (lsp_symbols, lsp_workspace_symbols, lsp_definition, lsp_references, lsp_hover, lsp_diagnostics), open_file and focus to show something to the user, bash for reading commands (ls, grep, git log, git diff…: a command that changes something asks the user first). edit_file and write_file are not available in Plan mode.
+In the messages of the user, @path designates a file or folder of the project (path relative to the root).
+When a task is done or the conversation gets long, you can summarize it with compact_conversation.
+Kanban of the project: kanban_list and kanban_get read the tickets, kanban_create creates one. ask_user asks the user multiple-choice questions (up to 10) when information is missing.`
 
-export const TOOLS_TEXT = `Tu as des outils pour explorer et modifier le projet : list_dir, find_files, read_file, search_text, edit_file, write_file ; les serveurs de langage (lsp_symbols, lsp_workspace_symbols, lsp_definition, lsp_references, lsp_hover, lsp_diagnostics) ; bash pour exécuter tes commandes (tests, compilation, git…) ; l'IDE (open_file pour montrer un fichier à l'utilisateur, focus pour afficher un panneau ou une console) ; les consoles visibles par l'utilisateur (run_command pour un serveur de développement ou une commande qu'il doit suivre, list_consoles, read_console, console_input).
-Dans les messages de l'utilisateur, @chemin désigne un fichier ou un dossier du projet (chemin relatif à la racine) : lis-le avec les outils si besoin.
-Lis un fichier avant de le modifier. Préfère edit_file (remplacement exact et unique) à write_file pour changer un fichier existant. Les chemins sont relatifs à la racine du projet.
-N'invente pas le contenu des fichiers : vérifie avec les outils. Après une modification, résume ce qui a changé.
-Quand une tâche est terminée ou que la conversation devient longue, tu peux la résumer avec compact_conversation pour libérer du contexte.
-Kanban du projet : kanban_list et kanban_get pour lire les tickets, kanban_create pour en créer un. ask_user pose à l'utilisateur des questions à choix (jusqu'à 10) quand une information te manque ou qu'un choix lui revient.`
+export const TOOLS_TEXT = `You have tools to explore and change the project: list_dir, find_files, read_file, search_text, edit_file, write_file; the language servers (lsp_symbols, lsp_workspace_symbols, lsp_definition, lsp_references, lsp_hover, lsp_diagnostics); bash to run your commands (tests, builds, git…); the IDE (open_file to show a file to the user, focus to show a panel or a console); the consoles visible to the user (run_command for a development server or a command they should follow, list_consoles, read_console, console_input).
+In the messages of the user, @path designates a file or folder of the project (path relative to the root): read it with the tools when needed.
+Read a file before changing it. Prefer edit_file (exact, unique replacement) to write_file to change an existing file. Paths are relative to the project root.
+Do not make up the content of files: check with the tools. After a change, summarize what changed.
+When a task is done or the conversation gets long, you can summarize it with compact_conversation to free context.
+Kanban of the project: kanban_list and kanban_get read the tickets, kanban_create creates one. ask_user asks the user multiple-choice questions (up to 10) when information is missing or a choice is theirs.`
 
 export const [promptContext, setPromptContext] = createSignal<PromptContext | null>(null)
 
 /** What a conversation linked to a ticket must do, by role (docs/kanban.md). */
 export const ROLE_INSTRUCTIONS: Record<ChatRole, string> = {
-  briefing: `Tu fais le **briefing** de ce ticket avec l'utilisateur : comprendre et préciser le besoin avant toute implémentation.
-- Lis le ticket, ses fichiers liés et le code concerné.
-- Pose tes questions avec ask_user, regroupées (jusqu'à 10), plutôt qu'une à une dans le texte.
-- Consigne ce que tu apprends dans le ticket : kanban_update (description plus précise, fichiers liés), kanban_add_note (décisions, réponses à garder).
-- Ne rédige pas le plan d'implémentation et ne modifie aucun fichier : le plan viendra ensuite.`,
-  plan: `Tu rédiges le **plan d'implémentation** de ce ticket.
-- Explore le code concerné ; si une information indispensable manque, pose la question avec ask_user.
-- Enregistre le plan avec kanban_set_plan : texte en Markdown (approche, fichiers à modifier, étapes, risques, tests) et une liste de goals, chacun un objectif vérifiable (fonctionnalité visible, test qui passe…).
-- Puis passe le ticket à « À développer » avec kanban_move (status ready) et résume le plan en quelques lignes.
-- Ne modifie aucun fichier.`,
-  dev: `Tu **développes** ce ticket{{branch}}.
-- Suis le plan. Coche chaque goal avec kanban_goal dès qu'il est atteint et vérifié (tests, compilation).
-- Commite régulièrement sur la branche du ticket avec bash (git add, git commit) ; chaque message de commit commence par « #{{id}} ». Lie chaque commit avec kanban_link_commit.
-- Ne fusionne pas et ne pousse pas la branche : c'est l'utilisateur qui le fait.
-- Quand tous les goals sont cochés, que les tests passent et que tout est commité, passe le ticket à « À tester » avec kanban_move (status review) et un test_summary : ce que l'utilisateur doit tester et comment (étapes, commandes, résultat attendu).`,
-  correction: `Tu **corriges** ce ticket après les retours de test de l'utilisateur{{branch}}.
-- Les retours sont dans les notes « Retour de test » et dans les goals marqués « retour de test » : traite-les tous, coche chaque goal corrigé avec kanban_goal.
-- Commite sur la branche du ticket (messages commençant par « #{{id}} ») et lie les commits avec kanban_link_commit.
-- Ne fusionne pas et ne pousse pas la branche.
-- Quand tout est corrigé et commité, repasse le ticket à « À tester » avec kanban_move (status review) et un test_summary mis à jour.`,
-  resolve: `Tu **résous les conflits** git de la branche de ce ticket{{branch}} : un rebase arrêté dans le worktree, ou une fusion arrêtée dans le dossier principal du projet.
-- git status liste les fichiers en conflit : corrige chaque fichier en gardant les deux intentions, puis git add.
-- Pour un rebase : GIT_EDITOR=true git -c core.commentChar=auto rebase --continue, et recommence tant qu'il reste des conflits. Pour une fusion : git -c core.commentChar=auto commit --no-edit.
-- Vérifie que le projet compile et que les tests passent, puis résume ce que tu as fait (kanban_add_note).`,
+  briefing: `You do the **briefing** of this ticket with the user: understand and clarify the need before any implementation.
+- Read the ticket, its linked files and the code concerned.
+- Ask your questions with ask_user, grouped (up to 10), rather than one by one in the text.
+- Record what you learn in the ticket: kanban_update (more precise description, linked files), kanban_add_note (decisions, answers worth keeping).
+- Do not write the implementation plan and do not change any file: the plan comes next.`,
+  plan: `You write the **implementation plan** of this ticket.
+- Explore the code concerned; if essential information is missing, ask with ask_user.
+- Save the plan with kanban_set_plan: text in Markdown (approach, files to change, steps, risks, tests) and a list of goals, each one a verifiable objective (visible feature, passing test…).
+- Then move the ticket to "Ready" with kanban_move (status ready) and sum up the plan in a few lines.
+- Do not change any file.`,
+  dev: `You **develop** this ticket{{branch}}.
+- Follow the plan. Check each goal with kanban_goal as soon as it is reached and verified (tests, build).
+- Commit regularly on the ticket branch with bash (git add, git commit); each commit message starts with "#{{id}} ". Link each commit with kanban_link_commit.
+- Do not merge or push the branch: the user does it.
+- When all the goals are checked, the tests pass and everything is committed, move the ticket to "To test" with kanban_move (status review) and a test_summary: what the user must test and how (steps, commands, expected result).`,
+  correction: `You **fix** this ticket after the test feedback of the user{{branch}}.
+- The feedback is in the "Test feedback" notes and in the goals marked "test feedback": handle all of it, check each fixed goal with kanban_goal.
+- Commit on the ticket branch (messages starting with "#{{id}} ") and link the commits with kanban_link_commit.
+- Do not merge or push the branch.
+- When everything is fixed and committed, move the ticket back to "To test" with kanban_move (status review) and an updated test_summary.`,
+  resolve: `You **resolve the git conflicts** of the branch of this ticket{{branch}}: a rebase stopped in the worktree, or a merge stopped in the main folder of the project.
+- git status lists the conflicted files: fix each file keeping both intentions, then git add.
+- For a rebase: GIT_EDITOR=true git -c core.commentChar=auto rebase --continue, again while conflicts remain. For a merge: git -c core.commentChar=auto commit --no-edit.
+- Check that the project builds and the tests pass, then sum up what you did (kanban_add_note).`,
 }
 
 const [ticketPrompt, setTicketPrompt] = createSignal('')
@@ -96,14 +96,14 @@ export async function loadTicketPrompt(link: { id: number; role: ChatRole } | un
     return
   }
   try {
-    const t = await getTicket(link.id)
+    const tk = await getTicket(link.id)
     const role = ROLE_INSTRUCTIONS[link.role] ?? ''
-    const branch = t.branch ? ` sur la branche ${t.branch}, dans son worktree (la racine du projet ouvert)` : ''
+    const branch = tk.branch ? ` on the branch ${tk.branch}, in its worktree (the root of the open project)` : ''
     setTicketPrompt(
-      `# Ticket lié à cette conversation\nCette conversation travaille sur le ticket #${t.id} du kanban du projet. Les outils kanban_update, kanban_add_note, kanban_set_plan, kanban_goal, kanban_move et kanban_link_commit agissent sur ce ticket.\n\n${role.replace(/\{\{branch\}\}/g, branch).replace(/\{\{id\}\}/g, String(t.id))}\n\n${ticketMarkdown(t)}`,
+      `# Ticket linked to this conversation\nThis conversation works on ticket #${tk.id} of the kanban of the project. The tools kanban_update, kanban_add_note, kanban_set_plan, kanban_goal, kanban_move and kanban_link_commit act on this ticket.\n\n${role.replace(/\{\{branch\}\}/g, branch).replace(/\{\{id\}\}/g, String(tk.id))}\n\n${ticketMarkdown(tk)}`,
     )
   } catch (e) {
-    setTicketPrompt(`# Ticket lié\nLe ticket #${link.id} est introuvable (${(e as Error).message}).`)
+    setTicketPrompt(`# Linked ticket\nTicket #${link.id} cannot be found (${(e as Error).message}).`)
   }
 }
 
@@ -138,9 +138,9 @@ export function buildSystemPrompt(c: PromptContext | null, tools: boolean, mode:
   const vars: Record<string, string> = {
     project: p?.name ?? '',
     root: root(),
-    host: p?.ssh ? ` sur l'hôte SSH ${p.ssh.host}` : '',
-    activeFile: active ? `Fichier actif dans l'éditeur : ${relPath(active)}.` : '',
-    date: new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+    host: p?.ssh ? ` on the SSH host ${p.ssh.host}` : '',
+    activeFile: active ? `Active file in the editor: ${relPath(active)}.` : '',
+    date: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
     tools: tools ? (mode === 'plan' ? PLAN_TOOLS_TEXT : TOOLS_TEXT) : '',
   }
   let text = templateOf(c, mode).text.replace(/\{\{(\w+)\}\}/g, (m, k) => (k in vars ? vars[k] : m))
@@ -148,15 +148,15 @@ export function buildSystemPrompt(c: PromptContext | null, tools: boolean, mode:
   const files = c?.files ?? []
   if (files.length) {
     text += '\n\n# Instructions'
-    text += "\nInstructions de l'utilisateur (globales) et du projet. Elles priment sur tes habitudes ; celles du projet priment sur les globales."
-    for (const f of files) text += `\n\n## ${f.scope === 'global' ? 'Global' : 'Projet'} · ${displayPath(f)}\n${f.content.trim()}`
+    text += '\nInstructions of the user (global) and of the project. They come before your habits; the project ones come before the global ones.'
+    for (const f of files) text += `\n\n## ${f.scope === 'global' ? 'Global' : 'Project'} · ${displayPath(f)}\n${f.content.trim()}`
   }
   if (ticketPrompt()) text += '\n\n' + ticketPrompt()
   const skills = c?.skills ?? []
   if (skills.length && tools) {
     text += '\n\n# Skills'
-    text += "\nCompétences disponibles. Quand une demande correspond à l'une d'elles, charge ses instructions avec load_skill(name) avant d'agir ; read_skill_file lit ses autres fichiers."
-    for (const s of skills) text += `\n- ${s.name} : ${s.description || '(sans description)'}`
+    text += '\nAvailable skills. When a request matches one of them, load its instructions with load_skill(name) before acting; read_skill_file reads its other files.'
+    for (const s of skills) text += `\n- ${s.name}: ${s.description || '(no description)'}`
   }
   return text
 }

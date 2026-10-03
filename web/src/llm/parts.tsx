@@ -4,6 +4,7 @@ import { relPath, root } from '../state/project'
 import { onMarkdownClick, renderMarkdown, renderMermaid } from './markdown'
 import { absPath } from './tools'
 import type { Attachment, DiffLine, ToolCall } from './state'
+import { fmtSize, t } from '../i18n'
 
 /** Markdown rendered at most once per frame while it streams; diagrams drawn as they close. */
 export function Markdown(props: { text: string; final: boolean }) {
@@ -22,12 +23,7 @@ export function Markdown(props: { text: string; final: boolean }) {
   return <div class="md" ref={el} onClick={onMarkdownClick} />
 }
 
-export function formatSize(n: number) {
-  if (n < 1024) return `${n} o`
-  if (n < 1 << 20) return `${(n / 1024).toFixed(0)} Ko`
-  if (n < 1 << 30) return `${(n / (1 << 20)).toFixed(1)} Mo`
-  return `${(n / (1 << 30)).toFixed(1)} Go`
-}
+export const formatSize = fmtSize
 
 export function formatDuration(ms: number) {
   const s = ms / 1000
@@ -66,7 +62,7 @@ export function AttachmentChip(props: { a: Attachment; onRemove?: () => void }) 
         <span class="ai-att-meta">{props.a.note ?? formatSize(props.a.size)}</span>
       </span>
       <Show when={props.onRemove}>
-        <button class="ai-att-x" title="Retirer" onClick={props.onRemove}>
+        <button class="ai-att-x" title={t('Remove')} onClick={props.onRemove}>
           ✕
         </button>
       </Show>
@@ -96,37 +92,37 @@ export function callLabel(call: ToolCall | undefined, name: string) {
 
 /** Readable verb of each tool, for the steps of an answer. */
 export const toolVerbs: Record<string, string> = {
-  list_dir: 'Liste',
-  find_files: 'Cherche les fichiers',
-  read_file: 'Lit',
-  search_text: 'Recherche',
-  edit_file: 'Modifie',
-  write_file: 'Écrit',
-  lsp_symbols: 'Structure de',
-  lsp_workspace_symbols: 'Cherche le symbole',
-  lsp_definition: 'Définition dans',
-  lsp_references: 'Références dans',
-  lsp_hover: 'Documentation dans',
+  list_dir: 'Lists',
+  find_files: 'Finds files',
+  read_file: 'Reads',
+  search_text: 'Searches',
+  edit_file: 'Edits',
+  write_file: 'Writes',
+  lsp_symbols: 'Structure of',
+  lsp_workspace_symbols: 'Finds the symbol',
+  lsp_definition: 'Definition in',
+  lsp_references: 'References in',
+  lsp_hover: 'Documentation in',
   lsp_diagnostics: 'Diagnostics',
-  load_skill: 'Charge le skill',
-  read_skill_file: 'Lit le skill',
-  open_file: 'Ouvre',
-  focus: 'Affiche',
-  run_command: 'Lance dans une console',
-  bash: 'Exécute',
-  list_consoles: 'Liste les consoles',
-  read_console: 'Lit la console',
-  console_input: 'Tape dans la console',
-  kanban_list: 'Liste les tickets',
-  kanban_get: 'Lit le ticket',
-  kanban_create: 'Crée le ticket',
-  kanban_update: 'Modifie le ticket',
-  kanban_add_note: 'Ajoute une note',
-  kanban_set_plan: 'Écrit le plan',
+  load_skill: 'Loads the skill',
+  read_skill_file: 'Reads the skill',
+  open_file: 'Opens',
+  focus: 'Shows',
+  run_command: 'Runs in a console',
+  bash: 'Runs',
+  list_consoles: 'Lists the consoles',
+  read_console: 'Reads the console',
+  console_input: 'Types in the console',
+  kanban_list: 'Lists the tickets',
+  kanban_get: 'Reads the ticket',
+  kanban_create: 'Creates the ticket',
+  kanban_update: 'Edits the ticket',
+  kanban_add_note: 'Adds a note',
+  kanban_set_plan: 'Writes the plan',
   kanban_goal: 'Goal',
-  kanban_move: 'Change l’état du ticket',
-  kanban_link_commit: 'Lie le commit',
-  ask_user: 'Pose des questions',
+  kanban_move: 'Moves the ticket',
+  kanban_link_commit: 'Links the commit',
+  ask_user: 'Asks questions',
 }
 
 export const toolIcons: Record<string, string> = {

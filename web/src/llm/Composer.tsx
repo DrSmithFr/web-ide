@@ -31,6 +31,7 @@ import { compactNow, currentMode, send, setMode, stop, unqueue } from './agent'
 import { prepare } from './attachments'
 import { cancelRecording, canRecord, modelById, speech, startRecording, stopRecording, transcribe } from './transcribe'
 import { AttachmentChip, formatSize, formatTokens, Popover, Switch } from './parts'
+import { t, tn } from '../i18n'
 
 const [draft, setDraft] = createSignal('')
 const [pending, setPending] = createSignal<{ parts: Part[]; attachment: Attachment }[]>([])
@@ -43,10 +44,10 @@ export async function addFiles(files: Iterable<File>) {
     setPreparing((n) => n + 1)
     try {
       const p = await prepare(f, currentModel()?.caps)
-      if (p.warning) toast(`${f.name} : ${p.warning}`, 'warn')
+      if (p.warning) toast(`${f.name}: ${p.warning}`, 'warn')
       setPending([...pending(), p])
     } catch (e) {
-      toast(`${f.name} : ${(e as Error).message}`, 'error')
+      toast(`${f.name}: ${(e as Error).message}`, 'error')
     } finally {
       setPreparing((n) => n - 1)
     }
@@ -67,10 +68,10 @@ export function suggest(text: string) {
 // ---------- commands and mentions ----------
 
 export const commands: { name: string; args?: string; hint: string }[] = [
-  { name: 'compact', args: '[consignes]', hint: 'Résume les anciens messages, avec des consignes facultatives' },
-  { name: 'clear', hint: 'Nouvelle conversation' },
-  { name: 'model', args: '[nom]', hint: 'Change de modèle' },
-  { name: 'help', hint: 'Liste des commandes et des skills' },
+  { name: 'compact', args: '[instructions]', hint: 'Summarizes the older messages, with optional instructions' },
+  { name: 'clear', hint: 'New conversation' },
+  { name: 'model', args: '[name]', hint: 'Changes the model' },
+  { name: 'help', hint: 'Lists the commands and the skills' },
 ]
 
 interface CompletionItem {
@@ -102,7 +103,7 @@ export async function runCommand(text: string, onSettings: () => void): Promise<
   if (!m) return false
   const [, name, args] = m
   if (live.busy && ['clear', 'new', 'compact'].includes(name)) {
-    toast(`/${name} : disponible une fois la réponse terminée`, 'warn')
+    toast(t('/{command}: available once the answer is finished', { command: name }), 'warn')
     return true
   }
   switch (name) {
@@ -119,16 +120,16 @@ export async function runCommand(text: string, onSettings: () => void): Promise<
     case 'model': {
       const q = args.trim().toLowerCase()
       if (!q) {
-        toast(`Modèles : ${models().map((x) => x.id).join(', ') || 'aucun'}`, 'info', undefined, 8000)
+        toast(t('Models: {list}', { list: models().map((x) => x.id).join(', ') || t('none') }), 'info', undefined, 8000)
         return true
       }
       const found = models().find((x) => x.id.toLowerCase() === q) ?? models().find((x) => x.id.toLowerCase().includes(q))
       if (!found) {
-        toast(`Aucun modèle « ${args.trim()} »`, 'warn')
+        toast(t('No model “{name}”', { name: args.trim() }), 'warn')
         return true
       }
       await select(config.server, found.id)
-      toast(`Modèle : ${found.id}`, 'ok')
+      toast(t('Model: {name}', { name: found.id }), 'ok')
       return true
     }
   }
@@ -138,11 +139,11 @@ export async function runCommand(text: string, onSettings: () => void): Promise<
       onSettings()
       return true
     }
-    const ask = `Utilise le skill « ${skill.name} » : charge ses instructions avec load_skill puis applique-les.${args.trim() ? `\n\n${args.trim()}` : ''}`
+    const ask = `Use the skill "${skill.name}": load its instructions with load_skill, then apply them.${args.trim() ? `\n\n${args.trim()}` : ''}`
     await send(ask, [], [], text.trim())
     return true
   }
-  toast(`Commande inconnue : /${name} (voir /help)`, 'warn')
+  toast(t('Unknown command: /{command} (see /help)', { command: name }), 'warn')
   return true
 }
 
@@ -152,9 +153,9 @@ function HelpCard() {
   return (
     <div class="ai-help" data-testid="ai-help">
       <div class="ai-help-head">
-        <strong>Commandes</strong>
+        <strong>{t('Commands')}</strong>
         <span class="grow" />
-        <button class="icon-btn small" title="Fermer" onClick={() => setHelp(false)}>
+        <button class="icon-btn small" title={t('Close')} onClick={() => setHelp(false)}>
           <Icon name="close" size={12} />
         </button>
       </div>
@@ -165,7 +166,7 @@ function HelpCard() {
               /{c.name}
               {c.args ? ` ${c.args}` : ''}
             </code>
-            <span>{c.hint}</span>
+            <span>{t(c.hint)}</span>
           </div>
         )}
       </For>
@@ -174,24 +175,24 @@ function HelpCard() {
         <For each={promptContext()!.skills}>
           {(sk) => (
             <div class="ai-help-row">
-              <code>/{sk.name} [demande]</code>
+              <code>/{sk.name} [{t('request')}]</code>
               <span>{sk.description}</span>
             </div>
           )}
         </For>
       </Show>
-      <div class="ai-help-foot muted">@chemin désigne un fichier ou un dossier du projet (autocomplétion en tapant @).</div>
+      <div class="ai-help-foot muted">{t('@path designates a file or folder of the project (completion when typing @).')}</div>
     </div>
   )
 }
 
 function capsText(m: Model) {
   const c: string[] = []
-  if (m.caps.vision) c.push('image')
-  if (m.caps.video) c.push('vidéo')
-  if (m.caps.audio) c.push('audio')
-  if (m.caps.tools) c.push('outils')
-  if (m.caps.thinking) c.push('réflexion')
+  if (m.caps.vision) c.push(t('image'))
+  if (m.caps.video) c.push(t('video'))
+  if (m.caps.audio) c.push(t('audio'))
+  if (m.caps.tools) c.push(t('tools'))
+  if (m.caps.thinking) c.push(t('thinking'))
   return c
 }
 
@@ -201,13 +202,13 @@ function ModelPicker(props: { onSettings: () => void }) {
     const q = filter().toLowerCase()
     return models().filter((m) => !q || m.id.toLowerCase().includes(q))
   }
-  const label = () => config.model || (config.servers.length ? 'Choisir un modèle' : 'Aucun serveur')
+  const label = () => config.model || (config.servers.length ? t('Choose a model') : t('No server'))
   return (
     <Popover
       align="right"
       class="ai-model-pop"
       trigger={(toggle, open) => (
-        <button class="ai-pill" classList={{ open }} onClick={toggle} title="Modèle" data-testid="model-pill">
+        <button class="ai-pill" classList={{ open }} onClick={toggle} title={t('Model')} data-testid="model-pill">
           <Show when={currentModel()?.state === 'loaded'}>
             <span class="ai-loaded-dot" />
           </Show>
@@ -224,7 +225,7 @@ function ModelPicker(props: { onSettings: () => void }) {
             <select
               class="small grow"
               value={config.server}
-              title="Serveur"
+              title={t('Server')}
               onChange={(e) => {
                 const v = e.currentTarget.value
                 if (v === '+') {
@@ -236,20 +237,20 @@ function ModelPicker(props: { onSettings: () => void }) {
               }}
             >
               <Show when={!config.server}>
-                <option value="">— serveur —</option>
+                <option value="">{t('— server —')}</option>
               </Show>
               <For each={config.servers}>{(s) => <option value={s.id}>{s.name}</option>}</For>
-              <option value="+">Gérer les serveurs…</option>
+              <option value="+">{t('Manage the servers…')}</option>
             </select>
-            <button class="icon-btn small" title={`Recharger la liste${serverKind() ? ` (${serverKind() === 'ollama' ? 'Ollama' : 'llama.cpp'})` : ''}`} onClick={() => loadModels()}>
+            <button class="icon-btn small" title={`${t('Reload the list')}${serverKind() ? ` (${serverKind() === 'ollama' ? 'Ollama' : 'llama.cpp'})` : ''}`} onClick={() => loadModels()}>
               <Icon name="refresh" size={13} />
             </button>
           </div>
           <Show when={models().length > 8}>
-            <input class="ai-pop-filter" placeholder="Filtrer les modèles…" value={filter()} onInput={(e) => setFilter(e.currentTarget.value)} />
+            <input class="ai-pop-filter" placeholder={t('Filter the models…')} value={filter()} onInput={(e) => setFilter(e.currentTarget.value)} />
           </Show>
           <div class="ai-model-list">
-            <Show when={shown().length} fallback={<div class="muted small pad">{modelsLoading() ? 'Chargement…' : 'Aucun modèle'}</div>}>
+            <Show when={shown().length} fallback={<div class="muted small pad">{modelsLoading() ? t('Loading…') : t('No model')}</div>}>
               <For each={shown()}>
                 {(m) => (
                   <button
@@ -265,16 +266,16 @@ function ModelPicker(props: { onSettings: () => void }) {
                       <span class="ai-model-name">
                         {m.id}
                         <Show when={m.state === 'loaded'}>
-                          <span class="ai-loaded-dot" title="Chargé" />
+                          <span class="ai-loaded-dot" title={t('Loaded')} />
                         </Show>
                       </span>
                       <span class="ai-model-meta">
-                        {[m.details, m.context ? `${formatTokens(m.context)} de contexte` : '', m.size ? formatSize(m.size) : ''].filter(Boolean).join(' · ')}
+                        {[m.details, m.context ? t('{n} context', { n: formatTokens(m.context) }) : '', m.size ? formatSize(m.size) : ''].filter(Boolean).join(' · ')}
                       </span>
                       <span class="ai-model-caps">
                         <For each={capsText(m)}>{(c) => <span class="badge">{c}</span>}</For>
                         <Show when={!m.caps.known}>
-                          <span class="badge" title="Capacités connues une fois le modèle chargé">?</span>
+                          <span class="badge" title={t('Capabilities known once the model is loaded')}>?</span>
                         </Show>
                       </span>
                     </span>
@@ -319,28 +320,28 @@ function ContextMenu() {
     >
       {(close) => (
         <div class="ai-ctx" data-testid="ai-context-menu">
-          <div class="ai-ctx-title">Contexte</div>
-          <Show when={ctx()} fallback={<p class="muted small">Taille de contexte inconnue : elle est connue une fois le modèle chargé. Environ {formatTokens(used())} jetons utilisés.</p>}>
+          <div class="ai-ctx-title">{t('Context')}</div>
+          <Show when={ctx()} fallback={<p class="muted small">{t('Unknown context size: it is known once the model is loaded. About {n} tokens used.', { n: formatTokens(used()) })}</p>}>
             <div class="ai-ctx-num">
-              <strong>{formatTokens(used())}</strong> / {formatTokens(ctx())} jetons <span class="muted">· {Math.round(ratio() * 100)} %</span>
+              <strong>{formatTokens(used())}</strong> / {t('{n} tokens', { n: formatTokens(ctx()) })} <span class="muted">· {Math.round(ratio() * 100)} %</span>
             </div>
             <div class={`ai-ctx-bar ${level()}`}>
               <span style={{ width: `${ratio() * 100}%` }} />
-              <i style={{ left: `${prefs.compactAt}%` }} title={`Seuil de compaction : ${prefs.compactAt} %`} />
+              <i style={{ left: `${prefs.compactAt}%` }} title={t('Compaction threshold: {n} %', { n: prefs.compactAt })} />
             </div>
           </Show>
           <div class="ai-ctx-rows small">
-            <span>Messages envoyés au modèle</span>
+            <span>{t('Messages sent to the model')}</span>
             <span>{active()}</span>
             <Show when={compacted()}>
-              <span>Messages compactés</span>
+              <span>{t('Compacted messages')}</span>
               <span>{compacted()}</span>
             </Show>
           </div>
           <div class="ai-pop-sep" />
-          <Switch label="Compaction automatique" hint={`Au-delà de ${prefs.compactAt} % du contexte`} checked={prefs.autoCompact} onChange={(v) => (setPrefs('autoCompact', v), savePrefs())} />
+          <Switch label={t('Automatic compaction')} hint={t('Beyond {n} % of the context', { n: prefs.compactAt })} checked={prefs.autoCompact} onChange={(v) => (setPrefs('autoCompact', v), savePrefs())} />
           <label class="ai-ctx-range small">
-            <span>Seuil</span>
+            <span>{t('Threshold')}</span>
             <input type="range" min="40" max="95" step="5" value={prefs.compactAt} onInput={(e) => (setPrefs('compactAt', Number(e.currentTarget.value)), savePrefs())} />
             <span>{prefs.compactAt} %</span>
           </label>
@@ -352,9 +353,9 @@ function ContextMenu() {
               compactNow().catch(errorToast)
             }}
           >
-            <Icon name="history" size={13} /> Compacter maintenant
+            <Icon name="history" size={13} /> {t('Compact now')}
           </button>
-          <p class="muted small ai-ctx-tip">Ou tapez /compact suivi de consignes pour le résumé.</p>
+          <p class="muted small ai-ctx-tip">{t('Or type /compact followed by instructions for the summary.')}</p>
         </div>
       )}
     </Popover>
@@ -370,17 +371,17 @@ function Options() {
     <Popover
       class="ai-options-pop"
       trigger={(toggle, open) => (
-        <button class="ai-icon" classList={{ on: open }} onClick={toggle} title="Options de l’assistant" data-testid="ai-options">
+        <button class="ai-icon" classList={{ on: open }} onClick={toggle} title={t('Assistant options')} data-testid="ai-options">
           <Icon name="sliders" size={16} />
         </button>
       )}
     >
       {() => (
         <>
-          <Switch label="Outils" hint="Fichiers, recherche, serveurs de langage, consoles" checked={prefs.tools} onChange={(v) => set('tools', v)} testid="opt-tools" />
-          <Switch label="Appliquer sans demander" hint="Modifications de fichiers sans confirmation" checked={prefs.autoApply} onChange={(v) => set('autoApply', v)} testid="opt-auto" />
+          <Switch label={t('Tools')} hint={t('Files, search, language servers, consoles')} checked={prefs.tools} onChange={(v) => set('tools', v)} testid="opt-tools" />
+          <Switch label={t('Apply without asking')} hint={t('File changes without confirmation')} checked={prefs.autoApply} onChange={(v) => set('autoApply', v)} testid="opt-auto" />
           <Show when={currentModel()?.caps.thinking}>
-            <Switch label="Réflexion" hint="Le modèle réfléchit avant de répondre" checked={prefs.think} onChange={(v) => set('think', v)} testid="opt-think" />
+            <Switch label={t('Thinking')} hint={t('The model thinks before answering')} checked={prefs.think} onChange={(v) => set('think', v)} testid="opt-think" />
           </Show>
         </>
       )}
@@ -425,7 +426,7 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
         if (blob) insertText(await transcribe(blob))
       } else if (speech.phase === 'idle') await startRecording()
     } catch (e) {
-      toast(`Dictée : ${(e as Error).message}`, 'error')
+      toast(t('Dictation: {message}', { message: (e as Error).message }), 'error')
     }
   }
   onCleanup(cancelRecording)
@@ -437,14 +438,14 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
     switch (speech.phase) {
       case 'recording': {
         const s = Math.max(0, Math.floor((now() - speech.startedAt) / 1000))
-        return `Enregistrement ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')} · cliquer sur le micro pour terminer`
+        return t('Recording {time} · click the microphone to finish', { time: `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })
       }
       case 'loading':
         return speech.total
-          ? `Téléchargement du modèle ${modelById(prefs.whisperModel).repo.split('/')[1]} : ${Math.round((speech.loaded / speech.total) * 100)} % (${formatSize(speech.loaded)} / ${formatSize(speech.total)})`
-          : 'Chargement du modèle de transcription…'
+          ? t('Downloading the model {name}: {pct} % ({done} / {total})', { name: modelById(prefs.whisperModel).repo.split('/')[1], pct: Math.round((speech.loaded / speech.total) * 100), done: formatSize(speech.loaded), total: formatSize(speech.total) })
+          : t('Loading the transcription model…')
       case 'transcribing':
-        return 'Transcription locale…'
+        return t('Local transcription…')
     }
     return ''
   }
@@ -472,7 +473,7 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
     if (!qy) return []
     if (qy.mode === 'slash') {
       const all: CompletionItem[] = [
-        ...commands.map((c) => ({ kind: 'command' as const, label: `/${c.name}`, detail: c.hint, insert: `/${c.name} ` })),
+        ...commands.map((c) => ({ kind: 'command' as const, label: `/${c.name}`, detail: t(c.hint), insert: `/${c.name} ` })),
         ...(promptContext()?.skills ?? []).map((sk) => ({ kind: 'skill' as const, label: `/${sk.name}`, detail: sk.description, insert: `/${sk.name} ` })),
       ]
       return all
@@ -512,7 +513,7 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
     const atts = pending()
     if (!canSend()) return
     if (live.watching) {
-      toast('Réponse en cours dans une autre fenêtre : attendre sa fin pour écrire ici', 'info')
+      toast(t('Answer running in another window: wait for its end to write here'), 'info')
       return
     }
     if (text.startsWith('/') && !atts.length) {
@@ -602,19 +603,19 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
         <Show when={chat.queue?.length}>
           <div class="ai-queue" data-testid="ai-queue">
             <div class="ai-queue-title">
-              <Icon name="history" size={12} /> En file d’attente : {live.busy ? 'envoyé à la prochaine étape de la réponse' : 'envoyé avec le prochain message'}
+              <Icon name="history" size={12} /> {live.busy ? t('Queued: sent at the next step of the answer') : t('Queued: sent with the next message')}
             </div>
             <For each={chat.queue}>
               {(q) => (
                 <div class="ai-queue-item">
                   <span class="ellipsis">{q.display ?? q.text}</span>
                   <Show when={q.attachments?.length}>
-                    <span class="muted small">+{q.attachments!.length} pièce(s) jointe(s)</span>
+                    <span class="muted small">+{tn(q.attachments!.length, '{n} attachment', '{n} attachments')}</span>
                   </Show>
                   <span class="grow" />
                   <button
                     class="ai-act"
-                    title="Reprendre dans la zone de saisie"
+                    title={t('Back to the message box')}
                     onClick={() => {
                       unqueue(q.id)
                       setDraft(q.display ?? q.text)
@@ -623,7 +624,7 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
                   >
                     <Icon name="edit" size={12} />
                   </button>
-                  <button class="ai-act" title="Retirer de la file" onClick={() => unqueue(q.id)}>
+                  <button class="ai-act" title={t('Remove from the queue')} onClick={() => unqueue(q.id)}>
                     <Icon name="close" size={12} />
                   </button>
                 </div>
@@ -636,7 +637,7 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
             <For each={pending()}>{(p, i) => <AttachmentChip a={p.attachment} onRemove={() => setPending(pending().filter((_, j) => j !== i()))} />}</For>
             <Show when={preparing()}>
               <span class="ai-att muted">
-                <span class="spinner" /> préparation…
+                <span class="spinner" /> {t('preparing…')}
               </span>
             </Show>
           </div>
@@ -678,7 +679,7 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
         <textarea
           ref={(el) => (textareaRef = el)}
           rows="1"
-          placeholder={live.watching ? 'Réponse en cours dans une autre fenêtre…' : live.busy ? 'Écrire la suite : le message attendra la prochaine étape…' : config.model ? `Message à ${config.model}…` : 'Choisir un modèle pour commencer…'}
+          placeholder={live.watching ? t('Answer running in another window…') : live.busy ? t('Write on: the message will wait for the next step…') : config.model ? t('Message to {model}…', { model: config.model }) : t('Choose a model to start…')}
           value={draft()}
           onInput={(e) => {
             setDraft(e.currentTarget.value)
@@ -690,7 +691,7 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
           onPaste={onPaste}
         />
         <div class="ai-composer-bar">
-          <button class="ai-icon" title="Joindre des fichiers (image, vidéo, audio, PDF, texte)" onClick={() => fileInput.click()}>
+          <button class="ai-icon" title={t('Attach files (image, video, audio, PDF, text)')} onClick={() => fileInput.click()}>
             <Icon name="paperclip" size={16} />
           </button>
           <input
@@ -706,7 +707,7 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
           <button
             class="ai-icon ai-mic"
             classList={{ rec: speech.phase === 'recording' }}
-            title={canRecord() ? (speech.phase === 'recording' ? 'Terminer la dictée (Ctrl+Espace)' : 'Dicter : transcription locale, le son reste sur cette machine (Ctrl+Espace)') : 'Micro indisponible (https ou localhost requis)'}
+            title={canRecord() ? (speech.phase === 'recording' ? t('End the dictation (Ctrl+Space)') : t('Dictate: local transcription, the sound stays on this machine (Ctrl+Space)')) : t('Microphone unavailable (https or localhost required)')}
             disabled={!canRecord() || speech.phase === 'loading' || speech.phase === 'transcribing'}
             onClick={dictate}
           >
@@ -716,7 +717,7 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
           <button
             class="ai-mode"
             classList={{ plan: currentMode() === 'plan' }}
-            title={currentMode() === 'plan' ? 'Mode Plan : explore et propose un plan, sans modifier les fichiers (Maj+Tab pour passer en Build)' : 'Mode Build : agit sur le projet (Maj+Tab pour passer en Plan)'}
+            title={currentMode() === 'plan' ? t('Plan mode: explores and proposes a plan, without changing files (Shift+Tab for Build)') : t('Build mode: acts on the project (Shift+Tab for Plan)')}
             onClick={() => setMode(currentMode() === 'plan' ? 'build' : 'plan')}
             data-testid="ai-mode"
           >
@@ -732,19 +733,19 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
           </Show>
           <ModelPicker onSettings={props.onSettings} />
           <Show when={live.busy && !live.watching && canSend()}>
-            <button class="ai-send queue" onClick={submit} aria-label="Mettre en file d’attente" title="Mettre en file d’attente (Entrée) : envoyé à la prochaine étape" data-testid="enqueue">
+            <button class="ai-send queue" onClick={submit} aria-label={t('Queue')} title={t('Queue (Enter): sent at the next step')} data-testid="enqueue">
               <Icon name="arrowUp" size={16} />
             </button>
           </Show>
           <Show
             when={live.busy}
             fallback={
-              <button class="ai-send" disabled={!canSend()} onClick={submit} aria-label="Envoyer" title="Envoyer (Entrée)" data-testid="send">
+              <button class="ai-send" disabled={!canSend()} onClick={submit} aria-label={t('Send')} title={t('Send (Enter)')} data-testid="send">
                 <Icon name="arrowUp" size={16} />
               </button>
             }
           >
-            <button class="ai-send stop" onClick={stop} aria-label="Arrêter" title="Arrêter (Échap)" data-testid="stop">
+            <button class="ai-send stop" onClick={stop} aria-label={t('Stop')} title={t('Stop (Esc)')} data-testid="stop">
               <span class="ai-stop-square" />
             </button>
           </Show>

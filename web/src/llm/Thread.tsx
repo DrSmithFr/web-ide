@@ -11,6 +11,7 @@ import { absPath } from './tools'
 import { focusComposer, runCommand } from './Composer'
 import { answerQuestions, dismissPlan, executePlan, send } from './agent'
 import { produce } from 'solid-js/store'
+import { t, tn } from '../i18n'
 
 const textOf = (m: ChatMessage) =>
   m.display !== undefined
@@ -19,8 +20,8 @@ const textOf = (m: ChatMessage) =>
 
 function copy(text: string) {
   navigator.clipboard?.writeText(text).then(
-    () => toast('Copié', 'ok'),
-    () => toast('Copie impossible', 'error'),
+    () => toast(t('Copied'), 'ok'),
+    () => toast(t('Copy failed'), 'error'),
   )
 }
 
@@ -37,25 +38,25 @@ function useNow(active: () => boolean, ms = 250) {
 function Welcome(props: { onSuggest: (t: string) => void; onSettings: () => void }) {
   const active = () => (activeTab()?.kind === 'file' ? relPath(activeTab()!.path!) : '')
   const suggestions = () => [
-    { icon: 'outline', text: 'Explique-moi l’architecture de ce projet' },
-    active() ? { icon: 'file', text: `Relis ${active()} et propose des améliorations` } : { icon: 'search', text: 'Où est gérée la configuration du projet ?' },
-    { icon: 'conflict', text: 'Trouve et corrige les erreurs signalées par les serveurs de langage' },
-    active() ? { icon: 'check', text: `Écris des tests pour ${active()}` } : { icon: 'terminal', text: 'Lance les tests et explique les échecs' },
+    { icon: 'outline', text: t('Explain the architecture of this project to me') },
+    active() ? { icon: 'file', text: t('Review {file} and suggest improvements', { file: active() }) } : { icon: 'search', text: t('Where is the configuration of the project handled?') },
+    { icon: 'conflict', text: t('Find and fix the errors reported by the language servers') },
+    active() ? { icon: 'check', text: t('Write tests for {file}', { file: active() }) } : { icon: 'terminal', text: t('Run the tests and explain the failures') },
   ]
   return (
     <div class="ai-empty ai-welcome">
       <div class="ai-welcome-icon">
         <Icon name="sparkle" size={26} />
       </div>
-      <h2>Que fait-on sur {project()?.name ?? 'ce projet'} ?</h2>
+      <h2>{project()?.name ? t('What shall we do on {project}?', { project: project()!.name }) : t('What shall we do on this project?')}</h2>
       <p class="muted">
-        L’assistant lit et modifie les fichiers, cherche dans le code, interroge les serveurs de langage et lance des commandes.
+        {t('The assistant reads and changes the files, searches the code, asks the language servers and runs commands.')}
       </p>
       <Show
         when={config.servers.length}
         fallback={
           <button class="btn primary" onClick={props.onSettings}>
-            Ajouter un serveur de modèles
+            {t('Add a model server')}
           </button>
         }
       >
@@ -71,7 +72,7 @@ function Welcome(props: { onSuggest: (t: string) => void; onSettings: () => void
         </div>
       </Show>
       <p class="ai-hint">
-        Glisser-déposer ou coller des images, vidéos, PDF · <kbd>Ctrl</kbd>+<kbd>Espace</kbd> pour dicter · <kbd>Maj</kbd>+<kbd>Entrée</kbd> pour aller à la ligne
+        {t('Drop or paste images, videos, PDF')} · <kbd>Ctrl</kbd>+<kbd>{t('Space')}</kbd> {t('to dictate')} · <kbd>{t('Shift')}</kbd>+<kbd>{t('Enter')}</kbd> {t('for a new line')}
       </p>
     </div>
   )
@@ -98,7 +99,7 @@ function UserText(props: { text: string }) {
   const open = (e: MouseEvent, token: string) => {
     if (!(e.ctrlKey || e.metaKey) || !token.startsWith('@') || token.endsWith('/')) return
     e.preventDefault()
-    openFile(absPath(token.slice(1))).catch(() => toast(`Impossible d’ouvrir ${token.slice(1)}`, 'error'))
+    openFile(absPath(token.slice(1))).catch(() => toast(t('Cannot open {path}', { path: token.slice(1) }), 'error'))
   }
   return (
     <div class="ai-user-text">
@@ -106,7 +107,7 @@ function UserText(props: { text: string }) {
       <For each={props.text.split(/(^\/\S+|@[^\s@]+)/)}>
         {(part) =>
           part.startsWith('@') || /^\/\S+$/.test(part) ? (
-            <span class="ai-mention" classList={{ file: part.startsWith('@') && !part.endsWith('/') }} title={part.startsWith('@') ? 'Ctrl+clic : ouvrir dans l’éditeur' : undefined} onClick={(e) => open(e, part)}>
+            <span class="ai-mention" classList={{ file: part.startsWith('@') && !part.endsWith('/') }} title={part.startsWith('@') ? t('Ctrl+click: open in the editor') : undefined} onClick={(e) => open(e, part)}>
               {part}
             </span>
           ) : (
@@ -156,13 +157,13 @@ function EditBox(props: { index: number; text: string }) {
         }}
       />
       <div class="ai-edit-bar">
-        <span class="muted small">La réponse sera régénérée à partir de ce message.</span>
+        <span class="muted small">{t('The answer will be generated again from this message.')}</span>
         <span class="grow" />
         <button class="btn small" onClick={() => setEditing(null)}>
-          Annuler
+          {t('Cancel')}
         </button>
         <button class="btn small primary" disabled={!value().trim()} onClick={submit}>
-          Envoyer
+          {t('Send')}
         </button>
       </div>
     </div>
@@ -187,11 +188,11 @@ function UserMessage(props: { msg: ChatMessage; index: number }) {
               </Show>
             </div>
             <div class="ai-actions">
-              <button class="ai-act" title="Copier" onClick={() => copy(textOf(props.msg))}>
+              <button class="ai-act" title={t('Copy')} onClick={() => copy(textOf(props.msg))}>
                 <Icon name="copy" size={13} />
               </button>
               <Show when={!live.busy && !props.msg.compacted}>
-                <button class="ai-act" title="Modifier" onClick={() => setEditing(props.index)}>
+                <button class="ai-act" title={t('Edit')} onClick={() => setEditing(props.index)}>
                   <Icon name="edit" size={13} />
                 </button>
               </Show>
@@ -210,8 +211,8 @@ function UserMessage(props: { msg: ChatMessage; index: number }) {
 function Reasoning(props: { text: string; live?: boolean; ms?: number }) {
   const now = useNow(() => !!props.live, 500)
   const label = () => {
-    if (props.live) return `Réflexion${live.thinkStart ? ` · ${formatDuration(now() - live.thinkStart)}` : ''}…`
-    return props.ms ? `Réflexion · ${formatDuration(props.ms)}` : 'Réflexion'
+    if (props.live) return `${t('Thinking')}${live.thinkStart ? ` · ${formatDuration(now() - live.thinkStart)}` : ''}…`
+    return props.ms ? `${t('Thinking')} · ${formatDuration(props.ms)}` : t('Thinking')
   }
   return (
     <details class="ai-reasoning" classList={{ live: !!props.live }} open={props.live}>
@@ -234,13 +235,13 @@ function ToolRow(props: { msg: ChatMessage; call?: ToolCall }) {
   }
   return (
     <div class={`ai-tool ${props.msg.status ?? 'running'}`}>
-      <button class="ai-tool-head" onClick={() => setOpen(!open())} title={`${props.msg.name} : afficher le résultat`}>
+      <button class="ai-tool-head" onClick={() => setOpen(!open())} title={t('{tool}: show the result', { tool: props.msg.name ?? '' })}>
         <span class="ai-tool-icon">
           <Show when={!pending()} fallback={<span class="spinner" />}>
             <Icon name={toolIcons[props.msg.name ?? ''] ?? 'puzzle'} size={13} />
           </Show>
         </span>
-        <span class="ai-tool-name">{toolVerbs[label().name] ?? label().name}</span>
+        <span class="ai-tool-name">{toolVerbs[label().name] ? t(toolVerbs[label().name]) : label().name}</span>
         <span class="ai-tool-target ellipsis">
           {label().target}
           {label().extra}
@@ -258,7 +259,7 @@ function ToolRow(props: { msg: ChatMessage; call?: ToolCall }) {
         <div class="ai-tool-detail">
           <Show when={path()}>
             <button class="link small" onClick={() => openFile(path())}>
-              Ouvrir {relPath(path())}
+              {t('Open')} {relPath(path())}
             </button>
           </Show>
           <Show
@@ -289,7 +290,7 @@ function ToolRow(props: { msg: ChatMessage; call?: ToolCall }) {
 function ToolSteps(props: { items: { msg: ChatMessage; call?: ToolCall }[] }) {
   const running = () => props.items.some((i) => !i.msg.status)
   const failed = () => props.items.filter((i) => i.msg.status === 'error').length
-  const names = () => [...new Set(props.items.map((i) => toolVerbs[i.msg.name ?? ''] ?? i.msg.name))].slice(0, 3).join(', ')
+  const names = () => [...new Set(props.items.map((i) => (toolVerbs[i.msg.name ?? ''] ? t(toolVerbs[i.msg.name ?? '']) : i.msg.name)))].slice(0, 3).join(', ')
   return (
     <Show when={props.items.length > 2} fallback={<div class="ai-steps-flat">{<For each={props.items}>{(i) => <ToolRow msg={i.msg} call={i.call} />}</For>}</div>}>
       <details class="ai-steps" open={running() || undefined}>
@@ -298,10 +299,10 @@ function ToolSteps(props: { items: { msg: ChatMessage; call?: ToolCall }[] }) {
             <span class="spinner" />
           </Show>
           <span>
-            {props.items.length} actions <span class="muted">· {names()}</span>
+            {tn(props.items.length, '{n} action', '{n} actions')} <span class="muted">· {names()}</span>
           </span>
           <Show when={failed()}>
-            <span class="badge danger">{failed()} en échec</span>
+            <span class="badge danger">{t('{n} failed', { n: failed() })}</span>
           </Show>
           <span class="grow" />
           <span class="ai-chev ai-steps-chev">
@@ -319,10 +320,10 @@ function Stats(props: { msg: ChatMessage }) {
   const parts = () => {
     const out: string[] = []
     if (props.msg.model) out.push(props.msg.model)
-    if (u()?.perSecond) out.push(`${u()!.perSecond!.toFixed(1)} jetons/s`)
+    if (u()?.perSecond) out.push(t('{n} tokens/s', { n: u()!.perSecond!.toFixed(1) }))
     const ms = props.msg.elapsedMs ?? u()?.durationMs
     if (ms) out.push(formatDuration(ms))
-    if (u()) out.push(`${formatTokens(u()!.prompt)} → ${formatTokens(u()!.completion)} jetons${u()!.cached ? ` (${formatTokens(u()!.cached!)} en cache)` : ''}`)
+    if (u()) out.push(`${formatTokens(u()!.prompt)} → ${t('{n} tokens', { n: formatTokens(u()!.completion) })}${u()!.cached ? ` (${t('{n} cached', { n: formatTokens(u()!.cached!) })})` : ''}`)
     return out
   }
   return (
@@ -382,12 +383,12 @@ function AssistantMessage(props: { msg: ChatMessage; index: number; lastOfTurn: 
       <Show when={props.lastOfTurn && !(live.busy && props.lastTurn)}>
         <div class="ai-actions">
           <Show when={turnText()}>
-            <button class="ai-act" title="Copier la réponse" onClick={() => copy(turnText())}>
+            <button class="ai-act" title={t('Copy the answer')} onClick={() => copy(turnText())}>
               <Icon name="copy" size={13} />
             </button>
           </Show>
           <Show when={props.lastTurn && !props.msg.compacted}>
-            <button class="ai-act" title="Régénérer la réponse" onClick={() => retry().catch(errorToast)}>
+            <button class="ai-act" title={t('Generate the answer again')} onClick={() => retry().catch(errorToast)}>
               <Icon name="refresh" size={13} />
             </button>
           </Show>
@@ -404,7 +405,7 @@ function SummaryCard(props: { msg: ChatMessage }) {
       <summary>
         <Icon name="history" size={13} />
         <span>
-          Conversation compactée : {props.msg.summarized} messages résumés{props.msg.model ? ` par ${props.msg.model}` : ''}
+          {props.msg.model ? t('Conversation compacted: {n} messages summarized by {model}', { n: props.msg.summarized ?? 0, model: props.msg.model }) : t('Conversation compacted: {n} messages summarized', { n: props.msg.summarized ?? 0 })}
         </span>
       </summary>
       <Markdown text={typeof props.msg.content === 'string' ? props.msg.content : ''} final />
@@ -417,22 +418,22 @@ function SummaryCard(props: { msg: ChatMessage }) {
 function LiveStats() {
   const now = useNow(() => live.busy)
   const text = () => {
-    const t = now()
+    const at = now()
     const parts: string[] = []
-    if (live.compacting) return 'Compaction de la conversation…'
-    if (live.watching && !live.stream) return 'Étape en cours dans une autre fenêtre…'
+    if (live.compacting) return t('Compacting the conversation…')
+    if (live.watching && !live.stream) return t('Step running in another window…')
     if (!live.firstAt) {
       if (live.promptTotal) {
         const pct = Math.round((live.promptDone / live.promptTotal) * 100)
-        parts.push(`Lecture du prompt · ${pct} % (${formatTokens(live.promptDone)} / ${formatTokens(live.promptTotal)})`)
-      } else parts.push(live.watching ? 'Réponse en cours dans une autre fenêtre' : 'En attente du modèle')
+        parts.push(t('Reading the prompt · {pct} % ({done} / {total})', { pct, done: formatTokens(live.promptDone), total: formatTokens(live.promptTotal) }))
+      } else parts.push(live.watching ? t('Answer running in another window') : t('Waiting for the model'))
     } else {
-      parts.push(live.tool ? `Prépare l’appel à ${live.tool}` : live.content ? 'Écrit' : 'Réfléchit')
-      const speed = liveSpeed(t)
-      if (speed) parts.push(`${speed.toFixed(1)} jetons/s`)
-      if (live.tokens) parts.push(`${live.tokens} jetons`)
+      parts.push(live.tool ? t('Preparing the call to {tool}', { tool: live.tool }) : live.content ? t('Writing') : t('Thinking'))
+      const speed = liveSpeed(at)
+      if (speed) parts.push(t('{n} tokens/s', { n: speed.toFixed(1) }))
+      if (live.tokens) parts.push(t('{n} tokens', { n: live.tokens }))
     }
-    if (live.startedAt) parts.push(formatDuration(t - live.startedAt))
+    if (live.startedAt) parts.push(formatDuration(at - live.startedAt))
     return parts.join(' · ')
   }
   return (
@@ -457,7 +458,7 @@ function ApprovalCard() {
           <>
             <div class="ai-approval-head">
               <Icon name="edit" size={14} />
-              <strong>{a().created ? 'Créer' : 'Modifier'}</strong>
+              <strong>{a().created ? t('Create') : t('Edit')}</strong>
               <span class="mono ellipsis">{relPath(a().path ?? '')}</span>
             </div>
             <DiffBlock lines={a().diff ?? []} />
@@ -466,8 +467,8 @@ function ApprovalCard() {
       >
         <div class="ai-approval-head">
           <Icon name="terminal" size={14} />
-          <strong>Exécuter cette commande ?</strong>
-          <span class="muted small">Mode Plan : elle pourrait modifier quelque chose.</span>
+          <strong>{t('Run this command?')}</strong>
+          <span class="muted small">{t('Plan mode: it may change something.')}</span>
         </div>
         <pre class="ai-term ai-approval-cmd">
           <span class="ai-term-cmd">$ {a().command}</span>
@@ -477,15 +478,15 @@ function ApprovalCard() {
         <Show when={a().kind === 'edit'}>
           <label class="check small">
             <input type="checkbox" onChange={(e) => (setPrefs('autoApply', e.currentTarget.checked), savePrefs())} />
-            Ne plus demander
+            {t('Do not ask again')}
           </label>
         </Show>
         <span class="grow" />
         <button class="btn" onClick={() => a().resolve(false)}>
-          Refuser
+          {t('Refuse')}
         </button>
         <button class="btn primary" onClick={() => a().resolve(true)}>
-          {a().kind === 'command' ? 'Exécuter' : 'Appliquer'}
+          {a().kind === 'command' ? t('Run') : t('Apply')}
         </button>
       </div>
     </div>
@@ -499,25 +500,25 @@ function PlanCard(props: { msg: ChatMessage; index: number }) {
     <div class="ai-plan" classList={{ done: state() !== 'pending' }} data-testid="ai-plan">
       <div class="ai-plan-head">
         <Icon name="outline" size={14} />
-        <strong>Plan proposé</strong>
+        <strong>{t('Proposed plan')}</strong>
         <span class="grow" />
         <Show when={state() === 'accepted'}>
-          <span class="badge ok">exécuté</span>
+          <span class="badge ok">{t('carried out')}</span>
         </Show>
         <Show when={state() === 'dismissed'}>
-          <span class="badge">à revoir</span>
+          <span class="badge">{t('to review')}</span>
         </Show>
       </div>
       <Markdown text={props.msg.plan ?? ''} final />
       <Show when={state() === 'pending'}>
         <div class="ai-plan-foot">
-          <span class="muted small">Passe en mode Build pour l’exécuter.</span>
+          <span class="muted small">{t('Switches to Build mode to carry it out.')}</span>
           <span class="grow" />
           <button class="btn" disabled={live.busy} onClick={() => (dismissPlan(props.index), focusComposer())}>
-            Continuer à planifier
+            {t('Keep planning')}
           </button>
           <button class="btn primary" disabled={live.busy} onClick={() => executePlan(props.index).catch(errorToast)}>
-            Exécuter ce plan
+            {t('Execute this plan')}
           </button>
         </div>
       </Show>
@@ -553,7 +554,7 @@ function AskCard(props: { msg: ChatMessage; index: number }) {
     <div class="ai-ask" classList={{ done: !pending() }} data-testid="ai-ask">
       <div class="ai-ask-head">
         <Icon name="info" size={14} />
-        <strong>{qs().length > 1 ? `${qs().length} questions` : 'Question'}</strong>
+        <strong>{qs().length > 1 ? t('{n} questions', { n: qs().length }) : t('Question')}</strong>
         <span class="grow" />
         <Show when={pending() && !recap() && qs().length > 1}>
           <span class="muted small">
@@ -561,10 +562,10 @@ function AskCard(props: { msg: ChatMessage; index: number }) {
           </span>
         </Show>
         <Show when={props.msg.askState === 'answered'}>
-          <span class="badge ok">répondu</span>
+          <span class="badge ok">{t('answered')}</span>
         </Show>
         <Show when={props.msg.askState === 'skipped'}>
-          <span class="badge">sans réponse</span>
+          <span class="badge">{t('not answered')}</span>
         </Show>
       </div>
       <Show
@@ -600,11 +601,11 @@ function AskCard(props: { msg: ChatMessage; index: number }) {
               </ol>
               <div class="ai-plan-foot">
                 <button class="btn" onClick={() => setStep(qs().length - 1)}>
-                  Précédent
+                  {t('Previous')}
                 </button>
                 <span class="grow" />
                 <button class="btn primary" disabled={live.busy} onClick={submit} data-testid="ai-ask-send">
-                  Envoyer les réponses
+                  {t('Send the answers')}
                 </button>
               </div>
             </>
@@ -636,7 +637,7 @@ function AskCard(props: { msg: ChatMessage; index: number }) {
                   </div>
                   <input
                     class="input"
-                    placeholder="Autre réponse…"
+                    placeholder={t('Other answer…')}
                     value={free()[i] ?? ''}
                     onInput={(e) => setFree((f) => f.map((x, k) => (k === i ? e.currentTarget.value : x)))}
                     onKeyDown={(e) => e.key === 'Enter' && answered(i) && setStep(i + 1)}
@@ -645,7 +646,7 @@ function AskCard(props: { msg: ChatMessage; index: number }) {
                   <div class="ai-plan-foot">
                     <Show when={i > 0}>
                       <button class="btn" onClick={() => setStep(i - 1)}>
-                        Précédent
+                        {t('Previous')}
                       </button>
                     </Show>
                     <span class="grow" />
@@ -653,12 +654,12 @@ function AskCard(props: { msg: ChatMessage; index: number }) {
                       when={qs().length > 1}
                       fallback={
                         <button class="btn primary" disabled={!answered(i) || live.busy} onClick={submit} data-testid="ai-ask-send">
-                          Répondre
+                          {t('Answer')}
                         </button>
                       }
                     >
                       <button class="btn primary" disabled={!answered(i)} onClick={() => setStep(i + 1)} data-testid="ai-ask-next">
-                        {i === qs().length - 1 ? 'Récapitulatif' : 'Suivant'}
+                        {i === qs().length - 1 ? t('Summary') : t('Next')}
                       </button>
                     </Show>
                   </div>
@@ -705,7 +706,7 @@ export function Thread(props: { onSuggest: (t: string) => void; onSettings: () =
       </Show>
       <Show when={compactedCount()}>
         <button class="ai-compacted-toggle" onClick={() => setShowCompacted(!showCompacted())}>
-          <Icon name="history" size={12} /> {showCompacted() ? 'Masquer' : 'Afficher'} les {compactedCount()} messages compactés
+          <Icon name="history" size={12} /> {showCompacted() ? t('Hide the {n} compacted messages', { n: compactedCount() }) : t('Show the {n} compacted messages', { n: compactedCount() })}
         </button>
       </Show>
       <For each={chat.messages}>
@@ -746,7 +747,7 @@ export function Thread(props: { onSuggest: (t: string) => void; onSettings: () =
       <Show when={lastFailed()}>
         <div class="ai-retry">
           <button class="btn small" onClick={() => retry().catch(errorToast)}>
-            <Icon name="refresh" size={12} /> Relancer
+            <Icon name="refresh" size={12} /> {t('Retry')}
           </button>
         </div>
       </Show>

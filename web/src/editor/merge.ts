@@ -37,7 +37,7 @@ export function withMarkers(blocks: Block[]): string {
   const out: string[] = []
   for (const b of blocks) {
     if (b.kind === 'ok') out.push(...b.lines)
-    else out.push('<<<<<<< modification en cours', ...b.local, '=======', ...b.remote, '>>>>>>> nouvelle version')
+    else out.push('<<<<<<< local changes', ...b.local, '=======', ...b.remote, '>>>>>>> new version')
   }
   return out.join('\n')
 }

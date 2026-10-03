@@ -15,16 +15,16 @@ export const tokenTypes = [
 ] as const
 
 export const tokenLabels: Record<string, string> = {
-  keyword: 'Mot-clé', string: 'Chaîne', comment: 'Commentaire', number: 'Nombre', function: 'Fonction', type: 'Type / classe',
-  variable: 'Variable', constant: 'Constante', property: 'Propriété', operator: 'Opérateur', punctuation: 'Ponctuation',
-  tag: 'Balise', attribute: 'Attribut', regexp: 'Regex', builtin: 'Fonction native', meta: 'Méta / annotation',
-  escape: 'Échappement', heading: 'Titre', emphasis: 'Emphase', link: 'Lien',
+  keyword: 'Keyword', string: 'String', comment: 'Comment', number: 'Number', function: 'Function', type: 'Type / class',
+  variable: 'Variable', constant: 'Constant', property: 'Property', operator: 'Operator', punctuation: 'Punctuation',
+  tag: 'Tag', attribute: 'Attribute', regexp: 'Regex', builtin: 'Built-in function', meta: 'Meta / annotation',
+  escape: 'Escape', heading: 'Heading', emphasis: 'Emphasis', link: 'Link',
 }
 
 export const themes: Theme[] = [
   {
     id: 'nuit',
-    name: 'Nuit',
+    name: 'Night',
     dark: true,
     ui: {
       bg: '#1b1d21', 'bg-2': '#212328', 'bg-3': '#2a2d33', 'bg-hover': '#30343b', 'bg-active': '#363b44',
@@ -41,7 +41,7 @@ export const themes: Theme[] = [
   },
   {
     id: 'jour',
-    name: 'Jour',
+    name: 'Day',
     dark: false,
     ui: {
       bg: '#fbfbfa', 'bg-2': '#f2f2f0', 'bg-3': '#e8e8e5', 'bg-hover': '#e2e2de', 'bg-active': '#d7dbe6',
@@ -58,7 +58,7 @@ export const themes: Theme[] = [
   },
   {
     id: 'solarized',
-    name: 'Solarized sombre',
+    name: 'Solarized dark',
     dark: true,
     ui: {
       bg: '#002b36', 'bg-2': '#073642', 'bg-3': '#0b3f4c', 'bg-hover': '#104755', 'bg-active': '#165263',
@@ -75,7 +75,7 @@ export const themes: Theme[] = [
   },
   {
     id: 'contraste',
-    name: 'Contraste élevé',
+    name: 'High contrast',
     dark: true,
     ui: {
       bg: '#000000', 'bg-2': '#0d0d0d', 'bg-3': '#1a1a1a', 'bg-hover': '#262626', 'bg-active': '#333333',

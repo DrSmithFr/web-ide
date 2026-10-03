@@ -56,11 +56,11 @@ func TestTicketLifecycle(t *testing.T) {
 	if err := m.Update(loc, id, Patch{TestSummary: ptr("tester l'export"), RemoveFiles: []string{"a.go"}}, ByModel); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.Move(loc, id, Review, ByModel, "prêt"); err != nil {
+	if err := m.Move(loc, id, Review, ByModel, "ready"); err != nil {
 		t.Fatal(err)
 	}
 	// A feedback becomes a goal and sends the ticket to Fix.
-	if err := m.AddNote(loc, id, "feedback", "le séparateur est faux", ByUser); err != nil {
+	if err := m.AddNote(loc, id, "feedback", "the separator is wrong", ByUser); err != nil {
 		t.Fatal(err)
 	}
 	tk, _ = m.Get(loc, id)
@@ -114,7 +114,7 @@ func TestLinksAndAttachments(t *testing.T) {
 	if err := m.LinkChat(loc, id, "c2", "bad", ""); err == nil {
 		t.Fatal("bad role accepted")
 	}
-	m.RenameChat(loc, "c1", "Renommée")
+	m.RenameChat(loc, "c1", "Renamed")
 	if err := m.LinkCommit(loc, id, "abc", "#1 fix"); err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestLinksAndAttachments(t *testing.T) {
 		t.Fatal(err)
 	}
 	tk, _ := m.Get(loc, id)
-	if len(tk.ChatList) != 1 || tk.ChatList[0].Role != "plan" || tk.ChatList[0].Title != "Renommée" || tk.Chats != 1 {
+	if len(tk.ChatList) != 1 || tk.ChatList[0].Role != "plan" || tk.ChatList[0].Title != "Renamed" || tk.Chats != 1 {
 		t.Fatalf("chats: %+v", tk.ChatList)
 	}
 	if len(tk.Commits) != 1 || len(tk.Attachments) != 1 {

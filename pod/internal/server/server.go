@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -22,6 +23,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/config"
 	"github.com/DrSmithFr/web-ide/pod/internal/db"
 	"github.com/DrSmithFr/web-ide/pod/internal/hfcache"
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
@@ -109,8 +111,8 @@ func loopback(r *http.Request) bool {
 }
 
 var pairPage = template.Must(template.New("pair").Parse(`<!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Web IDE · appairage</title>
+<html lang="{{.Lang}}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Web IDE · {{.T "pairing"}}</title>
 <style>
 :root{color-scheme:light dark;--bg:#f6f6f4;--fg:#1d1d1b;--muted:#6b6b66;--line:#d8d8d2;--accent:#2f6fde}
 @media (prefers-color-scheme:dark){:root{--bg:#18191b;--fg:#e6e6e3;--muted:#9a9a95;--line:#34363a;--accent:#6c9cff}}
@@ -122,17 +124,33 @@ button{padding:10px;border:0;border-radius:6px;background:var(--accent);color:#f
 .err{color:#d33}
 </style></head><body>
 <form method="post" action="/auth">
-<h1>Appairer ce navigateur</h1>
-<p>Collez le jeton affiché par le pod au démarrage (aussi dans <code>~/.web-ide/token</code>).</p>
-{{if .}}<p class="err">{{.}}</p>{{end}}
-<input name="token" autocomplete="off" autofocus placeholder="jeton">
+<h1>{{.T "Pair this browser"}}</h1>
+<p>{{.T "Paste the token printed by the pod when it starts (also in"}} <code>~/.web-ide/token</code>).</p>
+{{if .Error}}<p class="err">{{.T .Error}}</p>{{end}}
+<input name="token" autocomplete="off" autofocus placeholder="{{.T "token"}}">
 <input type="hidden" name="next" value="/">
-<button>Appairer</button>
+<button>{{.T "Pair"}}</button>
 </form></body></html>`))
+
+// pairView fills the pairing page in the language of the browser.
+type pairView struct {
+	Lang  string
+	Error string
+}
+
+func (v pairView) T(text string) string { return i18n.T(v.Lang, text) }
+
+func showPairing(w http.ResponseWriter, r *http.Request, errText string) {
+	lang := "en"
+	if strings.HasPrefix(strings.ToLower(r.Header.Get("Accept-Language")), "fr") {
+		lang = "fr"
+	}
+	_ = pairPage.Execute(w, pairView{Lang: lang, Error: errText})
+}
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !s.AllowRemote && !loopback(r) {
-		http.Error(w, "accès réservé à la machine locale", http.StatusForbidden)
+		http.Error(w, "access restricted to the local machine", http.StatusForbidden)
 		return
 	}
 	if tok := r.URL.Query().Get("token"); tok != "" {
@@ -148,7 +166,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/auth" && r.Method == http.MethodPost {
 		if subtle.ConstantTimeCompare([]byte(strings.TrimSpace(r.FormValue("token"))), []byte(s.Token)) != 1 {
 			w.WriteHeader(http.StatusUnauthorized)
-			_ = pairPage.Execute(w, "Jeton invalide.")
+			showPairing(w, r, "Invalid token.")
 			return
 		}
 		s.setCookie(w)
@@ -157,12 +175,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if !s.authorized(r) {
 		if r.URL.Path == "/ws" {
-			http.Error(w, "non appairé", http.StatusUnauthorized)
+			http.Error(w, "not paired", http.StatusUnauthorized)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusUnauthorized)
-		_ = pairPage.Execute(w, "")
+		showPairing(w, r, "")
 		return
 	}
 	if r.URL.Path == "/ws" {
@@ -194,7 +212,7 @@ func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request) {
 	// Routes of the single page app (/project/:id/...) all serve index.html.
 	data, err := fs.ReadFile(s.Static, "index.html")
 	if err != nil {
-		http.Error(w, "front non compilé : lancer `make build`", http.StatusInternalServerError)
+		http.Error(w, "front end not built: run `make build`", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -212,6 +230,14 @@ type Client struct {
 	ctx     context.Context
 	project string
 	cancels sync.Map
+	// lang is the language of the window (messages are translated for it).
+	lang atomic.Value
+}
+
+// language is the language of the window (English until it tells its own).
+func (c *Client) language() string {
+	l, _ := c.lang.Load().(string)
+	return l
 }
 
 type request struct {
@@ -313,7 +339,7 @@ func (c *Client) writeLoop(ctx context.Context) {
 func (c *Client) enqueue(v any) {
 	data, err := json.Marshal(v)
 	if err != nil {
-		log.Printf("encodage : %v", err)
+		log.Printf("encoding: %v", err)
 		return
 	}
 	select {
@@ -418,15 +444,15 @@ func (c *Client) dispatch(ctx context.Context, req request) {
 	var res any
 	var err error
 	if !ok {
-		err = errors.New("méthode inconnue : " + req.Method)
+		err = i18n.Errorf("unknown method: %s", req.Method)
 	} else {
 		rctx, cancel := context.WithCancel(ctx)
 		c.cancels.Store(req.ID, cancel)
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					log.Printf("panique dans %s : %v", req.Method, r)
-					err = errors.New("erreur interne du pod")
+					log.Printf("panic in %s: %v", req.Method, r)
+					err = i18n.New("internal error of the pod")
 				}
 			}()
 			res, err = h(rctx, c, req.Params)
@@ -440,25 +466,39 @@ func (c *Client) dispatch(ctx context.Context, req request) {
 	resp := response{ID: req.ID, Result: res}
 	if err != nil {
 		resp.Result = nil
-		resp.Error = toRPCError(err)
+		resp.Error = toRPCError(err, c.language())
 	} else if res == nil {
 		resp.Result = true
 	}
 	c.enqueue(resp)
 }
 
-func toRPCError(err error) *rpcError {
+// codeError gives an error a code the page can test (its message is still translated).
+type codeError struct {
+	code string
+	error
+}
+
+func (e *codeError) Unwrap() error { return e.error }
+
+func toRPCError(err error, lang string) *rpcError {
+	var ce *codeError
+	if errors.As(err, &ce) {
+		return &rpcError{Code: ce.code, Message: i18n.Translate(lang, ce.error)}
+	}
 	var ar *sshx.AuthRequired
 	var np *db.NeedPassword
 	switch {
 	case errors.As(err, &ar):
-		return &rpcError{Code: "auth_required", Message: ar.Prompt, Data: map[string]string{"kind": ar.Kind, "prompt": ar.Prompt}}
+		msg := i18n.Translate(lang, ar.Msg)
+		return &rpcError{Code: "auth_required", Message: msg, Data: map[string]string{"kind": ar.Kind, "prompt": msg}}
 	case errors.As(err, &np):
-		return &rpcError{Code: "db_password", Message: np.Prompt, Data: map[string]string{"kind": "dbpassword", "prompt": np.Prompt}}
+		msg := i18n.Translate(lang, np.Msg)
+		return &rpcError{Code: "db_password", Message: msg, Data: map[string]string{"kind": "dbpassword", "prompt": msg}}
 	case errors.Is(err, context.Canceled):
-		return &rpcError{Code: "canceled", Message: "annulé"}
+		return &rpcError{Code: "canceled", Message: i18n.T(lang, "canceled")}
 	}
-	return &rpcError{Code: "error", Message: err.Error()}
+	return &rpcError{Code: "error", Message: i18n.Translate(lang, err)}
 }
 
 // emitter returns the event function of a project runtime.

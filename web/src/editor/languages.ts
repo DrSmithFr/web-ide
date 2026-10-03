@@ -2,6 +2,7 @@
 import { createSignal } from 'solid-js'
 import { builtinGrammars } from './grammars'
 import { Grammar, type GrammarDef } from './tokenizer'
+import { t } from '../i18n'
 
 const [overrides, setOverridesSignal] = createSignal<Record<string, GrammarDef>>({})
 const [generation, setGeneration] = createSignal(0)
@@ -39,6 +40,8 @@ export function grammar(id: string): Grammar {
 }
 
 export function languageName(id: string) {
+  // Language names are proper nouns, except plain text.
+  if (id === 'plaintext') return t('Text')
   return grammarDefs().find((d) => d.id === id)?.name ?? id
 }
 

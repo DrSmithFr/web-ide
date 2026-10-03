@@ -18,11 +18,11 @@ run(
       else if (r.method() !== 'GET') uploads.push(`${r.method()} ${u}`)
     })
     await openProject(page)
-    await page.click('.rail-right .rail-btn[title="Assistant IA"]')
+    await page.click('.rail-right .rail-btn[title="AI assistant"]')
     await page.waitForSelector('.ai-panel')
 
     // Settings: smallest model, English.
-    await page.click('.ai-panel button[title^="Réglages"]')
+    await page.click('.ai-panel button[title^="Settings"]')
     await page.click('.ai-tab:has-text("Transcription")')
     await page.waitForSelector('[data-testid=speech-settings]')
     await page.selectOption('[data-testid=speech-settings] select[name=whisperModel]', 'tiny')
@@ -32,7 +32,7 @@ run(
     // Dictation with the fake microphone.
     await page.click('.ai-mic')
     await page.waitForSelector('[data-testid=ai-speech].rec')
-    assert(true, 'enregistrement en cours affiché')
+    assert(true, 'recording shown')
     await page.waitForTimeout(11500)
     await page.click('.ai-mic')
     await page.waitForSelector('[data-testid=ai-speech]:not(.rec)', { timeout: 5000 }).catch(() => {})
@@ -41,25 +41,25 @@ run(
       .waitForFunction(() => /ask not what.*can do for your country/i.test(document.querySelector('.ai-composer textarea').value), null, { timeout: 180000, polling: 500 })
       .then(() => true, () => false)
     const text = await page.inputValue('.ai-composer textarea')
-    assert(ok, 'dictée transcrite dans la zone de message : ' + text)
+    assert(ok, 'dictation transcribed into the message box: ' + text)
     await page.waitForSelector('[data-testid=ai-speech]', { state: 'detached', timeout: 5000 }).catch(() => {})
-    assert(!(await page.isVisible('[data-testid=ai-speech]')), 'indicateur retiré après la transcription')
+    assert(!(await page.isVisible('[data-testid=ai-speech]')), 'indicator removed after the transcription')
 
     // Audio file joined: transcribed in the page (the model is already loaded).
     await page.fill('.ai-composer textarea', '')
     await page.setInputFiles('.ai-composer input[type=file]', wav)
-    await page.waitForSelector('.ai-composer .ai-att[title*="transcrit localement"]', { timeout: 60000 })
-    assert(true, 'fichier audio joint transcrit localement')
+    await page.waitForSelector('.ai-composer .ai-att[title*="transcribed locally"]', { timeout: 60000 })
+    assert(true, 'attached audio file transcribed locally')
 
     // The model is in the pod cache, listed in the settings.
-    await page.click('.ai-panel button[title^="Réglages"]')
+    await page.click('.ai-panel button[title^="Settings"]')
     await page.click('.ai-tab:has-text("Transcription")')
     await page.waitForSelector('[data-testid=speech-settings] .ai-server-row:has-text("onnx-community/whisper-tiny")', { timeout: 5000 }).catch(() => {})
-    assert(await page.isVisible('[data-testid=speech-settings] .ai-server-row:has-text("onnx-community/whisper-tiny")'), 'modèle listé dans le cache du pod')
+    assert(await page.isVisible('[data-testid=speech-settings] .ai-server-row:has-text("onnx-community/whisper-tiny")'), 'model listed in the cache of the pod')
     await page.screenshot({ path: OUT + '/speech-settings.png' })
 
-    assert(outside.length === 0, 'aucune requête hors du pod : ' + JSON.stringify(outside.slice(0, 5)))
-    assert(uploads.length === 0, 'aucun envoi HTTP (le son reste dans la page) : ' + JSON.stringify(uploads.slice(0, 5)))
+    assert(outside.length === 0, 'no request outside the pod: ' + JSON.stringify(outside.slice(0, 5)))
+    assert(uploads.length === 0, 'no HTTP upload (the sound stays in the page): ' + JSON.stringify(uploads.slice(0, 5)))
   },
   { args, permissions: ['microphone'] },
 )

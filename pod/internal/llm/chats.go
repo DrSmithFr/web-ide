@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	_ "modernc.org/sqlite"
+
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
 
 // Conversations are kept in a SQLite base: <project>/.ide/chats.db for a local project
@@ -56,7 +58,7 @@ CREATE INDEX IF NOT EXISTS chats_updated ON chats(updated DESC);
 
 func (m *Manager) chatDB(loc ChatLocation) (*sql.DB, error) {
 	if !idPattern.MatchString(loc.Project) {
-		return nil, errors.New("projet invalide")
+		return nil, i18n.New("invalid project")
 	}
 	path := m.st.Path("chats", loc.Project+".db")
 	if loc.IdeDir != "" {
@@ -160,7 +162,7 @@ func (m *Manager) GetChat(loc ChatLocation, id string) (json.RawMessage, error) 
 	var created, updated int64
 	err = db.QueryRow(`SELECT title, created, updated, server, model, extra FROM chats WHERE id = ?`, id).Scan(&title, &created, &updated, &server, &model, &extra)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, errors.New("conversation introuvable")
+		return nil, i18n.New("conversation not found")
 	}
 	if err != nil {
 		return nil, err
@@ -211,7 +213,7 @@ func saveChat(db *sql.DB, data json.RawMessage) error {
 		return err
 	}
 	if !idPattern.MatchString(c.ID) {
-		return errors.New("identifiant de conversation invalide")
+		return i18n.New("invalid conversation id")
 	}
 	for _, k := range []string{"id", "title", "created", "updated", "server", "model", "messages"} {
 		delete(fields, k)

@@ -19,6 +19,6 @@ Go is not always in `PATH`: the Makefile falls back to `~/sdk/go/bin/go`.
 ## Conventions
 
 - Code, comments, docs and commit messages in English.
-- Every text shown to the user goes through `t()` (`web/src/i18n`): the English text is the key, `fr.ts` holds the French translation. Messages sent by the pod use `i18n.Errorf` / `i18n.T` (`pod/internal/i18n`) and its French catalog.
+- Every text shown to the user goes through `t()` (`web/src/i18n`): the English text is the key, `fr.json` holds the French translation. Messages sent by the pod use `i18n.Errorf` / `i18n.T` (`pod/internal/i18n`) and its French catalog.
 - One tested commit per feature: `make test` and the e2e suites touching the change must pass; add e2e assertions for visible features.
 - Match the surrounding code: comment density, naming, small focused files.

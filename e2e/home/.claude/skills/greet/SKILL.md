@@ -1,6 +1,6 @@
 ---
 name: greet
-description: Saluer quelqu’un selon les règles de la maison
+description: Greet someone the way of the house
 ---
-# Saluer
-Toujours dire « Bien le bonjour ».
+# Greet
+Always say “Good day to you”.

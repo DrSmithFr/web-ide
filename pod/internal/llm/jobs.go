@@ -2,9 +2,10 @@ package llm
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
+
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
 
 // A job is a completion that runs in the pod independently of the page that asked for it:
@@ -77,13 +78,13 @@ func (j *job) subscribe(f func(Delta)) (Snapshot, func()) {
 // StartChat starts a completion as a job identified by stream (chosen by the page).
 func (m *Manager) StartChat(stream string, req ChatRequest) error {
 	if stream == "" {
-		return errors.New("identifiant de flux manquant")
+		return i18n.New("stream id is missing")
 	}
 	m.mu.Lock()
 	m.gcJobs()
 	if _, ok := m.jobs[stream]; ok {
 		m.mu.Unlock()
-		return errors.New("flux déjà utilisé")
+		return i18n.New("stream already in use")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	j := &job{cancel: cancel, started: time.Now(), subs: map[int]func(Delta){}, done: make(chan struct{})}
@@ -107,7 +108,7 @@ func (m *Manager) WaitChat(ctx context.Context, stream string, onSnapshot func(S
 	j := m.jobs[stream]
 	m.mu.Unlock()
 	if j == nil {
-		return nil, errors.New("génération introuvable (le pod a peut-être redémarré)")
+		return nil, i18n.New("completion not found (the pod may have restarted)")
 	}
 	snap, unsubscribe := j.subscribe(onDelta)
 	defer unsubscribe()

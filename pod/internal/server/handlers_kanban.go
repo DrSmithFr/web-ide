@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"path/filepath"
 
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 )
@@ -16,13 +16,13 @@ import (
 func (s *Server) kanbanProject(id string) (*projects.Project, error) {
 	p, ok := s.Projects.Get(id)
 	if !ok {
-		return nil, errors.New("aucun projet ouvert sur cette connexion")
+		return nil, i18n.New("no project open on this connection")
 	}
 	if p.Parent != "" {
 		if parent, ok := s.Projects.Get(p.Parent); ok {
 			return parent, nil
 		}
-		return nil, errors.New("projet parent introuvable")
+		return nil, i18n.New("parent project not found")
 	}
 	return p, nil
 }

@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net"
 	"path"
 	"strconv"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/DrSmithFr/web-ide/pod/internal/execx"
 	"github.com/DrSmithFr/web-ide/pod/internal/fsx"
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
 	"github.com/DrSmithFr/web-ide/pod/internal/store"
 )
@@ -57,9 +57,9 @@ type Secret struct {
 func (s Secret) empty() bool { return s == Secret{} }
 
 // NeedPassword asks the page for the database password.
-type NeedPassword struct{ Prompt string }
+type NeedPassword struct{ Msg error }
 
-func (e *NeedPassword) Error() string { return e.Prompt }
+func (e *NeedPassword) Error() string { return e.Msg.Error() }
 
 type Status struct {
 	State string `json:"state"` // untested | connected | error | closed
@@ -187,15 +187,15 @@ func validate(c *ConnConfig) error {
 	switch c.Kind {
 	case "sqlite":
 		if c.Path == "" {
-			return errors.New("chemin du fichier SQLite manquant")
+			return i18n.New("path of the SQLite file is missing")
 		}
 		c.SSH = nil
 	case "postgres", "redis":
 		if c.Host == "" {
-			return errors.New("hôte manquant")
+			return i18n.New("host is missing")
 		}
 	default:
-		return errors.New("type de connexion inconnu")
+		return i18n.New("unknown connection type")
 	}
 	if c.Name == "" {
 		c.Name = c.Host
@@ -317,19 +317,20 @@ func (m *Manager) open(ctx context.Context, c ConnConfig, s Secret) (Driver, err
 		drv, err = openRedis(ctx, c, s.Password, dial)
 	}
 	if err != nil && authFailure(err) {
-		prompt := "Mot de passe de " + c.Name
+		prompt := i18n.Errorf("Password of %s", c.Name)
 		if s.Password != "" {
-			prompt = "Mot de passe refusé pour " + c.Name
+			prompt = i18n.Errorf("Password refused for %s", c.Name)
 		}
-		return nil, &NeedPassword{Prompt: prompt}
+		return nil, &NeedPassword{Msg: prompt}
 	}
 	return drv, err
 }
 
-// Test opens then closes a connection described by the form, without saving it.
-func (m *Manager) Test(ctx context.Context, c ConnConfig, s Secret) (string, error) {
+// Test opens then closes a connection described by the form, without saving it, and
+// tells how long it took (ms).
+func (m *Manager) Test(ctx context.Context, c ConnConfig, s Secret) (int64, error) {
 	if err := validate(&c); err != nil {
-		return "", err
+		return 0, err
 	}
 	m.mu.Lock()
 	if s.empty() && c.ID != "" {
@@ -341,10 +342,10 @@ func (m *Manager) Test(ctx context.Context, c ConnConfig, s Secret) (string, err
 	start := time.Now()
 	drv, err := m.open(ctx, c, s)
 	if err != nil {
-		return "", err
+		return 0, err
 	}
 	drv.Close()
-	return fmt.Sprintf("Connexion réussie (%d ms)", time.Since(start).Milliseconds()), nil
+	return time.Since(start).Milliseconds(), nil
 }
 
 // Connect opens a saved connection. A secret given here is remembered for the session
@@ -354,7 +355,7 @@ func (m *Manager) Connect(ctx context.Context, id string, s Secret) error {
 	c, ok := m.find(id)
 	if !ok {
 		m.mu.Unlock()
-		return errors.New("connexion introuvable")
+		return i18n.New("connection not found")
 	}
 	if _, ok := m.live[id]; ok {
 		m.mu.Unlock()
@@ -404,7 +405,7 @@ func (m *Manager) openDriver(ctx context.Context, id string) (Driver, error) {
 		return drv, nil
 	}
 	if closed {
-		return nil, errors.New("connexion fermée : la rouvrir depuis le Database explorer")
+		return nil, i18n.New("connection closed: open it again from the Database explorer")
 	}
 	return m.reconnect(ctx, id)
 }
@@ -549,7 +550,7 @@ func (m *Manager) console(id string) (*console, error) {
 	defer m.mu.Unlock()
 	c, ok := m.consoles[id]
 	if !ok {
-		return nil, errors.New("console SQL inconnue")
+		return nil, i18n.New("unknown SQL console")
 	}
 	return c, nil
 }
@@ -562,7 +563,7 @@ func (m *Manager) session(ctx context.Context, c *console) (Session, error) {
 	drv, ok := m.live[c.connID]
 	m.mu.Unlock()
 	if !ok {
-		return nil, errors.New("connexion fermée : la rouvrir depuis le Database explorer")
+		return nil, i18n.New("connection closed: open it again from the Database explorer")
 	}
 	s, err := drv.Session(ctx, c.db)
 	if err != nil {
@@ -643,7 +644,7 @@ func (m *Manager) Exec(ctx context.Context, id, query string) (*Result, ConsoleS
 	e := HistoryEntry{TS: start, Query: strings.TrimSpace(query), DurationMs: ms(start)}
 	if err != nil {
 		if errors.Is(ctx.Err(), context.Canceled) {
-			err = errors.New("instruction annulée")
+			err = i18n.New("statement canceled")
 		}
 		e.Error = err.Error()
 	} else {
@@ -659,7 +660,7 @@ func (m *Manager) Cancel(id string) error {
 	defer m.mu.Unlock()
 	c, ok := m.consoles[id]
 	if !ok {
-		return errors.New("console SQL inconnue")
+		return i18n.New("unknown SQL console")
 	}
 	if c.cancel != nil {
 		c.cancel()
@@ -702,7 +703,7 @@ func (m *Manager) EndTx(ctx context.Context, id string, commit bool) (ConsoleSta
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.sess == nil || !c.sess.InTx() {
-		return c.state(true), errors.New("aucune transaction ouverte")
+		return c.state(true), i18n.New("no open transaction")
 	}
 	if commit {
 		err = c.sess.Commit(ctx)

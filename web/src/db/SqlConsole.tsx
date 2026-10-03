@@ -12,6 +12,7 @@ import { Icon } from '../ui/icons'
 import { ResultGrid } from './ResultGrid'
 import { activeStatement, connById, connect, splitStatements, withAuth, type ConsoleState, type Result } from './api'
 import { setCursorInfo } from '../ui/status'
+import { fmtDate, t, tn } from '../i18n'
 
 interface HistoryEntry {
   ts: string
@@ -107,7 +108,7 @@ export function SqlConsole(props: { tab: TabState; paneId: string }) {
     if (list.length === 1) return run(doc.text.slice(list[0][0], list[0][1]))
     const c = v.coordsAt(caret)
     const chosen = await pick({
-      placeholder: 'Requête à exécuter',
+      placeholder: t('Statement to run'),
       noFilter: false,
       initial: i,
       anchor: { left: c.left, top: c.bottom + 4 },
@@ -164,15 +165,15 @@ export function SqlConsole(props: { tab: TabState; paneId: string }) {
   return (
     <div class="sql-console">
       <div class="toolbar">
-        <button class="btn small primary" disabled={running()} onClick={runActive} title={`Exécuter la requête active (${shortcutOf('sql.execute')})`}>
-          <Icon name="play" size={12} /> Exécuter
+        <button class="btn small primary" disabled={running()} onClick={runActive} title={`${t('Run the active statement')} (${shortcutOf('sql.execute')})`}>
+          <Icon name="play" size={12} /> {t('Run')}
         </button>
-        <button class="btn small" onClick={showHistory} title="Historique des commandes">
-          <Icon name="history" size={13} /> Historique
+        <button class="btn small" onClick={showHistory} title={t('Command history')}>
+          <Icon name="history" size={13} /> {t('History')}
         </button>
         <Show when={lang === 'sql'}>
           <span class="sep" />
-          <label class="check" title="Transaction automatique">
+          <label class="check" title={t('Automatic transaction')}>
             <input type="checkbox" checked={auto()} onChange={(e) => call('db.autocommit', { on: e.currentTarget.checked })} /> Auto-commit
           </label>
           <button class="btn small" disabled={auto() || !inTx()} onClick={() => call('db.commit')}>
@@ -182,16 +183,16 @@ export function SqlConsole(props: { tab: TabState; paneId: string }) {
             <Icon name="undo" size={13} /> Rollback
           </button>
         </Show>
-        <button class="btn small" disabled={!running()} onClick={() => request('db.cancel', { id: tab.id }).catch(errorToast)} title="Annuler l'instruction en cours">
-          <Icon name="stop" size={12} /> Annuler
+        <button class="btn small" disabled={!running()} onClick={() => request('db.cancel', { id: tab.id }).catch(errorToast)} title={t('Cancel the running statement')}>
+          <Icon name="stop" size={12} /> {t('Cancel')}
         </button>
         <span class="grow" />
         <Show when={inTx()}>
-          <span class="badge warn">transaction ouverte</span>
+          <span class="badge warn">{t('open transaction')}</span>
         </Show>
         <span class="conn-label" title={conn()?.status.error}>
           <span class={`dot dot-${connected() ? 'connected' : conn()?.status.state === 'error' ? 'error' : 'disconnected'}`} />
-          {conn()?.name ?? 'connexion supprimée'}
+          {conn()?.name ?? t('connection deleted')}
           {tab.db ? ` · ${tab.db}` : ''}
           <Show when={!connected()}>
             <button class="link" onClick={() => connect(tab.connId!).catch(errorToast)}>
@@ -204,11 +205,11 @@ export function SqlConsole(props: { tab: TabState; paneId: string }) {
         <div class="editor-host sql-editor" ref={host} />
         <div class="sql-result">
           <Show when={running()}>
-            <div class="muted pad">Exécution…</div>
+            <div class="muted pad">{t('Running…')}</div>
           </Show>
           <Show when={!running() && error()}>
             <div class="sql-error">
-              <strong>Erreur</strong>
+              <strong>{t('Error')}</strong>
               <pre>{error()}</pre>
             </div>
           </Show>
@@ -218,7 +219,7 @@ export function SqlConsole(props: { tab: TabState; paneId: string }) {
                 <div class="result-meta">
                   <span>{r().command}</span>
                   <span>
-                    {r().columns?.length ? `${r().rows?.length ?? 0} ligne(s)${r().truncated ? ' (tronqué à 1000)' : ''}` : `${r().affected} ligne(s) affectée(s)`}
+                    {r().columns?.length ? `${tn(r().rows?.length ?? 0, '{n} row', '{n} rows')}${r().truncated ? ` (${t('truncated at 1000')})` : ''}` : tn(r().affected ?? 0, '{n} row affected', '{n} rows affected')}
                   </span>
                   <span>{r().durationMs.toFixed(1)} ms</span>
                   <span class="muted mono ellipsis" title={lastQuery()}>
@@ -233,7 +234,7 @@ export function SqlConsole(props: { tab: TabState; paneId: string }) {
           </Show>
           <Show when={!running() && !error() && !result()}>
             <div class="muted pad small">
-              {shortcutOf('sql.execute')} exécute la requête sous le curseur. {lang === 'redis' ? 'Une commande par ligne (GET, HGETALL, SCAN…).' : 'Séparer les requêtes par « ; ».'}
+              {t('{shortcut} runs the statement under the caret.', { shortcut: shortcutOf('sql.execute') })} {lang === 'redis' ? t('One command per line (GET, HGETALL, SCAN…).') : t('Separate the statements with “;”.')}
             </div>
           </Show>
         </div>
@@ -271,15 +272,15 @@ function HistoryModal(props: { entries: HistoryEntry[]; onClose: () => void; onI
     e.preventDefault()
   }
   return (
-    <Modal title="Historique des commandes" onClose={props.onClose} class="modal-wide">
+    <Modal title={t('Command history')} onClose={props.onClose} class="modal-wide">
       <div class="history" tabIndex={0} onKeyDown={key} ref={(el) => queueMicrotask(() => el.focus())}>
         <div class="history-list">
-          <For each={props.entries} fallback={<div class="muted pad">Aucune commande exécutée sur cette connexion.</div>}>
+          <For each={props.entries} fallback={<div class="muted pad">{t('No command run on this connection.')}</div>}>
             {(e, i) => (
               <div class="history-item" classList={{ selected: i() === index(), failed: !!e.error }} onClick={() => setIndex(i())} onDblClick={() => props.onInsert(e.query)}>
                 <span class="mono ellipsis">{e.query.split('\n')[0]}</span>
                 <span class="muted small">
-                  {new Date(e.ts).toLocaleString()} · {e.durationMs.toFixed(0)} ms{e.error ? ' · erreur' : ''}
+                  {fmtDate(e.ts)} · {e.durationMs.toFixed(0)} ms{e.error ? ` · ${t('error')}` : ''}
                 </span>
               </div>
             )}
@@ -292,17 +293,17 @@ function HistoryModal(props: { entries: HistoryEntry[]; onClose: () => void; onI
               <p class="danger small">{cur()!.error}</p>
             </Show>
             <p class="muted small">
-              {new Date(cur()!.ts).toLocaleString()} · {cur()!.durationMs.toFixed(1)} ms · {cur()!.rows} ligne(s)
+              {fmtDate(cur()!.ts)} · {cur()!.durationMs.toFixed(1)} ms · {tn(cur()!.rows ?? 0, '{n} row', '{n} rows')}
             </p>
             <div class="form-actions">
-              <button class="btn" onClick={() => navigator.clipboard.writeText(cur()!.query).then(() => toast('Copié', 'ok'))}>
-                Copier
+              <button class="btn" onClick={() => navigator.clipboard.writeText(cur()!.query).then(() => toast(t('Copied'), 'ok'))}>
+                {t('Copy')}
               </button>
               <button class="btn" onClick={() => props.onInsert(cur()!.query)}>
-                Insérer dans la console
+                {t('Insert in the console')}
               </button>
               <button class="btn primary" onClick={() => props.onRun(cur()!.query)}>
-                Exécuter
+                {t('Run')}
               </button>
             </div>
           </Show>

@@ -18,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
 
 // Prefix of the URLs handled: /models/hf/<org>/<name>/resolve/<rev>/<file path>.
@@ -42,11 +44,11 @@ func New(dir string) *Cache {
 func parse(p string) (repo, rev, file string, err error) {
 	parts := strings.Split(strings.TrimPrefix(p, Prefix), "/")
 	if len(parts) < 5 || parts[2] != "resolve" {
-		return "", "", "", errors.New("chemin de modèle invalide")
+		return "", "", "", i18n.New("invalid model path")
 	}
 	for _, s := range parts {
 		if s != "resolve" && !segment.MatchString(s) {
-			return "", "", "", errors.New("chemin de modèle invalide")
+			return "", "", "", i18n.New("invalid model path")
 		}
 	}
 	return parts[0] + "/" + parts[1], parts[3], strings.Join(parts[4:], "/"), nil
@@ -65,7 +67,7 @@ func (c *Cache) lock(key string) *sync.Mutex {
 
 func (c *Cache) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		http.Error(w, "méthode non permise", http.StatusMethodNotAllowed)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	repo, rev, file, err := parse(r.URL.Path)
@@ -82,7 +84,7 @@ func (c *Cache) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err := c.download(r.Context(), repo, rev, file, local, w); err != nil {
 			var nf notFound
 			if errors.As(err, &nf) {
-				http.Error(w, "fichier absent du modèle", http.StatusNotFound)
+				http.Error(w, "file missing from the model", http.StatusNotFound)
 			} else if !errors.Is(err, errStreamed) {
 				http.Error(w, err.Error(), http.StatusBadGateway)
 			}
@@ -98,7 +100,7 @@ type notFound struct{}
 func (notFound) Error() string { return "absent" }
 
 // errStreamed: the download failed after the answer had started (nothing more to send).
-var errStreamed = errors.New("transfert interrompu")
+var errStreamed = i18n.New("transfer interrupted")
 
 // download fetches the file and streams it to the page while writing the cache.
 func (c *Cache) download(ctx context.Context, repo, rev, file, local string, w http.ResponseWriter) error {
@@ -108,7 +110,7 @@ func (c *Cache) download(ctx context.Context, repo, rev, file, local string, w h
 	}
 	resp, err := c.Client.Do(req)
 	if err != nil {
-		return fmt.Errorf("téléchargement de %s impossible : %v", file, err)
+		return i18n.Errorf("cannot download %s: %v", file, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusUnauthorized {
@@ -116,7 +118,7 @@ func (c *Cache) download(ctx context.Context, repo, rev, file, local string, w h
 		return notFound{}
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("téléchargement de %s : HTTP %d", file, resp.StatusCode)
+		return i18n.Errorf("download of %s: HTTP %d", file, resp.StatusCode)
 	}
 	if err := os.MkdirAll(filepath.Dir(local), 0o700); err != nil {
 		return err
@@ -198,7 +200,7 @@ func (c *Cache) List() ([]Entry, error) {
 func (c *Cache) Delete(repo string) error {
 	parts := strings.Split(repo, "/")
 	if len(parts) != 2 || !segment.MatchString(parts[0]) || !segment.MatchString(parts[1]) {
-		return errors.New("modèle invalide")
+		return i18n.New("invalid model")
 	}
 	if err := os.RemoveAll(filepath.Join(c.Dir, parts[0], parts[1])); err != nil {
 		return err

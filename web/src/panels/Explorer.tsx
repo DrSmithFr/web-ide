@@ -8,6 +8,7 @@ import { errorToast, toast } from '../ui/toast'
 import { Icon } from '../ui/icons'
 import { newConsole } from '../console/consoles'
 import { dirChanged, fileState } from '../state/git'
+import { t } from '../i18n'
 
 interface Entry {
   name: string
@@ -61,7 +62,7 @@ export function revealInExplorer(path: string) {
 }
 
 async function createIn(dir: string, isDir: boolean) {
-  const name = await prompt({ title: isDir ? 'Nouveau dossier' : 'Nouveau fichier', label: `Dans ${relPath(dir) || '/'}`, placeholder: isDir ? 'nom' : 'nom.ext (ou sous/dossier/nom.ext)' })
+  const name = await prompt({ title: isDir ? t('New folder') : t('New file'), label: t('In {dir}', { dir: relPath(dir) || '/' }), placeholder: isDir ? t('name') : t('name.ext (or sub/folder/name.ext)') })
   if (!name) return
   const path = dir + '/' + name.replace(/^\/+/, '')
   try {
@@ -75,7 +76,7 @@ async function createIn(dir: string, isDir: boolean) {
 }
 
 async function rename(e: Entry) {
-  const name = await prompt({ title: 'Renommer', value: e.name })
+  const name = await prompt({ title: t('Rename'), value: e.name })
   if (!name || name === e.name) return
   const dir = e.path.slice(0, e.path.lastIndexOf('/'))
   try {
@@ -87,7 +88,7 @@ async function rename(e: Entry) {
 }
 
 async function remove(e: Entry) {
-  if (!confirm(`Supprimer ${e.dir ? 'le dossier' : 'le fichier'} « ${relPath(e.path)} »${e.dir ? ' et tout son contenu' : ''} ?`)) return
+  if (!confirm(e.dir ? t('Delete the folder “{path}” and all its content?', { path: relPath(e.path) }) : t('Delete the file “{path}”?', { path: relPath(e.path) }))) return
   try {
     await request('fs.delete', { path: e.path })
     load(e.path.slice(0, e.path.lastIndexOf('/')))
@@ -99,16 +100,16 @@ async function remove(e: Entry) {
 function menuFor(ev: MouseEvent, e: Entry) {
   const dir = e.dir ? e.path : e.path.slice(0, e.path.lastIndexOf('/'))
   contextMenu(ev, [
-    { label: 'Nouveau fichier…', action: () => createIn(dir, false) },
-    { label: 'Nouveau dossier…', action: () => createIn(dir, true) },
+    { label: t('New file…'), action: () => createIn(dir, false) },
+    { label: t('New folder…'), action: () => createIn(dir, true) },
     { separator: true, label: '' },
-    { label: 'Renommer…', action: () => rename(e), disabled: e.path === root() },
-    { label: 'Supprimer', action: () => remove(e), danger: true, disabled: e.path === root() },
+    { label: t('Rename…'), action: () => rename(e), disabled: e.path === root() },
+    { label: t('Delete'), action: () => remove(e), danger: true, disabled: e.path === root() },
     { separator: true, label: '' },
-    { label: 'Copier le chemin', action: () => navigator.clipboard.writeText(e.path) },
-    { label: 'Copier le chemin relatif', action: () => navigator.clipboard.writeText(relPath(e.path)) },
-    { label: 'Ouvrir un terminal ici', action: () => newConsole({ cwd: dir }) },
-    { label: 'Rafraîchir', action: () => load(dir) },
+    { label: t('Copy the path'), action: () => navigator.clipboard.writeText(e.path) },
+    { label: t('Copy the relative path'), action: () => navigator.clipboard.writeText(relPath(e.path)) },
+    { label: t('Open a terminal here'), action: () => newConsole({ cwd: dir }) },
+    { label: t('Refresh'), action: () => load(dir) },
   ])
 }
 
@@ -165,7 +166,7 @@ function Row(props: { entry: Entry; depth: number }) {
         <Icon name={e.dir ? 'folder' : 'file'} size={14} />
         <span class={`tree-name git-${(e.dir ? (dirChanged(e.path) ? 'modified' : null) : fileState(e.path)) ?? 'clean'}`}>{e.name}</span>
         <Show when={e.link}>
-          <span class="tree-link" title="Lien symbolique">↪</span>
+          <span class="tree-link" title={t('Symbolic link')}>↪</span>
         </Show>
       </div>
       <Show when={e.dir && open()}>
@@ -190,23 +191,23 @@ export function Explorer() {
   return (
     <div class="panel explorer" classList={{ 'hide-dotfiles': !showHidden() }}>
       <div class="panel-head">
-        <span class="panel-title">Explorateur</span>
+        <span class="panel-title">{t('Explorer')}</span>
         <span class="grow" />
-        <button class="icon-btn" title="Nouveau fichier" onClick={() => createIn(root(), false)}>
+        <button class="icon-btn" title={t('New file')} onClick={() => createIn(root(), false)}>
           <Icon name="plus" />
         </button>
-        <button class="icon-btn" title="Localiser le fichier actif" onClick={() => activeTab()?.path && revealInExplorer(activeTab()!.path!)}>
+        <button class="icon-btn" title={t('Locate the active file')} onClick={() => activeTab()?.path && revealInExplorer(activeTab()!.path!)}>
           <Icon name="locate" />
         </button>
-        <button class="icon-btn" title={showHidden() ? 'Masquer les fichiers cachés' : 'Afficher les fichiers cachés'} onClick={() => setShowHidden(!showHidden())}>
+        <button class="icon-btn" title={showHidden() ? t('Hide the hidden files') : t('Show the hidden files')} onClick={() => setShowHidden(!showHidden())}>
           <span class="dotfiles-toggle">.*</span>
         </button>
         <button
           class="icon-btn"
-          title="Tout rafraîchir"
+          title={t('Refresh all')}
           onClick={() => {
             for (const k of Object.keys(children)) if (children[k]) load(k)
-            toast('Explorateur rafraîchi', 'info')
+            toast(t('Explorer refreshed'), 'info')
           }}
         >
           <Icon name="refresh" />

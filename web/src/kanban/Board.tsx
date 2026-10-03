@@ -8,6 +8,7 @@ import {
   board, createTicket, ensureBoard, setMeta, newTicketOpen, openTicket, priorityLabels, setNewTicketOpen, statusLabels, typeLabels,
   type Priority, type Status, type Summary, type TicketType,
 } from './state'
+import { t } from '../i18n'
 import './kanban.css'
 
 const active: Status[] = ['new', 'ready', 'in_progress', 'review', 'fix']
@@ -21,28 +22,28 @@ export function Board() {
   const filtered = createMemo(() => {
     const q = query().trim().toLowerCase()
     return board.tickets.filter(
-      (t) => (!type() || t.type === type()) && (!q || t.title.toLowerCase().includes(q) || `#${t.id}` === q || String(t.id) === q),
+      (tk) => (!type() || tk.type === type()) && (!q || tk.title.toLowerCase().includes(q) || `#${tk.id}` === q || String(tk.id) === q),
     )
   })
-  const column = (s: Status) => filtered().filter((t) => t.status === s)
-  const closed = () => filtered().filter((t) => t.status === 'done' || t.status === 'abandoned').sort((a, b) => (b.closed ?? 0) - (a.closed ?? 0))
+  const column = (s: Status) => filtered().filter((tk) => tk.status === s)
+  const closed = () => filtered().filter((tk) => tk.status === 'done' || tk.status === 'abandoned').sort((a, b) => (b.closed ?? 0) - (a.closed ?? 0))
   return (
     <div class="kb-board" data-testid="kanban-board">
       <div class="kb-toolbar">
         <button class="btn primary small" onClick={() => setNewTicketOpen(true)} data-testid="kanban-new">
-          <Icon name="plus" size={13} /> Nouveau ticket
+          <Icon name="plus" size={13} /> {t('New ticket')}
         </button>
-        <input class="input small kb-search" placeholder="Filtrer (titre ou #n°)" value={query()} onInput={(e) => setQuery(e.currentTarget.value)} />
+        <input class="input small kb-search" placeholder={t('Filter (title or #number)')} value={query()} onInput={(e) => setQuery(e.currentTarget.value)} />
         <select class="small" value={type()} onChange={(e) => setType(e.currentTarget.value as any)}>
-          <option value="">Tous les types</option>
+          <option value="">{t('All types')}</option>
           <For each={Object.entries(typeLabels)}>{([v, l]) => <option value={v}>{l}</option>}</For>
         </select>
         <span class="grow" />
         <button class="btn small" onClick={() => setSettingsOpen(true)} data-testid="kanban-settings">
-          <Icon name="gear" size={13} /> Réglages
+          <Icon name="gear" size={13} /> {t('Settings')}
         </button>
         <button class="btn small" classList={{ on: showClosed() }} onClick={() => setShowClosed(!showClosed())}>
-          Terminés et abandonnés ({board.tickets.filter((t) => t.status === 'done' || t.status === 'abandoned').length})
+          {t('Done and abandoned ({n})', { n: board.tickets.filter((tk) => tk.status === 'done' || tk.status === 'abandoned').length })}
         </button>
       </div>
       <Show when={board.error}>
@@ -62,7 +63,7 @@ export function Board() {
               </header>
               <div class="kb-col-body">
                 <For each={column(s)} fallback={<p class="kb-empty">—</p>}>
-                  {(t) => <Card t={t} />}
+                  {(tk) => <Card tk={tk} />}
                 </For>
               </div>
             </section>
@@ -72,12 +73,12 @@ export function Board() {
           <section class="kb-col st-done" data-status="closed">
             <header class="kb-col-head">
               <span class="kb-dot st-done" />
-              Terminés · abandonnés
+              {t('Done · abandoned')}
               <span class="kb-count">{closed().length}</span>
             </header>
             <div class="kb-col-body">
               <For each={closed()} fallback={<p class="kb-empty">—</p>}>
-                {(t) => <Card t={t} />}
+                {(tk) => <Card tk={tk} />}
               </For>
             </div>
           </section>
@@ -87,34 +88,34 @@ export function Board() {
   )
 }
 
-export function Card(props: { t: Summary; compact?: boolean }) {
-  const t = () => props.t
+export function Card(props: { tk: Summary; compact?: boolean }) {
+  const tk = () => props.tk
   return (
-    <button class="kb-card" classList={{ compact: props.compact }} onClick={() => openTicket(t().id)} data-testid={`ticket-card-${t().id}`}>
+    <button class="kb-card" classList={{ compact: props.compact }} onClick={() => openTicket(tk().id)} data-testid={`ticket-card-${tk().id}`}>
       <div class="kb-card-top">
-        <span class={`kb-prio p-${t().priority}`} title={`Priorité ${priorityLabels[t().priority]}`} />
-        <span class="kb-num">#{t().id}</span>
-        <span class={`kb-type t-${t().type}`}>{typeLabels[t().type]}</span>
+        <span class={`kb-prio p-${tk().priority}`} title={t('Priority: {priority}', { priority: priorityLabels[tk().priority] })} />
+        <span class="kb-num">#{tk().id}</span>
+        <span class={`kb-type tk-${tk().type}`}>{typeLabels[tk().type]}</span>
         <Show when={props.compact}>
-          <span class={`kb-status st-${t().status}`}>{statusLabels[t().status]}</span>
+          <span class={`kb-status st-${tk().status}`}>{statusLabels[tk().status]}</span>
         </Show>
       </div>
-      <div class="kb-card-title">{t().title}</div>
-      <Show when={!props.compact && (t().goals || t().chats || t().branch)}>
+      <div class="kb-card-title">{tk().title}</div>
+      <Show when={!props.compact && (tk().goals || tk().chats || tk().branch)}>
         <div class="kb-card-meta">
-          <Show when={t().goals}>
-            <span title="Goals atteints" classList={{ ok: t().goalsDone === t().goals }}>
-              <Icon name="check" size={11} /> {t().goalsDone}/{t().goals}
+          <Show when={tk().goals}>
+            <span title={t('Goals reached')} classList={{ ok: tk().goalsDone === tk().goals }}>
+              <Icon name="check" size={11} /> {tk().goalsDone}/{tk().goals}
             </span>
           </Show>
-          <Show when={t().chats}>
-            <span title="Conversations liées">
-              <Icon name="sparkle" size={11} /> {t().chats}
+          <Show when={tk().chats}>
+            <span title={t('Linked conversations')}>
+              <Icon name="sparkle" size={11} /> {tk().chats}
             </span>
           </Show>
-          <Show when={t().branch}>
-            <span class="ellipsis mono" title={t().branch}>
-              <Icon name="branch" size={11} /> {t().branch}
+          <Show when={tk().branch}>
+            <span class="ellipsis mono" title={tk().branch}>
+              <Icon name="branch" size={11} /> {tk().branch}
             </span>
           </Show>
         </div>
@@ -137,29 +138,29 @@ function KanbanSettings(props: { onClose: () => void }) {
   }
   return (
     <Modal
-      title="Réglages du kanban"
+      title={t('Kanban settings')}
       onClose={props.onClose}
       footer={
         <>
           <button class="btn" onClick={props.onClose}>
-            Annuler
+            {t('Cancel')}
           </button>
           <button class="btn primary" onClick={() => void save()} data-testid="kanban-settings-save">
-            Enregistrer
+            {t('Save')}
           </button>
         </>
       }
     >
       <div class="form">
         <label class="field">
-          <span>Base des branches de tickets (vide : origin/main, sinon main)</span>
+          <span>{t('Base of the ticket branches (empty: origin/main, else main)')}</span>
           <input class="mono" placeholder="origin/main" value={base()} onInput={(e) => setBase(e.currentTarget.value)} data-testid="kanban-base" />
         </label>
         <label class="field">
-          <span>Commande d'initialisation d'un worktree (lancée dans le worktree à sa création)</span>
+          <span>{t('Setup command of a worktree (run in the worktree when it is created)')}</span>
           <textarea class="mono" rows={3} placeholder="npm install && cp ../../../.env ." value={setup()} onInput={(e) => setSetup(e.currentTarget.value)} data-testid="kanban-setup" />
         </label>
-        <p class="muted small">Les worktrees sont créés dans <code>.ide/worktrees/</code>, ignoré par git.</p>
+        <p class="muted small">{t('Worktrees are created in {dir}, ignored by git.', { dir: '.ide/worktrees/' })}</p>
       </div>
     </Modal>
   )
@@ -185,9 +186,9 @@ export function NewTicket(props: { onClose: () => void }) {
     if (!title().trim() || busy()) return
     setBusy(true)
     try {
-      const t = await createTicket({ title: title(), type: type(), priority: priority(), description: description() })
+      const tk = await createTicket({ title: title(), type: type(), priority: priority(), description: description() })
       props.onClose()
-      openTicket(t.id)
+      openTicket(tk.id)
     } catch (err) {
       errorToast(err)
     } finally {
@@ -196,40 +197,40 @@ export function NewTicket(props: { onClose: () => void }) {
   }
   return (
     <Modal
-      title="Nouveau ticket"
+      title={t('New ticket')}
       onClose={props.onClose}
       footer={
         <>
           <button class="btn" onClick={props.onClose}>
-            Annuler
+            {t('Cancel')}
           </button>
           <button class="btn primary" disabled={!title().trim() || busy()} onClick={submit} data-testid="kanban-create">
-            Créer
+            {t('Create')}
           </button>
         </>
       }
     >
       <form class="form" onSubmit={submit}>
         <label class="field">
-          <span>Titre</span>
+          <span>{t('Title')}</span>
           <input autofocus value={title()} onInput={(e) => setTitle(e.currentTarget.value)} data-testid="kanban-title" />
         </label>
         <div class="field-row">
           <label class="field grow">
-            <span>Type</span>
+            <span>{t('Type')}</span>
             <select value={type()} onChange={(e) => setType(e.currentTarget.value as TicketType)}>
               <For each={Object.entries(typeLabels)}>{([v, l]) => <option value={v}>{l}</option>}</For>
             </select>
           </label>
           <label class="field grow">
-            <span>Priorité</span>
+            <span>{t('Priority')}</span>
             <select value={priority()} onChange={(e) => setPriority(e.currentTarget.value as Priority)}>
               <For each={Object.entries(priorityLabels)}>{([v, l]) => <option value={v}>{l}</option>}</For>
             </select>
           </label>
         </div>
         <label class="field">
-          <span>Description (Markdown)</span>
+          <span>{t('Description (Markdown)')}</span>
           <textarea rows={8} value={description()} onInput={(e) => setDescription(e.currentTarget.value)} data-testid="kanban-description" />
         </label>
       </form>

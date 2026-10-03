@@ -4,6 +4,7 @@ import { createSignal, onCleanup, onMount, Show } from 'solid-js'
 import { Portal } from 'solid-js/web'
 import { Icon } from '../ui/icons'
 import { toast } from '../ui/toast'
+import { t } from '../i18n'
 
 const [diagram, setDiagram] = createSignal<{ svg: string; source: string } | null>(null)
 
@@ -108,26 +109,26 @@ function Viewer(props: { svg: string; source: string; onClose: () => void }) {
       URL.revokeObjectURL(img.src)
       c.toBlob((b) => b && download('diagramme.png', b), 'image/png')
     } catch (e) {
-      toast(`Export PNG impossible : ${(e as Error).message}`, 'error')
+      toast(t('PNG export failed: {message}', { message: (e as Error).message }), 'error')
     }
   }
 
   return (
-    <div class="ai-diagram" role="dialog" aria-label="Diagramme" data-testid="diagram-viewer">
+    <div class="ai-diagram" role="dialog" aria-label={t('Diagram')} data-testid="diagram-viewer">
       <div class="ai-diagram-bar">
-        <strong>Diagramme</strong>
+        <strong>{t('Diagram')}</strong>
         <span class="grow" />
-        <button class="icon-btn" title="Dézoomer (-)" onClick={() => zoom(0.8)}>
+        <button class="icon-btn" title={t('Zoom out (-)')} onClick={() => zoom(0.8)}>
           −
         </button>
         <span class="ai-diagram-zoom">{Math.round(view().k * 100)} %</span>
-        <button class="icon-btn" title="Zoomer (+)" onClick={() => zoom(1.25)}>
+        <button class="icon-btn" title={t('Zoom in (+)')} onClick={() => zoom(1.25)}>
           +
         </button>
-        <button class="btn small" title="Ajuster à la fenêtre (0)" onClick={fit}>
-          Ajuster
+        <button class="btn small" title={t('Fit to the window (0)')} onClick={fit}>
+          {t('Fit')}
         </button>
-        <button class="btn small" title="Taille réelle" onClick={() => zoom(1 / view().k)}>
+        <button class="btn small" title={t('Actual size')} onClick={() => zoom(1 / view().k)}>
           100 %
         </button>
         <span class="sep" />
@@ -137,17 +138,17 @@ function Viewer(props: { svg: string; source: string; onClose: () => void }) {
         <button class="btn small" onClick={exportPng}>
           PNG
         </button>
-        <button class="btn small" title="Copier la source Mermaid" onClick={() => navigator.clipboard?.writeText(props.source).then(() => toast('Source copiée', 'ok'))}>
-          Source
+        <button class="btn small" title={t('Copy the Mermaid source')} onClick={() => navigator.clipboard?.writeText(props.source).then(() => toast(t('Source copied'), 'ok'))}>
+          {t('Source')}
         </button>
-        <button class="icon-btn" title="Fermer (Échap)" onClick={props.onClose}>
+        <button class="icon-btn" title={t('Close (Esc)')} onClick={props.onClose}>
           <Icon name="close" size={15} />
         </button>
       </div>
       <div class="ai-diagram-stage" ref={stage} onWheel={onWheel} onPointerDown={onDown} onDblClick={fit}>
         <div class="ai-diagram-content" ref={content} style={{ transform: `translate(${view().x}px, ${view().y}px) scale(${view().k})` }} innerHTML={props.svg} />
       </div>
-      <div class="ai-diagram-help">Molette : zoom · glisser : déplacer · double-clic : ajuster</div>
+      <div class="ai-diagram-help">{t('Wheel: zoom · drag: move · double-click: fit')}</div>
     </div>
   )
 }

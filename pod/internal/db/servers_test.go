@@ -121,7 +121,7 @@ func TestRedis(t *testing.T) {
 		}
 	}
 	r, _ := s.Exec(ctx, "HGETALL user:1")
-	if len(r.Rows) != 2 || r.Columns[0] != "clé" {
+	if len(r.Rows) != 2 || r.Columns[0] != "key" {
 		t.Fatalf("hgetall = %+v", r)
 	}
 	r, _ = s.Exec(ctx, "GET missing")

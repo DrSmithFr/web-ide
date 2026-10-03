@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/execx"
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
 
 // querier runs one statement. Local SQLite uses database/sql, a file on an SSH host
@@ -27,7 +27,7 @@ type sqliteDriver struct {
 func openSQLite(ctx context.Context, path string, local bool, runner execx.Runner) (Driver, error) {
 	if !local {
 		if !runner.Has("sqlite3") {
-			return nil, errors.New("sqlite3 n'est pas installé sur l'hôte distant")
+			return nil, i18n.New("sqlite3 is not installed on the remote host")
 		}
 		d := &sqliteDriver{runner: runner, path: path}
 		_, err := d.cli(ctx, "SELECT 1")
@@ -168,7 +168,7 @@ func (d *sqliteDriver) Children(ctx context.Context, n Node) ([]Node, error) {
 		for _, row := range cols.Rows {
 			detail := strings.ToLower(fmt.Sprint(row[1]))
 			if fmt.Sprint(row[3]) != "0" {
-				detail += " · clé primaire"
+				detail += " · primary key"
 			}
 			if fmt.Sprint(row[2]) == "1" {
 				detail += " · not null"
@@ -192,7 +192,7 @@ func (d *sqliteDriver) master(ctx context.Context, name string) (string, error) 
 		return "", err
 	}
 	if len(r.Rows) == 0 || r.Rows[0][0] == nil {
-		return "-- définition automatique (pas de SQL stocké)", nil
+		return "-- automatic definition (no stored SQL)", nil
 	}
 	return fmt.Sprint(r.Rows[0][0]) + ";", nil
 }
@@ -266,7 +266,7 @@ func (s *sqlSession) Exec(ctx context.Context, q string) (*Result, error) {
 
 func (s *sqlSession) SetAutoCommit(on bool) error {
 	if on && s.inTx {
-		return errors.New("transaction ouverte : faire un commit ou un rollback avant de repasser en automatique")
+		return i18n.New("open transaction: commit or roll back before going back to auto-commit")
 	}
 	s.auto = on
 	return nil
@@ -304,7 +304,7 @@ type cliSession struct{ d *sqliteDriver }
 func (s *cliSession) Exec(ctx context.Context, q string) (*Result, error) { return s.d.cli(ctx, q) }
 func (s *cliSession) SetAutoCommit(on bool) error {
 	if !on {
-		return errors.New("SQLite distant (sqlite3 en ligne de commande) : transactions manuelles non disponibles")
+		return i18n.New("remote SQLite (sqlite3 command): manual transactions not available")
 	}
 	return nil
 }

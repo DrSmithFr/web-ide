@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -10,6 +9,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
 
 type dialFunc func(ctx context.Context, network, addr string) (net.Conn, error)
@@ -195,7 +196,7 @@ func (d *pgDriver) Children(ctx context.Context, n Node) ([]Node, error) {
 				detail += " · not null"
 			}
 			if row[3] != nil {
-				detail += " · défaut " + fmt.Sprint(row[3])
+				detail += " · default " + fmt.Sprint(row[3])
 			}
 			out = append(out, Node{ID: "c:" + n.DB + ":" + n.Table + "." + fmt.Sprint(row[0]), Label: fmt.Sprint(row[0]), Kind: "column", Detail: detail, Leaf: true, DB: n.DB, Table: n.Table})
 		}
@@ -265,7 +266,7 @@ func (d *pgDriver) IndexDef(ctx context.Context, db, table, index string) (strin
 		return "", err
 	}
 	if len(r.Rows) == 0 {
-		return "", errors.New("index introuvable")
+		return "", i18n.New("index not found")
 	}
 	return fmt.Sprint(r.Rows[0][0]) + ";", nil
 }
@@ -281,7 +282,7 @@ func (d *pgDriver) Page(ctx context.Context, db, table string, offset, limit int
 		fmt.Sscan(fmt.Sprint(c.Rows[0][0]), &r.Total)
 	} else if e, err := d.q(ctx, db, "SELECT reltuples::bigint FROM pg_class WHERE oid = "+quoteLit(qualified(table))+"::regclass"); err == nil && len(e.Rows) == 1 {
 		fmt.Sscan(fmt.Sprint(e.Rows[0][0]), &r.Total)
-		r.Message = "nombre de lignes estimé"
+		r.Message = "estimated row count"
 	}
 	return r, nil
 }
@@ -327,7 +328,7 @@ func (s *pgSession) Exec(ctx context.Context, q string) (*Result, error) {
 
 func (s *pgSession) SetAutoCommit(on bool) error {
 	if on && s.InTx() {
-		return errors.New("transaction ouverte : faire un commit ou un rollback avant de repasser en automatique")
+		return i18n.New("open transaction: commit or roll back before going back to auto-commit")
 	}
 	s.auto = on
 	return nil

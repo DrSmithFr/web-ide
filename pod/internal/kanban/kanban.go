@@ -5,7 +5,6 @@ package kanban
 
 import (
 	"database/sql"
-	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -15,17 +14,18 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/store"
 )
 
 // Statuses of a ticket.
 const (
 	New        = "new"
-	Ready      = "ready"       // à développer
+	Ready      = "ready"       // shown as “Ready”
 	InProgress = "in_progress" // en cours
-	Review     = "review"      // à tester
+	Review     = "review"      // shown as “To test”
 	Fix        = "fix"         // correction
-	Done       = "done"        // terminé
+	Done       = "done"        // closed
 	Abandoned  = "abandoned"
 )
 
@@ -171,7 +171,7 @@ CREATE TABLE IF NOT EXISTS meta (
 
 func (m *Manager) db(loc Location) (*sql.DB, error) {
 	if !projectPattern.MatchString(loc.Project) {
-		return nil, errors.New("projet invalide")
+		return nil, i18n.New("invalid project")
 	}
 	path := m.st.Path("kanban", loc.Project+".db")
 	if loc.IdeDir != "" {

@@ -4,6 +4,7 @@ import { Marked, type Tokens } from 'marked'
 import DOMPurify from 'dompurify'
 import { grammar, grammarDefs } from '../editor/languages'
 import { openDiagram } from './DiagramViewer'
+import { t } from '../i18n'
 
 const aliases: Record<string, string> = {
   js: 'javascript', jsx: 'javascript', mjs: 'javascript', ts: 'typescript', tsx: 'typescript', py: 'python', golang: 'go',
@@ -56,9 +57,9 @@ const md = new Marked({
       // data-closed: the closing fence has arrived (a streamed diagram can be drawn).
       if (l === 'mermaid') {
         const closed = /\n\s*(```|~~~)\s*$/.test(raw)
-        return `<div class="md-mermaid${closed ? '' : ' md-mermaid-pending'}" data-src="${encodeURIComponent(text)}"${closed ? ' data-closed="1"' : ''}><div class="md-mermaid-wait">Diagramme en cours d’écriture…</div><pre class="md-code"><code>${escape(text)}</code></pre></div>`
+        return `<div class="md-mermaid${closed ? '' : ' md-mermaid-pending'}" data-src="${encodeURIComponent(text)}"${closed ? ' data-closed="1"' : ''}><div class="md-mermaid-wait">${t('Diagram being written…')}</div><pre class="md-code"><code>${escape(text)}</code></pre></div>`
       }
-      return `<div class="md-codeblock"><div class="md-code-head"><span>${escape(l)}</span><button class="md-copy" type="button">Copier</button></div><pre class="md-code"><code>${highlightCode(text, l)}</code></pre></div>`
+      return `<div class="md-codeblock"><div class="md-code-head"><span>${escape(l)}</span><button class="md-copy" type="button">${t('Copy')}</button></div><pre class="md-code"><code>${highlightCode(text, l)}</code></pre></div>`
     },
     link({ href, title, tokens }: Tokens.Link) {
       const text = this.parser.parseInline(tokens)
@@ -94,7 +95,7 @@ function place(b: HTMLElement, r: { svg?: string; error?: string }) {
     const open = document.createElement('button')
     open.type = 'button'
     open.className = 'md-mermaid-open'
-    open.title = 'Ouvrir en plein écran'
+    open.title = t('Open full screen')
     open.textContent = '⤢'
     box.append(open)
     b.prepend(box)
@@ -166,8 +167,8 @@ export function onMarkdownClick(e: MouseEvent) {
   const code = btn.closest('.md-codeblock')?.querySelector('code')?.textContent ?? ''
   navigator.clipboard?.writeText(code).then(
     () => {
-      btn.textContent = 'Copié'
-      setTimeout(() => (btn.textContent = 'Copier'), 1200)
+      btn.textContent = t('Copied')
+      setTimeout(() => (btn.textContent = t('Copy')), 1200)
     },
     () => {},
   )

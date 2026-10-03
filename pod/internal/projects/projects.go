@@ -5,7 +5,6 @@ package projects
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
 	"path"
 	"sort"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/store"
 )
 
@@ -112,11 +112,11 @@ func validate(p *Project) error {
 	case "local":
 		p.SSH = nil
 		if !path.IsAbs(p.Path) {
-			return errors.New("le chemin du projet doit être absolu")
+			return i18n.New("the project path must be absolute")
 		}
 	case "ssh":
 		if p.SSH == nil || p.SSH.Host == "" {
-			return errors.New("hôte SSH manquant")
+			return i18n.New("SSH host is missing")
 		}
 		if p.SSH.Port == 0 {
 			p.SSH.Port = 22
@@ -128,7 +128,7 @@ func validate(p *Project) error {
 			p.Path = "."
 		}
 	default:
-		return errors.New("type de projet inconnu")
+		return i18n.New("unknown project type")
 	}
 	p.Path = path.Clean(p.Path)
 	return nil
@@ -162,7 +162,7 @@ func (r *Registry) Update(p Project) (View, error) {
 			return view(&p), r.save()
 		}
 	}
-	return View{}, errors.New("projet introuvable")
+	return View{}, i18n.New("project not found")
 }
 
 // SetPath records the resolved absolute path (an SSH project given relative to the remote home).
@@ -197,7 +197,7 @@ func (r *Registry) Delete(id string) error {
 			return r.save()
 		}
 	}
-	return errors.New("projet introuvable")
+	return i18n.New("project not found")
 }
 
 // ChildID is the id of the project opened on the worktree of a ticket.

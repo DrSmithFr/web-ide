@@ -6,6 +6,7 @@ import { request } from '../pod/rpc'
 import { Modal } from '../ui/overlay'
 import { errorToast, toast } from '../ui/toast'
 import { connections, type ConnConfig, type Secret } from './api'
+import { t } from '../i18n'
 
 const blank = (kind: ConnConfig['kind'] = 'postgres'): ConnConfig => ({
   id: '',
@@ -70,17 +71,17 @@ export function ConnectionsModal(props: { initial?: string | 'new'; onClose: () 
       const v = await request('db.save', payload())
       setSelected(v.id)
       setForm('id', v.id)
-      toast(`Connexion « ${v.name} » enregistrée`, 'ok')
+      toast(t('Connection “{name}” saved', { name: v.name }), 'ok')
     } catch (e) {
       errorToast(e)
     }
   }
   const duplicate = () => {
     setSelected('')
-    setForm({ id: '', name: (form.name || 'connexion') + ' (copie)' })
+    setForm({ id: '', name: (form.name || t('connection')) + ` (${t('copy')})` })
   }
   const remove = async () => {
-    if (!form.id || !confirm(`Supprimer la connexion « ${form.name} » ?`)) return
+    if (!form.id || !confirm(t('Delete the connection “{name}”?', { name: form.name }))) return
     try {
       await request('db.delete', { id: form.id })
       fresh()
@@ -92,7 +93,7 @@ export function ConnectionsModal(props: { initial?: string | 'new'; onClose: () 
   const tcp = () => form.kind !== 'sqlite'
 
   return (
-    <Modal title="Connexions aux bases de données" onClose={props.onClose} class="modal-wide">
+    <Modal title={t('Database connections')} onClose={props.onClose} class="modal-wide">
       <div class="conn-editor">
         <aside class="conn-list">
           <For each={connections()}>
@@ -105,7 +106,7 @@ export function ConnectionsModal(props: { initial?: string | 'new'; onClose: () 
             )}
           </For>
           <div class="conn-new">
-            <span class="muted small">Ajouter :</span>
+            <span class="muted small">{t('Add:')}</span>
             <button class="btn small" onClick={() => fresh('postgres')}>
               Postgres
             </button>
@@ -126,11 +127,11 @@ export function ConnectionsModal(props: { initial?: string | 'new'; onClose: () 
         >
           <div class="field-row">
             <label class="field grow">
-              <span>Nom</span>
-              <input value={form.name} placeholder="déduit de l'hôte si vide" onInput={(e) => setForm('name', e.currentTarget.value)} />
+              <span>{t('Name')}</span>
+              <input value={form.name} placeholder={t('derived from the host when empty')} onInput={(e) => setForm('name', e.currentTarget.value)} />
             </label>
             <label class="field">
-              <span>Type</span>
+              <span>{t('Type')}</span>
               <select value={form.kind} disabled={!!form.id} onChange={(e) => setForm({ ...blank(e.currentTarget.value as ConnConfig['kind']), name: form.name })}>
                 <option value="postgres">PostgreSQL</option>
                 <option value="sqlite">SQLite</option>
@@ -140,29 +141,29 @@ export function ConnectionsModal(props: { initial?: string | 'new'; onClose: () 
           </div>
           <Show when={form.kind === 'sqlite'}>
             <label class="field">
-              <span>Fichier (absolu, ou relatif au projet ; sur l'hôte SSH pour un projet distant)</span>
+              <span>{t('File (absolute, or relative to the project; on the SSH host for a remote project)')}</span>
               <input value={form.path ?? ''} placeholder="var/data.db" onInput={(e) => setForm('path', e.currentTarget.value)} />
             </label>
           </Show>
           <Show when={tcp()}>
             <div class="field-row">
               <label class="field grow">
-                <span>Hôte{form.ssh?.enabled ? ' (vu depuis le serveur SSH)' : ''}</span>
+                <span>{form.ssh?.enabled ? t('Host (seen from the SSH server)') : t('Host')}</span>
                 <input value={form.host ?? ''} onInput={(e) => setForm('host', e.currentTarget.value)} />
               </label>
               <label class="field w-port">
-                <span>Port</span>
+                <span>{t('Port')}</span>
                 <input type="number" value={form.port ?? ''} onInput={(e) => setForm('port', parseInt(e.currentTarget.value, 10) || undefined)} />
               </label>
             </div>
             <Show when={form.kind === 'postgres'}>
               <div class="field-row">
                 <label class="field grow">
-                  <span>Base</span>
+                  <span>{t('Database')}</span>
                   <input value={form.database ?? ''} onInput={(e) => setForm('database', e.currentTarget.value)} />
                 </label>
                 <label class="field">
-                  <span>Mode SSL</span>
+                  <span>{t('SSL mode')}</span>
                   <select value={form.sslMode ?? 'prefer'} onChange={(e) => setForm('sslMode', e.currentTarget.value)}>
                     <For each={['disable', 'allow', 'prefer', 'require', 'verify-ca', 'verify-full']}>{(m) => <option value={m}>{m}</option>}</For>
                   </select>
@@ -171,21 +172,21 @@ export function ConnectionsModal(props: { initial?: string | 'new'; onClose: () 
             </Show>
             <Show when={form.kind === 'redis'}>
               <label class="field w-port">
-                <span>Base (index)</span>
+                <span>{t('Database (index)')}</span>
                 <input type="number" min="0" value={form.redisDb ?? 0} onInput={(e) => setForm('redisDb', parseInt(e.currentTarget.value, 10) || 0)} />
               </label>
             </Show>
             <div class="field-row">
               <label class="field grow">
-                <span>Utilisateur{form.kind === 'redis' ? ' (ACL, facultatif)' : ''}</span>
+                <span>{t('User')}{form.kind === 'redis' ? ' (ACL, facultatif)' : ''}</span>
                 <input value={form.user ?? ''} onInput={(e) => setForm('user', e.currentTarget.value)} />
               </label>
               <label class="field grow">
-                <span>Mot de passe</span>
+                <span>{t('Password')}</span>
                 <input
                   type="password"
                   autocomplete="new-password"
-                  placeholder={connections().find((c) => c.id === form.id)?.hasSecret ? '•••••• (inchangé)' : ''}
+                  placeholder={connections().find((c) => c.id === form.id)?.hasSecret ? t('•••••• (unchanged)') : ''}
                   value={secret.password ?? ''}
                   onInput={(e) => setSecret('password', e.currentTarget.value)}
                 />
@@ -193,59 +194,59 @@ export function ConnectionsModal(props: { initial?: string | 'new'; onClose: () 
             </div>
             <label class="check">
               <input type="checkbox" checked={form.rememberPassword} onChange={(e) => setForm('rememberPassword', e.currentTarget.checked)} />
-              Mémoriser le mot de passe dans le pod (sinon demandé à chaque session)
+              {t('Remember the password in the pod (otherwise asked at each session)')}
             </label>
 
             <fieldset class="fieldset">
               <legend>
                 <label class="check">
                   <input type="checkbox" checked={!!form.ssh?.enabled} onChange={(e) => setForm('ssh', 'enabled', e.currentTarget.checked)} />
-                  Tunnel SSH
+                  {t('SSH tunnel')}
                 </label>
               </legend>
               <Show when={form.ssh?.enabled}>
                 <div class="field-row">
                   <label class="field grow">
-                    <span>Hôte SSH</span>
+                    <span>{t('SSH host')}</span>
                     <input list="ssh-hosts" value={form.ssh!.host} onInput={(e) => setForm('ssh', 'host', e.currentTarget.value)} />
                     <datalist id="ssh-hosts">
                       <For each={sshInfo()?.hosts ?? []}>{(h: any) => <option value={h.alias} />}</For>
                     </datalist>
                   </label>
                   <label class="field w-port">
-                    <span>Port</span>
+                    <span>{t('Port')}</span>
                     <input type="number" value={form.ssh!.port} onInput={(e) => setForm('ssh', 'port', parseInt(e.currentTarget.value, 10) || 22)} />
                   </label>
                   <label class="field grow">
-                    <span>Utilisateur</span>
+                    <span>{t('User')}</span>
                     <input value={form.ssh!.user} onInput={(e) => setForm('ssh', 'user', e.currentTarget.value)} />
                   </label>
                 </div>
                 <div class="field-row">
                   <label class="field">
-                    <span>Authentification</span>
+                    <span>{t('Authentication')}</span>
                     <select value={form.ssh!.auth} onChange={(e) => setForm('ssh', 'auth', e.currentTarget.value as any)}>
-                      <option value="agent">Jeu de clés existant (agent + clés par défaut)</option>
-                      <option value="key">Clé dédiée</option>
-                      <option value="password">Mot de passe</option>
+                      <option value="agent">{t('Existing key set (agent + default keys)')}</option>
+                      <option value="key">{t('Dedicated key')}</option>
+                      <option value="password">{t('Password')}</option>
                     </select>
                   </label>
                   <Show when={form.ssh!.auth === 'key'}>
                     <label class="field grow">
-                      <span>Clé privée</span>
+                      <span>{t('Private key')}</span>
                       <input list="ssh-keys" value={form.ssh!.keyPath ?? ''} onInput={(e) => setForm('ssh', 'keyPath', e.currentTarget.value)} />
                       <datalist id="ssh-keys">
                         <For each={sshInfo()?.keys ?? []}>{(k: string) => <option value={k} />}</For>
                       </datalist>
                     </label>
                     <label class="field grow">
-                      <span>Phrase de passe</span>
+                      <span>{t('Passphrase')}</span>
                       <input type="password" value={secret.sshPassphrase ?? ''} onInput={(e) => setSecret('sshPassphrase', e.currentTarget.value)} />
                     </label>
                   </Show>
                   <Show when={form.ssh!.auth === 'password'}>
                     <label class="field grow">
-                      <span>Mot de passe SSH</span>
+                      <span>{t('SSH password')}</span>
                       <input type="password" value={secret.sshPassword ?? ''} onInput={(e) => setSecret('sshPassword', e.currentTarget.value)} />
                     </label>
                   </Show>
@@ -262,18 +263,18 @@ export function ConnectionsModal(props: { initial?: string | 'new'; onClose: () 
           <div class="form-actions">
             <Show when={form.id}>
               <button type="button" class="btn danger" onClick={remove}>
-                Supprimer
+                {t('Delete')}
               </button>
               <button type="button" class="btn" onClick={duplicate}>
-                Dupliquer
+                {t('Duplicate')}
               </button>
             </Show>
             <span class="grow" />
             <button type="button" class="btn" disabled={busy()} onClick={runTest}>
-              {busy() ? 'Test…' : 'Tester'}
+              {busy() ? t('Testing…') : t('Test')}
             </button>
             <button type="submit" class="btn primary">
-              Enregistrer
+              {t('Save')}
             </button>
           </div>
         </form>

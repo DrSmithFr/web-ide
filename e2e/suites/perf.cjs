@@ -33,18 +33,18 @@ run(async ({ page }) => {
   await openProject(page)
   const t0 = Date.now()
   await open(page, 'big.js')
-  console.log(`  ouverture : ${Date.now() - t0} ms`)
+  console.log(`  opening: ${Date.now() - t0} ms`)
   await page.click('.pane.active .ed-content')
   await page.keyboard.press('Control+Home')
-  for (const [where, key] of [['début', 'Control+Home'], ['fin', 'Control+End']]) {
+  for (const [where, key] of [['start', 'Control+Home'], ['end', 'Control+End']]) {
     await page.keyboard.press(key)
     for (const kind of ['type', 'enter']) {
       const m = await measure(page, kind)
-      assert(m.median < LIMIT, `${kind === 'type' ? 'frappe' : 'Entrée'} au ${where} : médiane ${m.median.toFixed(1)} ms, max ${m.max.toFixed(1)} ms`)
+      assert(m.median < LIMIT, `${kind === 'type' ? 'keystroke' : 'Enter'} at the ${where}: median ${m.median.toFixed(1)} ms, max ${m.max.toFixed(1)} ms`)
     }
   }
   const s = await measure(page, 'scroll')
-  assert(s.median < LIMIT, `défilement : médiane ${s.median.toFixed(1)} ms, max ${s.max.toFixed(1)} ms`)
+  assert(s.median < LIMIT, `scrolling: median ${s.median.toFixed(1)} ms, max ${s.max.toFixed(1)} ms`)
   const blocks = await page.$$eval('.pane.active .ed-block', (b) => b.length)
-  assert(blocks > 1000, `texte découpé en blocs (${blocks})`)
+  assert(blocks > 1000, `text split into blocks (${blocks})`)
 })

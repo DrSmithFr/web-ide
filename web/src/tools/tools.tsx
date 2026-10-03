@@ -7,27 +7,28 @@ import { openConflict } from '../conflict/ConflictDialog'
 import * as lspc from '../lsp/client'
 import { shortcutOf } from '../keys/bindings'
 import { languageName } from '../editor/languages'
+import { fmtDate, fmtNumber, t } from '../i18n'
 
 export function ConflictsTool() {
   const list = () => (docsVersion(), conflictedDocs())
   return (
     <div class="panel">
       <div class="panel-head">
-        <span class="panel-title">Conflits</span>
+        <span class="panel-title">{t('Conflicts')}</span>
       </div>
       <div class="panel-body pad">
         <p class="muted small">
-          Fichiers modifiés sur le disque (par l'IA ou un autre outil) pendant que vous les éditiez, et dont la fusion automatique a échoué. Résolution : {shortcutOf('conflict.resolve')}.
+          {t('Files changed on disk (by the AI or another tool) while you were editing them, and whose automatic merge failed. Resolution: {shortcut}.', { shortcut: shortcutOf('conflict.resolve') })}
         </p>
-        <For each={list()} fallback={<p class="muted">Aucun conflit en cours.</p>}>
+        <For each={list()} fallback={<p class="muted">{t('No conflict.')}</p>}>
           {(d) => (
             <div class="conflict-item">
               <button class="link" onClick={() => openFile(d.path)}>
                 {relPath(d.path)}
               </button>
-              <span class="muted small">rév. distante {d.conflict()?.rev}</span>
+              <span class="muted small">{t('remote rev. {rev}', { rev: d.conflict()?.rev ?? '' })}</span>
               <button class="btn small primary" onClick={() => openConflict(d)}>
-                Résoudre
+                {t('Resolve')}
               </button>
             </div>
           )}
@@ -65,14 +66,14 @@ export function StructureTool() {
   return (
     <div class="panel">
       <div class="panel-head">
-        <span class="panel-title">Structure</span>
+        <span class="panel-title">{t('Structure')}</span>
         <span class="grow" />
-        <button class="icon-btn" title="Rafraîchir" onClick={() => setTick((t) => t + 1)}>
+        <button class="icon-btn" title={t('Refresh')} onClick={() => setTick((t) => t + 1)}>
           ↻
         </button>
       </div>
       <div class="panel-body tree">
-        <Show when={path()} fallback={<p class="muted pad">Aucun fichier actif.</p>}>
+        <Show when={path()} fallback={<p class="muted pad">{t('No active file.')}</p>}>
           <Show when={symbols()?.error}>
             <p class="muted pad small">{symbols()!.error}</p>
           </Show>
@@ -83,7 +84,7 @@ export function StructureTool() {
                 style={{ 'padding-left': `${depth * 14 + 8}px` }}
                 onClick={() => openFile({ path: path(), line: s.selectionRange.start.line, col: s.selectionRange.start.character })}
               >
-                <span class="sym-kind" title={lspc.symbolKinds[s.kind]?.[0]}>
+                <span class="sym-kind" title={t(lspc.symbolKinds[s.kind]?.[0] ?? "")}>
                   {lspc.symbolKinds[s.kind]?.[1] ?? '·'}
                 </span>
                 <span class="tree-name">{s.name}</span>
@@ -107,15 +108,17 @@ export function ExtensionsTool() {
   return (
     <div class="panel">
       <div class="panel-head">
-        <span class="panel-title">Extensions · serveurs de langage</span>
+        <span class="panel-title">{t('Extensions · language servers')}</span>
         <span class="grow" />
-        <button class="icon-btn" title="Rafraîchir" onClick={refetch}>
+        <button class="icon-btn" title={t('Refresh')} onClick={refetch}>
           ↻
         </button>
       </div>
       <div class="panel-body pad">
         <p class="muted small">
-          Le pod lance un serveur par langage détecté (go.mod, composer.json, package.json, pyproject.toml…) {isLocal() ? 'sur cette machine' : "sur l'hôte SSH"}, et l'arrête deux minutes après la fermeture de la dernière fenêtre du projet. Commande personnalisable dans <code>.ide/project.json</code> (clé <code>lsp</code>).
+          {isLocal()
+            ? t('The pod runs a server per detected language (go.mod, composer.json, package.json, pyproject.toml…) on this machine, and stops it two minutes after the last window of the project is closed. Command configurable in {file} (key {key}).', { file: '.ide/project.json', key: 'lsp' })
+            : t('The pod runs a server per detected language (go.mod, composer.json, package.json, pyproject.toml…) on the SSH host, and stops it two minutes after the last window of the project is closed. Command configurable in {file} (key {key}).', { file: '.ide/project.json', key: 'lsp' })}
         </p>
         <For each={status() ?? []}>
           {(s) => (
@@ -127,7 +130,7 @@ export function ExtensionsTool() {
                   <div class="warn small">{s.error}</div>
                 </Show>
               </div>
-              <span class={`badge ${s.running ? 'ok' : ''}`}>{s.running ? 'actif' : s.detected ? 'détecté' : 'non détecté'}</span>
+              <span class={`badge ${s.running ? 'ok' : ''}`}>{s.running ? t('running') : s.detected ? t('detected') : t('not detected')}</span>
             </div>
           )}
         </For>
@@ -147,50 +150,50 @@ export function PropertiesTool() {
   return (
     <div class="panel">
       <div class="panel-head">
-        <span class="panel-title">Propriétés</span>
+        <span class="panel-title">{t('Properties')}</span>
       </div>
       <div class="panel-body pad">
         <section class="card">
-          <h3>Projet</h3>
+          <h3>{t('Project')}</h3>
           <dl class="props">
-            <dt>Nom</dt>
+            <dt>{t('Name')}</dt>
             <dd>{project()?.name}</dd>
             <Show when={project()?.description}>
-              <dt>Description</dt>
+              <dt>{t('Description')}</dt>
               <dd>{project()!.description}</dd>
             </Show>
-            <dt>Cible</dt>
+            <dt>{t('Target')}</dt>
             <dd class="mono">{isLocal() ? root() : `${project()?.ssh?.host}:${root()}`}</dd>
           </dl>
         </section>
         <Show when={tab()}>
           <section class="card">
-            <h3>Onglet actif</h3>
+            <h3>{t('Active tab')}</h3>
             <dl class="props">
-              <Show when={tab()!.kind === 'file'} fallback={<><dt>Type</dt><dd>{tab()!.kind}</dd></>}>
-                <dt>Fichier</dt>
+              <Show when={tab()!.kind === 'file'} fallback={<><dt>{t('Type')}</dt><dd>{tab()!.kind}</dd></>}>
+                <dt>{t('File')}</dt>
                 <dd>{basename(tab()!.path!)}</dd>
-                <dt>Chemin</dt>
+                <dt>{t('Path')}</dt>
                 <dd class="mono small">{relPath(tab()!.path!)}</dd>
                 <Show when={doc()}>
-                  <dt>Langage</dt>
+                  <dt>{t('code|Language')}</dt>
                   <dd>{languageName(doc()!.lang)}</dd>
-                  <dt>Lignes</dt>
+                  <dt>{t('Lines')}</dt>
                   <dd>{(doc()!.changed(), doc()!.lineCount)}</dd>
-                  <dt>État</dt>
-                  <dd>{doc()!.conflict() ? 'en conflit' : doc()!.dirty() ? 'modifié' : 'enregistré'}{doc()!.readOnly ? ' · lecture seule' : ''}</dd>
-                  <dt>Révision</dt>
+                  <dt>{t('State')}</dt>
+                  <dd>{doc()!.conflict() ? t('in conflict') : doc()!.dirty() ? t('modified') : t('saved')}{doc()!.readOnly ? ` · ${t('read-only')}` : ''}</dd>
+                  <dt>{t('Revision')}</dt>
                   <dd>{doc()!.baseRev}</dd>
-                  <dt>Fin de ligne</dt>
+                  <dt>{t('Line ending')}</dt>
                   <dd>{doc()!.text.includes('\r\n') ? 'CRLF' : 'LF'}</dd>
                 </Show>
                 <Show when={stat()}>
-                  <dt>Taille</dt>
-                  <dd>{stat()!.size.toLocaleString()} octets</dd>
-                  <dt>Modifié le</dt>
-                  <dd>{new Date(stat()!.mtime).toLocaleString()}</dd>
+                  <dt>{t('Size')}</dt>
+                  <dd>{t('{n} bytes', { n: fmtNumber(stat()!.size) })}</dd>
+                  <dt>{t('Modified on')}</dt>
+                  <dd>{fmtDate(stat()!.mtime)}</dd>
                 </Show>
-                <dt>Diagnostics</dt>
+                <dt>{t('Diagnostics')}</dt>
                 <dd>{errors()}</dd>
               </Show>
             </dl>

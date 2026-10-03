@@ -7,6 +7,7 @@ import { Icon } from '../ui/icons'
 import { ResultGrid } from './ResultGrid'
 import { connById, connect, withAuth, type Result } from './api'
 import { errorToast } from '../ui/toast'
+import { t } from '../i18n'
 
 export function TableView(props: { tab: TabState; paneId: string }) {
   const tab = props.tab
@@ -40,21 +41,21 @@ export function TableView(props: { tab: TabState; paneId: string }) {
   return (
     <div class="table-view">
       <div class="toolbar">
-        <button class="icon-btn" title="Première page" disabled={offset() === 0} onClick={() => setOffset(0)}>
+        <button class="icon-btn" title={t('First page')} disabled={offset() === 0} onClick={() => setOffset(0)}>
           «
         </button>
-        <button class="icon-btn" title="Page précédente" disabled={offset() === 0} onClick={() => setOffset(Math.max(0, offset() - limit()))}>
+        <button class="icon-btn" title={t('Previous page')} disabled={offset() === 0} onClick={() => setOffset(Math.max(0, offset() - limit()))}>
           ‹
         </button>
         <span class="small">
           {offset() + 1} – {offset() + (result()?.rows?.length ?? 0)}
-          {total() >= 0 ? ` sur ${total()}` : ''}
+          {total() >= 0 ? ` ${t('of {n}', { n: total() })}` : ''}
           {result()?.message ? ` (${result()!.message})` : ''}
         </span>
-        <button class="icon-btn" title="Page suivante" disabled={!hasNext()} onClick={() => setOffset(offset() + limit())}>
+        <button class="icon-btn" title={t('Next page')} disabled={!hasNext()} onClick={() => setOffset(offset() + limit())}>
           ›
         </button>
-        <button class="icon-btn" title="Dernière page" disabled={!hasNext() || total() < 0} onClick={() => setOffset(lastPage())}>
+        <button class="icon-btn" title={t('Last page')} disabled={!hasNext() || total() < 0} onClick={() => setOffset(lastPage())}>
           »
         </button>
         <select class="input small" value={limit()} onChange={(e) => (setOffset(0), setLimit(parseInt(e.currentTarget.value, 10)))}>
@@ -63,7 +64,7 @@ export function TableView(props: { tab: TabState; paneId: string }) {
           <option value="250">250</option>
           <option value="500">500</option>
         </select>
-        <button class="icon-btn" title="Rafraîchir" onClick={() => load(true)}>
+        <button class="icon-btn" title={t('Refresh')} onClick={() => load(true)}>
           <Icon name="refresh" />
         </button>
         <span class="grow" />
@@ -72,9 +73,9 @@ export function TableView(props: { tab: TabState; paneId: string }) {
         </span>
         <button
           class="btn small"
-          onClick={() => openTab({ kind: 'sql', title: `Console · ${conn()?.name ?? ''}`, connId: tab.connId, db: tab.db })}
+          onClick={() => openTab({ kind: 'sql', title: `${t('Console')} · ${conn()?.name ?? ''}`, connId: tab.connId, db: tab.db })}
         >
-          Console
+          {t('Console')}
         </button>
       </div>
       <Show when={error()}>
@@ -82,13 +83,13 @@ export function TableView(props: { tab: TabState; paneId: string }) {
           <pre>{error()}</pre>
           <Show when={conn()?.status.state === 'closed'}>
             <button class="btn small" onClick={() => connect(tab.connId!).then(() => load(true)).catch(errorToast)}>
-              Rouvrir la connexion
+              {t('Reopen the connection')}
             </button>
           </Show>
         </div>
       </Show>
       <Show when={busy() && !result()}>
-        <div class="muted pad">Chargement…</div>
+        <div class="muted pad">{t('Loading…')}</div>
       </Show>
       <Show when={result()}>{(r) => <ResultGrid result={r()} offset={offset()} />}</Show>
     </div>

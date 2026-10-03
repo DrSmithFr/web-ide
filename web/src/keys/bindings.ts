@@ -5,6 +5,7 @@ import { createMemo, createRoot, createSignal } from 'solid-js'
 import qwerty from './qwerty.json'
 import azerty from './azerty.json'
 import { settings } from '../state/settings'
+import { t } from '../i18n'
 
 export type Layout = 'qwerty' | 'azerty'
 export const presets: Record<Layout, { name: string; labels: Record<string, string>; bindings: Record<string, string[]> }> = { qwerty, azerty }
@@ -18,51 +19,51 @@ export interface ActionDef {
 }
 
 export const actions: ActionDef[] = [
-  { id: 'file.save', label: 'Enregistrer', category: 'Fichier' },
-  { id: 'file.saveAll', label: 'Tout enregistrer', category: 'Fichier' },
-  { id: 'edit.undo', label: 'Annuler', category: 'Édition' },
-  { id: 'edit.redo', label: 'Rétablir', category: 'Édition' },
-  { id: 'edit.duplicateLine', label: 'Dupliquer la ligne', category: 'Édition' },
-  { id: 'edit.deleteLine', label: 'Supprimer la ligne', category: 'Édition' },
-  { id: 'edit.toggleComment', label: 'Commenter / décommenter', category: 'Édition' },
-  { id: 'edit.selectAll', label: 'Tout sélectionner', category: 'Édition' },
-  { id: 'edit.complete', label: 'Compléter le code', category: 'Édition' },
-  { id: 'search.find', label: 'Rechercher dans le fichier', category: 'Recherche' },
-  { id: 'search.global', label: 'Rechercher dans le projet', category: 'Recherche' },
-  { id: 'nav.gotoFile', label: 'Aller au fichier…', category: 'Navigation', inTerminal: true },
-  { id: 'nav.gotoSymbol', label: 'Aller au symbole…', category: 'Navigation' },
-  { id: 'nav.fileStructure', label: 'Structure du fichier', category: 'Navigation' },
-  { id: 'nav.gotoLine', label: 'Aller à la ligne…', category: 'Navigation' },
-  { id: 'nav.back', label: 'Position précédente', category: 'Navigation' },
-  { id: 'nav.forward', label: 'Position suivante', category: 'Navigation' },
-  { id: 'nav.subwordLeft', label: 'Sous-mot précédent', category: 'Navigation' },
-  { id: 'nav.subwordRight', label: 'Sous-mot suivant', category: 'Navigation' },
-  { id: 'nav.subwordLeftSelect', label: 'Étendre au sous-mot précédent', category: 'Navigation' },
-  { id: 'nav.subwordRightSelect', label: 'Étendre au sous-mot suivant', category: 'Navigation' },
-  { id: 'nav.related', label: 'Symboles liés', category: 'Navigation' },
-  { id: 'nav.test', label: 'Aller au test / à la source', category: 'Navigation' },
-  { id: 'lsp.definition', label: 'Aller à la déclaration ou aux usages', category: 'Code' },
-  { id: 'lsp.implementation', label: 'Aller aux implémentations', category: 'Code' },
-  { id: 'lsp.typeDefinition', label: 'Aller à la déclaration de type', category: 'Code' },
-  { id: 'lsp.superMethod', label: 'Aller à la super méthode', category: 'Code' },
-  { id: 'lsp.references', label: 'Trouver les usages', category: 'Code' },
-  { id: 'lsp.hover', label: 'Documentation rapide', category: 'Code' },
-  { id: 'lsp.rename', label: 'Renommer le symbole…', category: 'Code' },
-  { id: 'lsp.format', label: 'Reformater le code', category: 'Code' },
-  { id: 'conflict.resolve', label: 'Résoudre le conflit', category: 'Fichier' },
-  { id: 'view.splitRight', label: 'Diviser à droite', category: 'Affichage' },
-  { id: 'view.splitDown', label: 'Diviser en bas', category: 'Affichage' },
-  { id: 'view.closeTab', label: "Fermer l'onglet", category: 'Affichage' },
-  { id: 'view.nextTab', label: 'Onglet suivant', category: 'Affichage' },
-  { id: 'view.prevTab', label: 'Onglet précédent', category: 'Affichage' },
-  { id: 'view.toggleLeft', label: 'Afficher / masquer le panneau gauche', category: 'Affichage', inTerminal: true },
-  { id: 'view.toggleRight', label: 'Afficher / masquer les tools', category: 'Affichage', inTerminal: true },
-  { id: 'view.toggleBottom', label: 'Afficher / masquer les consoles', category: 'Affichage', inTerminal: true },
-  { id: 'settings.open', label: 'Réglages', category: 'Général', inTerminal: true },
-  { id: 'kanban.open', label: 'Ouvrir le kanban', category: 'Général' },
-  { id: 'palette.open', label: 'Palette de commandes', category: 'Général', inTerminal: true },
-  { id: 'console.new', label: 'Nouveau terminal', category: 'Consoles', inTerminal: true },
-  { id: 'sql.execute', label: 'Exécuter la requête active', category: 'Base de données' },
+  { id: 'file.save', label: 'Save', category: 'File' },
+  { id: 'file.saveAll', label: 'Save all', category: 'File' },
+  { id: 'edit.undo', label: 'Undo', category: 'Editing' },
+  { id: 'edit.redo', label: 'Redo', category: 'Editing' },
+  { id: 'edit.duplicateLine', label: 'Duplicate the line', category: 'Editing' },
+  { id: 'edit.deleteLine', label: 'Delete the line', category: 'Editing' },
+  { id: 'edit.toggleComment', label: 'Comment / uncomment', category: 'Editing' },
+  { id: 'edit.selectAll', label: 'Select all', category: 'Editing' },
+  { id: 'edit.complete', label: 'Complete the code', category: 'Editing' },
+  { id: 'search.find', label: 'Find in the file', category: 'Search' },
+  { id: 'search.global', label: 'Search in the project', category: 'Search' },
+  { id: 'nav.gotoFile', label: 'Go to file…', category: 'Navigation', inTerminal: true },
+  { id: 'nav.gotoSymbol', label: 'Go to symbol…', category: 'Navigation' },
+  { id: 'nav.fileStructure', label: 'File structure', category: 'Navigation' },
+  { id: 'nav.gotoLine', label: 'Go to line…', category: 'Navigation' },
+  { id: 'nav.back', label: 'Previous position', category: 'Navigation' },
+  { id: 'nav.forward', label: 'Next position', category: 'Navigation' },
+  { id: 'nav.subwordLeft', label: 'Previous sub-word', category: 'Navigation' },
+  { id: 'nav.subwordRight', label: 'Next sub-word', category: 'Navigation' },
+  { id: 'nav.subwordLeftSelect', label: 'Extend to the previous sub-word', category: 'Navigation' },
+  { id: 'nav.subwordRightSelect', label: 'Extend to the next sub-word', category: 'Navigation' },
+  { id: 'nav.related', label: 'Related symbols', category: 'Navigation' },
+  { id: 'nav.test', label: 'Go to test / source', category: 'Navigation' },
+  { id: 'lsp.definition', label: 'Go to declaration or usages', category: 'Code' },
+  { id: 'lsp.implementation', label: 'Go to implementations', category: 'Code' },
+  { id: 'lsp.typeDefinition', label: 'Go to type declaration', category: 'Code' },
+  { id: 'lsp.superMethod', label: 'Go to super method', category: 'Code' },
+  { id: 'lsp.references', label: 'Find usages', category: 'Code' },
+  { id: 'lsp.hover', label: 'Quick documentation', category: 'Code' },
+  { id: 'lsp.rename', label: 'Rename the symbol…', category: 'Code' },
+  { id: 'lsp.format', label: 'Reformat the code', category: 'Code' },
+  { id: 'conflict.resolve', label: 'Resolve the conflict', category: 'File' },
+  { id: 'view.splitRight', label: 'Split right', category: 'View' },
+  { id: 'view.splitDown', label: 'Split down', category: 'View' },
+  { id: 'view.closeTab', label: 'Close the tab', category: 'View' },
+  { id: 'view.nextTab', label: 'Next tab', category: 'View' },
+  { id: 'view.prevTab', label: 'Previous tab', category: 'View' },
+  { id: 'view.toggleLeft', label: 'Show / hide the left panel', category: 'View', inTerminal: true },
+  { id: 'view.toggleRight', label: 'Show / hide the tools', category: 'View', inTerminal: true },
+  { id: 'view.toggleBottom', label: 'Show / hide the consoles', category: 'View', inTerminal: true },
+  { id: 'settings.open', label: 'Settings', category: 'General', inTerminal: true },
+  { id: 'kanban.open', label: 'Open the kanban', category: 'General' },
+  { id: 'palette.open', label: 'Command palette', category: 'General', inTerminal: true },
+  { id: 'console.new', label: 'New terminal', category: 'Consoles', inTerminal: true },
+  { id: 'sql.execute', label: 'Run the active statement', category: 'Database' },
 ]
 
 export const actionById = new Map(actions.map((a) => [a.id, a]))
@@ -139,8 +140,8 @@ export function comboFromEvent(e: KeyboardEvent): string | null {
 
 const keyNames: Record<string, string> = {
   ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓', Backslash: '\\', Slash: '/', Period: '.', Comma: ',',
-  Semicolon: ';', Quote: "'", Backquote: '`', BracketLeft: '[', BracketRight: ']', Minus: '-', Equal: '=', Enter: 'Entrée',
-  Escape: 'Échap', Space: 'Espace', Backspace: '⌫', Delete: 'Suppr', PageUp: 'PgPréc', PageDown: 'PgSuiv', Home: 'Début', End: 'Fin',
+  Semicolon: ';', Quote: "'", Backquote: '`', BracketLeft: '[', BracketRight: ']', Minus: '-', Equal: '=', Enter: 'Enter',
+  Escape: 'Esc', Space: 'Space', Backspace: '⌫', Delete: 'Del', PageUp: 'PgUp', PageDown: 'PgDn', Home: 'Home', End: 'End',
   Tab: 'Tab', IntlBackslash: '<',
 }
 
@@ -153,14 +154,14 @@ export function keyLabel(code: string): string {
   if (preset) return preset
   if (code.startsWith('Key')) return code.slice(3)
   if (code.startsWith('Digit')) return code.slice(5)
-  if (code.startsWith('Numpad')) return 'Pavé ' + code.slice(6)
-  return keyNames[code] ?? code
+  if (code.startsWith('Numpad')) return t('Num {key}', { key: code.slice(6) })
+  return keyNames[code] ? t(keyNames[code]) : code
 }
 
 export function comboLabel(combo: string): string {
   const parts = combo.split('+')
   const code = parts.pop()!
-  return [...parts.map((m) => (m === 'Ctrl' ? 'Ctrl' : m === 'Alt' ? 'Alt' : m === 'Shift' ? 'Maj' : 'Méta')), keyLabel(code)].join('+')
+  return [...parts.map((m) => (m === 'Ctrl' ? 'Ctrl' : m === 'Alt' ? 'Alt' : m === 'Shift' ? t('Shift') : t('Meta'))), keyLabel(code)].join('+')
 }
 
 export function shortcutOf(action: string): string {

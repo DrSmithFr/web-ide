@@ -1,1 +1,1 @@
-Instruction globale : réponds poliment.
+Global instruction: answer politely.

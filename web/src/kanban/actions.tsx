@@ -12,6 +12,7 @@ import {
 } from './state'
 import { openTicketChat, openWorktree, startTicketChat, startWorkSession } from './sessions'
 import { Section, type Apply } from './TicketView'
+import { t, tn } from '../i18n'
 
 export interface ActionButton {
   label: string
@@ -30,37 +31,37 @@ interface Ctx {
 }
 
 /** Buttons of the header of a ticket for its status. */
-export function ticketActions(t: Ticket, ctx: Ctx): ActionButton[] {
-  const here = project()?.ticket === t.id
-  const worktree: ActionButton[] = t.worktree && !here ? [{ label: 'Ouvrir le worktree', run: () => void openWorktree(t), testid: 'ticket-open-worktree' }] : []
-  switch (t.status) {
+export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
+  const here = project()?.ticket === tk.id
+  const worktree: ActionButton[] = tk.worktree && !here ? [{ label: t('Open the worktree'), run: () => void openWorktree(tk), testid: 'ticket-open-worktree' }] : []
+  switch (tk.status) {
     case 'new':
       return [
-        { label: 'Briefing', run: () => void startTicketChat(t, 'briefing'), title: 'Conversation (mode Plan) pour préciser le ticket', testid: 'ticket-briefing' },
+        { label: 'Briefing', run: () => void startTicketChat(tk, 'briefing'), title: t('Conversation (Plan mode) to clarify the ticket'), testid: 'ticket-briefing' },
         {
-          label: t.plan.trim() ? 'Refaire le plan' : 'Générer le plan',
-          primary: !t.plan.trim(),
-          run: () => void startTicketChat(t, 'plan'),
-          title: 'Le modèle écrit le plan et les goals, puis passe le ticket à développer',
+          label: tk.plan.trim() ? t('Redo the plan') : t('Generate the plan'),
+          primary: !tk.plan.trim(),
+          run: () => void startTicketChat(tk, 'plan'),
+          title: t('The model writes the plan and the goals, then moves the ticket to Ready'),
           testid: 'ticket-plan-generate',
         },
         {
-          label: 'Passer à développer',
-          primary: !!t.plan.trim(),
-          disabled: !t.plan.trim() && !t.goals,
-          title: !t.plan.trim() && !t.goals ? 'Il faut d’abord un plan ou des goals' : undefined,
+          label: t('Ready for development'),
+          primary: !!tk.plan.trim(),
+          disabled: !tk.plan.trim() && !tk.goals,
+          title: !tk.plan.trim() && !tk.goals ? t('A plan or goals are needed first') : undefined,
           run: () => void ctx.move('ready'),
           testid: 'ticket-to-ready',
         },
       ]
     case 'ready':
       return [
-        { label: 'Revenir à « Nouveau »', run: () => void ctx.move('new') },
+        { label: t('Back to “New”'), run: () => void ctx.move('new') },
         {
-          label: 'Commencer le développement',
+          label: t('Start development'),
           primary: true,
-          title: 'Crée la branche et le worktree du ticket, puis lance une conversation de développement dans sa fenêtre',
-          run: () => void startWorkSession(t, 'dev'),
+          title: t('Creates the branch and the worktree of the ticket, then starts a development conversation in its window'),
+          run: () => void startWorkSession(tk, 'dev'),
           testid: 'ticket-start',
         },
       ]
@@ -69,46 +70,46 @@ export function ticketActions(t: Ticket, ctx: Ctx): ActionButton[] {
       return [
         ...worktree,
         {
-          label: t.status === 'fix' ? 'Session de correction' : 'Nouvelle session de dev',
-          run: () => void startWorkSession(t, t.status === 'fix' ? 'correction' : 'dev'),
+          label: tk.status === 'fix' ? t('Fix session') : t('New dev session'),
+          run: () => void startWorkSession(tk, tk.status === 'fix' ? 'correction' : 'dev'),
           testid: 'ticket-session',
         },
-        { label: 'Envoyer en test', primary: true, run: () => void ctx.move('review'), testid: 'ticket-to-review' },
+        { label: t('Send to testing'), primary: true, run: () => void ctx.move('review'), testid: 'ticket-to-review' },
       ]
     case 'review':
       return [
         ...worktree,
-        { label: 'Ajouter un retour', run: ctx.focusFeedback, testid: 'ticket-feedback' },
-        { label: 'Fermer le ticket', primary: true, run: () => void closeTicket(t, ctx.apply), testid: 'ticket-close' },
+        { label: t('Add feedback'), run: ctx.focusFeedback, testid: 'ticket-feedback' },
+        { label: t('Close the ticket'), primary: true, run: () => void closeTicket(tk, ctx.apply), testid: 'ticket-close' },
       ]
     case 'done':
-      return [{ label: 'Rouvrir (→ Correction)', run: () => void ctx.move('fix'), testid: 'ticket-reopen' }]
+      return [{ label: t('Reopen (→ Fix)'), run: () => void ctx.move('fix'), testid: 'ticket-reopen' }]
     case 'abandoned':
-      return [{ label: 'Rouvrir', run: () => void ctx.move('new'), testid: 'ticket-reopen' }]
+      return [{ label: t('Reopen'), run: () => void ctx.move('new'), testid: 'ticket-reopen' }]
   }
 }
 
-async function closeTicket(t: Ticket, apply: Apply) {
-  if (t.worktree) {
-    const d = await ticketDiff(t.id).catch(() => null)
-    if (d?.dirty && !confirm('Le worktree a des modifications non commitées : elles seront perdues avec lui. Fermer quand même ?')) return
+async function closeTicket(tk: Ticket, apply: Apply) {
+  if (tk.worktree) {
+    const d = await ticketDiff(tk.id).catch(() => null)
+    if (d?.dirty && !confirm(t('The worktree has uncommitted changes: they will be lost with it. Close anyway?'))) return
   }
-  await apply(finishTicket(t.id, 'done'))
+  await apply(finishTicket(tk.id, 'done'))
 }
 
-export async function abandonTicket(t: Ticket, apply: Apply) {
-  const why = await prompt({ title: `Abandonner le ticket #${t.id}`, label: 'Raison (facultatif)' })
+export async function abandonTicket(tk: Ticket, apply: Apply) {
+  const why = await prompt({ title: t('Abandon ticket #{id}', { id: tk.id }), label: t('Reason (optional)') })
   if (why === null) return
-  const deleteBranch = !!t.branch && confirm(`Supprimer aussi la branche ${t.branch} ?`)
-  await apply(finishTicket(t.id, 'abandoned', why, deleteBranch))
+  const deleteBranch = !!tk.branch && confirm(t('Also delete the branch {branch}?', { branch: tk.branch }))
+  await apply(finishTicket(tk.id, 'abandoned', why, deleteBranch))
 }
 
 /** Opens a conversation of a ticket: development ones in the window of the worktree. */
-async function openChatOf(t: Ticket, chatId: string, role: ChatRole) {
+async function openChatOf(tk: Ticket, chatId: string, role: ChatRole) {
   const inWorktree = role === 'dev' || role === 'correction' || role === 'resolve'
-  if (inWorktree && t.worktree && project()?.ticket !== t.id) {
+  if (inWorktree && tk.worktree && project()?.ticket !== tk.id) {
     try {
-      const target = (await worktreeProject(t.id)).project
+      const target = (await worktreeProject(tk.id)).project
       localStorage.setItem(`webide.llm.active.${target}`, chatId)
       openWorktreeWindow(target, true)
     } catch (e) {
@@ -119,19 +120,19 @@ async function openChatOf(t: Ticket, chatId: string, role: ChatRole) {
   await openTicketChat(chatId)
 }
 
-export function TicketChats(props: { t: Ticket; apply: Apply; onUnlink: (chatId: string) => void; roleLabels: Record<ChatRole, string> }) {
+export function TicketChats(props: { tk: Ticket; apply: Apply; onUnlink: (chatId: string) => void; roleLabels: Record<ChatRole, string> }) {
   return (
-    <Section title="Conversations">
-      <For each={props.t.chatList} fallback={<p class="muted small">Aucune conversation liée.</p>}>
+    <Section title={t('Conversations')}>
+      <For each={props.tk.chatList} fallback={<p class="muted small">{t('No linked conversation.')}</p>}>
         {(c) => (
           <div class="tk-row">
             <Icon name="sparkle" size={12} />
             <span class={`kb-role r-${c.role}`}>{props.roleLabels[c.role]}</span>
-            <button class="link ellipsis small" title={c.title} onClick={() => void openChatOf(props.t, c.chatId, c.role)} data-testid="ticket-chat">
-              {c.title || 'Conversation'}
+            <button class="link ellipsis small" title={c.title} onClick={() => void openChatOf(props.tk, c.chatId, c.role)} data-testid="ticket-chat">
+              {c.title || t('Conversation')}
             </button>
             <span class="grow" />
-            <button class="icon-btn small" title="Délier" onClick={() => props.onUnlink(c.chatId)}>
+            <button class="icon-btn small" title={t('Unlink')} onClick={() => props.onUnlink(c.chatId)}>
               <Icon name="close" size={11} />
             </button>
           </div>
@@ -141,15 +142,15 @@ export function TicketChats(props: { t: Ticket; apply: Apply; onUnlink: (chatId:
   )
 }
 
-const statusNames: Record<string, string> = { A: 'ajouté', M: 'modifié', D: 'supprimé', R: 'renommé', C: 'copié', T: 'type changé', '?': 'non suivi' }
+const statusNames: Record<string, string> = { A: 'added', M: 'modified', D: 'deleted', R: 'renamed', C: 'copied', T: 'type changed', '?': 'untracked' }
 
 /** Branch, base, worktree and the files changed by the ticket, with their diff. */
-export function TicketGit(props: { t: Ticket; apply: Apply }) {
-  const t = () => props.t
-  const shown = () => !!t().branch || !!t().snapshot || ['in_progress', 'review', 'fix', 'done'].includes(t().status)
+export function TicketGit(props: { tk: Ticket; apply: Apply }) {
+  const tk = () => props.tk
+  const shown = () => !!tk().branch || !!tk().snapshot || ['in_progress', 'review', 'fix', 'done'].includes(tk().status)
   const [tick, setTick] = createSignal(0)
   const [diff] = createResource(
-    () => (shown() && (t().branch || t().snapshot) ? { id: t().id, v: ticketVersion(t().id), k: tick(), base: t().base } : null),
+    () => (shown() && (tk().branch || tk().snapshot) ? { id: tk().id, v: ticketVersion(tk().id), k: tick(), base: tk().base } : null),
     async ({ id }) => {
       try {
         return { d: await ticketDiff(id), error: '' }
@@ -160,51 +161,51 @@ export function TicketGit(props: { t: Ticket; apply: Apply }) {
   )
   const changeBase = async () => {
     const branches = await request<{ name: string; current: boolean }[]>('git.branches').catch(() => [])
-    const v = await prompt({ title: 'Base de comparaison', label: `Branches : ${branches.map((b) => b.name).slice(0, 12).join(', ')}`, value: t().base || 'origin/main' })
-    if (v?.trim()) await props.apply(updateTicket(t().id, { base: v.trim() }))
+    const v = await prompt({ title: t('Comparison base'), label: `Branches : ${branches.map((b) => b.name).slice(0, 12).join(', ')}`, value: tk().base || 'origin/main' })
+    if (v?.trim()) await props.apply(updateTicket(tk().id, { base: v.trim() }))
   }
   const totals = () => (diff()?.d?.files ?? []).reduce((a, f) => [a[0] + f.added, a[1] + f.removed], [0, 0])
   return (
     <Show when={shown()}>
       <Section
-        title="Git et changements"
+        title={t('Git and changes')}
         actions={
-          <button class="icon-btn small" title="Rafraîchir" onClick={() => setTick((n) => n + 1)}>
+          <button class="icon-btn small" title={t('Refresh')} onClick={() => setTick((n) => n + 1)}>
             <Icon name="refresh" size={12} />
           </button>
         }
       >
         <div class="tk-git" data-testid="ticket-git">
-          <Show when={t().branch} fallback={<p class="muted small">Pas encore de branche : elle est créée au début du développement.</p>}>
+          <Show when={tk().branch} fallback={<p class="muted small">{t('No branch yet: it is created when development starts.')}</p>}>
             <div class="tk-git-row">
               <Icon name="branch" size={12} />
               <span class="mono" data-testid="ticket-branch">
-                {t().branch}
+                {tk().branch}
               </span>
-              <span class="muted small">comparée à</span>
-              <button class="link mono" title="Changer la base de comparaison" onClick={() => void changeBase()} data-testid="ticket-base">
-                {t().base || diff()?.d?.base || 'origin/main'}
+              <span class="muted small">{t('compared with')}</span>
+              <button class="link mono" title={t('Change the comparison base')} onClick={() => void changeBase()} data-testid="ticket-base">
+                {tk().base || diff()?.d?.base || 'origin/main'}
               </button>
             </div>
-            <Show when={t().worktree}>
+            <Show when={tk().worktree}>
               <div class="tk-git-row muted small">
                 <Icon name="folder" size={12} />
-                <span class="mono ellipsis" title={t().worktree}>
-                  {t().worktree!.replace(root() + '/', '')}
+                <span class="mono ellipsis" title={tk().worktree}>
+                  {tk().worktree!.replace(root() + '/', '')}
                 </span>
-                <Show when={project()?.ticket !== t().id}>
-                  <button class="link" onClick={() => void openWorktree(t())}>
-                    ouvrir
+                <Show when={project()?.ticket !== tk().id}>
+                  <button class="link" onClick={() => void openWorktree(tk())}>
+                    {t('open')}
                   </button>
                 </Show>
               </div>
             </Show>
-            <Show when={t().setup}>
-              <details class="tk-setup" classList={{ error: t().setup === 'error' }}>
+            <Show when={tk().setup}>
+              <details class="tk-setup" classList={{ error: tk().setup === 'error' }}>
                 <summary>
-                  {t().setup === 'running' ? 'Initialisation du worktree en cours…' : t().setup === 'ok' ? 'Worktree initialisé' : 'Initialisation du worktree en échec'}
+                  {tk().setup === 'running' ? t('Setting up the worktree…') : tk().setup === 'ok' ? t('Worktree set up') : t('Worktree setup failed')}
                 </summary>
-                <pre>{t().setupLog || '(pas de sortie)'}</pre>
+                <pre>{tk().setupLog || t('(no output)')}</pre>
               </details>
             </Show>
           </Show>
@@ -215,29 +216,30 @@ export function TicketGit(props: { t: Ticket; apply: Apply }) {
             {(d) => (
               <>
                 <div class="tk-git-summary small" data-testid="ticket-diff-summary">
-                  <strong>{d().files.length} fichier(s)</strong>
+                  <strong>{tn(d().files.length, '{n} file', '{n} files')}</strong>
                   <span class="ok">+{totals()[0]}</span>
                   <span class="danger">−{totals()[1]}</span>
                   <Show when={d().source !== 'snapshot'}>
                     <span class="muted">
-                      · {d().ahead} commit(s) d'avance{d().behind ? `, ${d().behind} de retard sur ${d().base}` : ''}
+                      · {tn(d().ahead, '{n} commit ahead', '{n} commits ahead')}
+                      {d().behind ? `, ${tn(d().behind, '{n} behind {base}', '{n} behind {base}', { base: d().base })}` : ''}
                     </span>
                   </Show>
                   <Show when={d().dirty}>
-                    <span class="badge warn">modifications non commitées</span>
+                    <span class="badge warn">{t('uncommitted changes')}</span>
                   </Show>
                   <Show when={d().source === 'snapshot'}>
-                    <span class="badge">{t().status === 'done' ? 'figé à la fermeture' : 'figé à la fusion'}</span>
+                    <span class="badge">{tk().status === 'done' ? t('frozen when closed') : t('frozen when merged')}</span>
                   </Show>
                 </div>
                 <div class="tk-files">
-                  <For each={d().files}>{(f) => <ChangedFile t={t()} d={d()} f={f} />}</For>
+                  <For each={d().files}>{(f) => <ChangedFile tk={tk()} d={d()} f={f} />}</For>
                 </div>
               </>
             )}
           </Show>
-          <Show when={t().branch}>
-            <GitOps t={t()} tick={tick()} behind={diff()?.d?.behind ?? 0} onDone={() => setTick((n) => n + 1)} />
+          <Show when={tk().branch}>
+            <GitOps tk={tk()} tick={tick()} behind={diff()?.d?.behind ?? 0} onDone={() => setTick((n) => n + 1)} />
           </Show>
         </div>
       </Section>
@@ -245,20 +247,20 @@ export function TicketGit(props: { t: Ticket; apply: Apply }) {
   )
 }
 
-function ChangedFile(props: { t: Ticket; d: Diff; f: { path: string; status: string; added: number; removed: number } }) {
+function ChangedFile(props: { tk: Ticket; d: Diff; f: { path: string; status: string; added: number; removed: number } }) {
   const [open, setOpen] = createSignal(false)
   const [patch] = createResource(
-    () => (open() ? { v: ticketVersion(props.t.id), from: props.d.from } : null),
-    ({ from }) => filePatch(props.t.id, props.f.path, from, props.d.source).catch((e) => `Erreur : ${(e as Error).message}`),
+    () => (open() ? { v: ticketVersion(props.tk.id), from: props.d.from } : null),
+    ({ from }) => filePatch(props.tk.id, props.f.path, from, props.d.source).catch((e) => t('Error: {message}', { message: (e as Error).message })),
   )
-  const here = () => project()?.ticket === props.t.id
+  const here = () => project()?.ticket === props.tk.id
   return (
     <div class="tk-file" data-testid="ticket-diff-file">
       <div class="tk-file-head" onClick={() => setOpen(!open())}>
         <span class="tk-chev" classList={{ open: open() }}>
           <Icon name="chevron" size={11} />
         </span>
-        <span class={`tk-fst s-${props.f.status === '?' ? 'U' : props.f.status}`} title={statusNames[props.f.status] ?? props.f.status}>
+        <span class={`tk-fst s-${props.f.status === '?' ? 'U' : props.f.status}`} title={t(statusNames[props.f.status] ?? props.f.status)}>
           {props.f.status === '?' ? 'U' : props.f.status}
         </span>
         <span class="mono ellipsis" title={props.f.path}>
@@ -270,7 +272,7 @@ function ChangedFile(props: { t: Ticket; d: Diff; f: { path: string; status: str
         <Show when={here() && props.f.status !== 'D'}>
           <button
             class="icon-btn small"
-            title="Ouvrir le fichier"
+            title={t('Open the file')}
             onClick={(e) => {
               e.stopPropagation()
               openFile(`${root()}/${props.f.path}`)
@@ -281,7 +283,7 @@ function ChangedFile(props: { t: Ticket; d: Diff; f: { path: string; status: str
         </Show>
       </div>
       <Show when={open()}>
-        <Show when={patch() !== undefined} fallback={<p class="muted small pad">Chargement…</p>}>
+        <Show when={patch() !== undefined} fallback={<p class="muted small pad">{t('Loading…')}</p>}>
           <PatchView text={patch()!} />
         </Show>
       </Show>
@@ -303,7 +305,7 @@ export function PatchView(props: { text: string }) {
     return out
   }
   return (
-    <Show when={lines().length} fallback={<p class="muted small pad">{props.text.startsWith('Erreur') ? props.text : 'Pas de différence textuelle (fichier binaire ou mode).'}</p>}>
+    <Show when={lines().length} fallback={<p class="muted small pad">{props.text.startsWith(t('Error: {message}', { message: '' })) ? props.text : t('No text difference (binary file or mode).')}</p>}>
       <pre class="tk-patch">
         <For each={lines()}>{(l) => <div class={l.cls}>{l.text || ' '}</div>}</For>
       </pre>
@@ -312,12 +314,12 @@ export function PatchView(props: { text: string }) {
 }
 
 /** Merge into the base, rebase on it, and the conflicts they leave (docs/kanban.md). */
-function GitOps(props: { t: Ticket; tick: number; behind: number; onDone: () => void }) {
-  const t = () => props.t
+function GitOps(props: { tk: Ticket; tick: number; behind: number; onDone: () => void }) {
+  const tk = () => props.tk
   const [squash, setSquash] = createSignal(false)
   const [busy, setBusy] = createSignal('')
   const [info, { mutate }] = createResource(
-    () => ({ id: t().id, v: ticketVersion(t().id), k: props.tick }),
+    () => ({ id: tk().id, v: ticketVersion(tk().id), k: props.tick }),
     ({ id }) => gitInfo(id).catch(() => null),
   )
   const run = async (label: string, f: () => Promise<GitInfo>) => {
@@ -332,9 +334,9 @@ function GitOps(props: { t: Ticket; tick: number; behind: number; onDone: () => 
     }
   }
   const merge = async () => {
-    const d = await ticketDiff(t().id).catch(() => null)
-    if (d?.dirty && !confirm('Le worktree a des modifications non commitées : elles ne seront pas fusionnées. Continuer ?')) return
-    await run('merge', () => mergeTicket(t().id, squash()))
+    const d = await ticketDiff(tk().id).catch(() => null)
+    if (d?.dirty && !confirm(t('The worktree has uncommitted changes: they will not be merged. Continue?'))) return
+    await run('merge', () => mergeTicket(tk().id, squash()))
   }
   const busyState = (s?: GitOpState) => !!s && (s.rebase || s.merge || s.squash)
   return (
@@ -342,37 +344,37 @@ function GitOps(props: { t: Ticket; tick: number; behind: number; onDone: () => 
       {(i) => (
         <div class="tk-gitops" data-testid="ticket-gitops">
           <Show when={busyState(i().worktree)}>
-            <Conflicts t={t()} where="worktree" state={i().worktree!} busy={busy()} run={run} />
+            <Conflicts tk={tk()} where="worktree" state={i().worktree!} busy={busy()} run={run} />
           </Show>
           <Show when={busyState(i().main)}>
-            <Conflicts t={t()} where="main" state={i().main} busy={busy()} run={run} />
+            <Conflicts tk={tk()} where="main" state={i().main} busy={busy()} run={run} />
           </Show>
           <div class="tk-git-row">
             <Show
               when={!i().merged}
               fallback={
                 <span class="badge ok" data-testid="ticket-merged">
-                  <Icon name="check" size={11} /> fusionnée dans {i().into}
+                  <Icon name="check" size={11} /> {t('merged into {branch}', { branch: i().into })}
                 </span>
               }
             >
-              <select class="small" value={squash() ? 'squash' : 'merge'} onChange={(e) => setSquash(e.currentTarget.value === 'squash')} title="Mode de fusion">
+              <select class="small" value={squash() ? 'squash' : 'merge'} onChange={(e) => setSquash(e.currentTarget.value === 'squash')} title={t('Merge mode')}>
                 <option value="merge">merge --no-ff</option>
                 <option value="squash">squash</option>
               </select>
               <button class="btn small" disabled={!!busy() || busyState(i().main)} onClick={() => void merge()} data-testid="ticket-merge">
-                <Icon name="branch" size={12} /> {busy() === 'merge' ? 'Fusion…' : `Fusionner dans ${i().into}`}
+                <Icon name="branch" size={12} /> {busy() === 'merge' ? t('Merging…') : t('Merge into {branch}', { branch: i().into })}
               </button>
             </Show>
             <Show when={i().worktree && !busyState(i().worktree) && !i().merged}>
               <button
                 class="btn small"
                 disabled={!!busy()}
-                title="git fetch puis rebase de la branche sur sa base, dans le worktree"
-                onClick={() => void run('rebase', () => rebaseTicket(t().id))}
+                title={t('git fetch, then rebase of the branch on its base, in the worktree')}
+                onClick={() => void run('rebase', () => rebaseTicket(tk().id))}
                 data-testid="ticket-rebase"
               >
-                <Icon name="refresh" size={12} /> {busy() === 'rebase' ? 'Rebase…' : `Rebaser${props.behind ? ` (${props.behind} de retard)` : ''}`}
+                <Icon name="refresh" size={12} /> {busy() === 'rebase' ? t('Rebasing…') : props.behind ? t('Rebase ({n} behind)', { n: props.behind }) : t('Rebase')}
               </button>
             </Show>
           </div>
@@ -383,22 +385,22 @@ function GitOps(props: { t: Ticket; tick: number; behind: number; onDone: () => 
 }
 
 function Conflicts(props: {
-  t: Ticket
+  tk: Ticket
   where: 'worktree' | 'main'
   state: GitOpState
   busy: string
   run: (label: string, f: () => Promise<GitInfo>) => Promise<void>
 }) {
-  const what = () => (props.where === 'worktree' ? 'Rebase en cours dans le worktree' : props.state.squash ? 'Fusion (squash) en cours dans le dossier principal' : 'Fusion en cours dans le dossier principal')
-  const here = () => (props.where === 'worktree' ? project()?.ticket === props.t.id : !project()?.parent)
-  const resolve = () => (props.where === 'worktree' ? startWorkSession(props.t, 'resolve') : startTicketChat(props.t, 'resolve'))
+  const what = () => (props.where === 'worktree' ? t('Rebase in progress in the worktree') : props.state.squash ? t('Merge (squash) in progress in the main folder') : t('Merge in progress in the main folder'))
+  const here = () => (props.where === 'worktree' ? project()?.ticket === props.tk.id : !project()?.parent)
+  const resolve = () => (props.where === 'worktree' ? startWorkSession(props.tk, 'resolve') : startTicketChat(props.tk, 'resolve'))
   return (
     <div class="tk-conflicts" data-testid={`ticket-conflicts-${props.where}`}>
       <div class="tk-git-row">
         <Icon name="conflict" size={13} />
         <strong>{what()}</strong>
         <span class="muted small">
-          {props.state.conflicts.length ? `${props.state.conflicts.length} fichier(s) en conflit` : 'conflits résolus : continuer pour terminer'}
+          {props.state.conflicts.length ? tn(props.state.conflicts.length, '{n} file in conflict', '{n} files in conflict') : t('conflicts resolved: continue to finish')}
         </span>
       </div>
       <For each={props.state.conflicts}>
@@ -413,15 +415,15 @@ function Conflicts(props: {
         )}
       </For>
       <div class="tk-git-row">
-        <button class="btn small primary" disabled={!!props.busy} onClick={() => void props.run('continue', () => continueGit(props.t.id, props.where))} data-testid="ticket-continue">
-          Continuer
+        <button class="btn small primary" disabled={!!props.busy} onClick={() => void props.run('continue', () => continueGit(props.tk.id, props.where))} data-testid="ticket-continue">
+          {t('Continue')}
         </button>
-        <button class="btn small" disabled={!!props.busy} onClick={() => void props.run('abort', () => abortGit(props.t.id, props.where))} data-testid="ticket-abort">
-          {props.where === 'worktree' ? 'Abandonner le rebase' : 'Annuler la fusion'}
+        <button class="btn small" disabled={!!props.busy} onClick={() => void props.run('abort', () => abortGit(props.tk.id, props.where))} data-testid="ticket-abort">
+          {props.where === 'worktree' ? t('Abort the rebase') : t('Abort the merge')}
         </button>
         <Show when={props.state.conflicts.length}>
           <button class="btn small" onClick={() => void resolve()} data-testid="ticket-resolve">
-            <Icon name="sparkle" size={12} /> Session de résolution
+            <Icon name="sparkle" size={12} /> {t('Resolution session')}
           </button>
         </Show>
       </div>

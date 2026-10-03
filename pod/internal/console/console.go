@@ -5,11 +5,11 @@ package console
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
 	"sync"
 	"time"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/execx"
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
 
 const scrollbackMax = 512 * 1024
@@ -115,7 +115,7 @@ func (m *Manager) get(id string) (*Console, error) {
 	defer m.mu.Unlock()
 	c, ok := m.consoles[id]
 	if !ok {
-		return nil, errors.New("console introuvable")
+		return nil, i18n.New("console not found")
 	}
 	return c, nil
 }

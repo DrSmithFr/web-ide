@@ -1,6 +1,7 @@
 // WebSocket client of the pod: requests with responses, events pushed by the pod,
 // automatic reconnection and throughput measurement (sliding window of one second).
 import { createSignal } from 'solid-js'
+import { lang, onLangChange, t } from '../i18n'
 
 export type PodState = 'connecting' | 'connected' | 'disconnected'
 
@@ -58,6 +59,8 @@ function connect() {
   sock.onopen = () => {
     retry = 0
     setState('connected')
+    // First: the messages of the pod are translated for this window.
+    sock.send(JSON.stringify({ id: 0, method: 'client.lang', params: { lang: lang() } }))
     for (const m of queue.splice(0)) send(m)
   }
   sock.onmessage = (ev) => {
@@ -91,7 +94,7 @@ function connect() {
     ws = null
     setState('disconnected')
     for (const [id, p] of pending) {
-      p.reject(new RpcError('disconnected', 'connexion au pod perdue'))
+      p.reject(new RpcError('disconnected', t('connection to the pod lost')))
       pending.delete(id)
     }
     emit('pod.disconnected', null)
@@ -127,11 +130,13 @@ export function request<T = any>(method: string, params?: any, signal?: AbortSig
     signal?.addEventListener('abort', () => {
       if (pending.delete(id)) {
         send(JSON.stringify({ method: '$/cancel', params: { id } }))
-        reject(new RpcError('canceled', 'annulé'))
+        reject(new RpcError('canceled', t('canceled')))
       }
     })
   })
 }
+
+onLangChange((l) => notify('client.lang', { lang: l }))
 
 /** notify sends a request without waiting for its answer. */
 export function notify(method: string, params?: any) {

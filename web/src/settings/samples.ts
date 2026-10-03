@@ -79,12 +79,12 @@ SCAN 0 MATCH user:* COUNT 100
   html: `<!doctype html>
 <a href="/docs" class="link">Docs</a> &amp; <!-- note -->
 `,
-  markdown: `# Titre
-- **gras** et *italique*, \`code\`
-[lien](https://example.org)
+  markdown: `# Title
+- **bold** and *italic*, \`code\`
+[link](https://example.org)
 `,
   shell: `#!/bin/sh
-for f in "$@"; do echo "fichier: $f"; done
+for f in "$@"; do echo "file: $f"; done
 `,
   yaml: `services:
   db:

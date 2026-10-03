@@ -4,7 +4,7 @@ const { run, openProject, open, assert, text, OUT } = require('../common.cjs')
 try {
   execSync('command -v gopls', { env: { ...process.env, PATH: process.env.HOME + '/go/bin:' + process.env.PATH }, stdio: 'ignore' })
 } catch {
-  console.log('  (gopls absent : suite ignorée)')
+  console.log('  (gopls not installed: suite skipped)')
   process.exit(0)
 }
 run(async ({ page }) => {
@@ -30,11 +30,11 @@ run(async ({ page }) => {
     await page.keyboard.press('Control+b')
     jumped = await page.waitForFunction(() => document.querySelector('.cursor-info')?.textContent.startsWith('8:'), null, { timeout: 1500 }).then(() => true, () => false)
   }
-  assert(jumped, 'Ctrl+B va à la déclaration (ligne 8) : ' + (await line()))
+  assert(jumped, 'Ctrl+B goes to the declaration (line 8): ' + (await line()))
   // On the declaration: the usages (a single one: jump to it).
   await page.keyboard.press('Control+b')
   const usages = await page.waitForFunction(() => document.querySelector('.cursor-info')?.textContent.startsWith('13:') || document.querySelector('.pick'), null, { timeout: 8000 }).then(() => true, () => false)
-  assert(usages, 'Ctrl+B sur la déclaration montre les usages')
+  assert(usages, 'Ctrl+B on the declaration shows the usages')
   await page.keyboard.press('Escape')
   await page.click('.rail-right .rail-btn[title="Structure"]')
   const syms = await page
@@ -43,7 +43,7 @@ run(async ({ page }) => {
       return names.includes('Greeter') && names.some((n) => n.includes('Hello')) && names
     }, null, { timeout: 8000 })
     .then((h) => h.jsonValue(), () => [])
-  assert(syms.length > 0, 'la structure liste les symboles ' + JSON.stringify(syms))
+  assert(syms.length > 0, 'the structure lists the symbols ' + JSON.stringify(syms))
   // Diagnostics
   await page.click('.pane.active .ed-content')
   await page.keyboard.press('Control+End')
@@ -51,16 +51,16 @@ run(async ({ page }) => {
   const diag = await page
     .waitForFunction(() => CSS.highlights.get('diag-error')?.size, null, { timeout: 10000 })
     .then((h) => h.jsonValue(), () => 0)
-  assert(diag > 0, `diagnostic souligné dans l'éditeur (${diag})`)
+  assert(diag > 0, `diagnostic underlined in the editor (${diag})`)
   await page.click('.bottom-toggle').catch(() => {})
-  await page.click('.btab:has-text("Problèmes")')
+  await page.click('.btab:has-text("Problems")')
   await page.waitForTimeout(300)
-  assert((await page.$$('.problem')).length > 0, 'le panneau Problèmes liste le diagnostic')
+  assert((await page.$$('.problem')).length > 0, 'the Problems panel lists the diagnostic')
   await page.screenshot({ path: OUT + '/lsp.png' })
   // Remove the broken function again.
   await page.click('.pane.active .ed-content')
   for (let i = 0; i < 3 && (await text(page)).includes('broken'); i++) await page.keyboard.press('Control+z')
-  assert(!(await text(page)).includes('broken'), 'undo retire la fonction cassée')
+  assert(!(await text(page)).includes('broken'), 'undo removes the broken function')
 
   // Completion after a trigger character, filtered while typing.
   await caretOn('.Hello())', 9)
@@ -72,16 +72,16 @@ run(async ({ page }) => {
     console.log('     texte : ' + JSON.stringify((await text(page)).slice(150, 330)))
     console.log('     toasts : ' + (await page.$$eval('.toast', (t) => t.map((x) => x.textContent).join(' | '))))
   }
-  assert(shown, 'la liste de complétion apparaît')
+  assert(shown, 'the completion list shows up')
   const labels = await page.$$eval('.completion-item .completion-label', (e) => e.map((x) => x.textContent))
-  assert(labels[0]?.startsWith('Print'), 'filtrée sur « Pri » : ' + labels.slice(0, 4).join(', '))
+  assert(labels[0]?.startsWith('Print'), 'filtered on "Pri": ' + labels.slice(0, 4).join(', '))
   await page.keyboard.type('ntl')
   await page.waitForTimeout(150)
   await page.keyboard.press('Enter')
   await page.waitForTimeout(200)
   const accepted = await text(page)
-  assert(accepted.match(/\n\tfmt\.Println\b/g)?.length === 2, 'Entrée insère la proposition ' + JSON.stringify(accepted.slice(180, 300)))
-  assert(!(await page.isVisible('.completion')), 'la liste se ferme')
+  assert(accepted.match(/\n\tfmt\.Println\b/g)?.length === 2, 'Enter inserts the suggestion ' + JSON.stringify(accepted.slice(180, 300)))
+  assert(!(await page.isVisible('.completion')), 'the list closes')
   await page.screenshot({ path: OUT + '/completion.png' })
   await page.keyboard.type('("ok")')
   await page.keyboard.press('Enter')
@@ -97,12 +97,12 @@ run(async ({ page }) => {
   await page.keyboard.press('Enter')
   await page.waitForTimeout(300)
   const withImport = await text(page)
-  assert(/strings\.ToUpper/.test(withImport), 'strings.ToUpper complété ' + JSON.stringify(withImport.slice(0, 40) + ' … ' + withImport.slice(180, 320)))
-  assert(/import \(\s*"fmt"\s*"strings"\s*\)|"strings"/.test(withImport), "l'import de strings est ajouté")
+  assert(/strings\.ToUpper/.test(withImport), 'strings.ToUpper completed ' + JSON.stringify(withImport.slice(0, 40) + ' … ' + withImport.slice(180, 320)))
+  assert(/import \(\s*"fmt"\s*"strings"\s*\)|"strings"/.test(withImport), 'the import of strings is added')
   await page.keyboard.press('Escape')
   await page.keyboard.press('Control+z')
   await page.waitForTimeout(200)
-  assert(!(await text(page)).includes('"strings"'), "un seul undo retire la complétion et l'import")
+  assert(!(await text(page)).includes('"strings"'), 'a single undo removes the completion and the import')
   await page.keyboard.press('Shift+Home')
   await page.keyboard.press('Delete')
 
@@ -111,7 +111,7 @@ run(async ({ page }) => {
   await page.keyboard.press('Escape')
   await page.keyboard.press('Control+Space')
   const manual = await page.waitForSelector('.completion-item:has-text("Greeter")', { timeout: 8000 }).then(() => true, () => false)
-  assert(manual, 'Ctrl+Espace propose Greeter')
+  assert(manual, 'Ctrl+Space suggests Greeter')
   await page.keyboard.press('Escape')
   await page.keyboard.press('Shift+Home')
   await page.keyboard.press('Delete')
@@ -121,12 +121,12 @@ run(async ({ page }) => {
   await caretOn('type Greeter', 6)
   await page.keyboard.press('Shift+F6')
   await page.waitForSelector('.modal input')
-  assert((await page.inputValue('.modal input')) === 'Greeter', 'nom actuel proposé')
+  assert((await page.inputValue('.modal input')) === 'Greeter', 'current name suggested')
   await page.fill('.modal input', 'Saluteur')
   await page.keyboard.press('Enter')
   await page.waitForFunction(() => document.querySelector('.pane.active .ed-content').textContent.includes('Saluteur'), null, { timeout: 8000 }).catch(() => {})
   const renamed = await text(page)
-  assert(!renamed.includes('Greeter') && (renamed.match(/Saluteur/g) ?? []).length >= 3, 'toutes les occurrences renommées')
+  assert(!renamed.includes('Greeter') && (renamed.match(/Saluteur/g) ?? []).length >= 3, 'all occurrences renamed')
 
   // Formatting (Ctrl+Alt+L): gofmt fixes the indentation.
   await caretOn('return fmt.Sprintf', 0)
@@ -134,5 +134,5 @@ run(async ({ page }) => {
   await page.keyboard.type('      ')
   await page.keyboard.press('Control+Alt+l')
   await page.waitForFunction(() => /\n\treturn fmt\.Sprintf/.test(document.querySelector('.pane.active .ed-content').textContent), null, { timeout: 8000 }).catch(() => {})
-  assert(/\n\treturn fmt\.Sprintf/.test(await text(page)), 'gofmt remet la tabulation')
+  assert(/\n\treturn fmt\.Sprintf/.test(await text(page)), 'gofmt puts the tab back')
 })

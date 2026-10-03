@@ -6,16 +6,17 @@ import { prompt } from '../ui/overlay'
 import { errorToast } from '../ui/toast'
 import { stopWatch } from './agent'
 import { chat, chatList, deleteChat, live, openChat, refreshChats, renameChat, resetChat, type ChatInfo } from './state'
+import { t } from '../i18n'
 
-function groupOf(t: number): string {
+function groupOf(ms: number): string {
   const d = new Date()
   d.setHours(0, 0, 0, 0)
   const day = 86_400_000
-  if (t >= d.getTime()) return 'Aujourd’hui'
-  if (t >= d.getTime() - day) return 'Hier'
-  if (t >= d.getTime() - 7 * day) return '7 derniers jours'
-  if (t >= d.getTime() - 30 * day) return '30 derniers jours'
-  return 'Plus ancien'
+  if (ms >= d.getTime()) return t('Today')
+  if (ms >= d.getTime() - day) return t('Yesterday')
+  if (ms >= d.getTime() - 7 * day) return t('Last 7 days')
+  if (ms >= d.getTime() - 30 * day) return t('Last 30 days')
+  return t('Older')
 }
 
 export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
@@ -44,18 +45,18 @@ export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
     }
   }
   const rename = async (c: ChatInfo) => {
-    const title = await prompt({ title: 'Renommer la conversation', value: c.title })
+    const title = await prompt({ title: t('Rename the conversation'), value: c.title })
     if (title?.trim()) await renameChat(c.id, title.trim()).catch(errorToast)
   }
   const remove = async (c: ChatInfo) => {
-    if (!confirm(`Supprimer la conversation « ${c.title || 'Sans titre'} » ?`)) return
+    if (!confirm(t('Delete the conversation “{title}”?', { title: c.title || t('Untitled') }))) return
     await deleteChat(c.id).catch(errorToast)
   }
   return (
     <aside class="ai-sidebar" data-testid="ai-sidebar">
       <div class="ai-side-search">
         <Icon name="search" size={13} />
-        <input placeholder="Rechercher" value={q()} onInput={(e) => setQ(e.currentTarget.value)} />
+        <input placeholder={t('Search')} value={q()} onInput={(e) => setQ(e.currentTarget.value)} />
       </div>
       <button
         class="ai-new-chat"
@@ -66,10 +67,10 @@ export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
           props.onNew()
         }}
       >
-        <Icon name="plus" size={14} /> Nouvelle conversation
+        <Icon name="plus" size={14} /> {t('New conversation')}
       </button>
       <div class="ai-side-list">
-        <Show when={groups().length} fallback={<p class="muted small ai-side-empty">{q() ? 'Aucune conversation trouvée.' : 'Aucune conversation pour ce projet.'}</p>}>
+        <Show when={groups().length} fallback={<p class="muted small ai-side-empty">{q() ? t('No conversation found.') : t('No conversation for this project.')}</p>}>
           <For each={groups()}>
             {(g) => (
               <div class="ai-side-group">
@@ -78,12 +79,12 @@ export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
                   {(c) => (
                     <div class="ai-chat-item" classList={{ active: c.id === chat.id }}>
                       <button class="ai-chat-open" onClick={() => open(c.id)} title={c.model ? `${c.title} · ${c.model}` : c.title}>
-                        <span class="ellipsis">{c.title || 'Sans titre'}</span>
+                        <span class="ellipsis">{c.title || t('Untitled')}</span>
                       </button>
-                      <button class="ai-chat-act" title="Renommer" onClick={() => rename(c)}>
+                      <button class="ai-chat-act" title={t('Rename')} onClick={() => rename(c)}>
                         <Icon name="edit" size={12} />
                       </button>
-                      <button class="ai-chat-act" title="Supprimer" onClick={() => remove(c)}>
+                      <button class="ai-chat-act" title={t('Delete')} onClick={() => remove(c)}>
                         <Icon name="close" size={12} />
                       </button>
                     </div>

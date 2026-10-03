@@ -20,7 +20,8 @@ exports.OUT = process.env.E2E_OUT
 
 exports.start = async (opts = {}) => {
   const browser = await chromium.launch({ executablePath: chrome(), headless: true, args: opts.args ?? [] })
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, permissions: opts.permissions ?? [] })
+  // English interface unless E2E_LOCALE says otherwise (the browser follows the system language).
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, permissions: opts.permissions ?? [], locale: opts.locale ?? process.env.E2E_LOCALE ?? 'en-US' })
   const page = await ctx.newPage()
   const errors = []
   page.on('console', (m) => m.type() === 'error' && errors.push('console: ' + m.text()))

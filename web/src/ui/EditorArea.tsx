@@ -27,6 +27,7 @@ import { summary } from '../kanban/state'
 import { gitRevision, gitStatus } from '../state/git'
 import { lineMarks } from '../editor/linediff'
 import { formatDocument, renameSymbol } from '../lsp/refactor'
+import { t } from '../i18n'
 
 export function EditorArea(props: { detached?: boolean }) {
   return (
@@ -107,19 +108,19 @@ function Pane(props: { id: string }) {
   }
   const isActivePane = () => session.activePane === props.id
 
-  const tabMenu = (e: MouseEvent, t: TabState) =>
+  const tabMenu = (e: MouseEvent, tab: TabState) =>
     contextMenu(e, [
-      { label: 'Fermer', hint: shortcutOf('view.closeTab'), action: () => closeTab(props.id, t.id) },
-      { label: 'Fermer les autres', action: () => leaf()?.tabs.filter((x) => x !== t.id).forEach((x) => closeTab(props.id, x)) },
-      { label: 'Tout fermer', action: () => [...(leaf()?.tabs ?? [])].forEach((x) => closeTab(props.id, x)) },
+      { label: t('Close'), hint: shortcutOf('view.closeTab'), action: () => closeTab(props.id, tab.id) },
+      { label: t('Close the others'), action: () => leaf()?.tabs.filter((x) => x !== tab.id).forEach((x) => closeTab(props.id, x)) },
+      { label: t('Close all'), action: () => [...(leaf()?.tabs ?? [])].forEach((x) => closeTab(props.id, x)) },
       { separator: true, label: '' },
-      { label: 'Diviser à droite', hint: shortcutOf('view.splitRight'), action: () => (activateTab(props.id, t.id), splitPane(props.id, 'row')) },
-      { label: 'Diviser en bas', hint: shortcutOf('view.splitDown'), action: () => (activateTab(props.id, t.id), splitPane(props.id, 'col')) },
-      ...(t.kind === 'file'
+      { label: t('Split right'), hint: shortcutOf('view.splitRight'), action: () => (activateTab(props.id, tab.id), splitPane(props.id, 'row')) },
+      { label: t('Split down'), hint: shortcutOf('view.splitDown'), action: () => (activateTab(props.id, tab.id), splitPane(props.id, 'col')) },
+      ...(tab.kind === 'file'
         ? [
             { separator: true, label: '' },
-            { label: 'Copier le chemin', action: () => navigator.clipboard.writeText(t.path!) },
-            { label: 'Copier le chemin relatif', action: () => navigator.clipboard.writeText(relPath(t.path!)) },
+            { label: t('Copy the path'), action: () => navigator.clipboard.writeText(tab.path!) },
+            { label: t('Copy the relative path'), action: () => navigator.clipboard.writeText(relPath(tab.path!)) },
           ]
         : []),
     ])
@@ -139,20 +140,20 @@ function Pane(props: { id: string }) {
       >
         <For each={leaf()?.tabs ?? []}>
           {(id, i) => {
-            const t = () => session.tabs[id]
+            const tab = () => session.tabs[id]
             const doc = createMemo(() => {
               docsVersion()
-              const tab = t()
-              return tab?.kind === 'file' && tab.path ? getDoc(tab.path) : null
+              const cur = tab()
+              return cur?.kind === 'file' && cur.path ? getDoc(cur.path) : null
             })
             return (
-              <Show when={t()}>
+              <Show when={tab()}>
                 <div
                   class="tab"
                   role="tab"
                   aria-selected={leaf()?.active === id}
                   classList={{ active: leaf()?.active === id, dirty: !!doc()?.dirty(), conflict: !!doc()?.conflict(), readonly: !!doc()?.readOnly }}
-                  title={t().kind === 'file' ? relPath(t().path!) : t().title}
+                  title={tab().kind === 'file' ? relPath(tab().path!) : tab().title}
                   draggable
                   onDragStart={() => (dragged = { pane: props.id, tab: id })}
                   onDragOver={(e) => dragged && e.preventDefault()}
@@ -169,16 +170,16 @@ function Pane(props: { id: string }) {
                       closeTab(props.id, id)
                     } else if (e.button === 0) activateTab(props.id, id)
                   }}
-                  onContextMenu={(e) => tabMenu(e, t())}
+                  onContextMenu={(e) => tabMenu(e, tab())}
                 >
-                  <span class={`tab-kind kind-${t().kind}`} />
-                  <span class="tab-title">{tabTitle(t())}</span>
+                  <span class={`tab-kind kind-${tab().kind}`} />
+                  <span class="tab-title">{tabTitle(tab())}</span>
                   <Show when={doc()?.conflict()}>
-                    <span class="tab-badge conflict" title="En conflit">!</span>
+                    <span class="tab-badge conflict" title={t('In conflict')}>!</span>
                   </Show>
                   <button
                     class="tab-close"
-                    title="Fermer"
+                    title={t('Close')}
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation()
@@ -194,7 +195,7 @@ function Pane(props: { id: string }) {
           }}
         </For>
         <div class="tabbar-fill" />
-        <button class="icon-btn small" title={`Diviser à droite (${shortcutOf('view.splitRight')})`} onClick={() => splitPane(props.id, 'row')}>
+        <button class="icon-btn small" title={`${t('Split right')} (${shortcutOf('view.splitRight')})`} onClick={() => splitPane(props.id, 'row')}>
           ◫
         </button>
       </div>
@@ -235,15 +236,15 @@ function EmptyPane() {
   return (
     <div class="empty-pane">
       <div class="empty-grid">
-        <span>Aller au fichier</span>
+        <span>{t('Go to file')}</span>
         <kbd>{shortcutOf('nav.gotoFile')}</kbd>
-        <span>Rechercher dans le projet</span>
+        <span>{t('Search in the project')}</span>
         <kbd>{shortcutOf('search.global')}</kbd>
-        <span>Palette de commandes</span>
+        <span>{t('Command palette')}</span>
         <kbd>{shortcutOf('palette.open')}</kbd>
-        <span>Nouveau terminal</span>
+        <span>{t('New terminal')}</span>
         <kbd>{shortcutOf('console.new')}</kbd>
-        <span>Réglages</span>
+        <span>{t('Settings')}</span>
         <kbd>{shortcutOf('settings.open')}</kbd>
       </div>
     </div>
@@ -457,14 +458,14 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
         const text = await lspc.hoverText(d, off)
         const c = v.coordsAt(off)
         if (text) v.showTooltip(c.left, c.bottom - 8, text, 'doc')
-        else toast('Pas de documentation à cet endroit', 'info')
+        else toast(t('No documentation here'), 'info')
       } catch (e) {
         toast((e as Error).message, 'info')
       }
     })),
     registerAction('nav.gotoLine', when(async (v, d) => {
       const { line, col } = d.pos(v.getSelection().head)
-      const s = await prompt({ title: 'Aller à la ligne', label: `Ligne[:colonne] (1 – ${d.lineCount})`, value: `${line + 1}:${col + 1}` })
+      const s = await prompt({ title: t('Go to line'), label: t('Line[:column] (1 – {n})', { n: d.lineCount }), value: `${line + 1}:${col + 1}` })
       if (!s) return
       const [l, c] = s.split(':').map((x) => parseInt(x, 10))
       if (!l) return
@@ -497,11 +498,11 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
       const r = await request('fs.related', { path: d.path })
       const list: string[] = r.isTest ? r.sources : r.tests
       if (!list.length) {
-        toast(r.isTest ? 'Source du test introuvable' : 'Aucun test trouvé pour ce fichier', 'info')
+        toast(r.isTest ? t('Source of the test not found') : t('No test found for this file'), 'info')
         return
       }
       if (list.length === 1) return void openFile(list[0])
-      const p = await pick({ placeholder: r.isTest ? 'Sources testées' : 'Tests', items: list.map((x) => ({ label: basename(x), detail: relPath(x), value: x })) })
+      const p = await pick({ placeholder: r.isTest ? t('Tested sources') : t('Tests'), items: list.map((x) => ({ label: basename(x), detail: relPath(x), value: x })) })
       if (p) openFile(p)
     })),
     registerAction('nav.related', when(async (_, d) => {
@@ -512,10 +513,10 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
         ...r.related.map((x: string) => ({ label: basename(x), detail: relPath(x), value: x })),
       ]
       if (!items.length) {
-        toast('Aucun fichier lié', 'info')
+        toast(t('No related file'), 'info')
         return
       }
-      const p = await pick<string>({ placeholder: 'Symboles liés', items })
+      const p = await pick<string>({ placeholder: t('Related symbols'), items })
       if (p) openFile(p)
     })),
   ]
@@ -527,7 +528,7 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
     if (!d || !c) return
     d.setBase(c.remote, c.rev)
     d.setConflict(null)
-    toast('Votre version est conservée (enregistrer pour écraser le fichier)', 'info')
+    toast(t('Your version is kept (save to overwrite the file)'), 'info')
   }
   const takeTheirs = () => {
     const d = doc()
@@ -542,26 +543,26 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
     <div class="file-editor">
       <Show when={doc()?.conflict()}>
         <div class="banner banner-conflict" role="alert">
-          <span>Le fichier a changé sur le disque pendant vos modifications, et la fusion automatique a échoué. Votre version est conservée.</span>
+          <span>{t('The file changed on disk while you were editing it, and the automatic merge failed. Your version is kept.')}</span>
           <button class="btn small primary" onClick={() => openConflict(doc()!)}>
-            Résoudre ({shortcutOf('conflict.resolve')})
+            {t('Resolve')} ({shortcutOf('conflict.resolve')})
           </button>
           <button class="btn small" onClick={keepMine}>
-            Garder ma version
+            {t('Keep my version')}
           </button>
           <button class="btn small" onClick={takeTheirs}>
-            Prendre la nouvelle version
+            {t('Take the new version')}
           </button>
         </div>
       </Show>
       <Show when={doc()?.deleted()}>
-        <div class="banner banner-warn">Ce fichier a été supprimé du disque. L'enregistrer le recrée.</div>
+        <div class="banner banner-warn">{t('This file was deleted from the disk. Saving it creates it again.')}</div>
       </Show>
       <Show when={doc()?.readOnly}>
-        <div class="banner banner-info">Lecture seule : fichier hors du projet ({path})</div>
+        <div class="banner banner-info">{t('Read-only: file outside the project ({path})', { path })}</div>
       </Show>
       <Show when={error()}>
-        <div class="empty-pane">{error() === 'binary' ? 'Fichier binaire ou trop volumineux : pas d’aperçu.' : `Lecture impossible : ${error()}`}</div>
+        <div class="empty-pane">{error() === 'binary' ? t('Binary or too large file: no preview.') : t('Cannot read: {error}', { error: error() ?? '' })}</div>
       </Show>
       <div class="editor-host">
         {/* The view is mounted by hand: it gets its own node, never touched by Solid. */}

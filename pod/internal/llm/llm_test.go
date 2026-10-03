@@ -80,9 +80,9 @@ func TestOpenAIChatStream(t *testing.T) {
 			_ = json.NewDecoder(r.Body).Decode(&got)
 			sse(w,
 				`{"choices":[{"delta":{"content":null}}],"prompt_progress":{"total":40,"processed":20}}`,
-				`{"choices":[{"delta":{"reasoning_content":"Je "}}]}`,
-				`{"choices":[{"delta":{"reasoning_content":"réfléchis"}}]}`,
-				`{"choices":[{"delta":{"content":"Voici"}}],"timings":{"predicted_n":7,"predicted_per_second":31.5}}`,
+				`{"choices":[{"delta":{"reasoning_content":"I "}}]}`,
+				`{"choices":[{"delta":{"reasoning_content":"think"}}]}`,
+				`{"choices":[{"delta":{"content":"Here"}}],"timings":{"predicted_n":7,"predicted_per_second":31.5}}`,
 				`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a","type":"function","function":{"name":"read_file","arguments":"{\"pa"}}]}}]}`,
 				`{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"th\":\"x\"}"}}]}}]}`,
 				`{"choices":[{"delta":{"tool_calls":[{"index":1,"id":"b","type":"function","function":{"name":"list_dir","arguments":""}}]}}]}`,
@@ -103,7 +103,7 @@ func TestOpenAIChatStream(t *testing.T) {
 		t.Fatalf("request: %v", got)
 	}
 	msg := res.Message
-	if string(msg.Content) != `"Voici"` || msg.Reasoning != "Je réfléchis" || res.Finish != "tool_calls" {
+	if string(msg.Content) != `"Here"` || msg.Reasoning != "I think" || res.Finish != "tool_calls" {
 		t.Fatalf("message: %+v", res)
 	}
 	if len(msg.ToolCalls) != 2 || msg.ToolCalls[0].Function.Arguments != `{"path":"x"}` || msg.ToolCalls[1].Function.Arguments != "{}" || msg.ToolCalls[1].ID != "b" {
@@ -117,7 +117,7 @@ func TestOpenAIChatStream(t *testing.T) {
 		all.Content += d.Content
 		all.Reasoning += d.Reasoning
 	}
-	if all.Content != "Voici" || all.Reasoning != "Je réfléchis" {
+	if all.Content != "Here" || all.Reasoning != "I think" {
 		t.Fatalf("deltas: %+v", deltas)
 	}
 	var tokens, total int
@@ -136,12 +136,12 @@ func TestOpenAIChatStream(t *testing.T) {
 func TestOpenAIChatError(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(400)
-		io.WriteString(w, `{"error":{"message":"contexte dépassé"}}`)
+		io.WriteString(w, `{"error":{"message":"context exceeded"}}`)
 	}))
 	defer ts.Close()
 	m, id := newManager(t, ts.URL, "llamacpp")
 	_, err := m.Chat(context.Background(), ChatRequest{Server: id, Model: "m"}, nil)
-	if err == nil || !strings.Contains(err.Error(), "contexte dépassé") {
+	if err == nil || !strings.Contains(err.Error(), "context exceeded") {
 		t.Fatalf("err: %v", err)
 	}
 }
@@ -233,7 +233,7 @@ func TestModels(t *testing.T) {
 func TestChats(t *testing.T) {
 	m, _ := newManager(t, "h:1", "llamacpp")
 	// A conversation of the JSON era is imported.
-	_ = m.st.WriteFile("chats/p1/old.json", []byte(`{"id":"old","title":"Ancienne","updated":0,"messages":[{"role":"user","content":"hé"}]}`))
+	_ = m.st.WriteFile("chats/p1/old.json", []byte(`{"id":"old","title":"Old one","updated":0,"messages":[{"role":"user","content":"hé"}]}`))
 	root := t.TempDir()
 	loc := ChatLocation{Project: "p1", IdeDir: filepath.Join(root, ".ide")}
 	if err := m.SaveChat(loc, json.RawMessage(`{"id":"c1","title":"Un","created":1,"updated":1,"model":"m","pinned":true,"messages":[{"role":"user","content":"a"},{"role":"assistant","content":"b","usage":{"prompt":3}}]}`)); err != nil {
@@ -273,10 +273,10 @@ func TestChats(t *testing.T) {
 	if !strings.Contains(string(gi), "chats.db") {
 		t.Fatalf(".gitignore: %q", gi)
 	}
-	if err := m.RenameChat(loc, "c2", " Renommée "); err != nil {
+	if err := m.RenameChat(loc, "c2", " Renamed "); err != nil {
 		t.Fatal(err)
 	}
-	if list, _ := m.ListChats(loc); list[1].Title != "Renommée" {
+	if list, _ := m.ListChats(loc); list[1].Title != "Renamed" {
 		t.Fatalf("rename: %+v", list)
 	}
 	_ = m.DeleteChat(loc, "c1")
@@ -304,18 +304,18 @@ func TestContext(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(filepath.Join(home, ".claude/CLAUDE.md"), "Toujours en français.")
-	write(filepath.Join(home, ".claude/skills/pdf/SKILL.md"), "---\nname: pdf\ndescription: >\n  Lire et créer\n  des PDF\n---\n# PDF\nUtiliser pdftotext.")
+	write(filepath.Join(home, ".claude/CLAUDE.md"), "Always in English.")
+	write(filepath.Join(home, ".claude/skills/pdf/SKILL.md"), "---\nname: pdf\ndescription: >\n  Read and create\n  PDF files\n---\n# PDF\nUtiliser pdftotext.")
 	write(filepath.Join(home, ".claude/skills/pdf/scripts/x.py"), "print(1)")
 	write(filepath.Join(root, "CLAUDE.md"), "Projet Go. Voir @docs/style.md et `@ignored`.\n```\n@docs/none.md\n```")
 	write(filepath.Join(root, "docs/style.md"), "Tabulations.")
 	write(filepath.Join(root, "AGENTS.md"), "Tests avec make test.")
-	write(filepath.Join(root, ".claude/skills/deploy/SKILL.md"), "---\nname: deploy\ndescription: \"Déployer le projet\"\n---\nmake deploy")
+	write(filepath.Join(root, ".claude/skills/deploy/SKILL.md"), "---\nname: deploy\ndescription: \"Deploy the project\"\n---\nmake deploy")
 	write(filepath.Join(root, ".agents/skills/pdf/SKILL.md"), "---\nname: pdf\ndescription: PDF du projet\n---\nlocal")
 	write(filepath.Join(root, ".ide/system-prompt.md"), "Prompt du projet {{project}}")
 	_ = m.SaveGlobalPrompt("", "Prompt global")
 	_ = m.SaveGlobalPrompt("plan", "Plan global")
-	write(m.st.Path("AGENTS.md"), "Règles de l'IDE.")
+	write(m.st.Path("AGENTS.md"), "Rules of the IDE.")
 	write(m.st.Path("skills/notes/SKILL.md"), "---\nname: notes\ndescription: Notes de l'IDE\n---\nnoter")
 	write(m.st.Path("skills/pdf/SKILL.md"), "---\nname: pdf\ndescription: PDF de l'IDE\n---\nide")
 
@@ -334,7 +334,7 @@ func TestContext(t *testing.T) {
 	if strings.Join(paths, ",") != "global:CLAUDE.md,global:AGENTS.md,project:CLAUDE.md,project:style.md,project:AGENTS.md" {
 		t.Fatalf("files: %v", paths)
 	}
-	if len(c.Skills) != 3 || c.Skills[0].Name != "deploy" || c.Skills[0].Description != "Déployer le projet" || c.Skills[1].Name != "notes" || c.Skills[2].Scope != "project" || c.Skills[2].Description != "PDF du projet" {
+	if len(c.Skills) != 3 || c.Skills[0].Name != "deploy" || c.Skills[0].Description != "Deploy the project" || c.Skills[1].Name != "notes" || c.Skills[2].Scope != "project" || c.Skills[2].Description != "PDF du projet" {
 		t.Fatalf("skills: %+v", c.Skills)
 	}
 	sk, err := m.ReadSkill(p, "deploy")
@@ -352,7 +352,7 @@ func TestContext(t *testing.T) {
 	if err != nil || sk["content"] != "# PDF\nUtiliser pdftotext." || len(sk["files"].([]string)) != 1 {
 		t.Fatalf("global skill: %v %v", sk, err)
 	}
-	if desc := m.LoadContext(p).Skills[2].Description; desc != "Lire et créer des PDF" {
+	if desc := m.LoadContext(p).Skills[2].Description; desc != "Read and create PDF files" {
 		t.Fatalf("folded description: %q", desc)
 	}
 	if txt, err := m.ReadSkillFile(p, "pdf", "scripts/x.py"); err != nil || txt != "print(1)" {
@@ -368,7 +368,7 @@ func TestJobSurvivesDetach(t *testing.T) {
 	var hits atomic.Int32
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
-		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"début \"}}]}\n\n")
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"start \"}}]}\n\n")
 		w.(http.Flusher).Flush()
 		if hits.Add(1) > 1 {
 			<-r.Context().Done() // second job: never ends by itself
@@ -379,7 +379,7 @@ func TestJobSurvivesDetach(t *testing.T) {
 		case <-r.Context().Done():
 			return
 		}
-		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"fin\"}}]}\n\ndata: [DONE]\n\n")
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"end\"}}]}\n\ndata: [DONE]\n\n")
 	}))
 	defer ts.Close()
 	m, id := newManager(t, ts.URL, "llamacpp")
@@ -410,7 +410,7 @@ func TestJobSurvivesDetach(t *testing.T) {
 		close(release)
 	}()
 	res, err := m.WaitChat(context.Background(), "s1", func(s Snapshot) { snap = s }, func(Delta) {})
-	if err != nil || snap.Content != "début " || string(res.Message.Content) != `"début fin"` || snap.StartedAt == 0 {
+	if err != nil || snap.Content != "start " || string(res.Message.Content) != `"start end"` || snap.StartedAt == 0 {
 		t.Fatalf("attach: snap=%+v res=%+v err=%v", snap, res, err)
 	}
 	if _, err := m.WaitChat(context.Background(), "inconnu", nil, nil); err == nil {

@@ -6,40 +6,42 @@ import { createStore } from 'solid-js/store'
 import ortMjs from '../../node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.asyncify.mjs?url'
 import ortWasm from '../../node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.asyncify.wasm?url'
 import { prefs } from './state'
+import { t } from '../i18n'
 
 export interface WhisperModel {
   id: string
   label: string
   repo: string
   /** Download size per device. */
-  size: { webgpu: string; wasm: string }
+  /** Approximate download size in MB (0: not available). */
+  size: { webgpu: number; wasm: number }
   dtype: { webgpu: any; wasm: any }
   /** Needs WebGPU with 16-bit floats (too slow otherwise). */
   webgpuOnly?: boolean
 }
 
 export const whisperModels: WhisperModel[] = [
-  { id: 'tiny', label: 'Tiny (rapide, approximatif)', repo: 'onnx-community/whisper-tiny', size: { webgpu: '41 Mo', wasm: '41 Mo' }, dtype: { webgpu: 'q8', wasm: 'q8' } },
-  { id: 'base', label: 'Base', repo: 'onnx-community/whisper-base', size: { webgpu: '77 Mo', wasm: '77 Mo' }, dtype: { webgpu: 'q8', wasm: 'q8' } },
-  { id: 'small', label: 'Small (meilleur, plus lent)', repo: 'onnx-community/whisper-small', size: { webgpu: '250 Mo', wasm: '250 Mo' }, dtype: { webgpu: 'q8', wasm: 'q8' } },
+  { id: 'tiny', label: 'Tiny (fast, rough)', repo: 'onnx-community/whisper-tiny', size: { webgpu: 41, wasm: 41 }, dtype: { webgpu: 'q8', wasm: 'q8' } },
+  { id: 'base', label: 'Base', repo: 'onnx-community/whisper-base', size: { webgpu: 77, wasm: 77 }, dtype: { webgpu: 'q8', wasm: 'q8' } },
+  { id: 'small', label: 'Small (better, slower)', repo: 'onnx-community/whisper-small', size: { webgpu: 250, wasm: 250 }, dtype: { webgpu: 'q8', wasm: 'q8' } },
   {
     id: 'turbo',
-    label: 'Large v3 Turbo (le meilleur, WebGPU)',
+    label: 'Large v3 Turbo (the best, WebGPU)',
     repo: 'onnx-community/whisper-large-v3-turbo',
-    size: { webgpu: '560 Mo', wasm: '' },
+    size: { webgpu: 560, wasm: 0 },
     dtype: { webgpu: { encoder_model: 'q4f16', decoder_model_merged: 'q4f16' }, wasm: null },
     webgpuOnly: true,
   },
 ]
 
 export const languages: [string, string][] = [
-  ['auto', 'Détection automatique'],
-  ['fr', 'Français'],
-  ['en', 'Anglais'],
-  ['es', 'Espagnol'],
-  ['de', 'Allemand'],
-  ['it', 'Italien'],
-  ['pt', 'Portugais'],
+  ['auto', 'Automatic detection'],
+  ['fr', 'French'],
+  ['en', 'English'],
+  ['es', 'Spanish'],
+  ['de', 'German'],
+  ['it', 'Italian'],
+  ['pt', 'Portuguese'],
 ]
 
 export const [speech, setSpeech] = createStore({
@@ -93,7 +95,7 @@ function getWorker() {
     }
   }
   worker.onerror = (e) => {
-    for (const w of waiting.values()) w.reject(new Error(e.message || 'erreur du moteur de transcription'))
+    for (const w of waiting.values()) w.reject(new Error(e.message || t('transcription engine error')))
     waiting.clear()
     worker?.terminate()
     worker = null
@@ -114,7 +116,7 @@ async function decode(blob: Blob): Promise<Float32Array> {
     }
     return out
   } catch {
-    throw new Error('audio illisible par le navigateur')
+    throw new Error(t('audio the browser cannot read'))
   } finally {
     ctx.close()
   }
@@ -145,7 +147,7 @@ export function transcribe(blob: Blob): Promise<string> {
           return await run(audio.slice(), model.repo, model.dtype.webgpu, 'webgpu')
         } catch (e) {
           if (model.webgpuOnly) throw e
-          console.warn('WebGPU indisponible pour la transcription, repli sur WebAssembly :', e)
+          console.warn('WebGPU not available for the transcription, falling back to WebAssembly:', e)
         }
       }
       return await run(audio, model.repo, model.dtype.wasm, 'wasm')
@@ -168,7 +170,7 @@ export function canRecord() {
 
 export async function startRecording() {
   if (recorder) return
-  if (!canRecord()) throw new Error(window.isSecureContext ? 'micro indisponible dans ce navigateur' : 'le micro exige https ou localhost')
+  if (!canRecord()) throw new Error(window.isSecureContext ? t('microphone not available in this browser') : t('the microphone requires https or localhost'))
   const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } })
   chunks = []
   recorder = new MediaRecorder(stream)

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/execx"
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
 
 type Repo struct {
@@ -120,12 +121,12 @@ func (g *Repo) Status(ctx context.Context) (*Status, error) {
 func (g *Repo) rel(ctx context.Context, paths []string) ([]string, string, error) {
 	top := g.Top(ctx)
 	if top == "" {
-		return nil, "", errors.New("pas de dépôt git")
+		return nil, "", i18n.New("not a git repository")
 	}
 	out := make([]string, 0, len(paths))
 	for _, p := range paths {
 		if !strings.HasPrefix(p, top+"/") {
-			return nil, "", errors.New("hors du dépôt : " + p)
+			return nil, "", i18n.Errorf("outside the repository: %s", p)
 		}
 		out = append(out, strings.TrimPrefix(p, top+"/"))
 	}
@@ -187,7 +188,7 @@ func (g *Repo) Discard(ctx context.Context, paths []string) error {
 
 func (g *Repo) Commit(ctx context.Context, message string, amend bool) (string, error) {
 	if strings.TrimSpace(message) == "" && !amend {
-		return "", errors.New("message de commit vide")
+		return "", i18n.New("empty commit message")
 	}
 	args := []string{"commit", "-m", message}
 	if amend {

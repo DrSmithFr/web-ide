@@ -232,7 +232,7 @@ func TestCappedOutput(t *testing.T) {
 	}
 	_, _ = c.Write([]byte("FIN"))
 	text, cut := c.String()
-	if !cut || !strings.HasSuffix(text, "FIN") || !strings.Contains(text, "sortie coupée") || len(text) > execHead+execTail+100 {
+	if !cut || !strings.HasSuffix(text, "FIN") || !strings.Contains(text, "output cut") || len(text) > execHead+execTail+100 {
 		t.Fatalf("capped: cut=%v len=%d", cut, len(text))
 	}
 }

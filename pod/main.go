@@ -28,11 +28,11 @@ import (
 
 func main() {
 	home, _ := os.UserHomeDir()
-	dataDir := flag.String("data", filepath.Join(home, ".web-ide"), "dossier des réglages, projets et sessions")
-	addr := flag.String("addr", "", "adresse d'écoute (défaut : config.json, sinon "+config.DefaultAddr+")")
-	workspace := flag.String("workspace", "", "workspace par défaut (défaut : ~/Apps)")
-	allowRemote := flag.Bool("allow-remote", false, "accepter les connexions d'autres machines (protégées par le jeton seul)")
-	static := flag.String("static", "", "servir le front depuis ce dossier au lieu de la version embarquée")
+	dataDir := flag.String("data", filepath.Join(home, ".web-ide"), "folder of the settings, projects and sessions")
+	addr := flag.String("addr", "", "listen address (default: config.json, else "+config.DefaultAddr+")")
+	workspace := flag.String("workspace", "", "default workspace (default: ~/Apps)")
+	allowRemote := flag.Bool("allow-remote", false, "accept connections from other machines (protected by the token only)")
+	static := flag.String("static", "", "serve the front end from this folder instead of the embedded one")
 	flag.Parse()
 
 	st, err := store.Open(config.ExpandHome(*dataDir))
@@ -76,14 +76,14 @@ func main() {
 		sig := make(chan os.Signal, 1)
 		signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 		<-sig
-		log.Print("arrêt du pod…")
+		log.Print("stopping the pod…")
 		srv.Shutdown()
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		_ = httpSrv.Shutdown(ctx)
 	}()
 
-	fmt.Printf("Web IDE pod\n  données   : %s\n  workspace : %s\n  ouvrir    : http://%s/?token=%s\n", st.Dir(), cfg.Workspace, cfg.Addr, token)
+	fmt.Printf("Web IDE pod\n  data      : %s\n  workspace : %s\n  open      : http://%s/?token=%s\n", st.Dir(), cfg.Workspace, cfg.Addr, token)
 	if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}

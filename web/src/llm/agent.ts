@@ -30,6 +30,7 @@ import {
   type Question,
 } from './state'
 import { MAX_QUESTIONS } from './kanbanTools'
+import { t } from '../i18n'
 
 const MAX_STEPS = 30
 
@@ -121,7 +122,7 @@ export function setMode(mode: Mode) {
   if (chat.messages.length) saveChat()
 }
 
-const SUMMARY_PREFIX = 'Résumé de la conversation précédente (compaction automatique, les messages résumés ne sont plus visibles) :\n\n'
+const SUMMARY_PREFIX = 'Summary of the earlier conversation (automatic compaction, the summarized messages are not visible anymore):\n\n'
 
 /** Messages as the API expects them (fields of the page and compacted messages removed). */
 function apiMessages(): any[] {
@@ -160,7 +161,7 @@ export async function executePlan(index: number) {
   if (live.busy) return
   setChat('messages', index, 'planState', 'accepted')
   setMode('build')
-  await send('Le plan est accepté : exécute-le maintenant, étape par étape.', [], [], 'Exécuter le plan')
+  await send(t('The plan is accepted: carry it out now, step by step.'), [], [], t('Execute the plan'))
 }
 
 export function dismissPlan(index: number) {
@@ -178,7 +179,7 @@ export async function send(text: string, parts: Part[], attachments: ChatMessage
     enqueue(text, parts, attachments, display)
     return
   }
-  if (!config.server || !config.model) throw new Error('Choisir un serveur et un modèle')
+  if (!config.server || !config.model) throw new Error(t('Choose a server and a model'))
   const content: string | Part[] = parts.length ? [...(text ? [{ type: 'text' as const, text }] : []), ...parts] : text
   setChat(
     produce((c) => {
@@ -211,8 +212,8 @@ function normalizeQuestions(raw: unknown): Question[] {
 /** Text given back to the model for the answers of the user. */
 function answersText(qs: Question[], answers: string[][]): string {
   return (
-    'Réponses de l’utilisateur :\n' +
-    qs.map((q, i) => `${i + 1}. ${q.question}\n   → ${(answers[i] ?? []).filter((a) => a.trim()).join(' ; ') || '(pas de réponse)'}`).join('\n')
+    'Answers of the user:\n' +
+    qs.map((q, i) => `${i + 1}. ${q.question}\n   → ${(answers[i] ?? []).filter((a) => a.trim()).join(' ; ') || '(no answer)'}`).join('\n')
   )
 }
 
@@ -222,11 +223,11 @@ export async function answerQuestions(index: number, answers: string[][]) {
   if (live.busy || !m?.questions || m.askState !== 'pending') return
   setChat(
     produce((c) => {
-      const t = c.messages[index]
-      t.answers = answers
-      t.askState = 'answered'
-      t.content = answersText(m.questions!, answers)
-      t.summary = 'réponses reçues'
+      const msg = c.messages[index]
+      msg.answers = answers
+      msg.askState = 'answered'
+      msg.content = answersText(m.questions!, answers)
+      msg.summary = t('answers received')
     }),
   )
   saveChat()
@@ -241,8 +242,8 @@ function skipQuestions() {
       for (const m of c.messages)
         if (m.askState === 'pending') {
           m.askState = 'skipped'
-          m.content = 'L’utilisateur n’a pas répondu à ces questions ; son message suit.'
-          m.summary = 'questions sans réponse'
+          m.content = 'The user did not answer these questions; their message follows.'
+          m.summary = t('questions not answered')
         }
     }),
   )
@@ -293,13 +294,13 @@ export async function resumeIfNeeded() {
       for (const m of c.messages) {
         if (m.role === 'tool' && !m.status) {
           m.status = 'error'
-          m.content = 'Interrompu par le rechargement de la page.'
-          m.summary = 'interrompu'
+          m.content = 'Interrupted by a reload of the page.'
+          m.summary = t('interrupted')
         }
       }
       const last = [...c.messages].reverse().find((m) => m.role === 'assistant')
       for (const call of last?.tool_calls ?? []) {
-        if (!done.has(call.id)) c.messages.push({ role: 'tool', tool_call_id: call.id, name: call.function.name, content: 'Interrompu par le rechargement de la page.', status: 'error', summary: 'interrompu' })
+        if (!done.has(call.id)) c.messages.push({ role: 'tool', tool_call_id: call.id, name: call.function.name, content: 'Interrupted by a reload of the page.', status: 'error', summary: t('interrupted') })
       }
     }),
   )
@@ -396,7 +397,7 @@ async function run(resume = false) {
   // One window runs a conversation at a time (another window may already resume it).
   if (!(await request<boolean>('llm.claim', { id: chatId }).catch(() => true))) {
     setLive('busy', false)
-    if (!resume) pushMessage({ role: 'assistant', content: '', error: 'Cette conversation est déjà en cours dans une autre fenêtre.' })
+    if (!resume) pushMessage({ role: 'assistant', content: '', error: t('This conversation is already running in another window.') })
     return
   }
   const c = new AbortController()
@@ -465,7 +466,7 @@ async function run(resume = false) {
             model: tgt.model,
             mode,
             ...timing(),
-            error: canceled ? 'Arrêté.' : (e as Error).message,
+            error: canceled ? t('Stopped.') : (e as Error).message,
           })
         }
         return
@@ -480,7 +481,7 @@ async function run(resume = false) {
         model: tgt.model,
         mode,
         ...timing(),
-        error: res.finish === 'length' ? 'Réponse coupée : limite de longueur atteinte.' : undefined,
+        error: res.finish === 'length' ? t('Answer cut: length limit reached.') : undefined,
       })
       // The answer is in the conversation: a reload from now on does not attach to it.
       setChat('running', { stream: undefined }) // a store merges objects: clear the field itself
@@ -496,7 +497,7 @@ async function run(resume = false) {
       let stopAfter = false
       for (const call of msg.tool_calls) {
         if (c.signal.aborted) {
-          pushMessage({ role: 'tool', tool_call_id: call.id, name: call.function.name, content: 'Annulé par l’utilisateur.', status: 'denied', summary: 'annulé' })
+          pushMessage({ role: 'tool', tool_call_id: call.id, name: call.function.name, content: 'Canceled by the user.', status: 'denied', summary: t('canceled') })
           continue
         }
         const name = call.function.name
@@ -513,9 +514,9 @@ async function run(resume = false) {
             role: 'tool',
             tool_call_id: call.id,
             name,
-            content: plan ? 'Plan présenté à l’utilisateur, qui va l’accepter ou demander des changements. Attends sa réponse.' : 'Erreur : plan vide.',
+            content: plan ? 'Plan presented to the user, who will accept it or ask for changes. Wait for their answer.' : 'Error: empty plan.',
             status: plan ? 'ok' : 'error',
-            summary: plan ? 'plan proposé' : 'plan vide',
+            summary: plan ? t('plan proposed') : t('empty plan'),
             plan: plan || undefined,
             planState: plan ? 'pending' : undefined,
           })
@@ -529,7 +530,7 @@ async function run(resume = false) {
             role: 'tool',
             tool_call_id: call.id,
             name,
-            content: questions.length ? 'Questions posées à l’utilisateur : en attente de ses réponses.' : `Erreur : il faut 1 à ${MAX_QUESTIONS} questions, chacune avec au moins un choix.`,
+            content: questions.length ? 'Questions asked to the user: waiting for their answers.' : `Error: 1 to ${MAX_QUESTIONS} questions are needed, each with at least one choice.`,
             status: questions.length ? 'ok' : 'error',
             summary: questions.length ? `${questions.length} question${questions.length > 1 ? 's' : ''}` : 'questions invalides',
             questions: questions.length ? questions : undefined,
@@ -538,12 +539,12 @@ async function run(resume = false) {
           if (questions.length) stopAfter = true
           continue
         }
-        pushMessage({ role: 'tool', tool_call_id: call.id, name, content: '', summary: writeTools.has(name) ? 'en attente…' : 'en cours…' })
+        pushMessage({ role: 'tool', tool_call_id: call.id, name, content: '', summary: writeTools.has(name) ? t('waiting…') : t('running…') })
         if (name === 'compact_conversation') {
           // Asked by the model: everything but the last exchange is summarized.
           const r = await compact(true, c.signal, String(args.instructions ?? '')).then(
-            () => ({ content: 'Conversation compactée : les anciens messages sont remplacés par un résumé.', summary: 'conversation compactée', status: 'ok' as const }),
-            (e) => ({ content: `Erreur : ${(e as Error).message}`, summary: (e as Error).message, status: 'error' as const }),
+            () => ({ content: 'Conversation compacted: the older messages are replaced by a summary.', summary: t('conversation compacted'), status: 'ok' as const }),
+            (e) => ({ content: `Error: ${(e as Error).message}`, summary: (e as Error).message, status: 'error' as const }),
           )
           updateLast((m) => Object.assign(m, r))
           continue
@@ -560,7 +561,7 @@ async function run(resume = false) {
       saveChat()
       if (c.signal.aborted) return
     }
-    pushMessage({ role: 'assistant', content: '', error: `Arrêt après ${MAX_STEPS} étapes d’outils.` })
+    pushMessage({ role: 'assistant', content: '', error: t('Stopped after {n} tool steps.', { n: MAX_STEPS }) })
   } finally {
     if (ctrl === c) ctrl = null
     setLive({ busy: false, stream: '', compacting: false, ...resetLive })
@@ -573,26 +574,26 @@ async function run(resume = false) {
 
 // ---------- compaction ----------
 
-const SUMMARY_SYSTEM = `Tu résumes une conversation entre un utilisateur et un assistant de programmation qui agit sur un projet avec des outils, pour qu'un autre assistant puisse la poursuivre sans l'avoir lue.
-Écris un résumé structuré en Markdown, dans la langue de la conversation, avec :
-- la demande de l'utilisateur et ses consignes (y compris la demande en cours si elle n'est pas terminée) ;
-- les décisions prises et les informations importantes découvertes (fichiers, fonctions, commandes, erreurs) ;
-- les fichiers lus ou modifiés et ce qui a changé ;
-- l'état actuel et les prochaines étapes prévues.
-Sois précis (chemins, noms, valeurs) et concis. Ne réponds pas à la conversation : résume-la.`
+const SUMMARY_SYSTEM = `You summarize a conversation between a user and a programming assistant acting on a project with tools, so that another assistant can carry on without having read it.
+Write a structured summary in Markdown, in the language of the conversation, with:
+- the request of the user and their instructions (including the current request if it is not finished);
+- the decisions taken and the important information found (files, functions, commands, errors);
+- the files read or changed and what changed;
+- the current state and the next planned steps.
+Be precise (paths, names, values) and concise. Do not answer the conversation: summarize it.`
 
 function transcriptOf(m: ChatMessage, budget: number): string {
-  const cut = (t: string, n: number) => (t.length > n ? `${t.slice(0, n / 2)}\n… (${t.length - n} caractères coupés) …\n${t.slice(-n / 2)}` : t)
+  const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n / 2)}\n… (${s.length - n} characters cut) …\n${s.slice(-n / 2)}` : s)
   const text = typeof m.content === 'string' ? m.content : (m.content ?? []).map((p) => (p.type === 'text' ? p.text : `[${p.type}]`)).join('\n')
   switch (m.role) {
     case 'user':
-      return m.kind === 'summary' ? `## Résumé antérieur\n${text}` : `## Utilisateur\n${cut(text, budget)}${m.attachments?.length ? `\n(pièces jointes : ${m.attachments.map((a) => a.name).join(', ')})` : ''}`
+      return m.kind === 'summary' ? `## Earlier summary\n${text}` : `## User\n${cut(text, budget)}${m.attachments?.length ? `\n(attachments: ${m.attachments.map((a) => a.name).join(', ')})` : ''}`
     case 'assistant': {
       const calls = (m.tool_calls ?? []).map((c) => `→ ${c.function.name}(${cut(c.function.arguments, 400)})`).join('\n')
       return `## Assistant\n${cut(text, budget)}${calls ? `\n${calls}` : ''}`
     }
     case 'tool':
-      return `### Résultat de ${m.name ?? 'outil'}${m.status && m.status !== 'ok' ? ` (${m.status})` : ''}\n${cut(text, Math.min(budget, 1500))}`
+      return `### Result of ${m.name ?? 'tool'}${m.status && m.status !== 'ok' ? ` (${m.status})` : ''}\n${cut(text, Math.min(budget, 1500))}`
   }
 }
 
@@ -627,7 +628,7 @@ export async function compact(manual: boolean, signal?: AbortSignal, instruction
     if (keepFrom === msgs.length) keepFrom = msgs.length - 1
   }
   if (keepFrom - start < 2) {
-    if (manual) throw new Error('Rien à compacter')
+    if (manual) throw new Error(t('Nothing to compact'))
     return
   }
   const head = msgs.slice(start, keepFrom)
@@ -643,7 +644,7 @@ export async function compact(manual: boolean, signal?: AbortSignal, instruction
   if (transcript.length > maxChars) transcript = transcript.slice(-maxChars)
   const server = prefs.compactServer || config.server
   const model = prefs.compactServer ? prefs.compactModel : config.model
-  if (!server || !model) throw new Error('Aucun modèle pour la compaction')
+  if (!server || !model) throw new Error(t('No model for the compaction'))
   setLive('compacting', true)
   try {
     const res = await request(
@@ -652,8 +653,8 @@ export async function compact(manual: boolean, signal?: AbortSignal, instruction
         server,
         model,
         messages: [
-          { role: 'system', content: SUMMARY_SYSTEM + (instructions ? `\n\nConsignes de l'utilisateur pour ce résumé : ${instructions}` : '') },
-          { role: 'user', content: `Conversation à résumer :\n\n${transcript}` },
+          { role: 'system', content: SUMMARY_SYSTEM + (instructions ? `\n\nInstructions of the user for this summary: ${instructions}` : '') },
+          { role: 'user', content: `Conversation to summarize:\n\n${transcript}` },
         ],
         think: false,
         // Its own stream id: the summary must not show in the live answer.
@@ -662,8 +663,8 @@ export async function compact(manual: boolean, signal?: AbortSignal, instruction
       signal,
     )
     let summary = String(res.message?.content ?? '').replace(/<think>[\s\S]*?<\/think>/g, '').trim()
-    if (!summary) throw new Error('le modèle a renvoyé un résumé vide')
-    if (res.finish === 'length') summary += '\n\n(résumé coupé)'
+    if (!summary) throw new Error(t('the model returned an empty summary'))
+    if (res.finish === 'length') summary += '\n\n(summary cut)'
     setChat(
       produce((c) => {
         for (let i = start; i < keepFrom; i++) c.messages[i].compacted = true

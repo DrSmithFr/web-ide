@@ -84,6 +84,13 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 
 See [kanban.md](kanban.md). A ticket worktree is registered as a hidden child project `<parent>-t<n>` (`projects.PutChild`); its kanban and conversations are those of the parent. A development session started from the main window saves the conversation with `running: {}` and opens the worktree window with `?assistant=1`, which resumes it.
 
+## Languages
+
+- The interface is translated with `t()` (`web/src/i18n`): the English text is the key, `fr.json` gives the French one, `{name}` marks a parameter and `tn()` picks the plural. A key may carry a context (`'menu|Edit'`) when one English word has two translations. Data tables keep English labels and are translated where they are shown. The language is a setting (`language`: auto, en, fr), auto follows the browser.
+- Each window tells the pod its language (`client.lang`); errors created with `i18n.New` / `i18n.Errorf` are translated when they are sent (`pod/internal/i18n/fr.json`). Lines of the history of a ticket are stored as `{"key", "params"}` and translated by the page.
+- Text read by the model (system prompt, tool descriptions and results) is always English; the model answers in the language of the user.
+- `npm run check` and the Go tests of `internal/i18n` fail on a missing French translation. The e2e suites run in English (`E2E_LOCALE` to change it); the `i18n` suite checks French and the switch.
+
 ## Building and testing
 
 ```
@@ -91,7 +98,7 @@ make build          # front end (Vite) then pod binary bin/web-ide-pod (front en
 make dev            # pod with -allow-remote on 0.0.0.0:4433 + Vite on 0.0.0.0:5173 (hot reload)
 make test           # go vet + go test + tsc
 make e2e            # browser tests, all suites (a few minutes)
-./e2e/run.sh git    # one suite: editing features restore+ git lsp llm agent chat plan kanban kanbanai kanbangit speech perf
+./e2e/run.sh git    # one suite: editing features restore+ git lsp llm agent chat plan kanban kanbanai kanbangit i18n speech perf
 ```
 
 - Each e2e suite gets a fresh pod with temporary data and a workspace copied from `e2e/fixtures`; a suite ending with `+` reuses the previous pod. The assistant suites use a scripted fake OpenAI-compatible server. Chromium comes from the Playwright cache or `CHROME=…`; the `speech` suite downloads `whisper-tiny` once (kept in `~/.cache/web-ide-e2e/models`); the `lsp` suite needs `gopls`.

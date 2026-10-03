@@ -5,6 +5,7 @@ import { createSignal } from 'solid-js'
 import { createStore, reconcile } from 'solid-js/store'
 import { on, request } from '../pod/rpc'
 import { openTab, project } from '../state/project'
+import { t } from '../i18n'
 
 export type Status = 'new' | 'ready' | 'in_progress' | 'review' | 'fix' | 'done' | 'abandoned'
 export type TicketType = 'feature' | 'bug' | 'refactor' | 'task'
@@ -66,18 +67,28 @@ export interface Ticket extends Summary {
 }
 
 export const statusOrder: Status[] = ['new', 'ready', 'in_progress', 'review', 'fix', 'done', 'abandoned']
-export const statusLabels: Record<Status, string> = {
-  new: 'Nouveau',
-  ready: 'À développer',
-  in_progress: 'En cours',
-  review: 'À tester',
-  fix: 'Correction',
-  done: 'Terminé',
-  abandoned: 'Abandonné',
+/** English names (also what the model reads); the *Labels below are translated. */
+export const statusNames: Record<Status, string> = {
+  new: 'New',
+  ready: 'Ready',
+  in_progress: 'In progress',
+  review: 'To test',
+  fix: 'Fix',
+  done: 'Done',
+  abandoned: 'Abandoned',
 }
-export const typeLabels: Record<TicketType, string> = { feature: 'Fonctionnalité', bug: 'Bug', refactor: 'Refacto', task: 'Tâche' }
-export const priorityLabels: Record<Priority, string> = { low: 'Basse', normal: 'Normale', high: 'Haute', critical: 'Critique' }
-export const roleLabels: Record<ChatRole, string> = { briefing: 'Briefing', plan: 'Plan', dev: 'Développement', correction: 'Correction', resolve: 'Conflits' }
+export const typeNames: Record<TicketType, string> = { feature: 'Feature', bug: 'Bug', refactor: 'Refactor', task: 'Task' }
+export const priorityNames: Record<Priority, string> = { low: 'Low', normal: 'Normal', high: 'High', critical: 'Critical' }
+export const roleNames: Record<ChatRole, string> = { briefing: 'Briefing', plan: 'Plan', dev: 'Development', correction: 'Correction', resolve: 'Conflicts' }
+
+/** A record whose values are translated when read (reactive in views). */
+function translated<K extends string>(names: Record<K, string>): Record<K, string> {
+  return new Proxy(names, { get: (o, k) => (typeof k === 'string' && k in o ? t(o[k as K]) : undefined) })
+}
+export const statusLabels = translated(statusNames)
+export const typeLabels = translated(typeNames)
+export const priorityLabels = translated(priorityNames)
+export const roleLabels = translated(roleNames)
 
 export const [board, setBoard] = createStore<{ project: string; tickets: Summary[]; meta: Record<string, string>; loaded: boolean; error: string }>({
   project: '',
@@ -128,6 +139,23 @@ on('kanban.changed', (e: { project: string; id: number }) => {
 on('pod.reconnected', () => {
   if (loadedFor) refreshBoard()
 })
+
+/** A line of the history: the pod stores events as {"key", "params"} (English text and its values). */
+export function eventText(text: string): string {
+  if (text.startsWith('{')) {
+    try {
+      const e = JSON.parse(text)
+      if (e?.key) {
+        const params = { ...e.params }
+        for (const k of ['from', 'to'] as const) if (params[k] in statusNames) params[k] = statusLabels[params[k] as Status]
+        return t(e.key, params)
+      }
+    } catch {
+      /* plain text (older bases) */
+    }
+  }
+  return text
+}
 
 export function summary(id: number): Summary | undefined {
   return board.tickets.find((t) => t.id === id)

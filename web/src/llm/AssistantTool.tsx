@@ -15,16 +15,17 @@ import { DiagramViewer } from './DiagramViewer'
 import { board, ensureBoard, openTicket, roleLabels, statusLabels, summary, type ChatRole } from '../kanban/state'
 import { pick } from '../ui/overlay'
 import { setChat, saveChat } from './state'
+import { t } from '../i18n'
 import './assistant.css'
 
 /** Ticket linked to the conversation (link, unlink, link another one). */
 function TicketBar() {
-  const t = () => (chat.ticket ? summary(chat.ticket.id) : undefined)
+  const tk = () => (chat.ticket ? summary(chat.ticket.id) : undefined)
   const roleFor = (status: string): ChatRole => (status === 'new' ? 'briefing' : status === 'fix' || status === 'review' ? 'correction' : 'dev')
   const link = async () => {
     ensureBoard()
     const id = await pick<number>({
-      placeholder: 'Lier cette conversation à un ticket',
+      placeholder: t('Link this conversation to a ticket'),
       items: board.tickets
         .filter((x) => x.status !== 'done' && x.status !== 'abandoned')
         .map((x) => ({ label: `#${x.id} ${x.title}`, detail: statusLabels[x.status], value: x.id })),
@@ -39,8 +40,8 @@ function TicketBar() {
       when={chat.ticket}
       fallback={
         <Show when={chat.messages.length && !live.busy}>
-          <button class="ai-ticket-link" onClick={() => void link()} title="Les outils de modification du ticket deviennent disponibles">
-            <Icon name="kanban" size={12} /> Lier à un ticket…
+          <button class="ai-ticket-link" onClick={() => void link()} title={t('The tools that change the ticket become available')}>
+            <Icon name="kanban" size={12} /> {t('Link to a ticket…')}
           </button>
         </Show>
       }
@@ -48,11 +49,11 @@ function TicketBar() {
       <div class="ai-ticket-bar" data-testid="ai-ticket-bar">
         <Icon name="kanban" size={13} />
         <button class="link ellipsis" onClick={() => openTicket(chat.ticket!.id)}>
-          #{chat.ticket!.id} {t()?.title ?? ''}
+          #{chat.ticket!.id} {tk()?.title ?? ''}
         </button>
         <span class={`kb-role r-${chat.ticket!.role}`}>{roleLabels[chat.ticket!.role]}</span>
-        <Show when={t()}>
-          <span class={`kb-status st-${t()!.status}`}>{statusLabels[t()!.status]}</span>
+        <Show when={tk()}>
+          <span class={`kb-status st-${tk()!.status}`}>{statusLabels[tk()!.status]}</span>
         </Show>
       </div>
     </Show>
@@ -129,18 +130,18 @@ export function AssistantTool() {
     <div class="panel ai-panel" ref={rootEl} classList={{ wide: wide(), detached }}>
       <div class="panel-head ai-head">
         <Show when={!pinned()}>
-          <button class="icon-btn" classList={{ on: prefs.sidebarOpen }} title="Conversations du projet" onClick={() => setSidebar(!prefs.sidebarOpen)}>
+          <button class="icon-btn" classList={{ on: prefs.sidebarOpen }} title={t('Conversations of the project')} onClick={() => setSidebar(!prefs.sidebarOpen)}>
             <Icon name="sidebar" size={15} />
           </button>
         </Show>
         <span class="ai-title ellipsis" title={chat.title}>
-          {chat.title || 'Nouvelle conversation'}
+          {chat.title || t('New conversation')}
         </span>
         <span class="grow" />
-        <button class="icon-btn" title="Nouvelle conversation" disabled={live.busy && !live.watching} onClick={newChat}>
+        <button class="icon-btn" title={t('New conversation')} disabled={live.busy && !live.watching} onClick={newChat}>
           <Icon name="plus" size={15} />
         </button>
-        <button class="icon-btn" title="Réglages (serveurs, prompt, compaction, transcription)" onClick={() => setSettings(true)}>
+        <button class="icon-btn" title={t('Settings (servers, prompt, compaction, transcription)')} onClick={() => setSettings(true)}>
           <Icon name="gear" size={15} />
         </button>
       </div>

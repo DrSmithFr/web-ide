@@ -3,13 +3,13 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"path"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/execx"
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
@@ -59,11 +59,11 @@ func (s *Server) registerKanbanGit() {
 			return nil, err
 		}
 		if t.Status == kanban.Done || t.Status == kanban.Abandoned || t.Status == kanban.New {
-			return nil, errors.New("le ticket doit être « À développer », « En cours » ou en correction")
+			return nil, i18n.New("the ticket must be “Ready”, “In progress” or in fix")
 		}
 		if !exists(k, t.Worktree) {
 			if !k.git.IsRepo(ctx) {
-				return nil, errors.New("le projet n'est pas un dépôt git : impossible de créer la branche du ticket")
+				return nil, &codeError{"not_git", i18n.New("the project is not a git repository: cannot create the branch of the ticket")}
 			}
 			if err := s.ignoreWorktrees(k.root, k.rt); err != nil {
 				return nil, err
@@ -89,11 +89,11 @@ func (s *Server) registerKanbanGit() {
 			if err := s.Kanban.SetGit(k.loc, t.ID, kanban.GitState{Branch: &branch, Base: &base, Worktree: &dir, Setup: &state}); err != nil {
 				return nil, err
 			}
-			text := "Worktree créé : branche " + branch + " depuis " + base
 			if fetchErr != nil {
-				text += " (git fetch a échoué : " + fetchErr.Error() + ")"
+				_ = s.Kanban.Event(k.loc, t.ID, kanban.ByUser, "Worktree created: branch {branch} from {base} (git fetch failed: {error})", kanban.Params{"branch": branch, "base": base, "error": fetchErr.Error()})
+			} else {
+				_ = s.Kanban.Event(k.loc, t.ID, kanban.ByUser, "Worktree created: branch {branch} from {base}", kanban.Params{"branch": branch, "base": base})
 			}
-			_ = s.Kanban.Event(k.loc, t.ID, kanban.ByUser, text)
 			if setup != "" {
 				go s.runSetup(k.loc, k.root.ID, t.ID, dir, setup, k.rt.Runner)
 			}
@@ -126,7 +126,7 @@ func (s *Server) registerKanbanGit() {
 			return nil, err
 		}
 		if !exists(k, t.Worktree) {
-			return nil, errors.New("ce ticket n'a pas de worktree")
+			return nil, i18n.New("this ticket has no worktree")
 		}
 		child, err := s.Projects.PutChild(k.root, t.ID, "#"+itoa(t.ID)+" "+t.Title, t.Worktree)
 		if err != nil {
@@ -230,8 +230,8 @@ func (s *Server) registerKanbanGit() {
 		return info(ctx, k, t), nil
 	}))
 	// After a git operation: event in the history, windows told (git panels included).
-	done := func(c *Client, k gctx, t *kanban.Ticket, text string) {
-		_ = s.Kanban.Event(k.loc, t.ID, kanban.ByUser, text)
+	done := func(c *Client, k gctx, t *kanban.Ticket, key string, p kanban.Params) {
+		_ = s.Kanban.Event(k.loc, t.ID, kanban.ByUser, key, p)
 		s.emitKanban(k.root.ID, t.ID, nil)
 		s.emitter(k.root.ID)("git.changed", nil, "")
 		s.emitter(projects.ChildID(k.root.ID, t.ID))("git.changed", nil, "")
@@ -249,7 +249,7 @@ func (s *Server) registerKanbanGit() {
 			return nil, err
 		}
 		if t.Branch == "" {
-			return nil, errors.New("ce ticket n'a pas de branche")
+			return nil, i18n.New("this ticket has no branch")
 		}
 		gi := info(ctx, k, t)
 		msg := "Merge #" + itoa(t.ID) + " " + t.Title + " (" + t.Branch + ")"
@@ -274,9 +274,9 @@ func (s *Server) registerKanbanGit() {
 			how = "squash"
 		}
 		if len(st.Conflicts) > 0 {
-			done(c, k, t, "Fusion dans "+gi.Into+" ("+how+") arrêtée : "+itoa(int64(len(st.Conflicts)))+" fichier(s) en conflit")
+			done(c, k, t, "Merge into {branch} ({how}) stopped: {n} file(s) in conflict", kanban.Params{"branch": gi.Into, "how": how, "n": len(st.Conflicts)})
 		} else {
-			done(c, k, t, "Branche fusionnée dans "+gi.Into+" ("+how+")")
+			done(c, k, t, "Branch merged into {branch} ({how})", kanban.Params{"branch": gi.Into, "how": how})
 		}
 		return info(ctx, k, t), nil
 	}))
@@ -286,7 +286,7 @@ func (s *Server) registerKanbanGit() {
 			return nil, err
 		}
 		if !exists(k, t.Worktree) {
-			return nil, errors.New("ce ticket n'a pas de worktree")
+			return nil, i18n.New("this ticket has no worktree")
 		}
 		_ = k.git.Fetch(ctx)
 		base := firstOf(t.Base)
@@ -298,9 +298,9 @@ func (s *Server) registerKanbanGit() {
 			return nil, err
 		}
 		if len(st.Conflicts) > 0 {
-			done(c, k, t, "Rebase sur "+base+" arrêté : "+itoa(int64(len(st.Conflicts)))+" fichier(s) en conflit")
+			done(c, k, t, "Rebase on {base} stopped: {n} file(s) in conflict", kanban.Params{"base": base, "n": len(st.Conflicts)})
 		} else {
-			done(c, k, t, "Branche rebasée sur "+base)
+			done(c, k, t, "Branch rebased on {base}", kanban.Params{"base": base})
 		}
 		return info(ctx, k, t), nil
 	}))
@@ -310,7 +310,7 @@ func (s *Server) registerKanbanGit() {
 			return k.root.Path, nil
 		}
 		if !exists(k, t.Worktree) {
-			return "", errors.New("ce ticket n'a pas de worktree")
+			return "", i18n.New("this ticket has no worktree")
 		}
 		return t.Worktree, nil
 	}
@@ -334,13 +334,13 @@ func (s *Server) registerKanbanGit() {
 			}
 			what := "Rebase"
 			if a.Where == "main" {
-				what = "Fusion"
+				what = "Merge"
 			}
 			if op == "abort" {
 				if err := k.git.Abort(ctx, dir); err != nil {
 					return nil, err
 				}
-				done(c, k, t, what+" annulé(e)")
+				done(c, k, t, what+" aborted", nil)
 				return info(ctx, k, t), nil
 			}
 			st, err := k.git.Continue(ctx, dir)
@@ -348,9 +348,9 @@ func (s *Server) registerKanbanGit() {
 				return nil, err
 			}
 			if len(st.Conflicts) > 0 {
-				done(c, k, t, what+" : nouveaux conflits ("+itoa(int64(len(st.Conflicts)))+" fichier(s))")
+				done(c, k, t, what+": new conflicts ({n} file(s))", kanban.Params{"n": len(st.Conflicts)})
 			} else if !st.Busy() {
-				done(c, k, t, what+" terminé(e)")
+				done(c, k, t, what+" finished", nil)
 			}
 			return info(ctx, k, t), nil
 		}))
@@ -369,14 +369,14 @@ func (s *Server) registerKanbanGit() {
 			return nil, err
 		}
 		if a.Status != kanban.Done && a.Status != kanban.Abandoned {
-			return nil, errors.New("état final inconnu")
+			return nil, i18n.New("unknown final status")
 		}
 		t, err := s.Kanban.Get(k.loc, a.ID)
 		if err != nil {
 			return nil, err
 		}
 		if !kanban.CanMove(t.Status, a.Status, kanban.ByUser) {
-			return nil, errors.New("ce ticket ne peut pas passer à cet état")
+			return nil, i18n.New("this ticket cannot move to this status")
 		}
 		wt := ""
 		if exists(k, t.Worktree) {
@@ -399,11 +399,11 @@ func (s *Server) registerKanbanGit() {
 		}
 		if a.DeleteBranch && t.Branch != "" {
 			if err := k.git.DeleteBranch(ctx, t.Branch); err != nil {
-				_ = s.Kanban.Event(k.loc, t.ID, kanban.ByUser, "Branche non supprimée : "+err.Error())
+				_ = s.Kanban.Event(k.loc, t.ID, kanban.ByUser, "Branch not deleted: {error}", kanban.Params{"error": err.Error()})
 			} else {
 				empty := ""
 				_ = s.Kanban.SetGit(k.loc, t.ID, kanban.GitState{Branch: &empty})
-				_ = s.Kanban.Event(k.loc, t.ID, kanban.ByUser, "Branche "+t.Branch+" supprimée")
+				_ = s.Kanban.Event(k.loc, t.ID, kanban.ByUser, "Branch {branch} deleted", kanban.Params{"branch": t.Branch})
 			}
 		}
 		if err := s.Kanban.Move(k.loc, t.ID, a.Status, kanban.ByUser, a.Comment); err != nil {
@@ -426,7 +426,7 @@ func (s *Server) removeWorktree(ctx context.Context, loc kanban.Location, root *
 		if err := g.RemoveWorktree(ctx, wt); err != nil {
 			return err
 		}
-		_ = s.Kanban.Event(loc, t.ID, kanban.ByUser, "Worktree supprimé")
+		_ = s.Kanban.Event(loc, t.ID, kanban.ByUser, "Worktree removed", nil)
 	}
 	if t.Worktree != "" {
 		empty := ""
@@ -460,13 +460,13 @@ func (s *Server) runSetup(loc kanban.Location, rootID string, id int64, dir, cmd
 	if len(log) > 20000 {
 		log = "…\n" + log[len(log)-20000:]
 	}
-	state, text := "ok", "Initialisation du worktree terminée"
+	state, key, p := "ok", "Worktree setup finished", kanban.Params(nil)
 	if err != nil {
-		state, text = "error", "Initialisation du worktree en échec : "+err.Error()
+		state, key, p = "error", "Worktree setup failed: {error}", kanban.Params{"error": err.Error()}
 		log += "\n" + err.Error()
 	}
 	_ = s.Kanban.SetGit(loc, id, kanban.GitState{Setup: &state, SetupLog: &log})
-	_ = s.Kanban.Event(loc, id, kanban.ByUser, text)
+	_ = s.Kanban.Event(loc, id, kanban.ByUser, key, p)
 	s.emitKanban(rootID, id, nil)
 }
 

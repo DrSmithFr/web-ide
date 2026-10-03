@@ -8,12 +8,13 @@ import { newConsole } from '../console/consoles'
 import { contextMenu, pick, prompt } from '../ui/overlay'
 import { errorToast, toast } from '../ui/toast'
 import { Icon } from '../ui/icons'
+import { t, tn } from '../i18n'
 
 const letters: Record<string, string> = { M: 'M', A: 'A', D: 'D', R: 'R', C: 'C', T: 'T', U: 'U', '?': 'U' }
-const titles: Record<string, string> = { M: 'modifié', A: 'ajouté', D: 'supprimé', R: 'renommé', C: 'copié', T: 'type changé', U: 'en conflit', '?': 'non suivi' }
+const titles: Record<string, string> = { M: 'modified', A: 'added', D: 'deleted', R: 'renamed', C: 'copied', T: 'type changed', U: 'in conflict', '?': 'untracked' }
 
 export function openDiff(path: string, staged: boolean) {
-  openTab({ kind: 'diff', path, staged, title: `${basename(path)} (${staged ? 'indexé' : 'modifications'})` })
+  openTab({ kind: 'diff', path, staged, title: `${basename(path)} (${staged ? t('staged') : t('changes')})` })
 }
 
 async function act(method: string, params: object, ok?: string) {
@@ -46,7 +47,7 @@ export function GitPanel() {
 
   const commit = async () => {
     if (!staged().length && !amend()) {
-      toast('Rien à committer : indexer des fichiers d’abord', 'info')
+      toast(t('Nothing to commit: stage files first'), 'info')
       return
     }
     setBusy(true)
@@ -54,7 +55,7 @@ export function GitPanel() {
       const out: string = await request('git.commit', { message: message(), amend: amend() })
       setMessage('')
       setAmend(false)
-      toast(out.split('\n')[0] || 'Commit créé', 'ok')
+      toast(out.split('\n')[0] || t('Commit created'), 'ok')
       refetchLog()
     } catch (e) {
       errorToast(e)
@@ -66,7 +67,8 @@ export function GitPanel() {
 
   const discard = async (list: GitFile[]) => {
     const names = list.map((f) => relPath(f.path))
-    if (!confirm(`Annuler les modifications de ${names.length > 3 ? names.length + ' fichiers' : names.join(', ')} ? ${list.some((f) => f.untracked) ? 'Les fichiers non suivis seront supprimés. ' : ''}Action définitive.`)) return
+    const what = names.length > 3 ? tn(names.length, '{n} file', '{n} files') : names.join(', ')
+    if (!confirm(`${t('Discard the changes of {files}?', { files: what })} ${list.some((f) => f.untracked) ? t('Untracked files will be deleted.') + ' ' : ''}${t('This cannot be undone.')}`)) return
     await act('git.discard', { paths: list.filter((f) => !f.untracked).map((f) => f.path), untracked: list.filter((f) => f.untracked).map((f) => f.path) })
   }
 
@@ -74,17 +76,17 @@ export function GitPanel() {
     try {
       const list: any[] = await request('git.branches')
       const choice = await pick<string>({
-        placeholder: 'Changer de branche',
+        placeholder: t('Switch branch'),
         items: [
-          { label: '+ Nouvelle branche…', value: '\0new' },
-          ...list.filter((b) => !b.current).map((b) => ({ label: b.name, detail: b.remote ? 'distante' : b.upstream ? `→ ${b.upstream}` : '', value: b.name })),
+          { label: t('+ New branch…'), value: '\0new' },
+          ...list.filter((b) => !b.current).map((b) => ({ label: b.name, detail: b.remote ? t('remote') : b.upstream ? `→ ${b.upstream}` : '', value: b.name })),
         ],
       })
       if (!choice) return
       if (choice === '\0new') {
-        const name = await prompt({ title: 'Nouvelle branche', label: `Créée depuis ${st()?.branch}` })
-        if (name) await act('git.switch', { name: name.trim(), create: true }, `Branche ${name} créée`)
-      } else await act('git.switch', { name: choice.replace(/^origin\//, ''), create: false }, `Sur ${choice}`)
+        const name = await prompt({ title: t('New branch'), label: t('Created from {branch}', { branch: st()?.branch ?? '' }) })
+        if (name) await act('git.switch', { name: name.trim(), create: true }, t('Branch {name} created', { name }))
+      } else await act('git.switch', { name: choice.replace(/^origin\//, ''), create: false }, t('On {branch}', { branch: choice }))
       refetchLog()
     } catch (e) {
       errorToast(e)
@@ -100,18 +102,18 @@ export function GitPanel() {
     return (
       <div
         class="git-row"
-        title={`${rel} · ${titles[code()] ?? code()}${props.f.origPath ? ` (depuis ${relPath(props.f.origPath)})` : ''}`}
+        title={`${rel} · ${t(titles[code()] ?? code())}${props.f.origPath ? ` (${t('from {path}', { path: relPath(props.f.origPath) })})` : ''}`}
         onClick={() => (code() === 'D' || props.f.conflict ? openFile(props.f.path) : openDiff(props.f.path, props.staged))}
         onContextMenu={(e) =>
           contextMenu(e, [
-            { label: 'Voir les différences', action: () => openDiff(props.f.path, props.staged), disabled: code() === 'D' },
-            { label: 'Ouvrir le fichier', action: () => openFile(props.f.path), disabled: code() === 'D' },
+            { label: t('Show the differences'), action: () => openDiff(props.f.path, props.staged), disabled: code() === 'D' },
+            { label: t('Open the file'), action: () => openFile(props.f.path), disabled: code() === 'D' },
             { separator: true, label: '' },
             props.staged
-              ? { label: 'Désindexer', action: () => act('git.unstage', { paths: [props.f.path] }) }
-              : { label: 'Indexer', action: () => act('git.stage', { paths: [props.f.path] }) },
-            { label: 'Annuler les modifications', danger: true, disabled: props.staged, action: () => discard([props.f]) },
-            { label: 'Copier le chemin', action: () => navigator.clipboard.writeText(props.f.path) },
+              ? { label: t('Unstage'), action: () => act('git.unstage', { paths: [props.f.path] }) }
+              : { label: t('Stage'), action: () => act('git.stage', { paths: [props.f.path] }) },
+            { label: t('Discard the changes'), danger: true, disabled: props.staged, action: () => discard([props.f]) },
+            { label: t('Copy the path'), action: () => navigator.clipboard.writeText(props.f.path) },
           ])
         }
       >
@@ -119,15 +121,15 @@ export function GitPanel() {
         <span class="git-name">{basename(props.f.path)}</span>
         <span class="git-dir">{dir}</span>
         <span class="git-actions" onClick={(e) => e.stopPropagation()}>
-          <button class="icon-btn tiny" title="Ouvrir le fichier" onClick={() => openFile(props.f.path)}>
+          <button class="icon-btn tiny" title={t('Open the file')} onClick={() => openFile(props.f.path)}>
             <Icon name="file" size={11} />
           </button>
           <Show when={!props.staged}>
-            <button class="icon-btn tiny" title="Annuler les modifications" onClick={() => discard([props.f])}>
+            <button class="icon-btn tiny" title={t('Discard the changes')} onClick={() => discard([props.f])}>
               <Icon name="undo" size={11} />
             </button>
           </Show>
-          <button class="icon-btn tiny" title={props.staged ? 'Désindexer' : 'Indexer'} onClick={() => act(props.staged ? 'git.unstage' : 'git.stage', { paths: [props.f.path] })}>
+          <button class="icon-btn tiny" title={props.staged ? t('Unstage') : t('Stage')} onClick={() => act(props.staged ? 'git.unstage' : 'git.stage', { paths: [props.f.path] })}>
             {props.staged ? '−' : '+'}
           </button>
         </span>
@@ -157,7 +159,7 @@ export function GitPanel() {
       <div class="panel-head">
         <span class="panel-title">Git</span>
         <span class="grow" />
-        <button class="icon-btn" title="Rafraîchir" onClick={() => (refreshGit(0), refetchLog())}>
+        <button class="icon-btn" title={t('Refresh')} onClick={() => (refreshGit(0), refetchLog())}>
           <Icon name="refresh" />
         </button>
       </div>
@@ -165,32 +167,32 @@ export function GitPanel() {
         when={st()?.repo}
         fallback={
           <div class="pad">
-            <p class="muted">{st() ? "Le projet n'est pas dans un dépôt Git." : 'Chargement…'}</p>
+            <p class="muted">{st() ? t('The project is not in a Git repository.') : t('Loading…')}</p>
             <Show when={st()}>
-              <button class="btn" onClick={() => act('git.init', {}, 'Dépôt initialisé')}>
-                Initialiser un dépôt
+              <button class="btn" onClick={() => act('git.init', {}, t('Repository initialized'))}>
+                {t('Initialize a repository')}
               </button>
             </Show>
           </div>
         }
       >
         <div class="git-branch">
-          <button class="btn small" title="Changer de branche" onClick={branches}>
-            <Icon name="branch" size={12} /> {st()!.branch === '(detached)' ? 'HEAD détachée' : st()!.branch}
+          <button class="btn small" title={t('Switch branch')} onClick={branches}>
+            <Icon name="branch" size={12} /> {st()!.branch === '(detached)' ? t('detached HEAD') : st()!.branch}
           </button>
           <Show when={st()!.upstream}>
-            <span class="muted small" title={`Suivie : ${st()!.upstream}`}>
+            <span class="muted small" title={t('Tracking: {branch}', { branch: st()!.upstream! })}>
               ↑{st()!.ahead} ↓{st()!.behind}
             </span>
           </Show>
           <span class="grow" />
-          <button class="btn small" title="git pull (dans un terminal)" onClick={() => remote('pull')}>
+          <button class="btn small" title={t('git pull (in a terminal)')} onClick={() => remote('pull')}>
             Pull
           </button>
-          <button class="btn small" title="git push (dans un terminal)" onClick={() => remote('push')}>
+          <button class="btn small" title={t('git push (in a terminal)')} onClick={() => remote('push')}>
             Push
           </button>
-          <button class="icon-btn" title="git fetch (dans un terminal)" onClick={() => remote('fetch')}>
+          <button class="icon-btn" title={t('git fetch (in a terminal)')} onClick={() => remote('fetch')}>
             ⟳
           </button>
         </div>
@@ -198,7 +200,7 @@ export function GitPanel() {
           <textarea
             class="input"
             rows="3"
-            placeholder={`Message de commit (Ctrl+Entrée)`}
+            placeholder={t('Commit message (Ctrl+Enter)')}
             value={message()}
             onInput={(e) => setMessage(e.currentTarget.value)}
             onKeyDown={(e) => {
@@ -220,46 +222,46 @@ export function GitPanel() {
           </div>
         </div>
         <div class="panel-body git-files">
-          <Section title="Conflits" list={conflicts()} staged={false} />
+          <Section title={t('Conflicts')} list={conflicts()} staged={false} />
           <Section
-            title="Indexés"
+            title={t('Staged')}
             list={staged()}
             staged={true}
             actions={
               <button class="link small" onClick={() => act('git.unstage', { paths: staged().map((f) => f.path) })}>
-                tout désindexer
+                {t('unstage all')}
               </button>
             }
           />
           <Section
-            title="Modifications"
+            title={t('Changes')}
             list={unstaged()}
             staged={false}
             actions={
               <>
                 <button class="link small" onClick={() => discard(unstaged())}>
-                  tout annuler
+                  {t('discard all')}
                 </button>
                 <button class="link small" onClick={() => act('git.stage', { paths: unstaged().map((f) => f.path) })}>
-                  tout indexer
+                  {t('stage all')}
                 </button>
               </>
             }
           />
           <Show when={!files().length}>
-            <p class="muted pad small">Aucune modification.</p>
+            <p class="muted pad small">{t('No change.')}</p>
           </Show>
           <div class="git-section">
             <div class="git-section-head" onClick={() => setShowLog(!showLog())} style={{ cursor: 'pointer' }}>
               <span class="tree-twist" classList={{ open: showLog() }}>
                 <Icon name="chevron" size={12} />
               </span>
-              Historique
+              {t('History')}
             </div>
             <Show when={showLog()}>
-              <For each={log() ?? []} fallback={<p class="muted small pad">Aucun commit.</p>}>
+              <For each={log() ?? []} fallback={<p class="muted small pad">{t('No commit.')}</p>}>
                 {(c) => (
-                  <div class="git-commit-item" title={`${c.hash}\n${c.author}, ${c.when}`} onClick={() => navigator.clipboard.writeText(c.hash).then(() => toast('Hash copié', 'ok', undefined, 1200))}>
+                  <div class="git-commit-item" title={`${c.hash}\n${c.author}, ${c.when}`} onClick={() => navigator.clipboard.writeText(c.hash).then(() => toast(t('Hash copied'), 'ok', undefined, 1200))}>
                     <span class="mono git-hash">{c.short}</span>
                     <span class="ellipsis">{c.subject}</span>
                     <Show when={c.refs}>

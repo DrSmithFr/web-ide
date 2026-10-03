@@ -3,6 +3,7 @@
 import { createSignal } from 'solid-js'
 import { on, request, RpcError } from '../pod/rpc'
 import { prompt } from '../ui/overlay'
+import { t } from '../i18n'
 
 export interface SSHTunnel {
   enabled: boolean
@@ -96,11 +97,11 @@ export async function withAuth<T>(connId: string, f: () => Promise<T>): Promise<
       if (!(e instanceof RpcError) || attempt > 2) throw e
       let secret: Secret | null = null
       if (e.code === 'db_password') {
-        const pw = await prompt({ title: 'Mot de passe', label: e.message, password: true })
+        const pw = await prompt({ title: t('Password'), label: e.message, password: true })
         if (pw === null) throw e
         secret = { password: pw }
       } else if (e.code === 'auth_required') {
-        const pw = await prompt({ title: e.data?.kind === 'passphrase' ? 'Phrase de passe SSH' : 'Mot de passe SSH', label: e.message, password: true })
+        const pw = await prompt({ title: e.data?.kind === 'passphrase' ? 'Phrase de passe SSH' : t('SSH password'), label: e.message, password: true })
         if (pw === null) throw e
         secret = e.data?.kind === 'passphrase' ? { sshPassphrase: pw } : { sshPassword: pw }
       } else throw e

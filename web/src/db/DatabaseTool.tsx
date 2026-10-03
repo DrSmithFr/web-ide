@@ -10,6 +10,7 @@ import { errorToast } from '../ui/toast'
 import { Icon } from '../ui/icons'
 import { connect, connections, connById, refreshConnections, withAuth, type ConnView, type DbNode } from './api'
 import { ConnectionsModal } from './ConnectionForm'
+import { t } from '../i18n'
 
 interface Sel {
   connId: string
@@ -45,7 +46,7 @@ export function openConsole(connId: string, db?: string, text?: string) {
   const c = connById(connId)
   // In one batch, so the console starts with its text.
   batch(() => {
-    const id = openTab({ kind: 'sql', title: `Console · ${c?.name ?? ''}${db ? ' · ' + db : ''}`, connId, db: db ?? '' })
+    const id = openTab({ kind: 'sql', title: `${t('Console')} · ${c?.name ?? ''}${db ? ' · ' + db : ''}`, connId, db: db ?? '' })
     if (text) mutate((s) => (s.sqlText[id] = (s.sqlText[id] ? s.sqlText[id] + '\n' : '') + text))
   })
 }
@@ -88,19 +89,19 @@ export function DatabaseTool() {
     }
   }
   const remove = async (c: ConnView) => {
-    if (!confirm(`Supprimer la connexion « ${c.name} » ? Les consoles ouvertes passent en mode déconnecté.`)) return
+    if (!confirm(t('Delete the connection “{name}”? The open consoles switch to disconnected mode.', { name: c.name }))) return
     await request('db.delete', { id: c.id }).catch(errorToast)
   }
 
   const connMenu = (e: MouseEvent, c: ConnView) =>
     contextMenu(e, [
-      { label: c.status.state === 'connected' ? 'Fermer la connexion' : 'Se connecter', action: () => (c.status.state === 'connected' ? close(c) : connect(c.id).then(() => refresh(c)).catch(errorToast)) },
-      { label: 'Nouvelle console', action: () => openConsole(c.id) },
+      { label: c.status.state === 'connected' ? t('Close the connection') : t('Connect'), action: () => (c.status.state === 'connected' ? close(c) : connect(c.id).then(() => refresh(c)).catch(errorToast)) },
+      { label: t('New console'), action: () => openConsole(c.id) },
       { separator: true, label: '' },
-      { label: 'Modifier…', action: () => setEditing(c.id) },
-      { label: 'Dupliquer', action: () => duplicate(c) },
-      { label: 'Rafraîchir', action: () => refresh(c) },
-      { label: 'Supprimer', danger: true, action: () => remove(c) },
+      { label: t('Edit…'), action: () => setEditing(c.id) },
+      { label: t('Duplicate'), action: () => duplicate(c) },
+      { label: t('Refresh'), action: () => refresh(c) },
+      { label: t('Delete'), danger: true, action: () => remove(c) },
     ])
 
   const nodeMenu = (e: MouseEvent, c: ConnView, n: DbNode) => {
@@ -114,34 +115,34 @@ export function DatabaseTool() {
     switch (n.kind) {
       case 'database':
         return contextMenu(e, [
-          { label: 'Nouvelle console sur cette base', action: () => openConsole(c.id, n.db) },
-          { label: 'Rafraîchir', action: () => load(c.id, n) },
+          { label: t('New console on this database'), action: () => openConsole(c.id, n.db) },
+          { label: t('Refresh'), action: () => load(c.id, n) },
         ])
       case 'table':
       case 'view':
         return contextMenu(e, [
-          { label: 'Voir les données', action: () => openTable(c.id, n) },
-          { label: 'Voir le DDL', action: () => showText(`DDL · ${n.label}`, () => request('db.ddl', { id: c.id, db: n.db, table: n.table })) },
-          { label: 'Requête vide sur la table', action: () => openConsole(c.id, n.db, `SELECT *\nFROM ${quoteIdent(c.kind, n.table!)}\nLIMIT 100;`) },
+          { label: t('View the data'), action: () => openTable(c.id, n) },
+          { label: t('View the DDL'), action: () => showText(`DDL · ${n.label}`, () => request('db.ddl', { id: c.id, db: n.db, table: n.table })) },
+          { label: t('Empty query on the table'), action: () => openConsole(c.id, n.db, `SELECT *\nFROM ${quoteIdent(c.kind, n.table!)}\nLIMIT 100;`) },
           { separator: true, label: '' },
-          { label: 'Copier le nom', action: () => navigator.clipboard.writeText(n.table!) },
-          { label: 'Rafraîchir', action: () => load(c.id, n) },
+          { label: t('Copy the name'), action: () => navigator.clipboard.writeText(n.table!) },
+          { label: t('Refresh'), action: () => load(c.id, n) },
         ])
       case 'column':
         return contextMenu(e, [
-          { label: 'Copier le nom', action: () => navigator.clipboard.writeText(n.label) },
-          { label: 'Copier le nom qualifié (table.colonne)', action: () => navigator.clipboard.writeText(`${n.table!.split('.').pop()}.${n.label}`) },
+          { label: t('Copy the name'), action: () => navigator.clipboard.writeText(n.label) },
+          { label: t('Copy the qualified name (table.column)'), action: () => navigator.clipboard.writeText(`${n.table!.split('.').pop()}.${n.label}`) },
         ])
       case 'index':
         return contextMenu(e, [
-          { label: 'Voir la définition', action: () => showText(`Index · ${n.label}`, () => request('db.indexDef', { id: c.id, db: n.db, table: n.table, index: n.label })) },
-          { label: 'Copier le nom', action: () => navigator.clipboard.writeText(n.label) },
+          { label: t('View the definition'), action: () => showText(`Index · ${n.label}`, () => request('db.indexDef', { id: c.id, db: n.db, table: n.table, index: n.label })) },
+          { label: t('Copy the name'), action: () => navigator.clipboard.writeText(n.label) },
         ])
       case 'key':
         return contextMenu(e, [
-          { label: 'Voir la valeur', action: () => openTable(c.id, n) },
-          { label: 'Copier le nom', action: () => navigator.clipboard.writeText(n.label) },
-          { label: 'Console avec TTL', action: () => openConsole(c.id, n.db, `TYPE ${JSON.stringify(n.label)}\nTTL ${JSON.stringify(n.label)}`) },
+          { label: t('View the value'), action: () => openTable(c.id, n) },
+          { label: t('Copy the name'), action: () => navigator.clipboard.writeText(n.label) },
+          { label: t('Console with TTL'), action: () => openConsole(c.id, n.db, `TYPE ${JSON.stringify(n.label)}\nTTL ${JSON.stringify(n.label)}`) },
         ])
     }
   }
@@ -159,7 +160,7 @@ export function DatabaseTool() {
         </Show>
         <Show when={expanded[k()] && !children[k()] && !errors[k()]}>
           <div class="muted small" style={{ 'padding-left': `${p.depth * 14 + 22}px` }}>
-            chargement…
+            {t('loading…')}
           </div>
         </Show>
         <For each={children[k()] ?? []}>
@@ -210,27 +211,27 @@ export function DatabaseTool() {
         <span class="panel-title">Database explorer</span>
       </div>
       <div class="toolbar compact">
-        <button class="icon-btn" title="Ajouter une connexion" onClick={() => setEditing('new')}>
+        <button class="icon-btn" title={t('Add a connection')} onClick={() => setEditing('new')}>
           <Icon name="plus" />
         </button>
-        <button class="icon-btn" title="Éditer les connexions" onClick={() => setEditing(sel()?.connId ?? connections()[0]?.id ?? 'new')}>
+        <button class="icon-btn" title={t('Edit the connections')} onClick={() => setEditing(sel()?.connId ?? connections()[0]?.id ?? 'new')}>
           <Icon name="edit" />
         </button>
-        <button class="icon-btn" title="Rafraîchir la connexion sélectionnée" disabled={!conn()} onClick={() => conn() && refresh(conn()!)}>
+        <button class="icon-btn" title={t('Refresh the selected connection')} disabled={!conn()} onClick={() => conn() && refresh(conn()!)}>
           <Icon name="refresh" />
         </button>
-        <button class="icon-btn" title="Fermer la connexion sélectionnée" disabled={conn()?.status.state !== 'connected'} onClick={() => conn() && close(conn()!)}>
+        <button class="icon-btn" title={t('Close the selected connection')} disabled={conn()?.status.state !== 'connected'} onClick={() => conn() && close(conn()!)}>
           <Icon name="stop" />
         </button>
-        <button class="icon-btn" title="Ouvrir une console (connexion sélectionnée)" disabled={!conn()} onClick={() => conn() && openConsole(conn()!.id, sel()?.node?.db)}>
+        <button class="icon-btn" title={t('Open a console (selected connection)')} disabled={!conn()} onClick={() => conn() && openConsole(conn()!.id, sel()?.node?.db)}>
           <Icon name="terminal" />
         </button>
-        <button class="icon-btn" title="Ouvrir la table sélectionnée" disabled={!selTable()} onClick={() => selTable() && openTable(sel()!.connId, selTable()!)}>
+        <button class="icon-btn" title={t('Open the selected table')} disabled={!selTable()} onClick={() => selTable() && openTable(sel()!.connId, selTable()!)}>
           <Icon name="table" />
         </button>
       </div>
       <div class="panel-body tree">
-        <For each={connections()} fallback={<div class="muted pad small">Aucune connexion. « + » pour en ajouter une (SQLite, Postgres, Redis).</div>}>
+        <For each={connections()} fallback={<div class="muted pad small">{t('No connection. “+” to add one (SQLite, Postgres, Redis).')}</div>}>
           {(c) => {
             const k = () => key(c.id, null)
             return (
@@ -251,7 +252,7 @@ export function DatabaseTool() {
                   <span class="tree-twist" classList={{ open: !!expanded[k()] }}>
                     <Icon name="chevron" size={12} />
                   </span>
-                  <span class={`dot dot-${c.status.state === 'connected' ? 'connected' : c.status.state === 'error' ? 'error' : 'idle'}`} title={{ connected: 'connectée', error: 'en erreur', untested: 'non testée', closed: 'fermée' }[c.status.state]} />
+                  <span class={`dot dot-${c.status.state === 'connected' ? 'connected' : c.status.state === 'error' ? 'error' : 'idle'}`} title={t({ connected: 'db|connected', error: 'db|error', untested: 'db|untested', closed: 'db|closed' }[c.status.state] ?? '')} />
                   <span class="tree-name">{c.name}</span>
                   <span class="tree-detail">
                     {c.kind}

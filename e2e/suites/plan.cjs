@@ -25,18 +25,18 @@ const fake = http.createServer(async (req, res) => {
   for await (const c of req) body += c
   const r = JSON.parse(body)
   res.writeHead(200, { 'Content-Type': 'text/event-stream' })
-  if (text(r.messages[0]).startsWith('Tu résumes')) {
+  if (text(r.messages[0]).startsWith('You summarize')) {
     summaries.push(r)
-    sse(res, { content: 'RÉSUMÉ du travail.' })
+    sse(res, { content: 'SUMMARY of the work.' })
     return end(res)
   }
   requests.push(r)
   const msgs = r.messages
   const last = msgs[msgs.length - 1]
-  const lastUser = [...msgs].reverse().find((m) => m.role === 'user' && !text(m).startsWith('Résumé'))
+  const lastUser = [...msgs].reverse().find((m) => m.role === 'user' && !text(m).startsWith('Summary'))
   const ask = text(lastUser)
   const tools = msgs.filter((m) => m.role === 'tool')
-  if (ask.startsWith('Planifie')) {
+  if (ask.startsWith('Plan the')) {
     if (last.role === 'user')
       return (
         sse(res, {
@@ -48,15 +48,15 @@ const fake = http.createServer(async (req, res) => {
         }),
         end(res, 'tool_calls')
       )
-    return sse(res, { tool_calls: calls([['p4', 'exit_plan_mode', { plan: '## Plan\n1. Remplacer Bonjour par Salut dans `src/main.go`\n2. Lancer les tests' }]]) }), end(res, 'tool_calls')
+    return sse(res, { tool_calls: calls([['p4', 'exit_plan_mode', { plan: '## Plan\n1. Replace Bonjour with Salut in `src/main.go`\n2. Run the tests' }]]) }), end(res, 'tool_calls')
   }
-  if (ask.startsWith('Le plan est accepté')) {
+  if (ask.startsWith('The plan is accepted')) {
     if (last.role === 'user') return sse(res, { tool_calls: calls([['e1', 'edit_file', { path: 'src/main.go', old_string: '"Bonjour %s"', new_string: '"Salut %s"' }]]) }), end(res, 'tool_calls')
-    if (last.role === 'tool' && last.tool_call_id === 'e1') return sse(res, { tool_calls: calls([['c1', 'compact_conversation', { instructions: 'garder le plan' }]]) }), end(res, 'tool_calls')
-    sse(res, { content: 'Plan exécuté.' })
+    if (last.role === 'tool' && last.tool_call_id === 'e1') return sse(res, { tool_calls: calls([['c1', 'compact_conversation', { instructions: 'keep the plan' }]]) }), end(res, 'tool_calls')
+    sse(res, { content: 'Plan carried out.' })
     return end(res)
   }
-  sse(res, { content: `Réponse (${r.model}).` })
+  sse(res, { content: `Answer (${r.model}).` })
   end(res)
 })
 
@@ -65,13 +65,13 @@ run(async ({ page }) => {
   page.on('dialog', (d) => d.accept())
   try {
     await openProject(page)
-    await page.click('.rail-right .rail-btn[title="Assistant IA"]')
-    await page.click('.ai-empty button:has-text("Ajouter un serveur")')
+    await page.click('.rail-right .rail-btn[title="AI assistant"]')
+    await page.click('.ai-empty button:has-text("Add a model server")')
     await page.fill('.ai-servers input[name=url]', `127.0.0.1:${fake.address().port}`)
-    await page.click('.ai-servers button:has-text("Ajouter")')
+    await page.click('.ai-servers button:has-text("Add")')
     await page.waitForSelector('.ai-server-row:has-text("127.0.0.1")')
     // Dedicated Plan model.
-    await page.click('.ai-tab:has-text("Mode Plan")')
+    await page.click('.ai-tab:has-text("Plan mode")')
     await page.selectOption('[data-testid=plan-settings] select[name=planServer]', { index: 1 })
     await page.waitForSelector('[data-testid=plan-settings] select[name=planModel] option[value="fake-plan"]', { state: 'attached' })
     await page.selectOption('[data-testid=plan-settings] select[name=planModel]', 'fake-plan')
@@ -82,44 +82,44 @@ run(async ({ page }) => {
     await page.click('.ai-composer textarea')
     await page.keyboard.press('Shift+Tab')
     await page.waitForSelector('[data-testid=ai-mode].plan:has-text("fake-plan")')
-    assert(true, 'Maj+Tab passe en mode Plan (modèle dédié affiché)')
+    assert(true, 'Shift+Tab switches to Plan mode (dedicated model shown)')
 
-    await page.fill('.ai-composer textarea', 'Planifie le renommage')
+    await page.fill('.ai-composer textarea', 'Plan the renaming')
     await page.keyboard.press('Enter')
     // The command that changes something waits for the user.
     await page.waitForSelector('[data-testid=ai-approval]:has-text("rm -rf src")', { timeout: 10000 })
     const r0 = requests[0]
-    assert(r0.model === 'fake-plan', 'requête envoyée au modèle du mode Plan')
-    assert(r0.messages[0].content.includes('mode Plan') && r0.messages[0].content.includes('exit_plan_mode'), 'prompt système du mode Plan')
+    assert(r0.model === 'fake-plan', 'request sent to the model of the Plan mode')
+    assert(r0.messages[0].content.includes('Plan mode') && r0.messages[0].content.includes('exit_plan_mode'), 'system prompt of the Plan mode')
     const names = toolNames(r0)
-    assert(!names.includes('edit_file') && !names.includes('write_file') && names.includes('exit_plan_mode') && names.includes('compact_conversation'), 'outils du mode Plan : sans écriture, avec exit_plan_mode : ' + names.join(','))
-    await page.click('[data-testid=ai-approval] button:has-text("Refuser")')
+    assert(!names.includes('edit_file') && !names.includes('write_file') && names.includes('exit_plan_mode') && names.includes('compact_conversation'), 'tools of the Plan mode: no writing, with exit_plan_mode: ' + names.join(','))
+    await page.click('[data-testid=ai-approval] button:has-text("Refuse")')
     await page.waitForSelector('[data-testid=ai-plan]', { timeout: 10000 })
     const res1 = requests[1].messages.filter((m) => m.role === 'tool')
     const byId = (id) => text(res1.find((m) => m.tool_call_id === id) ?? { content: '' })
-    assert(byId('p1').startsWith('Code de sortie 0'), 'commande de lecture exécutée sans demander')
-    assert(byId('p2').includes('refusé') && fs.existsSync(WS + '/demo/src/main.go'), 'commande de modification refusée, rien supprimé')
-    assert(byId('p3').includes('mode Plan') && fs.readFileSync(WS + '/demo/src/main.go', 'utf8').includes('Bonjour'), 'edit_file refusé en mode Plan')
-    const card = await page.waitForSelector('[data-testid=ai-plan] .md:has-text("Remplacer Bonjour par Salut")', { timeout: 5000 }).then(() => true, () => false)
-    assert(card, 'carte du plan affichée')
+    assert(byId('p1').startsWith('Exit code 0'), 'reading command run without asking')
+    assert(byId('p2').includes('refused') && fs.existsSync(WS + '/demo/src/main.go'), 'changing command refused, nothing deleted')
+    assert(byId('p3').includes('Plan mode') && fs.readFileSync(WS + '/demo/src/main.go', 'utf8').includes('Bonjour'), 'edit_file refused in Plan mode')
+    const card = await page.waitForSelector('[data-testid=ai-plan] .md:has-text("Replace Bonjour with Salut")', { timeout: 5000 }).then(() => true, () => false)
+    assert(card, 'plan card shown')
     await page.waitForSelector('[data-testid=send]')
-    assert(requests.length === 2, 'le tour s’arrête après la présentation du plan')
-    assert(await page.isVisible('.ai-plan-badge'), 'réponse marquée Plan')
+    assert(requests.length === 2, 'the turn stops after the plan is presented')
+    assert(await page.isVisible('.ai-plan-badge'), 'answer marked Plan')
     await page.screenshot({ path: OUT + '/plan-card.png' })
 
     // Execute the plan: Build mode, model of the conversation, edit then compaction by the model.
-    await page.click('[data-testid=ai-plan] button:has-text("Exécuter ce plan")')
+    await page.click('[data-testid=ai-plan] button:has-text("Execute this plan")')
     await page.waitForSelector('[data-testid=ai-approval]:has-text("src/main.go")', { timeout: 10000 })
-    await page.click('[data-testid=ai-approval] button:has-text("Appliquer")')
-    await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Plan exécuté.")', { timeout: 15000 })
+    await page.click('[data-testid=ai-approval] button:has-text("Apply")')
+    await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Plan carried out.")', { timeout: 15000 })
     const r2 = requests[2]
-    assert(r2.model === 'fake-model' && toolNames(r2).includes('edit_file') && !toolNames(r2).includes('exit_plan_mode'), 'exécution en mode Build avec le modèle de la conversation')
-    assert(!(await page.isVisible('[data-testid=ai-mode].plan')), 'le mode repasse en Build')
-    assert(fs.readFileSync(WS + '/demo/src/main.go', 'utf8').includes('"Salut %s"'), 'le plan est exécuté (fichier modifié)')
-    assert(summaries.length === 1 && summaries[0].messages[0].content.includes('garder le plan'), 'compaction demandée par le modèle, avec ses consignes')
-    assert(await page.isVisible('[data-testid=ai-summary]'), 'résumé affiché dans la conversation')
+    assert(r2.model === 'fake-model' && toolNames(r2).includes('edit_file') && !toolNames(r2).includes('exit_plan_mode'), 'carried out in Build mode with the model of the conversation')
+    assert(!(await page.isVisible('[data-testid=ai-mode].plan')), 'the mode goes back to Build')
+    assert(fs.readFileSync(WS + '/demo/src/main.go', 'utf8').includes('"Salut %s"'), 'the plan is carried out (file changed)')
+    assert(summaries.length === 1 && summaries[0].messages[0].content.includes('keep the plan'), 'compaction asked by the model, with its instructions')
+    assert(await page.isVisible('[data-testid=ai-summary]'), 'summary shown in the conversation')
     await page.click('.ai-compacted-toggle')
-    assert((await page.textContent('[data-testid=ai-plan]')).includes('exécuté'), 'plan marqué exécuté (dans les messages compactés)')
+    assert((await page.textContent('[data-testid=ai-plan]')).includes('carried out'), 'plan marked carried out (in the compacted messages)')
     await page.screenshot({ path: OUT + '/plan-done.png' })
   } finally {
     fake.close()

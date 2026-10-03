@@ -8,8 +8,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"path"
 	"sync"
 	"time"
@@ -20,6 +18,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/execx"
 	"github.com/DrSmithFr/web-ide/pod/internal/fsx"
 	"github.com/DrSmithFr/web-ide/pod/internal/git"
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/lsp"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
@@ -95,10 +94,10 @@ func Open(p projects.Project, creds sshx.Creds, d Deps, emit Emit) (*Runtime, er
 	}
 	st, err := r.FS.Stat(root)
 	if err != nil {
-		return nil, fmt.Errorf("dossier du projet inaccessible : %w", err)
+		return nil, i18n.Errorf("project folder not reachable: %w", err)
 	}
 	if !st.Dir {
-		return nil, errors.New("la cible du projet n'est pas un dossier")
+		return nil, i18n.New("the project target is not a folder")
 	}
 	r.Root = root
 	if data, err := r.FS.Read(path.Join(root, ".ide", "project.json")); err == nil {
@@ -207,7 +206,7 @@ func (r *Runtime) Read(p string) (*FileContent, error) {
 		return nil, err
 	}
 	if st.Dir {
-		return nil, errors.New("c'est un dossier")
+		return nil, i18n.New("it is a folder")
 	}
 	fc := &FileContent{Path: p, Size: st.Size, ReadOnly: !fsx.Within(r.Root, p)}
 	if st.Size > maxFile {
@@ -246,7 +245,7 @@ func (r *Runtime) Read(p string) (*FileContent, error) {
 // (a clean merge since their buffers are already in sync).
 func (r *Runtime) Write(p, content, client string) (int, error) {
 	if !fsx.Within(r.Root, p) {
-		return 0, errors.New("fichier hors du projet : lecture seule")
+		return 0, i18n.New("file outside the project: read-only")
 	}
 	data := []byte(content)
 	if err := r.FS.Write(p, data); err != nil {
@@ -283,7 +282,7 @@ func (r *Runtime) SyncBuffer(p string, content *string, client string) {
 
 func (r *Runtime) Create(p string, dir bool) error {
 	if _, err := r.FS.Stat(p); err == nil {
-		return errors.New("existe déjà")
+		return i18n.New("already exists")
 	}
 	if dir {
 		return r.FS.Mkdir(p)
@@ -293,17 +292,17 @@ func (r *Runtime) Create(p string, dir bool) error {
 
 func (r *Runtime) Delete(p string) error {
 	if p == r.Root || !fsx.Within(r.Root, p) {
-		return errors.New("suppression refusée hors du projet")
+		return i18n.New("deletion refused outside the project")
 	}
 	return r.FS.Remove(p)
 }
 
 func (r *Runtime) Rename(from, to string) error {
 	if !fsx.Within(r.Root, from) || !fsx.Within(r.Root, to) {
-		return errors.New("renommage refusé hors du projet")
+		return i18n.New("renaming refused outside the project")
 	}
 	if _, err := r.FS.Stat(to); err == nil {
-		return errors.New("la destination existe déjà")
+		return i18n.New("the destination already exists")
 	}
 	return r.FS.Rename(from, to)
 }

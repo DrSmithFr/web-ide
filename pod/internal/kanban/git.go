@@ -3,7 +3,6 @@ package kanban
 import (
 	"context"
 	"errors"
-	"fmt"
 	"path"
 	"strconv"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	"golang.org/x/text/unicode/norm"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/execx"
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
 
 // Git runs the git operations of the tickets in the main folder of a project (locally or
@@ -107,7 +107,7 @@ func (g Git) AddWorktree(ctx context.Context, dir, branch, base string) error {
 		return err
 	}
 	if !g.verify(ctx, g.Root, base) {
-		return fmt.Errorf("base introuvable : %s", base)
+		return i18n.Errorf("base not found: %s", base)
 	}
 	_, err := g.git(ctx, g.Root, "worktree", "add", "--no-track", "-b", branch, dir, base)
 	return err
@@ -150,10 +150,10 @@ func (g Git) Changes(ctx context.Context, worktree, branch, base string) (*Diff,
 		d.Source = "branch"
 	}
 	if !g.verify(ctx, dir, head) {
-		return nil, fmt.Errorf("branche introuvable : %s", branch)
+		return nil, i18n.Errorf("branch not found: %s", branch)
 	}
 	if !g.verify(ctx, dir, base) {
-		return nil, fmt.Errorf("base introuvable : %s", base)
+		return nil, i18n.Errorf("base not found: %s", base)
 	}
 	mb, err := g.git(ctx, dir, "merge-base", base, head)
 	if err != nil {
@@ -263,7 +263,7 @@ func (g Git) Patch(ctx context.Context, worktree, branch, from string, max int) 
 		out, _ = g.git(ctx, worktree, "diff", "-M", prefixA, prefixB, from)
 	}
 	if len(out) > max {
-		out = out[:max] + "\n… (diff coupé)\n"
+		out = out[:max] + "\n… (diff cut)\n"
 	}
 	return out
 }
@@ -334,13 +334,13 @@ func (g Git) clean(ctx context.Context, dir string) bool {
 func (g Git) Merge(ctx context.Context, branch, into, message string, squash bool) (State, error) {
 	cur, _ := g.git(ctx, g.Root, "branch", "--show-current")
 	if cur = strings.TrimSpace(cur); cur != into {
-		return State{}, fmt.Errorf("le dossier principal est sur la branche « %s » : passer sur « %s » pour fusionner", cur, into)
+		return State{}, i18n.Errorf("the main folder is on the branch “%s”: switch to “%s” to merge", cur, into)
 	}
 	if st := g.State(ctx, g.Root); st.Busy() {
-		return st, errors.New("une fusion ou un rebase est déjà en cours dans le dossier principal")
+		return st, i18n.New("a merge or a rebase is already in progress in the main folder")
 	}
 	if !g.clean(ctx, g.Root) {
-		return State{}, errors.New("le dossier principal a des modifications non commitées : les commiter ou les mettre de côté avant de fusionner")
+		return State{}, i18n.New("the main folder has uncommitted changes: commit or stash them before merging")
 	}
 	var err error
 	if squash {
@@ -360,10 +360,10 @@ func (g Git) Merge(ctx context.Context, branch, into, message string, squash boo
 // Rebase replays the branch of a ticket on its base, in its worktree.
 func (g Git) Rebase(ctx context.Context, worktree, base string) (State, error) {
 	if st := g.State(ctx, worktree); st.Busy() {
-		return st, errors.New("un rebase est déjà en cours dans le worktree")
+		return st, i18n.New("a rebase is already in progress in the worktree")
 	}
 	if !g.clean(ctx, worktree) {
-		return State{}, errors.New("le worktree a des modifications non commitées : les commiter avant le rebase")
+		return State{}, i18n.New("the worktree has uncommitted changes: commit them before the rebase")
 	}
 	_, err := g.git(ctx, worktree, "-c", "core.editor=true", "-c", "core.commentChar=auto", "rebase", base)
 	st := g.State(ctx, worktree)
@@ -378,7 +378,7 @@ func (g Git) Rebase(ctx context.Context, worktree, base string) (State, error) {
 func (g Git) Continue(ctx context.Context, dir string) (State, error) {
 	st := g.State(ctx, dir)
 	if len(st.Conflicts) > 0 {
-		return st, fmt.Errorf("%d fichier(s) encore en conflit : les corriger puis git add", len(st.Conflicts))
+		return st, i18n.Errorf("%d file(s) still in conflict: fix them, then git add", len(st.Conflicts))
 	}
 	var err error
 	switch {
@@ -388,7 +388,7 @@ func (g Git) Continue(ctx context.Context, dir string) (State, error) {
 	case st.Merge, st.Squash:
 		_, err = g.git(ctx, dir, "-c", "core.commentChar=auto", "commit", "--no-edit")
 	default:
-		return st, errors.New("aucun rebase ni fusion en cours")
+		return st, i18n.New("no rebase or merge in progress")
 	}
 	st = g.State(ctx, dir)
 	if err != nil && len(st.Conflicts) == 0 {

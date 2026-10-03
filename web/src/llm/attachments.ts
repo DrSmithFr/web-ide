@@ -4,6 +4,7 @@
 // (or pages as images when it has no text), other files as text.
 import { prefs, type Attachment, type Caps, type Part } from './state'
 import { transcribe } from './transcribe'
+import { t } from '../i18n'
 
 export interface Prepared {
   parts: Part[]
@@ -19,7 +20,7 @@ function readAs(file: Blob, kind: 'dataURL' | 'text' | 'buffer'): Promise<any> {
   return new Promise((resolve, reject) => {
     const r = new FileReader()
     r.onload = () => resolve(r.result)
-    r.onerror = () => reject(r.error ?? new Error('lecture impossible'))
+    r.onerror = () => reject(r.error ?? new Error(t('cannot read the file')))
     if (kind === 'dataURL') r.readAsDataURL(file)
     else if (kind === 'text') r.readAsText(file)
     else r.readAsArrayBuffer(file)
@@ -30,7 +31,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image()
     img.onload = () => resolve(img)
-    img.onerror = () => reject(new Error('image illisible'))
+    img.onerror = () => reject(new Error(t('unreadable image')))
     img.src = src
   })
 }
@@ -78,7 +79,7 @@ async function videoFrames(file: File): Promise<{ frames: { t: number; url: stri
     video.src = src
     await new Promise<void>((resolve, reject) => {
       video.onloadeddata = () => resolve()
-      video.onerror = () => reject(new Error('vidéo illisible par le navigateur'))
+      video.onerror = () => reject(new Error(t('video the browser cannot read')))
     })
     const duration = isFinite(video.duration) ? video.duration : 0
     const frames: { t: number; url: string }[] = []
@@ -101,17 +102,17 @@ async function video(file: File, caps: Caps): Promise<Prepared> {
     const url: string = await readAs(file, 'dataURL')
     return { parts: [{ type: 'input_video', input_video: { url } }], attachment: { name: file.name, kind: 'video', size: file.size, thumb } }
   }
-  const parts: Part[] = [{ type: 'text', text: `Vidéo « ${file.name} » (${duration.toFixed(1)} s), ${frames.length} images extraites :` }]
+  const parts: Part[] = [{ type: 'text', text: `Video "${file.name}" (${duration.toFixed(1)} s), ${frames.length} frames extracted:` }]
   for (const f of frames) {
     parts.push({ type: 'text', text: `t = ${f.t.toFixed(1)} s` })
     parts.push({ type: 'image_url', image_url: { url: f.url } })
   }
-  let note = `${frames.length} images`
+  let note = t('{n} images', { n: frames.length })
   // Its sound, transcribed here (a video without sound track fails to decode: skipped).
   const speech = await transcribe(file).catch(() => '')
   if (speech) {
-    parts.push({ type: 'text', text: `Transcription de la bande son :\n${speech}` })
-    note += ' + transcription'
+    parts.push({ type: 'text', text: `Transcription of the sound track:\n${speech}` })
+    note += ` + ${t('transcription')}`
   }
   return { parts, attachment: { name: file.name, kind: 'video', size: file.size, thumb, note } }
 }
@@ -120,8 +121,8 @@ async function audio(file: File, caps: Caps): Promise<Prepared> {
   if (!(prefs.audioToModel && caps.audio)) {
     const text = await transcribe(file)
     return {
-      parts: [{ type: 'text', text: `Transcription de l’audio « ${file.name} » :\n${text || '(aucune parole reconnue)'}` }],
-      attachment: { name: file.name, kind: 'audio', size: file.size, note: 'transcrit localement' },
+      parts: [{ type: 'text', text: `Transcription of the audio "${file.name}":\n${text || '(no speech recognized)'}` }],
+      attachment: { name: file.name, kind: 'audio', size: file.size, note: t('transcribed locally') },
     }
   }
   const url: string = await readAs(file, 'dataURL')
@@ -154,11 +155,11 @@ async function pdf(file: File, caps: Caps): Promise<Prepared> {
     }
     text += `\n--- page ${i} ---\n${line.trim()}\n`
   }
-  const att: Attachment = { name: file.name, kind: 'pdf', size: file.size, note: `${doc.numPages} pages` }
+  const att: Attachment = { name: file.name, kind: 'pdf', size: file.size, note: t('{n} pages', { n: doc.numPages }) }
   const letters = text.replace(/--- page \d+ ---|\s/g, '').length
   if (letters < 3 * doc.numPages && caps.vision) {
     // Scanned document (next to no text): its pages as images.
-    const parts: Part[] = [{ type: 'text', text: `PDF « ${file.name} » (${doc.numPages} pages, sans texte) : pages en images.` }]
+    const parts: Part[] = [{ type: 'text', text: `PDF "${file.name}" (${doc.numPages} pages, no text): pages as images.` }]
     for (let i = 1; i <= Math.min(doc.numPages, PDF_PAGES); i++) {
       const page = await doc.getPage(i)
       const vp = page.getViewport({ scale: 1.5 })
@@ -168,22 +169,22 @@ async function pdf(file: File, caps: Caps): Promise<Prepared> {
       await page.render({ canvasContext: c.getContext('2d')!, viewport: vp, canvas: c }).promise
       parts.push({ type: 'image_url', image_url: { url: draw(c, c.width, c.height, 1600) } })
     }
-    att.note = `${Math.min(doc.numPages, PDF_PAGES)} pages en images`
+    att.note = t('{n} pages as images', { n: Math.min(doc.numPages, PDF_PAGES) })
     return { parts, attachment: att }
   }
-  if (text.length > MAX_TEXT) text = text.slice(0, MAX_TEXT) + '\n… (tronqué)'
-  return { parts: [{ type: 'text', text: `PDF « ${file.name} » (${doc.numPages} pages) :\n${text}` }], attachment: att }
+  if (text.length > MAX_TEXT) text = text.slice(0, MAX_TEXT) + '\n… (truncated)'
+  return { parts: [{ type: 'text', text: `PDF "${file.name}" (${doc.numPages} pages):\n${text}` }], attachment: att }
 }
 
 async function textFile(file: File): Promise<Prepared> {
-  if (file.size > 4 << 20) throw new Error(`${file.name} : fichier trop gros pour être joint`)
+  if (file.size > 4 << 20) throw new Error(t('{file}: file too large to attach', { file: file.name }))
   const head = new Uint8Array(await readAs(file.slice(0, 8000), 'buffer'))
-  if (head.includes(0)) throw new Error(`${file.name} : type de fichier non pris en charge`)
+  if (head.includes(0)) throw new Error(t('{file}: file type not supported', { file: file.name }))
   let text: string = await readAs(file, 'text')
-  if (text.length > MAX_TEXT) text = text.slice(0, MAX_TEXT) + '\n… (tronqué)'
+  if (text.length > MAX_TEXT) text = text.slice(0, MAX_TEXT) + '\n… (truncated)'
   const ext = file.name.includes('.') ? file.name.split('.').pop() : ''
   return {
-    parts: [{ type: 'text', text: `Fichier joint « ${file.name} » :\n\`\`\`${ext}\n${text}\n\`\`\`` }],
+    parts: [{ type: 'text', text: `Attached file "${file.name}":\n\`\`\`${ext}\n${text}\n\`\`\`` }],
     attachment: { name: file.name, kind: 'text', size: file.size },
   }
 }
@@ -195,11 +196,11 @@ export async function prepare(file: File, caps: Caps | undefined): Promise<Prepa
   const name = file.name.toLowerCase()
   if (type.startsWith('image/')) {
     const p = await image(file)
-    return { ...p, warning: c.known && !c.vision ? 'Ce modèle ne lit pas les images' : undefined }
+    return { ...p, warning: c.known && !c.vision ? t('This model does not read images') : undefined }
   }
   if (type.startsWith('video/')) {
     const p = await video(file, c)
-    return { ...p, warning: c.known && !c.vision && !c.video ? 'Ce modèle ne lit pas les images ni la vidéo' : undefined }
+    return { ...p, warning: c.known && !c.vision && !c.video ? t('This model reads neither images nor video') : undefined }
   }
   if (type.startsWith('audio/')) {
     return audio(file, c)

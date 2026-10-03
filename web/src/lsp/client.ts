@@ -5,6 +5,7 @@ import { lspLanguage, lspLanguageId } from '../editor/languages'
 import { fileUri, openFile, pathFromUri, relPath, basename } from '../state/project'
 import { pick, type PickItem } from '../ui/overlay'
 import { toast } from '../ui/toast'
+import { t } from '../i18n'
 
 export interface Position {
   line: number
@@ -29,18 +30,18 @@ export interface DocumentSymbol {
 }
 
 export const symbolKinds: Record<number, [string, string]> = {
-  1: ['Fichier', '📄'], 2: ['Module', '📦'], 3: ['Namespace', '{}'], 4: ['Package', '📦'], 5: ['Classe', 'C'], 6: ['Méthode', 'm'],
-  7: ['Propriété', 'p'], 8: ['Champ', 'f'], 9: ['Constructeur', 'm'], 10: ['Enum', 'E'], 11: ['Interface', 'I'], 12: ['Fonction', 'ƒ'],
-  13: ['Variable', 'v'], 14: ['Constante', 'c'], 15: ['Chaîne', 's'], 16: ['Nombre', '#'], 17: ['Booléen', 'b'], 18: ['Tableau', '[]'],
-  19: ['Objet', 'o'], 20: ['Clé', 'k'], 21: ['Null', '∅'], 22: ['Membre d’enum', 'e'], 23: ['Struct', 'S'], 24: ['Événement', '⚡'],
-  25: ['Opérateur', '±'], 26: ['Paramètre de type', 'T'],
+  1: ['File', '📄'], 2: ['Module', '📦'], 3: ['Namespace', '{}'], 4: ['Package', '📦'], 5: ['Class', 'C'], 6: ['Method', 'm'],
+  7: ['Property', 'p'], 8: ['Field', 'f'], 9: ['Constructor', 'm'], 10: ['Enum', 'E'], 11: ['Interface', 'I'], 12: ['Function', 'ƒ'],
+  13: ['Variable', 'v'], 14: ['Constant', 'c'], 15: ['String', 's'], 16: ['Number', '#'], 17: ['Boolean', 'b'], 18: ['Array', '[]'],
+  19: ['Object', 'o'], 20: ['Key', 'k'], 21: ['Null', '∅'], 22: ['Enum member', 'e'], 23: ['Struct', 'S'], 24: ['Event', '⚡'],
+  25: ['Operator', '±'], 26: ['Type parameter', 'T'],
 }
 
 export class NoServer extends Error {}
 
 export async function lsp<T = any>(path: string, method: string, params: any): Promise<T> {
   const lang = lspLanguage(path)
-  if (!lang) throw new NoServer('Pas de serveur de langage pour ce type de fichier')
+  if (!lang) throw new NoServer(t('No language server for this file type'))
   return request('lsp.request', { lang, method, params })
 }
 
@@ -68,7 +69,7 @@ export function jump(loc: Location) {
 /** One location: jump. Several: a list with the line of each one. */
 export async function showLocations(locs: Location[], title: string) {
   if (!locs.length) {
-    toast(`${title} : aucun résultat`, 'info')
+    toast(t('{title}: no result', { title }), 'info')
     return
   }
   if (locs.length === 1) {
@@ -104,7 +105,7 @@ function contains(r: Range, line: number, ch: number) {
 
 function guard(e: unknown) {
   if (e instanceof NoServer) toast(e.message, 'info')
-  else toast(`Serveur de langage : ${(e as Error).message}`, 'error')
+  else toast(t('Language server: {message}', { message: (e as Error).message }), 'error')
 }
 
 /** Ctrl+B: declaration, or the usages when the caret already is on the declaration. */
@@ -114,7 +115,7 @@ export async function gotoDeclaration(doc: Doc, offset: number) {
     const { line, col } = doc.pos(offset)
     const onItself = locs.length > 0 && locs.every((l) => l.path === doc.path && contains(l.range, line, col))
     if (onItself) return findReferences(doc, offset)
-    await showLocations(locs, 'Déclaration')
+    await showLocations(locs, t('Declaration'))
   } catch (e) {
     guard(e)
   }
@@ -123,7 +124,7 @@ export async function gotoDeclaration(doc: Doc, offset: number) {
 export async function findReferences(doc: Doc, offset: number) {
   try {
     const locs = toLocations(await lsp(doc.path, 'textDocument/references', { ...at(doc, offset), context: { includeDeclaration: false } }))
-    await showLocations(locs, 'Usages')
+    await showLocations(locs, t('Usages'))
   } catch (e) {
     guard(e)
   }
@@ -131,7 +132,7 @@ export async function findReferences(doc: Doc, offset: number) {
 
 export async function gotoImplementation(doc: Doc, offset: number) {
   try {
-    await showLocations(toLocations(await lsp(doc.path, 'textDocument/implementation', at(doc, offset))), 'Implémentations')
+    await showLocations(toLocations(await lsp(doc.path, 'textDocument/implementation', at(doc, offset))), t('Implementations'))
   } catch (e) {
     guard(e)
   }
@@ -139,7 +140,7 @@ export async function gotoImplementation(doc: Doc, offset: number) {
 
 export async function gotoTypeDefinition(doc: Doc, offset: number) {
   try {
-    await showLocations(toLocations(await lsp(doc.path, 'textDocument/typeDefinition', at(doc, offset))), 'Déclaration de type')
+    await showLocations(toLocations(await lsp(doc.path, 'textDocument/typeDefinition', at(doc, offset))), t('Type declaration'))
   } catch (e) {
     guard(e)
   }
@@ -179,7 +180,7 @@ export async function gotoSuperMethod(doc: Doc, offset: number) {
     const method = [...chain].reverse().find((s) => methodKinds.has(s.kind))
     const cls = [...chain].reverse().find((s) => typeKinds.has(s.kind))
     if (!method || !cls) {
-      toast('Le curseur doit être dans une méthode de classe', 'info')
+      toast(t('The caret must be in a class method'), 'info')
       return
     }
     const items = await lsp<any[]>(doc.path, 'textDocument/prepareTypeHierarchy', {
@@ -187,7 +188,7 @@ export async function gotoSuperMethod(doc: Doc, offset: number) {
       position: cls.selectionRange.start,
     }).catch(() => null)
     if (!items?.length) {
-      toast("Ce serveur de langage ne fournit pas la hiérarchie de types", 'info')
+      toast(t('This language server does not provide the type hierarchy'), 'info')
       return
     }
     const supers = await lsp<any[]>(doc.path, 'typeHierarchy/supertypes', { item: items[0] })
@@ -198,8 +199,8 @@ export async function gotoSuperMethod(doc: Doc, offset: number) {
       const target = flatten(syms).find(({ s }) => s.name === method.name && methodKinds.has(s.kind) && contains(sup.range, s.range.start.line, s.range.start.character))
       if (target) found.push({ path, range: target.s.selectionRange })
     }
-    if (!found.length) toast(`Pas de super méthode pour ${method.name}`, 'info')
-    else await showLocations(found, 'Super méthode')
+    if (!found.length) toast(t('No super method for {name}', { name: method.name }), 'info')
+    else await showLocations(found, t('Super method'))
   } catch (e) {
     guard(e)
   }

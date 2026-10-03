@@ -30,22 +30,23 @@ import { refreshConnections } from '../db/api'
 import * as lspc from '../lsp/client'
 import { lspLanguage } from '../editor/languages'
 import { toast } from '../ui/toast'
+import { t, tn } from '../i18n'
 
 export const leftPanels: Record<string, { label: string; icon: string; component: () => JSX.Element }> = {
-  explorer: { label: 'Explorateur', icon: 'files', component: Explorer },
-  search: { label: 'Recherche', icon: 'search', component: GlobalSearch },
+  explorer: { label: 'Explorer', icon: 'files', component: Explorer },
+  search: { label: 'Search', icon: 'search', component: GlobalSearch },
   git: { label: 'Git', icon: 'branch', component: GitPanel },
   kanban: { label: 'Kanban', icon: 'kanban', component: KanbanPanel },
-  connections: { label: 'Connexions', icon: 'plug', component: Connections },
+  connections: { label: 'Connections', icon: 'plug', component: Connections },
 }
 
 export const rightPanels: Record<string, { label: string; icon: string; component: () => JSX.Element }> = {
   database: { label: 'Database explorer', icon: 'database', component: DatabaseTool },
-  assistant: { label: 'Assistant IA', icon: 'sparkle', component: AssistantTool },
+  assistant: { label: 'AI assistant', icon: 'sparkle', component: AssistantTool },
   structure: { label: 'Structure', icon: 'outline', component: StructureTool },
-  conflicts: { label: 'Conflits', icon: 'conflict', component: ConflictsTool },
+  conflicts: { label: 'Conflicts', icon: 'conflict', component: ConflictsTool },
   extensions: { label: 'Extensions', icon: 'puzzle', component: ExtensionsTool },
-  properties: { label: 'Propriétés', icon: 'info', component: PropertiesTool },
+  properties: { label: 'Properties', icon: 'info', component: PropertiesTool },
 }
 
 /** Opens a project, asking for the SSH password / passphrase when the pod needs one. */
@@ -59,7 +60,7 @@ export async function openWithAuth(id: string) {
       return r
     } catch (e) {
       if (e instanceof RpcError && e.code === 'auth_required') {
-        const v = await prompt({ title: 'Connexion SSH', label: e.message, password: true })
+        const v = await prompt({ title: t('SSH connection'), label: e.message, password: true })
         if (v === null) throw e
         creds = e.data?.kind === 'passphrase' ? { passphrase: v } : { password: v }
         continue
@@ -100,8 +101,8 @@ export function useProjectActions() {
 
 async function palette() {
   const id = await pick({
-    placeholder: 'Commande…',
-    items: actions.map((a) => ({ label: a.label, detail: a.category, hint: shortcutOf(a.id), value: a.id })),
+    placeholder: t('Command…'),
+    items: actions.map((a) => ({ label: t(a.label), detail: t(a.category), hint: shortcutOf(a.id), value: a.id })),
   })
   if (id) {
     focusActiveEditor()
@@ -116,7 +117,7 @@ async function gotoFile() {
     return fileCache.files
   }
   const p = await pick<string>({
-    placeholder: 'Aller au fichier (nom ou chemin, recherche approximative)',
+    placeholder: t('Go to file (name or path, fuzzy search)'),
     provider: async (q) => {
       const list = await files()
       if (!q) return list.slice(0, 100).map((f) => ({ label: basename(f), detail: relPath(f), value: f }))
@@ -140,11 +141,11 @@ async function gotoSymbol() {
     path = lang ? ext[lang] : ''
   }
   if (!path) {
-    toast('Aucun serveur de langage disponible pour chercher des symboles', 'info')
+    toast(t('No language server available to search symbols'), 'info')
     return
   }
   const loc = await pick<lspc.Location>({
-    placeholder: 'Aller au symbole (classe, fonction, méthode…)',
+    placeholder: t('Go to symbol (class, function, method…)'),
     noFilter: true,
     provider: async (q, signal) => {
       if (q.length < 2) return []
@@ -169,21 +170,21 @@ function focusActiveEditor() {
 // ---------- menu bar ----------
 
 const menus: [string, string[]][] = [
-  ['Fichier', ['file.save', 'file.saveAll', 'nav.gotoFile', 'conflict.resolve', 'settings.open']],
-  ['Édition', ['edit.undo', 'edit.redo', 'edit.duplicateLine', 'edit.deleteLine', 'edit.toggleComment', 'search.find', 'search.global']],
-  ['Navigation', ['nav.back', 'nav.forward', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', 'nav.related', 'nav.test']],
-  ['Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover']],
-  ['Affichage', ['view.splitRight', 'view.splitDown', 'view.closeTab', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'console.new', 'palette.open']],
+  ['menu|File', ['file.save', 'file.saveAll', 'nav.gotoFile', 'conflict.resolve', 'settings.open']],
+  ['menu|Edit', ['edit.undo', 'edit.redo', 'edit.duplicateLine', 'edit.deleteLine', 'edit.toggleComment', 'search.find', 'search.global']],
+  ['menu|Navigate', ['nav.back', 'nav.forward', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', 'nav.related', 'nav.test']],
+  ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover']],
+  ['menu|View', ['view.splitRight', 'view.splitDown', 'view.closeTab', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'console.new', 'palette.open']],
 ]
 
 function openMenu(e: MouseEvent, ids: string[]) {
   const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
   const items: MenuItem[] = ids.map((id) => ({
-    label: actions.find((a) => a.id === id)?.label ?? id,
+    label: t(actions.find((a) => a.id === id)?.label ?? id),
     hint: shortcutOf(id),
     action: () => {
       focusActiveEditor()
-      requestAnimationFrame(() => runAction(id) || toast('Action indisponible ici', 'info'))
+      requestAnimationFrame(() => runAction(id) || toast(t('Action not available here'), 'info'))
     },
   }))
   contextMenu(new MouseEvent('contextmenu', { clientX: r.left, clientY: r.bottom + 2 }), items)
@@ -191,10 +192,10 @@ function openMenu(e: MouseEvent, ids: string[]) {
 
 export function PodStatus() {
   return (
-    <div class="pod-status" title={`Pod : ${podState()}`}>
+    <div class="pod-status" title={`Pod: ${t(podState())}`}>
       <span class={`dot dot-${podState()}`} />
-      <span class="rate" title="Débit descendant (pod → page)">↓ {formatRate(podRates().down)}</span>
-      <span class="rate" title="Débit montant (page → pod)">↑ {formatRate(podRates().up)}</span>
+      <span class="rate" title={t('Download rate (pod → page)')}>↓ {formatRate(podRates().down)}</span>
+      <span class="rate" title={t('Upload rate (page → pod)')}>↑ {formatRate(podRates().up)}</span>
     </div>
   )
 }
@@ -203,17 +204,17 @@ function MenuBar() {
   const conflicts = () => (docsVersion(), conflictedDocs().length)
   return (
     <header class="menubar">
-      <button class="icon-btn" title={`Réglages (${shortcutOf('settings.open')})`} onClick={() => openSettings()}>
+      <button class="icon-btn" title={`${t('Settings')} (${shortcutOf('settings.open')})`} onClick={() => openSettings()}>
         <Icon name="gear" />
       </button>
-      <button class="icon-btn" title="Projets" onClick={() => navigate('/')}>
+      <button class="icon-btn" title={t('Projects')} onClick={() => navigate('/')}>
         <Icon name="home" />
       </button>
       <nav class="menus">
         <For each={menus}>
           {([label, ids]) => (
             <button class="menu-btn" onClick={(e) => openMenu(e, ids)}>
-              {label}
+              {t(label)}
             </button>
           )}
         </For>
@@ -227,15 +228,15 @@ function MenuBar() {
       <Show when={project()?.ticket}>
         {(n) => {
           ensureBoard()
-          const t = () => summary(n())
+          const tk = () => summary(n())
           return (
-            <button class="wt-banner" title="Worktree de ce ticket : ouvrir le ticket" onClick={() => openTicket(n())} data-testid="worktree-banner">
+            <button class="wt-banner" title={t('Worktree of this ticket: open the ticket')} onClick={() => openTicket(n())} data-testid="worktree-banner">
               <Icon name="kanban" size={12} />
               <span class="ellipsis">
-                Ticket #{n()} {t()?.title ?? ''}
+                {t('Ticket #{id} {title}', { id: n(), title: tk()?.title ?? '' })}
               </span>
-              <Show when={t()}>
-                <span class={`kb-status st-${t()!.status}`}>{statusLabels[t()!.status]}</span>
+              <Show when={tk()}>
+                <span class={`kb-status st-${tk()!.status}`}>{statusLabels[tk()!.status]}</span>
               </Show>
             </button>
           )
@@ -244,14 +245,14 @@ function MenuBar() {
       <span class="grow" />
       <Show when={conflicts()}>
         <button class="badge warn" onClick={() => mutate((s) => (s.right.panel = 'conflicts'))}>
-          {conflicts()} conflit(s)
+          {tn(conflicts(), '{n} conflict', '{n} conflicts')}
         </button>
       </Show>
       <Show when={cursorInfo()}>
         {(c) => (
           <span class="cursor-info">
             {c().line}:{c().col}
-            {c().sel ? ` (${c().sel} car.)` : ''} · {c().lang}
+            {c().sel ? ` (${tn(c().sel, '{n} char', '{n} chars')})` : ''} · {c().lang}
           </span>
         )}
       </Show>
@@ -266,10 +267,10 @@ function Rail(props: { side: 'left' | 'right'; panels: typeof leftPanels }) {
   const current = () => session[props.side].panel
   const toggle = (id: string) => mutate((s) => (s[props.side].panel = s[props.side].panel === id ? null : id))
   return (
-    <nav class={`rail rail-${props.side}`} aria-label={props.side === 'left' ? 'Panneaux' : 'Tools'}>
+    <nav class={`rail rail-${props.side}`} aria-label={props.side === 'left' ? t('Panels') : t('Tools')}>
       <For each={Object.entries(props.panels)}>
         {([id, p]) => (
-          <button class="rail-btn" classList={{ active: current() === id }} title={p.label} aria-pressed={current() === id} onClick={() => toggle(id)}>
+          <button class="rail-btn" classList={{ active: current() === id }} title={t(p.label)} aria-pressed={current() === id} onClick={() => toggle(id)}>
             <Icon name={p.icon} size={18} />
           </button>
         )}
@@ -304,7 +305,7 @@ function SidePanel(props: { side: 'left' | 'right'; panels: typeof leftPanels })
   const detach = () => window.open(`/project/${project()!.id}/tool/${id()}`, `tool-${id()}`, id() === 'assistant' ? 'popup,width=1100,height=820' : 'popup,width=420,height=760')
   return (
     <aside class={`side side-${props.side}`} style={{ width: `${session[props.side].width}px` }}>
-      <button class="icon-btn detach" title="Ouvrir dans une fenêtre" onClick={detach}>
+      <button class="icon-btn detach" title={t('Open in a window')} onClick={detach}>
         <Icon name="external" size={13} />
       </button>
       <Show when={props.panels[id()]} keyed>
@@ -349,7 +350,7 @@ export function ProjectPage(props: { id: string }) {
       refreshConnections()
     }),
     onPod('project.closed', () => {
-      toast('Le projet a été fermé (modifié ou supprimé)', 'warn')
+      toast(t('The project was closed (changed or deleted)'), 'warn')
       navigate('/')
     }),
   ]
@@ -363,10 +364,10 @@ export function ProjectPage(props: { id: string }) {
       when={ready()}
       fallback={
         <div class="center-msg">
-          <Show when={error()} fallback={<p class="muted">Ouverture du projet…</p>}>
+          <Show when={error()} fallback={<p class="muted">{t('Opening the project…')}</p>}>
             <p class="danger">{error()}</p>
             <button class="btn" onClick={() => navigate('/')}>
-              Retour aux projets
+              {t('Back to the projects')}
             </button>
           </Show>
         </div>
@@ -394,7 +395,7 @@ export function ProjectPage(props: { id: string }) {
           when={session.bottom.open}
           fallback={
             <button class="bottom-toggle" onClick={() => mutate((s) => (s.bottom.open = true))} title={`Consoles (${shortcutOf('view.toggleBottom')})`}>
-              <Icon name="terminal" size={13} /> Consoles
+              <Icon name="terminal" size={13} /> {t('Consoles')}
             </button>
           }
         >

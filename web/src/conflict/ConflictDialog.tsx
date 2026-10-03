@@ -8,6 +8,7 @@ import { merge3, withMarkers, type Block } from '../editor/merge'
 import { Modal } from '../ui/overlay'
 import { basename, openTextTab, relPath, resolveConflict } from '../state/project'
 import { toast } from '../ui/toast'
+import { t } from '../i18n'
 
 interface Row {
   kind: 'ok' | 'conflict'
@@ -20,7 +21,7 @@ interface Row {
 const [target, setTarget] = createSignal<Doc | null>(null)
 export function openConflict(doc: Doc) {
   if (!doc.conflict()) {
-    toast("Ce fichier n'est pas en conflit", 'info')
+    toast(t('This file is not in conflict'), 'info')
     return
   }
   setTarget(doc)
@@ -55,9 +56,9 @@ function ConflictDialog(props: { doc: Doc; onClose: () => void }) {
   const pending = () => rows.filter((r) => r.kind === 'conflict' && !r.resolved).length
 
   const apply = () => {
-    if (pending() && !confirm(`${pending()} conflit(s) non traité(s) : appliquer quand même (la version de base sera gardée pour ces blocs) ?`)) return
+    if (pending() && !confirm(t('{n} conflict(s) not handled: apply anyway (the base version is kept for these blocks)?', { n: pending() }))) return
     resolveConflict(props.doc, result.join('\n'))
-    toast(`Conflit résolu sur ${basename(props.doc.path)} (enregistrer pour écrire le fichier)`, 'ok')
+    toast(t('Conflict resolved on {file} (save to write the file)', { file: basename(props.doc.path) }), 'ok')
     props.onClose()
   }
 
@@ -65,33 +66,33 @@ function ConflictDialog(props: { doc: Doc; onClose: () => void }) {
 
   return (
     <Modal
-      title={`Résoudre le conflit · ${relPath(props.doc.path)}`}
+      title={`${t('Resolve the conflict')} · ${relPath(props.doc.path)}`}
       onClose={props.onClose}
       class="modal-full"
       footer={
         <>
-          <span class="muted">{pending() ? `${pending()} conflit(s) à traiter` : 'Tous les conflits sont traités'}</span>
+          <span class="muted">{pending() ? t('{n} conflict(s) to handle', { n: pending() }) : t('All the conflicts are handled')}</span>
           <span class="grow" />
-          <button class="btn" onClick={() => openTextTab(`${basename(props.doc.path)} (marqueurs)`, withMarkers(outcome.blocks), props.doc.lang)}>
-            Version avec marqueurs
+          <button class="btn" onClick={() => openTextTab(`${basename(props.doc.path)} (${t('markers')})`, withMarkers(outcome.blocks), props.doc.lang)}>
+            {t('Version with markers')}
           </button>
           <button class="btn" onClick={() => acceptAll('local')}>
-            Tout garder à gauche
+            {t('Keep all the left side')}
           </button>
           <button class="btn" onClick={() => acceptAll('remote')}>
-            Tout prendre à droite
+            {t('Take all the right side')}
           </button>
           <button class="btn primary" onClick={apply}>
-            Appliquer
+            {t('Apply')}
           </button>
         </>
       }
     >
       <div class="merge">
         <div class="merge-head">
-          <div>Modification en cours</div>
-          <div>Résultat</div>
-          <div>Nouvelle version (rév. {c.rev})</div>
+          <div>{t('Local changes')}</div>
+          <div>{t('Result')}</div>
+          <div>{t('New version (rev. {rev})', { rev: c.rev })}</div>
         </div>
         <div class="merge-body">
           <For each={rows}>
@@ -101,13 +102,13 @@ function ConflictDialog(props: { doc: Doc; onClose: () => void }) {
                 <div class="merge-mid">
                   <Show when={r.kind === 'conflict'}>
                     <div class="merge-gutter">
-                      <button class="icon-btn" title="Accepter la gauche" onClick={() => accept(i(), 'local')}>
+                      <button class="icon-btn" title={t('Accept the left side')} onClick={() => accept(i(), 'local')}>
                         ≫
                       </button>
-                      <button class="icon-btn" title="Accepter les deux (gauche puis droite)" onClick={() => accept(i(), 'both')}>
+                      <button class="icon-btn" title={t('Accept both (left then right)')} onClick={() => accept(i(), 'both')}>
                         ⇔
                       </button>
-                      <button class="icon-btn" title="Accepter la droite" onClick={() => accept(i(), 'remote')}>
+                      <button class="icon-btn" title={t('Accept the right side')} onClick={() => accept(i(), 'remote')}>
                         ≪
                       </button>
                     </div>

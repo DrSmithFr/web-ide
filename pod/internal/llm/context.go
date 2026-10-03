@@ -1,7 +1,6 @@
 package llm
 
 import (
-	"errors"
 	"os"
 	"path"
 	"path/filepath"
@@ -10,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/fsx"
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
 
 // Instructions given to the assistant, compatible with Claude Code and the AGENTS.md
@@ -128,7 +128,7 @@ func readMemory(fs fsx.FS, scope, p string, seen map[string]bool, depth int) []I
 	seen[scope+":"+p] = true
 	text := string(data)
 	if len(text) > maxInstruction {
-		text = text[:maxInstruction] + "\n… (tronqué)"
+		text = text[:maxInstruction] + "\n… (truncated)"
 	}
 	out := []InstructionFile{{Scope: scope, Path: p, Content: text}}
 	if depth >= 4 {
@@ -248,7 +248,7 @@ func (m *Manager) findSkill(p Project, name string) (Skill, error) {
 			return s, nil
 		}
 	}
-	return Skill{}, errors.New("skill inconnu : " + name)
+	return Skill{}, i18n.Errorf("unknown skill: %s", name)
 }
 
 // ReadSkill returns the instructions of a skill and the list of its other files.
@@ -294,14 +294,14 @@ func (m *Manager) ReadSkillFile(p Project, name, file string) (string, error) {
 	}
 	clean := path.Clean("/" + file)[1:]
 	if clean == "" || strings.HasPrefix(clean, "..") {
-		return "", errors.New("fichier invalide")
+		return "", i18n.New("invalid file")
 	}
 	data, err := m.skillFS(p, s.Scope).Read(path.Join(s.Dir, clean))
 	if err != nil {
 		return "", err
 	}
 	if len(data) > 256*1024 {
-		data = append(data[:256*1024], []byte("\n… (tronqué)")...)
+		data = append(data[:256*1024], []byte("\n… (truncated)")...)
 	}
 	return string(data), nil
 }

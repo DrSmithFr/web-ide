@@ -12,6 +12,7 @@ import { prompt } from '../ui/overlay'
 import { errorToast } from '../ui/toast'
 import { Icon } from '../ui/icons'
 import { shortcutOf } from '../keys/bindings'
+import { t } from '../i18n'
 
 export interface ConsoleInfo {
   id: string
@@ -40,7 +41,7 @@ onPod('console.closed', (e: { id: string }) => {
 onPod('console.renamed', (e: { id: string; title: string }) => setConsoles((l) => l.map((c) => (c.id === e.id ? { ...c, title: e.title } : c))))
 onPod('console.exit', (e: { id: string; code: number }) => {
   setConsoles((l) => l.map((c) => (c.id === e.id ? { ...c, exited: true, code: e.code } : c)))
-  terms.get(e.id)?.term.write(`\r\n\x1b[2m[processus terminé, code ${e.code}]\x1b[0m\r\n`)
+  terms.get(e.id)?.term.write(`\r\n\x1b[2m[${t('process exited, code {code}', { code: e.code })}]\x1b[0m\r\n`)
 })
 onPod('console.output', (e: { id: string; data: string }) => {
   const t = terms.get(e.id)
@@ -48,11 +49,11 @@ onPod('console.output', (e: { id: string; data: string }) => {
   else t?.queue.push(e.data)
 })
 onPod('lsp.log', (e: { lang: string; method: string; params: { type: number; message: string } }) => {
-  const kind = ['', 'erreur', 'avert.', 'info', 'log'][e.params?.type] ?? ''
+  const kind = t(['', 'error', 'warn.', 'info', 'log'][e.params?.type] ?? '')
   setLogs((l) => [...l.slice(-999), `[${e.lang}] ${kind} ${e.params?.message ?? ''}`])
 })
 onPod('lsp.status', (e: { lang: string; running: boolean }) => {
-  setLogs((l) => [...l.slice(-999), `[${e.lang}] serveur ${e.running ? 'démarré' : 'arrêté'}`])
+  setLogs((l) => [...l.slice(-999), `[${e.lang}] ${e.running ? t('server started') : t('server stopped')}`])
 })
 
 function b64(s: string) {
@@ -76,8 +77,8 @@ function xtermTheme() {
 }
 
 function getTerm(id: string): TermEntry {
-  let t = terms.get(id)
-  if (t) return t
+  let te = terms.get(id)
+  if (te) return te
   const el = document.createElement('div')
   el.className = 'term-host'
   const term = new Terminal({
@@ -93,18 +94,18 @@ function getTerm(id: string): TermEntry {
   term.open(el)
   term.onData((data) => notify('console.input', { id, data }))
   term.onResize(({ cols, rows }) => notify('console.resize', { id, cols, rows }))
-  t = { term, fit, el, ready: false, queue: [] }
-  terms.set(id, t)
-  const entry = t
+  te = { term, fit, el, ready: false, queue: [] }
+  terms.set(id, te)
+  const entry = te
   request('console.attach', { id })
     .then((r) => {
       if (r.data) term.write(b64(r.data))
       for (const d of entry.queue.splice(0)) term.write(b64(d))
       entry.ready = true
-      if (r.info.exited) term.write(`\r\n\x1b[2m[processus terminé, code ${r.info.code}]\x1b[0m\r\n`)
+      if (r.info.exited) term.write(`\r\n\x1b[2m[${t('process exited, code {code}', { code: r.info.code })}]\x1b[0m\r\n`)
     })
     .catch(() => (entry.ready = true))
-  return t
+  return te
 }
 
 function disposeTerm(id: string) {
@@ -180,7 +181,7 @@ export async function newConsole(o: { cwd?: string; command?: string[]; title?: 
 }
 
 export async function runTask() {
-  const cmd = await prompt({ title: 'Lancer une commande', label: `Dans ${root()}`, placeholder: 'npm run build, go test ./…, make…' })
+  const cmd = await prompt({ title: t('Run a command'), label: `Dans ${root()}`, placeholder: 'npm run build, go test ./…, make…' })
   if (!cmd?.trim()) return
   await newConsole({ kind: 'task', command: ['sh', '-c', cmd], title: cmd })
 }
@@ -197,7 +198,7 @@ async function closeConsole(id: string) {
 }
 
 async function renameConsole(c: ConsoleInfo) {
-  const title = await prompt({ title: 'Renommer la console', value: c.title })
+  const title = await prompt({ title: t('Rename the console'), value: c.title })
   if (title) request('console.rename', { id: c.id, title }).catch(errorToast)
 }
 
@@ -214,10 +215,10 @@ function Problems() {
       .sort((a, b) => (a.d.severity ?? 4) - (b.d.severity ?? 4))
   return (
     <div class="problems">
-      <For each={list()} fallback={<div class="muted pad">Aucun problème signalé par les serveurs de langage.</div>}>
+      <For each={list()} fallback={<div class="muted pad">{t('No problem reported by the language servers.')}</div>}>
         {({ path, d }) => (
           <div class="problem" onClick={() => openFile({ path, line: d.range.start.line, col: d.range.start.character })}>
-            <span class={`sev sev-${d.severity ?? 3}`}>{d.severity === 1 ? 'erreur' : d.severity === 2 ? 'avert.' : 'info'}</span>
+            <span class={`sev sev-${d.severity ?? 3}`}>{d.severity === 1 ? t('error') : d.severity === 2 ? t('warn.') : t('info')}</span>
             <span class="problem-msg">{d.message}</span>
             <span class="muted small mono">
               {relPath(path)}:{d.range.start.line + 1}
@@ -237,7 +238,7 @@ function Output() {
   })
   return (
     <pre class="output-log" ref={el}>
-      {logs().join('\n') || 'Sortie des serveurs de langage.'}
+      {logs().join('\n') || t('Output of the language servers.')}
     </pre>
   )
 }
@@ -271,32 +272,32 @@ export function BottomPanel() {
               <Show when={c.exited}>
                 <span class={c.code === 0 ? 'ok' : 'danger'}>{c.code}</span>
               </Show>
-              <button class="icon-btn tiny" title="Détacher dans une fenêtre" onClick={(e) => (e.stopPropagation(), detach(c.id))}>
+              <button class="icon-btn tiny" title={t('Detach in a window')} onClick={(e) => (e.stopPropagation(), detach(c.id))}>
                 <Icon name="external" size={11} />
               </button>
-              <button class="icon-btn tiny" title="Fermer" onClick={(e) => (e.stopPropagation(), closeConsole(c.id))}>
+              <button class="icon-btn tiny" title={t('Close')} onClick={(e) => (e.stopPropagation(), closeConsole(c.id))}>
                 ✕
               </button>
             </div>
           )}
         </For>
-        <button class="icon-btn" title={`Nouveau terminal (${shortcutOf('console.new')})`} onClick={() => newConsole()}>
+        <button class="icon-btn" title={`${t('New terminal')} (${shortcutOf('console.new')})`} onClick={() => newConsole()}>
           <Icon name="plus" />
         </button>
-        <button class="icon-btn" title="Lancer une commande (sortie de build)" onClick={runTask}>
+        <button class="icon-btn" title={t('Run a command (build output)')} onClick={runTask}>
           <Icon name="play" />
         </button>
         <span class="grow" />
         <div class="btab" classList={{ active: active() === 'problems' }} onClick={() => setActive('problems')}>
-          Problèmes
+          {t('Problems')}
           <Show when={problemCount()}>
             <span class="badge danger">{problemCount()}</span>
           </Show>
         </div>
         <div class="btab" classList={{ active: active() === 'output' }} onClick={() => setActive('output')}>
-          Sortie
+          {t('Output')}
         </div>
-        <button class="icon-btn" title={`Masquer (${shortcutOf('view.toggleBottom')})`} onClick={() => mutate((s) => (s.bottom.open = false))}>
+        <button class="icon-btn" title={`${t('Hide')} (${shortcutOf('view.toggleBottom')})`} onClick={() => mutate((s) => (s.bottom.open = false))}>
           ✕
         </button>
       </div>
