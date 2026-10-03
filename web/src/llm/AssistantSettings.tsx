@@ -5,19 +5,18 @@ import { request } from '../pod/rpc'
 import { openTextTab, relPath } from '../state/project'
 import { Modal } from '../ui/overlay'
 import { errorToast, toast } from '../ui/toast'
-import { applyConfig, config, loadModels, prefs, savePrefs, select, setPrefs, type Model, type ServerView } from './state'
+import { applyConfig, config, loadModels, prefs, savePrefs, select, setPrefs, type Mode, type Model, type ServerView } from './state'
 import { languages, probeGpu, speech, whisperModels } from './transcribe'
 import { formatSize } from './parts'
-import { buildSystemPrompt, DEFAULT_PLAN_TEMPLATE, DEFAULT_TEMPLATE, loadPromptContext, promptContext, templateOf } from './prompt'
+import { buildSystemPrompt, defaultTemplate, loadPromptContext, promptContext, storedTemplates, templateOf } from './prompt'
 import { fmtSize, t } from '../i18n'
 
 const size = (n: number) => fmtSize(n)
 
 export function PromptSettings() {
   const [scope, setScope] = createSignal<'project' | 'global'>('project')
-  const [kind, setKind] = createSignal<'build' | 'plan'>('build')
-  const stored = (c: ReturnType<typeof promptContext>, sc: 'project' | 'global', k: 'build' | 'plan') =>
-    (k === 'plan' ? (sc === 'project' ? c?.projectPlanPrompt : c?.globalPlanPrompt) : sc === 'project' ? c?.projectPrompt : c?.globalPrompt) ?? ''
+  const [kind, setKind] = createSignal<Mode>('build')
+  const stored = (c: ReturnType<typeof promptContext>, sc: 'project' | 'global', k: Mode) => storedTemplates(c, k)[sc] ?? ''
   const [text, setText] = createSignal('')
   const [busy, setBusy] = createSignal(false)
   // Text typed before the context arrives is not replaced by it.
@@ -36,12 +35,12 @@ export function PromptSettings() {
     setScope(s)
     setText(stored(promptContext(), s, kind()))
   }
-  const switchKind = (k: 'build' | 'plan') => {
+  const switchKind = (k: Mode) => {
     edited = false
     setKind(k)
     setText(stored(promptContext(), scope(), k))
   }
-  const defaultText = () => (kind() === 'plan' ? DEFAULT_PLAN_TEMPLATE : DEFAULT_TEMPLATE)
+  const defaultText = () => defaultTemplate(kind())
   const save = async (content: string) => {
     setBusy(true)
     try {
@@ -59,7 +58,7 @@ export function PromptSettings() {
   return (
     <div class="form" data-testid="prompt-settings">
       <p class="muted small">
-        {t('The system prompt starts with this template, followed by the instruction files and the list of skills, loaded like Claude Code. The project prompt ({build}, {plan} for the Plan mode) replaces the global one. Currently:', { build: '.ide/system-prompt.md', plan: '.ide/plan-prompt.md' })}{' '}
+        {t('The system prompt starts with this template, followed by the instruction files and the list of skills, loaded like Claude Code. The project prompt ({build}, {plan} for the Plan mode, {briefing} for the Briefing mode) replaces the global one. Currently:', { build: '.ide/system-prompt.md', plan: '.ide/plan-prompt.md', briefing: '.ide/briefing-prompt.md' })}{' '}
         <strong>{source() === 'project' ? t('project prompt') : source() === 'global' ? t('global prompt') : t('default prompt')}</strong>.
       </p>
       <div class="field-row">
@@ -68,6 +67,9 @@ export function PromptSettings() {
         </button>
         <button type="button" class="toggle" classList={{ on: kind() === 'plan' }} onClick={() => switchKind('plan')} data-testid="prompt-plan">
           plan
+        </button>
+        <button type="button" class="toggle" classList={{ on: kind() === 'briefing' }} onClick={() => switchKind('briefing')} data-testid="prompt-briefing">
+          briefing
         </button>
         <span class="sep" />
         <button type="button" class="toggle" classList={{ on: scope() === 'project' }} onClick={() => switchScope('project')}>
@@ -86,7 +88,7 @@ export function PromptSettings() {
         {t('Variables:')} <code>{'{{project}}'}</code> <code>{'{{root}}'}</code> <code>{'{{host}}'}</code> <code>{'{{activeFile}}'}</code> <code>{'{{date}}'}</code> <code>{'{{tools}}'}</code> {t('(description of the tools, empty when they are off).')}
       </p>
       <div class="form-actions">
-        <button type="button" class="btn" onClick={() => openTextTab(kind() === 'plan' ? t('System prompt (Plan)') : t('System prompt'), buildSystemPrompt(promptContext(), true, kind()), 'markdown')}>
+        <button type="button" class="btn" onClick={() => openTextTab(kind() === 'plan' ? t('System prompt (Plan)') : kind() === 'briefing' ? t('System prompt (Briefing)') : t('System prompt'), buildSystemPrompt(promptContext(), true, kind()), 'markdown')}>
           {t('Preview of the full prompt')}
         </button>
         <span class="grow" />

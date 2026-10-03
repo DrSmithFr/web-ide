@@ -1,5 +1,6 @@
 // Kanban and the assistant: ask_user (questions one at a time, recap, answers sent back),
-// kanban_create / kanban_list from any conversation, writing tools only when linked.
+// kanban_create / kanban_list from any conversation, writing tools only when linked,
+// Briefing mode (tickets created and linked to the conversation).
 const http = require('http')
 const { run, openProject, assert, OUT } = require('../common.cjs')
 
@@ -38,6 +39,24 @@ const fake = http.createServer(async (req, res) => {
         end(res, 'tool_calls')
       )
     sse(res, { content: 'Plan saved.' })
+    return end(res)
+  }
+  if (firstUser.startsWith('Brief:')) {
+    if (last.role === 'user')
+      return sse(res, { tool_calls: calls([['b0', 'ask_user', { questions: [{ question: 'Who uses the export?', options: [{ label: 'Accounting' }, { label: 'Everyone' }] }] }]]) }), end(res, 'tool_calls')
+    if (last.tool_call_id === 'b0')
+      return (
+        sse(res, {
+          tool_calls: calls([
+            ['b1', 'kanban_create', { title: 'Accounting export', description: '**Need**: monthly export', type: 'feature' }],
+            ['b2', 'kanban_create', { title: 'Export settings', type: 'task' }],
+            ['b3', 'kanban_add_note', { text: 'Used by accounting only.' }],
+            ['b4', 'edit_file', { path: 'src/main.go', old_string: 'Bonjour', new_string: 'Salut' }],
+          ]),
+        }),
+        end(res, 'tool_calls')
+      )
+    sse(res, { content: 'Tickets written.' })
     return end(res)
   }
   if (firstUser.startsWith('Develop ticket')) {
@@ -192,6 +211,41 @@ run(async ({ page }) => {
     await page.click('[data-testid=ticket-chat]:has-text("Plan")')
     await page.waitForSelector('.ai-msg.assistant .md:has-text("Plan saved.")', { timeout: 5000 })
     assert(true, 'plan conversation reopened from the ticket')
+
+    // Briefing mode: questions, then tickets created and linked to the conversation.
+    await page.click('.ai-panel button[title="New conversation"]')
+    await page.click('.ai-composer textarea')
+    await page.keyboard.press('Shift+Tab')
+    await page.keyboard.press('Shift+Tab')
+    await page.waitForSelector('[data-testid=ai-mode].briefing:has-text("Briefing")')
+    assert(true, 'Shift+Tab twice: Briefing mode')
+    const before3 = requests.length
+    await page.fill('.ai-composer textarea', 'Brief: an export for accounting')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid=ai-ask-question]:has-text("Who uses the export")', { timeout: 10000 })
+    const rb = requests[before3]
+    const bn = toolNames(rb)
+    assert(rb.messages[0].content.includes('**Briefing mode**') && rb.messages[0].content.includes('Acceptance criteria'), 'system prompt of the Briefing mode')
+    assert(bn.includes('ask_user') && bn.includes('kanban_create') && !bn.includes('edit_file') && !bn.includes('exit_plan_mode') && !bn.includes('kanban_add_note'), 'tools of the Briefing mode: ' + bn.join(','))
+    await page.click('.ai-ask-option:has-text("Accounting")')
+    await page.click('[data-testid=ai-ask-send]')
+    await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Tickets written.")', { timeout: 15000 })
+    const rbr = requests[requests.length - 1].messages.filter((m) => m.role === 'tool')
+    const bt = (id) => text(rbr.find((m) => m.tool_call_id === id))
+    assert(bt('b1').includes('Ticket #2 created') && bt('b1').includes('now linked'), 'first ticket created, conversation linked: ' + bt('b1'))
+    assert(bt('b2').includes('Ticket #3 created') && bt('b2').includes('stays linked to ticket #2'), 'second ticket created: ' + bt('b2'))
+    assert(bt('b3') === 'Note added.', 'note added to the linked ticket: ' + bt('b3'))
+    assert(bt('b4').includes('Briefing mode'), 'no file change in Briefing mode')
+    assert(await page.isVisible('[data-testid=ai-ticket-bar]:has-text("#2")'), 'ticket bar of the created ticket')
+    assert(await page.isVisible('.ai-briefing-badge'), 'answers marked Briefing')
+    if (!(await page.isVisible('[data-testid=kanban-panel]'))) await page.click('.rail-left .rail-btn[title="Kanban"]')
+    await page.click('[data-testid=ticket-card-3]')
+    await page.waitForSelector('[data-testid=ticket-view] [data-testid=ticket-title]:has-text("Export settings")')
+    await page.waitForSelector('.tk-row:has(.kb-role.r-briefing) [data-testid=ticket-chat]:has-text("Brief:")', { timeout: 5000 })
+    assert(true, 'the second ticket lists the briefing conversation')
+    await page.click('[data-testid=ticket-card-2]')
+    await page.waitForSelector('[data-testid=ticket-note]:has-text("accounting only")', { timeout: 5000 })
+    assert(await page.isVisible('.tk-row:has(.kb-role.r-briefing) [data-testid=ticket-chat]:has-text("Brief:")'), 'the first ticket has the note and the conversation')
   } finally {
     fake.close()
   }

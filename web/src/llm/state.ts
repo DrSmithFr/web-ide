@@ -135,7 +135,7 @@ export interface Chat {
 
 export type ChatRole = 'briefing' | 'plan' | 'dev' | 'correction' | 'resolve'
 
-export type Mode = 'plan' | 'build'
+export type Mode = 'build' | 'plan' | 'briefing'
 
 export interface QueuedMessage {
   id: string

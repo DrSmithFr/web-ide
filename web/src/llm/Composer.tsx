@@ -27,10 +27,18 @@ import {
   type Model,
   type Part,
 } from './state'
-import { compactNow, currentMode, send, setMode, stop, unqueue } from './agent'
+import { compactNow, currentMode, nextMode, send, setMode, stop, unqueue } from './agent'
 import { prepare } from './attachments'
 import { cancelRecording, canRecord, modelById, speech, startRecording, stopRecording, transcribe } from './transcribe'
 import { AttachmentChip, formatSize, formatTokens, Popover, Switch } from './parts'
+
+const modeIcons = { build: 'edit', plan: 'outline', briefing: 'kanban' } as const
+const modeLabels = { build: () => t('Build'), plan: () => t('Plan'), briefing: () => t('Briefing') }
+const modeTitles = {
+  build: () => t('Build mode: acts on the project (Shift+Tab for Plan)'),
+  plan: () => t('Plan mode: explores and proposes a plan, without changing files (Shift+Tab for Briefing)'),
+  briefing: () => t('Briefing mode: questions you to clarify an idea and writes it in kanban tickets, without changing files (Shift+Tab for Build)'),
+}
 import { t, tn } from '../i18n'
 
 const [draft, setDraft] = createSignal('')
@@ -580,9 +588,9 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
         stop()
       }
     } else if (e.key === 'Tab' && e.shiftKey && !e.ctrlKey && !e.altKey) {
-      // Shift+Tab switches between Plan and Build.
+      // Shift+Tab cycles through Build, Plan and Briefing.
       e.preventDefault()
-      setMode(currentMode() === 'plan' ? 'build' : 'plan')
+      setMode(nextMode())
     } else if (e.key === ' ' && e.ctrlKey && !e.shiftKey && !e.altKey) {
       e.preventDefault()
       dictate()
@@ -599,7 +607,7 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
 
   return (
     <div class="ai-composer-wrap">
-      <div class="ai-composer" classList={{ plan: currentMode() === 'plan' }}>
+      <div class="ai-composer" classList={{ plan: currentMode() === 'plan', briefing: currentMode() === 'briefing' }}>
         <Show when={chat.queue?.length}>
           <div class="ai-queue" data-testid="ai-queue">
             <div class="ai-queue-title">
@@ -716,13 +724,13 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
           <Options />
           <button
             class="ai-mode"
-            classList={{ plan: currentMode() === 'plan' }}
-            title={currentMode() === 'plan' ? t('Plan mode: explores and proposes a plan, without changing files (Shift+Tab for Build)') : t('Build mode: acts on the project (Shift+Tab for Plan)')}
-            onClick={() => setMode(currentMode() === 'plan' ? 'build' : 'plan')}
+            classList={{ plan: currentMode() === 'plan', briefing: currentMode() === 'briefing' }}
+            title={modeTitles[currentMode()]()}
+            onClick={() => setMode(nextMode())}
             data-testid="ai-mode"
           >
-            <Icon name={currentMode() === 'plan' ? 'outline' : 'edit'} size={13} />
-            <span class="ai-mode-label">{currentMode() === 'plan' ? 'Plan' : 'Build'}</span>
+            <Icon name={modeIcons[currentMode()]} size={13} />
+            <span class="ai-mode-label">{modeLabels[currentMode()]()}</span>
             <Show when={currentMode() === 'plan' && prefs.planServer && prefs.planModel}>
               <span class="ai-mode-model ellipsis">· {prefs.planModel}</span>
             </Show>

@@ -34,10 +34,13 @@ type Context struct {
 	GlobalPrompt  *string `json:"globalPrompt"`
 	ProjectPrompt *string `json:"projectPrompt"`
 	// Templates of the Plan mode (nil: default plan template).
-	GlobalPlanPrompt  *string           `json:"globalPlanPrompt"`
-	ProjectPlanPrompt *string           `json:"projectPlanPrompt"`
-	Files             []InstructionFile `json:"files"`
-	Skills            []Skill           `json:"skills"`
+	GlobalPlanPrompt  *string `json:"globalPlanPrompt"`
+	ProjectPlanPrompt *string `json:"projectPlanPrompt"`
+	// Templates of the Briefing mode (nil: default briefing template).
+	GlobalBriefingPrompt  *string           `json:"globalBriefingPrompt"`
+	ProjectBriefingPrompt *string           `json:"projectBriefingPrompt"`
+	Files                 []InstructionFile `json:"files"`
+	Skills                []Skill           `json:"skills"`
 }
 
 // Project is what the context needs of a project: its root and its file system.
@@ -47,11 +50,13 @@ type Project struct {
 }
 
 const (
-	globalPromptFile      = "system-prompt.md"
-	projectPromptFile     = ".ide/system-prompt.md"
-	globalPlanPromptFile  = "plan-prompt.md"
-	projectPlanPromptFile = ".ide/plan-prompt.md"
-	maxInstruction        = 64 * 1024
+	globalPromptFile          = "system-prompt.md"
+	projectPromptFile         = ".ide/system-prompt.md"
+	globalPlanPromptFile      = "plan-prompt.md"
+	projectPlanPromptFile     = ".ide/plan-prompt.md"
+	globalBriefingPromptFile  = "briefing-prompt.md"
+	projectBriefingPromptFile = ".ide/briefing-prompt.md"
+	maxInstruction            = 64 * 1024
 )
 
 var globalMemory = []string{".claude/CLAUDE.md", ".codex/AGENTS.md"}
@@ -71,21 +76,16 @@ func home() string {
 // LoadContext reads the prompt templates, memory files and skills.
 func (m *Manager) LoadContext(p Project) *Context {
 	c := &Context{Files: []InstructionFile{}, Skills: []Skill{}}
-	if data, err := os.ReadFile(m.st.Path(globalPromptFile)); err == nil {
-		s := string(data)
-		c.GlobalPrompt = &s
-	}
-	if data, err := p.FS.Read(path.Join(p.Root, projectPromptFile)); err == nil {
-		s := string(data)
-		c.ProjectPrompt = &s
-	}
-	if data, err := os.ReadFile(m.st.Path(globalPlanPromptFile)); err == nil {
-		s := string(data)
-		c.GlobalPlanPrompt = &s
-	}
-	if data, err := p.FS.Read(path.Join(p.Root, projectPlanPromptFile)); err == nil {
-		s := string(data)
-		c.ProjectPlanPrompt = &s
+	for _, kind := range []string{"build", "plan", "briefing"} {
+		global, project := c.templates(kind)
+		if data, err := os.ReadFile(m.st.Path(globalPromptName(kind))); err == nil {
+			s := string(data)
+			*global = &s
+		}
+		if data, err := p.FS.Read(path.Join(p.Root, ProjectPromptFile(kind))); err == nil {
+			s := string(data)
+			*project = &s
+		}
 	}
 	local := fsx.Local{}
 	h := home()
@@ -310,10 +310,7 @@ func (m *Manager) ReadSkillFile(p Project, name, file string) (string, error) {
 // ("plan" or the default one). The project ones are project files (PromptFile), written
 // like any other.
 func (m *Manager) SaveGlobalPrompt(kind, content string) error {
-	name := globalPromptFile
-	if kind == "plan" {
-		name = globalPlanPromptFile
-	}
+	name := globalPromptName(kind)
 	if strings.TrimSpace(content) == "" {
 		return m.st.Remove(name)
 	}
@@ -322,8 +319,33 @@ func (m *Manager) SaveGlobalPrompt(kind, content string) error {
 
 // ProjectPromptFile returns the project template of a mode, relative to the root.
 func ProjectPromptFile(kind string) string {
-	if kind == "plan" {
+	switch kind {
+	case "plan":
 		return projectPlanPromptFile
+	case "briefing":
+		return projectBriefingPromptFile
 	}
 	return projectPromptFile
+}
+
+// globalPromptName returns the global template of a mode, in the data folder.
+func globalPromptName(kind string) string {
+	switch kind {
+	case "plan":
+		return globalPlanPromptFile
+	case "briefing":
+		return globalBriefingPromptFile
+	}
+	return globalPromptFile
+}
+
+// templates returns the fields of the global and project templates of a mode.
+func (c *Context) templates(kind string) (global, project **string) {
+	switch kind {
+	case "plan":
+		return &c.GlobalPlanPrompt, &c.ProjectPlanPrompt
+	case "briefing":
+		return &c.GlobalBriefingPrompt, &c.ProjectBriefingPrompt
+	}
+	return &c.GlobalPrompt, &c.ProjectPrompt
 }

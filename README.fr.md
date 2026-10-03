@@ -23,8 +23,8 @@ Un IDE auto-hébergé qui tourne dans le navigateur, adossé à un petit agent l
 - **Terminaux et commandes** dans le panneau du bas, détachables dans leur propre fenêtre.
 - **Git** : état, index, commits, branches, historique, diffs côte à côte, marqueurs de gouttière.
 - **Explorateur de bases de données** : SQLite, PostgreSQL et Redis, console SQL avec transactions, vue tableur, tunnels SSH.
-- **Assistant IA** pour serveurs llama.cpp et Ollama : un agent qui lit, cherche et modifie le projet, utilise les serveurs de langage, lance des commandes, vous pose des questions, suit les instructions `CLAUDE.md` / `AGENTS.md` et les skills, avec modes Plan / Build, compaction automatique du contexte, diagrammes Mermaid, pièces jointes image / PDF / audio et dictée locale (Whisper dans le navigateur).
-- **Kanban par projet** : les tickets passent du briefing au plan, au développement et au test avec des conversations liées ; chaque ticket en développement a sa branche et son worktree git, ouverts dans leur propre fenêtre, avec diff, fusion et rebase. Voir [docs/kanban.md](docs/kanban.md).
+- **Assistant IA** pour serveurs llama.cpp et Ollama : un agent qui lit, cherche et modifie le projet, utilise les serveurs de langage, lance des commandes, vous pose des questions, suit les instructions `CLAUDE.md` / `AGENTS.md` et les skills, avec modes Build / Plan / Briefing, compaction automatique du contexte, diagrammes Mermaid, pièces jointes image / PDF / audio et dictée locale (Whisper dans le navigateur).
+- **Kanban par projet** : une conversation en mode Briefing vous interroge et écrit les tickets ; ils passent du plan au développement et au test avec des conversations liées ; chaque ticket en développement a sa branche et son worktree git, ouverts dans leur propre fenêtre, avec diff, fusion et rebase. Voir [docs/kanban.md](docs/kanban.md).
 - Interface en **anglais et en français**.
 
 ## Prérequis

@@ -6,7 +6,7 @@ import { request } from '../pod/rpc'
 import { activeTab, project, relPath, root } from '../state/project'
 import { getTicket } from '../kanban/state'
 import { ticketMarkdown } from './kanbanTools'
-import type { ChatRole } from './state'
+import type { ChatRole, Mode } from './state'
 
 export interface InstructionFile {
   scope: 'global' | 'project'
@@ -26,6 +26,8 @@ export interface PromptContext {
   projectPrompt: string | null
   globalPlanPrompt: string | null
   projectPlanPrompt: string | null
+  globalBriefingPrompt: string | null
+  projectBriefingPrompt: string | null
   files: InstructionFile[]
   skills: Skill[]
 }
@@ -43,6 +45,26 @@ The plan is precise and actionable: goal, files concerned (paths), numbered step
 Answer in the language of the user, in Markdown. For a diagram, use a \`\`\`mermaid block.
 
 {{tools}}`
+
+export const DEFAULT_BRIEFING_TEMPLATE = `You are the programming assistant built into a web IDE, in **Briefing mode**. Open project: "{{project}}", root {{root}}{{host}}.
+{{activeFile}}
+In Briefing mode you help the user turn an idea into well-defined kanban tickets. You change nothing and you write neither code nor implementation plan: the plan and the development come later, from the tickets.
+Your job is to question the user until the need is clear:
+- First explore what exists (code, tickets with kanban_list and kanban_get) so that your questions are concrete and you do not ask what the project already answers.
+- Ask with ask_user, in rounds of a few grouped questions (up to 10), each with concrete options and your recommendation first. Cover what is still vague: the goal and who it is for, the expected behaviour, the scope and what is out of it, edge cases and errors, constraints (performance, compatibility, security), how to know it is done.
+- Challenge the idea: point out contradictions, risks, simpler alternatives and what already exists. Do not accept a vague answer: rephrase it and ask again.
+- After each round, sum up in a few lines what is decided and what is still open.
+- When the need is clear, propose the ticket(s): one ticket per deliverable that can be tested on its own; split a large idea and say in which order.
+Create the tickets with kanban_create only when the user asks for it or agrees. Each ticket gets a short title, its type and priority, the linked files, and a description in Markdown with: **Context**, **Need**, **Scope** (and out of scope), **Acceptance criteria** (a checkable list), **Open questions** if any.
+Answer in the language of the user, in Markdown. For a diagram, use a \`\`\`mermaid block.
+
+{{tools}}`
+
+export const BRIEFING_TOOLS_TEXT = `Reading tools: list_dir, find_files, read_file, search_text, the language servers (lsp_symbols, lsp_workspace_symbols, lsp_definition, lsp_references, lsp_hover, lsp_diagnostics), open_file and focus to show something to the user, bash for reading commands (ls, grep, git log…) and the build and test commands of the project, which run freely; any other command asks the user first. edit_file and write_file are not available in Briefing mode.
+In the messages of the user, @path designates a file or folder of the project (path relative to the root).
+ask_user asks the user multiple-choice questions (up to 10 per call): your main tool in this mode.
+Kanban of the project: kanban_list and kanban_get read the tickets, kanban_create creates one. The first ticket created links this conversation to it: kanban_update and kanban_add_note then refine that ticket.
+When the conversation gets long, you can summarize it with compact_conversation.`
 
 export const PLAN_TOOLS_TEXT = `Reading tools: list_dir, find_files, read_file, search_text, the language servers (lsp_symbols, lsp_workspace_symbols, lsp_definition, lsp_references, lsp_hover, lsp_diagnostics), open_file and focus to show something to the user, bash for reading commands (ls, grep, git log, git diff…) and the build, test and lint commands of the project (make test, go test, npm run check…), which run freely; any other command asks the user first. edit_file and write_file are not available in Plan mode.
 In the messages of the user, @path designates a file or folder of the project (path relative to the root).
@@ -113,18 +135,38 @@ export async function loadPromptContext(): Promise<PromptContext> {
     setPromptContext(c)
     return c
   } catch {
-    const empty: PromptContext = { globalPrompt: null, projectPrompt: null, globalPlanPrompt: null, projectPlanPrompt: null, files: [], skills: [] }
+    const empty: PromptContext = {
+      globalPrompt: null,
+      projectPrompt: null,
+      globalPlanPrompt: null,
+      projectPlanPrompt: null,
+      globalBriefingPrompt: null,
+      projectBriefingPrompt: null,
+      files: [],
+      skills: [],
+    }
     setPromptContext(empty)
     return empty
   }
 }
 
-export function templateOf(c: PromptContext | null, mode: 'plan' | 'build' = 'build'): { text: string; source: 'project' | 'global' | 'default' } {
-  const project = mode === 'plan' ? c?.projectPlanPrompt : c?.projectPrompt
-  const global = mode === 'plan' ? c?.globalPlanPrompt : c?.globalPrompt
+const defaults: Record<Mode, string> = { build: DEFAULT_TEMPLATE, plan: DEFAULT_PLAN_TEMPLATE, briefing: DEFAULT_BRIEFING_TEMPLATE }
+const toolsTexts: Record<Mode, string> = { build: TOOLS_TEXT, plan: PLAN_TOOLS_TEXT, briefing: BRIEFING_TOOLS_TEXT }
+
+/** Templates of a mode stored by the user: project, then global (null when absent). */
+export function storedTemplates(c: PromptContext | null, mode: Mode): { project: string | null; global: string | null } {
+  if (mode === 'plan') return { project: c?.projectPlanPrompt ?? null, global: c?.globalPlanPrompt ?? null }
+  if (mode === 'briefing') return { project: c?.projectBriefingPrompt ?? null, global: c?.globalBriefingPrompt ?? null }
+  return { project: c?.projectPrompt ?? null, global: c?.globalPrompt ?? null }
+}
+
+export const defaultTemplate = (mode: Mode) => defaults[mode]
+
+export function templateOf(c: PromptContext | null, mode: Mode = 'build'): { text: string; source: 'project' | 'global' | 'default' } {
+  const { project, global } = storedTemplates(c, mode)
   if (project?.trim()) return { text: project, source: 'project' }
   if (global?.trim()) return { text: global, source: 'global' }
-  return { text: mode === 'plan' ? DEFAULT_PLAN_TEMPLATE : DEFAULT_TEMPLATE, source: 'default' }
+  return { text: defaults[mode], source: 'default' }
 }
 
 function displayPath(f: InstructionFile) {
@@ -132,7 +174,7 @@ function displayPath(f: InstructionFile) {
 }
 
 /** Final system prompt. tools: whether the model receives the tools. */
-export function buildSystemPrompt(c: PromptContext | null, tools: boolean, mode: 'plan' | 'build' = 'build'): string {
+export function buildSystemPrompt(c: PromptContext | null, tools: boolean, mode: Mode = 'build'): string {
   const p = project()
   const active = activeTab()?.kind === 'file' ? activeTab()!.path! : ''
   const vars: Record<string, string> = {
@@ -141,7 +183,7 @@ export function buildSystemPrompt(c: PromptContext | null, tools: boolean, mode:
     host: p?.ssh ? ` on the SSH host ${p.ssh.host}` : '',
     activeFile: active ? `Active file in the editor: ${relPath(active)}.` : '',
     date: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
-    tools: tools ? (mode === 'plan' ? PLAN_TOOLS_TEXT : TOOLS_TEXT) : '',
+    tools: tools ? toolsTexts[mode] : '',
   }
   let text = templateOf(c, mode).text.replace(/\{\{(\w+)\}\}/g, (m, k) => (k in vars ? vars[k] : m))
   text = text.replace(/\n{3,}/g, '\n\n').trim()

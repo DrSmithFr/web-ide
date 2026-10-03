@@ -23,8 +23,8 @@ A self-hosted IDE that runs in your browser, backed by a small local agent — t
 - **Terminals and commands** in a bottom panel, detachable into their own windows.
 - **Git** — status, staging, commits, branches, history, side-by-side diffs, gutter markers.
 - **Database explorer** — SQLite, PostgreSQL and Redis, SQL console with transactions, table view, optional SSH tunnels.
-- **AI assistant** for llama.cpp and Ollama servers: an agent that reads, searches and edits the project, uses the language servers, runs commands, asks you questions, follows `CLAUDE.md` / `AGENTS.md` instructions and skills, with Plan / Build modes, automatic context compaction, Mermaid diagrams, image / PDF / audio attachments and local speech-to-text (Whisper in the browser).
-- **Kanban per project** — tickets go from briefing to plan to development to testing with linked assistant conversations; each ticket in development gets its own git branch and worktree, opened in its own window, with its diff, merge and rebase. See [docs/kanban.md](docs/kanban.md).
+- **AI assistant** for llama.cpp and Ollama servers: an agent that reads, searches and edits the project, uses the language servers, runs commands, asks you questions, follows `CLAUDE.md` / `AGENTS.md` instructions and skills, with Build / Plan / Briefing modes, automatic context compaction, Mermaid diagrams, image / PDF / audio attachments and local speech-to-text (Whisper in the browser).
+- **Kanban per project** — a Briefing conversation questions you and writes the tickets; they go from plan to development to testing with linked assistant conversations; each ticket in development gets its own git branch and worktree, opened in its own window, with its diff, merge and rebase. See [docs/kanban.md](docs/kanban.md).
 - **English and French** interface.
 
 ## Requirements

@@ -1,13 +1,14 @@
-// Kanban tools of the assistant: every conversation can read the tickets, create one and
-// ask the user questions; a conversation linked to a ticket can also change that ticket
+// Kanban tools of the assistant: every conversation can read the tickets, create one (in
+// Briefing mode, the conversation is linked to it) and ask the user questions; a conversation linked to a ticket can also change that ticket
 // (plan, goals, notes, status). See docs/kanban.md. What the model reads is in English;
 // the summaries shown in the conversation are translated.
 import { request } from '../pod/rpc'
 import { t, tn } from '../i18n'
 import {
-  addNote, createTicket, getTicket, goalOp, linkCommit, moveTicket, priorityNames, refreshBoard, roleNames, setPlan, statusLabels, statusNames, typeNames, updateTicket,
+  addNote, createTicket, getTicket, goalOp, linkChat, linkCommit, moveTicket, priorityNames, refreshBoard, roleNames, setPlan, statusLabels, statusNames, typeNames, updateTicket,
   board, type Priority, type Status, type Ticket, type TicketType,
 } from '../kanban/state'
+import { chat, setChat, type Mode } from './state'
 import type { ToolResult } from './tools'
 
 const str = (description: string) => ({ type: 'string', description })
@@ -139,7 +140,7 @@ export function ticketMarkdown(tk: Ticket): string {
   return out.join('\n')
 }
 
-export async function runKanbanTool(name: string, a: Record<string, any>, ticket: number | undefined): Promise<ToolResult> {
+export async function runKanbanTool(name: string, a: Record<string, any>, ticket: number | undefined, mode: Mode = 'build'): Promise<ToolResult> {
   switch (name) {
     case 'kanban_list': {
       await refreshBoard()
@@ -159,7 +160,15 @@ export async function runKanbanTool(name: string, a: Record<string, any>, ticket
         { title: String(a.title), description: a.description ? String(a.description) : '', type: a.type as TicketType, priority: a.priority as Priority, addFiles: Array.isArray(a.files) ? a.files.map(String) : undefined },
         'model',
       )
-      return ok(`Ticket #${tk.id} created in the backlog (status New).`, t('#{id} created', { id: tk.id }))
+      const done = `Ticket #${tk.id} created in the backlog (status New).`
+      if (mode !== 'briefing') return ok(done, t('#{id} created', { id: tk.id }))
+      // Briefing: the ticket lists this conversation; the first one created is linked to it.
+      if (!chat.ticket) {
+        setChat('ticket', { id: tk.id, role: 'briefing' })
+        return ok(`${done} This conversation is now linked to it: kanban_update and kanban_add_note refine it.`, t('#{id} created', { id: tk.id }))
+      }
+      await linkChat(tk.id, chat.id, 'briefing', chat.title).catch(() => {})
+      return ok(`${done} It lists this conversation as its briefing; this conversation stays linked to ticket #${chat.ticket.id}.`, t('#{id} created', { id: tk.id }))
     }
   }
   if (!ticket)

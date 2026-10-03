@@ -7,7 +7,7 @@ import { refreshGit } from '../state/git'
 import { lspLanguage, lspLanguageId } from '../editor/languages'
 import { lineHunks } from '../editor/linediff'
 import { flatten, symbolKinds, toLocations, type DocumentSymbol, type Location } from '../lsp/client'
-import type { DiffLine, ToolCall } from './state'
+import type { DiffLine, Mode, ToolCall } from './state'
 import { askUserDef, kanbanReadDefs, kanbanToolNames, kanbanWriteDefs, runKanbanTool } from './kanbanTools'
 import { runsFreely } from './commands'
 import { t, tn } from '../i18n'
@@ -122,11 +122,11 @@ export const agentToolDefs = {
 }
 
 /**
- * Tools offered to the model in a mode: no file change in Plan, exit_plan_mode only there.
- * The kanban tools that change a ticket come with a conversation linked to a ticket.
+ * Tools offered to the model in a mode: no file change in Plan and Briefing, exit_plan_mode
+ * only in Plan. The kanban tools that change a ticket come with a conversation linked to a ticket.
  */
-export function toolsFor(mode: 'plan' | 'build', ticket?: { id: number; role: string }) {
-  const base = mode === 'plan' ? toolDefs.filter((t) => !writeTools.has(t.function.name)) : toolDefs
+export function toolsFor(mode: Mode, ticket?: { id: number; role: string }) {
+  const base = mode === 'build' ? toolDefs : toolDefs.filter((t) => !writeTools.has(t.function.name))
   const kanban = [...kanbanReadDefs, ...(ticket ? kanbanWriteDefs : []), askUserDef]
   // The briefing and the plan of a ticket end in the ticket itself, not in exit_plan_mode.
   const exit = mode === 'plan' && ticket?.role !== 'briefing' && ticket?.role !== 'plan' ? [agentToolDefs.exitPlan] : []
@@ -158,18 +158,23 @@ function parseArgs(call: ToolCall): Record<string, any> {
   }
 }
 
-export async function runTool(call: ToolCall, confirm: Confirm, signal?: AbortSignal, mode: 'plan' | 'build' = 'build', ticket?: number): Promise<ToolResult> {
+export async function runTool(call: ToolCall, confirm: Confirm, signal?: AbortSignal, mode: Mode = 'build', ticket?: number): Promise<ToolResult> {
   const name = call.function.name
   try {
     const a = parseArgs(call)
-    if (kanbanToolNames.has(name)) return await runKanbanTool(name, a, ticket)
-    if (mode === 'plan') {
-      if (writeTools.has(name)) return fail('Plan mode: files cannot be changed. Present the plan with exit_plan_mode; it will be carried out in Build mode.')
+    if (kanbanToolNames.has(name)) return await runKanbanTool(name, a, ticket, mode)
+    if (mode !== 'build') {
+      if (writeTools.has(name))
+        return fail(
+          mode === 'plan'
+            ? 'Plan mode: files cannot be changed. Present the plan with exit_plan_mode; it will be carried out in Build mode.'
+            : 'Briefing mode: files cannot be changed. Clarify the need and write it in tickets (kanban_create).',
+        )
       // A command that may change something waits for the user.
       if ((name === 'bash' || name === 'run_command') && !runsFreely(String(a.command ?? ''), root(), a.cwd ? absPath(a.cwd) : root())) {
         if (!(await confirm({ call, kind: 'command', command: String(a.command ?? '') })))
           return {
-            content: 'The user refused this command (Plan mode: only reading commands, and the build and test commands of the project, run freely).',
+            content: `The user refused this command (${mode === 'plan' ? 'Plan' : 'Briefing'} mode: only reading commands, and the build and test commands of the project, run freely).`,
             summary: t('command refused'),
             status: 'denied',
           }

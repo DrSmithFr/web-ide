@@ -638,7 +638,6 @@
   "PgUp": "PgPréc",
   "Plan": "Plan",
   "Plan mode": "Mode Plan",
-  "Plan mode: explores and proposes a plan, without changing files (Shift+Tab for Build)": "Mode Plan : explore et propose un plan, sans modifier les fichiers (Maj+Tab pour passer en Build)",
   "Plan mode: it may change something.": "Mode Plan : elle pourrait modifier quelque chose.",
   "plan proposed": "plan proposé",
   "Plan updated": "Plan mis à jour",
@@ -877,7 +876,6 @@
   "The pod runs a server per detected language (go.mod, composer.json, package.json, pyproject.toml…) on this machine, and stops it two minutes after the last window of the project is closed. Command configurable in {file} (key {key}).": "Le pod lance un serveur par langage détecté (go.mod, composer.json, package.json, pyproject.toml…) sur cette machine, et l'arrête deux minutes après la fermeture de la dernière fenêtre du projet. Commande personnalisable dans {file} (clé {key}).",
   "The project is not in a Git repository.": "Le projet n'est pas dans un dépôt Git.",
   "The project was closed (changed or deleted)": "Le projet a été fermé (modifié ou supprimé)",
-  "The system prompt starts with this template, followed by the instruction files and the list of skills, loaded like Claude Code. The project prompt ({build}, {plan} for the Plan mode) replaces the global one. Currently:": "Le prompt système commence par ce modèle, puis viennent les fichiers d’instructions et la liste des skills, chargés comme Claude Code. Le prompt du projet ({build}, {plan} pour le mode Plan) remplace le global. En ce moment :",
   "The text changed during the formatting: try again": "Le texte a changé pendant le formatage : relancer",
   "The tools that change the ticket become available": "Les outils de modification du ticket deviennent disponibles",
   "The worktree has uncommitted changes: they will be lost with it. Close anyway?": "Le worktree a des modifications non commitées : elles seront perdues avec lui. Fermer quand même ?",
@@ -1083,5 +1081,10 @@
   "•••••• (unchanged)": "•••••• (inchangé)",
   "{n} question": "{n} question",
   "invalid questions": "questions invalides",
-  "note too long": "note trop longue"
+  "note too long": "note trop longue",
+  "The system prompt starts with this template, followed by the instruction files and the list of skills, loaded like Claude Code. The project prompt ({build}, {plan} for the Plan mode, {briefing} for the Briefing mode) replaces the global one. Currently:": "Le prompt système commence par ce modèle, puis viennent les fichiers d’instructions et la liste des skills, chargés comme Claude Code. Le prompt du projet ({build}, {plan} pour le mode Plan, {briefing} pour le mode Briefing) remplace le global. En ce moment :",
+  "Plan mode: explores and proposes a plan, without changing files (Shift+Tab for Briefing)": "Mode Plan : explore et propose un plan, sans modifier les fichiers (Maj+Tab pour passer en Briefing)",
+  "Briefing mode: questions you to clarify an idea and writes it in kanban tickets, without changing files (Shift+Tab for Build)": "Mode Briefing : vous interroge pour préciser une idée et l’écrit en tickets du kanban, sans modifier les fichiers (Maj+Tab pour passer en Build)",
+  "Build": "Build",
+  "System prompt (Briefing)": "Prompt système (Briefing)"
 }

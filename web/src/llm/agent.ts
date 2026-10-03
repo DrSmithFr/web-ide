@@ -114,6 +114,11 @@ function target() {
   return { server: config.server, model: config.model }
 }
 
+const modeCycle: Mode[] = ['build', 'plan', 'briefing']
+
+/** Mode after the current one (Shift+Tab). */
+export const nextMode = (): Mode => modeCycle[(modeCycle.indexOf(currentMode()) + 1) % modeCycle.length]
+
 export function setMode(mode: Mode) {
   if (currentMode() === mode) return
   setChat('mode', mode)

@@ -344,7 +344,10 @@ function Stats(props: { msg: ChatMessage }) {
   return (
     <Show when={parts().length}>
       <Show when={props.msg.mode === 'plan'}>
-        <span class="badge ai-plan-badge">Plan</span>
+        <span class="badge ai-plan-badge">{t('Plan')}</span>
+      </Show>
+      <Show when={props.msg.mode === 'briefing'}>
+        <span class="badge ai-briefing-badge">{t('Briefing')}</span>
       </Show>
       <span class="ai-usage">{parts().join(' · ')}</span>
     </Show>

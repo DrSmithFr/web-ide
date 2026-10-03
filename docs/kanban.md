@@ -31,13 +31,19 @@ Test feedback becomes goals (source `feedback`). Closing or abandoning removes t
 
 `chat.ticket = { id, role }`; roles:
 
-- `briefing` (Plan mode, New): clarify the need with the user, questions with `ask_user`, findings written into the ticket;
+- `briefing` (Briefing mode, New): clarify the need with the user, questions with `ask_user`, findings written into the ticket;
 - `plan` (Plan mode): writes the plan and the goals, then moves the ticket to *Ready*;
 - `dev` (Build mode, in the worktree): follows the plan, checks goals, commits on the ticket branch, moves to *To test*;
 - `correction` (Build mode, in the worktree): handles the test feedback;
 - `resolve`: resolves the conflicts of a rebase (worktree) or a merge (main folder).
 
 The system prompt receives the ticket as it is now and the instructions of the role.
+
+## From an idea to tickets: the Briefing mode
+
+The assistant has three modes (Shift+Tab cycles through them): Build, Plan and Briefing. In Briefing mode the model changes nothing: its prompt (editable, `briefing-prompt.md` / `.ide/briefing-prompt.md`) makes it question the user in rounds of `ask_user` until the need is clear, then write it as one or several tickets with `kanban_create` when the user agrees. The first ticket created links the conversation to it (role `briefing`), so `kanban_update` and `kanban_add_note` refine it; the other tickets created list the conversation too. A ticket may have several briefing conversations.
+
+The usual path: a briefing makes the tickets, *Generate the plan* writes the plan of each one, then development sessions build them.
 
 ## Assistant tools
 

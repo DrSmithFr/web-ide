@@ -315,6 +315,7 @@ func TestContext(t *testing.T) {
 	write(filepath.Join(root, ".ide/system-prompt.md"), "Prompt du projet {{project}}")
 	_ = m.SaveGlobalPrompt("", "Prompt global")
 	_ = m.SaveGlobalPrompt("plan", "Plan global")
+	write(filepath.Join(root, ".ide/briefing-prompt.md"), "Briefing of the project")
 	write(m.st.Path("AGENTS.md"), "Rules of the IDE.")
 	write(m.st.Path("skills/notes/SKILL.md"), "---\nname: notes\ndescription: Notes de l'IDE\n---\nnoter")
 	write(m.st.Path("skills/pdf/SKILL.md"), "---\nname: pdf\ndescription: PDF de l'IDE\n---\nide")
@@ -323,6 +324,9 @@ func TestContext(t *testing.T) {
 	c := m.LoadContext(p)
 	if c.GlobalPlanPrompt == nil || *c.GlobalPlanPrompt != "Plan global" || c.ProjectPlanPrompt != nil {
 		t.Fatalf("plan prompts: %+v", c)
+	}
+	if c.GlobalBriefingPrompt != nil || c.ProjectBriefingPrompt == nil || *c.ProjectBriefingPrompt != "Briefing of the project" {
+		t.Fatalf("briefing prompts: %+v", c)
 	}
 	if c.GlobalPrompt == nil || *c.GlobalPrompt != "Prompt global" || c.ProjectPrompt == nil || !strings.Contains(*c.ProjectPrompt, "{{project}}") {
 		t.Fatalf("prompts: %+v", c)

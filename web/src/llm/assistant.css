@@ -312,6 +312,9 @@
 .ai-mode-model { color: var(--fg-muted); }
 .ai-composer.plan { border-color: color-mix(in srgb, var(--info) 45%, var(--line)); }
 .ai-plan-badge { background: color-mix(in srgb, var(--info) 18%, transparent); color: var(--info); margin-left: 4px; }
+.ai-mode.briefing { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.ai-composer.briefing { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+.ai-briefing-badge { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); margin-left: 4px; }
 .ai-plan { border: 1px solid color-mix(in srgb, var(--info) 50%, var(--line)); border-radius: 12px; background: var(--bg-2); padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
 .ai-plan.done { border-color: var(--line); }
 .ai-plan-head { display: flex; align-items: center; gap: 8px; color: var(--info); }

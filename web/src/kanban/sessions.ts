@@ -34,7 +34,7 @@ export async function startTicketChat(tk: Ticket, role: ChatRole, text?: string)
   if (!assistantFree()) return
   stopWatch()
   resetChat()
-  setChat({ ticket: { id: tk.id, role }, mode: role === 'briefing' || role === 'plan' ? 'plan' : 'build', title: `#${tk.id} ${roleLabels[role]} · ${tk.title}`.slice(0, 80) })
+  setChat({ ticket: { id: tk.id, role }, mode: role === 'briefing' ? 'briefing' : role === 'plan' ? 'plan' : 'build', title: `#${tk.id} ${roleLabels[role]} · ${tk.title}`.slice(0, 80) })
   showAssistant()
   try {
     await loadConfig()
