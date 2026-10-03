@@ -14,7 +14,7 @@ import {
   type Priority, type Status, type Ticket, type TicketType,
 } from './state'
 import { abandonTicket, ticketActions, TicketChats, TicketGit } from './actions'
-import { fmtDate, fmtSize, t } from '../i18n'
+import { fmtAgo, fmtDate, fmtSize, t } from '../i18n'
 import './kanban.css'
 
 export function TicketView(props: { tab: TabState; paneId: string }) {
@@ -318,10 +318,10 @@ async function addFile(tk: Ticket, apply: Apply) {
 }
 
 async function addCommit(tk: Ticket, apply: Apply) {
-  const log = await request<{ hash: string; short: string; subject: string; when: string }[]>('git.log', { n: 100 }).catch(() => [])
+  const log = await request<{ hash: string; short: string; subject: string; when: number }[]>('git.log', { n: 100 }).catch(() => [])
   const c = await pick({
     placeholder: t('Commit to link to the ticket'),
-    items: log.map((c) => ({ label: c.subject, detail: `${c.short} · ${c.when}`, value: c })),
+    items: log.map((c) => ({ label: c.subject, detail: `${c.short} · ${fmtAgo(c.when * 1000)}`, value: c })),
   })
   if (c) await apply(linkCommit(tk.id, c.hash, c.subject))
 }

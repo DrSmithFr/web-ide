@@ -40,7 +40,7 @@ const fake = http.createServer(async (req, res) => {
           ['b1', 'bash', { command: "printf 'export\\n' > export.txt && git add -A && git commit -q -m '#1 export' && pwd" }],
           ['b2', 'kanban_link_commit', { hash: 'HEAD' }],
           ['b3', 'kanban_goal', { action: 'check', id: goal }],
-          ['b4', 'kanban_move', { status: 'review', test_summary: 'Lire `export.txt`.' }],
+          ['b4', 'kanban_move', { status: 'review', test_summary: 'Read `export.txt`.' }],
         ]),
       }),
       end(res, 'tool_calls')
@@ -73,7 +73,7 @@ run(async ({ page, ctx }) => {
     await page.fill('[data-testid=kanban-title]', 'Data export')
     await page.click('[data-testid=kanban-create]')
     await page.waitForSelector('[data-testid=ticket-view]')
-    await page.fill('[data-testid=ticket-goal-input]', 'export.txt existe')
+    await page.fill('[data-testid=ticket-goal-input]', 'export.txt exists')
     await page.keyboard.press('Enter')
     await page.waitForSelector('[data-testid=ticket-goal]')
     await page.click('[data-testid=ticket-to-ready]')

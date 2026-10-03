@@ -8,6 +8,12 @@ A self-hosted IDE that runs in your browser, backed by a small local agent — t
 - **Local first.** Everything (settings, projects, sessions, conversations) is stored by the pod in `~/.web-ide` and in the project's `.ide` folder. Private keys and audio never leave your machine.
 - **Same session everywhere.** Open the IDE from another browser or another machine connected to the same pod and find your tabs, splits, cursors and terminals as you left them.
 
+![The AI assistant editing a file, with its tool steps, the diff it applied and a Mermaid diagram](docs/images/assistant.png)
+
+![A ticket after development in its own worktree: goals, test summary, changed files, merged branch](docs/images/kanban.png)
+
+![The Git panel and a side-by-side diff](docs/images/git-diff.png)
+
 ## Features
 
 - **Editor** — fast block rendering (100,000-line files), syntax highlighting with the CSS Custom Highlight API (Go, PHP, JavaScript, TypeScript, Python, nginx…), split panes sharing buffers, find in file and project-wide search, sub-word navigation, QWERTY and AZERTY shortcut presets, themes.

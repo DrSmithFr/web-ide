@@ -8,6 +8,12 @@ Un IDE auto-hébergé qui tourne dans le navigateur, adossé à un petit agent l
 - **Local avant tout.** Tout (réglages, projets, sessions, conversations) est stocké par le pod dans `~/.web-ide` et dans le dossier `.ide` du projet. Les clés privées et l'audio ne quittent jamais votre machine.
 - **La même session partout.** Ouvrez l'IDE depuis un autre navigateur ou une autre machine reliée au même pod : onglets, découpages, curseurs et terminaux sont tels que vous les avez laissés.
 
+![L'assistant IA modifie un fichier : étapes d'outils, diff appliqué et diagramme Mermaid](docs/images/assistant.png)
+
+![Un ticket développé dans son worktree : goals, résumé de test, fichiers changés, branche fusionnée](docs/images/kanban.png)
+
+![Le panneau Git et un diff côte à côte](docs/images/git-diff.png)
+
 ## Fonctionnalités
 
 - **Éditeur** : rendu par blocs rapide (fichiers de 100 000 lignes), coloration syntaxique par la CSS Custom Highlight API (Go, PHP, JavaScript, TypeScript, Python, nginx…), panneaux divisés partageant les buffers, recherche dans le fichier et dans tout le projet, navigation par sous-mots, raccourcis QWERTY et AZERTY, thèmes.

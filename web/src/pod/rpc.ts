@@ -155,7 +155,7 @@ export function startPod() {
 }
 
 export function formatRate(n: number) {
-  if (n < 1024) return `${n} o/s`
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} Ko/s`
-  return `${(n / 1024 / 1024).toFixed(1)} Mo/s`
+  if (n < 1024) return t('{n} B/s', { n })
+  if (n < 1024 * 1024) return t('{n} KB/s', { n: (n / 1024).toFixed(1) })
+  return t('{n} MB/s', { n: (n / 1024 / 1024).toFixed(1) })
 }

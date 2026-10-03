@@ -76,3 +76,16 @@ export function fmtSize(n: number): string {
   if (n < 1 << 30) return t('{n} MB', { n: (n / (1 << 20)).toFixed(1) })
   return t('{n} GB', { n: (n / (1 << 30)).toFixed(1) })
 }
+
+/** Relative time of a past date ("3 minutes ago"), in the language of the interface. */
+export function fmtAgo(ms: number): string {
+  const rtf = new Intl.RelativeTimeFormat(locale(), { numeric: 'auto' })
+  const s = Math.round((ms - Date.now()) / 1000)
+  const steps: [Intl.RelativeTimeFormatUnit, number][] = [['second', 60], ['minute', 60], ['hour', 24], ['day', 30], ['month', 12], ['year', Infinity]]
+  let v = s
+  for (const [unit, size] of steps) {
+    if (Math.abs(v) < size) return rtf.format(v, unit)
+    v = Math.round(v / size)
+  }
+  return fmtDate(ms)
+}

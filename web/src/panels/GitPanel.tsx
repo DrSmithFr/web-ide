@@ -8,7 +8,7 @@ import { newConsole } from '../console/consoles'
 import { contextMenu, pick, prompt } from '../ui/overlay'
 import { errorToast, toast } from '../ui/toast'
 import { Icon } from '../ui/icons'
-import { t, tn } from '../i18n'
+import { fmtAgo, fmtDate, t, tn } from '../i18n'
 
 const letters: Record<string, string> = { M: 'M', A: 'A', D: 'D', R: 'R', C: 'C', T: 'T', U: 'U', '?': 'U' }
 const titles: Record<string, string> = { M: 'modified', A: 'added', D: 'deleted', R: 'renamed', C: 'copied', T: 'type changed', U: 'in conflict', '?': 'untracked' }
@@ -261,13 +261,13 @@ export function GitPanel() {
             <Show when={showLog()}>
               <For each={log() ?? []} fallback={<p class="muted small pad">{t('No commit.')}</p>}>
                 {(c) => (
-                  <div class="git-commit-item" title={`${c.hash}\n${c.author}, ${c.when}`} onClick={() => navigator.clipboard.writeText(c.hash).then(() => toast(t('Hash copied'), 'ok', undefined, 1200))}>
+                  <div class="git-commit-item" title={`${c.hash}\n${c.author}, ${fmtDate(c.when * 1000)}`} onClick={() => navigator.clipboard.writeText(c.hash).then(() => toast(t('Hash copied'), 'ok', undefined, 1200))}>
                     <span class="mono git-hash">{c.short}</span>
                     <span class="ellipsis">{c.subject}</span>
                     <Show when={c.refs}>
                       <span class="badge">{c.refs.replace('HEAD -> ', '')}</span>
                     </Show>
-                    <span class="muted small nowrap">{c.when}</span>
+                    <span class="muted small nowrap">{fmtAgo(c.when * 1000)}</span>
                   </div>
                 )}
               </For>

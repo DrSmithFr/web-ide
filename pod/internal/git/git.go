@@ -207,7 +207,7 @@ type Commit struct {
 	Hash    string `json:"hash"`
 	Short   string `json:"short"`
 	Author  string `json:"author"`
-	When    string `json:"when"`
+	When    int64  `json:"when"` // commit time, Unix seconds (the page formats it)
 	Subject string `json:"subject"`
 	Refs    string `json:"refs,omitempty"`
 }
@@ -216,7 +216,7 @@ func (g *Repo) Log(ctx context.Context, n int) ([]Commit, error) {
 	if n <= 0 || n > 500 {
 		n = 50
 	}
-	out, err := g.git(ctx, "log", "-n", strconv.Itoa(n), "--pretty=format:%H%x1f%h%x1f%an%x1f%ar%x1f%s%x1f%D%x1e")
+	out, err := g.git(ctx, "log", "-n", strconv.Itoa(n), "--pretty=format:%H%x1f%h%x1f%an%x1f%at%x1f%s%x1f%D%x1e")
 	if err != nil {
 		if strings.Contains(err.Error(), "does not have any commits") {
 			return []Commit{}, nil
@@ -227,7 +227,8 @@ func (g *Repo) Log(ctx context.Context, n int) ([]Commit, error) {
 	for _, rec := range strings.Split(out, "\x1e") {
 		f := strings.Split(strings.Trim(rec, "\n"), "\x1f")
 		if len(f) == 6 {
-			list = append(list, Commit{Hash: f[0], Short: f[1], Author: f[2], When: f[3], Subject: f[4], Refs: f[5]})
+			when, _ := strconv.ParseInt(f[3], 10, 64)
+			list = append(list, Commit{Hash: f[0], Short: f[1], Author: f[2], When: when, Subject: f[4], Refs: f[5]})
 		}
 	}
 	return list, nil

@@ -9,11 +9,9 @@ import { applyConfig, config, loadModels, prefs, savePrefs, select, setPrefs, ty
 import { languages, probeGpu, speech, whisperModels } from './transcribe'
 import { formatSize } from './parts'
 import { buildSystemPrompt, DEFAULT_PLAN_TEMPLATE, DEFAULT_TEMPLATE, loadPromptContext, promptContext, templateOf } from './prompt'
-import { t } from '../i18n'
+import { fmtSize, t } from '../i18n'
 
-function size(n: number) {
-  return n < 1024 ? `${n} o` : `${(n / 1024).toFixed(1)} Ko`
-}
+const size = (n: number) => fmtSize(n)
 
 export function PromptSettings() {
   const [scope, setScope] = createSignal<'project' | 'global'>('project')
