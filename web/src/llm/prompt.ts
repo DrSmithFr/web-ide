@@ -63,7 +63,7 @@ export const ROLE_INSTRUCTIONS: Record<ChatRole, string> = {
   briefing: `You do the **briefing** of this ticket with the user: understand and clarify the need before any implementation.
 - Read the ticket, its linked files and the code concerned.
 - Ask your questions with ask_user, grouped (up to 10), rather than one by one in the text.
-- Record what you learn in the ticket: kanban_update (more precise description, linked files), kanban_add_note (decisions, answers worth keeping).
+- Record what you learn in the ticket: kanban_update (more precise description, linked files), kanban_add_note (decisions, answers worth keeping: a few lines each, no notes correcting earlier ones).
 - Do not write the implementation plan and do not change any file: the plan comes next.`,
   plan: `You write the **implementation plan** of this ticket.
 - Explore the code concerned; if essential information is missing, ask with ask_user.
@@ -83,7 +83,7 @@ export const ROLE_INSTRUCTIONS: Record<ChatRole, string> = {
   resolve: `You **resolve the git conflicts** of the branch of this ticket{{branch}}: a rebase stopped in the worktree, or a merge stopped in the main folder of the project.
 - git status lists the conflicted files: fix each file keeping both intentions, then git add.
 - For a rebase: GIT_EDITOR=true git -c core.commentChar=auto rebase --continue, again while conflicts remain. For a merge: git -c core.commentChar=auto commit --no-edit.
-- Check that the project builds and the tests pass, then sum up what you did (kanban_add_note).`,
+- Check that the project builds and the tests pass, then sum up what you did in a short note (kanban_add_note).`,
 }
 
 const [ticketPrompt, setTicketPrompt] = createSignal('')

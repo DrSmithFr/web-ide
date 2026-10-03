@@ -45,6 +45,9 @@ export const askUserDef = fn(
   ['questions'],
 )
 
+/** Longest note the model may add: notes are for decisions, not reports. */
+export const MAX_NOTE = 500
+
 const statusEnum = { type: 'string', enum: Object.keys(statusNames), description: 'Status' }
 
 /** Tools of every conversation. */
@@ -79,7 +82,12 @@ export const kanbanWriteDefs = [
       remove_files: strList('Files to unlink'),
     },
   ),
-  fn('kanban_add_note', 'Adds a note to the linked ticket (context found, decision, answer of the user worth keeping).', { text: str('Note in Markdown') }, ['text']),
+  fn(
+    'kanban_add_note',
+    `Adds a short note to the linked ticket (${MAX_NOTE} characters max): a decision, a fact found, an answer of the user worth keeping. Not for progress logs, restatements of the ticket or corrections of earlier notes.`,
+    { text: str(`Note in Markdown, ${MAX_NOTE} characters max`) },
+    ['text'],
+  ),
   fn(
     'kanban_set_plan',
     'Writes the implementation plan of the linked ticket and its goals (verifiable objectives, checked during development). Replaces the plan and the goals of a previous plan (test feedback goals stay).',
@@ -172,9 +180,17 @@ export async function runKanbanTool(name: string, a: Record<string, any>, ticket
       )
       return ok(`Ticket #${tk.id} updated.`, t('#{id} updated', { id: tk.id }))
     }
-    case 'kanban_add_note':
-      await addNote(ticket, 'note', String(a.text ?? ''), 'model')
+    case 'kanban_add_note': {
+      const text = String(a.text ?? '').trim()
+      if (text.length > MAX_NOTE)
+        return {
+          content: `Error: note too long (${text.length} characters, ${MAX_NOTE} max). Keep only what is worth remembering, in a few lines; the details belong in the description (kanban_update) or the plan.`,
+          summary: t('note too long'),
+          status: 'error',
+        }
+      await addNote(ticket, 'note', text, 'model')
       return ok('Note added.', t('note added'))
+    }
     case 'kanban_set_plan': {
       const goals = Array.isArray(a.goals) ? a.goals.map(String).filter((g: string) => g.trim()) : []
       if (!String(a.plan ?? '').trim()) throw new Error('empty plan')

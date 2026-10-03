@@ -1082,5 +1082,6 @@
   "— server —": "— serveur —",
   "•••••• (unchanged)": "•••••• (inchangé)",
   "{n} question": "{n} question",
-  "invalid questions": "questions invalides"
+  "invalid questions": "questions invalides",
+  "note too long": "note trop longue"
 }

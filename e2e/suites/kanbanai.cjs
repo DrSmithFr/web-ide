@@ -50,6 +50,8 @@ const fake = http.createServer(async (req, res) => {
             ['d2', 'kanban_goal', { action: 'check', id: ids[1] }],
             ['d3', 'kanban_move', { status: 'done' }],
             ['d4', 'kanban_move', { status: 'review', test_summary: 'Open **/export** and check the CSV.' }],
+            ['d5', 'kanban_add_note', { text: 'Erratum: '.repeat(60) }],
+            ['d6', 'kanban_add_note', { text: 'The CSV uses `;` as separator.' }],
           ]),
         }),
         end(res, 'tool_calls')
@@ -177,6 +179,10 @@ run(async ({ page }) => {
     const rr = requests[requests.length - 1].messages.filter((m) => m.role === 'tool')
     const d3 = text(rr.find((m) => m.tool_call_id === 'd3'))
     assert(d3.includes('the model cannot move'), 'the model cannot close the ticket: ' + d3)
+    const d5 = text(rr.find((m) => m.tool_call_id === 'd5'))
+    assert(d5.includes('note too long') && !(await page.isVisible('[data-testid=ticket-note]:has-text("Erratum")')), 'a long note of the model is refused: ' + d5.slice(0, 60))
+    await page.waitForSelector('[data-testid=ticket-note]:has-text("separator")')
+    assert(true, 'a short note of the model is added')
     assert((await page.$$('[data-testid=ticket-goal].done')).length === 2, 'goals checked by the model')
     assert(await page.isVisible('[data-testid=ticket-test] strong:has-text("/export")'), 'test summary shown')
     assert((await page.$$('[data-testid=ticket-chat]')).length === 2, 'two linked conversations')

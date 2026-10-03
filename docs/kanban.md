@@ -42,7 +42,7 @@ The system prompt receives the ticket as it is now and the instructions of the r
 ## Assistant tools
 
 - In every conversation: `kanban_list`, `kanban_get`, `kanban_create` (a new ticket in the backlog), `ask_user` (1 to 10 multiple-choice questions with a free answer, shown one at a time in the thread).
-- Only in a conversation linked to a ticket, and only on that ticket: `kanban_update` (title, description, type, priority, files), `kanban_add_note`, `kanban_set_plan` (plan and goals), `kanban_goal` (check, uncheck, add), `kanban_move` (transitions allowed to the model; *To test* requires a test summary), `kanban_link_commit`.
+- Only in a conversation linked to a ticket, and only on that ticket: `kanban_update` (title, description, type, priority, files), `kanban_add_note` (500 characters max: notes are for decisions, not reports), `kanban_set_plan` (plan and goals), `kanban_goal` (check, uncheck, add), `kanban_move` (transitions allowed to the model; *To test* requires a test summary), `kanban_link_commit`.
 
 ## Git
 
