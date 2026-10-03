@@ -57,6 +57,16 @@ run(async ({ page, ctx }) => {
   await page.waitForSelector('.tk-side .tk-row:has-text("capture.txt")')
   assert(true, 'attachment added')
 
+  // Two columns in a wide pane, one in a narrow one.
+  const sideBelow = () =>
+    page.evaluate(() => document.querySelector('.tk-side').getBoundingClientRect().top >= document.querySelector('.tk-main').getBoundingClientRect().bottom)
+  assert(!(await sideBelow()), 'wide pane: side column beside the main one')
+  await page.setViewportSize({ width: 800, height: 900 })
+  await page.waitForFunction(() => document.querySelector('.tk-side').getBoundingClientRect().top >= document.querySelector('.tk-main').getBoundingClientRect().bottom)
+  assert(await page.evaluate(() => document.querySelector('.tk-main').getBoundingClientRect().width > 300), 'narrow pane: one full-width column')
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.waitForFunction(() => document.querySelector('.tk-side').getBoundingClientRect().top < document.querySelector('.tk-main').getBoundingClientRect().bottom)
+
   // A second window follows the changes.
   const page2 = await ctx.newPage()
   await page2.goto(page.url())

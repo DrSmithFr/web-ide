@@ -46,7 +46,7 @@
 .kb-panel-group { display: flex; align-items: center; gap: 6px; margin: 6px 2px 0; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fg-muted); }
 
 /* ---------- ticket ---------- */
-.tk { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: auto; background: var(--bg); }
+.tk { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: auto; background: var(--bg); container-type: inline-size; }
 .tk-head { padding: 12px 16px 10px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; position: sticky; top: 0; background: var(--bg); z-index: 2; }
 .tk-title-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .tk-num { font-family: var(--font-code); color: var(--fg-muted); font-size: 16px; }
@@ -56,9 +56,10 @@ input.tk-title { padding: 2px 6px; }
 .tk-body { display: flex; gap: 16px; padding: 12px 16px 24px; align-items: flex-start; }
 .tk-main { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .tk-side { flex: 0 0 300px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-@media (max-width: 900px) {
-  .tk-body { flex-direction: column; }
-  .tk-side { flex-basis: auto; width: 100%; }
+/* One column when the pane (not the window) is narrow: the view may sit in a split. */
+@container (max-width: 760px) {
+  .tk-body { flex-direction: column; align-items: stretch; }
+  .tk-side { flex-basis: auto; }
 }
 .tk-section { border-bottom: 1px solid var(--line); padding: 6px 0 10px; }
 .tk-section-head { display: flex; align-items: center; gap: 6px; }
