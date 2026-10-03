@@ -352,3 +352,9 @@
 .ai-ask-recap li > span, .ai-ask-recap li > .link { display: block; color: var(--fg-muted); padding: 0; text-align: left; }
 .ai-ask-recap strong { font-weight: 600; }
 .ai-ask .ai-plan-foot { width: 100%; }
+
+/* ticket linked to the conversation */
+.ai-ticket-bar { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-bottom: 1px solid var(--line); background: var(--bg-2); font-size: 12px; min-width: 0; flex: none; }
+.ai-ticket-bar .link { padding: 0; min-width: 0; }
+.ai-ticket-link { align-self: flex-start; margin: 4px 10px 0; border: 0; background: none; color: var(--fg-muted); font-size: 11.5px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.ai-ticket-link:hover { color: var(--accent); }

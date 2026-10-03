@@ -4,6 +4,9 @@
 import { createSignal } from 'solid-js'
 import { request } from '../pod/rpc'
 import { activeTab, project, relPath, root } from '../state/project'
+import { getTicket } from '../kanban/state'
+import { ticketMarkdown } from './kanbanTools'
+import type { ChatRole } from './state'
 
 export interface InstructionFile {
   scope: 'global' | 'project'
@@ -55,6 +58,55 @@ Kanban du projet : kanban_list et kanban_get pour lire les tickets, kanban_creat
 
 export const [promptContext, setPromptContext] = createSignal<PromptContext | null>(null)
 
+/** What a conversation linked to a ticket must do, by role (docs/kanban.md). */
+export const ROLE_INSTRUCTIONS: Record<ChatRole, string> = {
+  briefing: `Tu fais le **briefing** de ce ticket avec l'utilisateur : comprendre et préciser le besoin avant toute implémentation.
+- Lis le ticket, ses fichiers liés et le code concerné.
+- Pose tes questions avec ask_user, regroupées (jusqu'à 10), plutôt qu'une à une dans le texte.
+- Consigne ce que tu apprends dans le ticket : kanban_update (description plus précise, fichiers liés), kanban_add_note (décisions, réponses à garder).
+- Ne rédige pas le plan d'implémentation et ne modifie aucun fichier : le plan viendra ensuite.`,
+  plan: `Tu rédiges le **plan d'implémentation** de ce ticket.
+- Explore le code concerné ; si une information indispensable manque, pose la question avec ask_user.
+- Enregistre le plan avec kanban_set_plan : texte en Markdown (approche, fichiers à modifier, étapes, risques, tests) et une liste de goals, chacun un objectif vérifiable (fonctionnalité visible, test qui passe…).
+- Puis passe le ticket à « À développer » avec kanban_move (status ready) et résume le plan en quelques lignes.
+- Ne modifie aucun fichier.`,
+  dev: `Tu **développes** ce ticket{{branch}}.
+- Suis le plan. Coche chaque goal avec kanban_goal dès qu'il est atteint et vérifié (tests, compilation).
+- Commite régulièrement sur la branche du ticket avec bash (git add, git commit) ; chaque message de commit commence par « #{{id}} ». Lie chaque commit avec kanban_link_commit.
+- Ne fusionne pas et ne pousse pas la branche : c'est l'utilisateur qui le fait.
+- Quand tous les goals sont cochés, que les tests passent et que tout est commité, passe le ticket à « À tester » avec kanban_move (status review) et un test_summary : ce que l'utilisateur doit tester et comment (étapes, commandes, résultat attendu).`,
+  correction: `Tu **corriges** ce ticket après les retours de test de l'utilisateur{{branch}}.
+- Les retours sont dans les notes « Retour de test » et dans les goals marqués « retour de test » : traite-les tous, coche chaque goal corrigé avec kanban_goal.
+- Commite sur la branche du ticket (messages commençant par « #{{id}} ») et lie les commits avec kanban_link_commit.
+- Ne fusionne pas et ne pousse pas la branche.
+- Quand tout est corrigé et commité, repasse le ticket à « À tester » avec kanban_move (status review) et un test_summary mis à jour.`,
+  resolve: `Tu **résous les conflits** du rebase de la branche de ce ticket{{branch}}.
+- git status liste les fichiers en conflit : corrige chaque fichier (garde les deux intentions), puis git add.
+- Continue avec GIT_EDITOR=true git rebase --continue, et recommence tant qu'il reste des conflits.
+- Vérifie que le projet compile et que les tests passent, puis résume ce que tu as fait (kanban_add_note).`,
+}
+
+const [ticketPrompt, setTicketPrompt] = createSignal('')
+export { ticketPrompt }
+
+/** Loads the ticket linked to the conversation for the system prompt ('' without one). */
+export async function loadTicketPrompt(link: { id: number; role: ChatRole } | undefined) {
+  if (!link) {
+    setTicketPrompt('')
+    return
+  }
+  try {
+    const t = await getTicket(link.id)
+    const role = ROLE_INSTRUCTIONS[link.role] ?? ''
+    const branch = t.branch ? ` sur la branche ${t.branch}, dans son worktree (la racine du projet ouvert)` : ''
+    setTicketPrompt(
+      `# Ticket lié à cette conversation\nCette conversation travaille sur le ticket #${t.id} du kanban du projet. Les outils kanban_update, kanban_add_note, kanban_set_plan, kanban_goal, kanban_move et kanban_link_commit agissent sur ce ticket.\n\n${role.replace(/\{\{branch\}\}/g, branch).replace(/\{\{id\}\}/g, String(t.id))}\n\n${ticketMarkdown(t)}`,
+    )
+  } catch (e) {
+    setTicketPrompt(`# Ticket lié\nLe ticket #${link.id} est introuvable (${(e as Error).message}).`)
+  }
+}
+
 export async function loadPromptContext(): Promise<PromptContext> {
   try {
     const c = await request<PromptContext>('llm.context')
@@ -99,6 +151,7 @@ export function buildSystemPrompt(c: PromptContext | null, tools: boolean, mode:
     text += "\nInstructions de l'utilisateur (globales) et du projet. Elles priment sur tes habitudes ; celles du projet priment sur les globales."
     for (const f of files) text += `\n\n## ${f.scope === 'global' ? 'Global' : 'Projet'} · ${displayPath(f)}\n${f.content.trim()}`
   }
+  if (ticketPrompt()) text += '\n\n' + ticketPrompt()
   const skills = c?.skills ?? []
   if (skills.length && tools) {
     text += '\n\n# Skills'

@@ -123,10 +123,12 @@ export const agentToolDefs = {
  * Tools offered to the model in a mode: no file change in Plan, exit_plan_mode only there.
  * The kanban tools that change a ticket come with a conversation linked to a ticket.
  */
-export function toolsFor(mode: 'plan' | 'build', ticket?: number) {
+export function toolsFor(mode: 'plan' | 'build', ticket?: { id: number; role: string }) {
   const base = mode === 'plan' ? toolDefs.filter((t) => !writeTools.has(t.function.name)) : toolDefs
   const kanban = [...kanbanReadDefs, ...(ticket ? kanbanWriteDefs : []), askUserDef]
-  return mode === 'plan' ? [...base, ...kanban, agentToolDefs.exitPlan, agentToolDefs.compact] : [...base, ...kanban, agentToolDefs.compact]
+  // The briefing and the plan of a ticket end in the ticket itself, not in exit_plan_mode.
+  const exit = mode === 'plan' && ticket?.role !== 'briefing' && ticket?.role !== 'plan' ? [agentToolDefs.exitPlan] : []
+  return [...base, ...kanban, ...exit, agentToolDefs.compact]
 }
 
 // Commands that only read (Plan mode runs them without asking).

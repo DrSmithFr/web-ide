@@ -4,7 +4,7 @@
 import { produce } from 'solid-js/store'
 import { on, request, RpcError } from '../pod/rpc'
 import { runTool, toolsFor, writeTools, type Confirm } from './tools'
-import { buildSystemPrompt, loadPromptContext, promptContext } from './prompt'
+import { buildSystemPrompt, loadPromptContext, loadTicketPrompt, promptContext } from './prompt'
 import {
   approval,
   chat,
@@ -419,6 +419,8 @@ async function run(resume = false) {
         setChat('running', { stream })
         saveChat()
       }
+      // The linked ticket as it is now goes in the system prompt.
+      if (!attach) await loadTicketPrompt(chat.ticket)
       const model = currentModel()
       const tgt = target()
       const mode = currentMode()
@@ -432,7 +434,7 @@ async function run(resume = false) {
                 server: tgt.server,
                 model: tgt.model,
                 messages: apiMessages(),
-                tools: useTools() ? toolsFor(mode, chat.ticket?.id) : undefined,
+                tools: useTools() ? toolsFor(mode, chat.ticket) : undefined,
                 think: model?.caps.thinking ? prefs.think : undefined,
                 stream,
               },

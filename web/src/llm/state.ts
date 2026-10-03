@@ -391,9 +391,20 @@ async function saveNow() {
     await request('llm.chats.save', { chat: JSON.parse(JSON.stringify(chat)) })
     rememberActive()
     refreshChats()
+    linkTicket()
   } catch {
     /* kept in memory */
   }
+}
+
+// The ticket of a conversation lists it once it is saved (with its title).
+const linked = new Set<string>()
+function linkTicket() {
+  const t = chat.ticket
+  const key = `${chat.id}:${t?.id}:${t?.role}:${chat.title}`
+  if (!t || linked.has(key)) return
+  linked.add(key)
+  request('kanban.chat.link', { id: t.id, chatId: chat.id, role: t.role, title: chat.title }).catch(() => linked.delete(key))
 }
 
 export async function openChat(id: string) {

@@ -12,7 +12,52 @@ import { Thread } from './Thread'
 import { addFiles, Composer, focusComposer, suggest } from './Composer'
 import { Sidebar } from './Sidebar'
 import { DiagramViewer } from './DiagramViewer'
+import { board, ensureBoard, openTicket, roleLabels, statusLabels, summary, type ChatRole } from '../kanban/state'
+import { pick } from '../ui/overlay'
+import { setChat, saveChat } from './state'
 import './assistant.css'
+
+/** Ticket linked to the conversation (link, unlink, link another one). */
+function TicketBar() {
+  const t = () => (chat.ticket ? summary(chat.ticket.id) : undefined)
+  const roleFor = (status: string): ChatRole => (status === 'new' ? 'briefing' : status === 'fix' || status === 'review' ? 'correction' : 'dev')
+  const link = async () => {
+    ensureBoard()
+    const id = await pick<number>({
+      placeholder: 'Lier cette conversation à un ticket',
+      items: board.tickets
+        .filter((x) => x.status !== 'done' && x.status !== 'abandoned')
+        .map((x) => ({ label: `#${x.id} ${x.title}`, detail: statusLabels[x.status], value: x.id })),
+    })
+    const s = id ? summary(id) : undefined
+    if (!s) return
+    setChat('ticket', { id: s.id, role: roleFor(s.status) })
+    saveChat()
+  }
+  return (
+    <Show
+      when={chat.ticket}
+      fallback={
+        <Show when={chat.messages.length && !live.busy}>
+          <button class="ai-ticket-link" onClick={() => void link()} title="Les outils de modification du ticket deviennent disponibles">
+            <Icon name="kanban" size={12} /> Lier à un ticket…
+          </button>
+        </Show>
+      }
+    >
+      <div class="ai-ticket-bar" data-testid="ai-ticket-bar">
+        <Icon name="kanban" size={13} />
+        <button class="link ellipsis" onClick={() => openTicket(chat.ticket!.id)}>
+          #{chat.ticket!.id} {t()?.title ?? ''}
+        </button>
+        <span class={`kb-role r-${chat.ticket!.role}`}>{roleLabels[chat.ticket!.role]}</span>
+        <Show when={t()}>
+          <span class={`kb-status st-${t()!.status}`}>{statusLabels[t()!.status]}</span>
+        </Show>
+      </div>
+    </Show>
+  )
+}
 
 /** Width from which the side bar sits next to the conversation instead of over it. */
 const WIDE = 720
@@ -99,6 +144,7 @@ export function AssistantTool() {
           <Icon name="gear" size={15} />
         </button>
       </div>
+      <TicketBar />
       <Show when={modelsError()}>
         <div class="ai-banner">
           <Icon name="conflict" size={13} /> {modelsError()}

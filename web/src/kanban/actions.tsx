@@ -3,6 +3,7 @@
 import { For, Show } from 'solid-js'
 import { Icon } from '../ui/icons'
 import { moveTicket, type ChatRole, type Status, type Ticket } from './state'
+import { openTicketChat, startTicketChat } from './sessions'
 import { Section, type Apply } from './TicketView'
 
 export interface ActionButton {
@@ -26,9 +27,17 @@ export function ticketActions(t: Ticket, ctx: Ctx): ActionButton[] {
   switch (t.status) {
     case 'new':
       return [
+        { label: 'Briefing', run: () => void startTicketChat(t, 'briefing'), title: 'Conversation (mode Plan) pour préciser le ticket', testid: 'ticket-briefing' },
+        {
+          label: t.plan.trim() ? 'Refaire le plan' : 'Générer le plan',
+          primary: !t.plan.trim(),
+          run: () => void startTicketChat(t, 'plan'),
+          title: 'Le modèle écrit le plan et les goals, puis passe le ticket à développer',
+          testid: 'ticket-plan-generate',
+        },
         {
           label: 'Passer à développer',
-          primary: true,
+          primary: !!t.plan.trim(),
           disabled: !t.plan.trim() && !t.goals,
           title: !t.plan.trim() && !t.goals ? 'Il faut d’abord un plan ou des goals' : undefined,
           run: () => void ctx.move('ready'),
@@ -42,7 +51,14 @@ export function ticketActions(t: Ticket, ctx: Ctx): ActionButton[] {
       ]
     case 'in_progress':
     case 'fix':
-      return [{ label: 'Envoyer en test', primary: true, run: () => void ctx.move('review'), testid: 'ticket-to-review' }]
+      return [
+        {
+          label: t.status === 'fix' ? 'Session de correction' : 'Nouvelle session de dev',
+          run: () => void startTicketChat(t, t.status === 'fix' ? 'correction' : 'dev'),
+          testid: 'ticket-session',
+        },
+        { label: 'Envoyer en test', primary: true, run: () => void ctx.move('review'), testid: 'ticket-to-review' },
+      ]
     case 'review':
       return [
         { label: 'Ajouter un retour', run: ctx.focusFeedback, testid: 'ticket-feedback' },
@@ -63,9 +79,9 @@ export function TicketChats(props: { t: Ticket; apply: Apply; onUnlink: (chatId:
           <div class="tk-row">
             <Icon name="sparkle" size={12} />
             <span class={`kb-role r-${c.role}`}>{props.roleLabels[c.role]}</span>
-            <span class="ellipsis small" title={c.title}>
+            <button class="link ellipsis small" title={c.title} onClick={() => void openTicketChat(c.chatId)} data-testid="ticket-chat">
               {c.title || 'Conversation'}
-            </span>
+            </button>
             <span class="grow" />
             <button class="icon-btn small" title="Délier" onClick={() => props.onUnlink(c.chatId)}>
               <Icon name="close" size={11} />
