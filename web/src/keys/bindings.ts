@@ -59,6 +59,7 @@ export const actions: ActionDef[] = [
   { id: 'view.toggleRight', label: 'Afficher / masquer les tools', category: 'Affichage', inTerminal: true },
   { id: 'view.toggleBottom', label: 'Afficher / masquer les consoles', category: 'Affichage', inTerminal: true },
   { id: 'settings.open', label: 'Réglages', category: 'Général', inTerminal: true },
+  { id: 'kanban.open', label: 'Ouvrir le kanban', category: 'Général' },
   { id: 'palette.open', label: 'Palette de commandes', category: 'Général', inTerminal: true },
   { id: 'console.new', label: 'Nouveau terminal', category: 'Consoles', inTerminal: true },
   { id: 'sql.execute', label: 'Exécuter la requête active', category: 'Base de données' },

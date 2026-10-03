@@ -9,7 +9,7 @@ import { detectLanguage, lspLanguage, lspLanguageId } from '../editor/languages'
 import { merge3 } from '../editor/merge'
 import { toast } from '../ui/toast'
 
-export type TabKind = 'file' | 'sql' | 'table' | 'text' | 'diff'
+export type TabKind = 'file' | 'sql' | 'table' | 'text' | 'diff' | 'kanban' | 'ticket'
 
 export interface TabState {
   id: string
@@ -22,6 +22,8 @@ export interface TabState {
   text?: string
   lang?: string
   staged?: boolean
+  /** Number of the kanban ticket shown (kind ticket). */
+  ticket?: number
 }
 
 export type LayoutNode =
@@ -195,6 +197,8 @@ export function openTab(tab: Omit<TabState, 'id'>, paneId = session.activePane):
     if (tab.kind === 'file') return t.path === tab.path
     if (tab.kind === 'table') return t.connId === tab.connId && t.db === tab.db && t.table === tab.table
     if (tab.kind === 'diff') return t.path === tab.path && !!t.staged === !!tab.staged
+    if (tab.kind === 'kanban') return true
+    if (tab.kind === 'ticket') return t.ticket === tab.ticket
     return false
   })
   if (same) {

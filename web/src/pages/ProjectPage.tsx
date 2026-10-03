@@ -13,6 +13,9 @@ import { Explorer } from '../panels/Explorer'
 import { GlobalSearch, focusGlobalSearch } from '../panels/GlobalSearch'
 import { Connections } from '../panels/Connections'
 import { GitPanel } from '../panels/GitPanel'
+import { KanbanPanel } from '../kanban/Panel'
+import { NewTicketHost } from '../kanban/Board'
+import { openBoard } from '../kanban/state'
 import { refreshGit } from '../state/git'
 import { DatabaseTool } from '../db/DatabaseTool'
 import { AssistantTool } from '../llm/AssistantTool'
@@ -32,6 +35,7 @@ export const leftPanels: Record<string, { label: string; icon: string; component
   explorer: { label: 'Explorateur', icon: 'files', component: Explorer },
   search: { label: 'Recherche', icon: 'search', component: GlobalSearch },
   git: { label: 'Git', icon: 'branch', component: GitPanel },
+  kanban: { label: 'Kanban', icon: 'kanban', component: KanbanPanel },
   connections: { label: 'Connexions', icon: 'plug', component: Connections },
 }
 
@@ -81,6 +85,7 @@ export function useProjectActions() {
     registerAction('nav.back', () => navHistory(-1)),
     registerAction('nav.forward', () => navHistory(1)),
     registerAction('settings.open', () => openSettings()),
+    registerAction('kanban.open', () => openBoard()),
     registerAction('palette.open', () => void palette()),
     registerAction('nav.gotoFile', () => void gotoFile()),
     registerAction('nav.gotoSymbol', () => void gotoSymbol()),
@@ -347,6 +352,7 @@ export function ProjectPage(props: { id: string }) {
     >
       <div class="app">
         <MenuBar />
+        <NewTicketHost />
         <div class="workbench">
           <Rail side="left" panels={leftPanels} />
           <Show when={session.left.panel && leftPanels[session.left.panel]}>

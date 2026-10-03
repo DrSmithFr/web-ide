@@ -21,6 +21,9 @@ import { TableView } from '../db/TableView'
 import { setCursorInfo } from './status'
 import { useCompletion } from './Completion'
 import { DiffView } from './DiffView'
+import { Board } from '../kanban/Board'
+import { TicketView } from '../kanban/TicketView'
+import { summary } from '../kanban/state'
 import { gitRevision, gitStatus } from '../state/git'
 import { lineMarks } from '../editor/linediff'
 import { formatDocument, renameSymbol } from '../lsp/refactor'
@@ -89,6 +92,10 @@ let dragged: { pane: string; tab: string } | null = null
 
 function tabTitle(t: TabState) {
   if (t.kind === 'file') return basename(t.path ?? '')
+  if (t.kind === 'ticket') {
+    const s = summary(t.ticket!)
+    return s ? `#${s.id} ${s.title.length > 28 ? s.title.slice(0, 27) + '…' : s.title}` : `#${t.ticket}`
+  }
   return t.title ?? t.kind
 }
 
@@ -209,6 +216,12 @@ function Pane(props: { id: string }) {
               </Match>
               <Match when={t.kind === 'diff'}>
                 <DiffView tab={t} paneId={props.id} />
+              </Match>
+              <Match when={t.kind === 'kanban'}>
+                <Board />
+              </Match>
+              <Match when={t.kind === 'ticket'}>
+                <TicketView tab={t} paneId={props.id} />
               </Match>
             </Switch>
           )}

@@ -1,0 +1,197 @@
+// Kanban of the project: tickets kept by the pod in SQLite (see docs/kanban.md). The list
+// is shared by the board, the side panel and the ticket tabs, and follows the changes
+// made by other windows and by the assistant (event kanban.changed).
+import { createSignal } from 'solid-js'
+import { createStore, reconcile } from 'solid-js/store'
+import { on, request } from '../pod/rpc'
+import { openTab, project } from '../state/project'
+
+export type Status = 'new' | 'ready' | 'in_progress' | 'review' | 'fix' | 'done' | 'abandoned'
+export type TicketType = 'feature' | 'bug' | 'refactor' | 'task'
+export type Priority = 'low' | 'normal' | 'high' | 'critical'
+export type ChatRole = 'briefing' | 'plan' | 'dev' | 'correction' | 'resolve'
+
+export interface Summary {
+  id: number
+  title: string
+  type: TicketType
+  priority: Priority
+  status: Status
+  branch?: string
+  worktree?: string
+  goalsDone: number
+  goals: number
+  chats: number
+  created: number
+  updated: number
+  closed?: number
+}
+
+export interface Goal {
+  id: number
+  text: string
+  done: boolean
+  source: 'plan' | 'feedback' | 'user'
+}
+
+export interface Note {
+  id: number
+  kind: 'note' | 'feedback' | 'event'
+  author: 'user' | 'model'
+  text: string
+  created: number
+}
+
+export interface DiffFile {
+  path: string
+  status: string
+  added: number
+  removed: number
+}
+
+export interface Ticket extends Summary {
+  description: string
+  plan: string
+  testSummary: string
+  base: string
+  setup: string
+  setupLog?: string
+  snapshot?: { base: string; head: string; files: DiffFile[]; patch: string }
+  goalList: Goal[]
+  notes: Note[]
+  files: string[]
+  chatList: { chatId: string; role: ChatRole; title: string; created: number }[]
+  commits: { hash: string; subject: string }[]
+  attachments: { id: number; name: string; mime: string; size: number; created: number }[]
+}
+
+export const statusOrder: Status[] = ['new', 'ready', 'in_progress', 'review', 'fix', 'done', 'abandoned']
+export const statusLabels: Record<Status, string> = {
+  new: 'Nouveau',
+  ready: 'À développer',
+  in_progress: 'En cours',
+  review: 'À tester',
+  fix: 'Correction',
+  done: 'Terminé',
+  abandoned: 'Abandonné',
+}
+export const typeLabels: Record<TicketType, string> = { feature: 'Fonctionnalité', bug: 'Bug', refactor: 'Refacto', task: 'Tâche' }
+export const priorityLabels: Record<Priority, string> = { low: 'Basse', normal: 'Normale', high: 'Haute', critical: 'Critique' }
+export const roleLabels: Record<ChatRole, string> = { briefing: 'Briefing', plan: 'Plan', dev: 'Développement', correction: 'Correction', resolve: 'Conflits' }
+
+export const [board, setBoard] = createStore<{ project: string; tickets: Summary[]; meta: Record<string, string>; loaded: boolean; error: string }>({
+  project: '',
+  tickets: [],
+  meta: {},
+  loaded: false,
+  error: '',
+})
+
+/** Bumped for a ticket each time it changes: ticket views reload it. */
+const [versions, setVersions] = createStore<Record<number, number>>({})
+export const ticketVersion = (id: number) => versions[id] ?? 0
+
+let loading: Promise<void> | null = null
+export function refreshBoard(): Promise<void> {
+  if (loading) return loading
+  loading = (async () => {
+    try {
+      const r = await request<{ project: string; tickets: Summary[]; meta: Record<string, string> }>('kanban.list')
+      setBoard('tickets', reconcile(r.tickets, { key: 'id' }))
+      setBoard({ project: r.project, meta: r.meta ?? {}, loaded: true, error: '' })
+    } catch (e) {
+      setBoard({ error: (e as Error).message, loaded: true })
+    } finally {
+      loading = null
+    }
+  })()
+  return loading
+}
+
+/** Loads the board once for the open project (and again when the project changes). */
+let loadedFor = ''
+export function ensureBoard() {
+  const pid = project()?.id ?? ''
+  if (pid && pid !== loadedFor) {
+    loadedFor = pid
+    setBoard({ tickets: [], loaded: false })
+    refreshBoard()
+  }
+}
+
+let refreshTimer: number | undefined
+on('kanban.changed', (e: { project: string; id: number }) => {
+  if (e.id) setVersions(e.id, (v) => (v ?? 0) + 1)
+  clearTimeout(refreshTimer)
+  refreshTimer = window.setTimeout(() => refreshBoard(), 60)
+})
+on('pod.reconnected', () => {
+  if (loadedFor) refreshBoard()
+})
+
+export function summary(id: number): Summary | undefined {
+  return board.tickets.find((t) => t.id === id)
+}
+
+export async function getTicket(id: number): Promise<Ticket> {
+  return request<Ticket>('kanban.get', { id })
+}
+
+// ---------- changes (by the user; the assistant passes by: 'model') ----------
+
+export type By = 'user' | 'model'
+
+export interface TicketPatch {
+  title?: string
+  type?: TicketType
+  priority?: Priority
+  description?: string
+  plan?: string
+  testSummary?: string
+  base?: string
+  files?: string[]
+  addFiles?: string[]
+  removeFiles?: string[]
+}
+
+export const createTicket = (p: TicketPatch & { title: string }, by: By = 'user') => request<Ticket>('kanban.create', { ...p, by })
+export const updateTicket = (id: number, patch: TicketPatch, by: By = 'user') => request<Ticket>('kanban.update', { id, patch, by })
+export const moveTicket = (id: number, status: Status, by: By = 'user', comment = '') => request<Ticket>('kanban.move', { id, status, by, comment })
+export const deleteTicket = (id: number) => request('kanban.delete', { id })
+export const addNote = (id: number, kind: 'note' | 'feedback', text: string, by: By = 'user') => request<Ticket>('kanban.note', { id, kind, text, by })
+export const deleteNote = (id: number, noteId: number) => request<Ticket>('kanban.note.delete', { id, noteId })
+export const setPlan = (id: number, plan: string, goals: string[] | null, by: By = 'user') => request<Ticket>('kanban.plan', { id, plan, goals, by })
+export const goalOp = (id: number, goal: { op: 'add' | 'check' | 'edit' | 'delete'; id?: number; text?: string; done?: boolean; source?: string }, by: By = 'user') =>
+  request<Ticket>('kanban.goal', { id, goal, by })
+export const linkChat = (id: number, chatId: string, role: ChatRole, title = '') => request<Ticket>('kanban.chat.link', { id, chatId, role, title })
+export const unlinkChat = (id: number, chatId: string) => request<Ticket>('kanban.chat.unlink', { id, chatId })
+export const linkCommit = (id: number, hash: string, subject = '', by: By = 'user') => request<Ticket>('kanban.commit.link', { id, hash, subject, by })
+export const unlinkCommit = (id: number, hash: string) => request<Ticket>('kanban.commit.unlink', { id, hash })
+export const setMeta = (values: Record<string, string>) => request<Record<string, string>>('kanban.meta.set', { values })
+
+export async function addAttachment(id: number, file: File) {
+  const buf = new Uint8Array(await file.arrayBuffer())
+  let bin = ''
+  for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000))
+  return request<Ticket>('kanban.attachment.add', { id, name: file.name, mime: file.type, data: btoa(bin) })
+}
+export const deleteAttachment = (id: number, aid: number) => request<Ticket>('kanban.attachment.delete', { id, aid })
+export async function attachmentBlob(id: number, aid: number): Promise<{ name: string; blob: Blob }> {
+  const r = await request<{ attachment: { name: string; mime: string }; data: string }>('kanban.attachment.get', { id, aid })
+  const bin = atob(r.data)
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  return { name: r.attachment.name, blob: new Blob([bytes], { type: r.attachment.mime || 'application/octet-stream' }) }
+}
+
+// ---------- tabs ----------
+
+export function openBoard() {
+  openTab({ kind: 'kanban', title: 'Kanban' })
+}
+
+export function openTicket(id: number) {
+  openTab({ kind: 'ticket', ticket: id, title: `#${id}` })
+}
+
+export const [newTicketOpen, setNewTicketOpen] = createSignal(false)

@@ -5,6 +5,7 @@ import { Dynamic } from 'solid-js/web'
 import { project, closeProject, reopenProject } from '../state/project'
 import { EditorArea } from '../ui/EditorArea'
 import { TermView, consoles, setConsoleList } from '../console/consoles'
+import { NewTicketHost } from '../kanban/Board'
 import { leftPanels, openWithAuth, rightPanels, useProjectActions, PodStatus } from './ProjectPage'
 import { on as onPod, request } from '../pod/rpc'
 
@@ -82,6 +83,7 @@ export function DetachedTool(props: { id: string; toolId: string }) {
         <div class="tool-full">
           <Dynamic component={tool()!.component} />
         </div>
+        <NewTicketHost />
       </Show>
     </Frame>
   )
