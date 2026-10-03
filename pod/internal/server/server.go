@@ -22,6 +22,7 @@ import (
 	"webide/pod/internal/config"
 	"webide/pod/internal/db"
 	"webide/pod/internal/hfcache"
+	"webide/pod/internal/kanban"
 	"webide/pod/internal/llm"
 	"webide/pod/internal/projects"
 	"webide/pod/internal/runtime"
@@ -42,6 +43,7 @@ type Server struct {
 	Sessions *sessions.Sessions
 	Pool     *sshx.Pool
 	LLM      *llm.Manager
+	Kanban   *kanban.Manager
 	// Models caches the speech recognition models downloaded for the page.
 	Models *hfcache.Cache
 	Static fs.FS
@@ -70,12 +72,16 @@ func (s *Server) Init() {
 	s.opening = map[string]*sync.Mutex{}
 	s.handlers = map[string]handler{}
 	s.claims = map[string]*Client{}
+	if s.Kanban == nil {
+		s.Kanban = kanban.NewManager(s.Store)
+	}
 	s.registerGlobal()
 	s.registerProject()
 	s.registerDB()
 	s.registerGit()
 	s.registerLLM()
 	s.registerExec()
+	s.registerKanban()
 }
 
 func (s *Server) handle(name string, h handler) { s.handlers[name] = h }
@@ -498,4 +504,5 @@ func (s *Server) Shutdown() {
 	s.Sessions.FlushAll()
 	s.Pool.CloseAll()
 	s.LLM.Close()
+	s.Kanban.Close()
 }

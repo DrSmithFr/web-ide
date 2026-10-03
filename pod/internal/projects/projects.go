@@ -30,8 +30,12 @@ type Project struct {
 	Type        string     `json:"type"` // local | ssh
 	Path        string     `json:"path"`
 	SSH         *SSHTarget `json:"ssh,omitempty"`
-	CreatedAt   time.Time  `json:"createdAt"`
-	OpenedAt    time.Time  `json:"openedAt"`
+	// Parent and Ticket: worktree of a kanban ticket, opened as its own project (hidden
+	// from the project list, its kanban and conversations are those of the parent).
+	Parent    string    `json:"parent,omitempty"`
+	Ticket    int64     `json:"ticket,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
+	OpenedAt  time.Time `json:"openedAt"`
 }
 
 // Name is the title, or a name derived from the path or the host.
@@ -79,6 +83,9 @@ func (r *Registry) List() []View {
 	defer r.mu.Unlock()
 	out := make([]View, 0, len(r.items))
 	for _, p := range r.items {
+		if p.Parent != "" {
+			continue
+		}
 		cp := *p
 		out = append(out, view(&cp))
 	}

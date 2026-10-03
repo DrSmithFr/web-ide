@@ -182,6 +182,13 @@ func (s *Server) registerLLM() {
 		}
 	}
 	loc := func(c *Client, rt *runtime.Runtime) llm.ChatLocation {
+		// The worktree of a ticket keeps its conversations with those of its parent.
+		if p, ok := s.Projects.Get(c.project); ok && p.Parent != "" {
+			if parent, err := s.kanbanProject(c.project); err == nil {
+				k := kanbanLoc(parent)
+				return llm.ChatLocation{Project: k.Project, IdeDir: k.IdeDir}
+			}
+		}
 		l := llm.ChatLocation{Project: c.project}
 		if rt.Local {
 			l.IdeDir = filepath.Join(rt.Root, ".ide")
@@ -233,7 +240,14 @@ func (s *Server) registerLLM() {
 		if err != nil {
 			return nil, err
 		}
-		return nil, s.LLM.RenameChat(loc(c, rt), a.ID, a.Title)
+		if err := s.LLM.RenameChat(loc(c, rt), a.ID, a.Title); err != nil {
+			return nil, err
+		}
+		// The tickets linking this conversation show its new title.
+		if root, err := s.kanbanProject(c.project); err == nil {
+			s.Kanban.RenameChat(kanbanLoc(root), a.ID, a.Title)
+		}
+		return nil, nil
 	}))
 	s.handle("llm.context", withProject(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
 		return s.LLM.LoadContext(proj(rt)), nil
