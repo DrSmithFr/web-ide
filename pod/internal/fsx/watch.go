@@ -52,10 +52,10 @@ func (l *localWatcher) loop() {
 	}
 }
 
-func (l *localWatcher) Add(dir string)         { _ = l.w.Add(dir) }
-func (l *localWatcher) Remove(dir string)      { _ = l.w.Remove(dir) }
-func (l *localWatcher) Events() <-chan string  { return l.events }
-func (l *localWatcher) Close() error           { return l.w.Close() }
+func (l *localWatcher) Add(dir string)        { _ = l.w.Add(dir) }
+func (l *localWatcher) Remove(dir string)     { _ = l.w.Remove(dir) }
+func (l *localWatcher) Events() <-chan string { return l.events }
+func (l *localWatcher) Close() error          { return l.w.Close() }
 
 // pollWatcher lists the watched directories at a fixed interval (SFTP has no notifications).
 type pollWatcher struct {

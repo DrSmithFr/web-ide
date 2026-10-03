@@ -1,6 +1,6 @@
 // Tool "Assistant IA": chat with a model of a llama.cpp or Ollama server, which can read and
 // change the project files and ask the language servers.
-import { createEffect, createSignal, For, on, onCleanup, onMount, Show, type JSX } from 'solid-js'
+import { createEffect, createResource, createSignal, For, on, onCleanup, onMount, Show, type JSX } from 'solid-js'
 import { Modal } from '../ui/overlay'
 import { Icon } from '../ui/icons'
 import { errorToast, toast } from '../ui/toast'
@@ -39,6 +39,7 @@ import { retry, send, stop } from './agent'
 import { prepare } from './attachments'
 import { onMarkdownClick, renderMarkdown, renderMermaid } from './markdown'
 import { absPath } from './tools'
+import { cancelRecording, canRecord, languages, modelById, probeGpu, speech, startRecording, stopRecording, transcribe, whisperModels } from './transcribe'
 
 function Markdown(props: { text: string; final: boolean }) {
   let el!: HTMLDivElement
@@ -246,6 +247,70 @@ function ApprovalCard() {
   )
 }
 
+function SpeechSettings() {
+  const [cached, { refetch }] = createResource(() => request<{ repo: string; size: number }[]>('models.list').catch(() => []))
+  onMount(probeGpu)
+  const set = (k: 'whisperModel' | 'whisperLang', v: string) => {
+    setPrefs(k, v)
+    savePrefs()
+  }
+  return (
+    <fieldset class="fieldset" data-testid="speech-settings">
+      <legend>Transcription locale (Whisper)</legend>
+      <p class="muted small">
+        Dictée au micro et fichiers audio transcrits dans le navigateur : le son ne quitte pas cette machine. Le modèle est téléchargé une fois par le pod (dossier <code>models</code> des données) puis fonctionne hors ligne.
+        {speech.device ? ` Moteur : ${speech.device === 'webgpu' ? 'WebGPU (carte graphique)' : 'WebAssembly (processeur)'}.` : ''}
+      </p>
+      <div class="field-row">
+        <label class="field grow">
+          <span>Modèle</span>
+          <select value={prefs.whisperModel} onChange={(e) => set('whisperModel', e.currentTarget.value)} name="whisperModel">
+            <For each={whisperModels}>
+              {(m) => (
+                <option value={m.id} disabled={m.webgpuOnly && !(speech.device === 'webgpu' && speech.f16)}>
+                  {m.label} · {speech.device === 'webgpu' ? m.size.webgpu : m.size.wasm || m.size.webgpu}
+                </option>
+              )}
+            </For>
+          </select>
+        </label>
+        <label class="field">
+          <span>Langue parlée</span>
+          <select value={prefs.whisperLang} onChange={(e) => set('whisperLang', e.currentTarget.value)} name="whisperLang">
+            <For each={languages}>{([id, label]) => <option value={id}>{label}</option>}</For>
+          </select>
+        </label>
+      </div>
+      <label class="check small">
+        <input type="checkbox" checked={prefs.audioToModel} onChange={(e) => (setPrefs('audioToModel', e.currentTarget.checked), savePrefs())} />
+        Envoyer les fichiers audio tels quels aux modèles qui écoutent l’audio (sinon : transcription locale)
+      </label>
+      <Show when={(cached() ?? []).length}>
+        <div class="small">
+          <For each={cached()}>
+            {(c) => (
+              <div class="ai-server-row">
+                <span class="grow mono">{c.repo}</span>
+                <span class="muted">{formatSize(c.size)}</span>
+                <button
+                  type="button"
+                  class="btn small danger"
+                  onClick={async () => {
+                    await request('models.delete', { repo: c.repo }).catch(errorToast)
+                    refetch()
+                  }}
+                >
+                  Supprimer
+                </button>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+    </fieldset>
+  )
+}
+
 function ServersModal(props: { onClose: () => void }) {
   const blank = { id: '', name: '', kind: 'auto' as ServerView['kind'], url: '', apiKey: '', context: 0, hasKey: false, clearKey: false }
   const [form, setForm] = createSignal({ ...blank })
@@ -280,7 +345,7 @@ function ServersModal(props: { onClose: () => void }) {
     }
   }
   return (
-    <Modal title="Serveurs de modèles" onClose={props.onClose} class="ai-servers">
+    <Modal title="Réglages de l’assistant" onClose={props.onClose} class="ai-servers">
       <div class="form">
         <For each={config.servers} fallback={<p class="muted">Aucun serveur. Ajoutez llama.cpp (llama-server) ou Ollama ci-dessous.</p>}>
           {(s) => (
@@ -350,6 +415,7 @@ function ServersModal(props: { onClose: () => void }) {
             </button>
           </div>
         </form>
+        <SpeechSettings />
       </div>
     </Modal>
   )
@@ -458,6 +524,54 @@ export function AssistantTool() {
     }
   }
 
+  /** Inserts dictated text at the caret of the message box. */
+  const insertText = (t: string) => {
+    if (!t) return
+    const el = textarea
+    const v = input()
+    const start = el?.selectionStart ?? v.length
+    const end = el?.selectionEnd ?? v.length
+    const before = v.slice(0, start)
+    const sep = before && !/\s$/.test(before) ? ' ' : ''
+    setInput(before + sep + t + v.slice(end))
+    queueMicrotask(() => {
+      el?.focus()
+      const pos = (before + sep + t).length
+      el?.setSelectionRange(pos, pos)
+    })
+  }
+
+  const dictate = async () => {
+    try {
+      if (speech.phase === 'recording') {
+        const blob = await stopRecording()
+        if (blob) insertText(await transcribe(blob))
+      } else if (speech.phase === 'idle') await startRecording()
+    } catch (e) {
+      toast(`Dictée : ${(e as Error).message}`, 'error')
+    }
+  }
+  onCleanup(cancelRecording)
+
+  const [now, setNow] = createSignal(Date.now())
+  const tick = setInterval(() => speech.phase === 'recording' && setNow(Date.now()), 250)
+  onCleanup(() => clearInterval(tick))
+  const speechLabel = () => {
+    switch (speech.phase) {
+      case 'recording': {
+        const s = Math.max(0, Math.floor((now() - speech.startedAt) / 1000))
+        return `Enregistrement ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')} · cliquer sur le micro pour terminer`
+      }
+      case 'loading':
+        return speech.total
+          ? `Téléchargement du modèle ${modelById(prefs.whisperModel).repo.split('/')[1]} : ${Math.round((speech.loaded / speech.total) * 100)} % (${formatSize(speech.loaded)} / ${formatSize(speech.total)})`
+          : 'Chargement du modèle de transcription…'
+      case 'transcribing':
+        return 'Transcription locale…'
+    }
+    return ''
+  }
+
   const submit = async () => {
     const text = input().trim()
     const atts = pending()
@@ -487,6 +601,9 @@ export function AssistantTool() {
     } else if (e.key === 'Escape' && live.busy) {
       e.preventDefault()
       stop()
+    } else if (e.key === ' ' && e.ctrlKey && !e.shiftKey && !e.altKey) {
+      e.preventDefault()
+      dictate()
     }
   }
 
@@ -514,7 +631,7 @@ export function AssistantTool() {
         <button class="icon-btn" classList={{ on: view() === 'history' }} title="Conversations du projet" onClick={() => setView(view() === 'history' ? 'chat' : 'history')}>
           <Icon name="history" size={14} />
         </button>
-        <button class="icon-btn" title="Serveurs de modèles" onClick={() => setServers(true)}>
+        <button class="icon-btn" title="Réglages (serveurs de modèles, transcription)" onClick={() => setServers(true)}>
           <Icon name="gear" size={14} />
         </button>
       </div>
@@ -590,7 +707,7 @@ export function AssistantTool() {
               <p>
                 Posez une question sur le projet. L’assistant peut lire et modifier les fichiers, chercher dans le code et interroger les serveurs de langage.
               </p>
-              <p class="small">Images, vidéos, audio et PDF : bouton trombone, glisser-déposer ou coller. Entrée envoie, Maj+Entrée va à la ligne.</p>
+              <p class="small">Images, vidéos, audio et PDF : bouton trombone, glisser-déposer ou coller. Dictée : bouton micro ou Ctrl+Espace (transcription dans le navigateur). Entrée envoie, Maj+Entrée va à la ligne.</p>
               <Show when={!config.servers.length}>
                 <button class="btn primary" onClick={() => setServers(true)}>
                   Ajouter un serveur de modèles
@@ -643,6 +760,12 @@ export function AssistantTool() {
               </Show>
             </div>
           </Show>
+          <Show when={speech.phase !== 'idle'}>
+            <div class="ai-speech small" classList={{ rec: speech.phase === 'recording' }} data-testid="ai-speech">
+              {speech.phase === 'recording' ? <span class="rec-dot" /> : <span class="spinner" />}
+              <span class="ellipsis">{speechLabel()}</span>
+            </div>
+          </Show>
           <textarea
             ref={textarea}
             rows="3"
@@ -655,6 +778,15 @@ export function AssistantTool() {
           <div class="ai-composer-bar">
             <button class="icon-btn" title="Joindre des fichiers (image, vidéo, audio, PDF, texte)" onClick={() => fileInput.click()}>
               📎
+            </button>
+            <button
+              class="icon-btn ai-mic"
+              classList={{ rec: speech.phase === 'recording' }}
+              title={canRecord() ? (speech.phase === 'recording' ? 'Terminer la dictée (Ctrl+Espace)' : 'Dicter : transcription locale, le son reste sur cette machine (Ctrl+Espace)') : 'Micro indisponible (https ou localhost requis)'}
+              disabled={!canRecord() || speech.phase === 'loading' || speech.phase === 'transcribing'}
+              onClick={dictate}
+            >
+              <Icon name="mic" size={15} />
             </button>
             <input
               ref={fileInput}

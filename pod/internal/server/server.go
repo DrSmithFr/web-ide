@@ -21,6 +21,7 @@ import (
 
 	"webide/pod/internal/config"
 	"webide/pod/internal/db"
+	"webide/pod/internal/hfcache"
 	"webide/pod/internal/llm"
 	"webide/pod/internal/projects"
 	"webide/pod/internal/runtime"
@@ -41,7 +42,9 @@ type Server struct {
 	Sessions *sessions.Sessions
 	Pool     *sshx.Pool
 	LLM      *llm.Manager
-	Static   fs.FS
+	// Models caches the speech recognition models downloaded for the page.
+	Models *hfcache.Cache
+	Static fs.FS
 	// AllowRemote accepts connections from other machines (the token is then the only protection).
 	AllowRemote bool
 
@@ -154,6 +157,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.URL.Path == "/ws" {
 		s.serveWS(w, r)
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, hfcache.Prefix) && s.Models != nil {
+		s.Models.ServeHTTP(w, r)
 		return
 	}
 	s.serveStatic(w, r)

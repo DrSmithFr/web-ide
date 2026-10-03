@@ -18,9 +18,9 @@ function chrome() {
 exports.WS = process.env.E2E_WS
 exports.OUT = process.env.E2E_OUT
 
-exports.start = async () => {
-  const browser = await chromium.launch({ executablePath: chrome(), headless: true })
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+exports.start = async (opts = {}) => {
+  const browser = await chromium.launch({ executablePath: chrome(), headless: true, args: opts.args ?? [] })
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, permissions: opts.permissions ?? [] })
   const page = await ctx.newPage()
   const errors = []
   page.on('console', (m) => m.type() === 'error' && errors.push('console: ' + m.text()))
@@ -63,9 +63,9 @@ exports.assert = (cond, msg) => {
 }
 
 /** Runs a test body, closes the browser, reports page errors as failures. */
-exports.run = (body) =>
+exports.run = (body, opts) =>
   (async () => {
-    const t = await exports.start()
+    const t = await exports.start(opts)
     try {
       await body(t)
     } finally {

@@ -70,6 +70,18 @@ func (s *Server) registerLLM() {
 		})
 	})
 
+	// Speech recognition models cached by the pod (downloaded by the page through it).
+	s.handle("models.list", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		return s.Models.List()
+	})
+	s.handle("models.delete", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		a, err := bind[struct{ Repo string }](p)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.Models.Delete(a.Repo)
+	})
+
 	project := func(c *Client) (string, error) {
 		if c.project == "" {
 			return "", errors.New("aucun projet ouvert")

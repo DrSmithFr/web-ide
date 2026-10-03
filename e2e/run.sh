@@ -6,9 +6,10 @@ set -u
 cd "$(dirname "$0")"
 ROOT=$(cd .. && pwd)
 SUITES=("$@")
-[ ${#SUITES[@]} -eq 0 ] && SUITES=(editing features restore+ git lsp llm perf)
+[ ${#SUITES[@]} -eq 0 ] && SUITES=(editing features restore+ git lsp llm speech perf)
 [ -d node_modules/playwright-core ] || npm install --no-audit --no-fund >/dev/null
 PORT=${E2E_PORT:-4519}
+MODELS=${E2E_MODELS:-$HOME/.cache/web-ide-e2e/models}
 TMP=$(mktemp -d)
 POD_PID=
 stop_pod() {
@@ -20,7 +21,9 @@ stop_pod() {
 trap 'stop_pod; rm -rf "$TMP"' EXIT
 start_pod() {
   rm -rf "$TMP/data" "$TMP/ws"
-  mkdir -p "$TMP/ws"
+  mkdir -p "$TMP/ws" "$TMP/data" "$MODELS"
+  # Speech models are kept between runs (downloaded once from Hugging Face).
+  ln -s "$MODELS" "$TMP/data/models"
   cp -r fixtures/. "$TMP/ws/"
   python3 - "$TMP/ws/demo/app.db" <<'PY'
 import sqlite3, sys

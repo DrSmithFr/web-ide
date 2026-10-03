@@ -1,7 +1,9 @@
 // Files joined to a message, converted to what the model accepts: images as data URLs,
-// video as such when the model reads it (else frames), audio, PDF as text (or pages as
-// images when it has no text), other files as text.
-import type { Attachment, Caps, Part } from './state'
+// video as such when the model reads it (else frames and the transcript of its sound),
+// audio transcribed in the page (or sent as such when allowed and accepted), PDF as text
+// (or pages as images when it has no text), other files as text.
+import { prefs, type Attachment, type Caps, type Part } from './state'
+import { transcribe } from './transcribe'
 
 export interface Prepared {
   parts: Part[]
@@ -104,10 +106,24 @@ async function video(file: File, caps: Caps): Promise<Prepared> {
     parts.push({ type: 'text', text: `t = ${f.t.toFixed(1)} s` })
     parts.push({ type: 'image_url', image_url: { url: f.url } })
   }
-  return { parts, attachment: { name: file.name, kind: 'video', size: file.size, thumb, note: `${frames.length} images` } }
+  let note = `${frames.length} images`
+  // Its sound, transcribed here (a video without sound track fails to decode: skipped).
+  const speech = await transcribe(file).catch(() => '')
+  if (speech) {
+    parts.push({ type: 'text', text: `Transcription de la bande son :\n${speech}` })
+    note += ' + transcription'
+  }
+  return { parts, attachment: { name: file.name, kind: 'video', size: file.size, thumb, note } }
 }
 
-async function audio(file: File): Promise<Prepared> {
+async function audio(file: File, caps: Caps): Promise<Prepared> {
+  if (!(prefs.audioToModel && caps.audio)) {
+    const text = await transcribe(file)
+    return {
+      parts: [{ type: 'text', text: `Transcription de l’audio « ${file.name} » :\n${text || '(aucune parole reconnue)'}` }],
+      attachment: { name: file.name, kind: 'audio', size: file.size, note: 'transcrit localement' },
+    }
+  }
   const url: string = await readAs(file, 'dataURL')
   const data = url.slice(url.indexOf(',') + 1)
   const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
@@ -186,8 +202,7 @@ export async function prepare(file: File, caps: Caps | undefined): Promise<Prepa
     return { ...p, warning: c.known && !c.vision && !c.video ? 'Ce modèle ne lit pas les images ni la vidéo' : undefined }
   }
   if (type.startsWith('audio/')) {
-    const p = await audio(file)
-    return { ...p, warning: !c.audio ? 'Ce modèle ne semble pas accepter l’audio' : undefined }
+    return audio(file, c)
   }
   if (type === 'application/pdf' || name.endsWith('.pdf')) return pdf(file, c)
   return textFile(file)

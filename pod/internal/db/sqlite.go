@@ -19,8 +19,8 @@ import (
 type querier func(ctx context.Context, q string) (*Result, error)
 
 type sqliteDriver struct {
-	db     *sql.DB         // local file
-	runner execx.Runner    // remote file
+	db     *sql.DB      // local file
+	runner execx.Runner // remote file
 	path   string
 }
 
@@ -308,8 +308,8 @@ func (s *cliSession) SetAutoCommit(on bool) error {
 	}
 	return nil
 }
-func (s *cliSession) AutoCommit() bool                 { return true }
-func (s *cliSession) InTx() bool                       { return false }
-func (s *cliSession) Commit(context.Context) error     { return nil }
-func (s *cliSession) Rollback(context.Context) error   { return nil }
-func (s *cliSession) Close() error                     { return nil }
+func (s *cliSession) AutoCommit() bool               { return true }
+func (s *cliSession) InTx() bool                     { return false }
+func (s *cliSession) Commit(context.Context) error   { return nil }
+func (s *cliSession) Rollback(context.Context) error { return nil }
+func (s *cliSession) Close() error                   { return nil }

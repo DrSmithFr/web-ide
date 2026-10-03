@@ -268,4 +268,3 @@ func (g *Repo) Init(ctx context.Context) error {
 	_, err := g.git(ctx, "init")
 	return err
 }
-

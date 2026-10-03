@@ -15,6 +15,7 @@ import (
 	"github.com/coder/websocket"
 
 	"webide/pod/internal/config"
+	"webide/pod/internal/hfcache"
 	"webide/pod/internal/llm"
 	"webide/pod/internal/projects"
 	"webide/pod/internal/sessions"
@@ -37,7 +38,7 @@ func newServer(t *testing.T) (*Server, *httptest.Server) {
 	reg, _ := projects.Load(st)
 	sets, _ := settings.Load(st)
 	s := &Server{Cfg: cfg, Store: st, Token: "secret-token-0123456789abcdef0123", Projects: reg, Settings: sets,
-		Sessions: sessions.New(st), LLM: llm.New(st), Pool: sshx.NewPool(sshx.NewHostKeys(st.Path("known_hosts"))),
+		Sessions: sessions.New(st), LLM: llm.New(st), Models: hfcache.New(st.Path("models", "hf")), Pool: sshx.NewPool(sshx.NewHostKeys(st.Path("known_hosts"))),
 		Static: fstest.MapFS{"index.html": {Data: []byte("<html>app</html>")}}}
 	s.Init()
 	ts := httptest.NewServer(s)

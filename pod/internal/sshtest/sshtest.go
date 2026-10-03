@@ -100,7 +100,6 @@ func serveSession(ch ssh.Channel, reqs <-chan *ssh.Request) {
 	}
 }
 
-
 // forward connects a direct-tcpip channel to its target (RFC 4254 7.2).
 func forward(nc ssh.NewChannel) {
 	var p struct {

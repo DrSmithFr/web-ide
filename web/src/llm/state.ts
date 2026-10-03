@@ -122,7 +122,16 @@ export interface Approval {
 }
 export const [approval, setApproval] = createSignal<Approval | null>(null)
 
-export const [prefs, setPrefs] = createStore({ autoApply: false, think: true, tools: true })
+export const [prefs, setPrefs] = createStore({
+  autoApply: false,
+  think: true,
+  tools: true,
+  /** Local speech recognition: Whisper model and language. */
+  whisperModel: 'base',
+  whisperLang: 'auto',
+  /** Send audio files as such to models that accept audio (else transcribed in the page). */
+  audioToModel: false,
+})
 try {
   const p = JSON.parse(localStorage.getItem('webide.llm.prefs') ?? 'null')
   if (p) setPrefs(p)

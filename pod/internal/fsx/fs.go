@@ -110,11 +110,11 @@ func (Local) Stat(p string) (Entry, error) {
 	return entryOf(p, fi), nil
 }
 
-func (Local) Mkdir(p string) error            { return os.MkdirAll(p, 0o755) }
-func (Local) Remove(p string) error           { return os.RemoveAll(p) }
-func (Local) Rename(from, to string) error    { return os.Rename(from, to) }
-func (Local) NewWatcher() (Watcher, error)    { return newLocalWatcher() }
-func (Local) Close() error                    { return nil }
+func (Local) Mkdir(p string) error         { return os.MkdirAll(p, 0o755) }
+func (Local) Remove(p string) error        { return os.RemoveAll(p) }
+func (Local) Rename(from, to string) error { return os.Rename(from, to) }
+func (Local) NewWatcher() (Watcher, error) { return newLocalWatcher() }
+func (Local) Close() error                 { return nil }
 func (Local) Abs(p string) (string, error) {
 	if strings.HasPrefix(p, "~") {
 		home, _ := os.UserHomeDir()

@@ -574,3 +574,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .md-mermaid-svg svg { max-width: 100%; height: auto; }
 .md-mermaid-src { display: none; }
 .md-mermaid-error { color: var(--warn); font-size: 0.9em; margin-bottom: 4px; }
+.ai-speech { display: flex; align-items: center; gap: 6px; color: var(--fg-muted); min-width: 0; }
+.ai-speech.rec { color: var(--danger); }
+.rec-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--danger); flex: none; animation: rec-pulse 1s ease-in-out infinite; }
+@keyframes rec-pulse { 50% { opacity: 0.35; } }
+.ai-mic.rec { color: var(--danger); background: color-mix(in srgb, var(--danger) 18%, transparent); }

@@ -4,7 +4,7 @@
 
 ## Où on en est
 
-Toute la spec est implémentée et testée, plus cinq ajouts : autocomplétion, renommage, formatage, panneau Git et assistant IA. Tout est commité sur `main`.
+Toute la spec est implémentée et testée, plus six ajouts : autocomplétion, renommage, formatage, panneau Git, assistant IA et transcription vocale locale. Tout est commité sur `main`.
 
 | Commit | Contenu |
 |---|---|
@@ -13,7 +13,8 @@ Toute la spec est implémentée et testée, plus cinq ajouts : autocomplétion, 
 | `191dde6` | Tests e2e, tunnel SSH testé, service systemd |
 | `e647ede` | Autocomplétion, renommage (Maj+F6), formatage (Ctrl+Alt+L) |
 | `e336135` | Panneau Git, onglet de diff, marqueurs de gouttière |
-| dernier commit | Assistant IA : chat llama.cpp / Ollama, outils fichiers + LSP |
+| `56159ea` | Assistant IA : chat llama.cpp / Ollama, outils fichiers + LSP |
+| dernier commit | Transcription vocale locale (Whisper dans le navigateur) |
 
 ## Commandes
 
@@ -23,7 +24,7 @@ make build          # front (Vite) puis binaire bin/web-ide-pod (front embarqué
 make dev            # pod -allow-remote sur 0.0.0.0:4433 + Vite 0.0.0.0:5173 (HMR)
 make test           # go vet + go test + tsc
 make e2e            # tests navigateur (toutes les suites, ~3-4 min)
-./e2e/run.sh git    # une suite : editing features restore+ git lsp llm perf
+./e2e/run.sh git    # une suite : editing features restore+ git lsp llm speech perf
 make service        # service systemd utilisateur (pas activé à ce jour)
 ```
 
@@ -33,7 +34,7 @@ Tests DB optionnels sur de vrais serveurs : `WEBIDE_TEST_PG=hôte:port:user:mdp 
 
 ## Architecture en bref
 
-- `pod/internal` : `server` (HTTP, pairing, RPC WebSocket, files séquentielles + barrière LSP), `runtime` (un par projet ouvert), `fsx` (local/SFTP), `sshx`, `execx` (processus locaux ou SSH), `console`, `lsp`, `db`, `git`, `search`, `llm` (serveurs de modèles, chat, conversations), `sshtest` (faux serveur SSH pour les tests).
+- `pod/internal` : `server` (HTTP, pairing, RPC WebSocket, files séquentielles + barrière LSP), `runtime` (un par projet ouvert), `fsx` (local/SFTP), `sshx`, `execx` (processus locaux ou SSH), `console`, `lsp`, `db`, `git`, `search`, `llm` (serveurs de modèles, chat, conversations), `hfcache` (modèles Hugging Face servis depuis un cache disque), `sshtest` (faux serveur SSH pour les tests).
 - `web/src` : `editor/` (Doc, EditorView en blocs, tokenizer + grammaires, merge, linediff, FindBar), `state/` (project, settings, git), `keys/` (presets JSON + bindings), `lsp/` (client, completion, edits, refactor), `ui/` (EditorArea, Completion, DiffView, overlays), `panels/`, `tools/`, `db/`, `console/`, `llm/` (assistant IA), `pages/`.
 - `e2e/` : `run.sh` lance un pod neuf par suite (données et workspace temporaires copiés de `e2e/fixtures`), Chromium du cache Playwright (`~/.cache/ms-playwright`) ou `CHROME=…`.
 
@@ -66,6 +67,15 @@ Panneau de droite « Assistant IA » (détachable) : serveurs llama.cpp ou Ollam
 - Testé : Go (faux serveurs SSE / NDJSON), suite e2e `llm` (faux serveur OpenAI scripté : outils, diff confirmé, Mermaid, historique, image, PDF, arrêt), et à la main avec le vrai llama-server (Qwen3.8-Flash-Next) : lecture, `lsp_references`, modification, relecture.
 - Pièges : DOMPurify supprime les attributs contenant `-->` (source Mermaid stockée encodée en URI) et le HTML des `foreignObject` (Mermaid en `htmlLabels: false`). La fenêtre qui enregistre un serveur n'est pas dans le broadcast `llm.config` : elle applique la réponse elle-même.
 - Limites : vidéo native et audio non essayés sur un vrai modèle ; Ollama testé seulement avec le faux serveur (aucun modèle installé ici). Le llama-server local n'a qu'un slot (`--parallel 1`) partagé avec d'autres clients : une requête peut attendre longtemps (« En attente du modèle… ») quand un autre client y envoie un long prompt.
+
+## Transcription vocale locale
+
+Dictée (bouton micro ou Ctrl+Espace dans la zone de message) et fichiers audio joints transcrits **dans le navigateur** par Whisper (transformers.js 4 dans un Web Worker, `web/src/llm/whisper.worker.ts` + `transcribe.ts`) : WebGPU si disponible, sinon WebAssembly. Le son ne quitte jamais la page ; un audio n'est envoyé tel quel au modèle de chat que si l'option est cochée et que le modèle écoute l'audio. Une vidéo que le modèle ne lit pas reçoit aussi la transcription de sa bande son.
+
+- Modèles (réglage dans la fenêtre « Réglages de l'assistant ») : tiny, base (défaut), small en 8 bits ; large-v3-turbo en q4f16 si WebGPU avec `shader-f16`. Langue : auto ou forcée.
+- Fichiers des modèles : la page les demande au pod (`/models/hf/<org>/<nom>/resolve/<rév>/<fichier>`), qui les télécharge une fois depuis huggingface.co dans `~/.web-ide/models/hf` puis les sert hors ligne ; liste et suppression par les RPC `models.list` / `models.delete`. Le runtime ONNX (`ort-wasm-simd-threaded.asyncify.wasm`, 27 Mo) est embarqué dans le binaire (importé par chemin : les `exports` d'onnxruntime-web ne listent pas ces fichiers), donc aucun CDN. Le binaire passe de 29 à 57 Mo.
+- Suite e2e `speech` : micro simulé de Chromium qui joue `e2e/audio/jfk.wav` (domaine public, 16 kHz mono), whisper-tiny en WebAssembly ; vérifie qu'aucune requête ne sort du pod et qu'il n'y a aucun envoi HTTP. Les modèles des tests sont gardés dans `~/.cache/web-ide-e2e/models` (`E2E_MODELS`) : le premier lancement a besoin du réseau (hors bac à sable), les suivants non.
+- Limites : micro seulement en contexte sécurisé (localhost ou https) : avec `-allow-remote` en http sur une IP du réseau, la dictée est désactivée (les fichiers audio restent transcrits). WebGPU et le modèle turbo non essayés (Chromium headless sans GPU) ; transcription du français non testée automatiquement.
 
 ## Prochaines étapes proposées
 

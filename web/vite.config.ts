@@ -11,11 +11,14 @@ export default defineConfig({
     target: 'es2022',
     chunkSizeWarningLimit: 1500,
   },
+  // The speech recognition worker loads the ONNX runtime with dynamic imports.
+  worker: { format: 'es' },
   server: {
     // In development the page comes from Vite and talks to the pod through this proxy.
     proxy: {
       '/ws': { target: pod.replace(/^http/, 'ws'), ws: true },
       '/auth': { target: pod },
+      '/models/': { target: pod },
       // Pairing links (/…?token=…) go to the pod, which sets the cookie and redirects back.
       '^/[^?]*\\?(?:.*&)?token=': { target: pod },
     },
