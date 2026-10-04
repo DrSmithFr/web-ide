@@ -272,6 +272,8 @@ export interface MenuItem {
   hint?: string
   danger?: boolean
   separator?: boolean
+  /** A setting switched by the item: a check box shows its state. */
+  checked?: boolean
 }
 
 const [menu, setMenu] = createSignal<{ x: number; y: number; items: MenuItem[] } | null>(null)
@@ -303,7 +305,7 @@ function MenuHost() {
     <Show when={menu()}>
       {(m) => (
         <Portal>
-          <div ref={el} class="ctx-menu" role="menu" style={{ left: `${Math.min(m().x, innerWidth - 240)}px`, top: `${Math.min(m().y, innerHeight - m().items.length * 28 - 12)}px` }}>
+          <div ref={el} class="ctx-menu" classList={{ 'has-checks': m().items.some((it) => it.checked !== undefined) }} role="menu" style={{ left: `${Math.min(m().x, innerWidth - 240)}px`, top: `${Math.min(m().y, innerHeight - m().items.length * 28 - 12)}px` }}>
             <For each={m().items}>
               {(it) =>
                 it.separator ? (
@@ -311,7 +313,8 @@ function MenuHost() {
                 ) : (
                   <button
                     class="ctx-item"
-                    role="menuitem"
+                    role={it.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
+                    aria-checked={it.checked}
                     classList={{ danger: it.danger }}
                     disabled={it.disabled}
                     onClick={() => {
@@ -319,7 +322,10 @@ function MenuHost() {
                       it.action?.()
                     }}
                   >
-                    <span>{it.label}</span>
+                    <span class="ctx-label">
+                      <span class="ctx-check" classList={{ on: it.checked, box: it.checked !== undefined }} />
+                      {it.label}
+                    </span>
                     <Show when={it.hint}>
                       <kbd>{it.hint}</kbd>
                     </Show>

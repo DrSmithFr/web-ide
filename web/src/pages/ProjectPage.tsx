@@ -179,11 +179,17 @@ const menus: [string, string[]][] = [
   ['menu|View', ['view.splitRight', 'view.splitDown', 'view.closeTab', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', 'view.visualFocus', 'console.new', 'palette.open']],
 ]
 
+// Menu entries switching a setting, shown with a check box.
+const menuChecks: Record<string, () => boolean> = {
+  'view.visualFocus': () => settings.visualFocus,
+}
+
 function openMenu(e: MouseEvent, ids: string[]) {
   const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
   const items: MenuItem[] = ids.map((id) => ({
     label: t(actions.find((a) => a.id === id)?.label ?? id),
     hint: shortcutOf(id),
+    checked: menuChecks[id]?.(),
     action: () => {
       focusActiveEditor()
       requestAnimationFrame(() => runAction(id) || toast(t('Action not available here'), 'info'))
