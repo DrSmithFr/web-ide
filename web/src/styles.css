@@ -469,6 +469,10 @@ button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 .home-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
 .home-bar h2 { margin: 0; font-size: 16px; }
 .home-sub { font-size: 13px; color: var(--fg-muted); margin: 28px 0 10px; }
+.home-tunnels { margin-top: 28px; }
+.home-tunnels .home-bar { margin-bottom: 6px; }
+.home-tunnels .home-sub { margin: 0; }
+.home-tunnel { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; margin-bottom: 6px; background: var(--bg-2); }
 .project-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .project-card { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-2); min-width: 0; }
 .project-card:hover { border-color: var(--accent); }

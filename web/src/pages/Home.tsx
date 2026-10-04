@@ -11,6 +11,7 @@ import { openSettings } from '../settings/SettingsModal'
 import { t } from '../i18n'
 import { iconOf, iconURL, type IconSpec, loadIcon, loadIcons, setFavicon } from '../ui/projectIcon'
 import { IconEditor } from '../ui/IconEditor'
+import { OpenTunnels } from '../docker/OpenTunnels'
 
 interface Project {
   id: string
@@ -135,6 +136,7 @@ export function Home() {
             )}
           </For>
         </div>
+        <OpenTunnels />
         <Show when={available().length}>
           <h3 class="home-sub">{t('In the workspace')}</h3>
           <div class="ws-dirs">

@@ -28,7 +28,7 @@ The front end is built by Vite and embedded in the pod binary (`pod/webdist`), s
 ## Data on disk
 
 - `~/.web-ide/` (pod data, `-data` flag): `config.json` (address, workspace), `token`, `projects.json`, `settings.json` (with history), `sessions/<project>.json` (layout, tabs, tool zones, explorer options, and per file the cursor, folds and chosen indentation), `secrets.json` (0600), `known_hosts` (trust on first use, in addition to `~/.ssh/known_hosts`), `sql-history/`, `llm.json` (model servers), `system-prompt.md` / `plan-prompt.md` / `briefing-prompt.md`, `models/hf/` (speech models), `chats/` and `kanban/` (bases of SSH projects), `icons/<project>.svg` (copy of the project icons for the home page: an SSH project is not reached to list it).
-- `<project>/.ide/`: `connections.json` (database connections, no secret), `folders.json` (folder marks: source, tests, excluded), `project.json` (`lsp`: command per language; `tests`: pattern per extension, e.g. `{".php": "{name}Spec.php"}`), `chats.db` (conversations), `kanban.db` (tickets), `worktrees/` (one git worktree per ticket in development), `icon.svg` and `icon.json` (project icon, drawn by the page: `ui/projectIcon.ts`, `ui/IconEditor.tsx`). `.ide/.gitignore` keeps the bases and the worktrees out of git.
+- `<project>/.ide/`: `connections.json` (database connections, no secret), `tunnels.json` (tunnels of an SSH project), `folders.json` (folder marks: source, tests, excluded), `project.json` (`lsp`: command per language; `tests`: pattern per extension, e.g. `{".php": "{name}Spec.php"}`), `chats.db` (conversations), `kanban.db` (tickets), `worktrees/` (one git worktree per ticket in development), `icon.svg` and `icon.json` (project icon, drawn by the page: `ui/projectIcon.ts`, `ui/IconEditor.tsx`). `.ide/.gitignore` keeps the bases and the worktrees out of git.
 
 ## Protocol
 
@@ -49,6 +49,7 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 | `lsp` | Language servers per project and language |
 | `db` | SQLite (modernc), PostgreSQL (pgx), Redis (go-redis), SSH tunnels |
 | `git` | Git panel operations |
+| `tunnels` | Local ports forwarded to the SSH host of a project (open while a window of the pod is connected, closed `TunnelIdle` after the last one) |
 | `docker` | Docker tool: status, Compose stack, containers, inspect, stats, log streams (the `docker` command, JSON formats only) |
 | `search` | Project-wide search (RE2) and file list |
 | `llm` | Model servers, chat completions as jobs that survive the page, conversations (SQLite), instructions and skills |
@@ -56,7 +57,7 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 | `hfcache` | Hugging Face files downloaded once and served offline (speech models) |
 | `i18n` | Translation of the messages sent to the page |
 | `projects`, `sessions`, `settings`, `store`, `config` | Registry, sessions, settings with history, data folder, configuration |
-| `sshtest` | In-memory SSH server for tests |
+| `sshtest` | SSH server for tests (in memory; `sshtestd` runs it for the browser tests) |
 
 ## Front end (`web/src`)
 
@@ -71,7 +72,7 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 | `tools/`, `db/`, `console/`, `conflict/`, `settings/`, `pages/` | Right-panel tools, database explorer, Console and Problems tools, conflict dialog, settings modal, pages |
 | `llm/` | AI assistant: state, agent loop, tools, prompt, Markdown, attachments, speech recognition |
 | `kanban/` | Board, ticket view, workflow actions, linked conversations |
-| `docker/` | Docker tool: lists and polling (`state.ts`), detail pane, logs with ANSI colors (`ansi.ts`) |
+| `docker/` | Docker tool: lists and polling (`state.ts`), detail pane, logs with ANSI colors (`ansi.ts`), disk usage, tunnels (and their list on the home page) |
 | `i18n/` | `t()` and the catalogs (English source strings, French translation) |
 
 ### AI assistant
@@ -100,10 +101,10 @@ make build          # front end (Vite) then pod binary bin/web-ide-pod (front en
 make dev            # pod with -allow-remote on 0.0.0.0:4433 + Vite on 0.0.0.0:5173 (hot reload)
 make test           # go vet + go test + tsc
 make e2e            # browser tests, all suites (a few minutes)
-./e2e/run.sh git    # one suite: editing editor features restore+ git projects explorer lsp llm agent chat plan kanban kanbanai kanbangit docker i18n speech perf
+./e2e/run.sh git    # one suite: editing editor features restore+ git projects explorer lsp llm agent chat plan kanban kanbanai kanbangit docker tunnels i18n speech perf
 ```
 
-- Each e2e suite gets a fresh pod with temporary data and a workspace copied from `e2e/fixtures`; a suite ending with `+` reuses the previous pod. The assistant suites use a scripted fake OpenAI-compatible server. Chromium comes from the Playwright cache or `CHROME=…`; the `speech` suite downloads `whisper-tiny` once (kept in `~/.cache/web-ide-e2e/models`); the `lsp` suite needs `gopls`; the `docker` suite needs Docker with Compose and the `postgres:17-alpine` image (skipped otherwise).
+- Each e2e suite gets a fresh pod with temporary data and a workspace copied from `e2e/fixtures`; a suite ending with `+` reuses the previous pod. The assistant suites use a scripted fake OpenAI-compatible server. Chromium comes from the Playwright cache or `CHROME=…`; the `speech` suite downloads `whisper-tiny` once (kept in `~/.cache/web-ide-e2e/models`); the `lsp` suite needs `gopls`; the `docker` suite needs Docker with Compose and the `postgres:17-alpine` image (skipped otherwise); the `tunnels` suite builds `sshtestd` (Go) and opens an SSH project on it.
 - Optional database driver tests against real servers: `WEBIDE_TEST_PG=host:port:user:pass WEBIDE_TEST_REDIS=host:port:pass go test ./internal/db/`.
 - Code navigation needs the language servers in the pod's `PATH` (`gopls` also needs `go`).
 
@@ -127,7 +128,7 @@ make e2e            # browser tests, all suites (a few minutes)
 
 - Code navigation was tested with gopls only; intelephense, phpactor, pyright and typescript-language-server were never tried.
 - Tested in Chromium only.
-- SSH was tested with the in-memory test server, not against a real host; ticket worktrees on SSH projects are untested.
+- SSH was tested with the in-memory test server, not against a real host; ticket worktrees on SSH projects are untested. The Docker tool of an SSH project is untested (only its tunnels, through the test server).
 - Global search uses RE2 syntax (no lookbehind).
 - SQLite on an SSH project goes through the `sqlite3` command on the host (autocommit only).
 - The microphone needs a secure context (localhost or HTTPS): with `-allow-remote` over plain HTTP, dictation is disabled (audio files are still transcribed).

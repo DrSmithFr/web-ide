@@ -61,6 +61,9 @@ type Runtime struct {
 
 	emit    Emit
 	watcher fsx.Watcher
+	// pool and target reach the SSH host again (tunnels).
+	pool   *sshx.Pool
+	target sshx.Target
 
 	mu      sync.Mutex
 	watched map[string]bool
@@ -73,9 +76,10 @@ type Runtime struct {
 
 func Open(p projects.Project, creds sshx.Creds, d Deps, emit Emit) (*Runtime, error) {
 	r := &Runtime{P: p, emit: emit, watched: map[string]bool{}, files: map[string]*fileState{},
-		buffers: map[string]string{}, timers: map[string]*time.Timer{}}
+		buffers: map[string]string{}, timers: map[string]*time.Timer{}, pool: d.Pool}
 	if p.Type == "ssh" {
 		t := sshx.Target{Host: p.SSH.Host, Port: p.SSH.Port, User: p.SSH.User, Auth: p.SSH.Auth, KeyPath: p.SSH.KeyPath}
+		r.target = t
 		client, err := d.Pool.Get(t, creds)
 		if err != nil {
 			return nil, err

@@ -1,7 +1,7 @@
 // Docker tool: Project tab (Compose stack of the project), Host tab (every container), and a
 // detail pane beside the list. Lists and statistics are refreshed while the tool is shown.
 import { For, onCleanup, onMount, Show, type JSX } from 'solid-js'
-import { mutate, session } from '../state/project'
+import { isLocal, mutate, session } from '../state/project'
 import { contextMenu, prompt, type MenuItem } from '../ui/overlay'
 import { Icon } from '../ui/icons'
 import { t } from '../i18n'
@@ -11,19 +11,23 @@ import {
 } from './state'
 import { Detail } from './Detail'
 import { DiskTab } from './DiskTab'
+import { TunnelsTab } from './TunnelsTab'
 import './docker.css'
 
-type Tab = 'project' | 'host' | 'disk'
+type Tab = 'project' | 'host' | 'disk' | 'tunnels'
 
 export function DockerTool() {
-  const tab = (): Tab => (session.docker.tab === 'host' || session.docker.tab === 'disk' ? session.docker.tab : 'project')
+  const tab = (): Tab => {
+    const id = session.docker.tab
+    return id === 'host' || id === 'disk' || (id === 'tunnels' && !isLocal()) ? id : 'project'
+  }
   const setTab = (id: Tab) => mutate((s) => (s.docker.tab = id))
 
   // One refresh at a time: docker stats takes about a second.
   let timer: number | undefined
   let alive = true
   const tick = async () => {
-    if (document.visibilityState === 'visible') {
+    if (document.visibilityState === 'visible' && (tab() === 'project' || tab() === 'host')) {
       if (!status()?.available) await refreshStatus()
       if (tab() === 'project') {
         await refreshStack()
@@ -62,21 +66,28 @@ export function DockerTool() {
         <div class="tab" role="tab" data-testid="docker-tab-disk" aria-selected={tab() === 'disk'} classList={{ active: tab() === 'disk' }} onClick={() => switchTab('disk')}>
           <span class="tab-title">{t('Disk')}</span>
         </div>
+        <Show when={!isLocal()}>
+          <div class="tab" role="tab" data-testid="docker-tab-tunnels" aria-selected={tab() === 'tunnels'} classList={{ active: tab() === 'tunnels' }} onClick={() => switchTab('tunnels')}>
+            <span class="tab-title">{t('Tunnels')}</span>
+          </div>
+        </Show>
       </div>
       <div class="tool-body">
-        <Show when={status()} fallback={<p class="muted pad">{t('Loading…')}</p>}>
-          <Show when={status()!.available} fallback={<Unavailable />}>
-            <Show when={tab() !== 'disk'} fallback={<DiskTab />}>
-              <div class="dk-main">
-                <div class="dk-list">
-                  <Show when={tab() === 'project'} fallback={<HostList />}>
-                    <ProjectList />
+        <Show when={tab() !== 'tunnels'} fallback={<TunnelsTab />}>
+          <Show when={status()} fallback={<p class="muted pad">{t('Loading…')}</p>}>
+            <Show when={status()!.available} fallback={<Unavailable />}>
+              <Show when={tab() !== 'disk'} fallback={<DiskTab />}>
+                <div class="dk-main">
+                  <div class="dk-list">
+                    <Show when={tab() === 'project'} fallback={<HostList />}>
+                      <ProjectList />
+                    </Show>
+                  </div>
+                  <Show when={selected()}>
+                    <Detail />
                   </Show>
                 </div>
-                <Show when={selected()}>
-                  <Detail />
-                </Show>
-              </div>
+              </Show>
             </Show>
           </Show>
         </Show>

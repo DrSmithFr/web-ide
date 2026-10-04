@@ -20,6 +20,17 @@ import (
 // Start runs a minimal SSH server for the tests: password "pw", sftp subsystem, exec and
 // port forwarding (direct-tcpip, used by the database tunnels). It returns the port.
 func Start(t testing.TB) int {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { l.Close() })
+	go Serve(l)
+	return l.Addr().(*net.TCPAddr).Port
+}
+
+// Serve accepts SSH connections on l until it is closed (also run by the browser tests: sshtestd).
+func Serve(l net.Listener) {
 	_, priv, _ := ed25519.GenerateKey(rand.Reader)
 	signer, _ := ssh.NewSignerFromKey(priv)
 	cfg := &ssh.ServerConfig{PasswordCallback: func(c ssh.ConnMetadata, pw []byte) (*ssh.Permissions, error) {
@@ -29,39 +40,31 @@ func Start(t testing.TB) int {
 		return nil, errors.New("bad password")
 	}}
 	cfg.AddHostKey(signer)
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { l.Close() })
-	go func() {
-		for {
-			conn, err := l.Accept()
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			return
+		}
+		go func() {
+			_, chans, reqs, err := ssh.NewServerConn(conn, cfg)
 			if err != nil {
 				return
 			}
-			go func() {
-				_, chans, reqs, err := ssh.NewServerConn(conn, cfg)
-				if err != nil {
-					return
+			go ssh.DiscardRequests(reqs)
+			for nc := range chans {
+				if nc.ChannelType() == "direct-tcpip" {
+					go forward(nc)
+					continue
 				}
-				go ssh.DiscardRequests(reqs)
-				for nc := range chans {
-					if nc.ChannelType() == "direct-tcpip" {
-						go forward(nc)
-						continue
-					}
-					if nc.ChannelType() != "session" {
-						nc.Reject(ssh.UnknownChannelType, "")
-						continue
-					}
-					ch, chReqs, _ := nc.Accept()
-					go serveSession(ch, chReqs)
+				if nc.ChannelType() != "session" {
+					nc.Reject(ssh.UnknownChannelType, "")
+					continue
 				}
-			}()
-		}
-	}()
-	return l.Addr().(*net.TCPAddr).Port
+				ch, chReqs, _ := nc.Accept()
+				go serveSession(ch, chReqs)
+			}
+		}()
+	}
 }
 
 func serveSession(ch ssh.Channel, reqs <-chan *ssh.Request) {

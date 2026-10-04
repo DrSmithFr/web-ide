@@ -255,11 +255,12 @@ Right-panel tool talking to a **llama.cpp** or **Ollama** server (address and op
 
 Tool of the bottom right zone (beside Problems) driving Docker and Docker Compose. Everything goes through the `docker` command run by the executor, so on an SSH project Docker is the one of the SSH host. Docker missing, its daemon unreachable or not allowed (user outside the `docker` group): the tool shows the error of `docker` and a hint, never `sudo`.
 
-Three tabs (the shown tab is saved in the session), and a detail pane beside the list of the first two:
+Four tabs (the shown tab is saved in the session), and a detail pane beside the list of the first two:
 
 - **Project**: the services of the Compose file at the project root (`compose.yaml`, `compose.yml`, `docker-compose.yaml`, `docker-compose.yml`, with the override files Compose loads itself). A first *Stack* row, then one row per container (a declared service without container shows as *not created*): state dot, name, image, published ports, CPU and memory. Profiles declared by the file are chosen in a menu (saved in the session). Without Compose file, the tab says so.
 - **Host**: every container of the host (`docker ps -a`), grouped by Compose project.
 - **Disk**: space used by images, containers, volumes and the build cache (total, active, reclaimable), with the list of images and volumes. Prune buttons, each confirmed: stopped containers, dangling images, unused images, anonymous volumes, all unused volumes (stronger confirmation: data is lost), build cache. An unused image or volume is removed from its context menu.
+- **Tunnels** (SSH projects only): see below.
 
 ### Actions
 
@@ -272,6 +273,13 @@ Three tabs (the shown tab is saved in the session), and a detail pane beside the
 
 - **Infos**: image, state and health, command, creation date, ports (`host:port → container port/protocol`), mounts (type, source → destination, read-only), networks (name, IP address, aliases), and the live values: CPU, memory (usage / limit), network and block I/O, processes. Instant values from `docker stats --no-stream`, refreshed every few seconds while shown.
 - **Logs**: the last 500 lines, then followed live (`docker logs -f`, `docker compose logs -f` for the Stack row, with a service filter). Text filter, timestamps shown or hidden, ANSI colors kept, scrolling up pauses the following, at most 10,000 lines kept.
+
+### Tunnels (SSH projects)
+
+- A tunnel makes a port reachable from the SSH host (`127.0.0.1:5432` as seen by the host, or another address) available on the machine of the pod, like `ssh -L`. Local port: the remote one by default.
+- Scope per tunnel: *this machine* (`127.0.0.1`, default) or *local network* (`0.0.0.0`, flagged with a warning: any machine of the network reaches the service, without authentication of the pod).
+- Added by hand (remote address and port, local port, scope); each can be stopped, started or deleted. Kept in `.ide/tunnels.json`; the enabled ones open when the project opens.
+- They stay open while a window of the pod is open (the home page included), whatever the project; 5 minutes after the last window leaves, they close. The home page lists the open tunnels with a button to close each and *Close all*.
 
 ## 15. Decisions
 

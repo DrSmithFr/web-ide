@@ -298,6 +298,7 @@ func (s *Server) registerProject() {
 		if err := s.gitSetup(ctx, rt); err != nil {
 			log.Printf("git setup of %s: %v", a.ID, err) // the Git panel still offers the init
 		}
+		s.openTunnels(rt)
 		s.mu.Lock()
 		prev := s.runtimes[c.project]
 		same := c.project == a.ID

@@ -51,3 +51,11 @@
 .dk-obj { display: flex; align-items: center; gap: 8px; height: 24px; padding: 0 10px; font-size: 12.5px; }
 .dk-obj:hover { background: var(--bg-hover); }
 .dk-obj .num { min-width: 70px; }
+.dk-tunnel { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px; font-size: 12.5px; }
+.dk-tunnel:hover { background: var(--bg-hover); }
+.dk-tunnel a { text-decoration: none; }
+.dk-tunnel-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 10px; margin: 8px 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.dk-tunnel-form label { display: flex; flex-direction: column; gap: 2px; }
+.dk-tunnel-form input.input { width: 120px; }
+.dk-tunnel-form label.dk-check { flex-direction: row; align-items: center; gap: 6px; height: 26px; }
+.dk-lan-warn { flex-basis: 100%; margin: 0; }

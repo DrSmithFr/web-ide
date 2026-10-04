@@ -32,6 +32,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/settings"
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
 	"github.com/DrSmithFr/web-ide/pod/internal/store"
+	"github.com/DrSmithFr/web-ide/pod/internal/tunnels"
 )
 
 const cookieName = "webide_token"
@@ -48,6 +49,8 @@ type Server struct {
 	Kanban   *kanban.Manager
 	// Models caches the speech recognition models downloaded for the page.
 	Models *hfcache.Cache
+	// Tunnels are the port forwardings of the SSH projects.
+	Tunnels *tunnels.Manager
 	Static fs.FS
 	// AllowRemote accepts connections from other machines (the token is then the only protection).
 	AllowRemote bool
@@ -58,6 +61,8 @@ type Server struct {
 	opening  map[string]*sync.Mutex
 	handlers map[string]handler
 	claims   map[string]*Client // conversation of the assistant → window running it
+	// tunnelIdle closes the tunnels once no window is left (windowsChanged).
+	tunnelIdle *time.Timer
 }
 
 type handler func(ctx context.Context, c *Client, p json.RawMessage) (any, error)
@@ -77,6 +82,7 @@ func (s *Server) Init() {
 	if s.Kanban == nil {
 		s.Kanban = kanban.NewManager(s.Store)
 	}
+	s.Tunnels = tunnels.New(func() { s.broadcast("tunnels.changed", nil, nil) })
 	s.registerGlobal()
 	s.registerProject()
 	s.registerDB()
@@ -88,6 +94,7 @@ func (s *Server) Init() {
 	s.registerDocker()
 	s.registerDockerLogs()
 	s.registerDockerDisk()
+	s.registerTunnels()
 	s.registerKanban()
 	s.registerKanbanGit()
 }
@@ -294,12 +301,14 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 	c := &Client{id: nextClientID(), srv: s, conn: conn, send: make(chan []byte, 1024), ctx: ctx}
 	s.mu.Lock()
 	s.clients[c] = struct{}{}
+	s.windowsChanged()
 	s.mu.Unlock()
 	go c.writeLoop(ctx)
 	c.push("hello", map[string]string{"clientId": c.id})
 	c.readLoop(ctx)
 	s.mu.Lock()
 	delete(s.clients, c)
+	s.windowsChanged()
 	var released []string
 	for id, owner := range s.claims {
 		if owner == c {
@@ -546,6 +555,7 @@ func (s *Server) Shutdown() {
 	rts := s.runtimes
 	s.runtimes = map[string]*runtime.Runtime{}
 	s.mu.Unlock()
+	s.Tunnels.CloseAll()
 	for _, rt := range rts {
 		rt.Close()
 	}
