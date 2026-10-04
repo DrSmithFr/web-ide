@@ -281,7 +281,7 @@ func (s *Server) registerLLM() {
 			}
 			return nil, rt.Delete(target)
 		}
-		_, err = rt.Write(target, a.Content, "")
+		_, err = rt.Write(target, a.Content, runtime.Format{}, "")
 		return nil, err
 	}))
 }

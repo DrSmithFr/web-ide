@@ -22,18 +22,18 @@ run(async ({ page }) => {
     }, [needle, delta])
     await page.waitForTimeout(100)
   }
-  const line = () => page.textContent('.cursor-info')
+  const line = () => page.textContent('[data-testid=status-cursor]')
   // gopls starts cold (module loading): Ctrl+B is retried until it answers.
   let jumped = false
   for (let i = 0; i < 20 && !jumped; i++) {
     await caretOn('.Hello())', 2)
     await page.keyboard.press('Control+b')
-    jumped = await page.waitForFunction(() => document.querySelector('.cursor-info')?.textContent.startsWith('8:'), null, { timeout: 1500 }).then(() => true, () => false)
+    jumped = await page.waitForFunction(() => document.querySelector('[data-testid=status-cursor]')?.textContent.startsWith('8:'), null, { timeout: 1500 }).then(() => true, () => false)
   }
   assert(jumped, 'Ctrl+B goes to the declaration (line 8): ' + (await line()))
   // On the declaration: the usages (a single one: jump to it).
   await page.keyboard.press('Control+b')
-  const usages = await page.waitForFunction(() => document.querySelector('.cursor-info')?.textContent.startsWith('13:') || document.querySelector('.pick'), null, { timeout: 8000 }).then(() => true, () => false)
+  const usages = await page.waitForFunction(() => document.querySelector('[data-testid=status-cursor]')?.textContent.startsWith('13:') || document.querySelector('.pick'), null, { timeout: 8000 }).then(() => true, () => false)
   assert(usages, 'Ctrl+B on the declaration shows the usages')
   await page.keyboard.press('Escape')
   await page.click('.rail-right .rail-btn[title="Structure"]')

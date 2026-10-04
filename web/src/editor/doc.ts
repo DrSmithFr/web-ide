@@ -2,6 +2,7 @@
 // base = content at load (or last merged remote), text = local buffer, conflict.remote = new
 // version pushed by the pod that could not be merged. One Doc per path, shared by every view.
 import { createSignal, type Accessor, type Setter } from 'solid-js'
+import { detectIndent, type Indent } from './indent'
 
 export interface Change {
   from: number
@@ -26,6 +27,12 @@ interface Step {
   selBefore: Selection
   selAfter: Selection
   time: number
+}
+
+/** Encoding and line separator of the file on disk (the text itself is UTF-8 with LF). */
+export interface FileFormat {
+  encoding: string
+  eol: 'lf' | 'crlf'
 }
 
 export interface Conflict {
@@ -58,8 +65,15 @@ export class Doc {
   /** Bumped on each change, for reactive consumers (status bar, outline). */
   readonly changed: Accessor<number>
   private setChanged: Setter<number>
+  readonly format: Accessor<FileFormat>
+  readonly setFormat: Setter<FileFormat>
+  /** Indentation of the file (detected, or chosen in the status bar); null: the settings. */
+  readonly indent: Accessor<Indent | null>
+  private setIndent: Setter<Indent | null>
+  /** The indentation was chosen by the user, not detected. */
+  indentChosen = false
 
-  constructor(public path: string, text: string, opts: { base?: string; rev?: number; readOnly?: boolean; lang: string }) {
+  constructor(public path: string, text: string, opts: { base?: string; rev?: number; readOnly?: boolean; lang: string; format?: FileFormat }) {
     this.text = text
     this.base = opts.base ?? text
     this.baseRev = opts.rev ?? 0
@@ -70,6 +84,8 @@ export class Doc {
     ;[this.conflict, this.setConflict] = createSignal<Conflict | null>(null)
     ;[this.deleted, this.setDeleted] = createSignal(false)
     ;[this.changed, this.setChanged] = createSignal(0)
+    ;[this.format, this.setFormat] = createSignal<FileFormat>(opts.format ?? { encoding: 'utf-8', eol: 'lf' })
+    ;[this.indent, this.setIndent] = createSignal<Indent | null>(detectIndent(text))
   }
 
   private reindex() {
@@ -216,6 +232,12 @@ export class Doc {
       }
       return p + delta
     }
+  }
+
+  /** Indentation chosen for this file (status bar, session restore). */
+  chooseIndent(i: Indent) {
+    this.indentChosen = true
+    this.setIndent(i)
   }
 
   /** Breaks the current undo group (cursor moved, focus lost...). */

@@ -56,7 +56,7 @@ func TestSSHProject(t *testing.T) {
 	if err != nil || !strings.Contains(f.Content, "remote") {
 		t.Fatalf("read = %+v %v", f, err)
 	}
-	if _, err := rt.Write(filepath.Join(dir, "sub", "new.txt"), "hello over sftp\n", ""); err != nil {
+	if _, err := rt.Write(filepath.Join(dir, "sub", "new.txt"), "hello over sftp\n", Format{}, ""); err != nil {
 		t.Fatal(err)
 	}
 	if data, _ := os.ReadFile(filepath.Join(dir, "sub", "new.txt")); string(data) != "hello over sftp\n" {

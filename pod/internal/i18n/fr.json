@@ -134,5 +134,7 @@
   "gh pr create gave no address: %s": "gh pr create n'a pas donné d'adresse : %s",
   "a pull request needs a remote “origin” and the gh command": "une pull request demande un remote « origin » et la commande gh",
   "unknown folder mark: %s": "marque de dossier inconnue : %s",
-  "only a folder of the project can be marked": "seul un dossier du projet peut être marqué"
+  "only a folder of the project can be marked": "seul un dossier du projet peut être marqué",
+  "unknown encoding: %s": "encodage inconnu : %s",
+  "the text has characters that %s cannot encode": "le texte contient des caractères que %s ne peut pas encoder"
 }

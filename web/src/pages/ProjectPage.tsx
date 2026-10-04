@@ -28,7 +28,6 @@ import { openSettings } from '../settings/SettingsModal'
 import { actions, registerAction, runAction, shortcutOf } from '../keys/bindings'
 import { contextMenu, pick, prompt, fuzzy, type MenuItem } from '../ui/overlay'
 import { Icon } from '../ui/icons'
-import { cursorInfo } from '../ui/status'
 import { refreshConnections } from '../db/api'
 import * as lspc from '../lsp/client'
 import { lspLanguage } from '../editor/languages'
@@ -232,14 +231,6 @@ function MenuBar() {
         <button class="badge warn" onClick={() => mutate((s) => (s.right.panel = 'conflicts'))}>
           {tn(conflicts(), '{n} conflict', '{n} conflicts')}
         </button>
-      </Show>
-      <Show when={cursorInfo()}>
-        {(c) => (
-          <span class="cursor-info">
-            {c().line}:{c().col}
-            {c().sel ? ` (${tn(c().sel, '{n} char', '{n} chars')})` : ''} · {c().lang}
-          </span>
-        )}
       </Show>
       <PodStatus />
       <button class="icon-btn" title={`${t('Settings')} (${shortcutOf('settings.open')})`} onClick={() => openSettings()}>

@@ -4,6 +4,8 @@ const { run, openProject, open, assert, text, WS, OUT } = require('../common.cjs
 
 run(async ({ page }) => {
   fs.writeFileSync(WS + '/demo/multi.txt', 'foo bar foo\nfoo baz\n    foo qux\n')
+  fs.writeFileSync(WS + '/demo/win.txt', 'one\r\ntwo\r\n')
+  fs.writeFileSync(WS + '/demo/latin.txt', Buffer.from('caf\xe9\n', 'latin1'))
   fs.writeFileSync(WS + '/demo/conf.yaml', 'server:\n  host: x\n  ports:\n    - 80\n    - 443\nname: demo\n')
   await openProject(page)
   await open(page, 'main.go')
@@ -237,4 +239,46 @@ run(async ({ page }) => {
   await page.click('.pane.active .ed-content')
   await page.keyboard.press('Control+Shift+Minus')
   assert((await holders()) === 1 && (await nums()).trim().split('\n').join(',') === '1,6,7', 'YAML folded by indentation (' + (await nums()).trim().split('\n').join(',') + ')')
+
+  // Status bar: caret, line separator, encoding, indentation, language.
+  const item = (id) => page.textContent(`[data-testid=status-${id}]`)
+  assert(!(await page.$('.menubar [data-testid=status-cursor]')) && /^\d+:\d+$/.test(await item('cursor')), 'caret position in the status bar ' + (await item('cursor')))
+  assert((await page.textContent('[data-testid=status-bar]')).includes('YAML') && (await item('indent')) === '2 spaces', 'YAML indented by 2 spaces')
+  await open(page, 'main.go')
+  assert((await item('eol')) === 'LF' && (await item('encoding')) === 'UTF-8' && (await item('indent')) === 'Tab', 'Go file: LF, UTF-8, tabs')
+  const menuItem = async (id, label) => {
+    await page.click(`[data-testid=status-${id}]`)
+    await page.click(`.ctx-menu .ctx-item:has-text("${label}")`)
+  }
+  await menuItem('indent', '2 spaces')
+  await page.click('.pane.active .ed-content')
+  await page.keyboard.press('Control+End')
+  await page.keyboard.press('ArrowUp')
+  await page.keyboard.press('Home')
+  await page.keyboard.press('Tab')
+  assert((await text(page)).includes('\n  }\n'), 'Tab inserts the indentation chosen for the file')
+  await page.keyboard.press('Control+z')
+  await menuItem('indent', 'Tab')
+
+  // CRLF: normalized in the editor, written back with CRLF; LF conversion.
+  await open(page, 'win.txt')
+  assert((await item('eol')) === 'CRLF' && (await text(page)) === 'one\ntwo\n', 'CRLF file shown with LF in the editor')
+  await page.keyboard.press('Control+End')
+  await page.keyboard.type('three')
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('Control+s')
+  await page.waitForTimeout(400)
+  assert(fs.readFileSync(WS + '/demo/win.txt', 'utf8') === 'one\r\ntwo\r\nthree\r\n', 'saved with CRLF')
+  await menuItem('eol', 'LF')
+  await page.waitForFunction(() => document.querySelector('[data-testid=status-eol]').textContent === 'LF')
+  await page.waitForTimeout(300)
+  assert(fs.readFileSync(WS + '/demo/win.txt', 'utf8') === 'one\ntwo\nthree\n', 'converted to LF')
+
+  // Latin-1: opened as text, converted to UTF-8.
+  await open(page, 'latin.txt')
+  assert((await item('encoding')) === 'Windows-1252' && (await text(page)) === 'café\n', 'Windows-1252 file opened as text')
+  await page.screenshot({ path: OUT + '/editor-status.png' })
+  await menuItem('encoding', 'UTF-8 BOM')
+  await page.waitForTimeout(400)
+  assert(fs.readFileSync(WS + '/demo/latin.txt').equals(Buffer.from('\ufeffcafé\n', 'utf8')), 'converted to UTF-8 with a BOM')
 })

@@ -59,9 +59,10 @@ To treat local and SSH projects the same way, the pod exposes one interface (`li
 +----+-----------------------+---------------+-----+
 ```
 
-- **Menu bar**, from left to right: home button; project icon (click: icon editor), project title and the **worktree selector** (current branch, or the ticket of a worktree window); the File, Edit, Navigate… menus; then on the right conflicts, cursor position, pod status (connection state, download and upload rate in bytes/s over a sliding window of about one second) and settings.
+- **Menu bar**, from left to right: home button; project icon (click: icon editor), project title and the **worktree selector** (current branch, or the ticket of a worktree window); the File, Edit, Navigate… menus; then on the right conflicts, pod status (connection state, download and upload rate in bytes/s over a sliding window of about one second) and settings.
 - **Worktree selector**: lists the main folder, the worktrees of the tickets (with their status) and the other worktrees of the repository; choosing one opens its window, or brings back the one already open. *Open a branch…* checks an existing or new branch out in its own worktree (`.ide/worktrees/b-<branch>`) opened in its own window: the main folder is never switched, so its uncommitted changes never get in the way. The setup command of the kanban (`npm install`…) runs in a console of the new worktree window. *Remove a worktree…* deletes one of these worktrees and its project (confirmation when it has uncommitted changes); the branch is kept, and a window open on it goes back to the main folder. Ticket worktrees go with their ticket.
 - **Editor window**: explorer panel on the left, central editor with a tab bar, tools panel on the right.
+- **Status bar** under the editor area (one for all the split panes, about the active one): caret position and selected characters, then for a file its line separator (`LF`/`CRLF`), encoding and indentation, and the language. A click on the line separator or the encoding converts the file (written at once); a click on the indentation chooses tabs or 2, 4 or 8 spaces for this file (kept in the session).
 - **Icon rails** on both sides, the full height of the window, each with a top and a bottom group: four tool zones (top left, bottom left, bottom right, top right). Each icon toggles its tool; clicking the active icon hides it; each zone shows one tool at a time.
   - Top left: file explorer, global search, Git, kanban.
   - Top right: AI assistant, database explorer, structure, conflicts, infos. Infos stacks three sections: properties (project, target, pod, active tab), connections (local SSH keys, hosts of `~/.ssh/config`) and extensions (language servers).
@@ -110,6 +111,9 @@ To treat local and SSH projects the same way, the pod exposes one interface (`li
 - Typing, `Backspace`/`Delete` (also by word or line), `Enter` (auto-indent), `Tab`, the arrows (`Ctrl` by word, `Alt` by sub-word), `Home`/`End` and their `Shift` variants act on every caret; each such edit is one undo step. Copy joins the selections one per line (the lines of the carets when nothing is selected); a paste with as many lines as there are carets gives one line to each.
 
 ### 6.4 Display
+
+- **File format**: the pod decodes UTF-8, UTF-8 with BOM, UTF-16 (with BOM) and, for other non-binary data, Windows-1252; CRLF line ends become LF in the editor. Files are written back in their encoding and with their line separator (the most frequent one when they were mixed). A character the encoding cannot hold makes the save fail with a message.
+- **Indentation** of each file is detected (tabs, or the most frequent increase of spaces): `Tab`, auto-indent and the guides follow it; files without indentation follow the settings.
 
 - The text starts right against the gutter, without a left margin.
 - **Indentation guides** (setting, on by default): a thin vertical line at each indentation level, the step being the most frequent indentation increase of the file (else the tab size); blank lines take the smaller indentation of the lines around them. The guide of the block holding the caret (or opened by the caret line) is brighter.

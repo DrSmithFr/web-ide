@@ -1163,5 +1163,10 @@
   "Fold the block": "Replier le bloc",
   "Unfold the block": "Déplier le bloc",
   "Fold all the blocks": "Replier tous les blocs",
-  "Unfold all the blocks": "Déplier tous les blocs"
+  "Unfold all the blocks": "Déplier tous les blocs",
+  "Line separator": "Séparateur de ligne",
+  "File encoding": "Encodage du fichier",
+  "Tab": "Tabulation",
+  "{n} space": "{n} espace",
+  "{n} spaces": "{n} espaces"
 }

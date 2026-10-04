@@ -115,7 +115,6 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .mb-ticket { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
 .mb-branch.wt { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); background: color-mix(in srgb, var(--warn) 10%, transparent); color: var(--fg); max-width: 420px; }
 .mb-branch.wt:hover { border-color: var(--warn); }
-.cursor-info { color: var(--fg-muted); font-family: var(--font-code); font-size: 12px; margin-right: 10px; }
 .pod-status { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--fg-muted); font-variant-numeric: tabular-nums; }
 .pod-status .rate { min-width: 72px; }
 .workbench { display: flex; flex: 1; min-height: 0; }
@@ -194,7 +193,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .search-text mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
 
 /* ---------- editor area ---------- */
-.editor-area { flex: 1; display: flex; min-height: 0; min-width: 0; }
+.editor-area { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.editor-panes { flex: 1; display: flex; min-height: 0; min-width: 0; }
+.status-bar { display: flex; align-items: center; gap: 2px; height: 24px; padding: 0 6px; flex: none; background: var(--bg-2); border-top: 1px solid var(--line); font-size: 12px; color: var(--fg-muted); overflow: hidden; white-space: nowrap; }
+.sb-item { padding: 2px 7px; border-radius: 4px; font-variant-numeric: tabular-nums; color: inherit; background: none; border: 0; font: inherit; }
+button.sb-item { cursor: pointer; }
+button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 .split { display: flex; flex: 1; min-width: 0; min-height: 0; }
 .split-row { flex-direction: row; }
 .split-col { flex-direction: column; }
@@ -514,7 +518,6 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 
 @media (max-width: 720px) {
   .menus { display: none; }
-  .cursor-info { display: none; }
   .side { position: absolute; top: 0; bottom: 0; z-index: 30; box-shadow: 0 0 24px rgb(0 0 0 / 0.4); }
   .side-left { left: 0; }
   .side-right { right: 0; }

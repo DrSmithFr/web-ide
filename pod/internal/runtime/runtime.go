@@ -4,14 +4,12 @@
 package runtime
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"path"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/console"
 	"github.com/DrSmithFr/web-ide/pod/internal/db"
@@ -193,10 +191,7 @@ type FileContent struct {
 	ReadOnly bool    `json:"readOnly"`
 	Binary   bool    `json:"binary"`
 	Size     int64   `json:"size"`
-}
-
-func isText(data []byte) bool {
-	return bytes.IndexByte(data[:min(len(data), 8000)], 0) < 0 && utf8.Valid(data)
+	Format
 }
 
 // Read reads any path the pod can reach. Files outside the project are read-only.
@@ -217,11 +212,12 @@ func (r *Runtime) Read(p string) (*FileContent, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !isText(data) {
+	text, f, ok := DecodeText(data)
+	if !ok {
 		fc.Binary = true
 		return fc, nil
 	}
-	fc.Content = string(data)
+	fc.Content, fc.Format = text, f
 	h := sha256.Sum256(data)
 	r.mu.Lock()
 	fs, ok := r.files[p]
@@ -243,11 +239,14 @@ func (r *Runtime) Read(p string) (*FileContent, error) {
 
 // Write saves a file. The other windows receive the new version as a remote change
 // (a clean merge since their buffers are already in sync).
-func (r *Runtime) Write(p, content, client string) (int, error) {
+func (r *Runtime) Write(p, content string, f Format, client string) (int, error) {
 	if !fsx.Within(r.Root, p) {
 		return 0, i18n.New("file outside the project: read-only")
 	}
-	data := []byte(content)
+	data, err := EncodeText(content, f)
+	if err != nil {
+		return 0, err
+	}
 	if err := r.FS.Write(p, data); err != nil {
 		return 0, err
 	}
@@ -264,7 +263,7 @@ func (r *Runtime) Write(p, content, client string) (int, error) {
 	delete(r.buffers, p)
 	r.mu.Unlock()
 	r.watchDir(path.Dir(p))
-	r.emit("fs.changed", map[string]any{"path": p, "content": content, "rev": rev, "saved": true}, client)
+	r.emit("fs.changed", map[string]any{"path": p, "content": content, "rev": rev, "saved": true, "encoding": f.Encoding, "eol": f.EOL}, client)
 	return rev, nil
 }
 
@@ -339,7 +338,11 @@ func (r *Runtime) changed(p string) {
 		}
 		return
 	}
-	if len(data) > maxFile || !isText(data) {
+	if len(data) > maxFile {
+		return
+	}
+	text, f, ok := DecodeText(data)
+	if !ok {
 		return
 	}
 	h := sha256.Sum256(data)
@@ -352,5 +355,5 @@ func (r *Runtime) changed(p string) {
 	fs.rev++
 	rev := fs.rev
 	r.mu.Unlock()
-	r.emit("fs.changed", map[string]any{"path": p, "content": string(data), "rev": rev}, "")
+	r.emit("fs.changed", map[string]any{"path": p, "content": text, "rev": rev, "encoding": f.Encoding, "eol": f.EOL}, "")
 }

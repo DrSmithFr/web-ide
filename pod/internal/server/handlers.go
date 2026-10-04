@@ -365,11 +365,14 @@ func (s *Server) registerProject() {
 		return rt.FS.Stat(path)
 	}))
 	s.handle("fs.write", withPath(func(ctx context.Context, c *Client, rt *runtime.Runtime, path string, p json.RawMessage) (any, error) {
-		a, err := bind[struct{ Content string }](p)
+		a, err := bind[struct {
+			Content string
+			runtime.Format
+		}](p)
 		if err != nil {
 			return nil, err
 		}
-		rev, err := rt.Write(path, a.Content, c.id)
+		rev, err := rt.Write(path, a.Content, a.Format, c.id)
 		return map[string]int{"rev": rev}, err
 	}))
 	s.handle("fs.create", withPath(func(ctx context.Context, c *Client, rt *runtime.Runtime, path string, p json.RawMessage) (any, error) {

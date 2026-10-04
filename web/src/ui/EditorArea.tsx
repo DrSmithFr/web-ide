@@ -19,6 +19,7 @@ import { toast } from './toast'
 import { SqlConsole } from '../db/SqlConsole'
 import { TableView } from '../db/TableView'
 import { setCursorInfo } from './status'
+import { StatusBar } from './StatusBar'
 import { useCompletion } from './Completion'
 import { DiffView } from './DiffView'
 import { Board } from '../kanban/Board'
@@ -34,7 +35,10 @@ import { focusPart } from '../state/focus'
 export function EditorArea(props: { detached?: boolean }) {
   return (
     <div class="editor-area">
-      <Node node={session.layout} detached={props.detached} />
+      <div class="editor-panes">
+        <Node node={session.layout} detached={props.detached} />
+      </div>
+      <StatusBar />
     </div>
   )
 }
@@ -277,14 +281,22 @@ export interface UseViewOptions {
   onFolds?: (v: EditorView) => void
 }
 
+/** Tab size and kind of indentation: those of the file when known, else the settings. */
+function indentOptions(d: Doc) {
+  const i = d.indent()
+  return {
+    tabSize: i && !i.tabs ? i.size : settings.editor.tabSize,
+    insertSpaces: i ? !i.tabs : settings.editor.insertSpaces,
+  }
+}
+
 export function useEditorView(doc: () => Doc | null, host: () => HTMLElement | undefined, opts: UseViewOptions = {}) {
   const [view, setView] = createSignal<EditorView | null>(null)
   createEffect(
     on([doc, host], ([d, h]) => {
       if (!d || !h) return
       const v = new EditorView(d, {
-        tabSize: untrack(() => settings.editor.tabSize),
-        insertSpaces: untrack(() => settings.editor.insertSpaces),
+        ...untrack(() => indentOptions(d)),
         highlightLine: untrack(() => settings.editor.highlightLine),
         indentGuides: untrack(() => settings.editor.indentGuides),
         showWhitespace: untrack(() => settings.editor.showWhitespace),
@@ -310,8 +322,7 @@ export function useEditorView(doc: () => Doc | null, host: () => HTMLElement | u
     const v = view()
     if (!v) return
     v.setOptions({
-      tabSize: settings.editor.tabSize,
-      insertSpaces: settings.editor.insertSpaces,
+      ...indentOptions(v.doc),
       highlightLine: settings.editor.highlightLine,
       indentGuides: settings.editor.indentGuides,
       showWhitespace: settings.editor.showWhitespace,
@@ -363,17 +374,30 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
     onSelection: (v) => {
       completion?.onSelection()
       const sel = v.getSelection()
-      saveCursor(path, { anchor: sel.anchor, head: sel.head, scroll: v.scroller.scrollTop, folds: v.foldedLines() })
+      save(v)
       const { line, col } = v.doc.pos(sel.head)
       setCursorInfo({ line: line + 1, col: col + 1, sel: Math.abs(sel.head - sel.anchor), lang: languageName(v.doc.lang) })
     },
-    onFolds: (v) => {
-      const sel = v.getSelection()
-      saveCursor(path, { anchor: sel.anchor, head: sel.head, scroll: v.scroller.scrollTop, folds: v.foldedLines() })
-    },
+    onFolds: (v) => save(v),
     onCtrlClick: (v, off) => lspc.gotoDeclaration(v.doc, off),
     onFocus: () => setActivePane(props.paneId),
   })
+  // Cursor, folds and chosen indentation of the file, kept in the session.
+  function save(v: EditorView) {
+    const sel = v.getSelection()
+    const indent = v.doc.indentChosen ? (v.doc.indent() ?? undefined) : undefined
+    saveCursor(path, { anchor: sel.anchor, head: sel.head, scroll: v.scroller.scrollTop, folds: v.foldedLines(), indent })
+  }
+  createEffect(
+    on(
+      () => doc()?.indent(),
+      () => {
+        const v = view()
+        if (v && v.doc.indentChosen) save(v)
+      },
+      { defer: true },
+    ),
+  )
   const comp = useCompletion(view, doc)
   completion = comp
 
@@ -383,6 +407,7 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
       if (!v) return
       const c = untrack(() => session.cursors[path])
       if (c) {
+        if (c.indent && !v.doc.indentChosen) v.doc.chooseIndent(c.indent)
         if (c.folds?.length) v.restoreFolds(c.folds)
         v.scroller.scrollTop = c.scroll
         if (untrack(isActive)) v.setSelection(c.anchor, c.head, false)
@@ -438,7 +463,7 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
     const untracked = gitStatus()?.files.some((f) => f.path === path && f.untracked)
     markTimer = window.setTimeout(() => {
       if (!h.exists) v.setLineMarks(untracked ? new Map(Array.from({ length: d.lineCount }, (_, i) => [i, 'add' as const])) : new Map())
-      else v.setLineMarks(lineMarks(h.content, d.text))
+      else v.setLineMarks(lineMarks(h.content.replace(/\r\n/g, '\n'), d.text))
     }, 250)
   })
   onCleanup(() => clearTimeout(markTimer))

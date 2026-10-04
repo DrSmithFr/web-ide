@@ -1,6 +1,7 @@
 // State of the open project: session (tabs, split tree, panels, cursors) shared through the
 // pod with every window of the project, the open documents, and the reactions to the
 // file events pushed by the pod (remote versions, three-way merge, conflicts).
+import type { Indent } from '../editor/indent'
 import { batch, createSignal } from 'solid-js'
 import { createStore, produce, reconcile, unwrap } from 'solid-js/store'
 import { notify, on, request } from '../pod/rpc'
@@ -38,6 +39,8 @@ export interface Cursor {
   scroll: number
   /** Header lines of the folded ranges. */
   folds?: number[]
+  /** Indentation chosen for the file in the status bar. */
+  indent?: Indent
 }
 
 export interface SessionData {
@@ -416,7 +419,13 @@ export function loadDoc(path: string): Promise<Doc | null> {
         entry.binary = true
         return null
       }
-      const doc = new Doc(path, f.buffer ?? f.content, { base: f.content, rev: f.rev, readOnly: f.readOnly, lang: detectLanguage(path, f.content) })
+      const doc = new Doc(path, f.buffer ?? f.content, {
+        base: f.content,
+        rev: f.rev,
+        readOnly: f.readOnly,
+        lang: detectLanguage(path, f.content),
+        format: { encoding: f.encoding ?? 'utf-8', eol: f.eol ?? 'lf' },
+      })
       entry.doc = doc
       entry.dispose = attachDoc(doc)
       setDocsVersion((v) => v + 1)
@@ -500,7 +509,7 @@ export async function saveDoc(doc: Doc): Promise<boolean> {
   }
   const text = doc.text
   try {
-    const r = await request('fs.write', { path: doc.path, content: text })
+    const r = await request('fs.write', { path: doc.path, content: text, ...doc.format() })
     doc.setBase(text, r.rev)
     doc.setDeleted(false)
     const lang = lspLanguage(doc.path)
@@ -571,9 +580,11 @@ export function conflictedDocs(): Doc[] {
   return openDocs().filter((d) => d.conflict())
 }
 
-on('fs.changed', (e: { path: string; content: string; rev: number; saved?: boolean }) => {
+on('fs.changed', (e: { path: string; content: string; rev: number; saved?: boolean; encoding?: string; eol?: 'lf' | 'crlf' }) => {
   const d = getDoc(e.path)
-  if (d) applyRemote(d, e.content, e.rev, e.saved)
+  if (!d) return
+  if (e.encoding && e.eol) d.setFormat({ encoding: e.encoding, eol: e.eol })
+  applyRemote(d, e.content, e.rev, e.saved)
 })
 on('fs.deleted', (e: { path: string }) => {
   const d = getDoc(e.path)

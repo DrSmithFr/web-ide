@@ -201,6 +201,25 @@ func TestProjectFilesAndRemoteChanges(t *testing.T) {
 		t.Fatalf("external change = %+v", ev)
 	}
 
+	// A Latin-1 file with CRLF line ends: read as UTF-8 with LF, written back in its format.
+	latin := filepath.Join(dir, "latin.txt")
+	os.WriteFile(latin, []byte("caf\xe9\r\nfin\r\n"), 0o644)
+	l := a.call("fs.read", map[string]any{"path": latin})["result"].(map[string]any)
+	if l["content"] != "café\nfin\n" || l["encoding"] != "windows-1252" || l["eol"] != "crlf" || l["binary"] == true {
+		t.Fatalf("latin read = %+v", l)
+	}
+	a.call("fs.write", map[string]any{"path": latin, "content": "café\nfin!\n", "encoding": "windows-1252", "eol": "crlf"})
+	if data, _ := os.ReadFile(latin); string(data) != "caf\xe9\r\nfin!\r\n" {
+		t.Fatalf("latin written = %q", data)
+	}
+	a.call("fs.write", map[string]any{"path": latin, "content": "café\n", "encoding": "utf-8-bom", "eol": "lf"})
+	if data, _ := os.ReadFile(latin); string(data) != "\xef\xbb\xbfcafé\n" {
+		t.Fatalf("converted = %q", data)
+	}
+	if r := a.callRaw("fs.write", map[string]any{"path": latin, "content": "€ ✓", "encoding": "windows-1252"}); r["error"] == nil {
+		t.Fatal("a character windows-1252 cannot encode must be an error")
+	}
+
 	// Files outside the project are read-only.
 	outside := filepath.Join(t.TempDir(), "lib.d.ts")
 	os.WriteFile(outside, []byte("declare const x: number\n"), 0o644)
