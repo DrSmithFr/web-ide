@@ -47,8 +47,8 @@ export interface SessionData {
   right: { panel: string | null; width: number }
   /** Tools of each zone of the icon rails (state/zones). */
   placement: Record<Zone, string[]>
-  /** Strip under the editor: tools of the two bottom zones, split at `split` (fraction). */
-  bottom: { left: string | null; right: string | null; height: number; split: number; active: string | null; problemsTab: 'problems' | 'output' }
+  /** Strip under the editor: tools of the two bottom zones, split at `split` (fraction); shown console and order of the console tabs. */
+  bottom: { left: string | null; right: string | null; height: number; split: number; active: string | null; order: string[]; problemsTab: 'problems' | 'output' }
   sqlText: Record<string, string>
   expanded: string[]
 }
@@ -80,7 +80,7 @@ function emptySession(): SessionData {
     cursors: {},
     left: { panel: 'explorer', width: 260 },
     right: { panel: null, width: 300 },
-    bottom: { left: null, right: null, height: 240, split: 0.5, active: null, problemsTab: 'problems' },
+    bottom: { left: null, right: null, height: 240, split: 0.5, active: null, order: [], problemsTab: 'problems' },
     placement: normalizePlacement(null),
     sqlText: {},
     expanded: [],
@@ -143,7 +143,7 @@ function normalize(raw: any): SessionData {
   s.placement = normalizePlacement(raw.placement)
   // Former bottom panel: consoles, problems and output in one strip.
   if (raw.bottom && 'open' in raw.bottom) {
-    const { open, order: _order, ...rest } = s.bottom as any
+    const { open, ...rest } = s.bottom as any
     s.bottom = rest
     if (rest.active === 'problems' || rest.active === 'output') {
       s.bottom.problemsTab = rest.active

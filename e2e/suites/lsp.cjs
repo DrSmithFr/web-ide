@@ -53,7 +53,7 @@ run(async ({ page }) => {
     .then((h) => h.jsonValue(), () => 0)
   assert(diag > 0, `diagnostic underlined in the editor (${diag})`)
   if (!(await page.isVisible('[data-tool=problems]'))) await page.click('.rail-right .rail-btn[title="Problems"]')
-  await page.click('[data-tool=problems] .btab:has-text("Problems")')
+  await page.click('[data-tool=problems] .tab:has-text("Problems")')
   await page.waitForTimeout(300)
   assert((await page.$$('.problem')).length > 0, 'the Problems panel lists the diagnostic')
   await page.screenshot({ path: OUT + '/lsp.png' })

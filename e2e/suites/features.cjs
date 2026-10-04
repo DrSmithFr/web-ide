@@ -37,6 +37,13 @@ run(async ({ page }) => {
   await page.waitForFunction(() => document.querySelector('.pane.active .tab.active')?.textContent.includes('main.go'), null, { timeout: 5000 }).catch(() => {})
   assert((await page.textContent('.pane.active .tab.active')).includes('main.go'), 'search hit opens the file')
 
+  // File tabs reordered by drag and drop: on the right half of the next tab, one step right
+  const tabs = (sel) => page.$$eval(sel, (els) => els.map((e) => e.querySelector('.tab-title').textContent))
+  assert(JSON.stringify(await tabs('.pane.active .tab')) === JSON.stringify(['app.php', 'main.go']), 'two file tabs')
+  const right = async (sel) => ({ x: (await page.$eval(sel, (e) => e.offsetWidth)) - 6, y: 12 })
+  await page.dragAndDrop('.pane.active .tab:has-text("app.php")', '.pane.active .tab:has-text("main.go")', { targetPosition: await right('.pane.active .tab:has-text("main.go")') })
+  assert(JSON.stringify(await tabs('.pane.active .tab')) === JSON.stringify(['main.go', 'app.php']), 'file tab moved one step right: ' + JSON.stringify(await tabs('.pane.active .tab')))
+
   // Terminal
   await page.keyboard.press('Control+Shift+Backquote')
   await page.waitForSelector('.xterm', { timeout: 5000 })
@@ -47,6 +54,18 @@ run(async ({ page }) => {
   assert(term.includes('pod-42'), 'terminal runs commands')
   assert(await page.isVisible('.console-tabs.tabbar .tab.active .tab-close'), 'console tabs styled like the file tabs')
   assert(!(await page.$('.console-tabs [title="Detach in a window"]')), 'no detach button on a console tab')
+  await page.click('.console-tabs button[title^="New terminal"]')
+  await page.waitForFunction(() => document.querySelectorAll('.console-tabs .tab').length === 2)
+  await page.click('.console-tabs .tab >> nth=1')
+  await page.dblclick('.console-tabs .tab >> nth=1')
+  await page.fill('.modal input', 'second')
+  await page.keyboard.press('Enter')
+  await page.waitForSelector('.console-tabs .tab:has-text("second")')
+  await page.dragAndDrop('.console-tabs .tab:has-text("second")', '.console-tabs .tab >> nth=0', { targetPosition: { x: 6, y: 12 } })
+  assert(JSON.stringify(await tabs('.console-tabs .tab')) === JSON.stringify(['second', 'Terminal']), 'console tab moved first: ' + JSON.stringify(await tabs('.console-tabs .tab')))
+  await page.click('.console-tabs .tab:has-text("second") .tab-close')
+  await page.waitForFunction(() => document.querySelectorAll('.console-tabs .tab').length === 1)
+  await page.click('.console-tabs .tab')
 
   // Bottom tools: Console at the bottom of the left rail, Problems at the bottom of the right one
   const box = (sel) => page.$eval(sel, (e) => e.getBoundingClientRect().toJSON())
@@ -57,7 +76,7 @@ run(async ({ page }) => {
   assert(strip.left >= railL.right - 1 && sideL.bottom <= strip.top + 1, 'the strip spans under the side panels')
   assert((await box('[data-tool=console]')).width > strip.width - 2, 'Console alone takes the whole strip')
   await page.click('.rail-right .rail-btn[title="Problems"]')
-  await page.waitForSelector('[data-tool=problems] .btab:has-text("Output")')
+  await page.waitForSelector('[data-tool=problems] .tab:has-text("Output")')
   const before = await box('[data-tool=console]')
   assert(Math.abs(before.width - strip.width / 2) < 10, 'Console and Problems share the strip: ' + before.width)
   const handle = await box('.bottom > .resizer-x')

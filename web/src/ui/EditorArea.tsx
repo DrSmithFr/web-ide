@@ -28,6 +28,7 @@ import { gitRevision, gitStatus } from '../state/git'
 import { lineMarks } from '../editor/linediff'
 import { formatDocument, renameSymbol } from '../lsp/refactor'
 import { t } from '../i18n'
+import { dropClasses, dropIndex, setDropAt } from './tabDrop'
 
 export function EditorArea(props: { detached?: boolean }) {
   return (
@@ -130,12 +131,18 @@ function Pane(props: { id: string }) {
       <div
         class="tabbar"
         role="tablist"
-        onDragOver={(e) => dragged && e.preventDefault()}
+        onDragOver={(e) => {
+          if (!dragged) return
+          e.preventDefault()
+          if (e.target === e.currentTarget || (e.target as HTMLElement).classList.contains('tabbar-fill')) setDropAt({ bar: props.id, index: leaf()?.tabs.length ?? 0 })
+        }}
+        onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setDropAt(null)}
         onDrop={(e) => {
           if (!dragged) return
           e.preventDefault()
           moveTab(dragged.pane, dragged.tab, props.id, leaf()?.tabs.length ?? 0)
           dragged = null
+          setDropAt(null)
         }}
       >
         <For each={leaf()?.tabs ?? []}>
@@ -152,17 +159,24 @@ function Pane(props: { id: string }) {
                   class="tab"
                   role="tab"
                   aria-selected={leaf()?.active === id}
-                  classList={{ active: leaf()?.active === id, dirty: !!doc()?.dirty(), conflict: !!doc()?.conflict(), readonly: !!doc()?.readOnly }}
+                  classList={{ active: leaf()?.active === id, dirty: !!doc()?.dirty(), conflict: !!doc()?.conflict(), readonly: !!doc()?.readOnly, ...dropClasses(props.id, i(), leaf()?.tabs.length ?? 0) }}
                   title={tab().kind === 'file' ? relPath(tab().path!) : tab().title}
-                  draggable
+                  draggable="true"
                   onDragStart={() => (dragged = { pane: props.id, tab: id })}
-                  onDragOver={(e) => dragged && e.preventDefault()}
+                  onDragEnd={() => ((dragged = null), setDropAt(null))}
+                  onDragOver={(e) => {
+                    if (!dragged) return
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setDropAt({ bar: props.id, index: dropIndex(e, i()) })
+                  }}
                   onDrop={(e) => {
                     if (!dragged) return
                     e.preventDefault()
                     e.stopPropagation()
-                    moveTab(dragged.pane, dragged.tab, props.id, i())
+                    moveTab(dragged.pane, dragged.tab, props.id, dropIndex(e, i()))
                     dragged = null
+                    setDropAt(null)
                   }}
                   onMouseDown={(e) => {
                     if (e.button === 1) {

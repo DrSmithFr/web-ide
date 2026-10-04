@@ -195,6 +195,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .tabbar-fill { flex: 1; }
 .tab { display: flex; align-items: center; gap: 6px; padding: 0 6px 0 10px; border-right: 1px solid var(--line); cursor: pointer; white-space: nowrap; color: var(--fg-muted); max-width: 240px; position: relative; }
 .tab:hover { background: var(--bg-hover); }
+.tab.drop-before { box-shadow: inset 2px 0 0 var(--accent); }
+.tab.drop-after { box-shadow: inset -2px 0 0 var(--accent); }
 .tab.active { background: var(--bg); color: var(--fg); }
 .pane.active .tab.active::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--accent); }
 .tab.conflict { background: color-mix(in srgb, var(--conflict-bg) 70%, transparent); }
@@ -260,13 +262,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .find-error { max-width: 140px; color: var(--danger); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---------- bottom panel ---------- */
-.tool-tabs { display: flex; align-items: center; gap: 2px; padding: 0 30px 0 6px; height: 32px; border-bottom: 1px solid var(--line); flex: none; overflow-x: auto; }
-.btab { display: inline-flex; align-items: center; gap: 5px; padding: 2px 6px 2px 8px; border-radius: 4px; cursor: pointer; color: var(--fg-muted); white-space: nowrap; font-size: 12px; }
-.btab:hover { background: var(--bg-hover); }
-.btab.active { background: var(--bg-active); color: var(--fg); }
-.console-tabs { padding-right: 30px; }
-.console-tabs .tab.active { background: var(--bg-2); }
-.console-tabs .tab.active::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--accent); }
+.tool-tabbar { padding-right: 30px; }
+.tool-tabbar .tab.active { background: var(--bg-2); }
+.tool-tabbar .tab.active::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--accent); }
+.tool-tabbar .tab:not(:has(.tab-close)) { padding-right: 10px; }
 .console-tabs .tab.exited .tab-title { opacity: 0.7; }
 .console-tabs > .icon-btn { align-self: center; margin-left: 2px; }
 .tool-body { flex: 1; min-height: 0; position: relative; }

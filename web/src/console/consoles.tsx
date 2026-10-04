@@ -7,6 +7,7 @@ import '@xterm/xterm/css/xterm.css'
 import { notify, on as onPod, request } from '../pod/rpc'
 import { diagnostics, mutate, openFile, relPath, root, session } from '../state/project'
 import { showTool } from '../state/zones'
+import { dropClasses, dropIndex, moveItem, setDropAt } from '../ui/tabDrop'
 import { settings } from '../state/settings'
 import { themeById } from '../settings/themes'
 import { prompt } from '../ui/overlay'
@@ -240,24 +241,55 @@ function Output() {
   )
 }
 
+/** Consoles in the order of their tabs (session), the new ones last. */
+function ordered() {
+  const rank = (id: string) => {
+    const i = session.bottom.order.indexOf(id)
+    return i < 0 ? Infinity : i
+  }
+  return [...consoles()].sort((a, b) => rank(a.id) - rank(b.id))
+}
+
+function moveConsole(id: string, index: number) {
+  const ids = ordered().map((c) => c.id)
+  mutate((s) => (s.bottom.order = moveItem(ids, ids.indexOf(id), index)))
+}
+
+let dragged: string | null = null
+
 export function ConsoleTool() {
   // A console that no longer exists (pod restarted) falls back to the first one.
   const active = () => {
     const a = session.bottom.active
-    return consoles().some((c) => c.id === a) ? a : (consoles()[0]?.id ?? null)
+    return consoles().some((c) => c.id === a) ? a : (ordered()[0]?.id ?? null)
   }
   const setActive = (id: string) => mutate((s) => (s.bottom.active = id))
 
   return (
     <div class="panel">
-      <div class="tabbar console-tabs" role="tablist">
-        <For each={consoles()}>
-          {(c) => (
+      <div class="tabbar tool-tabbar console-tabs" role="tablist" onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setDropAt(null)}>
+        <For each={ordered()}>
+          {(c, i) => (
             <div
               class="tab"
               role="tab"
               aria-selected={active() === c.id}
-              classList={{ active: active() === c.id, exited: c.exited }}
+              classList={{ active: active() === c.id, exited: c.exited, ...dropClasses('consoles', i(), consoles().length) }}
+              draggable="true"
+              onDragStart={() => (dragged = c.id)}
+              onDragEnd={() => ((dragged = null), setDropAt(null))}
+              onDragOver={(e) => {
+                if (!dragged) return
+                e.preventDefault()
+                setDropAt({ bar: 'consoles', index: dropIndex(e, i()) })
+              }}
+              onDrop={(e) => {
+                if (!dragged) return
+                e.preventDefault()
+                moveConsole(dragged, dropIndex(e, i()))
+                dragged = null
+                setDropAt(null)
+              }}
               title={c.command?.join(' ') ?? c.title}
               onClick={() => setActive(c.id)}
               onDblClick={() => renameConsole(c)}
@@ -305,15 +337,17 @@ export function ProblemsTool() {
   const setTab = (id: 'problems' | 'output') => mutate((s) => (s.bottom.problemsTab = id))
   return (
     <div class="panel">
-      <div class="tool-tabs" role="tablist">
-        <div class="btab" role="tab" aria-selected={tab() === 'problems'} classList={{ active: tab() === 'problems' }} onClick={() => setTab('problems')}>
-          {t('Problems')}
+      <div class="tabbar tool-tabbar" role="tablist">
+        <div class="tab" role="tab" aria-selected={tab() === 'problems'} classList={{ active: tab() === 'problems' }} onClick={() => setTab('problems')}>
+          <Icon name="problems" size={13} />
+          <span class="tab-title">{t('Problems')}</span>
           <Show when={problemCount()}>
             <span class="badge danger">{problemCount()}</span>
           </Show>
         </div>
-        <div class="btab" role="tab" aria-selected={tab() === 'output'} classList={{ active: tab() === 'output' }} onClick={() => setTab('output')}>
-          {t('Output')}
+        <div class="tab" role="tab" aria-selected={tab() === 'output'} classList={{ active: tab() === 'output' }} onClick={() => setTab('output')}>
+          <Icon name="outline" size={13} />
+          <span class="tab-title">{t('Output')}</span>
         </div>
       </div>
       <div class="tool-body">
