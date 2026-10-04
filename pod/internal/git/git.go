@@ -164,11 +164,12 @@ func (g *Repo) Show(ctx context.Context, p, rev string) (string, bool, error) {
 	if err != nil {
 		return "", false, err
 	}
+	// Missing file or revision (the message of git depends on its language).
+	if _, err := g.git(ctx, "cat-file", "-e", rev+":"+rel[0]); err != nil {
+		return "", false, nil
+	}
 	out, err := g.git(ctx, "show", rev+":"+rel[0])
 	if err != nil {
-		if strings.Contains(err.Error(), "does not exist") || strings.Contains(err.Error(), "exists on disk, but not in") || strings.Contains(err.Error(), "invalid object name") || strings.Contains(err.Error(), "bad revision") {
-			return "", false, nil
-		}
 		return "", false, err
 	}
 	return out, true, nil
@@ -228,37 +229,6 @@ func (g *Repo) Commit(ctx context.Context, message string, amend bool) (string, 
 	return strings.TrimSpace(out), err
 }
 
-type Commit struct {
-	Hash    string `json:"hash"`
-	Short   string `json:"short"`
-	Author  string `json:"author"`
-	When    int64  `json:"when"` // commit time, Unix seconds (the page formats it)
-	Subject string `json:"subject"`
-	Refs    string `json:"refs,omitempty"`
-}
-
-func (g *Repo) Log(ctx context.Context, n int) ([]Commit, error) {
-	if n <= 0 || n > 500 {
-		n = 50
-	}
-	out, err := g.git(ctx, "log", "-n", strconv.Itoa(n), "--pretty=format:%H%x1f%h%x1f%an%x1f%at%x1f%s%x1f%D%x1e")
-	if err != nil {
-		if strings.Contains(err.Error(), "does not have any commits") {
-			return []Commit{}, nil
-		}
-		return nil, err
-	}
-	list := []Commit{}
-	for _, rec := range strings.Split(out, "\x1e") {
-		f := strings.Split(strings.Trim(rec, "\n"), "\x1f")
-		if len(f) == 6 {
-			when, _ := strconv.ParseInt(f[3], 10, 64)
-			list = append(list, Commit{Hash: f[0], Short: f[1], Author: f[2], When: when, Subject: f[4], Refs: f[5]})
-		}
-	}
-	return list, nil
-}
-
 type Branch struct {
 	Name     string `json:"name"`
 	Current  bool   `json:"current"`
@@ -282,10 +252,17 @@ func (g *Repo) Branches(ctx context.Context) ([]Branch, error) {
 	return list, nil
 }
 
-func (g *Repo) Switch(ctx context.Context, name string, create bool) error {
+// Switch checks a branch out, or creates it (from HEAD, or from the commit "from").
+func (g *Repo) Switch(ctx context.Context, name string, create bool, from string) error {
 	args := []string{"switch", name}
 	if create {
 		args = []string{"switch", "-c", name}
+		if strings.HasPrefix(from, "-") {
+			return i18n.Errorf("unknown revision: %s", from)
+		}
+		if from != "" {
+			args = append(args, from)
+		}
 	}
 	_, err := g.git(ctx, args...)
 	return err

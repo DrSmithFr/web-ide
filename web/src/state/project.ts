@@ -24,7 +24,11 @@ export interface TabState {
   table?: string
   text?: string
   lang?: string
+  /** Diff tabs: index ↔ HEAD (staged), HEAD ↔ working tree (head), or a commit against its first parent (rev); from: former path of a renamed file. */
   staged?: boolean
+  head?: boolean
+  rev?: string
+  from?: string
   /** Number of the kanban ticket shown (kind ticket). */
   ticket?: number
 }
@@ -58,6 +62,8 @@ export interface SessionData {
   expanded: string[]
   /** Options of the explorer. */
   explorer: { hidden: boolean; excluded: boolean; singleClick: boolean; follow: boolean }
+  /** Git tool: shown tab, heights of the commit form and of the commit detail. */
+  git: { tab: 'commit' | 'history'; form: number; detail: number }
 }
 
 export interface ProjectInfo {
@@ -92,6 +98,7 @@ function emptySession(): SessionData {
     sqlText: {},
     expanded: [],
     explorer: { hidden: true, excluded: true, singleClick: false, follow: false },
+    git: { tab: 'commit', form: 150, detail: 260 },
   }
 }
 
@@ -142,7 +149,7 @@ on('session.changed', (data: SessionData) => {
 function normalize(raw: any): SessionData {
   const d = emptySession()
   if (!raw || typeof raw !== 'object' || !raw.layout) return d
-  const s: SessionData = { ...d, ...raw, left: { ...d.left, ...raw.left }, right: { ...d.right, ...raw.right }, bottom: { ...d.bottom, ...raw.bottom }, explorer: { ...d.explorer, ...raw.explorer } }
+  const s: SessionData = { ...d, ...raw, left: { ...d.left, ...raw.left }, right: { ...d.right, ...raw.right }, bottom: { ...d.bottom, ...raw.bottom }, explorer: { ...d.explorer, ...raw.explorer }, git: { ...d.git, ...raw.git } }
   if (s.left.panel && panelAliases[s.left.panel]) {
     s.right.panel = panelAliases[s.left.panel]
     s.left.panel = null
@@ -232,7 +239,7 @@ export function openTab(tab: Omit<TabState, 'id'>, paneId = session.activePane):
     if (!t || t.kind !== tab.kind) return false
     if (tab.kind === 'file') return t.path === tab.path
     if (tab.kind === 'table') return t.connId === tab.connId && t.db === tab.db && t.table === tab.table
-    if (tab.kind === 'diff') return t.path === tab.path && !!t.staged === !!tab.staged
+    if (tab.kind === 'diff') return t.path === tab.path && !!t.staged === !!tab.staged && !!t.head === !!tab.head && t.rev === tab.rev
     if (tab.kind === 'kanban') return true
     if (tab.kind === 'ticket') return t.ticket === tab.ticket
     return false

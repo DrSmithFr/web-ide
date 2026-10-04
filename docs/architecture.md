@@ -66,7 +66,7 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 | `keys/` | Binding table and QWERTY / AZERTY presets |
 | `lsp/` | Client, completion, edits, rename and formatting |
 | `ui/` | Editor area, status bar, diff view, overlays (modal, prompt, pick list, context menu), toasts, icons |
-| `panels/` | Explorer (with file type icons, `fileIcons.tsx`), global search, Git |
+| `panels/` | Explorer (with file type icons, `fileIcons.tsx`), global search, Git tool (`panels/git/`: tabs, tree of changes, graph lanes `graph.ts`, commit detail) |
 | `tools/`, `db/`, `console/`, `conflict/`, `settings/`, `pages/` | Right-panel tools, database explorer, Console and Problems tools, conflict dialog, settings modal, pages |
 | `llm/` | AI assistant: state, agent loop, tools, prompt, Markdown, attachments, speech recognition |
 | `kanban/` | Board, ticket view, workflow actions, linked conversations |
@@ -117,7 +117,7 @@ make e2e            # browser tests, all suites (a few minutes)
 - **No `push(...bigArray)`** (stack overflow on large pastes): copy in a loop.
 - **A Solid store merges objects**: `setChat('running', {})` clears nothing; write `{ stream: undefined }`.
 - **DOMPurify** drops attributes containing `-->` (Mermaid sources are stored URI-encoded) and HTML inside `foreignObject` (Mermaid uses `htmlLabels: false`).
-- **Git**: ticket commits start with `#<n>`, so `rebase --continue` and `commit --no-edit` run with `core.commentChar=auto`; diff prefixes are forced (`--src-prefix=a/ --dst-prefix=b/`) because user settings such as `diff.mnemonicPrefix` change them; after a merge the branch has nothing left against its base, so the change is frozen in the ticket at merge time.
+- **Git**: git speaks the language of the user, so its messages are never parsed (`git.Show` asks `cat-file -e` first); ticket commits start with `#<n>`, so `rebase --continue` and `commit --no-edit` run with `core.commentChar=auto`; diff prefixes are forced (`--src-prefix=a/ --dst-prefix=b/`) because user settings such as `diff.mnemonicPrefix` change them; after a merge the branch has nothing left against its base, so the change is frozen in the ticket at merge time.
 - **Shell**: `pkill -f <pattern>` also kills the command running it; use `pkill -x web-ide-pod`. Start a test pod with `setsid` / `< /dev/null`, otherwise a pipe stays open.
 - **E2E tests** must wait actively (`waitForFunction`): language servers start cold. `<option>` elements are never "visible" for Playwright (`state: 'attached'`).
 

@@ -234,9 +234,11 @@ Definitions may point outside the project (`lib.es5.d.ts` in `node_modules/types
 
 ### Git
 
-- Git panel: branch (switch, create), ahead/behind, commit message (amend), conflicted / staged / changed sections with stage, unstage, discard, and the recent history.
-- Pull, push and fetch run in a terminal of the bottom panel (credential prompts stay interactive).
-- Side-by-side diff tab (working tree ↔ index, or index ↔ HEAD); gutter markers for added, changed and removed lines while typing.
+- Git tool: a branch bar (switch, create, ahead/behind, pull, push, fetch), then two tabs; the shown tab and the heights of the bottom areas are saved in the session.
+- **Commit** tab: the changed files as a tree drawn like the explorer (git colors, file icons, chains of single folders joined on one row, `a/b`), under a *Changes* root row. Each row ends with a check box: checked when the file is staged, partial when it is staged with changes left (or, on a folder, when part of its files are); a click stages or unstages the file, the folder or everything. Checking a conflicted file marks it resolved (confirmed when it still holds conflict markers). A click opens the diff against HEAD, a double click the file; arrows move, `Space` toggles the box; context menu: differences, open, stage, unstage, discard, copy the path. At the bottom (height set by a handle): commit message, *Amend* (filled with the last message), *Commit*, *Commit and push* with a menu to push with `--force-with-lease` or `--force` (confirmed).
+- **History** tab: the commits of the current branch with their graph, as `git log --graph --pretty='%h -%d %s (%an %ar - %ad)'` (lanes drawn in SVG, merged branches beside), loaded 100 at a time while scrolling; a search on message, author or hash (no graph then). A click shows the commit at the bottom (height set by a handle): actions (copy the hash, new branch at the commit, revert, reset soft / mixed / hard), author, dates, parents, full message, and the changed files as a tree; a file opens its diff against the first parent. The same actions are in the context menu of a commit.
+- Pull, push and fetch run in a terminal of the bottom panel (credential prompts stay interactive). A branch without upstream is pushed with `-u origin <branch>`.
+- Side-by-side diff tab (working tree ↔ index, index ↔ HEAD, working tree ↔ HEAD, or a commit ↔ its first parent); gutter markers for added, changed and removed lines while typing.
 - `git` runs through the same executor as the rest, so it also works on an SSH host.
 
 ## 13. AI assistant

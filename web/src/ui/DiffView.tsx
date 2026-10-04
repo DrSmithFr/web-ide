@@ -1,5 +1,6 @@
 // Side-by-side diff of a file (tab of the editor): working tree against the index
-// ("changes"), or the index against HEAD ("staged"). The working side follows the
+// ("changes"), the index against HEAD ("staged"), the working tree against HEAD ("head"),
+// or a commit against its first parent ("rev", read only). The working side follows the
 // open buffer while it is edited.
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, Show, Switch } from 'solid-js'
 import { request } from '../pod/rpc'
@@ -19,6 +20,11 @@ type Row =
 export function DiffView(props: { tab: TabState; paneId: string }) {
   const path = props.tab.path!
   const staged = !!props.tab.staged
+  const head = !!props.tab.head
+  const rev = props.tab.rev
+  const from = props.tab.from ?? path
+  // The working tree is one side of the diff.
+  const live = !staged && !rev
   const [expanded, setExpanded] = createSignal<Set<number>>(new Set())
   const [current, setCurrent] = createSignal(0)
   let body!: HTMLDivElement
@@ -32,11 +38,12 @@ export function DiffView(props: { tab: TabState; paneId: string }) {
     return d.text
   })
   const [texts] = createResource(
-    () => ({ rev: gitRevision(), work: staged ? null : workText() }),
+    () => ({ rev: gitRevision(), work: live ? workText() : null }),
     async ({ work }) => {
-      const old = await request('git.show', { path, rev: staged ? 'HEAD' : '' })
+      const old = rev ? await request('git.show', { path: from, rev: rev + '^' }) : await request('git.show', { path: staged || head ? from : path, rev: staged || head ? 'HEAD' : '' })
       let neu: string
-      if (staged) neu = (await request('git.show', { path, rev: '' })).content
+      if (rev) neu = (await request('git.show', { path, rev })).content
+      else if (staged) neu = (await request('git.show', { path, rev: '' })).content
       else if (work !== null) neu = work
       else {
         try {
@@ -101,11 +108,14 @@ export function DiffView(props: { tab: TabState; paneId: string }) {
   }
   createEffect(on(() => diff()?.hunks, () => setCurrent(0), { defer: true }))
 
-  const isStagedNow = () => gitStatus()?.files.some((f) => f.path === path && f.index !== '.' && !f.untracked)
+  const file = () => gitStatus()?.files.find((f) => f.path === path)
+  const isStagedNow = () => !!file() && file()!.index !== '.' && !file()!.untracked
+  // HEAD ↔ working tree: stage what is left, or unstage when everything is staged.
+  const unstages = () => staged || (head && !!file() && file()!.work === '.')
 
   const toggleStage = async () => {
     try {
-      await request(staged ? 'git.unstage' : 'git.stage', { paths: [path] })
+      await request(unstages() ? 'git.unstage' : 'git.stage', { paths: [path] })
     } catch (e) {
       errorToast(e)
     }
@@ -116,7 +126,7 @@ export function DiffView(props: { tab: TabState; paneId: string }) {
     <div class="diff-view" onMouseDown={() => setActivePane(props.paneId)}>
       <div class="toolbar">
         <span class="small">
-          {relPath(path)} · {staged ? t('index ↔ HEAD') : t('working tree ↔ index')}
+          {relPath(path)} · {rev ? t('commit {hash} ↔ its parent', { hash: rev.slice(0, 7) }) : staged ? t('index ↔ HEAD') : head ? t('working tree ↔ HEAD') : t('working tree ↔ index')}
         </span>
         <Show when={diff() && !diff()!.tooBig}>
           <span class="diff-stats">
@@ -133,9 +143,11 @@ export function DiffView(props: { tab: TabState; paneId: string }) {
         <button class="btn small" onClick={() => openFile(path)}>
           {t('Open the file')}
         </button>
-        <button class="btn small" onClick={toggleStage}>
-          {staged ? t('Unstage') : isStagedNow() ? t('Stage again') : t('Stage')}
-        </button>
+        <Show when={!rev}>
+          <button class="btn small" onClick={toggleStage}>
+            {unstages() ? t('Unstage') : isStagedNow() && !head ? t('Stage again') : t('Stage')}
+          </button>
+        </Show>
       </div>
       <div class="diff-body" ref={body}>
         <Switch>

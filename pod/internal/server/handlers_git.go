@@ -97,9 +97,40 @@ func (s *Server) registerGit() {
 	}))
 	s.handle("git.log", h(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
 		a, _ := bind[struct {
-			N int `json:"n"`
+			Skip  int    `json:"skip"`
+			N     int    `json:"n"`
+			Query string `json:"query"`
 		}](p)
-		return rt.Git.Log(ctx, a.N)
+		return rt.Git.Log(ctx, a.Skip, a.N, a.Query)
+	}))
+	type revArg struct {
+		Rev  string `json:"rev"`
+		Mode string `json:"mode"`
+	}
+	s.handle("git.commitInfo", h(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
+		a, err := bind[revArg](p)
+		if err != nil {
+			return nil, err
+		}
+		return rt.Git.CommitInfo(ctx, a.Rev)
+	}))
+	s.handle("git.revert", h(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
+		a, err := bind[revArg](p)
+		if err != nil {
+			return nil, err
+		}
+		out, err := rt.Git.Revert(ctx, a.Rev)
+		changed(c)
+		return out, err
+	}))
+	s.handle("git.reset", h(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
+		a, err := bind[revArg](p)
+		if err != nil {
+			return nil, err
+		}
+		err = rt.Git.Reset(ctx, a.Rev, a.Mode)
+		changed(c)
+		return nil, err
 	}))
 	s.handle("git.branches", h(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
 		return rt.Git.Branches(ctx)
@@ -108,11 +139,12 @@ func (s *Server) registerGit() {
 		a, err := bind[struct {
 			Name   string `json:"name"`
 			Create bool   `json:"create"`
+			From   string `json:"from"`
 		}](p)
 		if err != nil {
 			return nil, err
 		}
-		err = rt.Git.Switch(ctx, a.Name, a.Create)
+		err = rt.Git.Switch(ctx, a.Name, a.Create, a.From)
 		changed(c)
 		return nil, err
 	}))

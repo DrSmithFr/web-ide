@@ -78,11 +78,11 @@ func TestRepo(t *testing.T) {
 	if data, _ := os.ReadFile(a); string(data) != "one\n" {
 		t.Fatalf("discard: %q", data)
 	}
-	log, _ := g.Log(ctx, 10)
+	log, _ := g.Log(ctx, 0, 10, "")
 	if len(log) != 1 || log[0].Subject != "first" {
 		t.Fatalf("log = %+v", log)
 	}
-	if err := g.Switch(ctx, "feature", true); err != nil {
+	if err := g.Switch(ctx, "feature", true, ""); err != nil {
 		t.Fatal(err)
 	}
 	br, _ := g.Branches(ctx)
@@ -112,7 +112,7 @@ func TestSetup(t *testing.T) {
 	if !st.Repo || st.Branch != "main" {
 		t.Fatalf("status = %+v", st)
 	}
-	if log, _ := g.Log(ctx, 5); len(log) != 1 || log[0].Subject != "Initial commit" {
+	if log, _ := g.Log(ctx, 0, 5, ""); len(log) != 1 || log[0].Subject != "Initial commit" {
 		t.Fatalf("log = %+v", log)
 	}
 	if out, _ := g.git(ctx, "remote", "get-url", "origin"); strings.TrimSpace(out) != "git@example.com:me/app.git" {
@@ -132,7 +132,7 @@ func TestSetup(t *testing.T) {
 	if err := g2.Setup(ctx, "", false); err != nil {
 		t.Fatal(err)
 	}
-	if log, _ := g2.Log(ctx, 5); len(log) != 0 {
+	if log, _ := g2.Log(ctx, 0, 5, ""); len(log) != 0 {
 		t.Fatalf("unexpected commit: %+v", log)
 	}
 }
