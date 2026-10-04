@@ -36,6 +36,8 @@ export interface Cursor {
   anchor: number
   head: number
   scroll: number
+  /** Header lines of the folded ranges. */
+  folds?: number[]
 }
 
 export interface SessionData {

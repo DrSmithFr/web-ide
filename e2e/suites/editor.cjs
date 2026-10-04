@@ -4,6 +4,7 @@ const { run, openProject, open, assert, text, WS, OUT } = require('../common.cjs
 
 run(async ({ page }) => {
   fs.writeFileSync(WS + '/demo/multi.txt', 'foo bar foo\nfoo baz\n    foo qux\n')
+  fs.writeFileSync(WS + '/demo/conf.yaml', 'server:\n  host: x\n  ports:\n    - 80\n    - 443\nname: demo\n')
   await openProject(page)
   await open(page, 'main.go')
 
@@ -169,4 +170,58 @@ run(async ({ page }) => {
   assert((await text(page)) === '#foo bar foo\n#foo baz\n    foo qux\n', 'Alt+click adds a caret')
   await page.mouse.click(c.x + 30, c.y)
   assert((await carets()) === 0, 'a click leaves a single caret')
+
+  // Folding: gutter markers, placeholders, shortcuts, fold all, session.
+  await open(page, 'main.go')
+  const nums = () => page.textContent('.pane.active .ed-gutter-nums')
+  const holders = async () => {
+    await page.waitForTimeout(80)
+    return page.$$eval('.pane.active .ed-placeholder', (l) => l.length)
+  }
+  await page.hover('.pane.active .ed-gutter')
+  await page.click('.pane.active .ed-fold[data-fold="7"]')
+  await page.waitForSelector('.pane.active .ed-placeholder')
+  assert(!(await nums()).split('\n').includes('9') && (await nums()).includes('10'), 'gutter marker folds the function body')
+  assert(await page.isVisible('.pane.active .ed-fold.folded[data-fold="7"]'), 'folded marker')
+  await page.screenshot({ path: OUT + '/editor-fold.png' })
+  await page.click('.pane.active .ed-placeholder')
+  await page.waitForFunction(() => document.querySelector('.pane.active .ed-gutter-nums').textContent.split('\n').includes('9'))
+  assert((await holders()) === 0, 'a click on the placeholder unfolds')
+
+  await caretAt(12, 2)
+  await page.keyboard.press('Control+Minus')
+  assert((await holders()) === 1 && !(await nums()).split('\n').includes('13'), 'Ctrl+- folds the block of the caret')
+  assert((await page.evaluate(() => getSelection().focusOffset)) > 0, 'the caret leaves the hidden lines')
+  await page.keyboard.press('Control+Equal')
+  assert((await holders()) === 0, 'Ctrl+= unfolds it')
+  await page.keyboard.press('Control+Shift+Minus')
+  assert((await holders()) === 2, 'Ctrl+Shift+- folds every block')
+  await page.keyboard.press('Control+Shift+Equal')
+  assert((await holders()) === 0, 'Ctrl+Shift+= unfolds every block')
+
+  // A search result in a folded block unfolds it; typing in the header keeps the fold.
+  await caretAt(12, 2)
+  await page.keyboard.press('Control+Minus')
+  await page.keyboard.type(' ')
+  assert((await holders()) === 1, 'typing on the header line keeps the fold')
+  await page.keyboard.press('Backspace')
+  await page.keyboard.press('Control+g')
+  await page.keyboard.type('13')
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(200)
+  assert((await holders()) === 0, 'going to a hidden line unfolds it')
+
+  // Kept in the session.
+  await caretAt(7)
+  await page.keyboard.press('Control+Minus')
+  await page.waitForTimeout(1500)
+  await page.reload()
+  await page.waitForSelector('.pane.active .ed-placeholder', { timeout: 15000 })
+  assert(!(await nums()).split('\n').includes('9'), 'folds restored after a reload')
+
+  // YAML: by indentation.
+  await open(page, 'conf.yaml')
+  await page.click('.pane.active .ed-content')
+  await page.keyboard.press('Control+Shift+Minus')
+  assert((await holders()) === 1 && (await nums()).trim().split('\n').join(',') === '1,6,7', 'YAML folded by indentation (' + (await nums()).trim().split('\n').join(',') + ')')
 })

@@ -251,9 +251,19 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .ed-gutter, .ed-content, .ed-gutter-nums, .ed-ws { margin: 0; font-family: var(--font-code); font-size: var(--font-size-code); line-height: var(--line-height-code); font-variant-ligatures: var(--ligatures); tab-size: var(--tab-size, 4); }
 .ed-content { padding-top: 6px; padding-bottom: 40vh; }
 .ed-gutter { position: sticky; left: 0; z-index: 2; background: var(--bg); user-select: none; border-right: 1px solid var(--line); flex: none; overflow: hidden; }
-.ed-gutter-nums { position: absolute; top: 0; right: 12px; text-align: right; color: var(--gutter); will-change: transform; }
+.ed-gutter-nums { position: absolute; top: 0; right: 22px; text-align: right; color: var(--gutter); will-change: transform; }
 /* Own width: a longer line elsewhere must not re-layout every block. */
 .ed-block { display: block; width: max-content; }
+.ed-block.ed-folded { display: none; }
+.ed-folds { position: absolute; top: 0; right: 5px; width: 14px; }
+.ed-fold { position: absolute; left: 0; width: 14px; cursor: pointer; opacity: 0; transition: opacity 0.15s; }
+.ed-fold::before { content: ''; position: absolute; left: 4px; top: 50%; width: 5px; height: 5px; border: solid var(--fg-muted); border-width: 0 1.5px 1.5px 0; transform: translateY(-75%) rotate(45deg); }
+.ed-fold.folded::before { transform: translate(-2px, -50%) rotate(-45deg); }
+.ed-gutter:hover .ed-fold, .ed-fold.folded { opacity: 1; }
+.ed-fold:hover::before { border-color: var(--fg); }
+.ed-placeholders { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.ed-placeholder { position: absolute; pointer-events: auto; cursor: pointer; padding: 0 5px; border-radius: 3px; font-family: var(--font-code); font-size: var(--font-size-code); color: var(--fg-muted); background: color-mix(in srgb, var(--fg) 10%, transparent); }
+.ed-placeholder:hover { color: var(--fg); background: color-mix(in srgb, var(--fg) 18%, transparent); }
 .ed-main { position: relative; flex: 1; isolation: isolate; }
 .ed-content { position: relative; z-index: 1; padding-left: 0; padding-right: 40px; white-space: pre; outline: none; caret-color: var(--accent); min-height: 100%; color: var(--fg); }
 .ed-content::selection { background: var(--sel-bg); }

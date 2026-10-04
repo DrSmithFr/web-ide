@@ -63,6 +63,22 @@
     "edit.allOccurrences": [
       "Ctrl+Alt+Shift+KeyJ"
     ],
+    "edit.fold": [
+      "Ctrl+Digit6",
+      "Ctrl+NumpadSubtract"
+    ],
+    "edit.unfold": [
+      "Ctrl+Equal",
+      "Ctrl+NumpadAdd"
+    ],
+    "edit.foldAll": [
+      "Ctrl+Shift+Digit6",
+      "Ctrl+Shift+NumpadSubtract"
+    ],
+    "edit.unfoldAll": [
+      "Ctrl+Shift+Equal",
+      "Ctrl+Shift+NumpadAdd"
+    ],
     "edit.complete": [
       "Ctrl+Space"
     ],

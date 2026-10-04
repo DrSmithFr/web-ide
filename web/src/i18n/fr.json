@@ -1159,5 +1159,9 @@
   "Show whitespace": "Afficher les espaces",
   "Add the next occurrence to the selection": "Ajouter l'occurrence suivante à la sélection",
   "Remove the last occurrence from the selection": "Retirer la dernière occurrence de la sélection",
-  "Select all the occurrences": "Sélectionner toutes les occurrences"
+  "Select all the occurrences": "Sélectionner toutes les occurrences",
+  "Fold the block": "Replier le bloc",
+  "Unfold the block": "Déplier le bloc",
+  "Fold all the blocks": "Replier tous les blocs",
+  "Unfold all the blocks": "Déplier tous les blocs"
 }

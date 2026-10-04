@@ -8,6 +8,7 @@
 import { Highlighter, type Token } from './tokenizer'
 import { grammar } from './languages'
 import { subwordLeft, subwordRight } from './subword'
+import { Folder, type Fold } from './folding'
 import { normalize, nextOccurrence, occurrences, selFrom, selTo, wordAt, wordLeft, wordRight } from './carets'
 import type { Change, Doc, Selection } from './doc'
 import type { LineMark } from './linediff'
@@ -35,6 +36,8 @@ export interface ViewOptions {
   onKey?: (e: KeyboardEvent) => boolean
   /** After a keystroke edit: the typed text, or '' for a deletion. */
   onType?: (text: string) => void
+  /** The folded ranges changed. */
+  onFolds?: () => void
 }
 
 const registry = () => (CSS as any).highlights as Map<string, any> | undefined
@@ -84,6 +87,14 @@ export class EditorView {
   private gutter: HTMLDivElement
   private gutterNums: HTMLPreElement
   private gutterMarks: HTMLDivElement
+  private gutterFolds: HTMLDivElement
+  private placeholders: HTMLDivElement
+  private folder!: Folder
+  /** Folded ranges, by header line. */
+  private folds: Fold[] = []
+  /** Lines hidden by the folds: sorted, disjoint [first, last] ranges. */
+  private hidden: [number, number][] = []
+  private foldable = { version: -1, lines: new Map<number, boolean>() }
   private marks = new Map<number, LineMark>()
   private curLine: HTMLDivElement
   private boxes: HTMLDivElement
@@ -129,7 +140,11 @@ export class EditorView {
     this.gutterNums.className = 'ed-gutter-nums'
     this.gutterMarks = document.createElement('div')
     this.gutterMarks.className = 'ed-marks'
-    this.gutter.append(this.gutterNums, this.gutterMarks)
+    this.gutterFolds = document.createElement('div')
+    this.gutterFolds.className = 'ed-folds'
+    this.gutter.append(this.gutterNums, this.gutterMarks, this.gutterFolds)
+    this.placeholders = document.createElement('div')
+    this.placeholders.className = 'ed-placeholders'
     const main = document.createElement('div')
     main.className = 'ed-main'
     this.curLine = document.createElement('div')
@@ -153,7 +168,7 @@ export class EditorView {
     this.setReadOnly(!!opts.readOnly || doc.readOnly)
     this.tooltip = document.createElement('div')
     this.tooltip.className = 'ed-tooltip'
-    main.append(this.curLine, this.guides, this.boxes, this.content, this.ws, this.caretLayer)
+    main.append(this.curLine, this.guides, this.boxes, this.content, this.ws, this.caretLayer, this.placeholders)
     inner.append(this.gutter, main)
     this.scroller.append(inner)
     this.root.append(this.scroller, this.tooltip)
@@ -161,6 +176,7 @@ export class EditorView {
     this.buildAll()
 
     this.hl = new Highlighter(grammar(doc.lang), (i) => doc.lineText(i), () => doc.lineCount)
+    this.folder = new Folder(doc, this.hl, () => this.opts.tabSize)
 
     this.disposers.push(doc.onChange((c) => this.onDocChange(c)))
     const listen = <K extends keyof HTMLElementEventMap>(el: HTMLElement | Document, ev: K, f: (e: HTMLElementEventMap[K]) => void, o?: AddEventListenerOptions) => {
@@ -189,6 +205,15 @@ export class EditorView {
     listen(this.content, 'mousedown', (e) => this.onMouseDown(e))
     listen(this.content, 'auxclick', (e) => e.button === 1 && e.preventDefault())
     listen(this.content, 'mousemove', (e) => this.onHover(e))
+    // Fold markers of the gutter and placeholders of the folded ranges.
+    const foldClick = (e: MouseEvent) => {
+      const el = (e.target as HTMLElement).closest<HTMLElement>('[data-fold]')
+      if (!el || e.button !== 0) return
+      e.preventDefault()
+      this.toggleFold(Number(el.dataset.fold))
+    }
+    listen(this.gutterFolds, 'mousedown', foldClick)
+    listen(this.placeholders, 'mousedown', foldClick)
     listen(this.content, 'mouseleave', () => (this.tooltip.style.display = 'none'))
     listen(document as any, 'selectionchange', () => this.onSelectionChange())
     listen(this.scroller, 'scroll', () => {
@@ -411,6 +436,7 @@ export class EditorView {
     anchor = Math.max(0, Math.min(anchor, len))
     head = Math.max(0, Math.min(head, len))
     this.lastSel = { anchor, head }
+    this.reveal(anchor, head)
     if (document.activeElement !== this.content) this.focus()
     const [an, ao] = this.domAt(anchor)
     const [hn, ho] = this.domAt(head)
@@ -437,6 +463,7 @@ export class EditorView {
     if (prev.head !== cur.head || prev.anchor !== cur.anchor) {
       this.wholeWord = false
       this.clearCarets()
+      if (cur.anchor === cur.head) this.reveal(cur.head)
     }
     this.updateCurLine()
     this.opts.onSelection?.(cur)
@@ -487,6 +514,7 @@ export class EditorView {
     if (this.statement) this.statement = null
     // Change markers follow the lines until they are recomputed.
     const shift = c.newLines - c.oldLines
+    if (this.folds.length) this.foldsAfterChange(c)
     if (this.marks.size && shift) {
       const next = new Map<number, LineMark>()
       for (const [l, m] of this.marks) next.set(l <= c.fromLine ? l : Math.max(c.fromLine, l + shift), m)
@@ -1008,9 +1036,11 @@ export class EditorView {
     return true
   }
 
-  /** Line above (-1) or below (1), -1 past the document. */
+  /** Line shown above (-1) or below (1), -1 past the document. */
   private nextLine(line: number, dir: -1 | 1) {
-    const l = line + dir
+    let l = line + dir
+    const h = this.hiddenAt(l)
+    if (h) l = dir > 0 ? h[1] + 1 : h[0] - 1
     return l < 0 || l >= this.doc.lineCount ? -1 : l
   }
 
@@ -1180,6 +1210,161 @@ export class EditorView {
     return (offset < end ? rect.left : rect.right) - this.content.getBoundingClientRect().left
   }
 
+  // ---------- folding ----------
+
+  /** Header lines of the folded ranges (saved in the session). */
+  foldedLines() {
+    return this.folds.map((f) => f.line)
+  }
+
+  /** Folds again the ranges opened by these lines (session restore). */
+  restoreFolds(lines: number[]) {
+    const list: Fold[] = []
+    for (const line of lines) {
+      const end = line < this.doc.lineCount ? this.folder.end(line) : -1
+      if (end > line) list.push({ line, end })
+    }
+    this.setFolds(list, false)
+  }
+
+  /** Folds the innermost range holding the caret line. */
+  fold() {
+    const line = this.doc.lineAt(this.getSelection().head)
+    for (let l = line, k = 0; l >= 0 && k < 5000; l = this.nextLine(l, -1), k++) {
+      if (this.folds.some((f) => f.line === l)) continue
+      const end = this.folder.end(l)
+      // With brackets, the line of the closing one belongs to the range too.
+      if (end > l && (end >= line || (end + 1 === line && /^\s*[}\])]/.test(this.doc.lineText(line))))) {
+        this.setFolds([...this.folds, { line: l, end }])
+        return
+      }
+    }
+  }
+
+  /** Unfolds the range of the caret line. */
+  unfold() {
+    const line = this.doc.lineAt(this.getSelection().head)
+    this.setFolds(this.folds.filter((f) => f.line !== line))
+  }
+
+  foldAll() {
+    this.setFolds(this.folder.all())
+  }
+
+  unfoldAll() {
+    this.setFolds([])
+  }
+
+  /** Gutter marker: folds or unfolds the range a line opens. */
+  toggleFold(line: number) {
+    if (this.folds.some((f) => f.line === line)) return this.setFolds(this.folds.filter((f) => f.line !== line))
+    const end = this.folder.end(line)
+    if (end > line) this.setFolds([...this.folds, { line, end }])
+  }
+
+  private setFolds(list: Fold[], notify = true) {
+    if (this.hasFocus()) this.getSelection()
+    const byLine = new Map<number, Fold>()
+    for (const f of list) byLine.set(f.line, f)
+    this.folds = [...byLine.values()].sort((a, b) => a.line - b.line)
+    this.clearCarets()
+    this.applyFolds()
+    // A caret left in a hidden line goes to the end of the header line.
+    const h = this.hiddenAt(this.doc.lineAt(this.lastSel.head))
+    if (h) {
+      const end = this.doc.lineEnd(h[0] - 1)
+      if (this.hasFocus()) this.select(end, end)
+      else this.lastSel = { anchor: end, head: end }
+    }
+    if (notify) this.opts.onFolds?.()
+    this.schedule()
+  }
+
+  /** Unfolds the ranges hiding these offsets. */
+  private reveal(...offsets: number[]) {
+    if (!this.hidden.length) return
+    const lines = offsets.map((o) => this.doc.lineAt(o))
+    if (!lines.some((l) => this.hiddenAt(l))) return
+    this.folds = this.folds.filter((f) => !lines.some((l) => l > f.line && l <= f.end))
+    this.applyFolds()
+    this.opts.onFolds?.()
+    this.schedule()
+  }
+
+  /** Folds follow the edits; an edit inside a range (or changing the lines of its header) unfolds it. */
+  private foldsAfterChange(c: Change) {
+    const last = c.fromLine + c.oldLines - 1
+    const shift = c.newLines - c.oldLines
+    const kept = this.folds.filter((f) => !(c.fromLine <= f.end && last > f.line) && !(shift && c.fromLine <= f.line && last >= f.line))
+    const dropped = kept.length !== this.folds.length
+    for (const f of kept) {
+      if (f.line > last) {
+        f.line += shift
+        f.end += shift
+      }
+    }
+    this.folds = kept
+    this.applyFolds()
+    if (dropped) this.opts.onFolds?.()
+  }
+
+  /** Hides the folded lines: blocks are split at the range limits and the inner ones get display: none. */
+  private applyFolds() {
+    const ranges = this.folds.map((f): [number, number] => [f.line + 1, Math.min(f.end, this.doc.lineCount - 1)]).sort((a, b) => a[0] - b[0])
+    const merged: [number, number][] = []
+    for (const r of ranges) {
+      const m = merged[merged.length - 1]
+      if (m && r[0] <= m[1] + 1) m[1] = Math.max(m[1], r[1])
+      else if (r[1] >= r[0]) merged.push([r[0], r[1]])
+    }
+    this.hidden = merged
+    let split = false
+    for (const [s, e] of merged) {
+      split = this.splitAt(s) || split
+      split = this.splitAt(e + 1) || split
+    }
+    const starts = this.starts()
+    for (let i = 0, k = 0; i < this.blocks.length; i++) {
+      while (k < merged.length && merged[k][1] < starts[i]) k++
+      this.blocks[i].el.classList.toggle('ed-folded', k < merged.length && merged[k][0] <= starts[i])
+    }
+    // Moving a text node to a new block loses the DOM selection.
+    if (split && this.hasFocus()) {
+      const [an, ao] = this.domAt(this.lastSel.anchor)
+      const [hn, ho] = this.domAt(this.lastSel.head)
+      document.getSelection()?.setBaseAndExtent(an, ao, hn, ho)
+    }
+  }
+
+  /** Makes a block start at a line; true when a block was split. */
+  private splitAt(line: number) {
+    if (line <= 0 || line >= this.doc.lineCount) return false
+    const i = this.blockIndex(line)
+    const first = this.starts()[i]
+    if (first === line) return false
+    const blk = this.blocks[i]
+    const rest = blk.text.splitText(this.doc.lineStart(line) - this.blockStartOffset(i))
+    const el = document.createElement('div')
+    el.className = 'ed-block'
+    el.append(rest)
+    blk.el.after(el)
+    const nb: Block = { el, text: rest, lines: blk.lines - (line - first), index: 0 }
+    blk.lines = line - first
+    this.blockOf.set(el, nb)
+    this.blockOf.set(rest, nb)
+    this.blocks.splice(i + 1, 0, nb)
+    this.blockStarts = null
+    return true
+  }
+
+  /** The line opens a range (cached until the next edit). */
+  private canFold(line: number) {
+    if (this.foldable.version !== this.doc.version) this.foldable = { version: this.doc.version, lines: new Map() }
+    let v = this.foldable.lines.get(line)
+    if (v === undefined) this.foldable.lines.set(line, (v = this.folder.canFold(line)))
+    return v
+  }
+
   // ---------- rendering ----------
 
   private schedule() {
@@ -1211,39 +1396,60 @@ export class EditorView {
     return new StaticRange({ startContainer: sn, startOffset: so, endContainer: en, endOffset: eo })
   }
 
-  visibleLines(): [number, number] {
+  /** Rows (screen lines) shown, first and last. */
+  private visibleRows(): [number, number] {
     const top = this.scroller.scrollTop
     const h = this.scroller.clientHeight || 800
-    const first = Math.max(0, Math.floor((top - this.padTop) / this.lineHeight))
-    const last = Math.min(this.doc.lineCount - 1, Math.ceil((top + h) / this.lineHeight))
-    return [first, last]
+    return [Math.max(0, Math.floor((top - this.padTop) / this.lineHeight)), Math.ceil((top + h) / this.lineHeight)]
+  }
+
+  visibleLines(): [number, number] {
+    const [first, last] = this.visibleRows()
+    return [this.lineOfRow(first), this.lineOfRow(last)]
   }
 
   render() {
     if (!this.root.isConnected) return
     const n = this.doc.lineCount
-    const [first, last] = this.visibleLines()
-    const a = Math.max(0, first - MARGIN)
-    const b = Math.min(n - 1, last + MARGIN)
+    const [first, last] = this.visibleRows()
+    const a = this.lineOfRow(first - MARGIN)
+    const b = this.lineOfRow(last + MARGIN)
+    // Lines a..b not hidden by a fold.
+    const vis: number[] = []
+    for (let l = a, k = 0; l <= b; l++) {
+      while (k < this.hidden.length && this.hidden[k][1] < l) k++
+      if (k < this.hidden.length && this.hidden[k][0] <= l) l = this.hidden[k][1]
+      else vis.push(l)
+    }
 
     // Gutter: only the numbers of the rendered lines, moved to their place.
     let nums = ''
-    for (let i = a + 1; i <= b + 1; i++) nums += i + '\n'
+    for (const l of vis) nums += l + 1 + '\n'
     this.gutterNums.textContent = nums
-    this.gutterNums.style.transform = `translateY(${this.padTop + a * this.lineHeight}px)`
-    this.gutter.style.width = `calc(${String(n).length}ch + 24px)`
+    this.gutterNums.style.transform = `translateY(${this.lineTop(a)}px)`
+    this.gutter.style.width = `calc(${String(n).length}ch + 36px)`
     let marks = ''
-    for (let i = a; i <= b; i++) {
-      const m = this.marks.get(i)
-      if (m) marks += `<div class="ed-mark mark-${m}" style="top:${this.lineTop(i)}px;height:${this.lineHeight}px"></div>`
+    let folds = ''
+    let holders = ''
+    const lh = this.lineHeight
+    for (const l of vis) {
+      const m = this.marks.get(l)
+      const top = this.lineTop(l)
+      if (m) marks += `<div class="ed-mark mark-${m}" style="top:${top}px;height:${lh}px"></div>`
+      if (this.folds.some((f) => f.line === l)) {
+        folds += `<div class="ed-fold folded" data-fold="${l}" style="top:${top}px;height:${lh}px"></div>`
+        holders += `<div class="ed-placeholder" data-fold="${l}" style="left:${this.xAt(this.doc.lineEnd(l)) + 6}px;top:${top + 2}px;height:${lh - 4}px;line-height:${lh - 4}px">\u22ef</div>`
+      } else if (this.canFold(l)) folds += `<div class="ed-fold" data-fold="${l}" style="top:${top}px;height:${lh}px"></div>`
     }
     this.gutterMarks.innerHTML = marks
+    this.gutterFolds.innerHTML = folds
+    this.placeholders.innerHTML = holders
 
     this.clearOwn()
     if (registry()) {
       this.starts()
       let bi = this.blockIndex(a)
-      for (let line = a; line <= b; line++) {
+      for (const line of vis) {
         while (bi + 1 < this.blocks.length && this.blockStarts![bi + 1] <= line) bi++
         const blk = this.blocks[bi]
         const base = this.doc.lineStart(line) - this.blockStartOffset(bi)
@@ -1270,8 +1476,8 @@ export class EditorView {
         }
       }
     }
-    this.renderGuides(a, b)
-    this.renderWhitespace(a, b)
+    this.renderGuides(vis)
+    this.renderWhitespace(vis)
     this.renderCarets(a, b)
     this.renderStatement()
     this.updateCurLine()
@@ -1279,12 +1485,41 @@ export class EditorView {
 
   /** Top of a line in the content. */
   private lineTop(line: number) {
-    return this.padTop + line * this.lineHeight
+    return this.padTop + this.rowOf(line) * this.lineHeight
   }
 
   /** Line at a height in the content. */
   private lineAtY(y: number) {
-    return Math.floor((y - this.padTop) / this.lineHeight)
+    return this.lineOfRow(Math.floor((y - this.padTop) / this.lineHeight))
+  }
+
+  /** Screen row of a line: its number less the hidden lines above it. */
+  private rowOf(line: number) {
+    let row = line
+    for (const [s, e] of this.hidden) {
+      if (s >= line) break
+      row -= Math.min(e, line - 1) - s + 1
+    }
+    return row
+  }
+
+  /** Line shown at a screen row. */
+  private lineOfRow(row: number) {
+    let line = Math.max(0, row)
+    for (const [s, e] of this.hidden) {
+      if (s > line) break
+      line += e - s + 1
+    }
+    return Math.min(line, this.doc.lineCount - 1)
+  }
+
+  /** Hidden range holding a line, if any. */
+  private hiddenAt(line: number) {
+    for (const r of this.hidden) {
+      if (r[0] > line) return null
+      if (r[1] >= line) return r
+    }
+    return null
   }
 
   /** Indentation width of a line in columns, -1 for a blank line. */
@@ -1335,60 +1570,64 @@ export class EditorView {
   }
 
   /**
-   * Whitespace of lines a..b, drawn over the text: a copy of the lines in transparent
+   * Whitespace of the rendered lines, drawn over the text: a copy of the lines in transparent
    * characters (same widths, tabs included) where spaces, tabs and line ends get a mark.
    */
-  private renderWhitespace(a: number, b: number) {
-    if (!this.opts.showWhitespace) {
+  private renderWhitespace(vis: number[]) {
+    if (!this.opts.showWhitespace || !vis.length) {
       if (this.ws.firstChild) this.ws.replaceChildren()
       return
     }
     const esc: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', ' ': '<i> </i>', '\t': '<i class="t">\t</i>' }
     let html = ''
-    for (let l = a; l <= b; l++) {
+    for (const l of vis) {
       html += this.doc.lineText(l).replace(/[&<> \t]/g, (c) => esc[c])
       html += l < this.doc.lineCount - 1 ? '<i class="n">\u21b5</i>\n' : '\n'
     }
-    this.ws.style.top = `${this.lineTop(a)}px`
+    this.ws.style.top = `${this.lineTop(vis[0])}px`
     this.ws.innerHTML = html
   }
 
-  /** Indentation guides of lines a..b; the one of the block holding the caret stands out. */
-  private renderGuides(a: number, b: number) {
+  /**
+   * Indentation guides of the rendered lines (indexes in `vis`); the one of the block
+   * holding the caret stands out.
+   */
+  private renderGuides(vis: number[]) {
     if (!this.opts.indentGuides) {
       this.guides.replaceChildren()
       return
     }
     const step = this.indentStep()
-    const ind: number[] = []
-    for (let l = a; l <= b; l++) ind.push(this.blockIndent(l))
+    const ind = vis.map((l) => this.blockIndent(l))
+    const b = vis.length - 1
     // Active guide: the block the caret line opens, else the block holding it.
     let active: [number, number, number] | null = null
-    const caret = this.doc.lineAt(this.lastSel.head)
-    this.guideLine = caret
-    if (caret >= a && caret <= b) {
-      const own = ind[caret - a]
+    const caretLine = this.doc.lineAt(this.lastSel.head)
+    this.guideLine = caretLine
+    const caret = vis.indexOf(caretLine)
+    if (caret >= 0) {
+      const own = ind[caret]
       let next = -1
-      for (let l = caret + 1; l < this.doc.lineCount && next < 0 && l - caret < 200; l++) next = this.indentOf(l)
+      for (let l = this.nextLine(caretLine, 1), k = 0; l >= 0 && next < 0 && k < 200; l = this.nextLine(l, 1), k++) next = this.indentOf(l)
       const col = next > own ? own : own - step
       if (col >= 0) {
         let from = next > own ? caret + 1 : caret
         let to = from
-        while (from - 1 >= a && ind[from - 1 - a] > col) from--
-        while (to + 1 <= b && ind[to + 1 - a] > col) to++
+        while (from - 1 >= 0 && ind[from - 1] > col) from--
+        while (to + 1 <= b && ind[to + 1] > col) to++
         active = [Math.floor(col / step) * step, from, to]
       }
     }
     let html = ''
     const seg = (col: number, from: number, to: number) => {
       const on = active && active[0] === col && active[1] <= from && active[2] >= to
-      html += `<div class="ed-guide${on ? ' active' : ''}" style="left:${(col + 0.5) * this.charWidth}px;top:${this.lineTop(from)}px;height:${(to - from + 1) * this.lineHeight}px"></div>`
+      html += `<div class="ed-guide${on ? ' active' : ''}" style="left:${(col + 0.5) * this.charWidth}px;top:${this.lineTop(vis[from])}px;height:${(to - from + 1) * this.lineHeight}px"></div>`
     }
     const max = Math.max(0, ...ind)
     for (let col = 0; col < max; col += step) {
       let start = -1
-      for (let l = a; l <= b + 1; l++) {
-        const inside = l <= b && ind[l - a] > col
+      for (let l = 0; l <= b + 1; l++) {
+        const inside = l <= b && ind[l] > col
         // The active block gets its own segment.
         const cut = active && active[0] === col && (l === active[1] || l === active[2] + 1)
         if (start >= 0 && (!inside || cut)) {

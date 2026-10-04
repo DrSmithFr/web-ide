@@ -274,6 +274,7 @@ export interface UseViewOptions {
   onFocus?: () => void
   onKey?: (e: KeyboardEvent) => boolean
   onType?: (text: string) => void
+  onFolds?: (v: EditorView) => void
 }
 
 export function useEditorView(doc: () => Doc | null, host: () => HTMLElement | undefined, opts: UseViewOptions = {}) {
@@ -295,6 +296,7 @@ export function useEditorView(doc: () => Doc | null, host: () => HTMLElement | u
         onFocus: () => untrack(() => opts.onFocus?.()),
         onKey: (e) => untrack(() => opts.onKey?.(e) ?? false),
         onType: (t) => untrack(() => opts.onType?.(t)),
+        onFolds: () => untrack(() => opts.onFolds?.(v)),
       })
       v.mount(h)
       setView(v)
@@ -361,9 +363,13 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
     onSelection: (v) => {
       completion?.onSelection()
       const sel = v.getSelection()
-      saveCursor(path, { anchor: sel.anchor, head: sel.head, scroll: v.scroller.scrollTop })
+      saveCursor(path, { anchor: sel.anchor, head: sel.head, scroll: v.scroller.scrollTop, folds: v.foldedLines() })
       const { line, col } = v.doc.pos(sel.head)
       setCursorInfo({ line: line + 1, col: col + 1, sel: Math.abs(sel.head - sel.anchor), lang: languageName(v.doc.lang) })
+    },
+    onFolds: (v) => {
+      const sel = v.getSelection()
+      saveCursor(path, { anchor: sel.anchor, head: sel.head, scroll: v.scroller.scrollTop, folds: v.foldedLines() })
     },
     onCtrlClick: (v, off) => lspc.gotoDeclaration(v.doc, off),
     onFocus: () => setActivePane(props.paneId),
@@ -377,6 +383,7 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
       if (!v) return
       const c = untrack(() => session.cursors[path])
       if (c) {
+        if (c.folds?.length) v.restoreFolds(c.folds)
         v.scroller.scrollTop = c.scroll
         if (untrack(isActive)) v.setSelection(c.anchor, c.head, false)
         else v.restoreSelection({ anchor: c.anchor, head: c.head })
@@ -452,6 +459,10 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
     registerAction('edit.nextOccurrence', when((v) => v.addNextOccurrence(), true)),
     registerAction('edit.unselectOccurrence', when((v) => v.removeLastOccurrence(), true)),
     registerAction('edit.allOccurrences', when((v) => v.selectAllOccurrences(), true)),
+    registerAction('edit.fold', when((v) => v.fold(), true)),
+    registerAction('edit.unfold', when((v) => v.unfold(), true)),
+    registerAction('edit.foldAll', when((v) => v.foldAll(), true)),
+    registerAction('edit.unfoldAll', when((v) => v.unfoldAll(), true)),
     registerAction('nav.subwordLeft', when((v) => v.moveSubword(-1, false), true)),
     registerAction('nav.subwordRight', when((v) => v.moveSubword(1, false), true)),
     registerAction('nav.subwordLeftSelect', when((v) => v.moveSubword(-1, true), true)),
