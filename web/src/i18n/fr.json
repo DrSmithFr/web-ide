@@ -1152,5 +1152,7 @@
   "Always select the opened file": "Toujours sélectionner le fichier ouvert",
   "Expand all": "Tout déplier",
   "Collapse all": "Tout replier",
-  "Options": "Options"
+  "Options": "Options",
+  "Indentation guides": "Guides d'indentation",
+  "Show the indentation guides": "Afficher les guides d'indentation"
 }

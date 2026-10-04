@@ -211,6 +211,10 @@ function EditorSettings() {
         <input type="checkbox" checked={settings.editor.highlightLine} onChange={(e) => updateSettings((s) => (s.editor.highlightLine = e.currentTarget.checked), 'Current line')} />
         {t('Highlight the current line')}
       </label>
+      <label class="check">
+        <input type="checkbox" checked={settings.editor.indentGuides} onChange={(e) => updateSettings((s) => (s.editor.indentGuides = e.currentTarget.checked), 'Indentation guides')} />
+        {t('Show the indentation guides')}
+      </label>
     </section>
   )
 }

@@ -23,6 +23,7 @@ export interface ViewOptions {
   tabSize: number
   insertSpaces: boolean
   highlightLine: boolean
+  indentGuides?: boolean
   readOnly?: boolean
   onSelection?: (sel: Selection) => void
   onCtrlClick?: (offset: number) => void
@@ -84,6 +85,9 @@ export class EditorView {
   private marks = new Map<number, LineMark>()
   private curLine: HTMLDivElement
   private boxes: HTMLDivElement
+  private guides: HTMLDivElement
+  private guideLine = -1
+  private step: { version: number; tabSize: number; cols: number } | null = null
   private tooltip: HTMLDivElement
   private blocks: Block[] = []
   private blockStarts: number[] | null = null
@@ -122,6 +126,8 @@ export class EditorView {
     this.curLine.className = 'ed-curline'
     this.boxes = document.createElement('div')
     this.boxes.className = 'ed-boxes'
+    this.guides = document.createElement('div')
+    this.guides.className = 'ed-guides'
     this.content = document.createElement('pre')
     this.content.className = 'ed-content'
     this.content.spellcheck = false
@@ -132,7 +138,7 @@ export class EditorView {
     this.setReadOnly(!!opts.readOnly || doc.readOnly)
     this.tooltip = document.createElement('div')
     this.tooltip.className = 'ed-tooltip'
-    main.append(this.curLine, this.boxes, this.content)
+    main.append(this.curLine, this.guides, this.boxes, this.content)
     inner.append(this.gutter, main)
     this.scroller.append(inner)
     this.root.append(this.scroller, this.tooltip)
@@ -822,7 +828,7 @@ export class EditorView {
     let marks = ''
     for (let i = a; i <= b; i++) {
       const m = this.marks.get(i)
-      if (m) marks += `<div class="ed-mark mark-${m}" style="top:${this.padTop + i * this.lineHeight}px;height:${this.lineHeight}px"></div>`
+      if (m) marks += `<div class="ed-mark mark-${m}" style="top:${this.lineTop(i)}px;height:${this.lineHeight}px"></div>`
     }
     this.gutterMarks.innerHTML = marks
 
@@ -857,16 +863,119 @@ export class EditorView {
         }
       }
     }
+    this.renderGuides(a, b)
     this.renderStatement()
     this.updateCurLine()
   }
 
+  /** Top of a line in the content. */
+  private lineTop(line: number) {
+    return this.padTop + line * this.lineHeight
+  }
+
+  /** Indentation width of a line in columns, -1 for a blank line. */
+  private indentOf(line: number) {
+    const t = this.doc.lineText(line)
+    const tab = this.opts.tabSize
+    let col = 0
+    for (let i = 0; i < t.length; i++) {
+      const c = t.charCodeAt(i)
+      if (c === 32) col++
+      else if (c === 9) col += tab - (col % tab)
+      else return col
+    }
+    return -1
+  }
+
+  /** Indentation of a line; a blank line takes the smaller one of the lines around it. */
+  private blockIndent(line: number) {
+    const own = this.indentOf(line)
+    if (own >= 0) return own
+    const near = (dir: number) => {
+      for (let l = line + dir, k = 0; l >= 0 && l < this.doc.lineCount && k < 200; l += dir, k++) {
+        const i = this.indentOf(l)
+        if (i >= 0) return i
+      }
+      return 0
+    }
+    return Math.min(near(-1), near(1))
+  }
+
+  /** Indentation step of the file: the most frequent indentation increase, else the tab size. */
+  private indentStep() {
+    const tab = this.opts.tabSize
+    if (this.step?.version === this.doc.version && this.step.tabSize === tab) return this.step.cols
+    const counts = new Map<number, number>()
+    let prev = 0
+    for (let l = 0, n = Math.min(this.doc.lineCount, 1000); l < n; l++) {
+      const i = this.indentOf(l)
+      if (i < 0) continue
+      if (i > prev) counts.set(i - prev, (counts.get(i - prev) ?? 0) + 1)
+      prev = i
+    }
+    let cols = tab
+    let best = 0
+    for (const [d, c] of counts) if (c > best || (c === best && d < cols)) [cols, best] = [d, c]
+    this.step = { version: this.doc.version, tabSize: tab, cols: Math.max(1, Math.min(cols, 8)) }
+    return this.step.cols
+  }
+
+  /** Indentation guides of lines a..b; the one of the block holding the caret stands out. */
+  private renderGuides(a: number, b: number) {
+    if (!this.opts.indentGuides) {
+      this.guides.replaceChildren()
+      return
+    }
+    const step = this.indentStep()
+    const ind: number[] = []
+    for (let l = a; l <= b; l++) ind.push(this.blockIndent(l))
+    // Active guide: the block the caret line opens, else the block holding it.
+    let active: [number, number, number] | null = null
+    const caret = this.doc.lineAt(this.lastSel.head)
+    this.guideLine = caret
+    if (caret >= a && caret <= b) {
+      const own = ind[caret - a]
+      let next = -1
+      for (let l = caret + 1; l < this.doc.lineCount && next < 0 && l - caret < 200; l++) next = this.indentOf(l)
+      const col = next > own ? own : own - step
+      if (col >= 0) {
+        let from = next > own ? caret + 1 : caret
+        let to = from
+        while (from - 1 >= a && ind[from - 1 - a] > col) from--
+        while (to + 1 <= b && ind[to + 1 - a] > col) to++
+        active = [Math.floor(col / step) * step, from, to]
+      }
+    }
+    let html = ''
+    const seg = (col: number, from: number, to: number) => {
+      const on = active && active[0] === col && active[1] <= from && active[2] >= to
+      html += `<div class="ed-guide${on ? ' active' : ''}" style="left:${(col + 0.5) * this.charWidth}px;top:${this.lineTop(from)}px;height:${(to - from + 1) * this.lineHeight}px"></div>`
+    }
+    const max = Math.max(0, ...ind)
+    for (let col = 0; col < max; col += step) {
+      let start = -1
+      for (let l = a; l <= b + 1; l++) {
+        const inside = l <= b && ind[l - a] > col
+        // The active block gets its own segment.
+        const cut = active && active[0] === col && (l === active[1] || l === active[2] + 1)
+        if (start >= 0 && (!inside || cut)) {
+          seg(col, start, l - 1)
+          start = -1
+        }
+        if (inside && start < 0) start = l
+      }
+    }
+    this.guides.innerHTML = html
+  }
+
   private updateCurLine() {
+    // The active indentation guide follows the caret line.
+    if (this.opts.indentGuides && this.doc.lineAt(this.lastSel.head) !== this.guideLine) this.schedule()
     const show = this.opts.highlightLine && this.lastSel.anchor === this.lastSel.head
     this.curLine.style.display = show ? 'block' : 'none'
     if (show) {
       const line = this.doc.lineAt(this.lastSel.head)
-      this.curLine.style.transform = `translateY(${this.padTop + line * this.lineHeight}px)`
+      this.curLine.style.transform = `translateY(${this.lineTop(line)}px)`
       this.curLine.style.height = `${this.lineHeight}px`
     }
   }
@@ -912,7 +1021,7 @@ export class EditorView {
     for (let l = l1; l <= l2; l++) maxCol = Math.max(maxCol, this.visualCol(l, this.doc.lineEnd(l)))
     const box = document.createElement('div')
     box.className = 'ed-statement'
-    box.style.top = `${this.padTop + l1 * this.lineHeight - 1}px`
+    box.style.top = `${this.lineTop(l1) - 1}px`
     box.style.height = `${(l2 - l1 + 1) * this.lineHeight + 2}px`
     box.style.width = `${maxCol * this.charWidth + 6}px`
     this.boxes.append(box)
@@ -927,7 +1036,7 @@ export class EditorView {
 
   scrollToOffset(offset: number, center = false) {
     const line = this.doc.lineAt(offset)
-    const top = this.padTop + line * this.lineHeight
+    const top = this.lineTop(line)
     const s = this.scroller
     if (center) s.scrollTop = Math.max(0, top - s.clientHeight / 3)
     else if (top < s.scrollTop) s.scrollTop = top - this.lineHeight
