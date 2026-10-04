@@ -9,7 +9,7 @@ export const zones: Zone[] = ['left', 'bottomLeft', 'bottomRight', 'right']
 export const defaultPlacement: Record<Zone, string[]> = {
   left: ['explorer', 'search', 'git', 'kanban'],
   bottomLeft: ['console'],
-  bottomRight: ['problems'],
+  bottomRight: ['problems', 'docker'],
   right: ['database', 'assistant', 'structure', 'conflicts', 'info'],
 }
 

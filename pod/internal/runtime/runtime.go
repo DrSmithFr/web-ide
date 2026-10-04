@@ -13,6 +13,7 @@ import (
 
 	"github.com/DrSmithFr/web-ide/pod/internal/console"
 	"github.com/DrSmithFr/web-ide/pod/internal/db"
+	"github.com/DrSmithFr/web-ide/pod/internal/docker"
 	"github.com/DrSmithFr/web-ide/pod/internal/execx"
 	"github.com/DrSmithFr/web-ide/pod/internal/fsx"
 	"github.com/DrSmithFr/web-ide/pod/internal/git"
@@ -56,6 +57,7 @@ type Runtime struct {
 	LSP      *lsp.Manager
 	DB       *db.Manager
 	Git      *git.Repo
+	Docker   *docker.Docker
 
 	emit    Emit
 	watcher fsx.Watcher
@@ -117,6 +119,7 @@ func Open(p projects.Project, creds sshx.Creds, d Deps, emit Emit) (*Runtime, er
 	exists := func(p string) bool { _, err := r.FS.Stat(p); return err == nil }
 	r.LSP = lsp.NewManager(r.Runner, root, r.Local, r.Config.LSP, exists, func(ev string, data any) { r.emit(ev, data, "") })
 	r.Git = git.New(r.Runner, root)
+	r.Docker = docker.New(r.Runner, root, exists)
 	r.DB = db.NewManager(db.Deps{FS: r.FS, Root: root, ProjectID: p.ID, Local: r.Local, Runner: r.Runner, Pool: d.Pool, Store: d.Store})
 	return r, nil
 }

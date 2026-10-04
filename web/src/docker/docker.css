@@ -1,0 +1,43 @@
+/* Docker tool: list of containers, detail pane beside it (under it when narrow). */
+.docker-tool .tool-body { container-type: inline-size; }
+.dk-main { position: absolute; inset: 0; display: flex; }
+.dk-list { flex: 1 1 55%; min-width: 0; overflow: auto; }
+.dk-detail { flex: 1 1 45%; min-width: 0; display: flex; flex-direction: column; border-left: 1px solid var(--line); }
+@container (max-width: 640px) {
+  .dk-main { flex-direction: column; }
+  .dk-detail { border-left: 0; border-top: 1px solid var(--line); }
+  .dk-image, .dk-ports { display: none; }
+}
+.dk-bar { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-bottom: 1px solid var(--line); min-height: 30px; flex: none; }
+.dk-row { display: grid; grid-template-columns: 14px minmax(90px, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) 56px 70px auto; align-items: center; gap: 8px; height: 26px; padding: 0 6px 0 10px; cursor: pointer; white-space: nowrap; font-size: 12.5px; }
+.dk-row:hover { background: var(--bg-hover); }
+.dk-row.selected { background: var(--bg-active); }
+.dk-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--fg-faint); justify-self: center; }
+.dk-dot.up { background: var(--ok); }
+.dk-dot.starting { background: var(--warn); }
+.dk-dot.bad { background: var(--danger); }
+.dk-dot.none { background: transparent; border: 1px dashed var(--fg-faint); }
+.dk-indent { display: inline-block; width: 12px; }
+.dk-ports { display: flex; gap: 6px; font-family: var(--font-code); font-size: 11.5px; }
+.dk-num { text-align: right; font-variant-numeric: tabular-nums; font-size: 11.5px; }
+.dk-actions { display: flex; align-items: center; gap: 1px; min-width: 66px; justify-content: flex-end; }
+.dk-row:not(:hover):not(.selected) .dk-actions .icon-btn { opacity: 0.45; }
+.dk-group { padding: 8px 10px 2px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; font-size: 10.5px; }
+.dk-message { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.dk-error { white-space: pre-wrap; }
+.dk-detail-head { display: flex; align-items: center; gap: 8px; padding: 0 6px 0 10px; height: 30px; border-bottom: 1px solid var(--line); flex: none; }
+.dk-detail-title { font-weight: 600; max-width: 40%; }
+.dk-subtabs { display: flex; gap: 2px; }
+.dk-subtabs .toggle { font-family: var(--font-ui); }
+.dk-detail-body { flex: 1; min-height: 0; overflow: auto; padding: 8px 10px; }
+.dk-kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0; font-size: 12.5px; }
+.dk-kv dt { color: var(--fg-muted); }
+.dk-kv dd { margin: 0; overflow-wrap: anywhere; }
+.dk-items { display: flex; flex-direction: column; gap: 2px; }
+.dk-logs { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+.dk-filter { width: 180px; }
+.dk-log-lines { flex: 1; min-height: 0; overflow: auto; padding: 4px 10px; font-family: var(--font-code); font-size: 12px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg-2); }
+.dk-log-time { color: var(--fg-faint); margin-right: 8px; }
+.dk-log-svc { color: var(--info); margin-right: 8px; }
+.dk-log-end { margin-top: 4px; }
+.dk-follow { position: absolute; right: 16px; bottom: 10px; box-shadow: 0 4px 12px rgb(0 0 0 / 0.3); }

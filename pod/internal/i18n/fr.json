@@ -61,6 +61,8 @@
   "not a git repository": "pas de dépôt git",
   "open transaction: commit or roll back before going back to auto-commit": "transaction ouverte : faire un commit ou un rollback avant de repasser en automatique",
   "outside the repository: %s": "hors du dépôt : %s",
+  "the docker command is not installed": "la commande docker n'est pas installée",
+  "unknown action %s": "action inconnue : %s",
   "unknown revision: %s": "révision inconnue : %s",
   "unknown reset mode: %s": "mode de reset inconnu : %s",
   "Pair": "Appairer",

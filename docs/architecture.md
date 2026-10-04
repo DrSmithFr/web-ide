@@ -10,7 +10,7 @@ browser (SolidJS app)  ──WebSocket JSON-RPC──▶  pod (Go binary)
                                                  ├─ terminals (PTY), commands
                                                  ├─ language servers (LSP)
                                                  ├─ databases (SQLite, PostgreSQL, Redis)
-                                                 ├─ git
+                                                 ├─ git, docker
                                                  └─ model servers (llama.cpp, Ollama)
 ```
 
@@ -49,6 +49,7 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 | `lsp` | Language servers per project and language |
 | `db` | SQLite (modernc), PostgreSQL (pgx), Redis (go-redis), SSH tunnels |
 | `git` | Git panel operations |
+| `docker` | Docker tool: status, Compose stack, containers, inspect, stats, log streams (the `docker` command, JSON formats only) |
 | `search` | Project-wide search (RE2) and file list |
 | `llm` | Model servers, chat completions as jobs that survive the page, conversations (SQLite), instructions and skills |
 | `kanban` | Tickets (SQLite), workflow rules, ticket git operations (worktrees, diff, merge, rebase) |
@@ -70,6 +71,7 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 | `tools/`, `db/`, `console/`, `conflict/`, `settings/`, `pages/` | Right-panel tools, database explorer, Console and Problems tools, conflict dialog, settings modal, pages |
 | `llm/` | AI assistant: state, agent loop, tools, prompt, Markdown, attachments, speech recognition |
 | `kanban/` | Board, ticket view, workflow actions, linked conversations |
+| `docker/` | Docker tool: lists and polling (`state.ts`), detail pane, logs with ANSI colors (`ansi.ts`) |
 | `i18n/` | `t()` and the catalogs (English source strings, French translation) |
 
 ### AI assistant
@@ -98,10 +100,10 @@ make build          # front end (Vite) then pod binary bin/web-ide-pod (front en
 make dev            # pod with -allow-remote on 0.0.0.0:4433 + Vite on 0.0.0.0:5173 (hot reload)
 make test           # go vet + go test + tsc
 make e2e            # browser tests, all suites (a few minutes)
-./e2e/run.sh git    # one suite: editing editor features restore+ git projects explorer lsp llm agent chat plan kanban kanbanai kanbangit i18n speech perf
+./e2e/run.sh git    # one suite: editing editor features restore+ git projects explorer lsp llm agent chat plan kanban kanbanai kanbangit docker i18n speech perf
 ```
 
-- Each e2e suite gets a fresh pod with temporary data and a workspace copied from `e2e/fixtures`; a suite ending with `+` reuses the previous pod. The assistant suites use a scripted fake OpenAI-compatible server. Chromium comes from the Playwright cache or `CHROME=…`; the `speech` suite downloads `whisper-tiny` once (kept in `~/.cache/web-ide-e2e/models`); the `lsp` suite needs `gopls`.
+- Each e2e suite gets a fresh pod with temporary data and a workspace copied from `e2e/fixtures`; a suite ending with `+` reuses the previous pod. The assistant suites use a scripted fake OpenAI-compatible server. Chromium comes from the Playwright cache or `CHROME=…`; the `speech` suite downloads `whisper-tiny` once (kept in `~/.cache/web-ide-e2e/models`); the `lsp` suite needs `gopls`; the `docker` suite needs Docker with Compose and the `postgres:17-alpine` image (skipped otherwise).
 - Optional database driver tests against real servers: `WEBIDE_TEST_PG=host:port:user:pass WEBIDE_TEST_REDIS=host:port:pass go test ./internal/db/`.
 - Code navigation needs the language servers in the pod's `PATH` (`gopls` also needs `go`).
 

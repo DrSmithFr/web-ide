@@ -68,7 +68,7 @@ To treat local and SSH projects the same way, the pod exposes one interface (`li
   - Top left: file explorer, global search, Git, kanban.
   - Top right: AI assistant, database explorer, structure, conflicts, infos. Infos stacks three sections: properties (project, target, pod, active tab), connections (local SSH keys, hosts of `~/.ssh/config`) and extensions (language servers).
   - Bottom left: Console, the consoles as tabs (terminals, build output, commands).
-  - Bottom right: Problems, with two tabs: the diagnostics of the language servers and their output. A dot on its icon signals errors.
+  - Bottom right: Problems, with two tabs: the diagnostics of the language servers and their output. A dot on its icon signals errors. Docker (section 14).
 - **Moving tools**: an icon is dragged to another group of the rails (same zone to reorder it); a shown tool stays shown in its new zone. The placement is saved in the session; *View › Reset the tool layout* restores the default one.
 - **Tabs**: file, console and Problems tabs share one look. File and console tabs are reordered by drag and drop (a marker shows where the tab lands; file tabs also move to another pane); the order of the console tabs is saved in the session.
 - **Focus**: the part of the window last clicked or typed in (a tool zone or an editor pane) has the focus; menus, the palette and dialogs leave it unchanged. Its active tab and its rail icon are in the accent color; the active tabs and icons of the other open tools are white (the text color in a light theme). The accent color is the one of the theme or one picked in the settings.
@@ -251,7 +251,28 @@ Right-panel tool talking to a **llama.cpp** or **Ollama** server (address and op
 - Conversations stored per project in SQLite; an answer survives a page reload and can be followed from another window.
 - Local speech recognition: dictation and audio files are transcribed in the browser by Whisper; audio never leaves the page.
 
-## 14. Decisions
+## 14. Docker
+
+Tool of the bottom right zone (beside Problems) driving Docker and Docker Compose. Everything goes through the `docker` command run by the executor, so on an SSH project Docker is the one of the SSH host. Docker missing, its daemon unreachable or not allowed (user outside the `docker` group): the tool shows the error of `docker` and a hint, never `sudo`.
+
+Two tabs (the shown tab is saved in the session), and a detail pane beside the list:
+
+- **Project**: the services of the Compose file at the project root (`compose.yaml`, `compose.yml`, `docker-compose.yaml`, `docker-compose.yml`, with the override files Compose loads itself). A first *Stack* row, then one row per container (a declared service without container shows as *not created*): state dot, name, image, published ports, CPU and memory. Profiles declared by the file are chosen in a menu (saved in the session). Without Compose file, the tab says so.
+- **Host**: every container of the host (`docker ps -a`), grouped by Compose project.
+
+### Actions
+
+- Stack and each service: *Start* (`up -d`), *Stop*, *Restart* (same container), *Recreate* (`up -d --force-recreate`), *Rebuild* (`up -d --build`), *Pull* (`pull` then `up -d`); the stack also has *Down* (confirmed) and *Down with volumes* (`down -v`, the project name typed to confirm). Start, stop and restart run in the pod (the row shows a spinner, an error a toast); the others run as tasks in the Console, their output visible.
+- Containers of the Host tab: start, stop, restart, remove (confirmed, `rm -f`), logs, shell.
+- *Shell*: a Console terminal running `docker exec -it` with `bash`, or `sh` when bash is missing; *Shell as root* adds `-u root`.
+- The lists refresh every few seconds while the tool is shown.
+
+### Detail pane
+
+- **Infos**: image, state and health, command, creation date, ports (`host:port → container port/protocol`), mounts (type, source → destination, read-only), networks (name, IP address, aliases), and the live values: CPU, memory (usage / limit), network and block I/O, processes. Instant values from `docker stats --no-stream`, refreshed every few seconds while shown.
+- **Logs**: the last 500 lines, then followed live (`docker logs -f`, `docker compose logs -f` for the Stack row, with a service filter). Text filter, timestamps shown or hidden, ANSI colors kept, scrolling up pauses the following, at most 10,000 lines kept.
+
+## 15. Decisions
 
 - **Q1**: the pod pushes the whole file (`fs.changed`, decoded to UTF-8 with LF line ends, with its encoding and line separator) on each change, after 150 ms of stability (AI tools often write in several steps).
 - **Q2**: "accept both" concatenates local then remote.

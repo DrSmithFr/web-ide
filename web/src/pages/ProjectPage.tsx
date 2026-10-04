@@ -23,6 +23,7 @@ import { DatabaseTool } from '../db/DatabaseTool'
 import { AssistantTool } from '../llm/AssistantTool'
 import { ConflictsTool, StructureTool } from '../tools/tools'
 import { InfoTool } from '../tools/InfoTool'
+import { DockerTool } from '../docker/DockerTool'
 import { openConflict } from '../conflict/ConflictDialog'
 import { openSettings } from '../settings/SettingsModal'
 import { actions, registerAction, runAction, shortcutOf } from '../keys/bindings'
@@ -43,6 +44,7 @@ export const toolPanels: Record<string, { label: string; icon: string; component
   kanban: { label: 'Kanban', icon: 'kanban', component: KanbanPanel },
   console: { label: 'Console', icon: 'terminal', component: ConsoleTool },
   problems: { label: 'Problems', icon: 'problems', component: ProblemsTool, badge: problemCount },
+  docker: { label: 'Docker', icon: 'docker', component: DockerTool },
   database: { label: 'Database explorer', icon: 'database', component: DatabaseTool },
   assistant: { label: 'AI assistant', icon: 'sparkle', component: AssistantTool },
   structure: { label: 'Structure', icon: 'outline', component: StructureTool },

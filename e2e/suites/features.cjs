@@ -97,6 +97,9 @@ run(async ({ page }) => {
   await page.dragAndDrop('.rail-right .rail-btn[title="Problems"]', '[data-zone=left] .rail-btn[title="Search"]', { targetPosition: { x: 16, y: 3 } })
   assert(JSON.stringify(await group('left')) === JSON.stringify(['Explorer', 'Problems', 'Search', 'Git', 'Kanban']), 'Problems dropped before Search: ' + JSON.stringify(await group('left')))
   assert(await page.isVisible('.zone-left[data-tool=problems]'), 'a shown tool stays shown in its new zone')
+  // Docker leaves the bottom right zone too, which is then empty.
+  await page.dragAndDrop('.rail-right .rail-btn[title="Docker"]', '[data-zone=right] .rail-btn[title="Infos"]', { targetPosition: { x: 16, y: 20 } })
+  assert((await group('bottomRight')).length === 0, 'bottom right zone emptied')
   // An empty group only gets a height once the drag has started.
   await page.hover('[data-zone=bottomLeft] .rail-btn[title="Console"]')
   await page.mouse.down()

@@ -64,6 +64,8 @@ export interface SessionData {
   explorer: { hidden: boolean; excluded: boolean; singleClick: boolean; follow: boolean }
   /** Git tool: shown tab, heights of the commit form and of the commit detail. */
   git: { tab: 'commit' | 'history'; form: number; detail: number }
+  /** Docker tool: shown tab, chosen Compose profiles, tab of the detail pane. */
+  docker: { tab: 'project' | 'host' | 'disk' | 'tunnels'; profiles: string[]; detail: 'infos' | 'logs' }
 }
 
 export interface ProjectInfo {
@@ -99,6 +101,7 @@ function emptySession(): SessionData {
     expanded: [],
     explorer: { hidden: true, excluded: true, singleClick: false, follow: false },
     git: { tab: 'commit', form: 150, detail: 260 },
+    docker: { tab: 'project', profiles: [], detail: 'infos' },
   }
 }
 
@@ -149,7 +152,7 @@ on('session.changed', (data: SessionData) => {
 function normalize(raw: any): SessionData {
   const d = emptySession()
   if (!raw || typeof raw !== 'object' || !raw.layout) return d
-  const s: SessionData = { ...d, ...raw, left: { ...d.left, ...raw.left }, right: { ...d.right, ...raw.right }, bottom: { ...d.bottom, ...raw.bottom }, explorer: { ...d.explorer, ...raw.explorer }, git: { ...d.git, ...raw.git } }
+  const s: SessionData = { ...d, ...raw, left: { ...d.left, ...raw.left }, right: { ...d.right, ...raw.right }, bottom: { ...d.bottom, ...raw.bottom }, explorer: { ...d.explorer, ...raw.explorer }, git: { ...d.git, ...raw.git }, docker: { ...d.docker, ...raw.docker } }
   if (s.left.panel && panelAliases[s.left.panel]) {
     s.right.panel = panelAliases[s.left.panel]
     s.left.panel = null

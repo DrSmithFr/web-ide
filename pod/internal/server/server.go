@@ -85,6 +85,8 @@ func (s *Server) Init() {
 	s.registerWorktrees()
 	s.registerLLM()
 	s.registerExec()
+	s.registerDocker()
+	s.registerDockerLogs()
 	s.registerKanban()
 	s.registerKanbanGit()
 }
@@ -232,6 +234,8 @@ type Client struct {
 	ctx     context.Context
 	project string
 	cancels sync.Map
+	// streams holds the stop functions of the log streams of the window, by id.
+	streams sync.Map
 	// lang is the language of the window (messages are translated for it).
 	lang atomic.Value
 }
