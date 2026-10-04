@@ -102,6 +102,13 @@ To treat local and SSH projects the same way, the pod exposes one interface (`li
 - `Alt+Arrow`: jump between case boundaries inside a word (`foo|Bar`, `XML|Http|Request`, around `_` and `-`, between letters and digits). `Shift+Alt+Arrow` extends the selection.
 - `Ctrl+Alt+R`: opens the conflict resolution dialog of the current file (no effect without a conflict).
 
+### 6.5 Multiple carets
+
+- The primary caret is the browser selection; the other carets and selections are drawn by the editor (a `Highlight` for their text, blinking bars for the carets) and follow the edits made elsewhere.
+- `Alt+J` selects the word at the caret, then adds the next occurrence of the selected text (whole words when started from the word at the caret), which becomes the primary caret; `Shift+Alt+J` removes the last one added; `Ctrl+Alt+Shift+J` selects every occurrence.
+- Column selection by dragging with the middle button (the paste of the primary selection that Linux does on release is dropped) or with `Alt+Shift` and the left button; `Alt+click` adds a caret or removes the one clicked; `Escape`, a click or a move made by the browser (`Ctrl+Home`, select all, page keys) leaves a single caret.
+- Typing, `Backspace`/`Delete` (also by word or line), `Enter` (auto-indent), `Tab`, the arrows (`Ctrl` by word, `Alt` by sub-word), `Home`/`End` and their `Shift` variants act on every caret; each such edit is one undo step. Copy joins the selections one per line (the lines of the carets when nothing is selected); a paste with as many lines as there are carets gives one line to each.
+
 ### 6.4 Display
 
 - The text starts right against the gutter, without a left margin.

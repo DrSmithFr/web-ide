@@ -1156,5 +1156,8 @@
   "Indentation guides": "Guides d'indentation",
   "Show the indentation guides": "Afficher les guides d'indentation",
   "Whitespace": "Espaces",
-  "Show whitespace": "Afficher les espaces"
+  "Show whitespace": "Afficher les espaces",
+  "Add the next occurrence to the selection": "Ajouter l'occurrence suivante à la sélection",
+  "Remove the last occurrence from the selection": "Retirer la dernière occurrence de la sélection",
+  "Select all the occurrences": "Sélectionner toutes les occurrences"
 }

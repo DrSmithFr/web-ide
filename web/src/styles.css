@@ -266,6 +266,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .ed-ws i:not([class]) { background: radial-gradient(circle, var(--ws) 0 1.1px, transparent 1.6px); }
 .ed-ws i.t { background: var(--ws); --arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 5 8'%3E%3Cpath d='M1 1l3 3-3 3' fill='none' stroke='black'/%3E%3C/svg%3E"); mask: linear-gradient(#000, #000) no-repeat left 2px center / calc(100% - 5px) 1px, var(--arrow) no-repeat right 1px center / 5px 8px; }
 .ed-ws i.n { color: var(--ws); }
+.ed-carets { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.ed-caret { position: absolute; width: 1.5px; margin-left: -0.5px; background: var(--accent); animation: ed-blink 1.05s steps(1) infinite; }
+.ed:not(:focus-within) .ed-caret { visibility: hidden; }
+@keyframes ed-blink { 50% { opacity: 0; } }
 .ed-guide.active { background: color-mix(in srgb, var(--fg) 32%, transparent); }
 .ed-statement { position: absolute; left: 0; border: 1px solid var(--accent); border-radius: 4px; background: color-mix(in srgb, var(--accent) 7%, transparent); }
 .ed.readonly .ed-content { caret-color: transparent; }
@@ -273,6 +277,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .ed-tooltip[data-kind=error] { border-left: 3px solid var(--danger); }
 .ed-tooltip[data-kind=warning] { border-left: 3px solid var(--warn); }
 .ed-tooltip[data-kind=doc] { font-family: var(--font-code); }
+::highlight(ed-sel2) { background-color: var(--sel-bg); }
 ::highlight(search-match) { background-color: var(--match-bg); }
 ::highlight(search-current) { background-color: var(--match-cur-bg); color: #fff; }
 ::highlight(diag-error) { text-decoration: underline wavy var(--danger); }

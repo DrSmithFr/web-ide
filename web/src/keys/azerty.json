@@ -54,6 +54,15 @@
     "edit.selectAll": [
       "Ctrl+KeyQ"
     ],
+    "edit.nextOccurrence": [
+      "Alt+KeyJ"
+    ],
+    "edit.unselectOccurrence": [
+      "Alt+Shift+KeyJ"
+    ],
+    "edit.allOccurrences": [
+      "Ctrl+Alt+Shift+KeyJ"
+    ],
     "edit.complete": [
       "Ctrl+Space"
     ],

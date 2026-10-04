@@ -8,6 +8,7 @@
 import { Highlighter, type Token } from './tokenizer'
 import { grammar } from './languages'
 import { subwordLeft, subwordRight } from './subword'
+import { normalize, nextOccurrence, occurrences, selFrom, selTo, wordAt, wordLeft, wordRight } from './carets'
 import type { Change, Doc, Selection } from './doc'
 import type { LineMark } from './linediff'
 
@@ -88,6 +89,13 @@ export class EditorView {
   private boxes: HTMLDivElement
   private guides: HTMLDivElement
   private ws: HTMLPreElement
+  private caretLayer: HTMLDivElement
+  /** Other selections (multiple carets), in the order they were added; the primary one is the DOM selection. */
+  private extra: Selection[] = []
+  /** The occurrences added by Alt+J started from the word at the caret: whole words only. */
+  private wholeWord = false
+  /** End of a middle button drag: the paste of the primary selection that follows is dropped. */
+  private pasteGuard = 0
   private guideLine = -1
   private step: { version: number; tabSize: number; cols: number } | null = null
   private tooltip: HTMLDivElement
@@ -133,6 +141,8 @@ export class EditorView {
     this.ws = document.createElement('pre')
     this.ws.className = 'ed-ws'
     this.ws.setAttribute('aria-hidden', 'true')
+    this.caretLayer = document.createElement('div')
+    this.caretLayer.className = 'ed-carets'
     this.content = document.createElement('pre')
     this.content.className = 'ed-content'
     this.content.spellcheck = false
@@ -143,7 +153,7 @@ export class EditorView {
     this.setReadOnly(!!opts.readOnly || doc.readOnly)
     this.tooltip = document.createElement('div')
     this.tooltip.className = 'ed-tooltip'
-    main.append(this.curLine, this.guides, this.boxes, this.content, this.ws)
+    main.append(this.curLine, this.guides, this.boxes, this.content, this.ws, this.caretLayer)
     inner.append(this.gutter, main)
     this.scroller.append(inner)
     this.root.append(this.scroller, this.tooltip)
@@ -176,6 +186,8 @@ export class EditorView {
         opts.onCtrlClick(this.getSelection().head)
       }
     })
+    listen(this.content, 'mousedown', (e) => this.onMouseDown(e))
+    listen(this.content, 'auxclick', (e) => e.button === 1 && e.preventDefault())
     listen(this.content, 'mousemove', (e) => this.onHover(e))
     listen(this.content, 'mouseleave', () => (this.tooltip.style.display = 'none'))
     listen(document as any, 'selectionchange', () => this.onSelectionChange())
@@ -387,7 +399,14 @@ export class EditorView {
     return this.lastSel
   }
 
+  /** Sets the selection (a single one: the other carets go away). */
   setSelection(anchor: number, head = anchor, scroll = true) {
+    this.clearCarets()
+    this.select(anchor, head, scroll)
+  }
+
+  /** Moves the primary selection, keeping the other carets. */
+  private select(anchor: number, head = anchor, scroll = true) {
     const len = this.doc.text.length
     anchor = Math.max(0, Math.min(anchor, len))
     head = Math.max(0, Math.min(head, len))
@@ -403,6 +422,7 @@ export class EditorView {
 
   /** Restores a selection without taking the focus (tab switch). */
   restoreSelection(sel: Selection) {
+    this.clearCarets()
     this.lastSel = sel
     this.updateCurLine()
   }
@@ -413,6 +433,11 @@ export class EditorView {
     const prev = this.lastSel
     const cur = this.getSelection()
     if (prev.head !== cur.head) this.doc.breakUndoGroup()
+    // Moved by the browser (mouse, select all...), not by the editor: back to a single caret.
+    if (prev.head !== cur.head || prev.anchor !== cur.anchor) {
+      this.wholeWord = false
+      this.clearCarets()
+    }
     this.updateCurLine()
     this.opts.onSelection?.(cur)
   }
@@ -442,6 +467,7 @@ export class EditorView {
     const map = (p: number) => (p <= c.from ? p : p >= c.to ? p + delta : c.from + c.text.length)
     if (o !== this) {
       this.lastSel = { anchor: map(this.lastSel.anchor), head: map(this.lastSel.head) }
+      this.extra = this.extra.map((x) => ({ anchor: map(x.anchor), head: map(x.head) }))
       if (focused && !(o && o.view === this)) {
         const [an, ao] = this.domAt(this.lastSel.anchor)
         const [hn, ho] = this.domAt(this.lastSel.head)
@@ -489,11 +515,12 @@ export class EditorView {
       const dom = (this.content.textContent ?? '').replace(/\n$/, '')
       this.applyDomText(0, this.doc.text.length, dom, true)
       this.buildAll()
-      this.setSelection(sel.anchor, sel.head, false)
+      this.select(sel.anchor, sel.head, false)
       this.schedule()
       return
     }
     // Usually only the block holding the caret changed; else compare them all.
+    let typed = ''
     const focusBlock = this.blockOf.get(document.getSelection()?.focusNode as Node)
     const order = focusBlock ? [focusBlock.index, ...this.blocks.keys()] : [...this.blocks.keys()]
     for (const i of order) {
@@ -506,18 +533,20 @@ export class EditorView {
       const dom = last ? b.text.data.replace(/\n$/, '') : b.text.data
       const end = last ? this.doc.text.length : this.blockStartOffset(i + 1)
       if (last && !b.text.data.endsWith('\n')) b.text.appendData('\n')
-      this.applyDomText(start, end, dom, false)
+      typed = this.applyDomText(start, end, dom, false)
       break
     }
-    this.setSelection(sel.anchor, sel.head, false)
+    this.select(sel.anchor, sel.head, false)
+    // A dead key or an IME typed at the primary caret: same text at the other ones.
+    if (typed && this.extra.length) this.editAll((x, primary) => (primary ? null : { from: selFrom(x), to: selTo(x), text: typed }))
   }
 
-  /** Applies a DOM text that replaces [start, end) of the Doc, as the smallest edit. */
-  private applyDomText(start: number, end: number, dom: string, rebuildAfter: boolean) {
+  /** Applies a DOM text that replaces [start, end) of the Doc, as the smallest edit; returns the text typed, if any. */
+  private applyDomText(start: number, end: number, dom: string, rebuildAfter: boolean): string {
     const old = this.doc.text.slice(start, end)
     if (this.readOnly) {
       if (!rebuildAfter) this.buildAll()
-      return
+      return ''
     }
     let a = 0
     const max = Math.min(dom.length, old.length)
@@ -528,6 +557,7 @@ export class EditorView {
     this.doc.replace(start + a, end - z, inserted, { view: this, domDone: !rebuildAfter }, { selAfter: this.lastSel })
     // A dead key or an IME produced text: same as typing it.
     if (inserted && !inserted.includes('\n')) queueMicrotask(() => this.opts.onType?.(inserted))
+    return inserted && !inserted.includes('\n') && end - z === start + a ? inserted : ''
   }
 
   private rangeOffsets(r: StaticRange) {
@@ -542,6 +572,7 @@ export class EditorView {
     if (this.composing || e.inputType === 'insertCompositionText') return
     e.preventDefault()
     if (this.readOnly) return
+    if (this.extra.length) return this.multiInput(e)
     const sel = this.getSelection()
     let from = Math.min(sel.anchor, sel.head)
     let to = Math.max(sel.anchor, sel.head)
@@ -564,6 +595,7 @@ export class EditorView {
       case 'insertFromDrop':
       case 'insertFromYank':
       case 'insertFromPasteAsQuotation': {
+        if (this.pasteGuarded()) return
         const text = e.dataTransfer?.getData('text/plain') ?? e.data ?? ''
         this.edit(from, to, text.replace(/\r\n?/g, '\n'))
         return
@@ -607,6 +639,12 @@ export class EditorView {
   }
 
   private newline(from: number, to: number) {
+    const e = this.newlineEdit(from, to)
+    this.edit(e.from, e.to, e.text, e.from + e.caret)
+  }
+
+  /** Line break with the indentation of the line, one more level after an opening bracket. */
+  private newlineEdit(from: number, to: number) {
     const line = this.doc.lineAt(from)
     const lineText = this.doc.text.slice(this.doc.lineStart(line), from)
     let indent = /^[ \t]*/.exec(lineText)![0]
@@ -617,12 +655,11 @@ export class EditorView {
       const inner = indent + this.indentUnit()
       if (/^[})\]]/.test(next)) {
         // Between brackets: open an indented line and push the closing one below.
-        this.edit(from, to, '\n' + inner + '\n' + indent, from + 1 + inner.length)
-        return
+        return { from, to, text: '\n' + inner + '\n' + indent, caret: 1 + inner.length }
       }
       indent = inner
     }
-    this.edit(from, to, '\n' + indent)
+    return { from, to, text: '\n' + indent, caret: 1 + indent.length }
   }
 
   undo() {
@@ -636,6 +673,7 @@ export class EditorView {
   }
 
   private onCopy(e: ClipboardEvent, cut: boolean) {
+    if (this.extra.length) return this.copyAll(e, cut)
     const sel = this.getSelection()
     let from = Math.min(sel.anchor, sel.head)
     let to = Math.max(sel.anchor, sel.head)
@@ -655,8 +693,9 @@ export class EditorView {
 
   private onPaste(e: ClipboardEvent) {
     e.preventDefault()
-    if (this.readOnly) return
+    if (this.readOnly || this.pasteGuarded()) return
     const text = (e.clipboardData?.getData('text/plain') ?? '').replace(/\r\n?/g, '\n')
+    if (this.extra.length) return this.pasteAll(text)
     const sel = this.getSelection()
     this.edit(Math.min(sel.anchor, sel.head), Math.max(sel.anchor, sel.head), text)
   }
@@ -664,6 +703,11 @@ export class EditorView {
   private onKeyDown(e: KeyboardEvent) {
     if (e.defaultPrevented || this.composing) return
     if (this.opts.onKey?.(e)) {
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
+    if (this.extra.length && this.multiKey(e)) {
       e.preventDefault()
       e.stopPropagation()
       return
@@ -773,9 +817,367 @@ export class EditorView {
   }
 
   moveSubword(dir: -1 | 1, extend: boolean) {
+    const to = (x: Selection) => (dir < 0 ? subwordLeft(this.doc.text, x.head) : subwordRight(this.doc.text, x.head))
+    if (this.extra.length) return this.moveAll(to, extend)
     const sel = this.getSelection()
-    const head = dir < 0 ? subwordLeft(this.doc.text, sel.head) : subwordRight(this.doc.text, sel.head)
+    const head = to(sel)
     this.setSelection(extend ? sel.anchor : head, head)
+  }
+
+  // ---------- multiple carets ----------
+
+  /** True while there are several carets. */
+  hasCarets() {
+    return this.extra.length > 0
+  }
+
+  /** Back to the primary selection only. */
+  clearCarets() {
+    if (!this.extra.length) return
+    this.extra = []
+    this.schedule()
+  }
+
+  /** Every selection, sorted, with the index of the primary one. */
+  private allSelections() {
+    return normalize([...this.extra, this.getSelection()], this.extra.length)
+  }
+
+  /** Sets every selection; the primary one becomes the DOM selection. */
+  private setSelections(list: Selection[], primary: number, scroll = true) {
+    const n = normalize(list, primary)
+    const p = n.list[n.primary]
+    this.extra = n.list.filter((_, i) => i !== n.primary)
+    this.select(p.anchor, p.head, scroll)
+    this.schedule()
+  }
+
+  /**
+   * One edit per selection (null: none), applied as one undo step; each caret goes after
+   * its edit (at `caret` characters from its start when given).
+   */
+  private editAll(make: (s: Selection, primary: boolean) => { from: number; to: number; text: string; caret?: number } | null) {
+    if (this.readOnly) return
+    const { list, primary } = this.allSelections()
+    const edits = list.map((x, i) => make(x, i === primary))
+    let end = 0
+    for (const e of edits) {
+      if (!e) continue
+      e.from = Math.max(e.from, end)
+      e.to = Math.max(e.to, e.from)
+      end = e.to
+    }
+    let delta = 0
+    const after = list.map((x, i) => {
+      const e = edits[i]
+      if (!e) return { anchor: x.anchor + delta, head: x.head + delta }
+      const pos = e.from + delta + (e.caret ?? e.text.length)
+      delta += e.text.length - (e.to - e.from)
+      return { anchor: pos, head: pos }
+    })
+    this.doc.transact(() => {
+      for (let i = edits.length - 1; i >= 0; i--) {
+        const e = edits[i]
+        if (e) this.doc.replace(e.from, e.to, e.text, this, { selBefore: list[primary], selAfter: after[primary] })
+      }
+    })
+    this.setSelections(after, primary)
+  }
+
+  /** Moves every caret (or extends every selection) to the offset given by `to`. */
+  private moveAll(to: (s: Selection) => number, extend: boolean) {
+    const { list, primary } = this.allSelections()
+    this.setSelections(
+      list.map((x) => {
+        const h = to(x)
+        return { anchor: extend ? x.anchor : h, head: h }
+      }),
+      primary,
+    )
+  }
+
+  private multiInput(e: InputEvent) {
+    const t = e.inputType
+    const data = (e.data ?? e.dataTransfer?.getData('text/plain') ?? '').replace(/\r\n?/g, '\n')
+    const text = this.doc.text
+    if (t === 'insertText' || t === 'insertReplacementText') return this.editAll((x) => ({ from: selFrom(x), to: selTo(x), text: data }))
+    if (t.startsWith('insertFrom')) return this.pasteGuarded() ? undefined : this.pasteAll(data)
+    if (t === 'insertLineBreak' || t === 'insertParagraph') return this.editAll((x) => this.newlineEdit(selFrom(x), selTo(x)))
+    if (t === 'insertTab') return this.editAll((x) => ({ from: selFrom(x), to: selTo(x), text: this.indentUnit() }))
+    if (t === 'historyUndo') return this.undo()
+    if (t === 'historyRedo') return this.redo()
+    if (!t.startsWith('delete')) return
+    const back = t.includes('Backward')
+    this.editAll((x) => {
+      let from = selFrom(x)
+      let to = selTo(x)
+      if (from === to) {
+        const line = this.doc.lineAt(from)
+        if (t.includes('Line')) back ? (from = this.doc.lineStart(line)) : (to = this.doc.lineEnd(line))
+        else if (t.includes('Word')) back ? (from = wordLeft(text, from)) : (to = wordRight(text, to))
+        else if (back) from = this.backspaceFrom(from)
+        else to = Math.min(text.length, to + 1)
+      }
+      return from === to ? null : { from, to, text: '' }
+    })
+  }
+
+  /** Start of what Backspace removes at a caret: a whole indentation step, or one character. */
+  private backspaceFrom(pos: number) {
+    const before = this.doc.text.slice(this.doc.lineStart(this.doc.lineAt(pos)), pos)
+    if (before.length > 0 && /^ +$/.test(before) && this.opts.insertSpaces) return pos - (before.length % this.opts.tabSize || this.opts.tabSize)
+    let from = Math.max(0, pos - 1)
+    if (from > 0 && /[\udc00-\udfff]/.test(this.doc.text[from]) && /[\ud800-\udbff]/.test(this.doc.text[from - 1])) from--
+    return from
+  }
+
+  /** Paste at every caret: one line each when the text has as many lines as there are carets. */
+  private pasteAll(text: string) {
+    const n = this.extra.length + 1
+    let lines = text.split('\n')
+    if (lines.length === n + 1 && lines[n] === '') lines = lines.slice(0, n)
+    let i = 0
+    this.editAll((x) => ({ from: selFrom(x), to: selTo(x), text: lines.length === n ? lines[i++] : text }))
+  }
+
+  /** Copy (or cut) of every selection, one per line; without a selection, the lines of the carets. */
+  private copyAll(e: ClipboardEvent, cut: boolean) {
+    e.preventDefault()
+    const { list } = this.allSelections()
+    const lines = list.every((x) => x.anchor === x.head)
+    const range = (x: Selection): [number, number] => {
+      if (!lines) return [selFrom(x), selTo(x)]
+      const line = this.doc.lineAt(x.head)
+      return [this.doc.lineStart(line), Math.min(this.doc.text.length, this.doc.lineEnd(line) + 1)]
+    }
+    const parts = list.map((x) => this.doc.text.slice(...range(x)).replace(/\n$/, ''))
+    e.clipboardData?.setData('text/plain', parts.join('\n') + (lines ? '\n' : ''))
+    if (cut && !this.readOnly) this.editAll((x) => ({ from: range(x)[0], to: range(x)[1], text: '' }))
+  }
+
+  /** Keys acting on every caret; true when handled. */
+  private multiKey(e: KeyboardEvent): boolean {
+    if (e.altKey || e.metaKey) return false
+    if (e.key === 'Escape' && !e.ctrlKey && !e.shiftKey) {
+      this.clearCarets()
+      return true
+    }
+    if (e.key === 'Tab' && !e.ctrlKey) {
+      if (!e.shiftKey) this.editAll((x) => ({ from: selFrom(x), to: selTo(x), text: this.indentUnit() }))
+      return true
+    }
+    const text = this.doc.text
+    const d = this.doc
+    let to: ((x: Selection) => number) | null = null
+    switch (e.key) {
+      case 'ArrowLeft':
+        to = (x) => (e.ctrlKey ? wordLeft(text, x.head) : x.anchor !== x.head && !e.shiftKey ? selFrom(x) : Math.max(0, x.head - 1))
+        break
+      case 'ArrowRight':
+        to = (x) => (e.ctrlKey ? wordRight(text, x.head) : x.anchor !== x.head && !e.shiftKey ? selTo(x) : Math.min(text.length, x.head + 1))
+        break
+      case 'ArrowUp':
+      case 'ArrowDown':
+        if (e.ctrlKey) return false
+        to = (x) => {
+          const line = d.lineAt(x.head)
+          const next = this.nextLine(line, e.key === 'ArrowUp' ? -1 : 1)
+          if (next < 0) return e.key === 'ArrowUp' ? 0 : text.length
+          return this.offsetAtCol(next, this.visualCol(line, x.head))
+        }
+        break
+      case 'Home':
+        if (e.ctrlKey) return false
+        to = (x) => {
+          const line = d.lineAt(x.head)
+          const first = d.lineStart(line) + /^[ \t]*/.exec(d.lineText(line))![0].length
+          return x.head === first ? d.lineStart(line) : first
+        }
+        break
+      case 'End':
+        if (e.ctrlKey) return false
+        to = (x) => d.lineEnd(d.lineAt(x.head))
+        break
+    }
+    if (!to) {
+      // Keys moving far away (page, document start or end): a single caret again.
+      if (['PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) this.clearCarets()
+      return false
+    }
+    this.moveAll(to, e.shiftKey)
+    return true
+  }
+
+  /** Line above (-1) or below (1), -1 past the document. */
+  private nextLine(line: number, dir: -1 | 1) {
+    const l = line + dir
+    return l < 0 || l >= this.doc.lineCount ? -1 : l
+  }
+
+  /** Offset of a line at a visual column (tabs expanded), clamped to the line end. */
+  private offsetAtCol(line: number, col: number) {
+    const start = this.doc.lineStart(line)
+    const t = this.doc.lineText(line)
+    const tab = this.opts.tabSize
+    let c = 0
+    for (let i = 0; i < t.length; i++) {
+      if (col <= c) return start + i
+      const w = t[i] === '\t' ? tab - (c % tab) : 1
+      if (col < c + w) return start + (col - c < w / 2 ? i : i + 1)
+      c += w
+    }
+    return start + t.length
+  }
+
+  private pasteGuarded() {
+    return performance.now() - this.pasteGuard < 400
+  }
+
+  private onMouseDown(e: MouseEvent) {
+    if (e.button === 1 || (e.button === 0 && e.altKey && e.shiftKey)) {
+      e.preventDefault()
+      this.boxDrag(e)
+    } else if (e.button === 0 && e.altKey && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault()
+      this.toggleCaret(e.clientX, e.clientY)
+    } else if (e.button === 0) this.clearCarets()
+  }
+
+  /** Alt+click: adds a caret (it becomes the primary one), or removes the one clicked. */
+  private toggleCaret(x: number, y: number) {
+    const off = this.offsetAt(x, y)
+    if (off == null) return
+    if (!this.hasFocus()) this.focus()
+    const sel = this.getSelection()
+    const i = this.extra.findIndex((s) => s.anchor === off && s.head === off)
+    if (i >= 0) {
+      this.extra.splice(i, 1)
+    } else if (sel.anchor === off && sel.head === off) {
+      const p = this.extra.pop()
+      if (p) this.select(p.anchor, p.head, false)
+    } else {
+      this.extra.push(sel)
+      this.select(off, off, false)
+    }
+    this.schedule()
+  }
+
+  /** Column selection while dragging (middle button, or Alt+Shift with the left one). */
+  private boxDrag(e: MouseEvent) {
+    if (!this.hasFocus()) this.focus()
+    const middle = e.button === 1
+    const start = this.boxPoint(e.clientX, e.clientY)
+    const move = (ev: MouseEvent) => {
+      ev.preventDefault()
+      this.boxSelect(start, this.boxPoint(ev.clientX, ev.clientY))
+    }
+    const up = (ev: MouseEvent) => {
+      ev.preventDefault()
+      if (middle) this.pasteGuard = performance.now()
+      window.removeEventListener('mousemove', move, true)
+      window.removeEventListener('mouseup', up, true)
+    }
+    window.addEventListener('mousemove', move, true)
+    window.addEventListener('mouseup', up, true)
+    this.boxSelect(start, start)
+  }
+
+  /** Line and visual column under a mouse position. */
+  private boxPoint(x: number, y: number) {
+    const r = this.content.getBoundingClientRect()
+    const line = Math.max(0, Math.min(this.doc.lineCount - 1, this.lineAtY(y - r.top)))
+    return { line, col: Math.max(0, Math.round((x - r.left) / this.charWidth)) }
+  }
+
+  private boxSelect(a: { line: number; col: number }, b: { line: number; col: number }) {
+    const list: Selection[] = []
+    const dir = a.line <= b.line ? 1 : -1
+    for (let l = a.line; l >= 0; l = l === b.line ? -1 : this.nextLine(l, dir)) {
+      list.push({ anchor: this.offsetAtCol(l, a.col), head: this.offsetAtCol(l, b.col) })
+    }
+    this.setSelections(list, list.length - 1, false)
+  }
+
+  /** Alt+J: selects the word at the caret, then adds the next occurrence of the selected text. */
+  addNextOccurrence() {
+    const sel = this.getSelection()
+    const text = this.doc.text
+    if (sel.anchor === sel.head) {
+      const w = wordAt(text, sel.head)
+      if (!w) return
+      if (this.extra.length) {
+        // Several carets: each one selects its word.
+        const { list, primary } = this.allSelections()
+        this.setSelections(list.map((x) => {
+          const v = wordAt(text, x.head)
+          return v ? { anchor: v[0], head: v[1] } : x
+        }), primary)
+      } else this.select(w[0], w[1])
+      this.wholeWord = true
+      return
+    }
+    const needle = text.slice(selFrom(sel), selTo(sel))
+    const at = nextOccurrence(text, needle, selTo(sel), this.wholeWord, [...this.extra, sel])
+    if (at == null) return
+    this.extra.push(sel)
+    this.select(at, at + needle.length)
+    this.schedule()
+  }
+
+  /** Shift+Alt+J: removes the last occurrence added. */
+  removeLastOccurrence() {
+    const p = this.extra.pop()
+    if (!p) return
+    this.select(p.anchor, p.head)
+    this.schedule()
+  }
+
+  /** Ctrl+Alt+Shift+J: selects every occurrence of the selection (or of the word at the caret). */
+  selectAllOccurrences() {
+    let sel = this.getSelection()
+    const text = this.doc.text
+    if (sel.anchor === sel.head) {
+      const w = wordAt(text, sel.head)
+      if (!w) return
+      sel = { anchor: w[0], head: w[1] }
+      this.wholeWord = true
+    }
+    const needle = text.slice(selFrom(sel), selTo(sel))
+    const all = occurrences(text, needle, this.wholeWord)
+    const list = all.map((i) => ({ anchor: i, head: i + needle.length }))
+    this.setSelections(list.length ? list : [sel], Math.max(0, all.indexOf(selFrom(sel))), false)
+  }
+
+  /** Other carets and selections of lines a..b. */
+  private renderCarets(a: number, b: number) {
+    if (!this.extra.length) {
+      if (this.caretLayer.firstChild) this.caretLayer.replaceChildren()
+      return
+    }
+    const from = this.doc.lineStart(a)
+    const to = this.doc.lineEnd(b)
+    let html = ''
+    for (const x of this.extra) {
+      if (x.anchor !== x.head && selTo(x) >= from && selFrom(x) <= to && registry()) {
+        this.addOwn('ed-sel2', this.range(Math.max(selFrom(x), from), Math.min(selTo(x), to)))
+      }
+      if (x.head < from || x.head > to) continue
+      html += `<div class="ed-caret" style="left:${this.xAt(x.head)}px;top:${this.lineTop(this.doc.lineAt(x.head))}px;height:${this.lineHeight}px"></div>`
+    }
+    this.caretLayer.innerHTML = html
+  }
+
+  /** Horizontal position of an offset in the content. */
+  private xAt(offset: number) {
+    const line = this.doc.lineAt(offset)
+    const end = this.doc.lineEnd(line)
+    if (this.doc.lineStart(line) === end) return 0
+    const [n, o] = this.domAt(offset < end ? offset : offset - 1)
+    const r = document.createRange()
+    r.setStart(n, o)
+    r.setEnd(n, Math.min(o + 1, n.length))
+    const rect = r.getBoundingClientRect()
+    return (offset < end ? rect.left : rect.right) - this.content.getBoundingClientRect().left
   }
 
   // ---------- rendering ----------
@@ -870,6 +1272,7 @@ export class EditorView {
     }
     this.renderGuides(a, b)
     this.renderWhitespace(a, b)
+    this.renderCarets(a, b)
     this.renderStatement()
     this.updateCurLine()
   }
@@ -877,6 +1280,11 @@ export class EditorView {
   /** Top of a line in the content. */
   private lineTop(line: number) {
     return this.padTop + line * this.lineHeight
+  }
+
+  /** Line at a height in the content. */
+  private lineAtY(y: number) {
+    return Math.floor((y - this.padTop) / this.lineHeight)
   }
 
   /** Indentation width of a line in columns, -1 for a blank line. */
@@ -1077,6 +1485,8 @@ export class EditorView {
   /** Offset under a mouse position. */
   offsetAt(x: number, y: number): number | null {
     const d = document as any
+    // Right on the left edge, the point can fall in the gutter.
+    x = Math.max(x, this.content.getBoundingClientRect().left + 1)
     if (d.caretPositionFromPoint) {
       const p = d.caretPositionFromPoint(x, y)
       if (p && this.content.contains(p.offsetNode)) return this.domOffset(p.offsetNode, p.offset)

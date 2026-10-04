@@ -1,7 +1,9 @@
 // Editor: text against the gutter, indentation guides, whitespace, multiple carets, folding.
-const { run, openProject, open, assert, OUT } = require('../common.cjs')
+const fs = require('fs')
+const { run, openProject, open, assert, text, WS, OUT } = require('../common.cjs')
 
 run(async ({ page }) => {
+  fs.writeFileSync(WS + '/demo/multi.txt', 'foo bar foo\nfoo baz\n    foo qux\n')
   await openProject(page)
   await open(page, 'main.go')
 
@@ -68,4 +70,103 @@ run(async ({ page }) => {
   await whitespace()
   await page.waitForFunction(() => !document.querySelector('.pane.active .ed-ws').firstChild)
   assert(true, 'whitespace hidden again')
+
+  // Multiple carets.
+  await open(page, 'multi.txt')
+  const content = '.pane.active .ed-content'
+  const reset = async () => {
+    await page.click(content)
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Control+a')
+    await page.keyboard.insertText('foo bar foo\nfoo baz\n    foo qux\n')
+  }
+  // Screen position of a line and column of the text.
+  const at = (line, col) => page.evaluate(([l, c]) => {
+    const t = document.querySelector('.pane.active .ed-block').firstChild
+    const off = t.data.split('\n').slice(0, l).reduce((n, x) => n + x.length + 1, 0) + c
+    const r = document.createRange()
+    r.setStart(t, off)
+    r.setEnd(t, off + 1)
+    const b = r.getBoundingClientRect()
+    return { x: b.left + 1, y: b.top + b.height / 2 }
+  }, [line, col])
+  const carets = async () => {
+    await page.waitForTimeout(80)
+    return page.$$eval('.pane.active .ed-caret', (l) => l.length)
+  }
+
+  // Alt+J: the word at the caret, then its next occurrences; Shift+Alt+J removes the last one.
+  await page.click(content)
+  await page.keyboard.press('Control+Home')
+  await page.keyboard.press('ArrowRight')
+  await page.keyboard.press('Alt+j')
+  assert((await page.evaluate(() => getSelection().toString())) === 'foo', 'Alt+J selects the word at the caret')
+  await page.keyboard.press('Alt+j')
+  await page.keyboard.press('Alt+j')
+  await page.keyboard.press('Alt+j')
+  assert((await carets()) === 3, 'Alt+J adds the next occurrences (' + (await carets()) + ' other carets)')
+  await page.keyboard.press('Alt+Shift+j')
+  await page.keyboard.type('X')
+  assert((await text(page)) === 'X bar X\nX baz\n    foo qux\n', 'typing replaces every selection')
+  await page.keyboard.press('Backspace')
+  await page.keyboard.type('ab')
+  assert((await text(page)) === 'ab bar ab\nab baz\n    foo qux\n', 'Backspace at every caret')
+  await page.keyboard.press('Escape')
+  assert((await carets()) === 0, 'Escape leaves a single caret')
+  await page.keyboard.press('Control+z')
+  assert((await text(page)) === 'a bar a\na baz\n    foo qux\n', 'one undo step per edit of all the carets')
+
+  // Ctrl+Alt+Shift+J: every occurrence.
+  await reset()
+  await page.keyboard.press('Control+Home')
+  await page.keyboard.press('Control+Alt+Shift+j')
+  await page.keyboard.type('zz')
+  assert((await text(page)) === 'zz bar zz\nzz baz\n    zz qux\n', 'every occurrence selected and replaced')
+
+  // Column selection with the middle button, then the arrows, End and Enter at every caret.
+  await reset()
+  const p0 = await at(0, 0)
+  const p2 = await at(2, 0)
+  await page.mouse.move(p0.x - 1, p0.y)
+  await page.mouse.down({ button: 'middle' })
+  await page.mouse.move(p2.x - 1, p2.y, { steps: 4 })
+  await page.mouse.up({ button: 'middle' })
+  assert((await carets()) === 2, 'middle button drag: a caret per line')
+  await page.keyboard.type('> ')
+  await page.keyboard.press('End')
+  await page.keyboard.type(';')
+  assert((await text(page)) === '> foo bar foo;\n> foo baz;\n>     foo qux;\n', 'typing, End at every caret')
+  await page.screenshot({ path: OUT + '/editor-carets.png' })
+  await page.keyboard.press('Shift+Home')
+  assert((await page.$$eval('.pane.active .ed-caret', (l) => l.length)) === 2, 'Shift+Home extends every selection')
+  await page.keyboard.press('Delete')
+  assert((await text(page)) === '\n\n\n', 'Delete removes every selection')
+
+  // Alt+Shift+drag: a box from column 4 to 7.
+  await reset()
+  const a = await at(0, 4)
+  const b = await at(1, 7)
+  await page.keyboard.down('Alt')
+  await page.keyboard.down('Shift')
+  await page.mouse.move(a.x - 1, a.y)
+  await page.mouse.down()
+  await page.mouse.move(b.x - 1, b.y, { steps: 4 })
+  await page.mouse.up()
+  await page.keyboard.up('Shift')
+  await page.keyboard.up('Alt')
+  await page.keyboard.type('Z')
+  assert((await text(page)) === 'foo Z foo\nfoo Z\n    foo qux\n', 'Alt+Shift+drag selects a column')
+
+  // Alt+click adds a caret, a click goes back to one.
+  await reset()
+  await page.click(content)
+  await page.keyboard.press('Control+Home')
+  const c = await at(1, 0)
+  await page.keyboard.down('Alt')
+  await page.mouse.click(c.x - 1, c.y)
+  await page.keyboard.up('Alt')
+  await page.keyboard.type('#')
+  assert((await text(page)) === '#foo bar foo\n#foo baz\n    foo qux\n', 'Alt+click adds a caret')
+  await page.mouse.click(c.x + 30, c.y)
+  assert((await carets()) === 0, 'a click leaves a single caret')
 })
