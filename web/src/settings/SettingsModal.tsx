@@ -121,10 +121,16 @@ function Themes() {
           )}
         </For>
       </div>
-      <label class="check">
-        <input type="checkbox" checked={settings.visualFocus} onChange={(e) => updateSettings((s) => (s.visualFocus = e.currentTarget.checked), 'Visual focus')} />
-        {t('Visual focus mode: everything but the focused part in grayscale')}
-      </label>
+      <div class="checks">
+        <label class="check">
+          <input type="checkbox" checked={settings.visualFocus} onChange={(e) => updateSettings((s) => (s.visualFocus = e.currentTarget.checked), 'Visual focus')} />
+          {t('Visual focus mode: everything but the focused part in monochrome')}
+        </label>
+        <label class="check">
+          <input type="checkbox" checked={settings.focusOutline} onChange={(e) => updateSettings((s) => (s.focusOutline = e.currentTarget.checked), 'Focus outline')} />
+          {t('Outline around the focused part')}
+        </label>
+      </div>
       <h3>{t('Token colors · {theme}', { theme: t(theme().name) })}</h3>
       <p class="muted small">{t('No bold: the highlighting API only handles the color, the background, the underline and italics.')}</p>
       <div class="token-grid">

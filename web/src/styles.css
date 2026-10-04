@@ -61,6 +61,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .dot-connecting { background: var(--warn); }
 .dot-disconnected, .dot-error { background: var(--danger); }
 .dot-idle { background: var(--fg-faint); }
+.checks { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .chip { display: inline-flex; align-items: center; gap: 2px; margin: 2px 4px 2px 0; }
 .chip-x { border: 0; background: none; color: var(--fg-faint); cursor: pointer; font-size: 10px; }
@@ -195,7 +196,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .split-row > .split-handle { width: 3px; cursor: col-resize; }
 .split-col > .split-handle { height: 3px; cursor: row-resize; }
 .split-handle:hover { background: var(--accent); }
-.pane { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+.pane { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; position: relative; }
+/* Focus outline: drawn over the edges of the focused part, nothing moves. */
+.focus-outline :is(.zone, .pane).focused::after { content: ''; position: absolute; inset: 0; border: 1px solid var(--accent); pointer-events: none; z-index: 20; }
 .tabbar { display: flex; align-items: stretch; height: 32px; background: var(--bg-2); border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: hidden; flex: none; scrollbar-width: thin; }
 .tabbar-fill { flex: 1; }
 .tab { display: flex; align-items: center; gap: 6px; padding: 0 6px 0 10px; border-right: 1px solid var(--line); cursor: pointer; white-space: nowrap; color: var(--fg-muted); max-width: 240px; position: relative; }

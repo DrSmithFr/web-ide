@@ -14,6 +14,8 @@ export interface Settings {
   accent: string
   /** Everything but the focused part of the window in grayscale. */
   visualFocus: boolean
+  /** Accent outline around the focused part. */
+  focusOutline: boolean
   tokenColors: Record<string, Record<string, string>>
   font: { family: string; size: number; lineHeight: number; ligatures: boolean; uiSize: number }
   editor: { tabSize: number; insertSpaces: boolean; highlightLine: boolean }
@@ -26,6 +28,7 @@ export const defaultSettings: Settings = {
   theme: 'nuit',
   accent: '',
   visualFocus: false,
+  focusOutline: false,
   tokenColors: {},
   font: { family: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace", size: 13, lineHeight: 1.55, ligatures: true, uiSize: 13 },
   editor: { tabSize: 4, insertSpaces: true, highlightLine: true },
@@ -41,6 +44,7 @@ function merge(raw: any): Settings {
     theme: raw.theme ?? d.theme,
     accent: typeof raw.accent === 'string' ? raw.accent : d.accent,
     visualFocus: raw.visualFocus === true,
+    focusOutline: raw.focusOutline === true,
     tokenColors: raw.tokenColors ?? {},
     font: { ...d.font, ...(raw.font ?? {}) },
     editor: { ...d.editor, ...(raw.editor ?? {}) },

@@ -1121,7 +1121,6 @@
   "Worktree setup": "Préparation du worktree",
   "Accent color": "Couleur d'accent",
   "Marks the focused part of the window: its active tab and its tool icon.": "Marque la partie de la fenêtre en focus : son onglet actif et l'icône de son outil.",
-  "Visual focus mode: everything but the focused part in grayscale": "Mode focus visuel : tout en niveaux de gris sauf la partie en focus",
   "Visual focus mode": "Mode focus visuel",
   "Yellow": "Jaune",
   "Orange": "Orange",
@@ -1130,5 +1129,8 @@
   "Purple": "Violet",
   "Blue": "Bleu",
   "Cyan": "Cyan",
-  "Green": "Vert"
+  "Green": "Vert",
+  "Visual focus mode: everything but the focused part in monochrome": "Mode focus visuel : tout en monochrome sauf la partie en focus",
+  "Outline around the focused part": "Contour autour de la partie en focus",
+  "Focus outline": "Contour du focus"
 }
