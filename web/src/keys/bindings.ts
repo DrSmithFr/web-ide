@@ -16,6 +16,8 @@ export interface ActionDef {
   category: string
   /** Also runs while a terminal has the focus. */
   inTerminal?: boolean
+  /** Shortcut outside the binding table, shown when the action has no combo (double Shift). */
+  hint?: string
 }
 
 export const actions: ActionDef[] = [
@@ -39,6 +41,7 @@ export const actions: ActionDef[] = [
   { id: 'edit.complete', label: 'Complete the code', category: 'Editing' },
   { id: 'search.find', label: 'Find in the file', category: 'Search' },
   { id: 'search.global', label: 'Search in the project', category: 'Search' },
+  { id: 'search.everywhere', label: 'Search everywhere', category: 'Search', inTerminal: true, hint: 'Double Shift' },
   { id: 'nav.gotoFile', label: 'Go to file…', category: 'Navigation', inTerminal: true },
   { id: 'nav.gotoSymbol', label: 'Go to symbol…', category: 'Navigation' },
   { id: 'nav.fileStructure', label: 'File structure', category: 'Navigation' },
@@ -195,7 +198,8 @@ export function comboLabel(combo: string): string {
 
 export function shortcutOf(action: string): string {
   const c = effectiveBindings()[action]?.[0]
-  return c ? comboLabel(c) : ''
+  const hint = actionById.get(action)?.hint
+  return c ? comboLabel(c) : hint ? t(hint) : ''
 }
 
 /** Actions already bound to a combo (collision check before assigning). */
@@ -237,6 +241,10 @@ let capturing: ((e: KeyboardEvent) => void) | null = null
 /** Sends the next key presses to f instead of the bindings (shortcut editor). */
 export function captureKeys(f: ((e: KeyboardEvent) => void) | null) {
   capturing = f
+}
+
+export function isCapturingKeys() {
+  return !!capturing
 }
 
 export function installKeyHandler() {

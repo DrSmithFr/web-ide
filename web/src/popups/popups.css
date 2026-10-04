@@ -1,0 +1,12 @@
+/* Search Everywhere, Recent Files and the clipboard history: pick lists with more parts. */
+.pick.se { width: min(760px, calc(100vw - 32px)); }
+.se-tabs { display: flex; align-items: center; gap: 2px; padding: 4px 6px 0; border-bottom: 1px solid var(--line); }
+.se-tab { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--fg-muted); padding: 5px 10px; cursor: pointer; font-size: 13px; }
+.se-tab:hover { color: var(--fg); }
+.se-tab.active { color: var(--fg); border-bottom-color: var(--accent); }
+.se-help { color: var(--fg-faint); font-size: 12px; padding-right: 6px; }
+.se-section { color: var(--fg-muted); font-size: 12px; padding: 6px 12px 2px; text-transform: uppercase; letter-spacing: 0.04em; }
+.se-section:not(:first-child) { border-top: 1px solid var(--line); margin-top: 4px; }
+.se-glyph { font-family: var(--font-code); }
+.pick-item .pick-icon { display: inline-flex; align-self: center; justify-content: center; }
+.pick-label mark { background: var(--match-bg); color: inherit; border-radius: 2px; }

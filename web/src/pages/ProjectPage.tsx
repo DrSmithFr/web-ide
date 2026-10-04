@@ -3,11 +3,11 @@ import { createEffect, createSignal, For, type JSX, onCleanup, onMount, Show } f
 import { Dynamic } from 'solid-js/web'
 import { RpcError, formatRate, on as onPod, podRates, podState, request } from '../pod/rpc'
 import {
-  activeLeaf, activeTab, closeTab, conflictedDocs, cycleTab, docsVersion, mutate, navigate as navHistory, openFile, openProject, project, relPath, reopenProject, root,
-  saveAll, session, setConflictOpener, splitPane, closeProject, basename,
+  activeLeaf, activeTab, closeTab, conflictedDocs, cycleTab, docsVersion, mutate, navigate as navHistory, openProject, project, relPath, reopenProject, root,
+  saveAll, session, setConflictOpener, splitPane, closeProject,
 } from '../state/project'
 import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, toggleTool, toolsIn, zoneOf, type Zone } from '../state/zones'
-import { focusPart, setFocusPart, trackFocus } from '../state/focus'
+import { focusEditor, focusPart, setFocusPart, trackFocus } from '../state/focus'
 import { settings, updateSettings } from '../state/settings'
 import { navigate } from '../app/router'
 import { EditorArea } from '../ui/EditorArea'
@@ -27,14 +27,13 @@ import { DockerTool } from '../docker/DockerTool'
 import { openConflict } from '../conflict/ConflictDialog'
 import { openSettings } from '../settings/SettingsModal'
 import { actions, registerAction, runAction, shortcutOf } from '../keys/bindings'
-import { contextMenu, focusBeforeMenus, pick, prompt, fuzzy, type MenuItem } from '../ui/overlay'
+import { contextMenu, focusBeforeMenus, prompt, type MenuItem } from '../ui/overlay'
 import { Icon } from '../ui/icons'
 import { refreshConnections } from '../db/api'
-import * as lspc from '../lsp/client'
-import { lspLanguage } from '../editor/languages'
 import { toast } from '../ui/toast'
 import { t, tn } from '../i18n'
 import { ProjectBar } from './ProjectBar'
+import { SearchEverywhereHost, searchEverywhere } from '../popups/SearchEverywhere'
 
 /** Tools of the four zones; their placement comes from state/zones. */
 export const toolPanels: Record<string, { label: string; icon: string; component: () => JSX.Element; badge?: () => number }> = {
@@ -102,9 +101,10 @@ export function useProjectActions() {
     registerAction('nav.forward', () => navHistory(1)),
     registerAction('settings.open', () => openSettings()),
     registerAction('kanban.open', () => openBoard()),
-    registerAction('palette.open', () => void palette()),
-    registerAction('nav.gotoFile', () => void gotoFile()),
-    registerAction('nav.gotoSymbol', () => void gotoSymbol()),
+    registerAction('search.everywhere', () => searchEverywhere('all')),
+    registerAction('palette.open', () => searchEverywhere('actions')),
+    registerAction('nav.gotoFile', () => searchEverywhere('files')),
+    registerAction('nav.gotoSymbol', () => searchEverywhere('symbols')),
     registerAction('conflict.resolve', () => {
       const list = conflictedDocs()
       if (!list.length) return false
@@ -114,79 +114,9 @@ export function useProjectActions() {
   onCleanup(() => offs.forEach((f) => f()))
 }
 
-async function palette() {
-  const id = await pick({
-    placeholder: t('Command…'),
-    items: actions.map((a) => ({ label: t(a.label), detail: t(a.category), hint: shortcutOf(a.id), value: a.id })),
-  })
-  if (id) {
-    focusActiveEditor()
-    requestAnimationFrame(() => runAction(id))
-  }
-}
-
-let fileCache: { at: number; files: string[] } | null = null
-async function gotoFile() {
-  const files = async () => {
-    if (!fileCache || Date.now() - fileCache.at > 15000) fileCache = { at: Date.now(), files: await request<string[]>('search.files') }
-    return fileCache.files
-  }
-  const p = await pick<string>({
-    placeholder: t('Go to file (name or path, fuzzy search)'),
-    pathDetail: true,
-    provider: async (q) => {
-      const list = await files()
-      if (!q) return list.slice(0, 100).map((f) => ({ label: basename(f), detail: relPath(f), value: f }))
-      return list
-        .map((f) => ({ f, s: fuzzy(q, basename(f)) * 2 + fuzzy(q, relPath(f)) }))
-        .filter((x) => x.s > 0)
-        .sort((a, b) => b.s - a.s)
-        .slice(0, 100)
-        .map(({ f }) => ({ label: basename(f), detail: relPath(f), value: f }))
-    },
-  })
-  if (p) openFile(p)
-}
-
-async function gotoSymbol() {
-  let path = activeTab()?.path ?? ''
-  if (!lspLanguage(path)) {
-    const st = await request<any[]>('lsp.status').catch(() => [])
-    const lang = st.find((s) => s.detected && s.command)?.lang
-    const ext: Record<string, string> = { go: '/x.go', php: '/x.php', python: '/x.py', typescript: '/x.ts' }
-    path = lang ? ext[lang] : ''
-  }
-  if (!path) {
-    toast(t('No language server available to search symbols'), 'info')
-    return
-  }
-  const loc = await pick<lspc.Location>({
-    placeholder: t('Go to symbol (class, function, method…)'),
-    noFilter: true,
-    pathDetail: true,
-    provider: async (q, signal) => {
-      if (q.length < 2) return []
-      try {
-        const list = await lspc.workspaceSymbols(path, q, signal)
-        return list
-          .filter((s) => s.loc)
-          .slice(0, 200)
-          .map((s) => ({ label: s.name, icon: lspc.symbolKinds[s.kind]?.[1], detail: `${s.container ? s.container + ' · ' : ''}${relPath(s.loc!.path)}`, value: s.loc! }))
-      } catch {
-        return []
-      }
-    },
-  })
-  if (loc) lspc.jump(loc)
-}
-
 function newEntryDir() {
   const path = activeTab()?.kind === 'file' ? activeTab()!.path! : ''
   return path && relPath(path) !== path ? path.slice(0, path.lastIndexOf('/')) : root()
-}
-
-function focusActiveEditor() {
-  document.querySelector<HTMLElement>('.pane.active .ed-content')?.focus()
 }
 
 // Where the keyboard lands in a tool given the focus: its terminal, its prompt, the selected
@@ -213,7 +143,7 @@ function toggleToolFocus(id: string) {
   if (shownIn(session, z) === id && focusPart() === z) {
     mutate((s) => toggleTool(s, id))
     setFocusPart('editor')
-    focusActiveEditor()
+    focusEditor()
     return
   }
   mutate((s) => showTool(s, id))
@@ -228,7 +158,7 @@ function escapeToEditor(e: KeyboardEvent) {
   if (!target.closest?.('.zone') || target.closest('.xterm')) return
   e.preventDefault()
   setFocusPart('editor')
-  focusActiveEditor()
+  focusEditor()
 }
 
 // ---------- menu bar ----------
@@ -237,7 +167,7 @@ function escapeToEditor(e: KeyboardEvent) {
 const menus: [string, string[]][] = [
   ['menu|File', ['file.newFile', 'file.newFolder', '-', 'file.save', 'file.saveAll', '-', 'nav.gotoFile', '-', 'view.closeTab', 'view.closeOthers', 'view.closeAll', '-', 'conflict.resolve', '-', 'settings.open']],
   ['menu|Edit', ['edit.undo', 'edit.redo', '-', 'edit.duplicateLine', 'edit.deleteLine', 'edit.toggleComment', '-', 'edit.nextOccurrence', 'edit.allOccurrences', '-', 'search.find', 'search.global']],
-  ['menu|Navigate', ['nav.back', 'nav.forward', '-', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', '-', 'nav.related', 'nav.test']],
+  ['menu|Navigate', ['search.everywhere', '-', 'nav.back', 'nav.forward', '-', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', '-', 'nav.related', 'nav.test']],
   ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover', '-', 'lsp.rename', 'lsp.format', '-', 'edit.fold', 'edit.unfold', 'edit.foldAll', 'edit.unfoldAll']],
   ['menu|View', ['view.splitRight', 'view.splitDown', '-', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', '-', 'view.visualFocus', 'view.focusOutline', 'view.focusDim', '-', 'view.whitespace', '-', 'console.new', 'palette.open']],
   ['menu|Tools', ['tool.explorer', 'tool.search', 'tool.git', 'tool.kanban', '-', 'tool.assistant', 'tool.database', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.console', 'tool.problems', 'tool.docker']],
@@ -265,7 +195,7 @@ function openMenu(e: MouseEvent, ids: string[]) {
           checked: menuChecks[id]?.(),
           action: () => {
             if (prev && prev !== document.body && prev.isConnected && !prev.closest('.menubar')) prev.focus()
-            else focusActiveEditor()
+            else focusEditor()
             requestAnimationFrame(() => runAction(id) || toast(t('Action not available here'), 'info'))
           },
         },
@@ -547,6 +477,7 @@ export function ProjectPage(props: { id: string }) {
       <div class="app" classList={{ 'visual-focus': settings.visualFocus, 'focus-outline': settings.focusOutline, 'focus-dim': settings.focusDim }}>
         <MenuBar />
         <NewTicketHost />
+        <SearchEverywhereHost />
         <div class="workbench" onPointerDown={trackFocus} onFocusIn={trackFocus}>
           <Rail side="left" />
           <div class="work">

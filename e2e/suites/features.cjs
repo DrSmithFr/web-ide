@@ -10,7 +10,7 @@ run(async ({ page }) => {
   await page.keyboard.type('apph')
   await page.waitForTimeout(400)
   assert((await page.textContent('.pick-item.selected')).includes('app.php'), 'goto file fuzzy finds app.php')
-  const fonts = await page.evaluate(() => [...document.querySelectorAll('.pick-item.selected > span')].map((e) => getComputedStyle(e).fontFamily.includes('Mono')))
+  const fonts = await page.evaluate(() => [...document.querySelectorAll('.pick-item.selected :is(.pick-label, .pick-detail)')].map((e) => getComputedStyle(e).fontFamily.includes('Mono')))
   assert(JSON.stringify(fonts) === '[false,true]', 'goto file: name in the interface font, path in monospace ' + fonts)
   await page.keyboard.press('Enter')
   await page.waitForTimeout(500)

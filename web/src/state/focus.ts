@@ -14,3 +14,8 @@ export function trackFocus(e: Event) {
   const part = (e.target as HTMLElement).closest?.('[data-focus]')?.getAttribute('data-focus')
   if (part) setFocusPart(part as FocusPart)
 }
+
+/** Gives the keyboard to the editor of the active pane. */
+export function focusEditor() {
+  document.querySelector<HTMLElement>('.pane.active .ed-content')?.focus()
+}

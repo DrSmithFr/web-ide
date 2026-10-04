@@ -1312,5 +1312,15 @@
   "{n} container": "{n} container",
   "{n} containers": "{n} containers",
   "{n} line": "{n} ligne",
-  "{n} lines": "{n} lignes"
+  "{n} lines": "{n} lignes",
+  "All": "Tout",
+  "Files": "Fichiers",
+  "Symbols": "Symboles",
+  "Actions": "Actions",
+  "Search files, symbols and actions": "Chercher des fichiers, symboles et actions",
+  "Search the text of the project": "Chercher dans le texte du projet",
+  "Search everywhere": "Chercher partout",
+  "Tab: next tab": "Tab : onglet suivant",
+  "Type at least two characters": "Tapez au moins deux caractères",
+  "Double Shift": "Double Maj"
 }
