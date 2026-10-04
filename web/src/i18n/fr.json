@@ -1154,5 +1154,7 @@
   "Collapse all": "Tout replier",
   "Options": "Options",
   "Indentation guides": "Guides d'indentation",
-  "Show the indentation guides": "Afficher les guides d'indentation"
+  "Show the indentation guides": "Afficher les guides d'indentation",
+  "Whitespace": "Espaces",
+  "Show whitespace": "Afficher les espaces"
 }

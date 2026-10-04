@@ -24,6 +24,7 @@ export interface ViewOptions {
   insertSpaces: boolean
   highlightLine: boolean
   indentGuides?: boolean
+  showWhitespace?: boolean
   readOnly?: boolean
   onSelection?: (sel: Selection) => void
   onCtrlClick?: (offset: number) => void
@@ -86,6 +87,7 @@ export class EditorView {
   private curLine: HTMLDivElement
   private boxes: HTMLDivElement
   private guides: HTMLDivElement
+  private ws: HTMLPreElement
   private guideLine = -1
   private step: { version: number; tabSize: number; cols: number } | null = null
   private tooltip: HTMLDivElement
@@ -128,6 +130,9 @@ export class EditorView {
     this.boxes.className = 'ed-boxes'
     this.guides = document.createElement('div')
     this.guides.className = 'ed-guides'
+    this.ws = document.createElement('pre')
+    this.ws.className = 'ed-ws'
+    this.ws.setAttribute('aria-hidden', 'true')
     this.content = document.createElement('pre')
     this.content.className = 'ed-content'
     this.content.spellcheck = false
@@ -138,7 +143,7 @@ export class EditorView {
     this.setReadOnly(!!opts.readOnly || doc.readOnly)
     this.tooltip = document.createElement('div')
     this.tooltip.className = 'ed-tooltip'
-    main.append(this.curLine, this.guides, this.boxes, this.content)
+    main.append(this.curLine, this.guides, this.boxes, this.content, this.ws)
     inner.append(this.gutter, main)
     this.scroller.append(inner)
     this.root.append(this.scroller, this.tooltip)
@@ -864,6 +869,7 @@ export class EditorView {
       }
     }
     this.renderGuides(a, b)
+    this.renderWhitespace(a, b)
     this.renderStatement()
     this.updateCurLine()
   }
@@ -918,6 +924,25 @@ export class EditorView {
     for (const [d, c] of counts) if (c > best || (c === best && d < cols)) [cols, best] = [d, c]
     this.step = { version: this.doc.version, tabSize: tab, cols: Math.max(1, Math.min(cols, 8)) }
     return this.step.cols
+  }
+
+  /**
+   * Whitespace of lines a..b, drawn over the text: a copy of the lines in transparent
+   * characters (same widths, tabs included) where spaces, tabs and line ends get a mark.
+   */
+  private renderWhitespace(a: number, b: number) {
+    if (!this.opts.showWhitespace) {
+      if (this.ws.firstChild) this.ws.replaceChildren()
+      return
+    }
+    const esc: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', ' ': '<i> </i>', '\t': '<i class="t">\t</i>' }
+    let html = ''
+    for (let l = a; l <= b; l++) {
+      html += this.doc.lineText(l).replace(/[&<> \t]/g, (c) => esc[c])
+      html += l < this.doc.lineCount - 1 ? '<i class="n">\u21b5</i>\n' : '\n'
+    }
+    this.ws.style.top = `${this.lineTop(a)}px`
+    this.ws.innerHTML = html
   }
 
   /** Indentation guides of lines a..b; the one of the block holding the caret stands out. */

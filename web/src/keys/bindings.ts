@@ -62,6 +62,7 @@ export const actions: ActionDef[] = [
   { id: 'view.resetTools', label: 'Reset the tool layout', category: 'View' },
   { id: 'view.visualFocus', label: 'Visual focus mode', category: 'View', inTerminal: true },
   { id: 'view.focusOutline', label: 'Focus outline', category: 'View', inTerminal: true },
+  { id: 'view.whitespace', label: 'Show whitespace', category: 'View' },
   { id: 'settings.open', label: 'Settings', category: 'General', inTerminal: true },
   { id: 'kanban.open', label: 'Open the kanban', category: 'General' },
   { id: 'palette.open', label: 'Command palette', category: 'General', inTerminal: true },

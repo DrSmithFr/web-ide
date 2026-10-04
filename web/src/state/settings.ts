@@ -18,7 +18,7 @@ export interface Settings {
   focusOutline: boolean
   tokenColors: Record<string, Record<string, string>>
   font: { family: string; size: number; lineHeight: number; ligatures: boolean; uiSize: number }
-  editor: { tabSize: number; insertSpaces: boolean; highlightLine: boolean; indentGuides: boolean }
+  editor: { tabSize: number; insertSpaces: boolean; highlightLine: boolean; indentGuides: boolean; showWhitespace: boolean }
   keyboard: { layout: 'auto' | 'qwerty' | 'azerty'; overrides: Record<string, string[]> }
   syntax: Record<string, GrammarDef>
   language: LangSetting
@@ -31,7 +31,7 @@ export const defaultSettings: Settings = {
   focusOutline: false,
   tokenColors: {},
   font: { family: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace", size: 13, lineHeight: 1.55, ligatures: true, uiSize: 13 },
-  editor: { tabSize: 4, insertSpaces: true, highlightLine: true, indentGuides: true },
+  editor: { tabSize: 4, insertSpaces: true, highlightLine: true, indentGuides: true, showWhitespace: false },
   keyboard: { layout: 'auto', overrides: {} },
   syntax: {},
   language: 'auto',

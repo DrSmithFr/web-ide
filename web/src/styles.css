@@ -248,19 +248,24 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .ed { position: relative; flex: 1; display: flex; min-height: 0; min-width: 0; }
 .ed-scroll { flex: 1; overflow: auto; position: relative; }
 .ed-inner { display: flex; min-width: max-content; min-height: 100%; }
-.ed-gutter, .ed-content, .ed-gutter-nums { margin: 0; font-family: var(--font-code); font-size: var(--font-size-code); line-height: var(--line-height-code); font-variant-ligatures: var(--ligatures); tab-size: var(--tab-size, 4); }
+.ed-gutter, .ed-content, .ed-gutter-nums, .ed-ws { margin: 0; font-family: var(--font-code); font-size: var(--font-size-code); line-height: var(--line-height-code); font-variant-ligatures: var(--ligatures); tab-size: var(--tab-size, 4); }
 .ed-content { padding-top: 6px; padding-bottom: 40vh; }
 .ed-gutter { position: sticky; left: 0; z-index: 2; background: var(--bg); user-select: none; border-right: 1px solid var(--line); flex: none; overflow: hidden; }
 .ed-gutter-nums { position: absolute; top: 0; right: 12px; text-align: right; color: var(--gutter); will-change: transform; }
 /* Own width: a longer line elsewhere must not re-layout every block. */
 .ed-block { display: block; width: max-content; }
-.ed-main { position: relative; flex: 1; }
+.ed-main { position: relative; flex: 1; isolation: isolate; }
 .ed-content { position: relative; z-index: 1; padding-left: 0; padding-right: 40px; white-space: pre; outline: none; caret-color: var(--accent); min-height: 100%; color: var(--fg); }
 .ed-content::selection { background: var(--sel-bg); }
 .ed-curline { position: absolute; left: 0; right: 0; top: 0; background: var(--cur-line); pointer-events: none; z-index: 0; }
 .ed-boxes { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
 .ed-guides { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
 .ed-guide { position: absolute; width: 1px; background: color-mix(in srgb, var(--fg) 11%, transparent); }
+.ed-ws { position: absolute; left: 0; z-index: 2; pointer-events: none; user-select: none; white-space: pre; color: transparent; --ws: color-mix(in srgb, var(--fg) 28%, transparent); }
+.ed-ws i { font-style: normal; }
+.ed-ws i:not([class]) { background: radial-gradient(circle, var(--ws) 0 1.1px, transparent 1.6px); }
+.ed-ws i.t { background: var(--ws); --arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 5 8'%3E%3Cpath d='M1 1l3 3-3 3' fill='none' stroke='black'/%3E%3C/svg%3E"); mask: linear-gradient(#000, #000) no-repeat left 2px center / calc(100% - 5px) 1px, var(--arrow) no-repeat right 1px center / 5px 8px; }
+.ed-ws i.n { color: var(--ws); }
 .ed-guide.active { background: color-mix(in srgb, var(--fg) 32%, transparent); }
 .ed-statement { position: absolute; left: 0; border: 1px solid var(--accent); border-radius: 4px; background: color-mix(in srgb, var(--accent) 7%, transparent); }
 .ed.readonly .ed-content { caret-color: transparent; }

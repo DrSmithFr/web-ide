@@ -176,13 +176,14 @@ const menus: [string, string[]][] = [
   ['menu|Edit', ['edit.undo', 'edit.redo', 'edit.duplicateLine', 'edit.deleteLine', 'edit.toggleComment', 'search.find', 'search.global']],
   ['menu|Navigate', ['nav.back', 'nav.forward', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', 'nav.related', 'nav.test']],
   ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover']],
-  ['menu|View', ['view.splitRight', 'view.splitDown', 'view.closeTab', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', 'view.visualFocus', 'view.focusOutline', 'console.new', 'palette.open']],
+  ['menu|View', ['view.splitRight', 'view.splitDown', 'view.closeTab', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', 'view.visualFocus', 'view.focusOutline', 'view.whitespace', 'console.new', 'palette.open']],
 ]
 
 // Menu entries switching a setting, shown with a check box.
 const menuChecks: Record<string, () => boolean> = {
   'view.visualFocus': () => settings.visualFocus,
   'view.focusOutline': () => settings.focusOutline,
+  'view.whitespace': () => settings.editor.showWhitespace,
 }
 
 function openMenu(e: MouseEvent, ids: string[]) {
@@ -431,6 +432,7 @@ export function ProjectPage(props: { id: string }) {
     registerAction('view.resetTools', () => mutate((s) => (s.placement = normalizePlacement(defaultPlacement)))),
     registerAction('view.visualFocus', () => updateSettings((s) => (s.visualFocus = !s.visualFocus), 'Visual focus')),
     registerAction('view.focusOutline', () => updateSettings((s) => (s.focusOutline = !s.focusOutline), 'Focus outline')),
+    registerAction('view.whitespace', () => updateSettings((s) => (s.editor.showWhitespace = !s.editor.showWhitespace), 'Whitespace')),
     registerAction('console.new', () => void newConsole()),
     registerAction('view.toggleBottom', () => mutate((s) => toggleTool(s, 'console'))),
     registerAction('search.global', () => {

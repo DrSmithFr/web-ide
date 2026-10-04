@@ -286,6 +286,7 @@ export function useEditorView(doc: () => Doc | null, host: () => HTMLElement | u
         insertSpaces: untrack(() => settings.editor.insertSpaces),
         highlightLine: untrack(() => settings.editor.highlightLine),
         indentGuides: untrack(() => settings.editor.indentGuides),
+        showWhitespace: untrack(() => settings.editor.showWhitespace),
         readOnly: opts.readOnly,
         // Untracked: a callback run inside an effect (setSelection from a jump) must not
         // subscribe that effect to what the callback reads.
@@ -311,6 +312,7 @@ export function useEditorView(doc: () => Doc | null, host: () => HTMLElement | u
       insertSpaces: settings.editor.insertSpaces,
       highlightLine: settings.editor.highlightLine,
       indentGuides: settings.editor.indentGuides,
+      showWhitespace: settings.editor.showWhitespace,
     })
   })
   createEffect(

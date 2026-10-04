@@ -106,6 +106,7 @@ To treat local and SSH projects the same way, the pod exposes one interface (`li
 
 - The text starts right against the gutter, without a left margin.
 - **Indentation guides** (setting, on by default): a thin vertical line at each indentation level, the step being the most frequent indentation increase of the file (else the tab size); blank lines take the smaller indentation of the lines around them. The guide of the block holding the caret (or opened by the caret line) is brighter.
+- **Whitespace** (setting and *View › Show whitespace*, off by default): a dot for each space, an arrow for each tab, `↵` at each line end, drawn faintly over the text by an overlay copying the visible lines in transparent characters (exact widths, tab stops included).
 
 ## 7. Keyboard shortcuts
 

@@ -215,6 +215,10 @@ function EditorSettings() {
         <input type="checkbox" checked={settings.editor.indentGuides} onChange={(e) => updateSettings((s) => (s.editor.indentGuides = e.currentTarget.checked), 'Indentation guides')} />
         {t('Show the indentation guides')}
       </label>
+      <label class="check">
+        <input type="checkbox" checked={settings.editor.showWhitespace} onChange={(e) => updateSettings((s) => (s.editor.showWhitespace = e.currentTarget.checked), 'Whitespace')} />
+        {t('Show whitespace')}
+      </label>
     </section>
   )
 }

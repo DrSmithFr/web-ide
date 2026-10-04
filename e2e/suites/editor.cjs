@@ -40,4 +40,32 @@ run(async ({ page }) => {
   await page.waitForFunction((top) => Math.abs(document.querySelector('.pane.active .ed-guide.active')?.offsetTop - top) < 4, await lineTop(8))
   assert(true, 'on the line opening a block, its guide is the active one')
   await page.screenshot({ path: OUT + '/editor-guides.png' })
+
+  // Whitespace (View menu): dots for spaces, arrows for tabs, a mark at each line end.
+  const whitespace = async () => {
+    await page.click('.menu-btn:has-text("View")')
+    await page.click('.ctx-menu .ctx-item:has-text("Show whitespace")')
+  }
+  await whitespace()
+  await page.waitForSelector('.pane.active .ed-ws i.t', { state: 'attached', timeout: 3000 })
+  const ws = await page.evaluate(() => {
+    const q = (s) => document.querySelectorAll('.pane.active .ed-ws ' + s)
+    const tab = q('i.t')[0].getBoundingClientRect()
+    const main = document.querySelector('.pane.active .ed-main').getBoundingClientRect()
+    const cw = document.querySelector('.pane.active .ed-content').getBoundingClientRect().width
+    return { tabs: q('i.t').length, eol: q('i.n').length, spaces: q('i:not([class])').length, tabLeft: tab.left - main.left, tabWidth: tab.width }
+  })
+  assert(ws.tabs === 2 && ws.eol === 14 && ws.spaces > 10, 'tabs, spaces and line ends marked ' + JSON.stringify(ws))
+  const cw = await page.evaluate(() => {
+    const t = document.querySelector('.pane.active .ed-block').firstChild
+    const r = document.createRange()
+    r.setStart(t, 0)
+    r.setEnd(t, 7)
+    return r.getBoundingClientRect().width / 7
+  })
+  assert(Math.abs(ws.tabLeft) < 1 && Math.abs(ws.tabWidth - 4 * cw) < 1, 'the tab mark covers the tab')
+  await page.screenshot({ path: OUT + '/editor-whitespace.png' })
+  await whitespace()
+  await page.waitForFunction(() => !document.querySelector('.pane.active .ed-ws').firstChild)
+  assert(true, 'whitespace hidden again')
 })
