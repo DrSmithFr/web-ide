@@ -70,6 +70,18 @@ run(async ({ page }) => {
   assert((await page.$$('.history-entry')).length >= 2, 'settings history lists snapshots')
   await page.keyboard.press('Escape')
 
+  // Infos: properties, connections and extensions stacked in one tool
+  assert(!(await page.isVisible('.rail-left .rail-btn[title="Connections"]')), 'no Connections panel on the left')
+  assert(!(await page.isVisible('.rail-right .rail-btn[title="Extensions"]')), 'no Extensions tool')
+  await page.click('.rail-right .rail-btn[title="Infos"]')
+  await page.waitForSelector('[data-testid=info-extensions]')
+  const sections = await page.$$eval('.info-section > h2', (els) => els.map((e) => e.textContent))
+  assert(JSON.stringify(sections) === JSON.stringify(['Properties', 'Connections', 'Extensions · language servers']), 'Infos sections in order ' + JSON.stringify(sections))
+  const props = await page.textContent('[data-testid=info-properties] .card')
+  assert(props.includes('Name') && props.includes('Root') && props.includes('Pod') && !props.includes('Target'), 'a single Project card: ' + props)
+  assert(await page.isVisible('[data-testid=info-connections] h3:has-text("Local SSH keys")'), 'Infos lists the local SSH keys')
+  await page.screenshot({ path: OUT + '/s8-infos.png' })
+
   // Database explorer with SQLite
   await page.click('.rail-right .rail-btn[title="Database explorer"]')
   await page.waitForSelector('.db-tool')

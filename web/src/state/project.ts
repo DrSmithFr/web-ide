@@ -64,6 +64,9 @@ export interface ProjectInfo {
 
 const uid = () => Math.random().toString(36).slice(2, 10)
 
+/** Former panel ids, merged into the Infos tool. */
+export const panelAliases: Record<string, string> = { connections: 'info', extensions: 'info', properties: 'info' }
+
 function emptySession(): SessionData {
   const leaf = uid()
   return {
@@ -127,6 +130,11 @@ function normalize(raw: any): SessionData {
   const d = emptySession()
   if (!raw || typeof raw !== 'object' || !raw.layout) return d
   const s: SessionData = { ...d, ...raw, left: { ...d.left, ...raw.left }, right: { ...d.right, ...raw.right }, bottom: { ...d.bottom, ...raw.bottom } }
+  if (s.left.panel && panelAliases[s.left.panel]) {
+    s.right.panel = panelAliases[s.left.panel]
+    s.left.panel = null
+  }
+  if (s.right.panel && panelAliases[s.right.panel]) s.right.panel = panelAliases[s.right.panel]
   // Drop the tabs that no pane references and the pane references to missing tabs.
   const used = new Set<string>()
   const walk = (n: LayoutNode) => {

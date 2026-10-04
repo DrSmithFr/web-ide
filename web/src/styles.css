@@ -90,6 +90,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .props dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .card { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 10px; }
 .card h3 { margin: 0 0 8px; font-size: 1em; }
+.info-section + .info-section { margin-top: 18px; }
+.info-section > h2 { margin: 0 0 8px; font-size: 0.85em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fg-muted); }
 .plain-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .host-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 

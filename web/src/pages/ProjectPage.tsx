@@ -11,7 +11,6 @@ import { EditorArea } from '../ui/EditorArea'
 import { BottomPanel, newConsole, setConsoleList } from '../console/consoles'
 import { Explorer } from '../panels/Explorer'
 import { GlobalSearch, focusGlobalSearch } from '../panels/GlobalSearch'
-import { Connections } from '../panels/Connections'
 import { GitPanel } from '../panels/GitPanel'
 import { KanbanPanel } from '../kanban/Panel'
 import { NewTicketHost } from '../kanban/Board'
@@ -19,7 +18,8 @@ import { board, ensureBoard, openBoard, refreshBoard } from '../kanban/state'
 import { refreshGit } from '../state/git'
 import { DatabaseTool } from '../db/DatabaseTool'
 import { AssistantTool } from '../llm/AssistantTool'
-import { ConflictsTool, ExtensionsTool, PropertiesTool, StructureTool } from '../tools/tools'
+import { ConflictsTool, StructureTool } from '../tools/tools'
+import { InfoTool } from '../tools/InfoTool'
 import { openConflict } from '../conflict/ConflictDialog'
 import { openSettings } from '../settings/SettingsModal'
 import { actions, registerAction, runAction, shortcutOf } from '../keys/bindings'
@@ -38,7 +38,6 @@ export const leftPanels: Record<string, { label: string; icon: string; component
   search: { label: 'Search', icon: 'search', component: GlobalSearch },
   git: { label: 'Git', icon: 'branch', component: GitPanel },
   kanban: { label: 'Kanban', icon: 'kanban', component: KanbanPanel },
-  connections: { label: 'Connections', icon: 'plug', component: Connections },
 }
 
 export const rightPanels: Record<string, { label: string; icon: string; component: () => JSX.Element }> = {
@@ -46,8 +45,7 @@ export const rightPanels: Record<string, { label: string; icon: string; componen
   assistant: { label: 'AI assistant', icon: 'sparkle', component: AssistantTool },
   structure: { label: 'Structure', icon: 'outline', component: StructureTool },
   conflicts: { label: 'Conflicts', icon: 'conflict', component: ConflictsTool },
-  extensions: { label: 'Extensions', icon: 'puzzle', component: ExtensionsTool },
-  properties: { label: 'Properties', icon: 'info', component: PropertiesTool },
+  info: { label: 'Infos', icon: 'info', component: InfoTool },
 }
 
 /** Opens a project, asking for the SSH password / passphrase when the pod needs one. */

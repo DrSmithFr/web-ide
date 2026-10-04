@@ -63,8 +63,8 @@ To treat local and SSH projects the same way, the pod exposes one interface (`li
 - **Worktree selector**: lists the main folder, the worktrees of the tickets (with their status) and the other worktrees of the repository; choosing one opens its window, or brings back the one already open. *Open a branch…* checks an existing or new branch out in its own worktree (`.ide/worktrees/b-<branch>`) opened in its own window: the main folder is never switched, so its uncommitted changes never get in the way. The setup command of the kanban (`npm install`…) runs in a console of the new worktree window. *Remove a worktree…* deletes one of these worktrees and its project (confirmation when it has uncommitted changes); the branch is kept, and a window open on it goes back to the main folder. Ticket worktrees go with their ticket.
 - **Editor window**: explorer panel on the left, central editor with a tab bar, tools panel on the right.
 - **Icon rails** on both sides: each icon toggles a panel; clicking the active icon hides it.
-  - Left: file explorer, global search, Git, kanban, connections (local/SSH).
-  - Right: tools (AI assistant, database explorer, structure, conflicts, extensions, properties).
+  - Left: file explorer, global search, Git, kanban.
+  - Right: tools (AI assistant, database explorer, structure, conflicts, infos). Infos stacks three sections: properties (project, target, pod, active tab), connections (local SSH keys, hosts of `~/.ssh/config`) and extensions (language servers).
 - **Bottom panel**: consoles, as tabs (terminals, build output, commands).
 - **Split view**: recursive pane tree (split right, split down). A file open in several panes shares one buffer, never two copies.
 

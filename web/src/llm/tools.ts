@@ -73,7 +73,7 @@ export const toolDefs = [
   ),
   fn(
     'focus',
-    'Brings an element of the IDE to the front: an open file, a panel (explorer, search, git, kanban, connections, database, assistant, structure, conflicts, extensions, properties), a console or the problems list.',
+    'Brings an element of the IDE to the front: an open file, a panel (explorer, search, git, kanban, database, assistant, structure, conflicts, info), a console or the problems list.',
     {
       target: { type: 'string', enum: ['file', 'panel', 'console', 'problems'], description: 'Kind of element' },
       path: str('File (target=file)'),
@@ -577,8 +577,8 @@ async function showFile(p: string, line?: number, endLine?: number): Promise<Too
   return ok(`${relPath(abs)} opened in the editor, ${range}.`, `${relPath(abs)} · ${endLine ? t('lines {from}-{to}', { from: l1 + 1, to: l2 + 1 }) : t('line {n}', { n: l1 + 1 })}`)
 }
 
-const leftIds = ['explorer', 'search', 'git', 'kanban', 'connections']
-const rightIds = ['database', 'assistant', 'structure', 'conflicts', 'extensions', 'properties']
+const leftIds = ['explorer', 'search', 'git', 'kanban']
+const rightIds = ['database', 'assistant', 'structure', 'conflicts', 'info']
 
 async function focus(a: Record<string, any>): Promise<ToolResult> {
   switch (a.target) {

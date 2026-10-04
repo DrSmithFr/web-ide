@@ -2,7 +2,7 @@
 // WebSocket client of the same pod session; the shared buffers keep them in sync.
 import { createSignal, onCleanup, onMount, Show } from 'solid-js'
 import { Dynamic } from 'solid-js/web'
-import { project, closeProject, reopenProject } from '../state/project'
+import { project, closeProject, reopenProject, panelAliases } from '../state/project'
 import { EditorArea } from '../ui/EditorArea'
 import { TermView, consoles, setConsoleList } from '../console/consoles'
 import { NewTicketHost } from '../kanban/Board'
@@ -79,7 +79,8 @@ export function DetachedConsole(props: { id: string; consoleId: string }) {
 export function DetachedTool(props: { id: string; toolId: string }) {
   const s = useProject(props.id, () => 'Tool')
   useProjectActions()
-  const tool = () => rightPanels[props.toolId] ?? leftPanels[props.toolId]
+  const id = panelAliases[props.toolId] ?? props.toolId
+  const tool = () => rightPanels[id] ?? leftPanels[id]
   return (
     <Frame title={`${tool() ? t(tool()!.label) : props.toolId} · ${project()?.name ?? ''}`} ready={s.ready()} error={s.error()}>
       <Show when={tool()} fallback={<p class="muted pad">{t('Unknown tool.')}</p>}>

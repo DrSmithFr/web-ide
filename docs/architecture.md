@@ -66,7 +66,7 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 | `keys/` | Binding table and QWERTY / AZERTY presets |
 | `lsp/` | Client, completion, edits, rename and formatting |
 | `ui/` | Editor area, diff view, overlays (modal, prompt, pick list, context menu), toasts, icons |
-| `panels/` | Explorer, global search, Git, connections |
+| `panels/` | Explorer, global search, Git |
 | `tools/`, `db/`, `console/`, `conflict/`, `settings/`, `pages/` | Right-panel tools, database explorer, terminals, conflict dialog, settings modal, pages |
 | `llm/` | AI assistant: state, agent loop, tools, prompt, Markdown, attachments, speech recognition |
 | `kanban/` | Board, ticket view, workflow actions, linked conversations |
