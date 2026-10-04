@@ -410,13 +410,29 @@ func (s *Server) registerProject() {
 		if o.Query == "" {
 			return search.Result{Matches: []search.Match{}}, nil
 		}
+		o.Exclude = rt.Excluded()
 		if rt.Local {
 			return search.Local(ctx, rt.Root, o)
 		}
 		return search.Remote(ctx, rt.Runner, rt.Root, o)
 	}))
 	s.handle("search.files", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
-		return rt.Files(ctx)
+		files, err := rt.Files(ctx)
+		return search.WithoutExcluded(files, rt.Excluded()), err
+	}))
+	s.handle("folders.get", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
+		return rt.Folders(), nil
+	}))
+	s.handle("folders.mark", withPath(func(ctx context.Context, c *Client, rt *runtime.Runtime, path string, p json.RawMessage) (any, error) {
+		a, err := bind[struct{ Mark string }](p)
+		if err != nil {
+			return nil, err
+		}
+		m, err := rt.MarkFolder(path, a.Mark)
+		if err == nil {
+			s.emitter(c.project)("folders.changed", m, "")
+		}
+		return m, err
 	}))
 
 	s.handle("console.list", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {

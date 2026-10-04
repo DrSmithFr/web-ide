@@ -26,6 +26,13 @@ func (s *Server) registerGit() {
 	s.handle("git.status", h(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
 		return rt.Git.Status(ctx)
 	}))
+	s.handle("git.ignored", h(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
+		a, err := bind[pathsArg](p)
+		if err != nil {
+			return nil, err
+		}
+		return rt.Git.Ignored(ctx, a.Paths)
+	}))
 	s.handle("git.show", h(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
 		a, err := bind[struct {
 			Path string `json:"path"`

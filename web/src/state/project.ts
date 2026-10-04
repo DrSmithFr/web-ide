@@ -51,6 +51,8 @@ export interface SessionData {
   bottom: { left: string | null; right: string | null; height: number; split: number; active: string | null; order: string[]; problemsTab: 'problems' | 'output' }
   sqlText: Record<string, string>
   expanded: string[]
+  /** Options of the explorer. */
+  explorer: { hidden: boolean; excluded: boolean; singleClick: boolean; follow: boolean }
 }
 
 export interface ProjectInfo {
@@ -84,6 +86,7 @@ function emptySession(): SessionData {
     placement: normalizePlacement(null),
     sqlText: {},
     expanded: [],
+    explorer: { hidden: true, excluded: true, singleClick: false, follow: false },
   }
 }
 
@@ -134,7 +137,7 @@ on('session.changed', (data: SessionData) => {
 function normalize(raw: any): SessionData {
   const d = emptySession()
   if (!raw || typeof raw !== 'object' || !raw.layout) return d
-  const s: SessionData = { ...d, ...raw, left: { ...d.left, ...raw.left }, right: { ...d.right, ...raw.right }, bottom: { ...d.bottom, ...raw.bottom } }
+  const s: SessionData = { ...d, ...raw, left: { ...d.left, ...raw.left }, right: { ...d.right, ...raw.right }, bottom: { ...d.bottom, ...raw.bottom }, explorer: { ...d.explorer, ...raw.explorer } }
   if (s.left.panel && panelAliases[s.left.panel]) {
     s.right.panel = panelAliases[s.left.panel]
     s.left.panel = null

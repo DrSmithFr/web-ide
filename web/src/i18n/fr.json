@@ -376,7 +376,6 @@
   "Hash copied": "Hash copié",
   "Heading": "Titre",
   "Hide": "Masquer",
-  "Hide the hidden files": "Masquer les fichiers cachés",
   "Hide the {n} compacted messages": "Masquer les {n} messages compactés",
   "High": "Haute",
   "High contrast": "Contraste élevé",
@@ -1144,5 +1143,14 @@
   "Pushes the branch {branch} to origin, then opens its pull request with gh": "Pousse la branche {branch} sur origin, puis ouvre sa pull request avec gh",
   "Opening the pull request…": "Ouverture de la pull request…",
   "Create the pull request": "Créer la pull request",
-  "Pull request opened: {url}": "Pull request ouverte : {url}"
+  "Pull request opened: {url}": "Pull request ouverte : {url}",
+  "Source folder": "Dossier source",
+  "Test folder": "Dossier de tests",
+  "Excluded folder": "Dossier exclu",
+  "Show the excluded folders": "Afficher les dossiers exclus",
+  "Open files with a single click": "Ouvrir les fichiers au simple clic",
+  "Always select the opened file": "Toujours sélectionner le fichier ouvert",
+  "Expand all": "Tout déplier",
+  "Collapse all": "Tout replier",
+  "Options": "Options"
 }

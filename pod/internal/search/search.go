@@ -29,6 +29,32 @@ type Options struct {
 	Word    bool   `json:"wholeWord"`
 	Include string `json:"include"` // comma separated globs on the file name, e.g. "*.go,*.ts"
 	Max     int    `json:"max"`
+	// Exclude lists absolute folders left out (folders marked as excluded).
+	Exclude []string `json:"-"`
+}
+
+// InExcluded tells whether a path is one of the folders, or inside one.
+func InExcluded(p string, folders []string) bool {
+	for _, f := range folders {
+		if p == f || strings.HasPrefix(p, f+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// WithoutExcluded drops the paths inside the folders.
+func WithoutExcluded(paths, folders []string) []string {
+	if len(folders) == 0 {
+		return paths
+	}
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if !InExcluded(p, folders) {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 type Match struct {
@@ -132,7 +158,7 @@ func Local(ctx context.Context, root string, o Options) (*Result, error) {
 			return nil
 		}
 		if d.IsDir() {
-			if skipDirs[d.Name()] && p != root {
+			if p != root && (skipDirs[d.Name()] || InExcluded(filepath.ToSlash(p), o.Exclude)) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -221,6 +247,9 @@ func Remote(ctx context.Context, r execx.Runner, root string, o Options) (*Resul
 		}
 		n, _ := strconv.Atoi(ln)
 		full := path.Join(root, p)
+		if InExcluded(full, o.Exclude) {
+			continue
+		}
 		files[full] = true
 		if m, ok := matchLine(re, full, n, text); ok {
 			if len(res.Matches) >= max {

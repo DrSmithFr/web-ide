@@ -19,7 +19,7 @@ run(async ({ ctx, page }) => {
   await win.waitForTimeout(500)
   // main window: open notes.txt and type
   await page.click('.rail-left .rail-btn[title="Explorer"]')
-  await page.click('.tree-row:has-text("notes.txt")')
+  await page.dblclick('.tree-row:has-text("notes.txt")')
   await page.waitForTimeout(300)
   await page.click('.pane.active .ed-content')
   await page.keyboard.press('Control+End')

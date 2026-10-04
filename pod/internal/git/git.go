@@ -133,6 +133,31 @@ func (g *Repo) rel(ctx context.Context, paths []string) ([]string, string, error
 	return out, top, nil
 }
 
+// Ignored returns the paths that .gitignore leaves out (tracked files never are).
+// Outside a repository, nothing is ignored.
+func (g *Repo) Ignored(ctx context.Context, paths []string) ([]string, error) {
+	out := []string{}
+	rel, top, err := g.rel(ctx, paths)
+	if err != nil {
+		return out, nil
+	}
+	for len(rel) > 0 {
+		n := min(len(rel), 300)
+		// Exit status 1 (without message) when no path is ignored.
+		res, err := g.inTop(ctx, top, append([]string{"check-ignore", "--"}, rel[:n]...)...)
+		if err != nil && !strings.HasSuffix(err.Error(), "status 1") { // local and SSH wording
+			return nil, err
+		}
+		for _, p := range strings.Split(res, "\n") {
+			if p != "" {
+				out = append(out, top+"/"+p)
+			}
+		}
+		rel = rel[n:]
+	}
+	return out, nil
+}
+
 // Show returns a file at a revision: "HEAD", or "" for the index. Missing file: "", false.
 func (g *Repo) Show(ctx context.Context, p, rev string) (string, bool, error) {
 	rel, _, err := g.rel(ctx, []string{p})

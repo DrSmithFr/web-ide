@@ -1,5 +1,5 @@
 // Git state of the open project, refreshed after file changes and Git actions.
-import { createSignal } from 'solid-js'
+import { createMemo, createRoot, createSignal } from 'solid-js'
 import { on, request } from '../pod/rpc'
 import { project } from './project'
 
@@ -72,10 +72,9 @@ window.addEventListener('focus', () => {
   refreshGit(100)
 })
 
-/** Status letter of a path in the working tree view (explorer colors). */
-export function fileState(path: string): 'modified' | 'added' | 'untracked' | 'conflict' | 'deleted' | null {
-  const f = status()?.files.find((x) => x.path === path)
-  if (!f) return null
+export type FileGitState = 'modified' | 'added' | 'untracked' | 'conflict' | 'deleted'
+
+function stateOf(f: GitFile): FileGitState {
   if (f.conflict) return 'conflict'
   if (f.untracked) return 'untracked'
   if (f.work === 'D' || f.index === 'D') return 'deleted'
@@ -83,8 +82,40 @@ export function fileState(path: string): 'modified' | 'added' | 'untracked' | 'c
   return 'modified'
 }
 
+// States by file, and the states found under each folder, recomputed with the status.
+const states = createRoot(() =>
+  createMemo(() => {
+    const files = new Map<string, FileGitState>()
+    const dirs = new Map<string, Set<FileGitState>>()
+    for (const f of status()?.files ?? []) {
+      const st = stateOf(f)
+      files.set(f.path, st)
+      for (let i = f.path.lastIndexOf('/'); i > 0; i = f.path.lastIndexOf('/', i - 1)) {
+        const d = f.path.slice(0, i)
+        const set = dirs.get(d) ?? new Set()
+        set.add(st)
+        dirs.set(d, set)
+      }
+    }
+    return { files, dirs }
+  }),
+)
+
+/** Git state of a file in the working tree view (explorer colors). */
+export function fileState(path: string): FileGitState | null {
+  return states().files.get(path) ?? null
+}
+
+/** Git state of a folder from its content: untracked or added when all its changes are, modified otherwise. */
+export function dirState(dir: string): FileGitState | null {
+  const set = states().dirs.get(dir)
+  if (!set) return null
+  if (set.has('conflict')) return 'conflict'
+  if (set.size === 1 && (set.has('untracked') || set.has('added'))) return [...set][0]
+  return 'modified'
+}
+
 /** True when a folder contains changes (explorer). */
 export function dirChanged(dir: string): boolean {
-  const prefix = dir + '/'
-  return !!status()?.files.some((f) => f.path.startsWith(prefix))
+  return states().dirs.has(dir)
 }

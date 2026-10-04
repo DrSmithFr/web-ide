@@ -219,6 +219,38 @@ func TestProjectFilesAndRemoteChanges(t *testing.T) {
 		t.Fatalf("search = %+v", r)
 	}
 
+	// A folder marked as excluded leaves the search and "go to file"; the mark reaches b.
+	os.MkdirAll(filepath.Join(dir, "gen"), 0o755)
+	os.WriteFile(filepath.Join(dir, "gen", "out.go"), []byte("println()\n"), 0o644)
+	if r := a.call("search.grep", map[string]any{"query": "println"})["result"].(map[string]any); len(r["matches"].([]any)) != 2 {
+		t.Fatalf("search before the mark = %+v", r)
+	}
+	a.call("folders.mark", map[string]any{"path": filepath.Join(dir, "gen"), "mark": "excluded"})
+	if ev := b.waitEvent("folders.changed", nil); ev["gen"] != "excluded" {
+		t.Fatalf("folders.changed = %+v", ev)
+	}
+	if data, _ := os.ReadFile(filepath.Join(dir, ".ide", "folders.json")); !strings.Contains(string(data), `"gen": "excluded"`) {
+		t.Fatalf("folders.json = %s", data)
+	}
+	if r := a.call("search.grep", map[string]any{"query": "println"})["result"].(map[string]any); len(r["matches"].([]any)) != 1 {
+		t.Fatalf("search in an excluded folder = %+v", r)
+	}
+	for _, f := range a.call("search.files", nil)["result"].([]any) {
+		if strings.Contains(f.(string), "/gen/") {
+			t.Fatalf("excluded file listed: %v", f)
+		}
+	}
+	if m := a.call("folders.get", nil)["result"].(map[string]any); m["gen"] != "excluded" {
+		t.Fatalf("folders.get = %+v", m)
+	}
+
+	// Files left out by .gitignore.
+	os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("*.log\n"), 0o644)
+	ign := a.call("git.ignored", map[string]any{"paths": []string{filepath.Join(dir, "x.log"), file}})["result"].([]any)
+	if len(ign) != 1 || ign[0] != filepath.Join(dir, "x.log") {
+		t.Fatalf("ignored = %+v", ign)
+	}
+
 	// Terminal: output comes back as an event.
 	c := a.call("console.create", map[string]any{"command": []string{"echo", "hello-pod"}, "kind": "task"})["result"].(map[string]any)
 	a.waitEvent("console.exit", func(d map[string]any) bool { return d["id"] == c["id"] })

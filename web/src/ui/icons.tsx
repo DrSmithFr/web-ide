@@ -41,6 +41,8 @@ const paths: Record<string, string> = {
   arrowUp: 'M12 19V5M6 11l6-6 6 6',
   kanban: 'M4 4h4v16H4zM10 4h4v10h-4zM16 4h4v13h-4z',
   comment: 'M4 5h16v11H10l-6 4z',
+  expandAll: 'M7 9l5-5 5 5M7 15l5 5 5-5',
+  collapseAll: 'M7 4l5 5 5-5M7 20l5-5 5 5',
   branch: 'M6 3v12M6 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9c0 5-6 4-12 6',
 }
 

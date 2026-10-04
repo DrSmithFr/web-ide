@@ -8,6 +8,8 @@
   --font-code: 'JetBrains Mono', ui-monospace, monospace;
   --font-size-ui: 13px; --font-size-code: 13px; --line-height-code: 1.55; --ligatures: normal;
   --radius: 5px;
+  /* Folder marks of the explorer. */
+  --mark-source: #4a90e2; --mark-tests: #4caf50; --mark-excluded: #e0823d;
   color-scheme: dark;
 }
 
@@ -158,9 +160,15 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .tree-root { padding: 2px 10px 4px; font-weight: 600; font-size: 12px; }
 .tree-row { display: flex; align-items: center; gap: 5px; height: 24px; padding-right: 8px; cursor: pointer; white-space: nowrap; }
 .tree-row:hover { background: var(--bg-hover); }
-.tree-row.active { background: var(--bg-active); }
+.tree-row.active, .tree-row.selected { background: var(--bg-active); }
+.tree-row.current:not(.selected) .tree-name { text-decoration: underline; text-decoration-color: var(--fg-faint); text-underline-offset: 3px; }
+.tree-row.excluded .tree-name { opacity: 0.6; }
+.file-icon { flex: none; }
+.file-icon.folder { color: var(--fg-muted); }
+.file-icon.mark-source { color: var(--mark-source); fill: color-mix(in srgb, var(--mark-source) 30%, transparent); }
+.file-icon.mark-tests { color: var(--mark-tests); fill: color-mix(in srgb, var(--mark-tests) 30%, transparent); }
+.file-icon.mark-excluded { color: var(--mark-excluded); fill: color-mix(in srgb, var(--mark-excluded) 30%, transparent); }
 .tree-row:focus-visible { outline-offset: -2px; }
-.hide-dotfiles .tree-row.hidden { display: none; }
 .tree-twist { width: 14px; display: inline-flex; justify-content: center; color: var(--fg-faint); transition: transform 0.1s; flex: none; }
 .tree-twist.open { transform: rotate(90deg); }
 .tree-twist.none { visibility: hidden; }
@@ -168,7 +176,6 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .tree-detail { color: var(--fg-faint); font-size: 11px; margin-left: 6px; overflow: hidden; text-overflow: ellipsis; }
 .tree-link { color: var(--fg-faint); }
 .tree-error { color: var(--danger); font-size: 12px; padding: 2px 8px; }
-.dotfiles-toggle { font-family: var(--font-code); font-size: 11px; }
 .sym-kind { width: 18px; text-align: center; font-family: var(--font-code); font-size: 11px; color: var(--accent); flex: none; }
 .toolbar { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-bottom: 1px solid var(--line); flex: none; flex-wrap: wrap; background: var(--bg-2); }
 .toolbar.compact { gap: 2px; padding: 3px 6px; }
@@ -530,10 +537,13 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .git-commit-item { display: flex; align-items: baseline; gap: 8px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
 .git-commit-item:hover { background: var(--bg-hover); }
 .git-hash { color: var(--accent); flex: none; }
+/* Git colors of the explorer, as JetBrains IDEs. */
 .tree-name.git-modified { color: var(--info); }
-.tree-name.git-added, .tree-name.git-untracked { color: var(--ok); }
-.tree-name.git-conflict { color: var(--warn); }
-.tree-name.git-deleted { color: var(--danger); text-decoration: line-through; }
+.tree-name.git-added { color: var(--ok); }
+.tree-name.git-untracked { color: var(--danger); }
+.tree-name.git-conflict { color: color-mix(in srgb, var(--danger) 70%, #000); font-weight: 600; }
+.tree-name.git-deleted { color: var(--fg-faint); text-decoration: line-through; }
+.tree-name.git-ignored { color: color-mix(in srgb, var(--warn) 45%, var(--fg-faint)); }
 .kind-diff { background: var(--accent); }
 
 /* gutter change markers */
