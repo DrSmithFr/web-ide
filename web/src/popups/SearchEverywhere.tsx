@@ -10,7 +10,7 @@ import { lspLanguage } from '../editor/languages'
 import * as lspc from '../lsp/client'
 import { fuzzy } from '../ui/overlay'
 import { FileIcon } from '../panels/fileIcons'
-import { focusEditor } from '../state/focus'
+import { keepFocus } from '../state/focus'
 import { t } from '../i18n'
 import './popups.css'
 
@@ -191,22 +191,21 @@ export function SearchEverywhereHost() {
   const [index, setIndex] = createSignal(0)
   const [busy, setBusy] = createSignal(false)
   const hits = () => groups().flatMap((g) => g.hits)
-  let prevFocus: HTMLElement | null = null
+  let restoreFocus: () => HTMLElement | null = () => null
   let ctrl: AbortController | null = null
 
   const close = (hit?: Hit) => {
     ctrl?.abort()
     lastQuery = query()
     setOpen(false)
-    if (prevFocus?.isConnected && prevFocus !== document.body) prevFocus.focus()
-    else focusEditor()
+    restoreFocus()
     hit?.run()
   }
 
   createEffect(
     on(open, (o) => {
       if (!o) return
-      prevFocus = document.activeElement as HTMLElement | null
+      restoreFocus = keepFocus()
       setQuery(lastQuery)
       queueMicrotask(() => input?.select())
     }),

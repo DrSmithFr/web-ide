@@ -211,6 +211,10 @@ function EditorSettings() {
           <span>{t('Tab size')}</span>
           <input type="number" min="1" max="8" value={settings.editor.tabSize} onChange={(e) => updateSettings((s) => (s.editor.tabSize = parseInt(e.currentTarget.value, 10) || 4), 'Tab size')} />
         </label>
+        <label class="field">
+          <span>{t('Clipboard history (entries)')}</span>
+          <input type="number" min="5" max="500" value={settings.editor.clipboardSize} onChange={(e) => updateSettings((s) => (s.editor.clipboardSize = Math.min(500, Math.max(5, parseInt(e.currentTarget.value, 10) || 50))), 'Clipboard history')} />
+        </label>
       </div>
       <label class="check">
         <input type="checkbox" checked={settings.editor.insertSpaces} onChange={(e) => updateSettings((s) => (s.editor.insertSpaces = e.currentTarget.checked), 'Indentation')} />

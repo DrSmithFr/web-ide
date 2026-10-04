@@ -311,3 +311,28 @@ func TestExecRun(t *testing.T) {
 		t.Fatalf("timeout: %+v", r)
 	}
 }
+
+// The clipboard history is shared by every window, without an open project.
+func TestClipboardHistory(t *testing.T) {
+	_, ts := newServer(t)
+	a, _ := dial(t, ts, "secret-token-0123456789abcdef0123")
+	b, _ := dial(t, ts, "secret-token-0123456789abcdef0123")
+	a.call("clipboard.add", map[string]any{"text": "one", "max": 10})
+	a.call("clipboard.add", map[string]any{"text": "two", "max": 10})
+	for e := range b.events {
+		if e["event"] == "clipboard.changed" {
+			if len(e["data"].([]any)) != 1 {
+				t.Fatalf("event = %v", e)
+			}
+			break
+		}
+	}
+	l := b.call("clipboard.list", nil)["result"].([]any)
+	if len(l) != 2 || l[0].(map[string]any)["text"] != "two" {
+		t.Fatalf("list = %v", l)
+	}
+	a.call("clipboard.remove", map[string]any{"text": "two"})
+	if l := a.call("clipboard.list", nil)["result"].([]any); len(l) != 1 {
+		t.Fatalf("after remove = %v", l)
+	}
+}

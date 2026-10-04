@@ -33,6 +33,7 @@ import { formatDocument, renameSymbol } from '../lsp/refactor'
 import { t } from '../i18n'
 import { dropClasses, dropIndex, setDropAt } from './tabDrop'
 import { focusPart } from '../state/focus'
+import { copyText } from './clipboard'
 
 export function EditorArea(props: { detached?: boolean }) {
   return (
@@ -127,8 +128,8 @@ function Pane(props: { id: string }) {
       ...(tab.kind === 'file'
         ? [
             { separator: true, label: '' },
-            { label: t('Copy the path'), action: () => navigator.clipboard.writeText(tab.path!) },
-            { label: t('Copy the relative path'), action: () => navigator.clipboard.writeText(relPath(tab.path!)) },
+            { label: t('Copy the path'), action: () => copyText(tab.path!) },
+            { label: t('Copy the relative path'), action: () => copyText(relPath(tab.path!)) },
           ]
         : []),
     ])
@@ -504,6 +505,7 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
       { label: t('Cut'), hint: 'Ctrl+X', disabled: d.readOnly, action: () => document.execCommand('cut') },
       { label: t('Copy'), hint: 'Ctrl+C', action: () => document.execCommand('copy') },
       { label: t('Paste'), hint: 'Ctrl+V', disabled: d.readOnly, action: () => void paste() },
+      item('edit.pasteHistory', d.readOnly),
       sep,
       item('edit.toggleComment', d.readOnly),
       item('edit.duplicateLine', d.readOnly),
@@ -516,7 +518,7 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
           revealInExplorer(path, true)
         },
       },
-      { label: t('Copy the relative path'), action: () => navigator.clipboard.writeText(relPath(path)) },
+      { label: t('Copy the relative path'), action: () => copyText(relPath(path)) },
     ])
   }
   const when = (f: (v: EditorView, d: Doc) => void, needFocus = false) => () => {

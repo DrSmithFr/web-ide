@@ -13,6 +13,7 @@ import { ResultGrid } from './ResultGrid'
 import { activeStatement, connById, connect, splitStatements, withAuth, type ConsoleState, type Result } from './api'
 import { setCursorInfo } from '../ui/status'
 import { fmtDate, t, tn } from '../i18n'
+import { copyText } from '../ui/clipboard'
 
 interface HistoryEntry {
   ts: string
@@ -297,7 +298,7 @@ function HistoryModal(props: { entries: HistoryEntry[]; onClose: () => void; onI
               {fmtDate(cur()!.ts)} · {cur()!.durationMs.toFixed(1)} ms · {tn(cur()!.rows ?? 0, '{n} row', '{n} rows')}
             </p>
             <div class="form-actions">
-              <button class="btn" onClick={() => navigator.clipboard.writeText(cur()!.query).then(() => toast(t('Copied'), 'ok'))}>
+              <button class="btn" onClick={() => copyText(cur()!.query).then((ok) => ok && toast(t('Copied'), 'ok'))}>
                 {t('Copy')}
               </button>
               <button class="btn" onClick={() => props.onInsert(cur()!.query)}>

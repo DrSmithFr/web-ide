@@ -1328,5 +1328,13 @@
   "No changed file": "Aucun fichier modifié",
   "No recent file": "Aucun fichier récent",
   "Unsaved changes": "Modifications non enregistrées",
-  "Switcher": "Sélecteur d'onglets et d'outils"
+  "Switcher": "Sélecteur d'onglets et d'outils",
+  "Paste from history…": "Coller depuis l'historique…",
+  "Paste from history": "Coller depuis l'historique",
+  "Nothing copied yet": "Rien n'a encore été copié",
+  "(whitespace)": "(espaces)",
+  "Enter: paste · Shift+arrows: select several · Delete: forget": "Entrée : coller · Maj+flèches : en choisir plusieurs · Suppr : oublier",
+  "Clipboard history (entries)": "Historique du presse-papiers (entrées)",
+  "Clipboard history": "Historique du presse-papiers",
+  "The browser refused to write to the clipboard": "Le navigateur a refusé d'écrire dans le presse-papiers"
 }

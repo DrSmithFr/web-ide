@@ -27,7 +27,7 @@ The front end is built by Vite and embedded in the pod binary (`pod/webdist`), s
 
 ## Data on disk
 
-- `~/.web-ide/` (pod data, `-data` flag): `config.json` (address, workspace), `token`, `projects.json`, `settings.json` (with history), `sessions/<project>.json` (layout, tabs, tool zones, explorer options, recent files, and per file the cursor, folds and chosen indentation), `secrets.json` (0600), `known_hosts` (trust on first use, in addition to `~/.ssh/known_hosts`), `sql-history/`, `llm.json` (model servers), `system-prompt.md` / `plan-prompt.md` / `briefing-prompt.md`, `models/hf/` (speech models), `chats/` and `kanban/` (bases of SSH projects), `icons/<project>.svg` (copy of the project icons for the home page: an SSH project is not reached to list it).
+- `~/.web-ide/` (pod data, `-data` flag): `config.json` (address, workspace), `token`, `projects.json`, `settings.json` (with history), `clipboard.json` (clipboard history), `sessions/<project>.json` (layout, tabs, tool zones, explorer options, recent files, and per file the cursor, folds and chosen indentation), `secrets.json` (0600), `known_hosts` (trust on first use, in addition to `~/.ssh/known_hosts`), `sql-history/`, `llm.json` (model servers), `system-prompt.md` / `plan-prompt.md` / `briefing-prompt.md`, `models/hf/` (speech models), `chats/` and `kanban/` (bases of SSH projects), `icons/<project>.svg` (copy of the project icons for the home page: an SSH project is not reached to list it).
 - `<project>/.ide/`: `connections.json` (database connections, no secret), `tunnels.json` (tunnels of an SSH project), `folders.json` (folder marks: source, tests, excluded), `project.json` (`lsp`: command per language; `tests`: pattern per extension, e.g. `{".php": "{name}Spec.php"}`), `chats.db` (conversations), `kanban.db` (tickets), `worktrees/` (one git worktree per ticket in development), `icon.svg` and `icon.json` (project icon, drawn by the page: `ui/projectIcon.ts`, `ui/IconEditor.tsx`). `.ide/.gitignore` keeps the bases and the worktrees out of git.
 
 ## Protocol
@@ -56,6 +56,7 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 | `kanban` | Tickets (SQLite), workflow rules, ticket git operations (worktrees, diff, merge, rebase) |
 | `hfcache` | Hugging Face files downloaded once and served offline (speech models) |
 | `i18n` | Translation of the messages sent to the page |
+| `clipboard` | History of the texts copied in the IDE, shared by every window |
 | `projects`, `sessions`, `settings`, `store`, `config` | Registry, sessions, settings with history, data folder, configuration |
 | `sshtest` | SSH server for tests (in memory; `sshtestd` runs it for the browser tests) |
 
@@ -67,7 +68,7 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 | `state/` | Open project and session (tabs, split tree, tool zones), settings, git state, folder marks |
 | `keys/` | Binding table and QWERTY / AZERTY presets |
 | `lsp/` | Client, completion, edits, rename and formatting |
-| `popups/` | Search Everywhere, Recent Files and the switcher |
+| `popups/` | Search Everywhere, Recent Files and the switcher, paste from history (the history itself: `ui/clipboard.ts`) |
 | `ui/` | Editor area, status bar, diff view, overlays (modal, prompt, pick list, context menu), toasts, icons, empty states, keyboard navigation of the toolbars and tab bars (`roving.ts`) |
 | `panels/` | Explorer (with file type icons, `fileIcons.tsx`), global search, Git tool (`panels/git/`: tabs, tree of changes, graph lanes `graph.ts`, commit detail) |
 | `tools/`, `db/`, `console/`, `conflict/`, `settings/`, `pages/` | Right-panel tools, database explorer, Console and Problems tools, conflict dialog, settings modal, pages |
@@ -123,6 +124,7 @@ make e2e            # browser tests, all suites (a few minutes)
 - **DOMPurify** drops attributes containing `-->` (Mermaid sources are stored URI-encoded) and HTML inside `foreignObject` (Mermaid uses `htmlLabels: false`).
 - **Git**: git speaks the language of the user, so its messages are never parsed (`git.Show` asks `cat-file -e` first); ticket commits start with `#<n>`, so `rebase --continue` and `commit --no-edit` run with `core.commentChar=auto`; diff prefixes are forced (`--src-prefix=a/ --dst-prefix=b/`) because user settings such as `diff.mnemonicPrefix` change them; after a merge the branch has nothing left against its base, so the change is frozen in the ticket at merge time.
 - **Shell**: `pkill -f <pattern>` also kills the command running it; use `pkill -x web-ide-pod`. Start a test pod with `setsid` / `< /dev/null`, otherwise a pipe stays open.
+- **Copy through `copyText`** (`ui/clipboard.ts`), not `navigator.clipboard.writeText`: the text then goes to the clipboard history. A popup gives the focus back with `keepFocus` (`state/focus.ts`): focusing the editor again puts its caret at the start otherwise.
 - **E2E tests** must wait actively (`waitForFunction`): language servers start cold. `<option>` elements are never "visible" for Playwright (`state: 'attached'`).
 
 ## Known limitations

@@ -1,6 +1,7 @@
 import { createSignal, For, Show } from 'solid-js'
 import type { Result } from './api'
 import { t } from '../i18n'
+import { copyText } from '../ui/clipboard'
 
 function cell(v: unknown) {
   if (v === null || v === undefined) return null
@@ -15,7 +16,7 @@ export function ResultGrid(props: { result: Result; offset?: number }) {
     const s = sel()
     if (!s || !(e.ctrlKey || e.metaKey) || e.code !== 'KeyC') return
     const v = cell(props.result.rows?.[s[0]]?.[s[1]])
-    navigator.clipboard.writeText(v ?? 'NULL')
+    copyText(v ?? 'NULL')
     e.preventDefault()
   }
   return (

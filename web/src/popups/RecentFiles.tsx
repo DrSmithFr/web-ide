@@ -9,7 +9,7 @@ import { fileState } from '../state/git'
 import { fuzzy } from '../ui/overlay'
 import { Icon } from '../ui/icons'
 import { FileIcon } from '../panels/fileIcons'
-import { focusEditor } from '../state/focus'
+import { keepFocus } from '../state/focus'
 import { t } from '../i18n'
 import './popups.css'
 
@@ -81,13 +81,12 @@ export function recentFiles(mode: 'recent' | 'switcher') {
 export function RecentFilesHost(props: { tools: () => SwitcherTool[]; onTool: (id: string) => void }) {
   let input!: HTMLInputElement
   let body!: HTMLDivElement
-  let prevFocus: HTMLElement | null = null
+  let restoreFocus: () => HTMLElement | null = () => null
   tools = props.tools
 
   const close = (run?: () => void) => {
     setOpen(false)
-    if (prevFocus?.isConnected && prevFocus !== document.body) prevFocus.focus()
-    else focusEditor()
+    restoreFocus()
     run?.()
   }
 
@@ -105,7 +104,7 @@ export function RecentFilesHost(props: { tools: () => SwitcherTool[]; onTool: (i
   createEffect(
     on(open, (o) => {
       if (!o) return
-      prevFocus = document.activeElement as HTMLElement | null
+      restoreFocus = keepFocus()
       queueMicrotask(() => input?.focus())
     }),
   )

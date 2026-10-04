@@ -35,6 +35,7 @@ import { t, tn } from '../i18n'
 import { ProjectBar } from './ProjectBar'
 import { SearchEverywhereHost, searchEverywhere } from '../popups/SearchEverywhere'
 import { RecentFilesHost, recentFiles } from '../popups/RecentFiles'
+import { ClipboardHistoryHost, pasteFromHistory } from '../popups/ClipboardHistory'
 
 /** Tools of the four zones; their placement comes from state/zones. */
 export const toolPanels: Record<string, { label: string; icon: string; component: () => JSX.Element; badge?: () => number }> = {
@@ -108,6 +109,7 @@ export function useProjectActions() {
     registerAction('nav.gotoSymbol', () => searchEverywhere('symbols')),
     registerAction('nav.recentFiles', () => recentFiles('recent')),
     registerAction('nav.switcher', () => recentFiles('switcher')),
+    registerAction('edit.pasteHistory', () => pasteFromHistory()),
     registerAction('conflict.resolve', () => {
       const list = conflictedDocs()
       if (!list.length) return false
@@ -173,7 +175,7 @@ function escapeToEditor(e: KeyboardEvent) {
 // Actions of each menu; '-' draws a separator.
 const menus: [string, string[]][] = [
   ['menu|File', ['file.newFile', 'file.newFolder', '-', 'file.save', 'file.saveAll', '-', 'nav.gotoFile', '-', 'view.closeTab', 'view.closeOthers', 'view.closeAll', '-', 'conflict.resolve', '-', 'settings.open']],
-  ['menu|Edit', ['edit.undo', 'edit.redo', '-', 'edit.duplicateLine', 'edit.deleteLine', 'edit.toggleComment', '-', 'edit.nextOccurrence', 'edit.allOccurrences', '-', 'search.find', 'search.global']],
+  ['menu|Edit', ['edit.undo', 'edit.redo', '-', 'edit.pasteHistory', '-', 'edit.duplicateLine', 'edit.deleteLine', 'edit.toggleComment', '-', 'edit.nextOccurrence', 'edit.allOccurrences', '-', 'search.find', 'search.global']],
   ['menu|Navigate', ['search.everywhere', 'nav.recentFiles', '-', 'nav.back', 'nav.forward', '-', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', '-', 'nav.related', 'nav.test']],
   ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover', '-', 'lsp.rename', 'lsp.format', '-', 'edit.fold', 'edit.unfold', 'edit.foldAll', 'edit.unfoldAll']],
   ['menu|View', ['view.splitRight', 'view.splitDown', '-', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', '-', 'view.visualFocus', 'view.focusOutline', 'view.focusDim', '-', 'view.whitespace', '-', 'console.new', 'palette.open']],
@@ -486,6 +488,7 @@ export function ProjectPage(props: { id: string }) {
         <NewTicketHost />
         <SearchEverywhereHost />
         <RecentFilesHost tools={switcherTools} onTool={toggleToolFocus} />
+        <ClipboardHistoryHost />
         <div class="workbench" onPointerDown={trackFocus} onFocusIn={trackFocus}>
           <Rail side="left" />
           <div class="work">

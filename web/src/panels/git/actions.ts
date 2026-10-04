@@ -6,6 +6,7 @@ import { newConsole } from '../../console/consoles'
 import { contextMenu, prompt, type MenuItem } from '../../ui/overlay'
 import { errorToast, toast } from '../../ui/toast'
 import { t, tn } from '../../i18n'
+import { copyText } from '../../ui/clipboard'
 
 export async function act(method: string, params: object, ok?: string): Promise<boolean> {
   try {
@@ -96,7 +97,7 @@ export interface LogCommit {
 }
 
 export function copyHash(hash: string) {
-  navigator.clipboard.writeText(hash).then(() => toast(t('Hash copied'), 'ok', undefined, 1200))
+  copyText(hash).then((ok) => ok && toast(t('Hash copied'), 'ok', undefined, 1200))
 }
 
 export async function branchAt(c: LogCommit) {

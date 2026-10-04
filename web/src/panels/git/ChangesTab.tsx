@@ -13,6 +13,7 @@ import { discard, openChange, push, pushMenu, stage, unstage, type PushMode } fr
 import { FileTree } from './FileTree'
 import { Resizer } from './Resizer'
 import { buildTree, type TreeNode } from './tree'
+import { copyText } from '../../ui/clipboard'
 
 // Kept while the tool is hidden.
 const [message, setMessage] = createSignal('')
@@ -59,7 +60,7 @@ export function ChangesTab() {
       { label: t('Unstage'), action: () => unstage(n.items), disabled: checkOfAll(n.items) === 'off' },
       { label: t('Discard the changes'), danger: true, action: () => discard(n.items) },
       { separator: true, label: '' },
-      { label: t('Copy the path'), action: () => navigator.clipboard.writeText(n.path) },
+      { label: t('Copy the path'), action: () => copyText(n.path) },
     ])
   }
 

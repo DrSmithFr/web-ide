@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"github.com/DrSmithFr/web-ide/pod/internal/clipboard"
 	"html/template"
 	"io/fs"
 	"log"
@@ -44,9 +45,11 @@ type Server struct {
 	Projects *projects.Registry
 	Settings *settings.Settings
 	Sessions *sessions.Sessions
-	Pool     *sshx.Pool
-	LLM      *llm.Manager
-	Kanban   *kanban.Manager
+	// Clipboard is the history of the texts copied in the IDE, shared by every window.
+	Clipboard *clipboard.History
+	Pool      *sshx.Pool
+	LLM       *llm.Manager
+	Kanban    *kanban.Manager
 	// Models caches the speech recognition models downloaded for the page.
 	Models *hfcache.Cache
 	// Tunnels are the port forwardings of the SSH projects.
@@ -81,6 +84,9 @@ func (s *Server) Init() {
 	s.claims = map[string]*Client{}
 	if s.Kanban == nil {
 		s.Kanban = kanban.NewManager(s.Store)
+	}
+	if s.Clipboard == nil {
+		s.Clipboard = clipboard.Load(s.Store)
 	}
 	s.Tunnels = tunnels.New(func() { s.broadcast("tunnels.changed", nil, nil) })
 	s.registerGlobal()

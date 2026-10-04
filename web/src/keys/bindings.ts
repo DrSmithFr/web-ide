@@ -31,6 +31,7 @@ export const actions: ActionDef[] = [
   { id: 'edit.deleteLine', label: 'Delete the line', category: 'Editing' },
   { id: 'edit.toggleComment', label: 'Comment / uncomment', category: 'Editing' },
   { id: 'edit.selectAll', label: 'Select all', category: 'Editing' },
+  { id: 'edit.pasteHistory', label: 'Paste from history…', category: 'Editing' },
   { id: 'edit.nextOccurrence', label: 'Add the next occurrence to the selection', category: 'Editing' },
   { id: 'edit.unselectOccurrence', label: 'Remove the last occurrence from the selection', category: 'Editing' },
   { id: 'edit.allOccurrences', label: 'Select all the occurrences', category: 'Editing' },

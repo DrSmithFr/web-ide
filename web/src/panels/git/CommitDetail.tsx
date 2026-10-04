@@ -9,6 +9,7 @@ import { fmtAgo, fmtDate, t, tn } from '../../i18n'
 import { branchAt, copyHash, openCommitFile, reset, revert, type CommitFile, type LogCommit } from './actions'
 import { FileTree } from './FileTree'
 import { buildTree } from './tree'
+import { copyText } from '../../ui/clipboard'
 
 interface Info extends LogCommit {
   message: string
@@ -105,7 +106,7 @@ export function CommitDetail(props: { hash: string; select: (hash: string) => vo
                     contextMenu(e, [
                       { label: t('Show the differences'), action: () => openCommitFile(c().hash, n.item!) },
                       { label: t('Open the file'), action: () => openFile(n.item!.path), disabled: n.item.status === 'D' },
-                      { label: t('Copy the path'), action: () => navigator.clipboard.writeText(n.item!.path) },
+                      { label: t('Copy the path'), action: () => copyText(n.item!.path) },
                     ])
                   }
                 />

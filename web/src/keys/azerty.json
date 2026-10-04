@@ -54,6 +54,9 @@
     "edit.selectAll": [
       "Ctrl+KeyQ"
     ],
+    "edit.pasteHistory": [
+      "Ctrl+Shift+KeyV"
+    ],
     "edit.nextOccurrence": [
       "Alt+KeyJ"
     ],

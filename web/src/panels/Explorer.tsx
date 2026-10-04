@@ -12,6 +12,7 @@ import { newConsole } from '../console/consoles'
 import { dirState, fileState } from '../state/git'
 import { folderMark, inExcluded, loadFolderMarks, markFolder, type FolderMark } from '../state/folders'
 import { t } from '../i18n'
+import { copyText } from '../ui/clipboard'
 
 interface Entry {
   name: string
@@ -182,8 +183,8 @@ function menuFor(ev: MouseEvent, e: Entry) {
     { label: t('Rename…'), action: () => rename(e), disabled: e.path === root() },
     { label: t('Delete'), action: () => remove(e), danger: true, disabled: e.path === root() },
     { separator: true, label: '' },
-    { label: t('Copy the path'), action: () => navigator.clipboard.writeText(e.path) },
-    { label: t('Copy the relative path'), action: () => navigator.clipboard.writeText(relPath(e.path)) },
+    { label: t('Copy the path'), action: () => copyText(e.path) },
+    { label: t('Copy the relative path'), action: () => copyText(relPath(e.path)) },
     { label: t('Open a terminal here'), action: () => newConsole({ cwd: dir }) },
     { label: t('Refresh'), action: () => load(dir) },
   ]

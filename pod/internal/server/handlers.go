@@ -192,6 +192,35 @@ func (s *Server) registerGlobal() {
 		a, _ := bind[struct{ Label string }](p)
 		return s.Settings.Snapshot(a.Label), nil
 	})
+	s.handle("clipboard.list", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		return s.Clipboard.List(), nil
+	})
+	s.handle("clipboard.add", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		a, err := bind[struct {
+			Text string
+			Max  int
+		}](p)
+		if err != nil {
+			return nil, err
+		}
+		l, changed := s.Clipboard.Add(a.Text, a.Max)
+		if changed {
+			s.broadcast("clipboard.changed", l, nil)
+		}
+		return nil, nil
+	})
+	s.handle("clipboard.remove", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		a, err := bind[struct{ Text string }](p)
+		if err != nil {
+			return nil, err
+		}
+		s.broadcast("clipboard.changed", s.Clipboard.Remove(a.Text), nil)
+		return nil, nil
+	})
+	s.handle("clipboard.clear", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		s.broadcast("clipboard.changed", s.Clipboard.Clear(), nil)
+		return nil, nil
+	})
 	s.handle("settings.rollback", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 		a, err := bind[struct{ ID int }](p)
 		if err != nil {

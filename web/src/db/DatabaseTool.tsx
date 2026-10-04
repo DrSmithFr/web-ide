@@ -12,6 +12,7 @@ import { connect, connections, connById, refreshConnections, withAuth, type Conn
 import { ConnectionsModal } from './ConnectionForm'
 import { t } from '../i18n'
 import { EmptyState } from '../ui/EmptyState'
+import { copyText } from '../ui/clipboard'
 
 interface Sel {
   connId: string
@@ -126,23 +127,23 @@ export function DatabaseTool() {
           { label: t('View the DDL'), action: () => showText(`DDL · ${n.label}`, () => request('db.ddl', { id: c.id, db: n.db, table: n.table })) },
           { label: t('Empty query on the table'), action: () => openConsole(c.id, n.db, `SELECT *\nFROM ${quoteIdent(c.kind, n.table!)}\nLIMIT 100;`) },
           { separator: true, label: '' },
-          { label: t('Copy the name'), action: () => navigator.clipboard.writeText(n.table!) },
+          { label: t('Copy the name'), action: () => copyText(n.table!) },
           { label: t('Refresh'), action: () => load(c.id, n) },
         ])
       case 'column':
         return contextMenu(e, [
-          { label: t('Copy the name'), action: () => navigator.clipboard.writeText(n.label) },
-          { label: t('Copy the qualified name (table.column)'), action: () => navigator.clipboard.writeText(`${n.table!.split('.').pop()}.${n.label}`) },
+          { label: t('Copy the name'), action: () => copyText(n.label) },
+          { label: t('Copy the qualified name (table.column)'), action: () => copyText(`${n.table!.split('.').pop()}.${n.label}`) },
         ])
       case 'index':
         return contextMenu(e, [
           { label: t('View the definition'), action: () => showText(`Index · ${n.label}`, () => request('db.indexDef', { id: c.id, db: n.db, table: n.table, index: n.label })) },
-          { label: t('Copy the name'), action: () => navigator.clipboard.writeText(n.label) },
+          { label: t('Copy the name'), action: () => copyText(n.label) },
         ])
       case 'key':
         return contextMenu(e, [
           { label: t('View the value'), action: () => openTable(c.id, n) },
-          { label: t('Copy the name'), action: () => navigator.clipboard.writeText(n.label) },
+          { label: t('Copy the name'), action: () => copyText(n.label) },
           { label: t('Console with TTL'), action: () => openConsole(c.id, n.db, `TYPE ${JSON.stringify(n.label)}\nTTL ${JSON.stringify(n.label)}`) },
         ])
     }

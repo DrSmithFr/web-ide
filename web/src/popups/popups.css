@@ -24,3 +24,9 @@
 .rf-foot { padding: 5px 12px; border-top: 1px solid var(--line); color: var(--fg-muted); font-size: 12px; min-height: 26px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 560px) { .rf-tools { flex-basis: 40%; } }
 .rf-tools .pick-item { align-items: center; min-height: 32px; }
+
+/* Paste from history: the entries, a preview of the selection below. */
+.pick.cb .pick-list { max-height: 34vh; }
+.pick.cb .pick-item.picked { background: color-mix(in srgb, var(--bg-active) 70%, transparent); }
+.cb-time { margin-left: auto; color: var(--fg-faint); font-size: 12px; flex: none; }
+.cb-preview { margin: 0; padding: 8px 12px; border-top: 1px solid var(--line); max-height: 22vh; min-height: 3.2em; overflow: auto; font-family: var(--font-code); font-size: 12.5px; white-space: pre; color: var(--fg); background: var(--bg); }

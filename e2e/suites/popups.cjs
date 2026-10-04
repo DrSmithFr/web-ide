@@ -1,5 +1,5 @@
 // Popups: Search Everywhere (tabs over files, symbols, actions and text), Recent Files and
-// the switcher.
+// the switcher, the clipboard history.
 const { execSync } = require('child_process')
 const { run, openProject, open, assert, OUT, WS } = require('../common.cjs')
 
@@ -124,4 +124,57 @@ run(async ({ page }) => {
   await page.waitForSelector('.pick.rf')
   assert(JSON.stringify(await files()) === JSON.stringify(['notes.txt', 'main.go', 'app.php']), 'recent files kept after a reload ' + (await files()))
   await page.keyboard.press('Escape')
-})
+
+  // Clipboard history: the copies of the editor and of the menus, the most recent first.
+  await open(page, 'main.go')
+  await page.click('.pane .ed-content')
+  await page.keyboard.press('Control+Home')
+  await page.keyboard.press('Shift+End')
+  await page.keyboard.press('Control+c')
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Control+c') // no selection: the whole line
+  await page.click('.zone-left .tree-row:has-text("go.mod")', { button: 'right' })
+  await page.click('.ctx-item:has-text("Copy the relative path")')
+  await page.click('.pane .ed-content')
+  await page.keyboard.press('Control+End')
+  await page.keyboard.press('Control+Shift+v')
+  await page.waitForSelector('.pick.cb')
+  const entries = () => page.$$eval('.pick.cb .pick-label', (l) => l.map((e) => e.textContent))
+  await page.waitForFunction(() => document.querySelectorAll('.pick.cb .pick-item').length >= 3)
+  assert(JSON.stringify((await entries()).slice(0, 3)) === JSON.stringify(['go.mod', 'import "fmt"', 'package main']), 'copies listed, the most recent first ' + (await entries()))
+  await page.keyboard.press('ArrowDown')
+  assert((await page.textContent('[data-testid=clipboard-preview]')) === 'import "fmt"\n', 'preview of the selected entry')
+  await page.screenshot({ path: OUT + '/popups-clipboard.png' })
+  await page.keyboard.press('Enter')
+  await page.waitForFunction(() => document.querySelector('.pane.active .ed-content').textContent.endsWith('import "fmt"\n\n'))
+  assert(!(await page.$('.pick.cb')) && (await page.evaluate(() => document.activeElement?.classList.contains('ed-content'))), 'Enter pastes at the caret, the editor keeps the keyboard')
+
+  // Shift+arrows: several entries pasted one per line.
+  await page.keyboard.press('Control+Shift+v')
+  await page.waitForSelector('.pick.cb')
+  await page.waitForFunction(() => document.querySelector('.pick.cb .pick-label')?.textContent === 'import "fmt"')
+  assert(true, 'the pasted entry moves to the top')
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Shift+ArrowDown')
+  assert((await page.$$('.pick.cb .pick-item[aria-selected=true]')).length === 2 && (await page.textContent('[data-testid=clipboard-preview]')) === 'go.mod\npackage main', 'two entries selected, joined in the preview')
+  await page.keyboard.press('Enter')
+  await page.waitForFunction(() => document.querySelector('.pane.active .ed-content').textContent.endsWith('go.mod\npackage main\n'))
+  assert(true, 'both pasted, one per line')
+  for (let i = 0; i < 2; i++) await page.keyboard.press('Control+z')
+
+  // The joined text is the last copy; Delete forgets it; the history is kept by the pod.
+  await page.keyboard.press('Control+Shift+v')
+  await page.waitForFunction(() => document.querySelector('.pick.cb .pick-item .pick-detail')?.textContent === '2 lines')
+  assert(true, 'several entries pasted: their text is the last copy')
+  await page.keyboard.press('Delete')
+  await page.waitForFunction(() => document.querySelector('.pick.cb .pick-label')?.textContent === 'import "fmt"')
+  await page.keyboard.press('Escape')
+  await page.reload()
+  await page.waitForSelector('.pane .ed-content')
+  await page.click('.pane .ed-content')
+  await page.keyboard.press('Control+Shift+v')
+  await page.waitForSelector('.pick.cb .pick-item')
+  assert(JSON.stringify(await entries()) === JSON.stringify(['import "fmt"', 'go.mod', 'package main']), 'history kept after a reload, the forgotten entry gone ' + (await entries()))
+  await page.keyboard.press('Escape')
+}, { permissions: ['clipboard-read', 'clipboard-write'] })

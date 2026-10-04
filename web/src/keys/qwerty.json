@@ -26,6 +26,9 @@
     "edit.selectAll": [
       "Ctrl+KeyA"
     ],
+    "edit.pasteHistory": [
+      "Ctrl+Shift+KeyV"
+    ],
     "edit.nextOccurrence": [
       "Alt+KeyJ"
     ],
