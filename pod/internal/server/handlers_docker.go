@@ -183,3 +183,29 @@ func (s *Server) pumpLogs(c *Client, id string, proc execx.Process, stop func())
 		}
 	}
 }
+
+func (s *Server) registerDockerDisk() {
+	s.handle("docker.disk", withRuntime(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
+		return rt.Docker.Disk(ctx)
+	}))
+	s.handle("docker.prune", withRuntime(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
+		a, err := bind[struct {
+			What string `json:"what"`
+		}](p)
+		if err != nil {
+			return nil, err
+		}
+		freed, err := rt.Docker.Prune(ctx, a.What)
+		return map[string]string{"reclaimed": freed}, err
+	}))
+	s.handle("docker.remove", withRuntime(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
+		a, err := bind[struct {
+			Kind string `json:"kind"`
+			ID   string `json:"id"`
+		}](p)
+		if err != nil {
+			return nil, err
+		}
+		return nil, rt.Docker.RemoveObject(ctx, a.Kind, a.ID)
+	}))
+}

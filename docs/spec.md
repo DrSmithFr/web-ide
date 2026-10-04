@@ -255,10 +255,11 @@ Right-panel tool talking to a **llama.cpp** or **Ollama** server (address and op
 
 Tool of the bottom right zone (beside Problems) driving Docker and Docker Compose. Everything goes through the `docker` command run by the executor, so on an SSH project Docker is the one of the SSH host. Docker missing, its daemon unreachable or not allowed (user outside the `docker` group): the tool shows the error of `docker` and a hint, never `sudo`.
 
-Two tabs (the shown tab is saved in the session), and a detail pane beside the list:
+Three tabs (the shown tab is saved in the session), and a detail pane beside the list of the first two:
 
 - **Project**: the services of the Compose file at the project root (`compose.yaml`, `compose.yml`, `docker-compose.yaml`, `docker-compose.yml`, with the override files Compose loads itself). A first *Stack* row, then one row per container (a declared service without container shows as *not created*): state dot, name, image, published ports, CPU and memory. Profiles declared by the file are chosen in a menu (saved in the session). Without Compose file, the tab says so.
 - **Host**: every container of the host (`docker ps -a`), grouped by Compose project.
+- **Disk**: space used by images, containers, volumes and the build cache (total, active, reclaimable), with the list of images and volumes. Prune buttons, each confirmed: stopped containers, dangling images, unused images, anonymous volumes, all unused volumes (stronger confirmation: data is lost), build cache. An unused image or volume is removed from its context menu.
 
 ### Actions
 

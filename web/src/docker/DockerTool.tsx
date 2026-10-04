@@ -10,12 +10,13 @@ import {
   stack, stats, status, type Container,
 } from './state'
 import { Detail } from './Detail'
+import { DiskTab } from './DiskTab'
 import './docker.css'
 
-type Tab = 'project' | 'host'
+type Tab = 'project' | 'host' | 'disk'
 
 export function DockerTool() {
-  const tab = () => (session.docker.tab === 'host' ? 'host' : 'project') as Tab
+  const tab = (): Tab => (session.docker.tab === 'host' || session.docker.tab === 'disk' ? session.docker.tab : 'project')
   const setTab = (id: Tab) => mutate((s) => (s.docker.tab = id))
 
   // One refresh at a time: docker stats takes about a second.
@@ -27,7 +28,7 @@ export function DockerTool() {
       if (tab() === 'project') {
         await refreshStack()
         await refreshStats(stack()?.stack?.containers ?? [])
-      } else {
+      } else if (tab() === 'host') {
         await refreshHost()
         await refreshStats(host()?.list ?? [])
       }
@@ -58,20 +59,25 @@ export function DockerTool() {
         <div class="tab" role="tab" data-testid="docker-tab-host" aria-selected={tab() === 'host'} classList={{ active: tab() === 'host' }} onClick={() => switchTab('host')}>
           <span class="tab-title">{t('Host')}</span>
         </div>
+        <div class="tab" role="tab" data-testid="docker-tab-disk" aria-selected={tab() === 'disk'} classList={{ active: tab() === 'disk' }} onClick={() => switchTab('disk')}>
+          <span class="tab-title">{t('Disk')}</span>
+        </div>
       </div>
       <div class="tool-body">
         <Show when={status()} fallback={<p class="muted pad">{t('Loading…')}</p>}>
           <Show when={status()!.available} fallback={<Unavailable />}>
-            <div class="dk-main">
-              <div class="dk-list">
-                <Show when={tab() === 'project'} fallback={<HostList />}>
-                  <ProjectList />
+            <Show when={tab() !== 'disk'} fallback={<DiskTab />}>
+              <div class="dk-main">
+                <div class="dk-list">
+                  <Show when={tab() === 'project'} fallback={<HostList />}>
+                    <ProjectList />
+                  </Show>
+                </div>
+                <Show when={selected()}>
+                  <Detail />
                 </Show>
               </div>
-              <Show when={selected()}>
-                <Detail />
-              </Show>
-            </div>
+            </Show>
           </Show>
         </Show>
       </div>

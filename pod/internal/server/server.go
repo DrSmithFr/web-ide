@@ -87,6 +87,7 @@ func (s *Server) Init() {
 	s.registerExec()
 	s.registerDocker()
 	s.registerDockerLogs()
+	s.registerDockerDisk()
 	s.registerKanban()
 	s.registerKanbanGit()
 }

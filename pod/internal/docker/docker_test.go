@@ -100,3 +100,36 @@ func TestActions(t *testing.T) {
 		t.Fatal("unknown actions accepted")
 	}
 }
+
+func TestDisk(t *testing.T) {
+	f := &fake{has: true, out: map[string]string{
+		"docker system df --format json": `{"Active":"1","Reclaimable":"10MB (2%)","Size":"424MB","TotalCount":"2","Type":"Images"}
+{"Active":"0","Reclaimable":"0B","Size":"0B","TotalCount":"1","Type":"Local Volumes"}`,
+		"docker system df -v --format json": `{"Images":[{"ID":"sha256:b0f9560a2de083e2cc","Repository":"postgres","Tag":"17-alpine","Size":"424MB","CreatedSince":"2 weeks ago","Containers":"1"}],
+"Volumes":[{"Name":"91c98efa","Size":"0B","Links":"0","Labels":"com.docker.volume.anonymous="},{"Name":"demo_data","Size":"12MB","Links":"1","Labels":"com.docker.compose.project=demo"}]}`,
+		"docker builder prune -a -f": "ID\nabc\nTotal:\t1.5GB\n",
+		"docker volume prune -a -f":  "ERR:unknown shorthand flag: 'a' in -a",
+		"docker volume prune -f":     "Deleted Volumes:\nx\n\nTotal reclaimed space: 12MB\n",
+	}}
+	d := New(f, "/p", nil)
+	disk, err := d.Disk(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(disk.Usage) != 2 || disk.Usage[0].Total != 2 || disk.Images[0].ID != "b0f9560a2de0" || disk.Images[0].Containers != 1 {
+		t.Fatalf("disk = %+v", disk)
+	}
+	if disk.Volumes[0].Name != "demo_data" || !disk.Volumes[1].Anonymous {
+		t.Fatalf("named volumes first: %+v", disk.Volumes)
+	}
+	if got, err := d.Prune(context.Background(), "buildCache"); err != nil || got != "1.5GB" {
+		t.Fatalf("build cache: %q %v", got, err)
+	}
+	// An older Docker without volume prune -a.
+	if got, err := d.Prune(context.Background(), "volumes"); err != nil || got != "12MB" {
+		t.Fatalf("volumes: %q %v", got, err)
+	}
+	if _, err := d.Prune(context.Background(), "system"); err == nil {
+		t.Fatal("unknown prune accepted")
+	}
+}

@@ -38,6 +38,7 @@ volumes:
 const cleanup = () => {
   try {
     compose('--profile debug down -v -t 0')
+    execSync(`docker volume rm -f ${name}-spare`, { stdio: 'ignore' })
   } catch {
     /* already down */
   }
@@ -54,7 +55,17 @@ const menu = async (page, sel, label) => {
 }
 
 run(async ({ page }) => {
-  page.on('dialog', (d) => d.accept())
+  // Prune confirmations are refused: the test never prunes the Docker of the machine.
+  let refuse = false
+  let lastDialog = ''
+  page.on('dialog', (d) => {
+    lastDialog = d.message()
+    if (refuse) {
+      refuse = false
+      return d.dismiss()
+    }
+    return d.accept()
+  })
   await openProject(page)
   await page.click('.rail-right .rail-btn[title="Docker"]')
   await page.waitForSelector('[data-testid=docker-stack]', { timeout: 15000 })
@@ -137,6 +148,23 @@ run(async ({ page }) => {
   await page.click('[data-testid=docker-tab-host]')
   await page.waitForSelector(`.dk-group:has-text("${name}")`, { timeout: 15000 })
   assert(await page.isVisible(`[data-testid=docker-container-${name}-app-1]`), 'host tab lists the containers of the project')
+
+  // Disk tab: usage, images and volumes; an unused volume removed from its menu.
+  execSync(`docker volume create ${name}-spare`, { stdio: 'ignore' })
+  await page.click('[data-testid=docker-tab-disk]')
+  await page.waitForSelector('[data-testid=docker-usage-Images]', { timeout: 30000 })
+  assert(/\d/.test(await page.textContent('[data-testid=docker-usage-Images]')), 'disk usage of the images')
+  assert((await page.textContent('[data-testid="docker-image-postgres:17-alpine"]')).includes('in use'), 'image in use')
+  assert((await page.textContent(`[data-testid=docker-volume-${name}_data]`)).includes('in use'), 'volume of the stack in use')
+  assert((await page.textContent(`[data-testid=docker-volume-${name}-spare]`)).includes('unused'), 'spare volume unused')
+  await menu(page, `[data-testid=docker-volume-${name}-spare]`, 'Remove')
+  await page.waitForSelector(`[data-testid=docker-volume-${name}-spare]`, { state: 'detached', timeout: 15000 })
+  assert(execSync(`docker volume ls -q --filter name=${name}-spare`, { encoding: 'utf8' }).trim() === '', 'unused volume removed')
+  refuse = true
+  await page.click('[data-prune=volumes]')
+  await page.waitForTimeout(300)
+  assert(lastDialog.includes('EVERY volume') && (await page.isVisible(`[data-testid=docker-volume-${name}_data]`)), 'pruning every volume asks first; refused, nothing happens')
+  await page.screenshot({ path: OUT + '/docker-disk.png' })
   await page.click('[data-testid=docker-tab-project]')
 
   // Down with volumes: the project name typed to confirm.
