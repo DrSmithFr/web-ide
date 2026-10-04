@@ -281,22 +281,67 @@ export interface MenuItem {
   checked?: boolean
 }
 
-const [menu, setMenu] = createSignal<{ x: number; y: number; items: MenuItem[] } | null>(null)
+interface MenuState {
+  x: number
+  y: number
+  items: MenuItem[]
+  /** Left / Right arrows: the menu bar opens the menu beside. */
+  onSide?: (dir: -1 | 1) => void
+  /** Focused before the menu opened, focused again when it closes. */
+  prev: HTMLElement | null
+}
 
-export function contextMenu(e: MouseEvent, items: MenuItem[]) {
+const [menu, setMenu] = createSignal<MenuState | null>(null)
+
+/** Focused element outside the menus (a menu opened from another one keeps the first one). */
+export function focusBeforeMenus(): HTMLElement | null {
+  const a = document.activeElement as HTMLElement | null
+  return a?.closest('.ctx-menu') ? (menu()?.prev ?? null) : a
+}
+
+export function contextMenu(e: MouseEvent, items: MenuItem[], opts: { onSide?: (dir: -1 | 1) => void } = {}) {
   e.preventDefault()
   e.stopPropagation()
-  setMenu({ x: e.clientX, y: e.clientY, items })
+  setMenu({ x: e.clientX, y: e.clientY, items, onSide: opts.onSide, prev: focusBeforeMenus() })
 }
 
 function MenuHost() {
   let el!: HTMLDivElement
-  const close = () => setMenu(null)
+  const close = () => {
+    const prev = menu()?.prev
+    setMenu(null)
+    if (prev && prev !== document.body && prev.isConnected) prev.focus()
+  }
+  // The keyboard moves between the items: arrows, Home / End, Tab closes.
+  const entries = () => [...el.querySelectorAll<HTMLButtonElement>('.ctx-item:not(:disabled)')]
+  const onKey = (e: KeyboardEvent) => {
+    const list = entries()
+    const i = list.indexOf(document.activeElement as HTMLButtonElement)
+    let to = -1
+    if (e.key === 'ArrowDown') to = (i + 1) % list.length
+    else if (e.key === 'ArrowUp') to = i < 0 ? list.length - 1 : (i - 1 + list.length) % list.length
+    else if (e.key === 'Home') to = 0
+    else if (e.key === 'End') to = list.length - 1
+    else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && menu()?.onSide) menu()!.onSide!(e.key === 'ArrowLeft' ? -1 : 1)
+    else if (e.key === 'Tab') close()
+    else return
+    e.preventDefault()
+    e.stopPropagation()
+    if (to >= 0) list[to]?.focus()
+  }
+  // Each menu opened (another one of the menu bar included) puts the keyboard on its first item.
+  createEffect(() => menu() && queueMicrotask(() => entries()[0]?.focus()))
   onMount(() => {
     const down = (e: MouseEvent) => {
       if (menu() && !el?.contains(e.target as Node)) close()
     }
-    const key = (e: KeyboardEvent) => e.key === 'Escape' && close()
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && menu()) {
+        e.preventDefault()
+        e.stopPropagation()
+        close()
+      }
+    }
     window.addEventListener('mousedown', down, true)
     window.addEventListener('keydown', key, true)
     window.addEventListener('blur', close)
@@ -310,7 +355,13 @@ function MenuHost() {
     <Show when={menu()}>
       {(m) => (
         <Portal>
-          <div ref={el} class="ctx-menu" classList={{ 'has-checks': m().items.some((it) => it.checked !== undefined) }} role="menu" style={{ left: `${Math.min(m().x, innerWidth - 240)}px`, top: `${Math.min(m().y, innerHeight - m().items.length * 28 - 12)}px` }}>
+          <div
+            ref={el}
+            onKeyDown={onKey}
+            class="ctx-menu"
+            classList={{ 'has-checks': m().items.some((it) => it.checked !== undefined) }}
+            role="menu"
+            style={{ left: `${Math.min(m().x, innerWidth - 240)}px`, top: `${Math.min(m().y, innerHeight - m().items.length * 28 - 12)}px` }}>
             <For each={m().items}>
               {(it) =>
                 it.separator ? (

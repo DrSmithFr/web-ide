@@ -19,6 +19,8 @@ export interface ActionDef {
 }
 
 export const actions: ActionDef[] = [
+  { id: 'file.newFile', label: 'New file…', category: 'File' },
+  { id: 'file.newFolder', label: 'New folder…', category: 'File' },
   { id: 'file.save', label: 'Save', category: 'File' },
   { id: 'file.saveAll', label: 'Save all', category: 'File' },
   { id: 'edit.undo', label: 'Undo', category: 'Editing' },
@@ -61,6 +63,8 @@ export const actions: ActionDef[] = [
   { id: 'view.splitRight', label: 'Split right', category: 'View' },
   { id: 'view.splitDown', label: 'Split down', category: 'View' },
   { id: 'view.closeTab', label: 'Close the tab', category: 'View' },
+  { id: 'view.closeOthers', label: 'Close the other tabs', category: 'View' },
+  { id: 'view.closeAll', label: 'Close all the tabs', category: 'View' },
   { id: 'view.nextTab', label: 'Next tab', category: 'View' },
   { id: 'view.prevTab', label: 'Previous tab', category: 'View' },
   { id: 'view.toggleLeft', label: 'Show / hide the left panel', category: 'View', inTerminal: true },
@@ -86,6 +90,7 @@ export const actions: ActionDef[] = [
   { id: 'settings.open', label: 'Settings', category: 'General', inTerminal: true },
   { id: 'kanban.open', label: 'Open the kanban', category: 'General' },
   { id: 'palette.open', label: 'Command palette', category: 'General', inTerminal: true },
+  { id: 'menu.open', label: 'Open the menu bar', category: 'General', inTerminal: true },
   { id: 'console.new', label: 'New terminal', category: 'Consoles', inTerminal: true },
   { id: 'sql.execute', label: 'Run the active statement', category: 'Database' },
 ]

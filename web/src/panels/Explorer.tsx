@@ -131,7 +131,8 @@ function collapseAll() {
   })
 }
 
-async function createIn(dir: string, isDir: boolean) {
+/** Asks the name of a new file or folder in dir, creates it and opens the file. */
+export async function createIn(dir: string, isDir: boolean) {
   const name = await prompt({ title: isDir ? t('New folder') : t('New file'), label: t('In {dir}', { dir: relPath(dir) || '/' }), placeholder: isDir ? t('name') : t('name.ext (or sub/folder/name.ext)') })
   if (!name) return
   const path = dir + '/' + name.replace(/^\/+/, '')

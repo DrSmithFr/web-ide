@@ -3,14 +3,16 @@
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from 'solid-js'
 import {
   activateTab, basename, closeTab, docError, findLeaf, getDoc, loadDoc, moveTab, openFile, relPath, reveal, saveCursor,
-  saveDoc, session, setActivePane, setSplitSizes, splitPane, diagnostics, type LayoutNode, type TabState, docsVersion,
+  saveDoc, session, setActivePane, setSplitSizes, splitPane, diagnostics, type LayoutNode, type TabState, docsVersion, mutate,
 } from '../state/project'
+import { showTool } from '../state/zones'
+import { revealInExplorer } from '../panels/Explorer'
 import { EditorView, type Diagnostic } from '../editor/view'
 import { Doc } from '../editor/doc'
 import { FindBar } from '../editor/FindBar'
 import { grammarGeneration, languageName } from '../editor/languages'
 import { settings } from '../state/settings'
-import { registerAction, shortcutOf } from '../keys/bindings'
+import { actions, registerAction, runAction, shortcutOf } from '../keys/bindings'
 import { contextMenu, pick, prompt } from './overlay'
 import { openConflict } from '../conflict/ConflictDialog'
 import { request } from '../pod/rpc'
@@ -478,6 +480,45 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
   })
   onCleanup(() => clearTimeout(markTimer))
 
+  // Context menu of the text: code navigation, clipboard, comment, file.
+  const editorMenu = (e: MouseEvent) => {
+    const v = view()
+    const d = doc()
+    if (!v || !d || !(e.target as HTMLElement).closest('.ed')) return
+    const content = host.querySelector<HTMLElement>('.ed-content')
+    const item = (id: string, disabled = false) => ({ label: t(actions.find((a) => a.id === id)!.label), hint: shortcutOf(id), disabled, action: () => void runAction(id) })
+    const sep = { separator: true, label: '' }
+    const paste = async () => {
+      const data = new DataTransfer()
+      data.setData('text/plain', await navigator.clipboard.readText().catch(() => ''))
+      content?.focus()
+      content?.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
+    }
+    contextMenu(e, [
+      item('lsp.definition'),
+      item('lsp.references'),
+      item('lsp.implementation'),
+      item('lsp.rename', d.readOnly),
+      item('lsp.format', d.readOnly),
+      sep,
+      { label: t('Cut'), hint: 'Ctrl+X', disabled: d.readOnly, action: () => document.execCommand('cut') },
+      { label: t('Copy'), hint: 'Ctrl+C', action: () => document.execCommand('copy') },
+      { label: t('Paste'), hint: 'Ctrl+V', disabled: d.readOnly, action: () => void paste() },
+      sep,
+      item('edit.toggleComment', d.readOnly),
+      item('edit.duplicateLine', d.readOnly),
+      sep,
+      {
+        label: t('Show in the explorer'),
+        disabled: relPath(path) === path,
+        action: () => {
+          mutate((s) => showTool(s, 'explorer'))
+          revealInExplorer(path, true)
+        },
+      },
+      { label: t('Copy the relative path'), action: () => navigator.clipboard.writeText(relPath(path)) },
+    ])
+  }
   const when = (f: (v: EditorView, d: Doc) => void, needFocus = false) => () => {
     const v = view()
     const d = doc()
@@ -636,7 +677,7 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
       <Show when={error()}>
         <div class="empty-pane">{error() === 'binary' ? t('Binary or too large file: no preview.') : t('Cannot read: {error}', { error: error() ?? '' })}</div>
       </Show>
-      <div class="editor-host">
+      <div class="editor-host" onContextMenu={editorMenu}>
         {/* The view is mounted by hand: it gets its own node, never touched by Solid. */}
         <div class="editor-mount" ref={host} />
         <Show when={findOpen() && view() && doc()}>

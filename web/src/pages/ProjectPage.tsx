@@ -3,7 +3,7 @@ import { createEffect, createSignal, For, type JSX, onCleanup, onMount, Show } f
 import { Dynamic } from 'solid-js/web'
 import { RpcError, formatRate, on as onPod, podRates, podState, request } from '../pod/rpc'
 import {
-  activeLeaf, activeTab, closeTab, conflictedDocs, cycleTab, docsVersion, mutate, navigate as navHistory, openFile, openProject, project, relPath, reopenProject,
+  activeLeaf, activeTab, closeTab, conflictedDocs, cycleTab, docsVersion, mutate, navigate as navHistory, openFile, openProject, project, relPath, reopenProject, root,
   saveAll, session, setConflictOpener, splitPane, closeProject, basename,
 } from '../state/project'
 import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, toggleTool, toolsIn, zoneOf, type Zone } from '../state/zones'
@@ -12,7 +12,7 @@ import { settings, updateSettings } from '../state/settings'
 import { navigate } from '../app/router'
 import { EditorArea } from '../ui/EditorArea'
 import { ConsoleTool, ProblemsTool, newConsole, problemCount, setConsoleList } from '../console/consoles'
-import { Explorer } from '../panels/Explorer'
+import { createIn, Explorer } from '../panels/Explorer'
 import { GlobalSearch, focusGlobalSearch } from '../panels/GlobalSearch'
 import { GitPanel } from '../panels/git/GitPanel'
 import { KanbanPanel } from '../kanban/Panel'
@@ -27,7 +27,7 @@ import { DockerTool } from '../docker/DockerTool'
 import { openConflict } from '../conflict/ConflictDialog'
 import { openSettings } from '../settings/SettingsModal'
 import { actions, registerAction, runAction, shortcutOf } from '../keys/bindings'
-import { contextMenu, pick, prompt, fuzzy, type MenuItem } from '../ui/overlay'
+import { contextMenu, focusBeforeMenus, pick, prompt, fuzzy, type MenuItem } from '../ui/overlay'
 import { Icon } from '../ui/icons'
 import { refreshConnections } from '../db/api'
 import * as lspc from '../lsp/client'
@@ -84,6 +84,18 @@ export function useProjectActions() {
       const l = activeLeaf()
       if (l.active) closeTab(l.id, l.active)
     }),
+    registerAction('view.closeOthers', () => {
+      const l = activeLeaf()
+      l.tabs.filter((x) => x !== l.active).forEach((x) => closeTab(l.id, x))
+    }),
+    registerAction('view.closeAll', () => {
+      const l = activeLeaf()
+      ;[...l.tabs].forEach((x) => closeTab(l.id, x))
+    }),
+    // New file or folder: beside the active file, else at the root.
+    registerAction('file.newFile', () => void createIn(newEntryDir(), false)),
+    registerAction('file.newFolder', () => void createIn(newEntryDir(), true)),
+    registerAction('menu.open', () => document.querySelector<HTMLElement>('.menubar .menu-btn')?.click()),
     registerAction('view.nextTab', () => cycleTab(1)),
     registerAction('view.prevTab', () => cycleTab(-1)),
     registerAction('nav.back', () => navHistory(-1)),
@@ -168,6 +180,11 @@ async function gotoSymbol() {
   if (loc) lspc.jump(loc)
 }
 
+function newEntryDir() {
+  const path = activeTab()?.kind === 'file' ? activeTab()!.path! : ''
+  return path && relPath(path) !== path ? path.slice(0, path.lastIndexOf('/')) : root()
+}
+
 function focusActiveEditor() {
   document.querySelector<HTMLElement>('.pane.active .ed-content')?.focus()
 }
@@ -216,12 +233,14 @@ function escapeToEditor(e: KeyboardEvent) {
 
 // ---------- menu bar ----------
 
+// Actions of each menu; '-' draws a separator.
 const menus: [string, string[]][] = [
-  ['menu|File', ['file.save', 'file.saveAll', 'nav.gotoFile', 'conflict.resolve', 'settings.open']],
-  ['menu|Edit', ['edit.undo', 'edit.redo', 'edit.duplicateLine', 'edit.deleteLine', 'edit.toggleComment', 'edit.nextOccurrence', 'edit.allOccurrences', 'search.find', 'search.global']],
-  ['menu|Navigate', ['nav.back', 'nav.forward', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', 'nav.related', 'nav.test']],
-  ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover', 'edit.fold', 'edit.unfold', 'edit.foldAll', 'edit.unfoldAll']],
-  ['menu|View', ['view.splitRight', 'view.splitDown', 'view.closeTab', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', 'view.visualFocus', 'view.focusOutline', 'view.focusDim', 'view.whitespace', 'console.new', 'palette.open']],
+  ['menu|File', ['file.newFile', 'file.newFolder', '-', 'file.save', 'file.saveAll', '-', 'nav.gotoFile', '-', 'view.closeTab', 'view.closeOthers', 'view.closeAll', '-', 'conflict.resolve', '-', 'settings.open']],
+  ['menu|Edit', ['edit.undo', 'edit.redo', '-', 'edit.duplicateLine', 'edit.deleteLine', 'edit.toggleComment', '-', 'edit.nextOccurrence', 'edit.allOccurrences', '-', 'search.find', 'search.global']],
+  ['menu|Navigate', ['nav.back', 'nav.forward', '-', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', '-', 'nav.related', 'nav.test']],
+  ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover', '-', 'lsp.rename', 'lsp.format', '-', 'edit.fold', 'edit.unfold', 'edit.foldAll', 'edit.unfoldAll']],
+  ['menu|View', ['view.splitRight', 'view.splitDown', '-', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', '-', 'view.visualFocus', 'view.focusOutline', 'view.focusDim', '-', 'view.whitespace', '-', 'console.new', 'palette.open']],
+  ['menu|Tools', ['tool.explorer', 'tool.search', 'tool.git', 'tool.kanban', '-', 'tool.assistant', 'tool.database', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.console', 'tool.problems', 'tool.docker']],
 ]
 
 // Menu entries switching a setting, shown with a check box.
@@ -233,20 +252,30 @@ const menuChecks: Record<string, () => boolean> = {
 }
 
 function openMenu(e: MouseEvent, ids: string[]) {
-  const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  const btn = e.currentTarget as HTMLElement
+  const r = btn.getBoundingClientRect()
   // The action runs where the focus was (the menu buttons do not take it), the editor otherwise.
-  const prev = document.activeElement as HTMLElement | null
-  const items: MenuItem[] = ids.map((id) => ({
-    label: t(actions.find((a) => a.id === id)?.label ?? id),
-    hint: shortcutOf(id),
-    checked: menuChecks[id]?.(),
-    action: () => {
-      if (prev && prev !== document.body && prev.isConnected && !prev.closest('.menubar')) prev.focus()
-      else focusActiveEditor()
-      requestAnimationFrame(() => runAction(id) || toast(t('Action not available here'), 'info'))
-    },
-  }))
-  contextMenu(new MouseEvent('contextmenu', { clientX: r.left, clientY: r.bottom + 2 }), items)
+  const prev = focusBeforeMenus()
+  const items: MenuItem[] = ids.map((id) =>
+    id === '-'
+      ? { separator: true, label: '' }
+      : {
+          label: t(actions.find((a) => a.id === id)?.label ?? id),
+          hint: shortcutOf(id),
+          checked: menuChecks[id]?.(),
+          action: () => {
+            if (prev && prev !== document.body && prev.isConnected && !prev.closest('.menubar')) prev.focus()
+            else focusActiveEditor()
+            requestAnimationFrame(() => runAction(id) || toast(t('Action not available here'), 'info'))
+          },
+        },
+  )
+  // Left and Right open the menu beside.
+  const onSide = (dir: -1 | 1) => {
+    const all = [...document.querySelectorAll<HTMLElement>('.menubar .menu-btn')]
+    all[(all.indexOf(btn) + dir + all.length) % all.length]?.click()
+  }
+  contextMenu(new MouseEvent('contextmenu', { clientX: r.left, clientY: r.bottom + 2 }), items, { onSide })
 }
 
 export function PodStatus() {

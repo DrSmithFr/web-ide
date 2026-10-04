@@ -400,7 +400,7 @@ button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 .pick-empty { padding: 10px; color: var(--fg-muted); }
 .ctx-menu { position: fixed; z-index: 120; min-width: 200px; padding: 4px; background: var(--bg-3); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 8px 28px rgb(0 0 0 / 0.45); display: flex; flex-direction: column; }
 .ctx-item { display: flex; justify-content: space-between; gap: 24px; border: 0; background: transparent; padding: 5px 10px; border-radius: 4px; cursor: pointer; text-align: left; white-space: nowrap; }
-.ctx-item:hover:not(:disabled) { background-color: var(--bg-active); color: var(--fg); }
+.ctx-item:is(:hover, :focus-visible):not(:disabled) { background-color: var(--bg-active); color: var(--fg); outline: none; }
 .ctx-item:disabled { opacity: 0.4; cursor: default; }
 .ctx-item.danger { color: var(--danger); }
 .ctx-label { display: inline-flex; align-items: center; gap: 8px; }
@@ -629,4 +629,4 @@ button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 
 /* Selected item of a list, a menu or a tree: lighter background and an accent bar on the left,
    drawn a little inside, so that the focus outline at the edge of the zone never hides it. */
-:is(.tree-row.selected, .tree-row.active, .pick-item.selected, .completion-item.selected, .conn-item.selected, .history-item.selected, .git-log-row.selected, .settings-nav button.active, .dk-row.selected, .ai-chat-item.active, .ai-model-item.active, .ai-complete-item.active, .ctx-item:hover:not(:disabled)) { background-image: linear-gradient(var(--accent), var(--accent)); background-repeat: no-repeat; background-size: 3px calc(100% - 8px); background-position: 3px center; }
+:is(.tree-row.selected, .tree-row.active, .pick-item.selected, .completion-item.selected, .conn-item.selected, .history-item.selected, .git-log-row.selected, .settings-nav button.active, .dk-row.selected, .ai-chat-item.active, .ai-model-item.active, .ai-complete-item.active, .ctx-item:is(:hover, :focus-visible):not(:disabled)) { background-image: linear-gradient(var(--accent), var(--accent)); background-repeat: no-repeat; background-size: 3px calc(100% - 8px); background-position: 3px center; }

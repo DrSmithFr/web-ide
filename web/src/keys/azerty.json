@@ -212,6 +212,9 @@
     ],
     "tool.console": [
       "Alt+F12"
+    ],
+    "menu.open": [
+      "F10"
     ]
   }
 }
