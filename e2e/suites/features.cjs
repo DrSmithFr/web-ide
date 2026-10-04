@@ -160,7 +160,7 @@ run(async ({ page }) => {
   // Out of focus: tones of the theme for the colors, its own backgrounds kept
   const varIn = (sel, v) => page.$eval(sel, (e, v) => getComputedStyle(e).getPropertyValue(v).trim(), v)
   const accent = await cssVar('--accent')
-  assert((await varIn('.zone-bottomLeft', '--accent')) !== accent && (await varIn('.menubar', '--danger')) !== (await cssVar('--danger')), 'colors toned down out of focus')
+  assert((await varIn('.zone-bottomLeft', '--accent')) !== accent && (await varIn('.menubar', '--danger')) === (await cssVar('--danger')), 'colors toned down out of focus, not in the menu bar')
   assert((await page.$eval('.zone-bottomLeft', (e) => getComputedStyle(e).backgroundColor)) === 'rgb(7, 54, 66)', 'the background of the theme is kept')
   assert((await varIn('.pane.focused', '--accent')) === accent && (await varIn('.rail-btn[title="Console"]', '--accent')) !== accent, 'focused part in color')
   await page.screenshot({ path: OUT + '/s5-visual-focus.png' })

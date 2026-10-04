@@ -145,4 +145,4 @@ export function monoOf(theme: Theme, color: string): string {
 export const toneVars = ['fg', 'fg-muted', 'fg-faint', 'line', 'accent', 'accent-fg', 'sel-bg', 'cur-line', 'danger', 'warn', 'ok', 'info', 'match-bg', 'match-cur-bg', 'gutter', 'conflict-bg']
 
 /** Parts out of focus in visual focus mode. */
-export const unfocusedParts = '.visual-focus :is(.menubar, .rail-btn:not(.focused), .zone:not(.focused), .pane:not(.focused))'
+export const unfocusedParts = '.visual-focus :is(.rail-btn:not(.focused), .zone:not(.focused), .pane:not(.focused))'
