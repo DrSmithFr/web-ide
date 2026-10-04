@@ -121,3 +121,28 @@ export function accentOf(theme: Theme, accent: string): [string, string] {
   if (!a) return [theme.ui.accent, theme.ui['accent-fg']]
   return theme.dark ? a.dark : a.light
 }
+
+// Visual focus mode: the parts out of focus keep the backgrounds of the theme and show every
+// other color as a tone between its background and its text color, by luminance.
+const hex = (c: string) => {
+  const h = c.replace('#', '')
+  const f = h.length === 3 ? [...h].map((x) => x + x).join('') : h.slice(0, 6)
+  return [0, 2, 4].map((i) => parseInt(f.slice(i, i + 2), 16))
+}
+const luma = ([r, g, b]: number[]) => 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+/** Monochrome tone of a color in a theme. */
+export function monoOf(theme: Theme, color: string): string {
+  if (!/^#[0-9a-f]{3,8}$/i.test(color)) return color
+  const bg = hex(theme.ui.bg)
+  const fg = hex(theme.ui.fg)
+  const span = luma(fg) - luma(bg)
+  const k = span ? Math.max(0, Math.min(1, (luma(hex(color)) - luma(bg)) / span)) : 1
+  return '#' + bg.map((b, i) => Math.round(b + (fg[i] - b) * k).toString(16).padStart(2, '0')).join('')
+}
+
+/** Interface variables of a theme that are not backgrounds: monochrome out of focus. */
+export const toneVars = ['fg', 'fg-muted', 'fg-faint', 'line', 'accent', 'accent-fg', 'sel-bg', 'cur-line', 'danger', 'warn', 'ok', 'info', 'match-bg', 'match-cur-bg', 'gutter', 'conflict-bg']
+
+/** Parts out of focus in visual focus mode. */
+export const unfocusedParts = '.visual-focus :is(.menubar, .rail-btn:not(.focused), .zone:not(.focused), .pane:not(.focused))'

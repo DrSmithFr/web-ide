@@ -130,8 +130,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .rail-btn.active.focused { color: var(--accent); }
 .rail-btn { position: relative; }
 .rail-badge { position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--danger); }
-/* Visual focus mode: everything but the focused part in grayscale. Overlays are portaled out. */
-.visual-focus .menubar, .visual-focus .rail-btn:not(.focused), .visual-focus .zone:not(.focused), .visual-focus .pane:not(.focused) { filter: grayscale(1); transition: filter 0.15s; }
+/* Visual focus mode: the colors of the parts out of focus are toned down by state/settings.ts;
+   images and the text of the terminals (colors set by the programs) are grayed instead, over
+   the background of the theme. Overlays are portaled out. */
+.visual-focus :is(.menubar, .rail-btn:not(.focused), .zone:not(.focused), .pane:not(.focused)) :is(img, .xterm-rows) { filter: grayscale(1); }
 .work { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .work-top { flex: 1; min-height: 0; display: flex; position: relative; }
 .zone { position: relative; display: flex; flex-direction: column; background: var(--bg-2); min-width: 0; min-height: 0; }

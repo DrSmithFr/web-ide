@@ -3,7 +3,7 @@
 import { createStore, reconcile, unwrap } from 'solid-js/store'
 import { createEffect, createRoot, createSignal } from 'solid-js'
 import { on as onPod, request } from '../pod/rpc'
-import { accentOf, themeById, tokenTypes } from '../settings/themes'
+import { accentOf, monoOf, themeById, tokenTypes, toneVars, unfocusedParts } from '../settings/themes'
 import { setGrammarOverrides } from '../editor/languages'
 import type { GrammarDef } from '../editor/tokenizer'
 import { setLang, type LangSetting } from '../i18n'
@@ -107,7 +107,9 @@ createRoot(() => {
     root.style.setProperty('--font-size-ui', `${settings.font.uiSize}px`)
     root.style.setProperty('--ligatures', settings.font.ligatures ? 'normal' : 'none')
     const overrides = settings.tokenColors[t.id] ?? {}
-    let css = ''
+    // Visual focus mode: tones of the theme instead of its colors out of focus.
+    const tones: Record<string, string> = { ...t.ui, accent, 'accent-fg': accentFg }
+    let css = `${unfocusedParts} { ${toneVars.map((v) => `--${v}: ${monoOf(t, tones[v])};`).join(' ')} }\n`
     for (const tok of tokenTypes) {
       const color = overrides[tok] ?? t.tokens[tok]
       if (!color) continue
@@ -115,6 +117,7 @@ createRoot(() => {
       // Separate rules: a browser without ::highlight would drop a shared one. The spans
       // (code blocks of the assistant) use the same colors as the editor.
       css += `::highlight(tok-${tok}) { color: ${color}; ${extra} }\n.tok-${tok} { color: ${color}; ${extra} }\n`
+      css += `${unfocusedParts} ::highlight(tok-${tok}) { color: ${monoOf(t, color)}; }\n${unfocusedParts} .tok-${tok} { color: ${monoOf(t, color)}; }\n`
     }
     style.textContent = css
   })

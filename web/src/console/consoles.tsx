@@ -9,7 +9,7 @@ import { diagnostics, mutate, openFile, relPath, root, session } from '../state/
 import { showTool } from '../state/zones'
 import { dropClasses, dropIndex, moveItem, setDropAt } from '../ui/tabDrop'
 import { settings } from '../state/settings'
-import { themeById } from '../settings/themes'
+import { accentOf, themeById } from '../settings/themes'
 import { prompt } from '../ui/overlay'
 import { errorToast } from '../ui/toast'
 import { Icon } from '../ui/icons'
@@ -74,8 +74,9 @@ interface TermEntry {
 const terms = new Map<string, TermEntry>()
 
 function xtermTheme() {
-  const t = themeById(settings.theme).ui
-  return { background: t['bg-2'], foreground: t.fg, cursor: t.accent, selectionBackground: t['sel-bg'], black: t['bg-3'] }
+  const th = themeById(settings.theme)
+  const t = th.ui
+  return { background: t['bg-2'], foreground: t.fg, cursor: accentOf(th, settings.accent)[0], selectionBackground: t['sel-bg'], black: t['bg-3'] }
 }
 
 function getTerm(id: string): TermEntry {
@@ -120,7 +121,7 @@ function disposeTerm(id: string) {
 
 createEffect(
   on(
-    () => [settings.theme, settings.font.family, settings.font.size],
+    () => [settings.theme, settings.accent, settings.font.family, settings.font.size],
     () => {
       for (const t of terms.values()) {
         t.term.options.theme = xtermTheme()
