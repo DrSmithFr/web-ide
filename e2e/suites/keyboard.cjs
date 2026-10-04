@@ -1,0 +1,84 @@
+// Keyboard navigation: one shortcut per tool, Escape back to the editor, arrows inside
+// toolbars and tab bars (one Tab stop per bar).
+const { run, openProject, open, assert, OUT } = require('../common.cjs')
+
+run(async ({ page }) => {
+  await openProject(page)
+  await open(page, 'main.go')
+  const active = () => page.evaluate(() => document.activeElement?.closest('.zone, .pane')?.className ?? '')
+  const focused = () => page.evaluate(() => document.querySelector('.zone.focused, .pane.focused')?.className ?? '')
+  const shown = (zone) => page.$(`.zone-${zone}`)
+
+  // Alt+1: the explorer is shown and its tree has the keyboard.
+  if (await shown('left')) await page.click('.rail-left .rail-btn.active')
+  await page.click('.pane .ed-content')
+  await page.keyboard.press('Alt+1')
+  await page.waitForFunction(() => document.activeElement?.closest('.zone-left [role=tree]'))
+  assert((await focused()).includes('zone-left'), 'Alt+1 shows the explorer and gives it the focus')
+  const row = () => page.evaluate(() => document.activeElement?.textContent)
+  // The rows of the explorer are rendered again once loaded: the focus follows.
+  await page.waitForTimeout(500)
+  const first = await row()
+  await page.keyboard.press('ArrowDown')
+  assert((await row()) !== first, 'the arrows move in the tree at once')
+  // Escape: back to the editor, the explorer stays shown.
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(100)
+  assert((await active()).includes('pane') && (await focused()).includes('pane') && (await shown('left')), 'Escape gives the focus back to the editor')
+  // Alt+1 on the focused explorer hides it.
+  await page.keyboard.press('Alt+1')
+  await page.waitForTimeout(200)
+  await page.keyboard.press('Alt+1')
+  await page.waitForTimeout(200)
+  assert(!(await shown('left')) && (await active()).includes('pane'), 'Alt+1 again hides the explorer, the editor gets the focus')
+
+  // Alt+F12: the console, Escape does not leave a terminal.
+  await page.keyboard.press('Alt+F12')
+  await page.waitForFunction(() => document.activeElement?.closest('.zone-bottomLeft'))
+  await page.waitForTimeout(500)
+  if (!(await page.$('.zone-bottomLeft .xterm'))) {
+    await page.click('.zone-bottomLeft .empty-state button')
+    await page.waitForSelector('.zone-bottomLeft .xterm')
+    await page.click('.zone-bottomLeft .xterm')
+  }
+  await page.keyboard.press('Escape')
+  assert((await active()).includes('zone-bottomLeft'), 'Escape stays in a terminal')
+  await page.keyboard.press('Alt+F12')
+  await page.waitForTimeout(200)
+
+  // Toolbars: one Tab stop, the arrows move between the buttons.
+  await page.keyboard.press('Alt+1')
+  await page.waitForFunction(() => document.activeElement?.closest('.zone-left [role=tree]'))
+  const head = await page.$$eval('.zone-left .panel-head button', (l) => l.map((b) => b.tabIndex))
+  assert(head.filter((x) => x === 0).length === 1 && head.length > 2, 'one Tab stop in the explorer header ' + head)
+  await page.focus('.zone-left .panel-head button[tabindex="0"]')
+  const title = () => page.evaluate(() => document.activeElement?.getAttribute('title'))
+  const t0 = await title()
+  await page.keyboard.press('ArrowRight')
+  const t1 = await title()
+  assert(t1 && t1 !== t0 && (await page.$eval('.zone-left .panel-head button[tabindex="0"]', (b) => b === document.activeElement)), 'ArrowRight moves to the next button, which becomes the Tab stop')
+  await page.keyboard.press('ArrowLeft')
+  assert((await title()) === t0, 'ArrowLeft moves back')
+  // Rails: vertical toolbars.
+  await page.focus('.rail-left .rail-group[role=toolbar] .rail-btn[tabindex="0"]')
+  const r0 = await title()
+  await page.keyboard.press('ArrowDown')
+  assert((await title()) !== r0, 'ArrowDown moves in a rail')
+  // Tab bars: the arrows move between the tabs, Enter activates one.
+  await open(page, 'notes.txt')
+  await page.focus('.pane.active .tabbar [role=tab][tabindex="0"]')
+  const tabText = () => page.evaluate(() => document.activeElement?.textContent?.trim())
+  const tab0 = await tabText()
+  assert(tab0.includes('notes.txt'), 'the Tab stop of a tab bar is its active tab')
+  await page.keyboard.press('ArrowLeft')
+  const tab1 = await tabText()
+  assert(tab1.includes('main.go'), 'ArrowLeft moves to the previous editor tab')
+  await page.keyboard.press('Enter')
+  await page.waitForFunction((n) => document.querySelector('.pane.active .tab.active')?.textContent.includes(n), tab1)
+  assert(true, 'Enter activates the tab')
+  // A click on a tab gives the keyboard to the editor.
+  await page.click('.pane.active .tab:has-text("notes.txt")')
+  await page.waitForTimeout(100)
+  assert(await page.evaluate(() => document.activeElement?.classList.contains('ed-content')), 'a click on a tab focuses the editor')
+  await page.screenshot({ path: OUT + '/keyboard.png' })
+})

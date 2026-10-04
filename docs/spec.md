@@ -144,6 +144,9 @@ To treat local and SSH projects the same way, the pod exposes one interface (`li
 - User changes are stored as overrides (`action → binding`) on top of the preset, and can be reset per action.
 - Assigning a combination checks for collisions and asks before overwriting.
 - Menus and the command palette show remapped shortcuts without a restart.
+- **One shortcut per tool** (*Tools* category): it shows the tool and gives it the keyboard (its terminal, its prompt, the selected row of its tree, else its first field or button); pressed again while the tool has the focus, it hides it and the editor gets the focus back. Defaults, in the order of the rails: `Alt+1` Explorer, `Alt+2` Search, `Alt+3` Git, `Alt+4` Kanban, `Alt+5` AI assistant, `Alt+6` Database explorer, `Alt+7` Structure, `Alt+8` Problems, `Alt+9` Docker, `Alt+0` Infos, `Alt+F12` Console; Conflicts has none. *Show / hide the left panel, the tools, the consoles* keep their menu entries without a default shortcut.
+- **Escape** in a tool gives the focus back to the editor, unless the tool used the key (closing a popup, stopping an answer, leaving an edit) or the focus is in a terminal.
+- **Toolbars and tab bars** (rails, panel headers, toolbars, editor and tool tabs, settings sections) are one Tab stop each: the arrows move between their buttons and tabs (up and down in the rails), `Home` / `End` go to the ends, `Enter` or `Space` activates a tab, `Delete` closes it. The Tab stop is the item focused last, else the active one. A click on an editor tab gives the keyboard to the editor.
 
 ## 8. Synchronisation and conflicts (files changed by other tools)
 

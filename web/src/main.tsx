@@ -4,6 +4,7 @@ import './styles.css'
 import { startPod } from './pod/rpc'
 import { loadSettings } from './state/settings'
 import { detectLayout, installKeyHandler } from './keys/bindings'
+import { installRoving } from './ui/roving'
 import { route } from './app/router'
 import { Home } from './pages/Home'
 import { ProjectPage } from './pages/ProjectPage'
@@ -19,6 +20,7 @@ function App() {
     loadSettings()
     detectLayout()
     installKeyHandler()
+    installRoving()
     // Keep the browser shortcuts (Ctrl+S "save page"...) away from the IDE.
     window.addEventListener('beforeunload', (e) => {
       if (document.querySelector('.tab.dirty')) e.preventDefault()

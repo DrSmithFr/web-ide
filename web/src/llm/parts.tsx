@@ -142,19 +142,23 @@ export function Popover(props: { trigger: (open: () => void, isOpen: boolean) =>
   const onDown = (e: MouseEvent) => {
     if (!box.contains(e.target as Node)) close()
   }
-  const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close()
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key !== 'Escape') return
+    e.preventDefault()
+    close()
+  }
   createEffect(() => {
     if (open()) {
       document.addEventListener('mousedown', onDown)
-      document.addEventListener('keydown', onKey)
+      document.addEventListener('keydown', onKey, true)
     } else {
       document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('keydown', onKey, true)
     }
   })
   onCleanup(() => {
     document.removeEventListener('mousedown', onDown)
-    document.removeEventListener('keydown', onKey)
+    document.removeEventListener('keydown', onKey, true)
   })
   return (
     <div class="ai-pop-anchor" ref={box}>

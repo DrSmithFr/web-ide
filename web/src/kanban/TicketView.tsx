@@ -494,7 +494,10 @@ function EditableText(props: { value: string; class?: string; onSave: (v: string
         onBlur={save}
         onKeyDown={(e) => {
           if (e.key === 'Enter') save()
-          if (e.key === 'Escape') setEditing(false)
+          if (e.key === 'Escape') {
+            e.preventDefault()
+            setEditing(false)
+          }
         }}
       />
     </Show>
@@ -536,7 +539,10 @@ export function EditableMarkdown(props: { value: string; empty: string; max?: nu
           onInput={(e) => setDraft(e.currentTarget.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void save()
-            if (e.key === 'Escape') setEditing(false)
+            if (e.key === 'Escape') {
+            e.preventDefault()
+            setEditing(false)
+          }
           }}
           ref={(el) => queueMicrotask(() => el.focus())}
         />
@@ -628,7 +634,7 @@ function GoalRow(props: { tk: Ticket; g: Goal; apply: Apply }) {
         }
       >
         <div class="tk-goal-edit">
-          <input class="input small" value={title()} onInput={(e) => setTitle(e.currentTarget.value)} onKeyDown={(e) => e.key === 'Escape' && setEditing(false)} ref={(el) => queueMicrotask(() => el.focus())} />
+          <input class="input small" value={title()} onInput={(e) => setTitle(e.currentTarget.value)} onKeyDown={(e) => e.key === 'Escape' && (e.preventDefault(), setEditing(false))} ref={(el) => queueMicrotask(() => el.focus())} />
           <textarea class="tk-note-input" rows={2} value={description()} placeholder={t('How to check it (optional)')} onInput={(e) => setDescription(e.currentTarget.value)} />
           <div class="form-actions">
             <button class="btn small" onClick={() => setEditing(false)}>

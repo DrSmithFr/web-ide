@@ -168,15 +168,6 @@
     "view.prevTab": [
       "Alt+PageUp"
     ],
-    "view.toggleLeft": [
-      "Alt+Digit1"
-    ],
-    "view.toggleRight": [
-      "Alt+Digit9"
-    ],
-    "view.toggleBottom": [
-      "Alt+F12"
-    ],
     "settings.open": [
       "Ctrl+Alt+KeyS"
     ],
@@ -188,6 +179,39 @@
     ],
     "sql.execute": [
       "Ctrl+Enter"
+    ],
+    "tool.explorer": [
+      "Alt+Digit1"
+    ],
+    "tool.search": [
+      "Alt+Digit2"
+    ],
+    "tool.git": [
+      "Alt+Digit3"
+    ],
+    "tool.kanban": [
+      "Alt+Digit4"
+    ],
+    "tool.assistant": [
+      "Alt+Digit5"
+    ],
+    "tool.database": [
+      "Alt+Digit6"
+    ],
+    "tool.structure": [
+      "Alt+Digit7"
+    ],
+    "tool.problems": [
+      "Alt+Digit8"
+    ],
+    "tool.docker": [
+      "Alt+Digit9"
+    ],
+    "tool.info": [
+      "Alt+Digit0"
+    ],
+    "tool.console": [
+      "Alt+F12"
     ]
   }
 }

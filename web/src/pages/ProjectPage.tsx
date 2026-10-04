@@ -6,7 +6,7 @@ import {
   activeLeaf, activeTab, closeTab, conflictedDocs, cycleTab, docsVersion, mutate, navigate as navHistory, openFile, openProject, project, relPath, reopenProject,
   saveAll, session, setConflictOpener, splitPane, closeProject, basename,
 } from '../state/project'
-import { defaultPlacement, moveTool, normalizePlacement, shownIn, toggleTool, toolsIn, type Zone } from '../state/zones'
+import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, toggleTool, toolsIn, zoneOf, type Zone } from '../state/zones'
 import { focusPart, setFocusPart, trackFocus } from '../state/focus'
 import { settings, updateSettings } from '../state/settings'
 import { navigate } from '../app/router'
@@ -172,6 +172,48 @@ function focusActiveEditor() {
   document.querySelector<HTMLElement>('.pane.active .ed-content')?.focus()
 }
 
+// Where the keyboard lands in a tool given the focus: its terminal, its prompt, the selected
+// row of its tree, its first field, else its first button.
+// A tool just shown may still be loading: the preferred targets are awaited a few frames.
+const focusTargets = ['.xterm-helper-textarea', '.ai-composer textarea', '[role=tree] [aria-selected=true]', '[role=tree] [tabindex]', '.tree-row.active', '.tree-row', 'input:not([type=checkbox]), textarea']
+const fallbackTarget = '.panel-body button:not(:disabled), .tool-body button:not(:disabled), [tabindex="0"]:not(.detach), button:not(:disabled):not(.detach)'
+
+function focusZone(zone: Zone, tries = 10) {
+  const el = document.querySelector<HTMLElement>(`.zone-${zone}`)
+  if (!el) return
+  const visible = (x: HTMLElement | null) => x && x.offsetParent !== null
+  const target = focusTargets.map((s) => el.querySelector<HTMLElement>(s)).find(visible)
+  if (!target && tries > 0) return void requestAnimationFrame(() => focusZone(zone, tries - 1))
+  ;(target ?? [...el.querySelectorAll<HTMLElement>(fallbackTarget)].find(visible) ?? el).focus()
+  // The rows of a tool still loading can be rendered again: the focus is given back if it was lost.
+  if (tries > 0) requestAnimationFrame(() => document.activeElement === document.body && focusPart() === zone && focusZone(zone, tries - 1))
+}
+
+/** Shortcut of a tool: shows it and gives it the focus; hides it when it has the focus already. */
+function toggleToolFocus(id: string) {
+  const z = zoneOf(session, id)
+  if (!z) return false
+  if (shownIn(session, z) === id && focusPart() === z) {
+    mutate((s) => toggleTool(s, id))
+    setFocusPart('editor')
+    focusActiveEditor()
+    return
+  }
+  mutate((s) => showTool(s, id))
+  setFocusPart(z)
+  requestAnimationFrame(() => focusZone(z))
+}
+
+/** Escape in a tool gives the focus back to the editor (not in a terminal, nor when the tool used the key). */
+function escapeToEditor(e: KeyboardEvent) {
+  if (e.key !== 'Escape' || e.defaultPrevented || e.ctrlKey || e.altKey || e.shiftKey || e.metaKey) return
+  const target = e.target as HTMLElement
+  if (!target.closest?.('.zone') || target.closest('.xterm')) return
+  e.preventDefault()
+  setFocusPart('editor')
+  focusActiveEditor()
+}
+
 // ---------- menu bar ----------
 
 const menus: [string, string[]][] = [
@@ -282,6 +324,8 @@ function RailGroup(props: { zone: Zone }) {
   return (
     <div
       class="rail-group"
+      role="toolbar"
+      aria-orientation="vertical"
       data-zone={props.zone}
       classList={{ 'drop-end': dropAt()?.zone === props.zone && dropAt()!.index === list().filter((x) => x !== dragged()).length }}
       onDragOver={(e) => {
@@ -435,6 +479,7 @@ export function ProjectPage(props: { id: string }) {
     registerAction('view.whitespace', () => updateSettings((s) => (s.editor.showWhitespace = !s.editor.showWhitespace), 'Whitespace')),
     registerAction('console.new', () => void newConsole()),
     registerAction('view.toggleBottom', () => mutate((s) => toggleTool(s, 'console'))),
+    ...Object.keys(toolPanels).map((id) => registerAction(`tool.${id}`, () => toggleToolFocus(id))),
     registerAction('search.global', () => {
       mutate((s) => (s.left.panel = 'search'))
       requestAnimationFrame(focusGlobalSearch)
@@ -449,8 +494,10 @@ export function ProjectPage(props: { id: string }) {
       navigate('/')
     }),
   ]
+  document.addEventListener('keydown', escapeToEditor)
   onCleanup(() => {
     offs.forEach((f) => f())
+    document.removeEventListener('keydown', escapeToEditor)
     closeProject()
   })
 

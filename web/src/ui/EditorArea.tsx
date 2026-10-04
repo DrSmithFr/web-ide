@@ -187,7 +187,17 @@ function Pane(props: { id: string }) {
                     if (e.button === 1) {
                       e.preventDefault()
                       closeTab(props.id, id)
-                    } else if (e.button === 0) activateTab(props.id, id)
+                    } else if (e.button === 0) {
+                      // A click shows the tab and gives the keyboard to its content (the tab keeps
+                      // the focus only from the keyboard).
+                      activateTab(props.id, id)
+                      requestAnimationFrame(() => document.querySelector<HTMLElement>('.pane.active .ed-content')?.focus())
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' && e.key !== ' ') return
+                    e.preventDefault()
+                    activateTab(props.id, id)
                   }}
                   onContextMenu={(e) => tabMenu(e, tab())}
                 >

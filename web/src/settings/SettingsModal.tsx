@@ -37,7 +37,7 @@ export function SettingsHost() {
     <Show when={open()}>
       <Modal title={t('Settings')} onClose={() => setOpen(null)} class="modal-settings">
         <div class="settings">
-          <nav class="settings-nav">
+          <nav class="settings-nav" role="tablist" aria-orientation="vertical">
             <For each={sections}>
               {([id, label]) => (
                 <button classList={{ active: open() === id }} onClick={() => setOpen(id)}>

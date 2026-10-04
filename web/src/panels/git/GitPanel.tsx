@@ -65,7 +65,7 @@ export function GitPanel() {
           </div>
         }
       >
-        <div class="git-branch">
+        <div class="git-branch" role="toolbar">
           <button class="btn small" title={t('Switch branch')} onClick={branches}>
             <Icon name="branch" size={12} /> {st()!.branch === '(detached)' ? t('detached HEAD') : st()!.branch}
           </button>
