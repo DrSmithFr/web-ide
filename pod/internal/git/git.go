@@ -49,6 +49,7 @@ type Status struct {
 	Repo     bool   `json:"repo"`
 	Top      string `json:"top,omitempty"`
 	Branch   string `json:"branch,omitempty"`
+	Head     string `json:"head,omitempty"` // commit checked out ("" before the first one)
 	Upstream string `json:"upstream,omitempty"`
 	Ahead    int    `json:"ahead"`
 	Behind   int    `json:"behind"`
@@ -83,6 +84,10 @@ func (g *Repo) Status(ctx context.Context) (*Status, error) {
 			switch f[1] {
 			case "branch.head":
 				st.Branch = f[2]
+			case "branch.oid":
+				if f[2] != "(initial)" {
+					st.Head = f[2]
+				}
 			case "branch.upstream":
 				st.Upstream = f[2]
 			case "branch.ab":

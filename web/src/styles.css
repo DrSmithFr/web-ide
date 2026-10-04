@@ -603,7 +603,8 @@ button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 .diff-body { flex: 1; overflow: auto; min-height: 0; }
 .diff { border-collapse: collapse; width: 100%; table-layout: fixed; font-family: var(--font-code); font-size: var(--font-size-code); line-height: var(--line-height-code); tab-size: var(--tab-size, 4); }
 .diff td { padding: 0 8px; vertical-align: top; }
-.diff-no { width: 52px; text-align: right; color: var(--gutter); user-select: none; background: var(--bg-2); }
+.diff-no-col { width: 52px; }
+.diff-no { text-align: right; color: var(--gutter); user-select: none; background: var(--bg-2); }
 .diff-line { white-space: pre; overflow: hidden; text-overflow: ellipsis; }
 .diff-line.del { background: color-mix(in srgb, var(--danger) 18%, transparent); }
 .diff-line.add { background: color-mix(in srgb, var(--ok) 18%, transparent); }

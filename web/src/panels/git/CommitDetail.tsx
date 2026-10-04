@@ -1,5 +1,5 @@
 // Detail of a commit of the history: actions, author, message, parents and changed files.
-import { createMemo, createResource, createSignal, For, Show } from 'solid-js'
+import { createMemo, createResource, createSignal, For, on, Show } from 'solid-js'
 import { request } from '../../pod/rpc'
 import { openFile, relPath } from '../../state/project'
 import { gitRevision, gitStatus } from '../../state/git'
@@ -25,7 +25,9 @@ export function CommitDetail(props: { hash: string; select: (hash: string) => vo
     ({ hash }) => request<Info>('git.commitInfo', { rev: hash }),
   )
   const [closed, setClosed] = createSignal(new Set<string>())
-  const tree = createMemo(() => buildTree(info()?.files ?? [], gitStatus()?.top ?? '', (f) => f.path))
+  // Rebuilt only when the files change (the commit is read again on every change of the repository).
+  const key = createMemo(() => JSON.stringify([gitStatus()?.top, props.hash, info()?.files]))
+  const tree = createMemo(on(key, () => buildTree(info()?.files ?? [], gitStatus()?.top ?? '', (f) => f.path)))
 
   const resetMenu = (e: MouseEvent, c: LogCommit) => {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect()

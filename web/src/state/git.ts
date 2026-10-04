@@ -16,6 +16,7 @@ export interface GitStatus {
   repo: boolean
   top?: string
   branch?: string
+  head?: string
   upstream?: string
   ahead: number
   behind: number
@@ -45,7 +46,10 @@ async function load() {
   }
   running = true
   try {
-    setStatus(await request<GitStatus>('git.status'))
+    const st = await request<GitStatus>('git.status')
+    // A commit made in a terminal moves HEAD without any event of the pod.
+    if (status() && st.head !== status()!.head) setRevision((r) => r + 1)
+    setStatus(st)
   } catch {
     setStatus(null)
   } finally {

@@ -1,6 +1,6 @@
 // Tree of changed files, drawn as the explorer: a click opens the file's diff, a double
 // click the file; arrows move, Space toggles the check box of the row.
-import { createEffect, createSignal, For, type JSX, on, Show } from 'solid-js'
+import { createEffect, createMemo, createSignal, For, type JSX, on, Show } from 'solid-js'
 import { Icon } from '../../ui/icons'
 import { FileIcon } from '../fileIcons'
 import type { TreeNode } from './tree'
@@ -32,15 +32,21 @@ export function FileTree<T>(props: {
     props.setClosed(s)
   }
   const rows = () => [...box.querySelectorAll<HTMLElement>('.tree-row')]
-  // Rows are rebuilt with the status: the selected row keeps the focus it had.
+  // Rows are rebuilt with the tree: a row that had the focus gives it to its new copy
+  // (read before the rows are replaced, never taken from elsewhere).
+  let hadFocus = false
+  const root = createMemo(() => {
+    hadFocus = !!box?.contains(document.activeElement)
+    return props.root
+  })
   createEffect(
     on(
-      () => props.root,
-      () =>
-        requestAnimationFrame(() => {
-          if (document.activeElement !== document.body || !selected()) return
-          rows().find((r) => r.dataset.path === selected())?.focus()
-        }),
+      root,
+      () => {
+        if (!hadFocus) return
+        hadFocus = false
+        requestAnimationFrame(() => rows().find((r) => r.dataset.path === selected())?.focus())
+      },
       { defer: true },
     ),
   )
@@ -114,7 +120,7 @@ export function FileTree<T>(props: {
 
   return (
     <div class="tree git-tree" role="tree" ref={box} data-testid={props.testid}>
-      <Show when={props.root} keyed>
+      <Show when={root()} keyed>
         {(root) => <Row node={root} depth={0} root />}
       </Show>
     </div>

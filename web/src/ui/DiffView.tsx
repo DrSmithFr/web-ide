@@ -165,6 +165,13 @@ export function DiffView(props: { tab: TabState; paneId: string }) {
           </Match>
           <Match when={true}>
             <table class="diff">
+              {/* Fixed layout takes its widths from the first row, which may be a fold. */}
+              <colgroup>
+                <col class="diff-no-col" />
+                <col />
+                <col class="diff-no-col" />
+                <col />
+              </colgroup>
               <tbody>
                 <For each={diff()!.rows}>
                   {(r) =>

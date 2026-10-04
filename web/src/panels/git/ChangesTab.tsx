@@ -1,6 +1,6 @@
 // Commit tab: the changed files as a tree with a check box per row (checked: staged),
 // and the commit form at the bottom.
-import { createEffect, createMemo, createSignal, Show } from 'solid-js'
+import { createEffect, createMemo, createSignal, on, Show } from 'solid-js'
 import { request } from '../../pod/rpc'
 import { mutate, openFile, relPath, session } from '../../state/project'
 import { fileState, gitStatus, refreshGit, type GitFile } from '../../state/git'
@@ -37,7 +37,9 @@ function checkOfAll(list: GitFile[]): Check {
 export function ChangesTab() {
   const [busy, setBusy] = createSignal(false)
   const files = () => gitStatus()?.files ?? []
-  const tree = createMemo(() => buildTree(files(), gitStatus()?.top ?? '', (f) => f.path))
+  // Rebuilt only when the list changes (the status is polled).
+  const key = createMemo(() => JSON.stringify([gitStatus()?.top, files()]))
+  const tree = createMemo(on(key, () => buildTree(files(), gitStatus()?.top ?? '', (f) => f.path)))
   const staged = () => files().filter((f) => !f.conflict && f.index !== '.' && !f.untracked)
 
   const toggle = (n: TreeNode<GitFile>) => (checkOfAll(n.items) === 'on' ? unstage(n.items) : stage(n.items))

@@ -8,6 +8,7 @@ const repo = WS + '/demo'
 const origin = WS + '/../origin.git'
 const env = { ...process.env, GIT_AUTHOR_NAME: 'e2e', GIT_AUTHOR_EMAIL: 'e2e@x', GIT_COMMITTER_NAME: 'e2e', GIT_COMMITTER_EMAIL: 'e2e@x' }
 const git = (cmd, cwd = repo) => execSync(`git ${cmd}`, { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+fs.writeFileSync(repo + '/long.txt', Array.from({ length: 60 }, (_, i) => `line ${i + 1}`).join('\n') + '\n')
 git('init -q -b main')
 git('add -A')
 git('commit -q -m "initial state"')
@@ -58,6 +59,21 @@ run(async ({ page }) => {
   assert(del.includes('line two') && add.includes('line 2 (changed)') && add.includes('line four'), 'side-by-side diff: ' + JSON.stringify({ del, add }))
   assert((await page.textContent('.diff-stats')).includes('+2'), 'diff statistics')
   assert((await page.textContent('.diff-view .toolbar')).includes('working tree ↔ HEAD'), 'diff against HEAD')
+
+  // Folded identical lines open in place, the first ones included.
+  fs.writeFileSync(repo + '/long.txt', Array.from({ length: 60 }, (_, i) => (i === 39 ? 'line forty' : `line ${i + 1}`)).join('\n') + '\n')
+  await page.waitForSelector(row('long.txt'), { timeout: 10000 })
+  await page.click(row('long.txt'))
+  await page.waitForSelector('.diff-view .diff-fold')
+  const numbers = await page.$eval('.diff-view .diff td.diff-no', (td) => td.getBoundingClientRect().width)
+  assert(numbers < 80, `line number column keeps its width under a first fold (${numbers}px)`)
+  const before = (await page.$$('.diff-view .diff tr')).length
+  await page.click('.diff-view .diff-fold >> nth=0')
+  await page.waitForTimeout(300)
+  const after = (await page.$$('.diff-view .diff tr')).length
+  assert(after > before && (await page.isVisible('.diff-view .diff-line:text-is("line 1")')), `first fold opened (${before} → ${after} rows)`)
+  await page.screenshot({ path: OUT + '/git-fold.png' })
+  await menu(page, row('long.txt'), 'Discard the changes')
 
   // Gutter markers of an edited file.
   await open(page, 'main.go')
@@ -162,6 +178,18 @@ run(async ({ page }) => {
   await page.waitForSelector('.diff-view .diff-line.add', { timeout: 5000 })
   assert((await page.textContent('.diff-view .toolbar')).includes('its parent'), 'commit file diff against the parent')
   assert((await page.$$eval('.diff-line.add', (e) => e.map((x) => x.textContent))).includes('side'), 'commit diff content')
+
+  // Rebuilding the trees after a change of the repository never takes the focus.
+  await page.evaluate(() => document.activeElement?.blur())
+  fs.writeFileSync(repo + '/focus.txt', 'x\n')
+  git('add focus.txt')
+  git('commit -q -m "focus check"')
+  await page.waitForSelector('.git-log-row:has-text("focus check")', { timeout: 8000 })
+  await page.waitForTimeout(1500)
+  const focused = await page.evaluate(() => document.activeElement?.closest('.git-panel') ? document.activeElement.className : '')
+  assert(focused === '', 'the Git tool does not take the focus: ' + focused)
+  git('reset -q --hard HEAD~1')
+  await page.waitForFunction(() => !document.querySelector('.git-log-row .git-subject')?.textContent.includes('focus check'), null, { timeout: 8000 }).catch(() => {})
 
   // Search: no graph, matching commits only.
   await page.fill('.git-search input', 'amended')
