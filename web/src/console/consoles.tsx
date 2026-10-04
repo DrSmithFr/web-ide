@@ -5,7 +5,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { notify, on as onPod, request } from '../pod/rpc'
-import { diagnostics, mutate, openFile, project, relPath, root, session } from '../state/project'
+import { diagnostics, mutate, openFile, relPath, root, session } from '../state/project'
 import { showTool } from '../state/zones'
 import { settings } from '../state/settings'
 import { themeById } from '../settings/themes'
@@ -203,10 +203,6 @@ async function renameConsole(c: ConsoleInfo) {
   if (title) request('console.rename', { id: c.id, title }).catch(errorToast)
 }
 
-function detach(id: string) {
-  window.open(`/project/${project()!.id}/console/${id}`, `console-${id}`, 'popup,width=900,height=500')
-}
-
 // ---------- tools ----------
 
 function Problems() {
@@ -254,36 +250,34 @@ export function ConsoleTool() {
 
   return (
     <div class="panel">
-      <div class="tool-tabs" role="tablist">
+      <div class="tabbar console-tabs" role="tablist">
         <For each={consoles()}>
           {(c) => (
             <div
-              class="btab"
+              class="tab"
               role="tab"
               aria-selected={active() === c.id}
               classList={{ active: active() === c.id, exited: c.exited }}
+              title={c.command?.join(' ') ?? c.title}
               onClick={() => setActive(c.id)}
               onDblClick={() => renameConsole(c)}
-              onMouseDown={(e) => e.button === 1 && closeConsole(c.id)}
+              onMouseDown={(e) => e.button === 1 && (e.preventDefault(), closeConsole(c.id))}
             >
               <Icon name={c.kind === 'task' ? 'play' : 'terminal'} size={13} />
-              <span>{c.title}</span>
+              <span class="tab-title">{c.title}</span>
               <Show when={c.exited}>
                 <span class={c.code === 0 ? 'ok' : 'danger'}>{c.code}</span>
               </Show>
-              <button class="icon-btn tiny" title={t('Detach in a window')} onClick={(e) => (e.stopPropagation(), detach(c.id))}>
-                <Icon name="external" size={11} />
-              </button>
-              <button class="icon-btn tiny" title={t('Close')} onClick={(e) => (e.stopPropagation(), closeConsole(c.id))}>
-                ✕
+              <button class="tab-close" title={t('Close')} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => (e.stopPropagation(), closeConsole(c.id))}>
+                <span class="x">✕</span>
               </button>
             </div>
           )}
         </For>
-        <button class="icon-btn" title={`${t('New terminal')} (${shortcutOf('console.new')})`} onClick={() => newConsole()}>
+        <button class="icon-btn small" title={`${t('New terminal')} (${shortcutOf('console.new')})`} onClick={() => newConsole()}>
           <Icon name="plus" />
         </button>
-        <button class="icon-btn" title={t('Run a command (build output)')} onClick={runTask}>
+        <button class="icon-btn small" title={t('Run a command (build output)')} onClick={runTask}>
           <Icon name="play" />
         </button>
       </div>

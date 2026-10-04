@@ -45,6 +45,8 @@ run(async ({ page }) => {
   await page.waitForTimeout(800)
   const term = await page.textContent('.xterm-rows')
   assert(term.includes('pod-42'), 'terminal runs commands')
+  assert(await page.isVisible('.console-tabs.tabbar .tab.active .tab-close'), 'console tabs styled like the file tabs')
+  assert(!(await page.$('.console-tabs [title="Detach in a window"]')), 'no detach button on a console tab')
 
   // Bottom tools: Console at the bottom of the left rail, Problems at the bottom of the right one
   const box = (sel) => page.$eval(sel, (e) => e.getBoundingClientRect().toJSON())

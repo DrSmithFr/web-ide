@@ -144,11 +144,11 @@ run(async ({ page }) => {
     assert(byId('s3').includes('Exit code: 3') && byId('s3').includes('hello-console'), 'run_command returns the output and the code: ' + JSON.stringify(byId('s3').slice(0, 80)))
     assert(tools[2].cls.includes('error'), 'failed command reported')
     assert(byId('s5').startsWith('Exit code 2') && byId('s5').includes('from-bash') && byId('s5').includes('main.go'), 'bash returns the output and the code: ' + JSON.stringify(byId('s5').slice(0, 60)))
-    assert(!(await page.isVisible('.bottom .btab:has-text("from-bash")')), 'bash does not open a console')
+    assert(!(await page.isVisible('.bottom .console-tabs .tab:has-text("from-bash")')), 'bash does not open a console')
     const pos = await page.textContent('.cursor-info')
     assert((await page.textContent('.pane.active .tab.active')).includes('main.go') && /^10:2 \(\d+ chars\)/.test(pos), 'open_file opens main.go and selects the lines 8 to 10: ' + pos)
     assert(await page.isVisible('.git-panel'), 'focus shows the Git panel')
-    assert(await page.isVisible('.bottom .btab.active:has-text("echo hello-console")'), 'console of the command in front')
+    assert(await page.isVisible('.bottom .console-tabs .tab.active:has-text("echo hello-console")'), 'console of the command in front')
     await page.screenshot({ path: OUT + '/agent-tools.png' })
 
     // Manual compaction by a different model.

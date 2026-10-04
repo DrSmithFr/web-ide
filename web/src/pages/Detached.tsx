@@ -4,7 +4,7 @@ import { createSignal, onCleanup, onMount, Show } from 'solid-js'
 import { Dynamic } from 'solid-js/web'
 import { project, closeProject, reopenProject, panelAliases } from '../state/project'
 import { EditorArea } from '../ui/EditorArea'
-import { TermView, consoles, setConsoleList } from '../console/consoles'
+import { setConsoleList } from '../console/consoles'
 import { NewTicketHost } from '../kanban/Board'
 import { openWithAuth, toolPanels, useProjectActions, PodStatus } from './ProjectPage'
 import { on as onPod, request } from '../pod/rpc'
@@ -58,20 +58,6 @@ export function DetachedEditor(props: { id: string }) {
   return (
     <Frame title={`${project()?.name ?? ''} · ${t('editor')}`} ready={s.ready()} error={s.error()}>
       <EditorArea detached />
-    </Frame>
-  )
-}
-
-export function DetachedConsole(props: { id: string; consoleId: string }) {
-  const s = useProject(props.id, () => 'Console')
-  const info = () => consoles().find((c) => c.id === props.consoleId)
-  return (
-    <Frame title={info()?.title ?? 'Console'} ready={s.ready()} error={s.error()}>
-      <Show when={info()} fallback={<p class="muted pad">{t('This console does not exist anymore.')}</p>}>
-        <div class="term-full">
-          <TermView id={props.consoleId} focus />
-        </div>
-      </Show>
     </Frame>
   )
 }

@@ -65,7 +65,7 @@ To treat local and SSH projects the same way, the pod exposes one interface (`li
 - **Icon rails** on both sides, the full height of the window, each with a top and a bottom group: four tool zones (top left, bottom left, bottom right, top right). Each icon toggles its tool; clicking the active icon hides it; each zone shows one tool at a time.
   - Top left: file explorer, global search, Git, kanban.
   - Top right: AI assistant, database explorer, structure, conflicts, infos. Infos stacks three sections: properties (project, target, pod, active tab), connections (local SSH keys, hosts of `~/.ssh/config`) and extensions (language servers).
-  - Bottom left: Console, the consoles as tabs (terminals, build output, commands).
+  - Bottom left: Console, the consoles as tabs styled like the file tabs (terminals, build output, commands).
   - Bottom right: Problems, with two tabs: the diagnostics of the language servers and their output. A dot on its icon signals errors.
 - **Moving tools**: an icon is dragged to another group of the rails (same zone to reorder it); a shown tool stays shown in its new zone. The placement is saved in the session; *View › Reset the tool layout* restores the default one.
 - **Bottom strip**: the tools of the two bottom zones, under the side panels and the editor. One shared height; side by side, the border between them can be dragged; alone, a tool takes the whole width.
@@ -147,8 +147,7 @@ Large modal with navigation on the left: themes, fonts, keyboard shortcuts, synt
 Each panel has an id and can be opened alone:
 
 - `/project/:id/editor`
-- `/project/:id/console/:consoleId`
-- `/project/:id/tool/:toolId`
+- `/project/:id/tool/:toolId`, any tool of the four zones, the Console with all its tabs included.
 
 Each window is one more WebSocket client on the same pod session; the shared buffers keep them in sync.
 

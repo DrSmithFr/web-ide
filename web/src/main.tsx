@@ -7,7 +7,7 @@ import { detectLayout, installKeyHandler } from './keys/bindings'
 import { route } from './app/router'
 import { Home } from './pages/Home'
 import { ProjectPage } from './pages/ProjectPage'
-import { DetachedConsole, DetachedEditor, DetachedTool } from './pages/Detached'
+import { DetachedEditor, DetachedTool } from './pages/Detached'
 import { Overlays } from './ui/overlay'
 import { Toasts } from './ui/toast'
 import { SettingsHost } from './settings/SettingsModal'
@@ -35,9 +35,6 @@ function App() {
         </Match>
         <Match when={route().name === 'editor' && route()} keyed>
           {(r) => <DetachedEditor id={(r as any).id} />}
-        </Match>
-        <Match when={route().name === 'console' && route()} keyed>
-          {(r) => <DetachedConsole id={(r as any).id} consoleId={(r as any).consoleId} />}
         </Match>
         <Match when={route().name === 'tool' && route()} keyed>
           {(r) => <DetachedTool id={(r as any).id} toolId={(r as any).toolId} />}
