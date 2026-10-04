@@ -95,6 +95,12 @@
     "nav.gotoSymbol": [
       "Ctrl+Alt+Shift+KeyN"
     ],
+    "nav.recentFiles": [
+      "Ctrl+KeyE"
+    ],
+    "nav.switcher": [
+      "Ctrl+Tab"
+    ],
     "nav.fileStructure": [
       "Ctrl+F12"
     ],

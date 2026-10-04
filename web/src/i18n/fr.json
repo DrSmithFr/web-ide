@@ -1322,5 +1322,11 @@
   "Search everywhere": "Chercher partout",
   "Tab: next tab": "Tab : onglet suivant",
   "Type at least two characters": "Tapez au moins deux caractères",
-  "Double Shift": "Double Maj"
+  "Double Shift": "Double Maj",
+  "Recent files": "Fichiers récents",
+  "Recently changed files": "Fichiers modifiés récemment",
+  "No changed file": "Aucun fichier modifié",
+  "No recent file": "Aucun fichier récent",
+  "Unsaved changes": "Modifications non enregistrées",
+  "Switcher": "Sélecteur d'onglets et d'outils"
 }

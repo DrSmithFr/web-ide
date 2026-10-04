@@ -591,12 +591,12 @@ button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 .git-meta-author { color: var(--ok); }
 .git-message { margin: 6px 10px; white-space: pre-wrap; word-break: break-word; font-family: var(--font-ui); font-size: 12.5px; }
 /* Git colors of the explorer, as JetBrains IDEs. */
-.tree-name.git-modified { color: var(--info); }
-.tree-name.git-added { color: var(--ok); }
-.tree-name.git-untracked { color: var(--danger); }
-.tree-name.git-conflict { color: color-mix(in srgb, var(--danger) 70%, #000); font-weight: 600; }
-.tree-name.git-deleted { color: var(--fg-faint); text-decoration: line-through; }
-.tree-name.git-ignored { color: color-mix(in srgb, var(--warn) 45%, var(--fg-faint)); }
+:is(.tree-name, .rf-name).git-modified { color: var(--info); }
+:is(.tree-name, .rf-name).git-added { color: var(--ok); }
+:is(.tree-name, .rf-name).git-untracked { color: var(--danger); }
+:is(.tree-name, .rf-name).git-conflict { color: color-mix(in srgb, var(--danger) 70%, #000); font-weight: 600; }
+:is(.tree-name, .rf-name).git-deleted { color: var(--fg-faint); text-decoration: line-through; }
+:is(.tree-name, .rf-name).git-ignored { color: color-mix(in srgb, var(--warn) 45%, var(--fg-faint)); }
 .kind-diff { background: var(--accent); }
 
 /* gutter change markers */

@@ -2,7 +2,7 @@
 // pod with every window of the project, the open documents, and the reactions to the
 // file events pushed by the pod (remote versions, three-way merge, conflicts).
 import type { Indent } from '../editor/indent'
-import { batch, createSignal } from 'solid-js'
+import { batch, createEffect, createRoot, createSignal, on as track } from 'solid-js'
 import { createStore, produce, reconcile, unwrap } from 'solid-js/store'
 import { notify, on, request } from '../pod/rpc'
 import { Doc } from '../editor/doc'
@@ -52,6 +52,8 @@ export interface SessionData {
   tabs: Record<string, TabState>
   activePane: string
   cursors: Record<string, Cursor>
+  /** Files last shown, the most recent first (Recent Files). */
+  recent: string[]
   left: { panel: string | null; width: number }
   right: { panel: string | null; width: number }
   /** Tools of each zone of the icon rails (state/zones). */
@@ -93,6 +95,7 @@ function emptySession(): SessionData {
     tabs: {},
     activePane: leaf,
     cursors: {},
+    recent: [],
     left: { panel: 'explorer', width: 260 },
     right: { panel: null, width: 300 },
     bottom: { left: null, right: null, height: 240, split: 0.5, active: null, order: [], problemsTab: 'problems' },
@@ -131,9 +134,12 @@ let applyingRemote = false
 function pushSession() {
   if (applyingRemote || !project()) return
   clearTimeout(pushTimer)
-  pushTimer = window.setTimeout(() => {
-    notify('session.update', { session: unwrap(session) })
-  }, 400)
+  pushTimer = window.setTimeout(sendSession, 400)
+}
+
+function sendSession() {
+  pushTimer = undefined
+  notify('session.update', { session: unwrap(session) })
 }
 
 export function mutate(fn: (s: SessionData) => void) {
@@ -159,6 +165,7 @@ function normalize(raw: any): SessionData {
   }
   if (s.right.panel && panelAliases[s.right.panel]) s.right.panel = panelAliases[s.right.panel]
   s.placement = normalizePlacement(raw.placement)
+  if (!Array.isArray(s.recent)) s.recent = []
   // Former bottom panel: consoles, problems and output in one strip.
   if (raw.bottom && 'open' in raw.bottom) {
     const { open, ...rest } = s.bottom as any
@@ -612,6 +619,33 @@ on('lsp.diagnostics', (e: { params: { uri: string; diagnostics: LspDiagnostic[] 
   setDiagnostics(p, e.params.diagnostics ?? [])
 })
 
+// ---------- recent files ----------
+
+const maxRecent = 50
+
+/** Puts a file at the top of the recent files. */
+function touchRecent(path: string) {
+  if (session.recent[0] === path) return
+  mutate((s) => {
+    s.recent = [path, ...s.recent.filter((p) => p !== path)].slice(0, maxRecent)
+  })
+}
+
+export function forgetRecent(path: string) {
+  mutate((s) => {
+    s.recent = s.recent.filter((p) => p !== path)
+  })
+}
+
+createRoot(() =>
+  createEffect(
+    track(
+      () => (project() && activeTab()?.kind === 'file' ? activeTab()!.path! : null),
+      (path) => path && touchRecent(path),
+    ),
+  ),
+)
+
 // ---------- cursors & navigation history ----------
 
 let cursorTimer: number | undefined
@@ -619,17 +653,32 @@ const pendingCursors: Record<string, Cursor> = {}
 export function saveCursor(path: string, c: Cursor) {
   pendingCursors[path] = c
   clearTimeout(cursorTimer)
-  cursorTimer = window.setTimeout(() => {
-    const entries = { ...pendingCursors }
-    for (const k of Object.keys(pendingCursors)) delete pendingCursors[k]
-    mutate((s) => {
-      for (const [p, cur] of Object.entries(entries)) s.cursors[p] = cur
-      // Keep the cursors of the 300 most recent files.
-      const keys = Object.keys(s.cursors)
-      if (keys.length > 300) for (const k of keys.slice(0, keys.length - 300)) delete s.cursors[k]
-    })
-  }, 500)
+  cursorTimer = window.setTimeout(storeCursors, 500)
 }
+
+function storeCursors() {
+  cursorTimer = undefined
+  const entries = { ...pendingCursors }
+  for (const k of Object.keys(pendingCursors)) delete pendingCursors[k]
+  mutate((s) => {
+    for (const [p, cur] of Object.entries(entries)) s.cursors[p] = cur
+    // Keep the cursors of the 300 most recent files.
+    const keys = Object.keys(s.cursors)
+    if (keys.length > 300) for (const k of keys.slice(0, keys.length - 300)) delete s.cursors[k]
+  })
+}
+
+// A reload or a closed window sends the changes still waiting, the cursors included.
+window.addEventListener('pagehide', () => {
+  if (cursorTimer !== undefined) {
+    clearTimeout(cursorTimer)
+    storeCursors()
+  }
+  if (pushTimer !== undefined) {
+    clearTimeout(pushTimer)
+    sendSession()
+  }
+})
 
 export interface NavTarget {
   path: string

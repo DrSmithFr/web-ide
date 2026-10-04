@@ -44,6 +44,8 @@ export const actions: ActionDef[] = [
   { id: 'search.everywhere', label: 'Search everywhere', category: 'Search', inTerminal: true, hint: 'Double Shift' },
   { id: 'nav.gotoFile', label: 'Go to file…', category: 'Navigation', inTerminal: true },
   { id: 'nav.gotoSymbol', label: 'Go to symbol…', category: 'Navigation' },
+  { id: 'nav.recentFiles', label: 'Recent files', category: 'Navigation' },
+  { id: 'nav.switcher', label: 'Switcher', category: 'Navigation', inTerminal: true },
   { id: 'nav.fileStructure', label: 'File structure', category: 'Navigation' },
   { id: 'nav.gotoLine', label: 'Go to line…', category: 'Navigation' },
   { id: 'nav.back', label: 'Previous position', category: 'Navigation' },

@@ -6,7 +6,7 @@ import {
   activeLeaf, activeTab, closeTab, conflictedDocs, cycleTab, docsVersion, mutate, navigate as navHistory, openProject, project, relPath, reopenProject, root,
   saveAll, session, setConflictOpener, splitPane, closeProject,
 } from '../state/project'
-import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, toggleTool, toolsIn, zoneOf, type Zone } from '../state/zones'
+import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, toggleTool, toolsIn, zoneOf, zones, type Zone } from '../state/zones'
 import { focusEditor, focusPart, setFocusPart, trackFocus } from '../state/focus'
 import { settings, updateSettings } from '../state/settings'
 import { navigate } from '../app/router'
@@ -34,6 +34,7 @@ import { toast } from '../ui/toast'
 import { t, tn } from '../i18n'
 import { ProjectBar } from './ProjectBar'
 import { SearchEverywhereHost, searchEverywhere } from '../popups/SearchEverywhere'
+import { RecentFilesHost, recentFiles } from '../popups/RecentFiles'
 
 /** Tools of the four zones; their placement comes from state/zones. */
 export const toolPanels: Record<string, { label: string; icon: string; component: () => JSX.Element; badge?: () => number }> = {
@@ -105,6 +106,8 @@ export function useProjectActions() {
     registerAction('palette.open', () => searchEverywhere('actions')),
     registerAction('nav.gotoFile', () => searchEverywhere('files')),
     registerAction('nav.gotoSymbol', () => searchEverywhere('symbols')),
+    registerAction('nav.recentFiles', () => recentFiles('recent')),
+    registerAction('nav.switcher', () => recentFiles('switcher')),
     registerAction('conflict.resolve', () => {
       const list = conflictedDocs()
       if (!list.length) return false
@@ -151,6 +154,10 @@ function toggleToolFocus(id: string) {
   requestAnimationFrame(() => focusZone(z))
 }
 
+/** Tools of the switcher, in the order of the rails. */
+const switcherTools = () =>
+  zones.flatMap((z) => toolsIn(session, z)).filter((id) => toolPanels[id]).map((id) => ({ id, label: toolPanels[id].label, icon: toolPanels[id].icon, shortcut: shortcutOf(`tool.${id}`) }))
+
 /** Escape in a tool gives the focus back to the editor (not in a terminal, nor when the tool used the key). */
 function escapeToEditor(e: KeyboardEvent) {
   if (e.key !== 'Escape' || e.defaultPrevented || e.ctrlKey || e.altKey || e.shiftKey || e.metaKey) return
@@ -167,7 +174,7 @@ function escapeToEditor(e: KeyboardEvent) {
 const menus: [string, string[]][] = [
   ['menu|File', ['file.newFile', 'file.newFolder', '-', 'file.save', 'file.saveAll', '-', 'nav.gotoFile', '-', 'view.closeTab', 'view.closeOthers', 'view.closeAll', '-', 'conflict.resolve', '-', 'settings.open']],
   ['menu|Edit', ['edit.undo', 'edit.redo', '-', 'edit.duplicateLine', 'edit.deleteLine', 'edit.toggleComment', '-', 'edit.nextOccurrence', 'edit.allOccurrences', '-', 'search.find', 'search.global']],
-  ['menu|Navigate', ['search.everywhere', '-', 'nav.back', 'nav.forward', '-', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', '-', 'nav.related', 'nav.test']],
+  ['menu|Navigate', ['search.everywhere', 'nav.recentFiles', '-', 'nav.back', 'nav.forward', '-', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', '-', 'nav.related', 'nav.test']],
   ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover', '-', 'lsp.rename', 'lsp.format', '-', 'edit.fold', 'edit.unfold', 'edit.foldAll', 'edit.unfoldAll']],
   ['menu|View', ['view.splitRight', 'view.splitDown', '-', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', '-', 'view.visualFocus', 'view.focusOutline', 'view.focusDim', '-', 'view.whitespace', '-', 'console.new', 'palette.open']],
   ['menu|Tools', ['tool.explorer', 'tool.search', 'tool.git', 'tool.kanban', '-', 'tool.assistant', 'tool.database', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.console', 'tool.problems', 'tool.docker']],
@@ -478,6 +485,7 @@ export function ProjectPage(props: { id: string }) {
         <MenuBar />
         <NewTicketHost />
         <SearchEverywhereHost />
+        <RecentFilesHost tools={switcherTools} onTool={toggleToolFocus} />
         <div class="workbench" onPointerDown={trackFocus} onFocusIn={trackFocus}>
           <Rail side="left" />
           <div class="work">

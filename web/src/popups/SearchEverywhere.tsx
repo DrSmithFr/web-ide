@@ -4,7 +4,7 @@
 import { batch, createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show } from 'solid-js'
 import { Portal } from 'solid-js/web'
 import { request } from '../pod/rpc'
-import { activeTab, basename, openFile, relPath } from '../state/project'
+import { activeTab, basename, openFile, relPath, session } from '../state/project'
 import { actions, isCapturingKeys, runAction, shortcutOf } from '../keys/bindings'
 import { lspLanguage } from '../editor/languages'
 import * as lspc from '../lsp/client'
@@ -66,7 +66,8 @@ const fileHit = (f: string): Hit => ({ label: basename(f), detail: relPath(f), p
 
 async function findFiles(q: string, max: number) {
   const list = await projectFiles()
-  if (!q) return list.slice(0, max).map(fileHit)
+  // Without a query, the recent files come first.
+  if (!q) return [...new Set([...session.recent, ...list])].slice(0, max).map(fileHit)
   return list
     .map((f) => ({ f, s: fuzzy(q, basename(f)) * 2 + fuzzy(q, relPath(f)) }))
     .filter((x) => x.s > 0)

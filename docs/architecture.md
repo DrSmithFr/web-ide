@@ -27,7 +27,7 @@ The front end is built by Vite and embedded in the pod binary (`pod/webdist`), s
 
 ## Data on disk
 
-- `~/.web-ide/` (pod data, `-data` flag): `config.json` (address, workspace), `token`, `projects.json`, `settings.json` (with history), `sessions/<project>.json` (layout, tabs, tool zones, explorer options, and per file the cursor, folds and chosen indentation), `secrets.json` (0600), `known_hosts` (trust on first use, in addition to `~/.ssh/known_hosts`), `sql-history/`, `llm.json` (model servers), `system-prompt.md` / `plan-prompt.md` / `briefing-prompt.md`, `models/hf/` (speech models), `chats/` and `kanban/` (bases of SSH projects), `icons/<project>.svg` (copy of the project icons for the home page: an SSH project is not reached to list it).
+- `~/.web-ide/` (pod data, `-data` flag): `config.json` (address, workspace), `token`, `projects.json`, `settings.json` (with history), `sessions/<project>.json` (layout, tabs, tool zones, explorer options, recent files, and per file the cursor, folds and chosen indentation), `secrets.json` (0600), `known_hosts` (trust on first use, in addition to `~/.ssh/known_hosts`), `sql-history/`, `llm.json` (model servers), `system-prompt.md` / `plan-prompt.md` / `briefing-prompt.md`, `models/hf/` (speech models), `chats/` and `kanban/` (bases of SSH projects), `icons/<project>.svg` (copy of the project icons for the home page: an SSH project is not reached to list it).
 - `<project>/.ide/`: `connections.json` (database connections, no secret), `tunnels.json` (tunnels of an SSH project), `folders.json` (folder marks: source, tests, excluded), `project.json` (`lsp`: command per language; `tests`: pattern per extension, e.g. `{".php": "{name}Spec.php"}`), `chats.db` (conversations), `kanban.db` (tickets), `worktrees/` (one git worktree per ticket in development), `icon.svg` and `icon.json` (project icon, drawn by the page: `ui/projectIcon.ts`, `ui/IconEditor.tsx`). `.ide/.gitignore` keeps the bases and the worktrees out of git.
 
 ## Protocol
@@ -67,7 +67,7 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 | `state/` | Open project and session (tabs, split tree, tool zones), settings, git state, folder marks |
 | `keys/` | Binding table and QWERTY / AZERTY presets |
 | `lsp/` | Client, completion, edits, rename and formatting |
-| `popups/` | Search Everywhere |
+| `popups/` | Search Everywhere, Recent Files and the switcher |
 | `ui/` | Editor area, status bar, diff view, overlays (modal, prompt, pick list, context menu), toasts, icons, empty states, keyboard navigation of the toolbars and tab bars (`roving.ts`) |
 | `panels/` | Explorer (with file type icons, `fileIcons.tsx`), global search, Git tool (`panels/git/`: tabs, tree of changes, graph lanes `graph.ts`, commit detail) |
 | `tools/`, `db/`, `console/`, `conflict/`, `settings/`, `pages/` | Right-panel tools, database explorer, Console and Problems tools, conflict dialog, settings modal, pages |

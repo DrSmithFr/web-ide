@@ -10,3 +10,17 @@
 .se-glyph { font-family: var(--font-code); }
 .pick-item .pick-icon { display: inline-flex; align-self: center; justify-content: center; }
 .pick-label mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
+
+/* Recent Files and the switcher: tools on the left, files on the right, the path below. */
+.pick.rf { width: min(720px, calc(100vw - 32px)); }
+.rf-head { display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--line); }
+.rf-title { font-weight: 600; white-space: nowrap; }
+.rf-filter { flex: 1; min-width: 0; }
+.rf-body { display: flex; height: min(420px, 60vh); }
+.rf-tools, .rf-files { overflow: auto; padding: 4px; }
+.rf-tools { flex: 0 0 230px; border-right: 1px solid var(--line); }
+.rf-files { flex: 1; min-width: 0; }
+.rf-dirty { color: var(--accent); font-size: 12px; }
+.rf-foot { padding: 5px 12px; border-top: 1px solid var(--line); color: var(--fg-muted); font-size: 12px; min-height: 26px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 560px) { .rf-tools { flex-basis: 40%; } }
+.rf-tools .pick-item { align-items: center; min-height: 32px; }
