@@ -6,11 +6,19 @@ Each project has a kanban, a tool of the IDE that is also where the user and the
 
 - A SQLite base that is not versioned: `<project>/.ide/kanban.db` for a local project, `~/.web-ide/kanban/<project>.db` for an SSH one (like the conversations). `.ide/.gitignore` excludes `kanban.db*` and `worktrees/`.
 - Attachments are stored in the base (20 MB max per file).
+- The schema is versioned with `PRAGMA user_version`; an older base is migrated when it is opened (Ready → To do, Fix → To test, test feedback moved from goals and notes to its own table).
 - The worktree of a ticket, opened as its own project, uses the kanban and the conversations of its parent project.
 
 ## Ticket
 
-Number (#1, #2… per project), title, type (feature, bug, refactor, task), priority (low, normal, high, critical), description (Markdown), linked files (paths), attachments, notes, plan (Markdown), goals (checkable objectives), test summary, linked conversations (with their role), branch, comparison base, worktree, linked commits, history.
+Number (#1, #2… per project), title, priority (low, normal, high, critical), linked files (paths), attachments, linked commits, history, and what each stage adds:
+
+- **New**: description (Markdown, 1500 characters max: the model tends to be verbose), notes (1000 characters max each, with the conversation that wrote them), briefing conversations.
+- **To do**: implementation plan (Markdown), goals (a title and a description of how to check it, checkable), plan conversations.
+- **In progress**: development conversations, git and changes, how to test (written by the model when it finishes).
+- **To test**: test feedback (info, bug or new feature; 1000 characters max; checked once handled, by the model or the user; with the conversation handling it).
+
+The ticket view shows every stage, always open, the current one marked.
 
 ## Statuses and transitions
 
@@ -18,23 +26,22 @@ Tickets move with buttons only (no drag and drop).
 
 | Status | User buttons | The model may |
 |---|---|---|
-| New | Briefing, Generate the plan, Ready for development (once there is a plan or goals), Abandon | move to *Ready* (after writing the plan and goals) |
-| Ready | Start development (→ In progress), Abandon | — |
-| In progress | New session, Send to testing, Abandon | move to *To test* (with a test summary) |
-| To test | Add feedback (→ Fix), Close (→ Done), Abandon | — |
-| Fix | Fix session, Send to testing, Abandon | move to *To test* |
-| Done / Abandoned | Reopen (Done → Fix, Abandoned → New) | — |
+| New | Briefing, Generate the plan, Abandon | — (a plan moves the ticket to *To do* by itself, whoever writes it) |
+| To do | Back to New, Redo the plan, Start development (→ In progress), Abandon | — |
+| In progress | New session, Send to testing, Abandon | move to *To test* (with how to test) |
+| To test | Add feedback, Fix session (per open feedback), Back to In progress, Close (→ Done), Abandon | mark feedback handled |
+| Done / Abandoned | Reopen (Done → To test, Abandoned → New) | — |
 
-Test feedback becomes goals (source `feedback`). Closing or abandoning removes the worktree; the branch is kept (abandoning offers to delete it). The change is frozen in the ticket when it is merged, or else when it is closed.
+A feedback leaves the ticket in *To test*. Closing or abandoning removes the worktree; the branch is kept (abandoning offers to delete it). The change is frozen in the ticket when it is merged, or else when it is closed.
 
 ## Linked conversations
 
-`chat.ticket = { id, role }`; roles:
+`chat.ticket = { id, role, feedback? }`; roles:
 
 - `briefing` (Briefing mode, New): clarify the need with the user, questions with `ask_user`, findings written into the ticket;
-- `plan` (Plan mode): writes the plan and the goals, then moves the ticket to *Ready*;
-- `dev` (Build mode, in the worktree): follows the plan, checks goals, commits on the ticket branch, moves to *To test*;
-- `correction` (Build mode, in the worktree): handles the test feedback;
+- `plan` (Plan mode): writes the plan and the goals (the ticket moves to *To do*);
+- `dev` (Build mode, in the worktree): follows the plan, checks goals, commits on the ticket branch, moves to *To test* with how to test;
+- `correction` (Build mode, in the worktree): handles one test feedback (`feedback`, started from it, which records the conversation) or the open ones, and marks each one handled;
 - `resolve`: resolves the conflicts of a rebase (worktree) or a merge (main folder).
 
 The system prompt receives the ticket as it is now and the instructions of the role.
@@ -48,7 +55,8 @@ The usual path: a briefing makes the tickets, *Generate the plan* writes the pla
 ## Assistant tools
 
 - In every conversation: `kanban_list`, `kanban_get`, `kanban_create` (a new ticket in the backlog), `ask_user` (1 to 10 multiple-choice questions with a free answer, shown one at a time in the thread).
-- Only in a conversation linked to a ticket, and only on that ticket: `kanban_update` (title, description, type, priority, files), `kanban_add_note` (500 characters max: notes are for decisions, not reports), `kanban_set_plan` (plan and goals), `kanban_goal` (check, uncheck, add), `kanban_move` (transitions allowed to the model; *To test* requires a test summary), `kanban_link_commit`.
+- Only in a conversation linked to a ticket, and only on that ticket: `kanban_update` (title, description, priority, how to test, files), `kanban_add_note` (1000 characters max: notes are for decisions, not reports), `kanban_set_plan` (plan and goals with their description), `kanban_goal` (check, uncheck, add), `kanban_feedback` (mark a feedback handled or open again), `kanban_move` (*To test* only, with how to test), `kanban_link_commit`.
+- A description over 1500 characters is refused with advice to shorten it.
 
 ## Git
 
@@ -61,4 +69,4 @@ The usual path: a briefing makes the tickets, *Generate the plan* writes the pla
 
 ## Interface
 
-Board in an editor tab (one column per status, Done and Abandoned folded), ticket detail in an editor tab, compact list in a side panel, kanban settings (default base, worktree setup command). Every window follows the changes (`kanban.changed` event).
+Board in an editor tab (columns New, To do, In progress and To test; Done and Abandoned folded; cards show the open feedback), ticket detail in an editor tab, compact list in a side panel, kanban settings (default base, worktree setup command). Every window follows the changes (`kanban.changed` event).

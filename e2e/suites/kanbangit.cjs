@@ -76,8 +76,10 @@ run(async ({ page, ctx }) => {
     await page.fill('[data-testid=ticket-goal-input]', 'export.txt exists')
     await page.keyboard.press('Enter')
     await page.waitForSelector('[data-testid=ticket-goal]')
-    await page.click('[data-testid=ticket-to-ready]')
-    await page.waitForSelector('[data-testid=ticket-status]:has-text("Ready")')
+    await page.click('[data-testid=ticket-plan-edit]')
+    await page.fill('.tk-md-input', 'Write export.txt')
+    await page.click('[data-testid=ticket-plan-save]')
+    await page.waitForSelector('[data-testid=ticket-status]:has-text("To do")')
 
     // Start: branch + worktree, its window opens and runs the conversation.
     const [win] = await Promise.all([ctx.waitForEvent('page'), page.click('[data-testid=ticket-start]')])

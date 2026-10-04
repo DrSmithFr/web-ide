@@ -167,14 +167,14 @@ func (s *Server) registerKanban() {
 		return nil, nil
 	}))
 	s.handle("kanban.note", change(func(k kctx, a idArg, p json.RawMessage) error {
-		b, err := bind[struct{ Kind, Text string }](p)
+		b, err := bind[struct {
+			Text   string `json:"text"`
+			ChatID string `json:"chatId"`
+		}](p)
 		if err != nil {
 			return err
 		}
-		if b.Kind == "" {
-			b.Kind = "note"
-		}
-		return s.Kanban.AddNote(k.loc, a.ID, b.Kind, b.Text, a.By)
+		return s.Kanban.AddNote(k.loc, a.ID, b.Text, a.By, b.ChatID)
 	}))
 	s.handle("kanban.note.delete", change(func(k kctx, a idArg, p json.RawMessage) error {
 		b, err := bind[struct {
@@ -187,8 +187,8 @@ func (s *Server) registerKanban() {
 	}))
 	s.handle("kanban.plan", change(func(k kctx, a idArg, p json.RawMessage) error {
 		b, err := bind[struct {
-			Plan  string   `json:"plan"`
-			Goals []string `json:"goals"`
+			Plan  string             `json:"plan"`
+			Goals []kanban.GoalInput `json:"goals"`
 		}](p)
 		if err != nil {
 			return err
@@ -203,6 +203,16 @@ func (s *Server) registerKanban() {
 			return err
 		}
 		return s.Kanban.Goal(k.loc, a.ID, b.Goal)
+	}))
+	s.handle("kanban.feedback", change(func(k kctx, a idArg, p json.RawMessage) error {
+		b, err := bind[struct {
+			Feedback kanban.FeedbackOp `json:"feedback"`
+		}](p)
+		if err != nil {
+			return err
+		}
+		_, err = s.Kanban.Feedback(k.loc, a.ID, b.Feedback, a.By)
+		return err
 	}))
 	s.handle("kanban.chat.link", change(func(k kctx, a idArg, p json.RawMessage) error {
 		b, err := bind[struct {

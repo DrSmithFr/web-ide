@@ -1,4 +1,4 @@
-// Kanban: board, new ticket, ticket view (description, plan, goals, notes, files,
+// Kanban: board, new ticket, ticket view by stage (description, notes, plan, goals, files,
 // attachments), workflow buttons, test feedback, side panel, sync with a second window.
 const fs = require('fs')
 const { run, openProject, assert, WS, OUT } = require('../common.cjs')
@@ -10,7 +10,7 @@ run(async ({ page, ctx }) => {
   await page.waitForSelector('[data-testid=kanban-panel]')
   await page.click('[data-testid=kanban-open-board]')
   await page.waitForSelector('[data-testid=kanban-board]')
-  assert((await page.$$('.kb-col')).length === 5, 'five active columns')
+  assert((await page.$$('.kb-col')).length === 4, 'four active columns: New, To do, In progress, To test')
 
   // New ticket.
   await page.click('[data-testid=kanban-new]')
@@ -24,19 +24,31 @@ run(async ({ page, ctx }) => {
   assert(await page.isVisible('.pane.active .tab.active:has-text("#1")'), 'title of the tab')
   assert(fs.existsSync(WS + '/demo/.ide/kanban.db'), 'kanban.db base in .ide')
   assert(fs.readFileSync(WS + '/demo/.ide/.gitignore', 'utf8').includes('kanban.db'), 'kanban.db ignored by git')
-  assert(await page.isDisabled('[data-testid=ticket-to-ready]'), 'no move to Ready without a plan')
+  assert(await page.isVisible('.tk-stage.current[data-stage=new]'), 'the stage New is the current one')
+  assert((await page.$$eval('.tk-stage', (l) => l.map((e) => e.dataset.stage))).join() === 'new,todo,in_progress,review', 'every stage shown')
 
-  // Plan and goals.
+  // Description limited to 1500 characters.
+  await page.click('[data-testid=ticket-description-edit]')
+  await page.fill('.tk-md-input', 'x'.repeat(1501))
+  assert(await page.isDisabled('[data-testid=ticket-description-save]'), 'description over 1500 characters cannot be saved')
+  assert((await page.textContent('[data-testid=ticket-description] .tk-count.over')).includes('1501/1500'), 'character counter')
+  await page.click('[data-testid=ticket-description] .btn:has-text("Cancel")')
+
+  // Plan and goals: the plan moves the ticket to To do.
   await page.click('[data-testid=ticket-plan-edit]')
   await page.fill('.tk-md-input', '1. Add the route\n2. Write the CSV')
   await page.click('[data-testid=ticket-plan-save]')
   await page.waitForSelector('[data-testid=ticket-plan] ol li')
-  for (const g of ['The /export route answers', 'The CSV has a header']) {
+  await page.waitForSelector('[data-testid=ticket-status]:has-text("To do")')
+  assert(await page.isVisible('.tk-stage.current[data-stage=todo]'), 'a plan moves the ticket to To do')
+  for (const [g, d] of [['The /export route answers', 'curl /export'], ['The CSV has a header', '']]) {
     await page.fill('[data-testid=ticket-goal-input]', g)
+    await page.fill('[data-testid=ticket-goal-description]', d)
     await page.keyboard.press('Enter')
     await page.waitForSelector(`[data-testid=ticket-goal]:has-text("${g}")`)
   }
   assert((await page.$$('[data-testid=ticket-goal]')).length === 2, 'two goals added')
+  assert((await page.textContent('[data-testid=ticket-goal-desc]')) === 'curl /export', 'goal with a description')
   await page.click('[data-testid=ticket-goal] input[type=checkbox]')
   await page.waitForSelector('[data-testid=ticket-goal].done')
   assert(true, 'goal checked')
@@ -73,26 +85,29 @@ run(async ({ page, ctx }) => {
   await page2.waitForSelector('[data-testid=ticket-view]')
 
   // Workflow.
-  await page.click('[data-testid=ticket-to-ready]')
-  await page.waitForSelector('[data-testid=ticket-status]:has-text("Ready")')
-  await page2.waitForSelector('[data-testid=ticket-status]:has-text("Ready")', { timeout: 5000 })
-  assert(true, 'the other window follows the status change')
   await page.click('[data-testid=ticket-start]')
   await page.waitForSelector('[data-testid=ticket-status]:has-text("In progress")')
+  await page2.waitForSelector('[data-testid=ticket-status]:has-text("In progress")', { timeout: 5000 })
+  assert(true, 'the other window follows the status change')
   await page.click('[data-testid=ticket-to-review]')
   await page.waitForSelector('[data-testid=ticket-status]:has-text("To test")')
-  await page.fill('[data-testid=ticket-note-input]', 'The file is empty')
+  await page.click('[data-testid=ticket-feedback]')
+  assert(await page.evaluate(() => document.activeElement?.dataset.testid === 'ticket-feedback-input'), 'Add feedback focuses the feedback box')
+  await page.selectOption('[data-testid=ticket-feedback-kind]', 'bug')
+  await page.fill('[data-testid=ticket-feedback-input]', 'The file is empty')
   await page.click('[data-testid=ticket-feedback-add]')
-  await page.waitForSelector('[data-testid=ticket-status]:has-text("Fix")')
-  assert(await page.isVisible('[data-testid=ticket-goal]:has-text("The file is empty") .badge'), 'the feedback becomes a goal')
-  await page.click('[data-testid=ticket-to-review]')
-  await page.waitForSelector('[data-testid=ticket-status]:has-text("To test")')
+  await page.waitForSelector('[data-testid=ticket-feedback-item].k-bug:has-text("The file is empty")')
+  assert((await page.textContent('[data-testid=ticket-status]')).includes('To test'), 'a feedback leaves the ticket in To test')
+  assert(await page.isVisible('[data-testid=ticket-feedback-item] [data-testid=ticket-feedback-session]'), 'fix session offered for an open feedback')
+  await page.click('[data-testid=ticket-feedback-item] input[type=checkbox]')
+  await page.waitForSelector('[data-testid=ticket-feedback-item].done')
+  assert(!(await page.isVisible('[data-testid=ticket-feedback-session]')), 'no fix session for a handled feedback')
   await page.click('[data-testid=ticket-close]')
   await page.waitForSelector('[data-testid=ticket-status]:has-text("Done")')
   assert(true, 'ticket closed')
   await page.click('.tk-section-toggle:has-text("History")')
   const events = await page.$$eval('.tk-events li', (l) => l.length)
-  assert(events >= 7, `history of the changes (${events})`)
+  assert(events >= 5, `history of the changes (${events})`)
 
   // Board and panel.
   await page.click('.pane.active .tab:has-text("Kanban")')

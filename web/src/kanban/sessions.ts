@@ -5,16 +5,22 @@ import { request, RpcError } from '../pod/rpc'
 import { toast, errorToast } from '../ui/toast'
 import { chat, config, emptyChat, live, loadConfig, openChat, resetChat, setChat, type Chat, type ChatRole } from '../llm/state'
 import { resumeIfNeeded, send, stopWatch } from '../llm/agent'
-import { moveTicket, openWorktreeWindow, roleLabels, startWork, worktreeProject, type Ticket } from './state'
+import { feedbackOp, moveTicket, openWorktreeWindow, roleLabels, startWork, worktreeProject, type Feedback, type Ticket } from './state'
 import { t } from '../i18n'
 
-const firstMessage: Record<ChatRole, (tk: Ticket) => string> = {
+const firstMessage: Record<ChatRole, (tk: Ticket, f?: Feedback) => string> = {
   briefing: (k) => t("Let's do the briefing of ticket #{id} “{title}”: help me clarify it.", { id: k.id, title: k.title }),
-  plan: (k) => t('Write the implementation plan of ticket #{id} “{title}” and its goals, then move it to “Ready”.', { id: k.id, title: k.title }),
+  plan: (k) => t('Write the implementation plan of ticket #{id} “{title}” and its goals.', { id: k.id, title: k.title }),
   dev: (k) => t('Develop ticket #{id} “{title}” following its plan.', { id: k.id, title: k.title }),
-  correction: (k) => t('Fix ticket #{id} “{title}” according to the test feedback.', { id: k.id, title: k.title }),
+  correction: (k, f) =>
+    f
+      ? t('Handle this test feedback of ticket #{id} “{title}”:\n\n{text}', { id: k.id, title: k.title, text: f.text })
+      : t('Handle the open test feedback of ticket #{id} “{title}”.', { id: k.id, title: k.title }),
   resolve: (k) => t('Resolve the git conflicts of the branch of ticket #{id}.', { id: k.id }),
 }
+
+/** The conversation handling a feedback is recorded on it. */
+const linkFeedback = (tk: Ticket, f: Feedback | undefined, chatId: string) => (f ? feedbackOp(tk.id, { op: 'chat', id: f.id, chatId }).catch(() => {}) : undefined)
 
 function showAssistant() {
   mutate((s) => (s.right.panel = 'assistant'))
@@ -30,11 +36,12 @@ function assistantFree(): boolean {
 }
 
 /** Starts a conversation linked to a ticket in this window, with its first message. */
-export async function startTicketChat(tk: Ticket, role: ChatRole, text?: string) {
+export async function startTicketChat(tk: Ticket, role: ChatRole, text?: string, feedback?: Feedback) {
   if (!assistantFree()) return
   stopWatch()
   resetChat()
-  setChat({ ticket: { id: tk.id, role }, mode: role === 'briefing' ? 'briefing' : role === 'plan' ? 'plan' : 'build', title: `#${tk.id} ${roleLabels[role]} · ${tk.title}`.slice(0, 80) })
+  void linkFeedback(tk, feedback, chat.id)
+  setChat({ ticket: { id: tk.id, role, ...(feedback ? { feedback: feedback.id } : {}) }, mode: role === 'briefing' ? 'briefing' : role === 'plan' ? 'plan' : 'build', title: `#${tk.id} ${roleLabels[role]} · ${tk.title}`.slice(0, 80) })
   showAssistant()
   try {
     await loadConfig()
@@ -42,7 +49,7 @@ export async function startTicketChat(tk: Ticket, role: ChatRole, text?: string)
       toast(t('Choose a server and a model in the assistant, then try again.'), 'warn')
       return
     }
-    await send(text ?? firstMessage[role](tk), [], [])
+    await send(text ?? firstMessage[role](tk, feedback), [], [])
   } catch (e) {
     errorToast(e)
   }
@@ -68,16 +75,16 @@ export async function openTicketChat(chatId: string) {
  * from another one, the conversation is saved with its first message and the worktree
  * window opens on it and runs it.
  */
-export async function startWorkSession(tk: Ticket, role: ChatRole) {
-  if (project()?.ticket === tk.id) return startTicketChat(tk, role)
+export async function startWorkSession(tk: Ticket, role: ChatRole, feedback?: Feedback) {
+  if (project()?.ticket === tk.id) return startTicketChat(tk, role, undefined, feedback)
   let target: string
   try {
     target = (await startWork(tk.id)).project
   } catch (e) {
     const msg = (e as Error).message
     if (e instanceof RpcError && e.code === 'not_git' && confirm(t('{error}.\n\nDevelop in the project folder, without branch or worktree?', { error: msg }))) {
-      if (tk.status === 'ready') await moveTicket(tk.id, 'in_progress').catch(() => {})
-      return startTicketChat(tk, role)
+      if (tk.status === 'todo') await moveTicket(tk.id, 'in_progress').catch(() => {})
+      return startTicketChat(tk, role, undefined, feedback)
     }
     errorToast(e)
     return
@@ -96,8 +103,8 @@ export async function startWorkSession(tk: Ticket, role: ChatRole) {
       server: config.server,
       model: config.model,
       mode: 'build',
-      ticket: { id: tk.id, role },
-      messages: [{ role: 'user', content: firstMessage[role](tk) }],
+      ticket: { id: tk.id, role, ...(feedback ? { feedback: feedback.id } : {}) },
+      messages: [{ role: 'user', content: firstMessage[role](tk, feedback) }],
       // Picked up by the worktree window as an answer to resume (resumeIfNeeded).
       running: {},
       created: now,
@@ -105,6 +112,7 @@ export async function startWorkSession(tk: Ticket, role: ChatRole) {
     }
     await request('llm.chats.save', { chat: c })
     await request('kanban.chat.link', { id: tk.id, chatId: c.id, role, title: c.title }).catch(() => {})
+    await linkFeedback(tk, feedback, c.id)
     try {
       localStorage.setItem(`webide.llm.active.${target}`, c.id)
     } catch {

@@ -7,15 +7,14 @@ import { on, request } from '../pod/rpc'
 import { openTab, project } from '../state/project'
 import { t } from '../i18n'
 
-export type Status = 'new' | 'ready' | 'in_progress' | 'review' | 'fix' | 'done' | 'abandoned'
-export type TicketType = 'feature' | 'bug' | 'refactor' | 'task'
+export type Status = 'new' | 'todo' | 'in_progress' | 'review' | 'done' | 'abandoned'
 export type Priority = 'low' | 'normal' | 'high' | 'critical'
 export type ChatRole = 'briefing' | 'plan' | 'dev' | 'correction' | 'resolve'
+export type FeedbackKind = 'info' | 'bug' | 'feature'
 
 export interface Summary {
   id: number
   title: string
-  type: TicketType
   priority: Priority
   status: Status
   branch?: string
@@ -23,6 +22,8 @@ export interface Summary {
   goalsDone: number
   goals: number
   chats: number
+  /** Test feedback not handled yet. */
+  feedbackOpen: number
   created: number
   updated: number
   closed?: number
@@ -30,16 +31,29 @@ export interface Summary {
 
 export interface Goal {
   id: number
+  /** Title of the goal. */
   text: string
+  description: string
   done: boolean
-  source: 'plan' | 'feedback' | 'user'
+  source: 'plan' | 'user'
 }
 
 export interface Note {
   id: number
-  kind: 'note' | 'feedback' | 'event'
+  kind: 'note' | 'event'
   author: 'user' | 'model'
   text: string
+  chatId?: string
+  created: number
+}
+
+export interface Feedback {
+  id: number
+  kind: FeedbackKind
+  text: string
+  done: boolean
+  author: 'user' | 'model'
+  chatId?: string
   created: number
 }
 
@@ -60,24 +74,26 @@ export interface Ticket extends Summary {
   snapshot?: { base: string; head: string; files: DiffFile[]; patch: string }
   goalList: Goal[]
   notes: Note[]
+  feedbackList: Feedback[]
   files: string[]
   chatList: { chatId: string; role: ChatRole; title: string; created: number }[]
   commits: { hash: string; subject: string }[]
   attachments: { id: number; name: string; mime: string; size: number; created: number }[]
 }
 
-export const statusOrder: Status[] = ['new', 'ready', 'in_progress', 'review', 'fix', 'done', 'abandoned']
+export const statusOrder: Status[] = ['new', 'todo', 'in_progress', 'review', 'done', 'abandoned']
 /** English names (also what the model reads); the *Labels below are translated. */
 export const statusNames: Record<Status, string> = {
   new: 'New',
-  ready: 'Ready',
+  todo: 'To do',
   in_progress: 'In progress',
   review: 'To test',
-  fix: 'Fix',
   done: 'Done',
   abandoned: 'Abandoned',
 }
-export const typeNames: Record<TicketType, string> = { feature: 'Feature', bug: 'Bug', refactor: 'Refactor', task: 'Task' }
+/** Statuses of older bases, still named in the history. */
+const legacyNames: Record<string, string> = { ready: 'Ready', fix: 'Fix' }
+export const feedbackNames: Record<FeedbackKind, string> = { info: 'Info', bug: 'Bug', feature: 'New feature' }
 export const priorityNames: Record<Priority, string> = { low: 'Low', normal: 'Normal', high: 'High', critical: 'Critical' }
 export const roleNames: Record<ChatRole, string> = { briefing: 'Briefing', plan: 'Plan', dev: 'Development', correction: 'Correction', resolve: 'Conflicts' }
 
@@ -86,7 +102,7 @@ function translated<K extends string>(names: Record<K, string>): Record<K, strin
   return new Proxy(names, { get: (o, k) => (typeof k === 'string' && k in o ? t(o[k as K]) : undefined) })
 }
 export const statusLabels = translated(statusNames)
-export const typeLabels = translated(typeNames)
+export const feedbackLabels = translated(feedbackNames)
 export const priorityLabels = translated(priorityNames)
 export const roleLabels = translated(roleNames)
 
@@ -147,7 +163,10 @@ export function eventText(text: string): string {
       const e = JSON.parse(text)
       if (e?.key) {
         const params = { ...e.params }
-        for (const k of ['from', 'to'] as const) if (params[k] in statusNames) params[k] = statusLabels[params[k] as Status]
+        for (const k of ['from', 'to'] as const) {
+          if (params[k] in statusNames) params[k] = statusLabels[params[k] as Status]
+          else if (params[k] in legacyNames) params[k] = t(legacyNames[params[k]])
+        }
         return t(e.key, params)
       }
     } catch {
@@ -171,7 +190,6 @@ export type By = 'user' | 'model'
 
 export interface TicketPatch {
   title?: string
-  type?: TicketType
   priority?: Priority
   description?: string
   plan?: string
@@ -186,11 +204,24 @@ export const createTicket = (p: TicketPatch & { title: string }, by: By = 'user'
 export const updateTicket = (id: number, patch: TicketPatch, by: By = 'user') => request<Ticket>('kanban.update', { id, patch, by })
 export const moveTicket = (id: number, status: Status, by: By = 'user', comment = '') => request<Ticket>('kanban.move', { id, status, by, comment })
 export const deleteTicket = (id: number) => request('kanban.delete', { id })
-export const addNote = (id: number, kind: 'note' | 'feedback', text: string, by: By = 'user') => request<Ticket>('kanban.note', { id, kind, text, by })
+export const addNote = (id: number, text: string, by: By = 'user', chatId = '') => request<Ticket>('kanban.note', { id, text, by, chatId })
 export const deleteNote = (id: number, noteId: number) => request<Ticket>('kanban.note.delete', { id, noteId })
-export const setPlan = (id: number, plan: string, goals: string[] | null, by: By = 'user') => request<Ticket>('kanban.plan', { id, plan, goals, by })
-export const goalOp = (id: number, goal: { op: 'add' | 'check' | 'edit' | 'delete'; id?: number; text?: string; done?: boolean; source?: string }, by: By = 'user') =>
-  request<Ticket>('kanban.goal', { id, goal, by })
+export type GoalInput = { title: string; description?: string }
+export const setPlan = (id: number, plan: string, goals: GoalInput[] | null, by: By = 'user') => request<Ticket>('kanban.plan', { id, plan, goals, by })
+export const goalOp = (
+  id: number,
+  goal: { op: 'add' | 'check' | 'edit' | 'delete'; id?: number; text?: string; description?: string; done?: boolean; source?: string },
+  by: By = 'user',
+) => request<Ticket>('kanban.goal', { id, goal, by })
+export const feedbackOp = (
+  id: number,
+  feedback: { op: 'add' | 'check' | 'chat' | 'delete'; id?: number; kind?: FeedbackKind; text?: string; done?: boolean; chatId?: string },
+  by: By = 'user',
+) => request<Ticket>('kanban.feedback', { id, feedback, by })
+
+/** Longest texts, in characters (checked by the pod too). */
+export const MAX_DESCRIPTION = 1500
+export const MAX_NOTE = 1000
 export const linkChat = (id: number, chatId: string, role: ChatRole, title = '') => request<Ticket>('kanban.chat.link', { id, chatId, role, title })
 export const unlinkChat = (id: number, chatId: string) => request<Ticket>('kanban.chat.unlink', { id, chatId })
 export const linkCommit = (id: number, hash: string, subject = '', by: By = 'user') => request<Ticket>('kanban.commit.link', { id, hash, subject, by })

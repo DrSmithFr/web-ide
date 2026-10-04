@@ -1,6 +1,7 @@
 package kanban
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,19 +25,23 @@ func ptr[T any](v T) *T { return &v }
 
 func TestTicketLifecycle(t *testing.T) {
 	m, loc := newManager(t)
-	id, err := m.Create(loc, Patch{Title: ptr(" Export CSV "), Type: ptr("feature"), Description: ptr("desc"), AddFiles: []string{"a.go", "b.go"}}, ByUser)
+	id, err := m.Create(loc, Patch{Title: ptr(" Export CSV "), Description: ptr("desc"), AddFiles: []string{"a.go", "b.go"}}, ByUser)
 	if err != nil || id != 1 {
 		t.Fatalf("create: %v %d", err, id)
 	}
-	if _, err := m.Create(loc, Patch{Title: ptr("x"), Type: ptr("nope")}, ByUser); err == nil {
-		t.Fatal("unknown type accepted")
+	if _, err := m.Create(loc, Patch{Title: ptr("x"), Description: ptr(strings.Repeat("é", MaxDescription+1))}, ByModel); err == nil {
+		t.Fatal("description too long accepted")
 	}
-	if err := m.SetPlan(loc, id, "# Plan", []string{"goal 1", "goal 2", " "}, ByModel); err != nil {
+	if _, err := m.Create(loc, Patch{Title: ptr("x"), Priority: ptr("nope")}, ByUser); err == nil {
+		t.Fatal("unknown priority accepted")
+	}
+	// A plan moves the ticket to To do by itself.
+	if err := m.SetPlan(loc, id, "# Plan", []GoalInput{{Title: "goal 1", Description: "how"}, {Title: "goal 2"}, {Title: " "}}, ByModel); err != nil {
 		t.Fatal(err)
 	}
-	// The model may move New → Ready but not Ready → In progress.
-	if err := m.Move(loc, id, Ready, ByModel, ""); err != nil {
-		t.Fatal(err)
+	tk, _ := m.Get(loc, id)
+	if tk.Status != Todo || len(tk.GoalList) != 2 || tk.GoalList[0].Description != "how" {
+		t.Fatalf("after plan: %+v", tk)
 	}
 	if err := m.Move(loc, id, InProgress, ByModel, ""); err == nil {
 		t.Fatal("model moved to in progress")
@@ -44,8 +49,8 @@ func TestTicketLifecycle(t *testing.T) {
 	if err := m.Move(loc, id, InProgress, ByUser, ""); err != nil {
 		t.Fatal(err)
 	}
-	tk, _ := m.Get(loc, id)
-	if len(tk.GoalList) != 2 || tk.Title != "Export CSV" || len(tk.Files) != 2 {
+	tk, _ = m.Get(loc, id)
+	if tk.Title != "Export CSV" || len(tk.Files) != 2 {
 		t.Fatalf("ticket: %+v", tk)
 	}
 	for _, g := range tk.GoalList {
@@ -59,24 +64,34 @@ func TestTicketLifecycle(t *testing.T) {
 	if err := m.Move(loc, id, Review, ByModel, "ready"); err != nil {
 		t.Fatal(err)
 	}
-	// A feedback becomes a goal and sends the ticket to Fix.
-	if err := m.AddNote(loc, id, "feedback", "the separator is wrong", ByUser); err != nil {
+	// Feedback stays in To test, the model marks it done.
+	fid, err := m.Feedback(loc, id, FeedbackOp{Op: "add", Kind: "bug", Text: "the separator is wrong"}, ByUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Feedback(loc, id, FeedbackOp{Op: "add", Kind: "nope", Text: "x"}, ByUser); err == nil {
+		t.Fatal("unknown feedback kind accepted")
+	}
+	if _, err := m.Feedback(loc, id, FeedbackOp{Op: "chat", ID: fid, ChatID: "c9"}, ByUser); err != nil {
 		t.Fatal(err)
 	}
 	tk, _ = m.Get(loc, id)
-	if tk.Status != Fix || tk.Goals != 3 || tk.GoalsDone != 2 || tk.GoalList[2].Source != "feedback" || len(tk.Files) != 1 {
-		t.Fatalf("after feedback: %+v", tk.Summary)
+	if tk.Status != Review || tk.FeedbackOpen != 1 || tk.FeedbackList[0].Kind != "bug" || tk.FeedbackList[0].ChatID != "c9" || len(tk.Files) != 1 {
+		t.Fatalf("after feedback: %+v", tk)
 	}
-	// A new plan keeps the feedback goals.
-	if err := m.SetPlan(loc, id, "v2", []string{"g"}, ByModel); err != nil {
+	if _, err := m.Feedback(loc, id, FeedbackOp{Op: "check", ID: fid, Done: true}, ByModel); err != nil {
+		t.Fatal(err)
+	}
+	// A new plan keeps the goals of the user.
+	if err := m.Goal(loc, id, GoalOp{Op: "add", Text: "mine"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetPlan(loc, id, "v2", []GoalInput{{Title: "g"}}, ByModel); err != nil {
 		t.Fatal(err)
 	}
 	tk, _ = m.Get(loc, id)
-	if tk.Goals != 2 {
-		t.Fatalf("goals after replan: %d", tk.Goals)
-	}
-	if err := m.Move(loc, id, Review, ByModel, ""); err != nil {
-		t.Fatal(err)
+	if tk.Goals != 2 || tk.FeedbackOpen != 0 || tk.Status != Review {
+		t.Fatalf("after replan: %+v", tk.Summary)
 	}
 	if err := m.Move(loc, id, Done, ByModel, ""); err == nil {
 		t.Fatal("model closed the ticket")
@@ -94,11 +109,66 @@ func TestTicketLifecycle(t *testing.T) {
 			events++
 		}
 	}
-	if events < 7 {
+	if events < 6 {
 		t.Fatalf("events: %d %+v", events, tk.Notes)
 	}
 	if err := m.Move(loc, id, Abandoned, ByUser, ""); err == nil {
 		t.Fatal("abandoned a closed ticket")
+	}
+	if err := m.Move(loc, id, Review, ByUser, ""); err != nil {
+		t.Fatal("reopen to To test: ", err)
+	}
+}
+
+func TestNotes(t *testing.T) {
+	m, loc := newManager(t)
+	id, _ := m.Create(loc, Patch{Title: ptr("t")}, ByUser)
+	if err := m.AddNote(loc, id, strings.Repeat("x", MaxNote+1), ByModel, "c1"); err == nil {
+		t.Fatal("note too long accepted")
+	}
+	if err := m.AddNote(loc, id, "decided", ByModel, "c1"); err != nil {
+		t.Fatal(err)
+	}
+	tk, _ := m.Get(loc, id)
+	if n := tk.Notes[len(tk.Notes)-1]; n.Text != "decided" || n.ChatID != "c1" || n.Author != ByModel {
+		t.Fatalf("note: %+v", n)
+	}
+	// Writing the plan by hand also moves the ticket to To do.
+	if err := m.Update(loc, id, Patch{Plan: ptr("p")}, ByUser); err != nil {
+		t.Fatal(err)
+	}
+	if tk, _ = m.Get(loc, id); tk.Status != Todo {
+		t.Fatalf("status: %s", tk.Status)
+	}
+}
+
+// An older base: Ready and Fix statuses, feedback kept as goals and notes.
+func TestMigration(t *testing.T) {
+	m, loc := newManager(t)
+	if err := os.MkdirAll(loc.IdeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(loc.IdeDir, "kanban.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(schema + `
+INSERT INTO tickets (id, title, status) VALUES (1, 'a', 'ready'), (2, 'b', 'fix');
+INSERT INTO goals (ticket_id, text, done, source) VALUES (2, 'plan goal', 1, 'plan'), (2, 'empty file', 1, 'feedback');
+INSERT INTO notes (ticket_id, kind, text) VALUES (2, 'feedback', 'empty file'), (2, 'feedback', 'nice'), (2, 'note', 'n');`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	a, _ := m.Get(loc, 1)
+	b, err := m.Get(loc, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Status != Todo || b.Status != Review || len(b.GoalList) != 1 || len(b.Notes) != 1 || len(b.FeedbackList) != 2 {
+		t.Fatalf("migrated: %+v %+v", a.Summary, b)
+	}
+	if f := b.FeedbackList; f[0].Kind != "bug" || !f[0].Done || f[1].Kind != "info" || f[1].Text != "nice" || b.FeedbackOpen != 1 {
+		t.Fatalf("feedback: %+v", f)
 	}
 }
 

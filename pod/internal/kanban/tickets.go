@@ -6,22 +6,36 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
 
 type Goal struct {
-	ID     int64  `json:"id"`
-	Text   string `json:"text"`
-	Done   bool   `json:"done"`
-	Source string `json:"source"` // plan | feedback | user
+	ID          int64  `json:"id"`
+	Text        string `json:"text"` // title
+	Description string `json:"description"`
+	Done        bool   `json:"done"`
+	Source      string `json:"source"` // plan | user
 }
 
 type Note struct {
 	ID      int64  `json:"id"`
-	Kind    string `json:"kind"`   // note | feedback | event
+	Kind    string `json:"kind"`   // note | event
 	Author  string `json:"author"` // user | model
 	Text    string `json:"text"`
+	ChatID  string `json:"chatId,omitempty"`
+	Created int64  `json:"created"`
+}
+
+// Feedback is a return of the user testing the ticket; the model marks it done once handled.
+type Feedback struct {
+	ID      int64  `json:"id"`
+	Kind    string `json:"kind"` // info | bug | feature
+	Text    string `json:"text"`
+	Done    bool   `json:"done"`
+	Author  string `json:"author"`
+	ChatID  string `json:"chatId,omitempty"`
 	Created int64  `json:"created"`
 }
 
@@ -64,7 +78,6 @@ type DiffFile struct {
 type Summary struct {
 	ID        int64  `json:"id"`
 	Title     string `json:"title"`
-	Type      string `json:"type"`
 	Priority  string `json:"priority"`
 	Status    string `json:"status"`
 	Branch    string `json:"branch,omitempty"`
@@ -72,6 +85,8 @@ type Summary struct {
 	GoalsDone int    `json:"goalsDone"`
 	Goals     int    `json:"goals"`
 	Chats     int    `json:"chats"`
+	// Feedback not handled yet.
+	FeedbackOpen int   `json:"feedbackOpen"`
 	Created   int64  `json:"created"`
 	Updated   int64  `json:"updated"`
 	Closed    int64  `json:"closed,omitempty"`
@@ -88,6 +103,7 @@ type Ticket struct {
 	Snapshot    *Snapshot    `json:"snapshot,omitempty"`
 	GoalList    []Goal       `json:"goalList"`
 	Notes       []Note       `json:"notes"`
+	FeedbackList []Feedback  `json:"feedbackList"`
 	Files       []string     `json:"files"`
 	ChatList    []ChatLink   `json:"chatList"`
 	Commits     []CommitLink `json:"commits"`
@@ -96,13 +112,14 @@ type Ticket struct {
 
 var ErrNotFound = i18n.New("ticket not found")
 
-const summaryCols = `t.id, t.title, t.type, t.priority, t.status, t.branch, t.worktree, t.created, t.updated, t.closed,
+const summaryCols = `t.id, t.title, t.priority, t.status, t.branch, t.worktree, t.created, t.updated, t.closed,
   (SELECT COUNT(*) FROM goals g WHERE g.ticket_id = t.id AND g.done = 1),
   (SELECT COUNT(*) FROM goals g WHERE g.ticket_id = t.id),
-  (SELECT COUNT(*) FROM chats c WHERE c.ticket_id = t.id)`
+  (SELECT COUNT(*) FROM chats c WHERE c.ticket_id = t.id),
+  (SELECT COUNT(*) FROM feedback f WHERE f.ticket_id = t.id AND f.done = 0)`
 
 func scanSummary(row interface{ Scan(...any) error }, s *Summary) error {
-	return row.Scan(&s.ID, &s.Title, &s.Type, &s.Priority, &s.Status, &s.Branch, &s.Worktree, &s.Created, &s.Updated, &s.Closed, &s.GoalsDone, &s.Goals, &s.Chats)
+	return row.Scan(&s.ID, &s.Title, &s.Priority, &s.Status, &s.Branch, &s.Worktree, &s.Created, &s.Updated, &s.Closed, &s.GoalsDone, &s.Goals, &s.Chats, &s.FeedbackOpen)
 }
 
 func (m *Manager) List(loc Location) ([]Summary, error) {
@@ -135,10 +152,10 @@ func (m *Manager) Get(loc Location, id int64) (*Ticket, error) {
 }
 
 func get(db *sql.DB, id int64) (*Ticket, error) {
-	t := &Ticket{GoalList: []Goal{}, Notes: []Note{}, Files: []string{}, ChatList: []ChatLink{}, Commits: []CommitLink{}, Attachments: []Attachment{}}
+	t := &Ticket{GoalList: []Goal{}, Notes: []Note{}, FeedbackList: []Feedback{}, Files: []string{}, ChatList: []ChatLink{}, Commits: []CommitLink{}, Attachments: []Attachment{}}
 	var snap string
 	row := db.QueryRow(`SELECT `+summaryCols+`, t.description, t.plan, t.test_summary, t.base, t.setup, t.setup_log, t.snapshot FROM tickets t WHERE t.id = ?`, id)
-	err := row.Scan(&t.ID, &t.Title, &t.Type, &t.Priority, &t.Status, &t.Branch, &t.Worktree, &t.Created, &t.Updated, &t.Closed, &t.GoalsDone, &t.Goals, &t.Chats,
+	err := row.Scan(&t.ID, &t.Title, &t.Priority, &t.Status, &t.Branch, &t.Worktree, &t.Created, &t.Updated, &t.Closed, &t.GoalsDone, &t.Goals, &t.Chats, &t.FeedbackOpen,
 		&t.Description, &t.Plan, &t.TestSummary, &t.Base, &t.Setup, &t.SetupLog, &snap)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -163,18 +180,26 @@ func get(db *sql.DB, id int64) (*Ticket, error) {
 		}
 		return rows.Err()
 	}
-	if err := each(`SELECT id, text, done, source FROM goals WHERE ticket_id = ? ORDER BY pos, id`, func(r *sql.Rows) error {
+	if err := each(`SELECT id, text, description, done, source FROM goals WHERE ticket_id = ? ORDER BY pos, id`, func(r *sql.Rows) error {
 		var g Goal
-		err := r.Scan(&g.ID, &g.Text, &g.Done, &g.Source)
+		err := r.Scan(&g.ID, &g.Text, &g.Description, &g.Done, &g.Source)
 		t.GoalList = append(t.GoalList, g)
 		return err
 	}); err != nil {
 		return nil, err
 	}
-	if err := each(`SELECT id, kind, author, text, created FROM notes WHERE ticket_id = ? ORDER BY created, id`, func(r *sql.Rows) error {
+	if err := each(`SELECT id, kind, author, text, chat_id, created FROM notes WHERE ticket_id = ? ORDER BY created, id`, func(r *sql.Rows) error {
 		var n Note
-		err := r.Scan(&n.ID, &n.Kind, &n.Author, &n.Text, &n.Created)
+		err := r.Scan(&n.ID, &n.Kind, &n.Author, &n.Text, &n.ChatID, &n.Created)
 		t.Notes = append(t.Notes, n)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	if err := each(`SELECT id, kind, text, done, author, chat_id, created FROM feedback WHERE ticket_id = ? ORDER BY created, id`, func(r *sql.Rows) error {
+		var f Feedback
+		err := r.Scan(&f.ID, &f.Kind, &f.Text, &f.Done, &f.Author, &f.ChatID, &f.Created)
+		t.FeedbackList = append(t.FeedbackList, f)
 		return err
 	}); err != nil {
 		return nil, err
@@ -217,7 +242,6 @@ func get(db *sql.DB, id int64) (*Ticket, error) {
 // Patch holds the fields to change (nil: unchanged).
 type Patch struct {
 	Title       *string   `json:"title"`
-	Type        *string   `json:"type"`
 	Priority    *string   `json:"priority"`
 	Description *string   `json:"description"`
 	Plan        *string   `json:"plan"`
@@ -232,8 +256,10 @@ func (p *Patch) validate() error {
 	if p.Title != nil && strings.TrimSpace(*p.Title) == "" {
 		return i18n.New("empty title")
 	}
-	if p.Type != nil && !contains(Types, *p.Type) {
-		return i18n.Errorf("unknown type: %s (%s)", *p.Type, strings.Join(Types, ", "))
+	if p.Description != nil {
+		if n := utf8.RuneCountInString(strings.TrimSpace(*p.Description)); n > MaxDescription {
+			return i18n.Errorf("description too long (%d characters, %d max)", n, MaxDescription)
+		}
 	}
 	if p.Priority != nil && !contains(Priorities, *p.Priority) {
 		return i18n.Errorf("unknown priority: %s (%s)", *p.Priority, strings.Join(Priorities, ", "))
@@ -295,19 +321,16 @@ func (m *Manager) Create(loc Location, p Patch, by string) (int64, error) {
 	}
 	var id int64
 	err := m.tx(loc, 0, func(tx *sql.Tx, now int64) error {
-		typ, prio := "feature", "normal"
-		if p.Type != nil {
-			typ = *p.Type
-		}
+		prio := "normal"
 		if p.Priority != nil {
 			prio = *p.Priority
 		}
 		desc := ""
 		if p.Description != nil {
-			desc = *p.Description
+			desc = strings.TrimSpace(*p.Description)
 		}
-		res, err := tx.Exec(`INSERT INTO tickets (title, type, priority, status, description, created, updated) VALUES (?, ?, ?, 'new', ?, ?, ?)`,
-			strings.TrimSpace(*p.Title), typ, prio, desc, now, now)
+		res, err := tx.Exec(`INSERT INTO tickets (title, priority, status, description, created, updated) VALUES (?, ?, 'new', ?, ?, ?)`,
+			strings.TrimSpace(*p.Title), prio, desc, now, now)
 		if err != nil {
 			return err
 		}
@@ -352,25 +375,31 @@ func (m *Manager) Update(loc Location, id int64, p Patch, by string) error {
 				return nil
 			}
 			val := *v
-			if col == "title" {
+			if col == "title" || col == "description" {
 				val = strings.TrimSpace(val)
 			}
 			_, err := tx.Exec(`UPDATE tickets SET `+col+` = ? WHERE id = ?`, val, id)
 			return err
 		}
-		for col, v := range map[string]*string{"title": p.Title, "type": p.Type, "priority": p.Priority, "description": p.Description,
+		for col, v := range map[string]*string{"title": p.Title, "priority": p.Priority, "description": p.Description,
 			"plan": p.Plan, "test_summary": p.TestSummary, "base": p.Base} {
 			if err := set(col, v); err != nil {
 				return err
 			}
 		}
-		return setFiles(tx, id, p)
+		if err := setFiles(tx, id, p); err != nil {
+			return err
+		}
+		if p.Plan != nil {
+			return planned(tx, id, *p.Plan, by, now)
+		}
+		return nil
 	})
 }
 
 // StatusNames are the English names of the statuses (translated in messages).
 var StatusNames = map[string]string{
-	New: "New", Ready: "Ready", InProgress: "In progress", Review: "To test", Fix: "Fix", Done: "Done", Abandoned: "Abandoned",
+	New: "New", Todo: "To do", InProgress: "In progress", Review: "To test", Done: "Done", Abandoned: "Abandoned",
 }
 
 // Move changes the status of a ticket if the actor may do this transition.
@@ -392,18 +421,34 @@ func (m *Manager) Move(loc Location, id int64, to, by, comment string) error {
 			}
 			return i18n.Errorf("a ticket cannot go from “%s” to “%s”", i18n.Text(StatusNames[from]), i18n.Text(StatusNames[to]))
 		}
-		closed := int64(0)
-		if to == Done || to == Abandoned {
-			closed = now
-		}
-		if _, err := tx.Exec(`UPDATE tickets SET status = ?, closed = ? WHERE id = ?`, to, closed, id); err != nil {
-			return err
-		}
-		if comment = strings.TrimSpace(comment); comment != "" {
-			return event(tx, id, by, "{from} → {to}: {comment}", Params{"from": from, "to": to, "comment": comment}, now)
-		}
-		return event(tx, id, by, "{from} → {to}", Params{"from": from, "to": to}, now)
+		return setStatus(tx, id, from, to, by, comment, now)
 	})
+}
+
+func setStatus(tx *sql.Tx, id int64, from, to, by, comment string, now int64) error {
+	closed := int64(0)
+	if to == Done || to == Abandoned {
+		closed = now
+	}
+	if _, err := tx.Exec(`UPDATE tickets SET status = ?, closed = ? WHERE id = ?`, to, closed, id); err != nil {
+		return err
+	}
+	if comment = strings.TrimSpace(comment); comment != "" {
+		return event(tx, id, by, "{from} → {to}: {comment}", Params{"from": from, "to": to, "comment": comment}, now)
+	}
+	return event(tx, id, by, "{from} → {to}", Params{"from": from, "to": to}, now)
+}
+
+// planned moves a New ticket to To do once it has a plan.
+func planned(tx *sql.Tx, id int64, plan, by string, now int64) error {
+	var status string
+	if err := tx.QueryRow(`SELECT status FROM tickets WHERE id = ?`, id).Scan(&status); err != nil {
+		return err
+	}
+	if status != New || strings.TrimSpace(plan) == "" {
+		return nil
+	}
+	return setStatus(tx, id, New, Todo, by, "", now)
 }
 
 func (m *Manager) Delete(loc Location, id int64) error {
@@ -421,36 +466,19 @@ func (m *Manager) Delete(loc Location, id int64) error {
 	return nil
 }
 
-// AddNote adds a note (kind note) or a test feedback (kind feedback: it also becomes a
-// goal and sends a ticket under test to Fix).
-func (m *Manager) AddNote(loc Location, id int64, kind, text, by string) error {
+// AddNote adds a note; chatID is the conversation that wrote it ("" for the user).
+func (m *Manager) AddNote(loc Location, id int64, text, by, chatID string) error {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return i18n.New("empty note")
 	}
-	if kind != "note" && kind != "feedback" {
-		return i18n.New("unknown note kind")
+	if n := utf8.RuneCountInString(text); n > MaxNote {
+		return i18n.Errorf("note too long (%d characters, %d max)", n, MaxNote)
 	}
-	err := m.tx(loc, id, func(tx *sql.Tx, now int64) error {
-		if _, err := tx.Exec(`INSERT INTO notes (ticket_id, kind, author, text, created) VALUES (?, ?, ?, ?, ?)`, id, kind, by, text, now); err != nil {
-			return err
-		}
-		if kind == "feedback" {
-			return addGoal(tx, id, text, "feedback", now)
-		}
-		return nil
+	return m.tx(loc, id, func(tx *sql.Tx, now int64) error {
+		_, err := tx.Exec(`INSERT INTO notes (ticket_id, kind, author, text, chat_id, created) VALUES (?, 'note', ?, ?, ?, ?)`, id, by, text, chatID, now)
+		return err
 	})
-	if err != nil || kind != "feedback" {
-		return err
-	}
-	t, err := m.Get(loc, id)
-	if err != nil {
-		return err
-	}
-	if t.Status == Review {
-		return m.Move(loc, id, Fix, ByUser, "retour de test")
-	}
-	return nil
 }
 
 func (m *Manager) DeleteNote(loc Location, id, noteID int64) error {
@@ -460,14 +488,29 @@ func (m *Manager) DeleteNote(loc Location, id, noteID int64) error {
 	})
 }
 
-func addGoal(tx *sql.Tx, id int64, text, source string, now int64) error {
-	_, err := tx.Exec(`INSERT INTO goals (ticket_id, pos, text, source, created) VALUES (?, (SELECT COALESCE(MAX(pos), 0) + 1 FROM goals WHERE ticket_id = ?), ?, ?, ?)`,
-		id, id, strings.TrimSpace(text), source, now)
+func addGoal(tx *sql.Tx, id int64, g GoalInput, source string, now int64) error {
+	_, err := tx.Exec(`INSERT INTO goals (ticket_id, pos, text, description, source, created) VALUES (?, (SELECT COALESCE(MAX(pos), 0) + 1 FROM goals WHERE ticket_id = ?), ?, ?, ?, ?)`,
+		id, id, strings.TrimSpace(g.Title), strings.TrimSpace(g.Description), source, now)
 	return err
 }
 
-// SetPlan writes the plan and replaces the goals that come from a plan (feedback goals stay).
-func (m *Manager) SetPlan(loc Location, id int64, plan string, goals []string, by string) error {
+// GoalInput is a goal to write: a title and a description. A plain string is a title.
+type GoalInput struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
+}
+
+func (g *GoalInput) UnmarshalJSON(data []byte) error {
+	if len(data) > 0 && data[0] == '"' {
+		return json.Unmarshal(data, &g.Title)
+	}
+	type plain GoalInput
+	return json.Unmarshal(data, (*plain)(g))
+}
+
+// SetPlan writes the plan and replaces the goals that come from a plan (the goals added by
+// the user stay). A New ticket moves to To do.
+func (m *Manager) SetPlan(loc Location, id int64, plan string, goals []GoalInput, by string) error {
 	return m.tx(loc, id, func(tx *sql.Tx, now int64) error {
 		if _, err := tx.Exec(`UPDATE tickets SET plan = ? WHERE id = ?`, plan, id); err != nil {
 			return err
@@ -477,24 +520,29 @@ func (m *Manager) SetPlan(loc Location, id int64, plan string, goals []string, b
 				return err
 			}
 			for _, g := range goals {
-				if strings.TrimSpace(g) != "" {
+				if strings.TrimSpace(g.Title) != "" {
 					if err := addGoal(tx, id, g, "plan", now); err != nil {
 						return err
 					}
 				}
 			}
 		}
-		return event(tx, id, by, "Plan updated", nil, now)
+		if err := event(tx, id, by, "Plan updated", nil, now); err != nil {
+			return err
+		}
+		return planned(tx, id, plan, by, now)
 	})
 }
 
-// GoalOp changes the goals: add (Text), check (ID, Done), edit (ID, Text), delete (ID).
+// GoalOp changes the goals: add (Text, Description), check (ID, Done), edit (ID, Text,
+// Description), delete (ID).
 type GoalOp struct {
-	Op     string `json:"op"`
-	ID     int64  `json:"id"`
-	Text   string `json:"text"`
-	Done   bool   `json:"done"`
-	Source string `json:"source"`
+	Op          string `json:"op"`
+	ID          int64  `json:"id"`
+	Text        string `json:"text"`
+	Description string `json:"description"`
+	Done        bool   `json:"done"`
+	Source      string `json:"source"`
 }
 
 func (m *Manager) Goal(loc Location, id int64, op GoalOp) error {
@@ -510,14 +558,14 @@ func (m *Manager) Goal(loc Location, id int64, op GoalOp) error {
 			if src == "" {
 				src = "user"
 			}
-			return addGoal(tx, id, op.Text, src, now)
+			return addGoal(tx, id, GoalInput{op.Text, op.Description}, src, now)
 		case "check":
 			res, err = tx.Exec(`UPDATE goals SET done = ? WHERE ticket_id = ? AND id = ?`, op.Done, id, op.ID)
 		case "edit":
 			if strings.TrimSpace(op.Text) == "" {
 				return i18n.New("empty goal")
 			}
-			res, err = tx.Exec(`UPDATE goals SET text = ? WHERE ticket_id = ? AND id = ?`, strings.TrimSpace(op.Text), id, op.ID)
+			res, err = tx.Exec(`UPDATE goals SET text = ?, description = ? WHERE ticket_id = ? AND id = ?`, strings.TrimSpace(op.Text), strings.TrimSpace(op.Description), id, op.ID)
 		case "delete":
 			res, err = tx.Exec(`DELETE FROM goals WHERE ticket_id = ? AND id = ?`, id, op.ID)
 		default:
@@ -531,6 +579,59 @@ func (m *Manager) Goal(loc Location, id int64, op GoalOp) error {
 		}
 		return nil
 	})
+}
+
+// FeedbackOp changes the test feedback: add (Kind, Text, ChatID), check (ID, Done), chat
+// (ID, ChatID: the conversation handling it), delete (ID).
+type FeedbackOp struct {
+	Op     string `json:"op"`
+	ID     int64  `json:"id"`
+	Kind   string `json:"kind"`
+	Text   string `json:"text"`
+	Done   bool   `json:"done"`
+	ChatID string `json:"chatId"`
+}
+
+// Feedback changes the test feedback of a ticket; it returns the id of an added one.
+func (m *Manager) Feedback(loc Location, id int64, op FeedbackOp, by string) (int64, error) {
+	var fid int64
+	err := m.tx(loc, id, func(tx *sql.Tx, now int64) error {
+		var res sql.Result
+		var err error
+		switch op.Op {
+		case "add":
+			text := strings.TrimSpace(op.Text)
+			if text == "" {
+				return i18n.New("empty feedback")
+			}
+			if n := utf8.RuneCountInString(text); n > MaxNote {
+				return i18n.Errorf("feedback too long (%d characters, %d max)", n, MaxNote)
+			}
+			if !contains(FeedbackKinds, op.Kind) {
+				return i18n.Errorf("unknown feedback kind: %s (%s)", op.Kind, strings.Join(FeedbackKinds, ", "))
+			}
+			res, err = tx.Exec(`INSERT INTO feedback (ticket_id, kind, text, author, chat_id, created) VALUES (?, ?, ?, ?, ?, ?)`, id, op.Kind, text, by, op.ChatID, now)
+			if err == nil {
+				fid, _ = res.LastInsertId()
+			}
+		case "check":
+			res, err = tx.Exec(`UPDATE feedback SET done = ? WHERE ticket_id = ? AND id = ?`, op.Done, id, op.ID)
+		case "chat":
+			res, err = tx.Exec(`UPDATE feedback SET chat_id = ? WHERE ticket_id = ? AND id = ?`, op.ChatID, id, op.ID)
+		case "delete":
+			res, err = tx.Exec(`DELETE FROM feedback WHERE ticket_id = ? AND id = ?`, id, op.ID)
+		default:
+			return i18n.Errorf("unknown operation: %s", op.Op)
+		}
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return i18n.Errorf("feedback %d not found", op.ID)
+		}
+		return nil
+	})
+	return fid, err
 }
 
 func (m *Manager) LinkChat(loc Location, id int64, chatID, role, title string) error {

@@ -55,7 +55,7 @@ Your job is to question the user until the need is clear:
 - Challenge the idea: point out contradictions, risks, simpler alternatives and what already exists. Do not accept a vague answer: rephrase it and ask again.
 - After each round, sum up in a few lines what is decided and what is still open.
 - When the need is clear, propose the ticket(s): one ticket per deliverable that can be tested on its own; split a large idea and say in which order.
-Create the tickets with kanban_create only when the user asks for it or agrees. Each ticket gets a short title, its type and priority, the linked files, and a description in Markdown with: **Context**, **Need**, **Scope** (and out of scope), **Acceptance criteria** (a checkable list), **Open questions** if any.
+Create the tickets with kanban_create only when the user asks for it or agrees. Each ticket gets a short title, its priority, the linked files, and a concise description in Markdown (1500 characters max) with: **Context**, **Need**, **Scope** (and out of scope), **Acceptance criteria** (a checkable list), **Open questions** if any.
 Answer in the language of the user, in Markdown. For a diagram, use a \`\`\`mermaid block.
 
 {{tools}}`
@@ -85,23 +85,23 @@ export const ROLE_INSTRUCTIONS: Record<ChatRole, string> = {
   briefing: `You do the **briefing** of this ticket with the user: understand and clarify the need before any implementation.
 - Read the ticket, its linked files and the code concerned.
 - Ask your questions with ask_user, grouped (up to 10), rather than one by one in the text.
-- Record what you learn in the ticket: kanban_update (more precise description, linked files), kanban_add_note (decisions, answers worth keeping: a few lines each, no notes correcting earlier ones).
+- Record what you learn in the ticket: kanban_update (more precise description, 1500 characters max; linked files), kanban_add_note (decisions, answers worth keeping: a few lines each, no notes correcting earlier ones).
 - Do not write the implementation plan and do not change any file: the plan comes next.`,
   plan: `You write the **implementation plan** of this ticket.
 - Explore the code concerned; if essential information is missing, ask with ask_user.
-- Save the plan with kanban_set_plan: text in Markdown (approach, files to change, steps, risks, tests) and a list of goals, each one a verifiable objective (visible feature, passing test…).
-- Then move the ticket to "Ready" with kanban_move (status ready) and sum up the plan in a few lines.
+- Save the plan with kanban_set_plan: text in Markdown (approach, files to change, steps, risks, tests) and a list of goals, each one a verifiable objective (visible feature, passing test…) with a short title and, if useful, a description of how to check it. The ticket then moves to "To do" by itself.
+- Sum up the plan in a few lines.
 - Do not change any file.`,
   dev: `You **develop** this ticket{{branch}}.
 - Follow the plan. Check each goal with kanban_goal as soon as it is reached and verified (tests, build).
 - Commit regularly on the ticket branch with bash (git add, git commit); each commit message starts with "#{{id}} ". Link each commit with kanban_link_commit.
 - Do not merge or push the branch: the user does it.
 - When all the goals are checked, the tests pass and everything is committed, move the ticket to "To test" with kanban_move (status review) and a test_summary: what the user must test and how (steps, commands, expected result).`,
-  correction: `You **fix** this ticket after the test feedback of the user{{branch}}.
-- The feedback is in the "Test feedback" notes and in the goals marked "test feedback": handle all of it, check each fixed goal with kanban_goal.
+  correction: `You handle the **test feedback** of this ticket{{branch}}: {{feedback}}.
+- A bug: fix it. A new feature: build it if it fits the ticket, otherwise ask the user with ask_user. An info: take it into account.
 - Commit on the ticket branch (messages starting with "#{{id}} ") and link the commits with kanban_link_commit.
 - Do not merge or push the branch.
-- When everything is fixed and committed, move the ticket back to "To test" with kanban_move (status review) and an updated test_summary.`,
+- Once a feedback is handled, verified and committed, mark it done with kanban_feedback (action done). If how to test the ticket changed, update it with kanban_update (test_summary).`,
   resolve: `You **resolve the git conflicts** of the branch of this ticket{{branch}}: a rebase stopped in the worktree, or a merge stopped in the main folder of the project.
 - git status lists the conflicted files: fix each file keeping both intentions, then git add.
 - For a rebase: GIT_EDITOR=true git -c core.commentChar=auto rebase --continue, again while conflicts remain. For a merge: git -c core.commentChar=auto commit --no-edit.
@@ -112,7 +112,7 @@ const [ticketPrompt, setTicketPrompt] = createSignal('')
 export { ticketPrompt }
 
 /** Loads the ticket linked to the conversation for the system prompt ('' without one). */
-export async function loadTicketPrompt(link: { id: number; role: ChatRole } | undefined) {
+export async function loadTicketPrompt(link: { id: number; role: ChatRole; feedback?: number } | undefined) {
   if (!link) {
     setTicketPrompt('')
     return
@@ -121,8 +121,9 @@ export async function loadTicketPrompt(link: { id: number; role: ChatRole } | un
     const tk = await getTicket(link.id)
     const role = ROLE_INSTRUCTIONS[link.role] ?? ''
     const branch = tk.branch ? ` on the branch ${tk.branch}, in its worktree (the root of the open project)` : ''
+    const feedback = link.feedback ? `the feedback with id ${link.feedback}` : 'the open feedback (not checked yet)'
     setTicketPrompt(
-      `# Ticket linked to this conversation\nThis conversation works on ticket #${tk.id} of the kanban of the project. The tools kanban_update, kanban_add_note, kanban_set_plan, kanban_goal, kanban_move and kanban_link_commit act on this ticket.\n\n${role.replace(/\{\{branch\}\}/g, branch).replace(/\{\{id\}\}/g, String(tk.id))}\n\n${ticketMarkdown(tk)}`,
+      `# Ticket linked to this conversation\nThis conversation works on ticket #${tk.id} of the kanban of the project. The tools kanban_update, kanban_add_note, kanban_set_plan, kanban_goal, kanban_feedback, kanban_move and kanban_link_commit act on this ticket.\n\n${role.replace(/\{\{branch\}\}/g, branch).replace(/\{\{feedback\}\}/g, feedback).replace(/\{\{id\}\}/g, String(tk.id))}\n\n${ticketMarkdown(tk)}`,
     )
   } catch (e) {
     setTicketPrompt(`# Linked ticket\nTicket #${link.id} cannot be found (${(e as Error).message}).`)

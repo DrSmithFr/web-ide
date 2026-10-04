@@ -21,7 +21,7 @@ import './assistant.css'
 /** Ticket linked to the conversation (link, unlink, link another one). */
 function TicketBar() {
   const tk = () => (chat.ticket ? summary(chat.ticket.id) : undefined)
-  const roleFor = (status: string): ChatRole => (status === 'new' ? 'briefing' : status === 'fix' || status === 'review' ? 'correction' : 'dev')
+  const roleFor = (status: string): ChatRole => (status === 'new' ? 'briefing' : status === 'todo' ? 'plan' : status === 'review' ? 'correction' : 'dev')
   const link = async () => {
     ensureBoard()
     const id = await pick<number>({

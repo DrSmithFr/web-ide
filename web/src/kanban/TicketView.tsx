@@ -1,19 +1,20 @@
-// Detail of a ticket (tab of the editor): description, plan and goals, notes and test
-// feedback, linked files, attachments, conversations, commits, history, and the buttons
-// that move it through the workflow (docs/kanban.md).
+// Detail of a ticket (tab of the editor), by stage of the workflow: New (description,
+// notes), To do (plan, goals), In progress (git, how to test), To test (feedback); linked
+// files, attachments and commits aside, and the buttons that move it on (docs/kanban.md).
 import { createResource, createSignal, For, type JSX, Show } from 'solid-js'
 import { Icon } from '../ui/icons'
-import { contextMenu, fuzzy, pick, prompt } from '../ui/overlay'
+import { contextMenu, fuzzy, pick } from '../ui/overlay'
 import { errorToast } from '../ui/toast'
 import { Markdown } from '../llm/parts'
 import { request } from '../pod/rpc'
 import { basename, closeTab, leaves, openFile, relPath, root, type TabState } from '../state/project'
 import {
-  addAttachment, addNote, eventText, attachmentBlob, deleteAttachment, deleteNote, deleteTicket, ensureBoard, getTicket, goalOp, linkCommit, moveTicket,
-  priorityLabels, roleLabels, statusLabels, ticketVersion, typeLabels, unlinkChat, unlinkCommit, updateTicket,
-  type Priority, type Status, type Ticket, type TicketType,
+  addAttachment, addNote, eventText, attachmentBlob, deleteAttachment, deleteNote, deleteTicket, ensureBoard, feedbackLabels, feedbackOp, getTicket, goalOp, linkCommit,
+  moveTicket, priorityLabels, statusLabels, statusOrder, ticketVersion, unlinkCommit, updateTicket,
+  MAX_DESCRIPTION, MAX_NOTE, type FeedbackKind, type Goal, type Priority, type Status, type Ticket,
 } from './state'
-import { abandonTicket, ticketActions, TicketChats, TicketGit } from './actions'
+import { abandonTicket, ChatLink, ticketActions, TicketChats, TicketGit } from './actions'
+import { startWorkSession } from './sessions'
 import { fmtAgo, fmtDate, fmtSize, t } from '../i18n'
 import './kanban.css'
 
@@ -51,16 +52,14 @@ export type Apply = (p: Promise<Ticket>) => Promise<void>
 
 function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: string }) {
   const tk = () => props.tk
-  const [noteText, setNoteText] = createSignal('')
-  let noteArea!: HTMLTextAreaElement
-  const notes = () => tk().notes.filter((n) => n.kind !== 'event')
+  let feedbackArea!: HTMLTextAreaElement
   const events = () => tk().notes.filter((n) => n.kind === 'event')
   const closed = () => tk().status === 'done' || tk().status === 'abandoned'
 
   const move = (s: Status, comment = '') => props.apply(moveTicket(tk().id, s, 'user', comment))
   const focusFeedback = () => {
-    noteArea?.focus()
-    noteArea?.scrollIntoView({ block: 'center' })
+    feedbackArea?.focus()
+    feedbackArea?.scrollIntoView({ block: 'center' })
   }
 
   const remove = async () => {
@@ -86,9 +85,6 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
           </span>
         </div>
         <div class="tk-meta-row">
-          <select class="small" value={tk().type} onChange={(e) => props.apply(updateTicket(tk().id, { type: e.currentTarget.value as TicketType }))} title={t('Type')}>
-            <For each={Object.entries(typeLabels)}>{([v, l]) => <option value={v}>{l}</option>}</For>
-          </select>
           <select class="small" value={tk().priority} onChange={(e) => props.apply(updateTicket(tk().id, { priority: e.currentTarget.value as Priority }))} title={t('Priority')}>
             <For each={Object.entries(priorityLabels)}>{([v, l]) => <option value={v}>{t('{priority} priority', { priority: l })}</option>}</For>
           </select>
@@ -118,82 +114,46 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
 
       <div class="tk-body">
         <div class="tk-main">
-          <Section title={t('Description')}>
-            <EditableMarkdown value={tk().description} empty={t('No description.')} onSave={(v) => props.apply(updateTicket(tk().id, { description: v }))} testid="ticket-description" />
-          </Section>
-
-          <Section title={t('Implementation plan')}>
-            <EditableMarkdown value={tk().plan} empty={t('No plan yet.')} onSave={(v) => props.apply(updateTicket(tk().id, { plan: v }))} testid="ticket-plan" />
-          </Section>
-
-          <Section title={`${t('Goals')} ${tk().goals ? `· ${tk().goalsDone}/${tk().goals}` : ''}`}>
-            <Goals tk={tk()} apply={props.apply} />
-          </Section>
-
-          <Show when={tk().testSummary || ['review', 'fix', 'done'].includes(tk().status)}>
-            <Section title={t('To test')}>
-              <EditableMarkdown value={tk().testSummary} empty={t('No test summary.')} onSave={(v) => props.apply(updateTicket(tk().id, { testSummary: v }))} testid="ticket-test" />
+          <Stage tk={tk()} status="new">
+            <Section title={t('Description')}>
+              <EditableMarkdown
+                value={tk().description}
+                max={MAX_DESCRIPTION}
+                empty={t('No description.')}
+                onSave={(v) => props.apply(updateTicket(tk().id, { description: v }))}
+                testid="ticket-description"
+              />
             </Section>
-          </Show>
+            <Notes tk={tk()} apply={props.apply} />
+            <TicketChats tk={tk()} roles={['briefing']} title={t('Briefing conversations')} />
+          </Stage>
 
-          <TicketGit tk={tk()} apply={props.apply} />
+          <Stage tk={tk()} status="todo">
+            <Section title={t('Implementation plan')}>
+              <EditableMarkdown value={tk().plan} empty={t('No plan yet.')} onSave={(v) => props.apply(updateTicket(tk().id, { plan: v }))} testid="ticket-plan" />
+            </Section>
+            <Section title={`${t('Goals')} ${tk().goals ? `· ${tk().goalsDone}/${tk().goals}` : ''}`}>
+              <Goals tk={tk()} apply={props.apply} />
+            </Section>
+            <TicketChats tk={tk()} roles={['plan']} title={t('Plan conversations')} />
+          </Stage>
 
-          <Section title={t('Notes and feedback')}>
-            <For each={notes()} fallback={<p class="muted small">{t('No note.')}</p>}>
-              {(n) => (
-                <div class="tk-note" classList={{ feedback: n.kind === 'feedback' }} data-testid="ticket-note">
-                  <div class="tk-note-head">
-                    <span class="badge" classList={{ warn: n.kind === 'feedback' }}>
-                      {n.kind === 'feedback' ? t('Test feedback') : t('Note')}
-                    </span>
-                    <span class="muted small">
-                      {n.author === 'model' ? t('Assistant') : t('You')} · {fmtDate(n.created)}
-                    </span>
-                    <span class="grow" />
-                    <button class="icon-btn small" title={t('Delete')} onClick={() => props.apply(deleteNote(tk().id, n.id))}>
-                      <Icon name="close" size={11} />
-                    </button>
-                  </div>
-                  <Markdown text={n.text} final />
-                </div>
-              )}
-            </For>
-            <textarea
-              ref={noteArea}
-              class="tk-note-input"
-              rows={3}
-              placeholder={tk().status === 'review' ? t('Test feedback or note…') : t('Add context, a note…')}
-              value={noteText()}
-              onInput={(e) => setNoteText(e.currentTarget.value)}
-              data-testid="ticket-note-input"
-            />
-            <div class="form-actions">
-              <Show when={tk().status === 'review'}>
-                <button
-                  class="btn small primary"
-                  disabled={!noteText().trim()}
-                  onClick={async () => {
-                    await props.apply(addNote(tk().id, 'feedback', noteText()))
-                    setNoteText('')
-                  }}
-                  data-testid="ticket-feedback-add"
-                >
-                  {t('Send as feedback (→ Fix)')}
-                </button>
-              </Show>
-              <button
-                class="btn small"
-                disabled={!noteText().trim()}
-                onClick={async () => {
-                  await props.apply(addNote(tk().id, 'note', noteText()))
-                  setNoteText('')
-                }}
-                data-testid="ticket-note-add"
-              >
-                {t('Add a note')}
-              </button>
-            </div>
-          </Section>
+          <Stage tk={tk()} status="in_progress">
+            <TicketChats tk={tk()} roles={['dev', 'resolve']} title={t('Development conversations')} />
+            <TicketGit tk={tk()} apply={props.apply} />
+            <Section title={t('How to test')}>
+              <EditableMarkdown
+                value={tk().testSummary}
+                empty={t('Filled in by the model when it finishes the development.')}
+                onSave={(v) => props.apply(updateTicket(tk().id, { testSummary: v }))}
+                testid="ticket-test"
+              />
+            </Section>
+          </Stage>
+
+          <Stage tk={tk()} status="review">
+            <FeedbackList tk={tk()} apply={props.apply} areaRef={(el) => (feedbackArea = el)} />
+          </Stage>
 
           <Section title={t('History ({n})', { n: events().length })} folded>
             <ul class="tk-events">
@@ -264,8 +224,6 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
             </label>
           </Section>
 
-          <TicketChats tk={tk()} apply={props.apply} onUnlink={(chatId) => props.apply(unlinkChat(tk().id, chatId))} roleLabels={roleLabels} />
-
           <Section title={t('Linked commits')}>
             <For each={tk().commits} fallback={<p class="muted small">{t('No commit.')}</p>}>
               {(c) => (
@@ -288,6 +246,147 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
         </aside>
       </div>
     </div>
+  )
+}
+
+/** A stage of the workflow: its sections, under the name of the status (the current one marked). */
+function Stage(props: { tk: Ticket; status: Status; children: JSX.Element }) {
+  const rank = (s: Status) => statusOrder.indexOf(s)
+  return (
+    <div
+      class={`tk-stage st-${props.status}`}
+      classList={{ current: props.tk.status === props.status, past: rank(props.tk.status) > rank(props.status) && props.tk.status !== 'abandoned' }}
+      data-stage={props.status}
+    >
+      <h2 class="tk-stage-head">
+        <span class={`kb-dot st-${props.status}`} />
+        {statusLabels[props.status]}
+      </h2>
+      {props.children}
+    </div>
+  )
+}
+
+/** Characters used out of the maximum of a text. */
+function Count(props: { text: string; max: number }) {
+  const n = () => [...props.text.trim()].length
+  return (
+    <span class="tk-count small" classList={{ over: n() > props.max }} data-testid="ticket-count">
+      {n()}/{props.max}
+    </span>
+  )
+}
+
+const tooLong = (text: string, max: number) => [...text.trim()].length > max
+
+function Notes(props: { tk: Ticket; apply: Apply }) {
+  const [text, setText] = createSignal('')
+  const notes = () => props.tk.notes.filter((n) => n.kind === 'note')
+  const add = async () => {
+    await props.apply(addNote(props.tk.id, text()))
+    setText('')
+  }
+  return (
+    <Section title={t('Notes')}>
+      <For each={notes()} fallback={<p class="muted small">{t('No note.')}</p>}>
+        {(n) => (
+          <div class="tk-note" data-testid="ticket-note">
+            <div class="tk-note-head">
+              <span class="muted small">
+                {n.author === 'model' ? t('Assistant') : t('You')} · {fmtDate(n.created)}
+              </span>
+              <Show when={n.chatId}>
+                <ChatLink tk={props.tk} chatId={n.chatId!} />
+              </Show>
+              <span class="grow" />
+              <button class="icon-btn small" title={t('Delete')} onClick={() => props.apply(deleteNote(props.tk.id, n.id))}>
+                <Icon name="close" size={11} />
+              </button>
+            </div>
+            <Markdown text={n.text} final />
+          </div>
+        )}
+      </For>
+      <textarea class="tk-note-input" rows={3} placeholder={t('Add context, a note…')} value={text()} onInput={(e) => setText(e.currentTarget.value)} data-testid="ticket-note-input" />
+      <div class="form-actions">
+        <Count text={text()} max={MAX_NOTE} />
+        <button class="btn small" disabled={!text().trim() || tooLong(text(), MAX_NOTE)} onClick={() => void add()} data-testid="ticket-note-add">
+          {t('Add a note')}
+        </button>
+      </div>
+    </Section>
+  )
+}
+
+/** Test feedback: added while the ticket is under test, each one handled by a conversation. */
+function FeedbackList(props: { tk: Ticket; apply: Apply; areaRef: (el: HTMLTextAreaElement) => void }) {
+  const [text, setText] = createSignal('')
+  const [kind, setKind] = createSignal<FeedbackKind>('bug')
+  const list = () => props.tk.feedbackList
+  const open = () => list().filter((f) => !f.done).length
+  const add = async () => {
+    await props.apply(feedbackOp(props.tk.id, { op: 'add', kind: kind(), text: text() }))
+    setText('')
+  }
+  // Correction conversations not tied to a feedback.
+  const tied = () => new Set(list().map((f) => f.chatId).filter(Boolean))
+  return (
+    <>
+      <Section title={`${t('Feedback')} ${list().length ? `· ${t('{n} open', { n: open() })}` : ''}`}>
+        <For each={list()} fallback={<p class="muted small">{t('No feedback.')}</p>}>
+          {(f) => (
+            <div class={`tk-feedback k-${f.kind}`} classList={{ done: f.done }} data-testid="ticket-feedback-item">
+              <div class="tk-note-head">
+                <input
+                  type="checkbox"
+                  checked={f.done}
+                  title={t('Handled')}
+                  onChange={(e) => props.apply(feedbackOp(props.tk.id, { op: 'check', id: f.id, done: e.currentTarget.checked }))}
+                />
+                <span class={`tk-fb-kind k-${f.kind}`}>{feedbackLabels[f.kind]}</span>
+                <span class="muted small">{fmtDate(f.created)}</span>
+                <Show when={f.chatId}>
+                  <ChatLink tk={props.tk} chatId={f.chatId!} />
+                </Show>
+                <span class="grow" />
+                <Show when={!f.done && props.tk.status === 'review'}>
+                  <button class="btn small" onClick={() => void startWorkSession(props.tk, 'correction', f)} data-testid="ticket-feedback-session">
+                    <Icon name="sparkle" size={12} /> {t('Fix session')}
+                  </button>
+                </Show>
+                <button class="icon-btn small" title={t('Delete')} onClick={() => props.apply(feedbackOp(props.tk.id, { op: 'delete', id: f.id }))}>
+                  <Icon name="close" size={11} />
+                </button>
+              </div>
+              <Markdown text={f.text} final />
+            </div>
+          )}
+        </For>
+        <Show when={props.tk.status === 'review'}>
+          <div class="tk-feedback-add">
+            <select class="small" value={kind()} onChange={(e) => setKind(e.currentTarget.value as FeedbackKind)} data-testid="ticket-feedback-kind">
+              <For each={Object.entries(feedbackLabels)}>{([v, l]) => <option value={v}>{l}</option>}</For>
+            </select>
+            <textarea
+              ref={props.areaRef}
+              class="tk-note-input"
+              rows={3}
+              placeholder={t('What did you notice while testing?')}
+              value={text()}
+              onInput={(e) => setText(e.currentTarget.value)}
+              data-testid="ticket-feedback-input"
+            />
+          </div>
+          <div class="form-actions">
+            <Count text={text()} max={MAX_NOTE} />
+            <button class="btn small primary" disabled={!text().trim() || tooLong(text(), MAX_NOTE)} onClick={() => void add()} data-testid="ticket-feedback-add">
+              {t('Add feedback')}
+            </button>
+          </div>
+        </Show>
+      </Section>
+      <TicketChats tk={props.tk} roles={['correction']} title={t('Other correction conversations')} hideEmpty exclude={tied()} />
+    </>
   )
 }
 
@@ -400,14 +499,16 @@ function EditableText(props: { value: string; class?: string; onSave: (v: string
   )
 }
 
-export function EditableMarkdown(props: { value: string; empty: string; onSave: (v: string) => void | Promise<void>; testid?: string }) {
+export function EditableMarkdown(props: { value: string; empty: string; max?: number; onSave: (v: string) => void | Promise<void>; testid?: string }) {
   const [editing, setEditing] = createSignal(false)
   const [draft, setDraft] = createSignal('')
   const start = () => {
     setDraft(props.value)
     setEditing(true)
   }
+  const over = () => !!props.max && tooLong(draft(), props.max)
   const save = async () => {
+    if (over()) return
     setEditing(false)
     if (draft() !== props.value) await props.onSave(draft())
   }
@@ -438,11 +539,14 @@ export function EditableMarkdown(props: { value: string; empty: string; onSave: 
           ref={(el) => queueMicrotask(() => el.focus())}
         />
         <div class="form-actions">
+          <Show when={props.max}>
+            <Count text={draft()} max={props.max!} />
+          </Show>
           <span class="muted small">{t('Ctrl+Enter to save')}</span>
           <button class="btn small" onClick={() => setEditing(false)}>
             {t('Cancel')}
           </button>
-          <button class="btn small primary" onClick={() => void save()} data-testid={props.testid && `${props.testid}-save`}>
+          <button class="btn small primary" disabled={over()} onClick={() => void save()} data-testid={props.testid && `${props.testid}-save`}>
             {t('Save')}
           </button>
         </div>
@@ -452,43 +556,92 @@ export function EditableMarkdown(props: { value: string; empty: string; onSave: 
 }
 
 function Goals(props: { tk: Ticket; apply: Apply }) {
-  const [text, setText] = createSignal('')
+  const [title, setTitle] = createSignal('')
+  const [description, setDescription] = createSignal('')
   const add = async () => {
-    if (!text().trim()) return
-    await props.apply(goalOp(props.tk.id, { op: 'add', text: text() }))
-    setText('')
+    if (!title().trim()) return
+    await props.apply(goalOp(props.tk.id, { op: 'add', text: title(), description: description() }))
+    setTitle('')
+    setDescription('')
   }
   return (
     <div class="tk-goals">
       <For each={props.tk.goalList} fallback={<p class="muted small">{t('No goal: the plan defines them, you can also add some.')}</p>}>
-        {(g) => (
-          <div class="tk-goal" classList={{ done: g.done }} data-testid="ticket-goal">
-            <input type="checkbox" checked={g.done} onChange={(e) => props.apply(goalOp(props.tk.id, { op: 'check', id: g.id, done: e.currentTarget.checked }))} />
-            <span
-              class="tk-goal-text"
-              onDblClick={async () => {
-                const v = await prompt({ title: t('Edit the goal'), value: g.text })
-                if (v?.trim()) await props.apply(goalOp(props.tk.id, { op: 'edit', id: g.id, text: v }))
-              }}
-            >
-              {g.text}
-            </span>
-            <Show when={g.source === 'feedback'}>
-              <span class="badge warn">{t('feedback')}</span>
-            </Show>
-            <span class="grow" />
-            <button class="icon-btn small" title={t('Delete')} onClick={() => props.apply(goalOp(props.tk.id, { op: 'delete', id: g.id }))}>
-              <Icon name="close" size={11} />
-            </button>
-          </div>
-        )}
+        {(g) => <GoalRow tk={props.tk} g={g} apply={props.apply} />}
       </For>
       <div class="tk-goal-add">
-        <input class="input small" placeholder={t('New goal')} value={text()} onInput={(e) => setText(e.currentTarget.value)} onKeyDown={(e) => e.key === 'Enter' && void add()} data-testid="ticket-goal-input" />
-        <button class="btn small" disabled={!text().trim()} onClick={() => void add()}>
+        <input
+          class="input small"
+          placeholder={t('New goal')}
+          value={title()}
+          onInput={(e) => setTitle(e.currentTarget.value)}
+          onKeyDown={(e) => e.key === 'Enter' && void add()}
+          data-testid="ticket-goal-input"
+        />
+        <input
+          class="input small"
+          placeholder={t('How to check it (optional)')}
+          value={description()}
+          onInput={(e) => setDescription(e.currentTarget.value)}
+          onKeyDown={(e) => e.key === 'Enter' && void add()}
+          data-testid="ticket-goal-description"
+        />
+        <button class="btn small" disabled={!title().trim()} onClick={() => void add()}>
           {t('Add')}
         </button>
       </div>
+    </div>
+  )
+}
+
+/** A goal: its title and description, edited in place (double click). */
+function GoalRow(props: { tk: Ticket; g: Goal; apply: Apply }) {
+  const [editing, setEditing] = createSignal(false)
+  const [title, setTitle] = createSignal('')
+  const [description, setDescription] = createSignal('')
+  const start = () => {
+    setTitle(props.g.text)
+    setDescription(props.g.description)
+    setEditing(true)
+  }
+  const save = async () => {
+    if (!title().trim()) return
+    setEditing(false)
+    await props.apply(goalOp(props.tk.id, { op: 'edit', id: props.g.id, text: title(), description: description() }))
+  }
+  return (
+    <div class="tk-goal" classList={{ done: props.g.done }} data-testid="ticket-goal">
+      <input type="checkbox" checked={props.g.done} onChange={(e) => props.apply(goalOp(props.tk.id, { op: 'check', id: props.g.id, done: e.currentTarget.checked }))} />
+      <Show
+        when={editing()}
+        fallback={
+          <div class="tk-goal-text" title={t('Double-click to edit')} onDblClick={start}>
+            <div class="tk-goal-title">{props.g.text}</div>
+            <Show when={props.g.description.trim()}>
+              <div class="tk-goal-desc muted small" data-testid="ticket-goal-desc">
+                {props.g.description}
+              </div>
+            </Show>
+          </div>
+        }
+      >
+        <div class="tk-goal-edit">
+          <input class="input small" value={title()} onInput={(e) => setTitle(e.currentTarget.value)} onKeyDown={(e) => e.key === 'Escape' && setEditing(false)} ref={(el) => queueMicrotask(() => el.focus())} />
+          <textarea class="tk-note-input" rows={2} value={description()} placeholder={t('How to check it (optional)')} onInput={(e) => setDescription(e.currentTarget.value)} />
+          <div class="form-actions">
+            <button class="btn small" onClick={() => setEditing(false)}>
+              {t('Cancel')}
+            </button>
+            <button class="btn small primary" disabled={!title().trim()} onClick={() => void save()}>
+              {t('Save')}
+            </button>
+          </div>
+        </div>
+      </Show>
+      <span class="grow" />
+      <button class="icon-btn small" title={t('Delete')} onClick={() => props.apply(goalOp(props.tk.id, { op: 'delete', id: props.g.id }))}>
+        <Icon name="close" size={11} />
+      </button>
     </div>
   )
 }

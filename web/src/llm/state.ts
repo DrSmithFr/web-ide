@@ -130,7 +130,7 @@ export interface Chat {
   /** Plan: explore and propose without changing files; Build (default): act. */
   mode?: Mode
   /** Kanban ticket this conversation works on, and its role (docs/kanban.md). */
-  ticket?: { id: number; role: ChatRole }
+  ticket?: { id: number; role: ChatRole; feedback?: number }
 }
 
 export type ChatRole = 'briefing' | 'plan' | 'dev' | 'correction' | 'resolve'

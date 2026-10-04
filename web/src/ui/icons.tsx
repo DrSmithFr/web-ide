@@ -40,6 +40,7 @@ const paths: Record<string, string> = {
   paperclip: 'M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9.7 17a1.7 1.7 0 0 1-2.4-2.4L15 7',
   arrowUp: 'M12 19V5M6 11l6-6 6 6',
   kanban: 'M4 4h4v16H4zM10 4h4v10h-4zM16 4h4v13h-4z',
+  comment: 'M4 5h16v11H10l-6 4z',
   branch: 'M6 3v12M6 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9c0 5-6 4-12 6',
 }
 

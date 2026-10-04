@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -20,20 +21,25 @@ import (
 
 // Statuses of a ticket.
 const (
-	New        = "new"
-	Ready      = "ready"       // shown as “Ready”
+	New        = "new"         // backlog without a plan
+	Todo       = "todo"        // backlog with a plan, shown as “To do”
 	InProgress = "in_progress" // en cours
 	Review     = "review"      // shown as “To test”
-	Fix        = "fix"         // correction
 	Done       = "done"        // closed
 	Abandoned  = "abandoned"
 )
 
 var (
-	Statuses   = []string{New, Ready, InProgress, Review, Fix, Done, Abandoned}
-	Types      = []string{"feature", "bug", "refactor", "task"}
-	Priorities = []string{"low", "normal", "high", "critical"}
-	ChatRoles  = []string{"briefing", "plan", "dev", "correction", "resolve"}
+	Statuses      = []string{New, Todo, InProgress, Review, Done, Abandoned}
+	Priorities    = []string{"low", "normal", "high", "critical"}
+	ChatRoles     = []string{"briefing", "plan", "dev", "correction", "resolve"}
+	FeedbackKinds = []string{"info", "bug", "feature"}
+)
+
+// Longest texts, in characters: the model tends to be verbose.
+const (
+	MaxDescription = 1500
+	MaxNote        = 1000
 )
 
 // Actors of a change: the model may only do some transitions.
@@ -42,17 +48,17 @@ const (
 	ByModel = "model"
 )
 
-// modelMoves are the transitions the model may do (docs/kanban.md).
+// modelMoves are the transitions the model may do (docs/kanban.md). New → To do also
+// happens by itself when a plan is written.
 var modelMoves = map[[2]string]bool{
-	{New, Ready}: true, {InProgress, Review}: true, {Fix, Review}: true,
+	{New, Todo}: true, {InProgress, Review}: true,
 }
 
 // userMoves are the transitions of the buttons. Done and Abandoned are reached through
-// Close and Abandon, Fix through a test feedback.
+// Close and Abandon.
 var userMoves = map[[2]string]bool{
-	{New, Ready}: true, {Ready, InProgress}: true, {InProgress, Review}: true, {Fix, Review}: true,
-	{Review, Fix}: true, {Review, Done}: true, {Done, Fix}: true, {Abandoned, New}: true,
-	{Ready, New}: true,
+	{New, Todo}: true, {Todo, New}: true, {Todo, InProgress}: true, {InProgress, Review}: true,
+	{Review, InProgress}: true, {Review, Done}: true, {Done, Review}: true, {Abandoned, New}: true,
 }
 
 // CanMove tells whether an actor may move a ticket from one status to another.
@@ -169,6 +175,57 @@ CREATE TABLE IF NOT EXISTS meta (
 );
 `
 
+// migrations bring an older base up to date, one per version (PRAGMA user_version).
+var migrations = []string{
+	// 1: statuses New, To do, In progress, To test (Ready → To do, Fix → To test); test
+	// feedback in its own table (feedback goals and notes moved there); goals get a
+	// description, notes the conversation that wrote them.
+	`ALTER TABLE goals ADD COLUMN description TEXT NOT NULL DEFAULT '';
+ALTER TABLE notes ADD COLUMN chat_id TEXT NOT NULL DEFAULT '';
+CREATE TABLE feedback (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL DEFAULT 'info',
+  text TEXT NOT NULL,
+  done INTEGER NOT NULL DEFAULT 0,
+  author TEXT NOT NULL DEFAULT 'user',
+  chat_id TEXT NOT NULL DEFAULT '',
+  created INTEGER NOT NULL DEFAULT 0
+);
+UPDATE tickets SET status = 'todo' WHERE status = 'ready';
+UPDATE tickets SET status = 'review' WHERE status = 'fix';
+INSERT INTO feedback (ticket_id, kind, text, done, created) SELECT ticket_id, 'bug', text, done, created FROM goals WHERE source = 'feedback';
+INSERT INTO feedback (ticket_id, kind, text, author, created) SELECT n.ticket_id, 'info', n.text, n.author, n.created FROM notes n
+  WHERE n.kind = 'feedback' AND NOT EXISTS (SELECT 1 FROM goals g WHERE g.ticket_id = n.ticket_id AND g.source = 'feedback' AND g.text = TRIM(n.text));
+DELETE FROM goals WHERE source = 'feedback';
+DELETE FROM notes WHERE kind = 'feedback';`,
+}
+
+func migrate(db *sql.DB) error {
+	var version int
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		return err
+	}
+	for ; version < len(migrations); version++ {
+		tx, err := db.Begin()
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(migrations[version]); err != nil {
+			tx.Rollback()
+			return err
+		}
+		if _, err := tx.Exec(`PRAGMA user_version = ` + strconv.Itoa(version+1)); err != nil {
+			tx.Rollback()
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (m *Manager) db(loc Location) (*sql.DB, error) {
 	if !projectPattern.MatchString(loc.Project) {
 		return nil, i18n.New("invalid project")
@@ -193,6 +250,10 @@ func (m *Manager) db(loc Location) (*sql.DB, error) {
 	}
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(schema); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := migrate(db); err != nil {
 		db.Close()
 		return nil, err
 	}

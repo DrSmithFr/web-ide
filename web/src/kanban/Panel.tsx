@@ -6,7 +6,7 @@ import { board, ensureBoard, openBoard, refreshBoard, setNewTicketOpen, statusLa
 import { t } from '../i18n'
 import './kanban.css'
 
-const shown: Status[] = ['in_progress', 'fix', 'review', 'ready', 'new']
+const shown: Status[] = ['in_progress', 'review', 'todo', 'new']
 
 export function KanbanPanel() {
   onMount(ensureBoard)

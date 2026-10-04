@@ -59,7 +59,7 @@ func (s *Server) registerKanbanGit() {
 			return nil, err
 		}
 		if t.Status == kanban.Done || t.Status == kanban.Abandoned || t.Status == kanban.New {
-			return nil, i18n.New("the ticket must be “Ready”, “In progress” or in fix")
+			return nil, i18n.New("the ticket must be “To do”, “In progress” or “To test”")
 		}
 		if !exists(k, t.Worktree) {
 			if !k.git.IsRepo(ctx) {
@@ -101,7 +101,7 @@ func (s *Server) registerKanbanGit() {
 				go s.runSetup(k.loc, k.root.ID, t.ID, dir, setup, k.rt.Runner)
 			}
 		}
-		if t.Status == kanban.Ready {
+		if t.Status == kanban.Todo {
 			if err := s.Kanban.Move(k.loc, t.ID, kanban.InProgress, kanban.ByUser, ""); err != nil {
 				return nil, err
 			}

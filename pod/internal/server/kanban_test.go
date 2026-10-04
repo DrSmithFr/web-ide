@@ -21,30 +21,31 @@ func TestKanbanRPC(t *testing.T) {
 	a.call("project.open", map[string]any{"id": id})
 	b.call("project.open", map[string]any{"id": id})
 
-	tk := a.call("kanban.create", map[string]any{"title": "Export", "type": "bug", "addFiles": []string{"a.go"}})["result"].(map[string]any)
-	if tk["id"] != float64(1) || tk["status"] != "new" || tk["type"] != "bug" {
+	tk := a.call("kanban.create", map[string]any{"title": "Export", "priority": "high", "addFiles": []string{"a.go"}})["result"].(map[string]any)
+	if tk["id"] != float64(1) || tk["status"] != "new" || tk["priority"] != "high" {
 		t.Fatalf("create: %+v", tk)
 	}
 	b.waitEvent("kanban.changed", func(d map[string]any) bool { return d["id"] == float64(1) && d["project"] == id })
 
-	tk = a.call("kanban.plan", map[string]any{"id": 1, "by": "model", "plan": "# P", "goals": []string{"g1", "g2"}})["result"].(map[string]any)
-	if tk["goals"] != float64(2) {
+	// Goals as titles, or titles with a description; the plan moves the ticket to To do.
+	tk = a.call("kanban.plan", map[string]any{"id": 1, "by": "model", "plan": "# P", "goals": []any{"g1", map[string]string{"title": "g2", "description": "d2"}}})["result"].(map[string]any)
+	if tk["goals"] != float64(2) || tk["status"] != "todo" || tk["goalList"].([]any)[1].(map[string]any)["description"] != "d2" {
 		t.Fatalf("plan: %+v", tk)
 	}
-	tk = a.call("kanban.move", map[string]any{"id": 1, "by": "model", "status": "ready"})["result"].(map[string]any)
-	if tk["status"] != "ready" {
-		t.Fatalf("move: %+v", tk)
+	tk = a.call("kanban.feedback", map[string]any{"id": 1, "feedback": map[string]any{"op": "add", "kind": "info", "text": "f"}})["result"].(map[string]any)
+	if tk["feedbackOpen"] != float64(1) {
+		t.Fatalf("feedback: %+v", tk)
 	}
 	// Errors are translated for the language of the window; history lines stay neutral.
-	if r := a.callRaw("kanban.move", map[string]any{"id": 1, "by": "model", "status": "done"}); r["error"].(map[string]any)["message"] != "the model cannot move the ticket from “Ready” to “Done”" {
+	if r := a.callRaw("kanban.move", map[string]any{"id": 1, "by": "model", "status": "done"}); r["error"].(map[string]any)["message"] != "the model cannot move the ticket from “To do” to “Done”" {
 		t.Fatalf("english error: %+v", r)
 	}
 	a.call("client.lang", map[string]any{"lang": "fr"})
-	if r := a.callRaw("kanban.move", map[string]any{"id": 1, "by": "model", "status": "done"}); r["error"].(map[string]any)["message"] != "le modèle ne peut pas passer le ticket de « À développer » à « Terminé »" {
+	if r := a.callRaw("kanban.move", map[string]any{"id": 1, "by": "model", "status": "done"}); r["error"].(map[string]any)["message"] != "le modèle ne peut pas passer le ticket de « Todo » à « Terminé »" {
 		t.Fatalf("french error: %+v", r)
 	}
 	notes := tk["notes"].([]any)
-	if last := notes[len(notes)-1].(map[string]any)["text"]; last != `{"key":"{from} → {to}","params":{"from":"new","to":"ready"}}` {
+	if last := notes[len(notes)-1].(map[string]any)["text"]; last != `{"key":"{from} → {to}","params":{"from":"new","to":"todo"}}` {
 		t.Fatalf("event: %v", last)
 	}
 	tk = a.call("kanban.attachment.add", map[string]any{"id": 1, "name": "n.txt", "mime": "text/plain", "data": "aGVsbG8="})["result"].(map[string]any)
@@ -89,7 +90,6 @@ func TestKanbanWorktree(t *testing.T) {
 	a.call("kanban.meta.set", map[string]any{"values": map[string]string{"setup": "echo ready > setup.log"}})
 	a.call("kanban.create", map[string]any{"title": "Café à l'export !"})
 	a.call("kanban.plan", map[string]any{"id": 1, "plan": "p", "goals": []string{"g"}})
-	a.call("kanban.move", map[string]any{"id": 1, "status": "ready"})
 
 	r := a.call("kanban.start", map[string]any{"id": 1})["result"].(map[string]any)
 	tk := r["ticket"].(map[string]any)
@@ -187,7 +187,6 @@ func TestKanbanMergeRebase(t *testing.T) {
 	start := func(n int, title string) string {
 		a.call("kanban.create", map[string]any{"title": title})
 		a.call("kanban.plan", map[string]any{"id": n, "plan": "p", "goals": []string{"g"}})
-		a.call("kanban.move", map[string]any{"id": n, "status": "ready"})
 		return a.call("kanban.start", map[string]any{"id": n})["result"].(map[string]any)["ticket"].(map[string]any)["worktree"].(string)
 	}
 	wt := start(1, "A")

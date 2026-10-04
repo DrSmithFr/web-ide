@@ -1,17 +1,13 @@
 /* ---------- kanban: shared ---------- */
 .st-new { --st: var(--fg-muted); }
-.st-ready { --st: var(--info); }
+.st-todo { --st: var(--info); }
 .st-in_progress { --st: var(--warn); }
 .st-review { --st: #b48ef0; }
-.st-fix { --st: var(--danger); }
 .st-done { --st: var(--ok); }
 .st-abandoned { --st: var(--fg-faint); }
 .kb-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--st); flex: none; }
 .kb-count { color: var(--fg-faint); font-weight: 600; margin-left: 4px; }
 .kb-status { display: inline-flex; align-items: center; padding: 0 7px; border-radius: 9px; font-size: 11px; font-weight: 600; line-height: 18px; white-space: nowrap; color: var(--st); background: color-mix(in srgb, var(--st) 18%, transparent); }
-.kb-type { font-size: 10.5px; color: var(--fg-muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; line-height: 15px; }
-.kb-type.t-bug { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
-.kb-type.t-refactor { color: var(--info); }
 .kb-num { font-family: var(--font-code); font-size: 11px; color: var(--fg-muted); }
 .kb-prio { width: 4px; height: 12px; border-radius: 2px; background: var(--fg-faint); flex: none; }
 .kb-prio.p-low { background: var(--bg-active); }
@@ -39,6 +35,7 @@
 .kb-card-meta { display: flex; gap: 10px; color: var(--fg-muted); font-size: 11px; min-width: 0; }
 .kb-card-meta span { display: inline-flex; align-items: center; gap: 3px; }
 .kb-card-meta .ok { color: var(--ok); }
+.kb-card-meta .warn { color: var(--warn); }
 .kb-card.compact { padding: 6px 8px; gap: 3px; border-radius: 4px; }
 
 /* ---------- side panel ---------- */
@@ -78,14 +75,32 @@ input.tk-title { padding: 2px 6px; }
 .tk-goal { display: flex; align-items: flex-start; gap: 8px; padding: 3px 4px; border-radius: 4px; }
 .tk-goal:hover { background: var(--bg-2); }
 .tk-goal input { margin-top: 3px; }
-.tk-goal.done .tk-goal-text { color: var(--fg-muted); text-decoration: line-through; }
-.tk-goal-text { overflow-wrap: anywhere; }
+.tk-goal.done .tk-goal-text { color: var(--fg-muted); }
+.tk-goal.done .tk-goal-title { text-decoration: line-through; }
+.tk-goal-text { overflow-wrap: anywhere; min-width: 0; }
+.tk-goal-desc { white-space: pre-wrap; margin-top: 1px; }
+.tk-goal-edit { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .tk-goal .icon-btn { opacity: 0; }
 .tk-goal:hover .icon-btn { opacity: 1; }
 .tk-goal-add { display: flex; gap: 6px; margin-top: 4px; }
-.tk-goal-add input { flex: 1; }
+.tk-goal-add input { flex: 1; min-width: 0; }
 .tk-note { border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 10px; background: var(--bg-2); }
-.tk-note.feedback { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+.tk-count { color: var(--fg-faint); font-variant-numeric: tabular-nums; margin-right: auto; }
+.tk-count.over { color: var(--danger); font-weight: 600; }
+.tk-chat-link { display: inline-flex; align-items: center; gap: 3px; padding: 0; max-width: 260px; }
+/* Stages of the workflow: the current one marked with the color of its status. */
+.tk-stage { border-left: 2px solid var(--line); padding: 0 0 6px 12px; margin-bottom: 10px; }
+.tk-stage.current { border-left-color: var(--st); }
+.tk-stage-head { display: flex; align-items: center; gap: 6px; margin: 0 0 2px; font-size: 13px; font-weight: 600; color: var(--fg-muted); }
+.tk-stage.current .tk-stage-head { color: var(--fg); }
+.tk-feedback { border: 1px solid var(--line); border-left: 3px solid var(--fbk); border-radius: var(--radius); padding: 6px 10px; background: var(--bg-2); --fbk: var(--info); }
+.tk-feedback.k-bug { --fbk: var(--danger); }
+.tk-feedback.k-feature { --fbk: var(--ok); }
+.tk-feedback.done { opacity: 0.6; }
+.tk-feedback.done .md { text-decoration: line-through; }
+.tk-fb-kind { font-size: 10.5px; font-weight: 700; color: var(--fbk); text-transform: uppercase; letter-spacing: 0.04em; }
+.tk-feedback-add { display: flex; flex-direction: column; gap: 6px; }
+.tk-feedback-add select { align-self: flex-start; }
 .tk-note-head { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
 .tk-events { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
 .tk-row { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 22px; }

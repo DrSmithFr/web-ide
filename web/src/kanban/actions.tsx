@@ -7,7 +7,7 @@ import { errorToast } from '../ui/toast'
 import { request } from '../pod/rpc'
 import { openFile, project, root } from '../state/project'
 import {
-  abortGit, continueGit, filePatch, finishTicket, gitInfo, mergeTicket, openWorktreeWindow, rebaseTicket, ticketDiff, ticketVersion, updateTicket, worktreeProject,
+  abortGit, continueGit, filePatch, finishTicket, gitInfo, mergeTicket, openWorktreeWindow, rebaseTicket, roleLabels, ticketDiff, ticketVersion, unlinkChat, updateTicket, worktreeProject,
   type ChatRole, type Diff, type GitInfo, type GitOpState, type Status, type Ticket,
 } from './state'
 import { openTicketChat, openWorktree, startTicketChat, startWorkSession } from './sessions'
@@ -39,24 +39,17 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
       return [
         { label: 'Briefing', run: () => void startTicketChat(tk, 'briefing'), title: t('Conversation (Plan mode) to clarify the ticket'), testid: 'ticket-briefing' },
         {
-          label: tk.plan.trim() ? t('Redo the plan') : t('Generate the plan'),
-          primary: !tk.plan.trim(),
+          label: t('Generate the plan'),
+          primary: true,
           run: () => void startTicketChat(tk, 'plan'),
-          title: t('The model writes the plan and the goals, then moves the ticket to Ready'),
+          title: t('The model writes the plan and the goals; the ticket then moves to “To do”'),
           testid: 'ticket-plan-generate',
         },
-        {
-          label: t('Ready for development'),
-          primary: !!tk.plan.trim(),
-          disabled: !tk.plan.trim() && !tk.goals,
-          title: !tk.plan.trim() && !tk.goals ? t('A plan or goals are needed first') : undefined,
-          run: () => void ctx.move('ready'),
-          testid: 'ticket-to-ready',
-        },
       ]
-    case 'ready':
+    case 'todo':
       return [
-        { label: t('Back to “New”'), run: () => void ctx.move('new') },
+        { label: t('Back to “New”'), run: () => void ctx.move('new'), testid: 'ticket-to-new' },
+        { label: t('Redo the plan'), run: () => void startTicketChat(tk, 'plan'), testid: 'ticket-plan-generate' },
         {
           label: t('Start development'),
           primary: true,
@@ -66,24 +59,20 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
         },
       ]
     case 'in_progress':
-    case 'fix':
       return [
         ...worktree,
-        {
-          label: tk.status === 'fix' ? t('Fix session') : t('New dev session'),
-          run: () => void startWorkSession(tk, tk.status === 'fix' ? 'correction' : 'dev'),
-          testid: 'ticket-session',
-        },
+        { label: t('New dev session'), run: () => void startWorkSession(tk, 'dev'), testid: 'ticket-session' },
         { label: t('Send to testing'), primary: true, run: () => void ctx.move('review'), testid: 'ticket-to-review' },
       ]
     case 'review':
       return [
         ...worktree,
+        { label: t('Back to “In progress”'), run: () => void ctx.move('in_progress'), testid: 'ticket-to-progress' },
         { label: t('Add feedback'), run: ctx.focusFeedback, testid: 'ticket-feedback' },
         { label: t('Close the ticket'), primary: true, run: () => void closeTicket(tk, ctx.apply), testid: 'ticket-close' },
       ]
     case 'done':
-      return [{ label: t('Reopen (→ Fix)'), run: () => void ctx.move('fix'), testid: 'ticket-reopen' }]
+      return [{ label: t('Reopen (→ To test)'), run: () => void ctx.move('review'), testid: 'ticket-reopen' }]
     case 'abandoned':
       return [{ label: t('Reopen'), run: () => void ctx.move('new'), testid: 'ticket-reopen' }]
   }
@@ -120,25 +109,39 @@ async function openChatOf(tk: Ticket, chatId: string, role: ChatRole) {
   await openTicketChat(chatId)
 }
 
-export function TicketChats(props: { tk: Ticket; apply: Apply; onUnlink: (chatId: string) => void; roleLabels: Record<ChatRole, string> }) {
+/** Conversations of some roles linked to a ticket (exclude: ids shown elsewhere). */
+export function TicketChats(props: { tk: Ticket; roles: ChatRole[]; title: string; hideEmpty?: boolean; exclude?: Set<string | undefined> }) {
+  const list = () => props.tk.chatList.filter((c) => props.roles.includes(c.role) && !props.exclude?.has(c.chatId))
   return (
-    <Section title={t('Conversations')}>
-      <For each={props.tk.chatList} fallback={<p class="muted small">{t('No linked conversation.')}</p>}>
-        {(c) => (
-          <div class="tk-row">
-            <Icon name="sparkle" size={12} />
-            <span class={`kb-role r-${c.role}`}>{props.roleLabels[c.role]}</span>
-            <button class="link ellipsis small" title={c.title} onClick={() => void openChatOf(props.tk, c.chatId, c.role)} data-testid="ticket-chat">
-              {c.title || t('Conversation')}
-            </button>
-            <span class="grow" />
-            <button class="icon-btn small" title={t('Unlink')} onClick={() => props.onUnlink(c.chatId)}>
-              <Icon name="close" size={11} />
-            </button>
-          </div>
-        )}
-      </For>
-    </Section>
+    <Show when={!props.hideEmpty || list().length}>
+      <Section title={props.title}>
+        <For each={list()} fallback={<p class="muted small">{t('No linked conversation.')}</p>}>
+          {(c) => (
+            <div class="tk-row">
+              <Icon name="sparkle" size={12} />
+              <span class={`kb-role r-${c.role}`}>{roleLabels[c.role]}</span>
+              <button class="link ellipsis small" title={c.title} onClick={() => void openChatOf(props.tk, c.chatId, c.role)} data-testid="ticket-chat">
+                {c.title || t('Conversation')}
+              </button>
+              <span class="grow" />
+              <button class="icon-btn small" title={t('Unlink')} onClick={() => void unlinkChat(props.tk.id, c.chatId).catch(errorToast)}>
+                <Icon name="close" size={11} />
+              </button>
+            </div>
+          )}
+        </For>
+      </Section>
+    </Show>
+  )
+}
+
+/** Link to a conversation of the ticket (from a note or a feedback). */
+export function ChatLink(props: { tk: Ticket; chatId: string }) {
+  const c = () => props.tk.chatList.find((x) => x.chatId === props.chatId)
+  return (
+    <button class="link small ellipsis tk-chat-link" title={c()?.title} onClick={() => void openChatOf(props.tk, props.chatId, c()?.role ?? 'briefing')} data-testid="ticket-chat-link">
+      <Icon name="sparkle" size={11} /> {c()?.title || t('Conversation')}
+    </button>
   )
 }
 
@@ -147,10 +150,9 @@ const statusNames: Record<string, string> = { A: 'added', M: 'modified', D: 'del
 /** Branch, base, worktree and the files changed by the ticket, with their diff. */
 export function TicketGit(props: { tk: Ticket; apply: Apply }) {
   const tk = () => props.tk
-  const shown = () => !!tk().branch || !!tk().snapshot || ['in_progress', 'review', 'fix', 'done'].includes(tk().status)
   const [tick, setTick] = createSignal(0)
   const [diff] = createResource(
-    () => (shown() && (tk().branch || tk().snapshot) ? { id: tk().id, v: ticketVersion(tk().id), k: tick(), base: tk().base } : null),
+    () => (tk().branch || tk().snapshot ? { id: tk().id, v: ticketVersion(tk().id), k: tick(), base: tk().base } : null),
     async ({ id }) => {
       try {
         return { d: await ticketDiff(id), error: '' }
@@ -166,7 +168,7 @@ export function TicketGit(props: { tk: Ticket; apply: Apply }) {
   }
   const totals = () => (diff()?.d?.files ?? []).reduce((a, f) => [a[0] + f.added, a[1] + f.removed], [0, 0])
   return (
-    <Show when={shown()}>
+    <>
       <Section
         title={t('Git and changes')}
         actions={
@@ -243,7 +245,7 @@ export function TicketGit(props: { tk: Ticket; apply: Apply }) {
           </Show>
         </div>
       </Section>
-    </Show>
+    </>
   )
 }
 
