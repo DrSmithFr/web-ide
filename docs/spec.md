@@ -281,6 +281,10 @@ Four tabs (the shown tab is saved in the session), and a detail pane beside the 
 - Added by hand (remote address and port, local port, scope); each can be stopped, started or deleted. Kept in `.ide/tunnels.json`; the enabled ones open when the project opens.
 - They stay open while a window of the pod is open (the home page included), whatever the project; 5 minutes after the last window leaves, they close. The home page lists the open tunnels with a button to close each and *Close all*.
 
+### Assistant
+
+The assistant reads, without confirmation: the state of the services of the project (`docker_ps`) and the logs of a service or container (`docker_logs`, last lines, optional filter). It runs no Docker action itself.
+
 ## 15. Decisions
 
 - **Q1**: the pod pushes the whole file (`fs.changed`, decoded to UTF-8 with LF line ends, with its encoding and line separator) on each change, after 150 ms of stability (AI tools often write in several steps).

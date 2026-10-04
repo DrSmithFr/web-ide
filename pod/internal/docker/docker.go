@@ -526,3 +526,15 @@ func (d *Docker) Logs(id string, profiles []string, tail int) (execx.Process, er
 	}
 	return d.run.Start([]string{"sh", "-c", "exec " + execx.Join(argv) + " 2>&1"}, d.root)
 }
+
+// LogsTail returns the last lines of the logs of a container, or of a service of the stack
+// (service set), without following them.
+func (d *Docker) LogsTail(ctx context.Context, id, service string, profiles []string, tail int) (string, error) {
+	n := strconv.Itoa(tail)
+	argv := []string{"docker", "logs", "--tail", n, "--timestamps", id}
+	if service != "" {
+		argv = ComposeArgv(profiles, "logs", "--tail", n, "--timestamps", "--no-color", "--no-log-prefix", service)
+	}
+	out, err := d.run.Output(ctx, []string{"sh", "-c", execx.Join(argv) + " 2>&1"}, d.root)
+	return string(out), err
+}

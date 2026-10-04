@@ -2,6 +2,7 @@
   "%d file(s) still in conflict: fix them, then git add": "%d fichier(s) encore en conflit : les corriger puis git add",
   "%s cannot be reached: %v": "%s injoignable : %v",
   "%s: no answer": "%s : pas de réponse",
+  "a container or a service is needed": "il faut un container ou un service",
   "a merge or a rebase is already in progress in the main folder": "une fusion ou un rebase est déjà en cours dans le dossier principal",
   "a rebase is already in progress in the worktree": "un rebase est déjà en cours dans le worktree",
   "a ticket cannot go from “%s” to “%s”": "un ticket ne peut pas passer de « %s » à « %s »",

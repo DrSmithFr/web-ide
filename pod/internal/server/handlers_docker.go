@@ -185,6 +185,23 @@ func (s *Server) pumpLogs(c *Client, id string, proc execx.Process, stop func())
 }
 
 func (s *Server) registerDockerDisk() {
+	// docker.logsTail gives the last lines of a container or a service (the assistant).
+	s.handle("docker.logsTail", withRuntime(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
+		a, err := bind[struct {
+			ID       string   `json:"id"`
+			Service  string   `json:"service"`
+			Profiles []string `json:"profiles"`
+			Lines    int      `json:"lines"`
+		}](p)
+		if err != nil {
+			return nil, err
+		}
+		if a.ID == "" && a.Service == "" {
+			return nil, i18n.New("a container or a service is needed")
+		}
+		out, err := rt.Docker.LogsTail(ctx, a.ID, a.Service, a.Profiles, min(max(a.Lines, 1), 2000))
+		return map[string]string{"output": out}, err
+	}))
 	s.handle("docker.disk", withRuntime(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
 		return rt.Docker.Disk(ctx)
 	}))

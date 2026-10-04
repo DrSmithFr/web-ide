@@ -2,6 +2,7 @@
 // statistics, logs with filter, shell, tasks in the Console, down with volumes) and the Host tab.
 // Needs docker with Compose and the postgres:17-alpine image (no download).
 const fs = require('fs')
+const http = require('http')
 const { execSync } = require('child_process')
 const { run, openProject, assert, WS, OUT } = require('../common.cjs')
 
@@ -21,14 +22,17 @@ fs.writeFileSync(
 services:
   app:
     image: postgres:17-alpine
+    tmpfs: ["/var/lib/postgresql/data"]
     entrypoint: ["sh", "-c", "i=0; while true; do printf '\\\\033[32mtick %d\\\\033[0m\\\\n' $$i; echo warn$$i >&2; i=$$((i+1)); sleep 0.5; done"]
     ports: ["127.0.0.1::80"]
     volumes: ["data:/data", "./:/src:ro"]
   db:
     image: postgres:17-alpine
+    tmpfs: ["/var/lib/postgresql/data"]
     entrypoint: ["sleep", "infinity"]
   extra:
     image: postgres:17-alpine
+    tmpfs: ["/var/lib/postgresql/data"]
     entrypoint: ["sleep", "infinity"]
     profiles: ["debug"]
 volumes:
@@ -44,6 +48,29 @@ const cleanup = () => {
   }
 }
 process.on('exit', cleanup)
+
+// Scripted model server: calls docker_ps and docker_logs, then answers.
+const requests = []
+const sse = (res, delta) => res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`)
+const end = (res, reason) => res.end(`data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: reason }] })}\n\ndata: [DONE]\n\n`)
+const fake = http.createServer(async (req, res) => {
+  if (req.url === '/api/version') return res.writeHead(404).end()
+  if (req.url === '/v1/models') return res.end(JSON.stringify({ data: [{ id: 'fake-model', status: { value: 'loaded' } }] }))
+  if (req.url === '/props') return res.end(JSON.stringify({ role: 'router' }))
+  if (req.url.startsWith('/props?')) return res.end(JSON.stringify({ chat_template_caps: { supports_tools: true }, default_generation_settings: { n_ctx: 8192 } }))
+  let body = ''
+  for await (const c of req) body += c
+  const r = JSON.parse(body)
+  requests.push(r)
+  res.writeHead(200, { 'Content-Type': 'text/event-stream' })
+  if (r.messages[r.messages.length - 1].role === 'user') {
+    const call = (index, id, name, args) => ({ index, id, type: 'function', function: { name, arguments: JSON.stringify(args) } })
+    sse(res, { tool_calls: [call(0, 'd1', 'docker_ps', {}), call(1, 'd2', 'docker_logs', { service: 'app', lines: 20, filter: 'warn' })] })
+    return end(res, 'tool_calls')
+  }
+  sse(res, { content: 'Docker checked.' })
+  end(res, 'stop')
+})
 
 const row = (svc) => `[data-testid=docker-service-${svc}]`
 const dot = (page, svc) => page.$eval(`${row(svc)} .dk-dot`, (e) => e.className.replace('dk-dot', '').trim()).catch(() => 'none')
@@ -93,6 +120,7 @@ run(async ({ page }) => {
   await page.waitForSelector('[data-testid=docker-detail] .dk-kv')
   await page.waitForFunction(() => document.querySelector('[data-testid=docker-mounts]')?.textContent.includes('/src'))
   const mounts = await page.textContent('[data-testid=docker-mounts]')
+  // (the tmpfs replaces the anonymous volume of the image: the test leaves no volume behind)
   assert(mounts.includes(`${name}_data`) && mounts.includes('→ /data') && mounts.includes('ro'), 'mounts: named volume and read-only bind: ' + mounts)
   assert((await page.textContent('[data-testid=docker-networks]')).includes(`${name}_default`), 'network listed')
   assert(/→80/.test(await page.textContent('[data-testid=docker-ports]')), 'ports listed')
@@ -122,6 +150,24 @@ run(async ({ page }) => {
   await page.click('[data-testid=docker-stack]')
   await page.waitForFunction(() => document.querySelector('.dk-log-svc')?.textContent.startsWith('app'), null, { timeout: 15000 })
   assert(await page.isVisible('[data-testid=docker-log-service]'), 'stack logs: service filter')
+
+  // The assistant reads the state of the services and their logs.
+  await new Promise((r) => fake.listen(0, '127.0.0.1', r))
+  await page.click('.rail-right .rail-btn[title="AI assistant"]')
+  await page.click('.ai-empty button:has-text("Add a model server")')
+  await page.fill('.ai-servers input[name=url]', `127.0.0.1:${fake.address().port}`)
+  await page.click('.ai-servers button:has-text("Add")')
+  await page.waitForSelector('.ai-server-row:has-text("127.0.0.1")')
+  await page.click('.ai-servers .modal-head button')
+  await page.fill('.ai-composer textarea', 'How is docker?')
+  await page.keyboard.press('Enter')
+  await page.waitForSelector('.ai-msg.assistant .md:has-text("Docker checked.")', { timeout: 30000 })
+  const results = requests[requests.length - 1].messages.filter((m) => m.role === 'tool').map((m) => m.content)
+  assert(requests[0].tools.some((t) => t.function.name === 'docker_ps'), 'docker tools offered to the model')
+  assert(results[0]?.includes(`Compose project "${name}"`) && /app \(.*app-1\): Up/.test(results[0]), 'docker_ps: state of the services: ' + results[0])
+  const logLines = (results[1] ?? '').split('\n').slice(1)
+  assert(logLines.length > 0 && logLines.every((l) => l.includes('warn')), 'docker_logs: filtered logs of a service: ' + results[1]?.slice(0, 200))
+  fake.close()
 
   // Stop one service from its row.
   await page.click(`${row('db')} [data-action=stop]`)

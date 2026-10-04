@@ -11,6 +11,7 @@ import { flatten, symbolKinds, toLocations, type DocumentSymbol, type Location }
 import type { DiffLine, Mode, ToolCall } from './state'
 import { askUserDef, kanbanReadDefs, kanbanToolNames, kanbanWriteDefs, runKanbanTool } from './kanbanTools'
 import { runsFreely } from './commands'
+import { dockerToolDefs, dockerToolNames, runDockerTool } from './dockerTools'
 import { t, tn } from '../i18n'
 
 export interface ToolResult {
@@ -74,7 +75,7 @@ export const toolDefs = [
   ),
   fn(
     'focus',
-    'Brings an element of the IDE to the front: an open file, a panel (explorer, search, git, kanban, console, problems, database, assistant, structure, conflicts, info), a console or the problems list.',
+    'Brings an element of the IDE to the front: an open file, a panel (explorer, search, git, kanban, console, problems, docker, database, assistant, structure, conflicts, info), a console or the problems list.',
     {
       target: { type: 'string', enum: ['file', 'panel', 'console', 'problems'], description: 'Kind of element' },
       path: str('File (target=file)'),
@@ -131,7 +132,7 @@ export function toolsFor(mode: Mode, ticket?: { id: number; role: string }) {
   const kanban = [...kanbanReadDefs, ...(ticket ? kanbanWriteDefs : []), askUserDef]
   // The briefing and the plan of a ticket end in the ticket itself, not in exit_plan_mode.
   const exit = mode === 'plan' && ticket?.role !== 'briefing' && ticket?.role !== 'plan' ? [agentToolDefs.exitPlan] : []
-  return [...base, ...kanban, ...exit, agentToolDefs.compact]
+  return [...base, ...dockerToolDefs, ...kanban, ...exit, agentToolDefs.compact]
 }
 
 const MAX_LINES = 1500
@@ -164,6 +165,7 @@ export async function runTool(call: ToolCall, confirm: Confirm, signal?: AbortSi
   try {
     const a = parseArgs(call)
     if (kanbanToolNames.has(name)) return await runKanbanTool(name, a, ticket, mode)
+    if (dockerToolNames.has(name)) return await runDockerTool(name, a)
     if (mode !== 'build') {
       if (writeTools.has(name))
         return fail(

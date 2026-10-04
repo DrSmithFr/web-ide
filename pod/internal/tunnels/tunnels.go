@@ -233,4 +233,3 @@ func (m *Manager) List() []State {
 	})
 	return out
 }
-

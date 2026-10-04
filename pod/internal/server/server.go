@@ -51,7 +51,7 @@ type Server struct {
 	Models *hfcache.Cache
 	// Tunnels are the port forwardings of the SSH projects.
 	Tunnels *tunnels.Manager
-	Static fs.FS
+	Static  fs.FS
 	// AllowRemote accepts connections from other machines (the token is then the only protection).
 	AllowRemote bool
 

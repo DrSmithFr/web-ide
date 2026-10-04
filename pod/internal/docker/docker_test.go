@@ -44,7 +44,7 @@ func TestParsePorts(t *testing.T) {
 
 func TestStack(t *testing.T) {
 	f := &fake{has: true, out: map[string]string{
-		"docker compose --profile dev config --services": "web\ndb\nworker\n",
+		"docker compose --profile dev config --services":    "web\ndb\nworker\n",
 		"docker compose --profile dev config --format json": `{"name":"demo","services":{}}`,
 		"docker compose --profile dev ps -a --format json": `{"ID":"b1","Name":"demo-web-1","Image":"nginx","State":"running","Status":"Up 1 minute","Project":"demo","Service":"web","Publishers":[{"URL":"0.0.0.0","TargetPort":80,"PublishedPort":8080,"Protocol":"tcp"},{"URL":"::","TargetPort":80,"PublishedPort":8080,"Protocol":"tcp"}]}
 {"ID":"a1","Name":"demo-db-1","Image":"postgres","State":"exited","Status":"Exited (0)","Project":"demo","Service":"db","Publishers":[]}
@@ -131,5 +131,19 @@ func TestDisk(t *testing.T) {
 	}
 	if _, err := d.Prune(context.Background(), "system"); err == nil {
 		t.Fatal("unknown prune accepted")
+	}
+}
+
+func TestLogsTail(t *testing.T) {
+	f := &fake{has: true, out: map[string]string{
+		"sh -c docker logs --tail 50 --timestamps abc 2>&1":                                    "2026-10-04T10:00:00Z boom\n",
+		"sh -c docker compose logs --tail 50 --timestamps --no-color --no-log-prefix web 2>&1": "2026-10-04T10:00:00Z up\n",
+	}}
+	d := New(f, "/p", nil)
+	if out, err := d.LogsTail(context.Background(), "abc", "", nil, 50); err != nil || !strings.Contains(out, "boom") {
+		t.Fatalf("container: %q %v (ran %v)", out, err, f.ran)
+	}
+	if out, err := d.LogsTail(context.Background(), "", "web", nil, 50); err != nil || !strings.Contains(out, "up") {
+		t.Fatalf("service: %q %v (ran %v)", out, err, f.ran)
 	}
 }

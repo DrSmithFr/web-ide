@@ -1295,5 +1295,9 @@
   "Remote port": "Port distant",
   "Local port": "Port local",
   "same": "identique",
-  "Reachable from the local network": "Accessible depuis le réseau local"
+  "Reachable from the local network": "Accessible depuis le réseau local",
+  "{n} container": "{n} container",
+  "{n} containers": "{n} containers",
+  "{n} line": "{n} ligne",
+  "{n} lines": "{n} lignes"
 }
