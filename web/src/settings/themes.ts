@@ -95,3 +95,29 @@ export const themes: Theme[] = [
 export function themeById(id: string) {
   return themes.find((t) => t.id === id) ?? themes[0]
 }
+
+/** Accent colors to pick instead of the one of the theme: a tone for dark and for light themes. */
+export interface Accent {
+  id: string
+  name: string
+  dark: [color: string, fg: string]
+  light: [color: string, fg: string]
+}
+
+export const accents: Accent[] = [
+  { id: 'yellow', name: 'Yellow', dark: ['#ffd400', '#000000'], light: ['#b58900', '#ffffff'] },
+  { id: 'orange', name: 'Orange', dark: ['#ff9e45', '#000000'], light: ['#d9620b', '#ffffff'] },
+  { id: 'red', name: 'Red', dark: ['#ff6b6b', '#000000'], light: ['#d03535', '#ffffff'] },
+  { id: 'pink', name: 'Pink', dark: ['#f78fd6', '#000000'], light: ['#c22e96', '#ffffff'] },
+  { id: 'purple', name: 'Purple', dark: ['#b78cff', '#000000'], light: ['#7c3aed', '#ffffff'] },
+  { id: 'blue', name: 'Blue', dark: ['#5b8cff', '#ffffff'], light: ['#2f6fde', '#ffffff'] },
+  { id: 'cyan', name: 'Cyan', dark: ['#4fd6e8', '#000000'], light: ['#0e7490', '#ffffff'] },
+  { id: 'green', name: 'Green', dark: ['#6fdc7a', '#000000'], light: ['#2e7d32', '#ffffff'] },
+]
+
+/** Accent color and its text color for a theme, the chosen accent overriding the theme one. */
+export function accentOf(theme: Theme, accent: string): [string, string] {
+  const a = accents.find((x) => x.id === accent)
+  if (!a) return [theme.ui.accent, theme.ui['accent-fg']]
+  return theme.dark ? a.dark : a.light
+}

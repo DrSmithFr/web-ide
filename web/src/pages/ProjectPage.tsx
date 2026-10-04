@@ -1,5 +1,5 @@
 // Main window of a project: menu bar, icon rails, side panels, editor area, bottom tools.
-import { createSignal, For, type JSX, onCleanup, onMount, Show } from 'solid-js'
+import { createEffect, createSignal, For, type JSX, onCleanup, onMount, Show } from 'solid-js'
 import { Dynamic } from 'solid-js/web'
 import { RpcError, formatRate, on as onPod, podRates, podState, request } from '../pod/rpc'
 import {
@@ -7,6 +7,8 @@ import {
   saveAll, session, setConflictOpener, splitPane, closeProject, basename,
 } from '../state/project'
 import { defaultPlacement, moveTool, normalizePlacement, shownIn, toggleTool, toolsIn, type Zone } from '../state/zones'
+import { focusPart, setFocusPart, trackFocus } from '../state/focus'
+import { settings, updateSettings } from '../state/settings'
 import { navigate } from '../app/router'
 import { EditorArea } from '../ui/EditorArea'
 import { ConsoleTool, ProblemsTool, newConsole, problemCount, setConsoleList } from '../console/consoles'
@@ -174,7 +176,7 @@ const menus: [string, string[]][] = [
   ['menu|Edit', ['edit.undo', 'edit.redo', 'edit.duplicateLine', 'edit.deleteLine', 'edit.toggleComment', 'search.find', 'search.global']],
   ['menu|Navigate', ['nav.back', 'nav.forward', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', 'nav.related', 'nav.test']],
   ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover']],
-  ['menu|View', ['view.splitRight', 'view.splitDown', 'view.closeTab', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', 'console.new', 'palette.open']],
+  ['menu|View', ['view.splitRight', 'view.splitDown', 'view.closeTab', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', 'view.visualFocus', 'console.new', 'palette.open']],
 ]
 
 function openMenu(e: MouseEvent, ids: string[]) {
@@ -292,12 +294,15 @@ function RailGroup(props: { zone: Zone }) {
         {(id) => (
           <button
             class="rail-btn"
-            classList={{ active: current() === id, 'drop-before': marker(id), dragging: dragged() === id }}
+            classList={{ active: current() === id, focused: current() === id && focusPart() === props.zone, 'drop-before': marker(id), dragging: dragged() === id }}
             data-id={id}
             draggable="true"
             title={t(toolPanels[id].label)}
             aria-pressed={current() === id}
-            onClick={() => mutate((s) => toggleTool(s, id))}
+            onClick={() => {
+              mutate((s) => toggleTool(s, id))
+              if (current() === id) setFocusPart(props.zone)
+            }}
             onDragStart={(e) => {
               e.dataTransfer!.effectAllowed = 'move'
               e.dataTransfer!.setData('text/plain', id)
@@ -346,7 +351,7 @@ function ZonePanel(props: { zone: Zone; width?: number; style?: JSX.CSSPropertie
   const detach = () => window.open(`/project/${project()!.id}/tool/${id()}`, `tool-${id()}`, id() === 'assistant' ? 'popup,width=1100,height=820' : 'popup,width=420,height=760')
   const side = props.zone === 'left' || props.zone === 'right'
   return (
-    <aside class={`zone zone-${props.zone}`} classList={{ side, [`side-${props.zone}`]: side }} data-tool={id()} style={props.width ? { width: `${props.width}px` } : props.style}>
+    <aside class={`zone zone-${props.zone}`} classList={{ side, [`side-${props.zone}`]: side, focused: focusPart() === props.zone }} data-tool={id()} data-focus={props.zone} style={props.width ? { width: `${props.width}px` } : props.style}>
       <button class="icon-btn detach" title={t('Open in a window')} onClick={detach}>
         <Icon name="external" size={13} />
       </button>
@@ -408,10 +413,16 @@ export function ProjectPage(props: { id: string }) {
     }
   })
   useProjectActions()
+  // A closed zone gives the focus back to the editor.
+  createEffect(() => {
+    const part = focusPart()
+    if (part !== 'editor' && !shownIn(session, part)) setFocusPart('editor')
+  })
   const offs = [
     registerAction('view.toggleLeft', () => mutate((s) => (s.left.panel = s.left.panel ? null : (toolsIn(s, 'left')[0] ?? null)))),
     registerAction('view.toggleRight', () => mutate((s) => (s.right.panel = s.right.panel ? null : (toolsIn(s, 'right')[0] ?? null)))),
     registerAction('view.resetTools', () => mutate((s) => (s.placement = normalizePlacement(defaultPlacement)))),
+    registerAction('view.visualFocus', () => updateSettings((s) => (s.visualFocus = !s.visualFocus), 'Visual focus')),
     registerAction('console.new', () => void newConsole()),
     registerAction('view.toggleBottom', () => mutate((s) => toggleTool(s, 'console'))),
     registerAction('search.global', () => {
@@ -447,10 +458,10 @@ export function ProjectPage(props: { id: string }) {
         </div>
       }
     >
-      <div class="app">
+      <div class="app" classList={{ 'visual-focus': settings.visualFocus }}>
         <MenuBar />
         <NewTicketHost />
-        <div class="workbench">
+        <div class="workbench" onPointerDown={trackFocus} onFocusIn={trackFocus}>
           <Rail side="left" />
           <div class="work">
             <div class="work-top">
@@ -458,7 +469,7 @@ export function ProjectPage(props: { id: string }) {
                 <ZonePanel zone="left" width={session.left.width} />
                 <Resizer dir="x" onDrag={(d) => mutate((s) => (s.left.width = Math.max(160, Math.min(700, s.left.width + d))))} />
               </Show>
-              <main class="center">
+              <main class="center" data-focus="editor">
                 <EditorArea />
               </main>
               <Show when={shownIn(session, 'right')}>

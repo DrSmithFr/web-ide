@@ -29,6 +29,7 @@ import { lineMarks } from '../editor/linediff'
 import { formatDocument, renameSymbol } from '../lsp/refactor'
 import { t } from '../i18n'
 import { dropClasses, dropIndex, setDropAt } from './tabDrop'
+import { focusPart } from '../state/focus'
 
 export function EditorArea(props: { detached?: boolean }) {
   return (
@@ -127,7 +128,7 @@ function Pane(props: { id: string }) {
     ])
 
   return (
-    <div class="pane" classList={{ active: isActivePane() }} onMouseDown={() => setActivePane(props.id)}>
+    <div class="pane" classList={{ active: isActivePane(), focused: isActivePane() && focusPart() === 'editor' }} onMouseDown={() => setActivePane(props.id)}>
       <div
         class="tabbar"
         role="tablist"

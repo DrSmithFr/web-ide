@@ -1118,5 +1118,17 @@
   "the branch is kept": "la branche est conservée",
   "Remove the worktree of {branch}? The branch is kept.": "Supprimer le worktree de {branch} ? La branche est conservée.",
   "The worktree has uncommitted changes: they will be lost with it. Remove anyway?": "Le worktree a des modifications non commitées : elles seront perdues avec lui. Supprimer quand même ?",
-  "Worktree setup": "Préparation du worktree"
+  "Worktree setup": "Préparation du worktree",
+  "Accent color": "Couleur d'accent",
+  "Marks the focused part of the window: its active tab and its tool icon.": "Marque la partie de la fenêtre en focus : son onglet actif et l'icône de son outil.",
+  "Visual focus mode: everything but the focused part in grayscale": "Mode focus visuel : tout en niveaux de gris sauf la partie en focus",
+  "Visual focus mode": "Mode focus visuel",
+  "Yellow": "Jaune",
+  "Orange": "Orange",
+  "Red": "Rouge",
+  "Pink": "Rose",
+  "Purple": "Violet",
+  "Blue": "Bleu",
+  "Cyan": "Cyan",
+  "Green": "Vert"
 }

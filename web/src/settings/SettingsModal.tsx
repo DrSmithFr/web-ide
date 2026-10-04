@@ -3,7 +3,7 @@ import { createMemo, createResource, createSignal, For, Index, onCleanup, onMoun
 import { unwrap } from 'solid-js/store'
 import { Modal } from '../ui/overlay'
 import { settings, updateSettings, replaceSettings, type Settings } from '../state/settings'
-import { themes, themeById, tokenLabels, tokenTypes } from './themes'
+import { accents, accentOf, themes, themeById, tokenLabels, tokenTypes } from './themes'
 import {
   actions, actionsFor, activeLayout, captureKeys, comboFromEvent, comboLabel, detectedLayout, effectiveBindings, presets, suggestedLayout, actionById,
 } from '../keys/bindings'
@@ -109,6 +109,22 @@ function Themes() {
           )}
         </For>
       </div>
+      <h3>{t('Accent color')}</h3>
+      <p class="muted small">{t('Marks the focused part of the window: its active tab and its tool icon.')}</p>
+      <div class="accent-grid">
+        <For each={[{ id: '', name: 'Theme' }, ...accents]}>
+          {(a) => (
+            <button class="accent-card" classList={{ active: settings.accent === a.id }} data-accent={a.id} onClick={() => updateSettings((s) => (s.accent = a.id), 'Accent color')}>
+              <span class="accent-dot" style={{ background: accentOf(theme(), a.id)[0] }} />
+              <span>{t(a.name)}</span>
+            </button>
+          )}
+        </For>
+      </div>
+      <label class="check">
+        <input type="checkbox" checked={settings.visualFocus} onChange={(e) => updateSettings((s) => (s.visualFocus = e.currentTarget.checked), 'Visual focus')} />
+        {t('Visual focus mode: everything but the focused part in grayscale')}
+      </label>
       <h3>{t('Token colors · {theme}', { theme: t(theme().name) })}</h3>
       <p class="muted small">{t('No bold: the highlighting API only handles the color, the background, the underline and italics.')}</p>
       <div class="token-grid">

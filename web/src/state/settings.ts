@@ -3,13 +3,17 @@
 import { createStore, reconcile, unwrap } from 'solid-js/store'
 import { createEffect, createRoot, createSignal } from 'solid-js'
 import { on as onPod, request } from '../pod/rpc'
-import { themeById, tokenTypes } from '../settings/themes'
+import { accentOf, themeById, tokenTypes } from '../settings/themes'
 import { setGrammarOverrides } from '../editor/languages'
 import type { GrammarDef } from '../editor/tokenizer'
 import { setLang, type LangSetting } from '../i18n'
 
 export interface Settings {
   theme: string
+  /** Accent color id (settings/themes.ts), empty for the one of the theme. */
+  accent: string
+  /** Everything but the focused part of the window in grayscale. */
+  visualFocus: boolean
   tokenColors: Record<string, Record<string, string>>
   font: { family: string; size: number; lineHeight: number; ligatures: boolean; uiSize: number }
   editor: { tabSize: number; insertSpaces: boolean; highlightLine: boolean }
@@ -20,6 +24,8 @@ export interface Settings {
 
 export const defaultSettings: Settings = {
   theme: 'nuit',
+  accent: '',
+  visualFocus: false,
   tokenColors: {},
   font: { family: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace", size: 13, lineHeight: 1.55, ligatures: true, uiSize: 13 },
   editor: { tabSize: 4, insertSpaces: true, highlightLine: true },
@@ -33,6 +39,8 @@ function merge(raw: any): Settings {
   if (!raw || typeof raw !== 'object') return d
   return {
     theme: raw.theme ?? d.theme,
+    accent: typeof raw.accent === 'string' ? raw.accent : d.accent,
+    visualFocus: raw.visualFocus === true,
     tokenColors: raw.tokenColors ?? {},
     font: { ...d.font, ...(raw.font ?? {}) },
     editor: { ...d.editor, ...(raw.editor ?? {}) },
@@ -88,6 +96,9 @@ createRoot(() => {
     const t = themeById(settings.theme)
     const root = document.documentElement
     for (const [k, v] of Object.entries(t.ui)) root.style.setProperty(`--${k}`, v)
+    const [accent, accentFg] = accentOf(t, settings.accent)
+    root.style.setProperty('--accent', accent)
+    root.style.setProperty('--accent-fg', accentFg)
     root.dataset.theme = t.dark ? 'dark' : 'light'
     root.style.colorScheme = t.dark ? 'dark' : 'light'
     root.style.setProperty('--font-code', settings.font.family)

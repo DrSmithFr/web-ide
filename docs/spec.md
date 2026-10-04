@@ -69,6 +69,8 @@ To treat local and SSH projects the same way, the pod exposes one interface (`li
   - Bottom right: Problems, with two tabs: the diagnostics of the language servers and their output. A dot on its icon signals errors.
 - **Moving tools**: an icon is dragged to another group of the rails (same zone to reorder it); a shown tool stays shown in its new zone. The placement is saved in the session; *View › Reset the tool layout* restores the default one.
 - **Tabs**: file, console and Problems tabs share one look. File and console tabs are reordered by drag and drop (a marker shows where the tab lands; file tabs also move to another pane); the order of the console tabs is saved in the session.
+- **Focus**: the part of the window last clicked or typed in (a tool zone or an editor pane) has the focus; menus, the palette and dialogs leave it unchanged. Its active tab and its rail icon are in the accent color; the active tabs and icons of the other open tools are white (the text color in a light theme). The accent color is the one of the theme or one picked in the settings.
+- **Visual focus mode** (settings, *View › Visual focus mode*): everything but the focused part is shown in grayscale, rails and menu bar included.
 - **Bottom strip**: the tools of the two bottom zones, under the side panels and the editor. One shared height; side by side, the border between them can be dragged; alone, a tool takes the whole width.
 - **Split view**: recursive pane tree (split right, split down). A file open in several panes shares one buffer, never two copies.
 
@@ -133,7 +135,7 @@ To treat local and SSH projects the same way, the pod exposes one interface (`li
 
 ### Settings
 
-Large modal with navigation on the left: themes, fonts, keyboard shortcuts, syntax highlighting (add, edit, export rules as JSON per language), language of the interface.
+Large modal with navigation on the left: themes (with the accent color and the visual focus mode), fonts, keyboard shortcuts, syntax highlighting (add, edit, export rules as JSON per language), language of the interface.
 
 ### Home page and projects
 
