@@ -914,7 +914,7 @@ export class EditorView {
     box.className = 'ed-statement'
     box.style.top = `${this.padTop + l1 * this.lineHeight - 1}px`
     box.style.height = `${(l2 - l1 + 1) * this.lineHeight + 2}px`
-    box.style.width = `${maxCol * this.charWidth + 12}px`
+    box.style.width = `${maxCol * this.charWidth + 6}px`
     this.boxes.append(box)
   }
 

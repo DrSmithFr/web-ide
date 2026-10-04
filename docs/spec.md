@@ -102,6 +102,10 @@ To treat local and SSH projects the same way, the pod exposes one interface (`li
 - `Alt+Arrow`: jump between case boundaries inside a word (`foo|Bar`, `XML|Http|Request`, around `_` and `-`, between letters and digits). `Shift+Alt+Arrow` extends the selection.
 - `Ctrl+Alt+R`: opens the conflict resolution dialog of the current file (no effect without a conflict).
 
+### 6.4 Display
+
+- The text starts right against the gutter, without a left margin.
+
 ## 7. Keyboard shortcuts
 
 - **Centralised** binding table: an action (`search.find`, `conflict.resolve`, `view.splitRight`…) maps to a key combination stored by physical `code`, not by `key`.

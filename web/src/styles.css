@@ -255,11 +255,11 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 /* Own width: a longer line elsewhere must not re-layout every block. */
 .ed-block { display: block; width: max-content; }
 .ed-main { position: relative; flex: 1; }
-.ed-content { position: relative; z-index: 1; padding-left: 10px; padding-right: 40px; white-space: pre; outline: none; caret-color: var(--accent); min-height: 100%; color: var(--fg); }
+.ed-content { position: relative; z-index: 1; padding-left: 0; padding-right: 40px; white-space: pre; outline: none; caret-color: var(--accent); min-height: 100%; color: var(--fg); }
 .ed-content::selection { background: var(--sel-bg); }
 .ed-curline { position: absolute; left: 0; right: 0; top: 0; background: var(--cur-line); pointer-events: none; z-index: 0; }
 .ed-boxes { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
-.ed-statement { position: absolute; left: 4px; border: 1px solid var(--accent); border-radius: 4px; background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.ed-statement { position: absolute; left: 0; border: 1px solid var(--accent); border-radius: 4px; background: color-mix(in srgb, var(--accent) 7%, transparent); }
 .ed.readonly .ed-content { caret-color: transparent; }
 .ed-tooltip { display: none; position: absolute; z-index: 20; max-width: 520px; max-height: 300px; overflow: auto; padding: 8px 10px; background: var(--bg-3); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 6px 24px rgb(0 0 0 / 0.35); white-space: pre-wrap; font-size: 12.5px; }
 .ed-tooltip[data-kind=error] { border-left: 3px solid var(--danger); }
