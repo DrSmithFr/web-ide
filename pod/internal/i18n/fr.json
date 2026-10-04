@@ -126,5 +126,11 @@
   "note too long (%d characters, %d max)": "note trop longue (%d caractères, %d max)",
   "the ticket must be “To do”, “In progress” or “To test”": "le ticket doit être « Todo », « En cours » ou « À tester »",
   "To do": "Todo",
-  "unknown feedback kind: %s (%s)": "type de retour inconnu : %s (%s)"
+  "unknown feedback kind: %s (%s)": "type de retour inconnu : %s (%s)",
+  "Goals": "Goals",
+  "How to test": "Comment tester",
+  "git push failed: %s": "échec de git push : %s",
+  "gh pr create failed: %s": "échec de gh pr create : %s",
+  "gh pr create gave no address: %s": "gh pr create n'a pas donné d'adresse : %s",
+  "a pull request needs a remote “origin” and the gh command": "une pull request demande un remote « origin » et la commande gh"
 }

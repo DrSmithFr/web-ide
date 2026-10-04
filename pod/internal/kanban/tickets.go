@@ -97,6 +97,7 @@ type Ticket struct {
 	Description string       `json:"description"`
 	Plan        string       `json:"plan"`
 	TestSummary string       `json:"testSummary"`
+	PR          string       `json:"pr,omitempty"`
 	Base        string       `json:"base"`
 	Setup       string       `json:"setup"`
 	SetupLog    string       `json:"setupLog,omitempty"`
@@ -154,9 +155,9 @@ func (m *Manager) Get(loc Location, id int64) (*Ticket, error) {
 func get(db *sql.DB, id int64) (*Ticket, error) {
 	t := &Ticket{GoalList: []Goal{}, Notes: []Note{}, FeedbackList: []Feedback{}, Files: []string{}, ChatList: []ChatLink{}, Commits: []CommitLink{}, Attachments: []Attachment{}}
 	var snap string
-	row := db.QueryRow(`SELECT `+summaryCols+`, t.description, t.plan, t.test_summary, t.base, t.setup, t.setup_log, t.snapshot FROM tickets t WHERE t.id = ?`, id)
+	row := db.QueryRow(`SELECT `+summaryCols+`, t.description, t.plan, t.test_summary, t.pr, t.base, t.setup, t.setup_log, t.snapshot FROM tickets t WHERE t.id = ?`, id)
 	err := row.Scan(&t.ID, &t.Title, &t.Priority, &t.Status, &t.Branch, &t.Worktree, &t.Created, &t.Updated, &t.Closed, &t.GoalsDone, &t.Goals, &t.Chats, &t.FeedbackOpen,
-		&t.Description, &t.Plan, &t.TestSummary, &t.Base, &t.Setup, &t.SetupLog, &snap)
+		&t.Description, &t.Plan, &t.TestSummary, &t.PR, &t.Base, &t.Setup, &t.SetupLog, &snap)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -724,12 +725,13 @@ type GitState struct {
 	Worktree *string   `json:"worktree"`
 	Setup    *string   `json:"setup"`
 	SetupLog *string   `json:"setupLog"`
+	PR       *string   `json:"pr"`
 	Snapshot *Snapshot `json:"snapshot"`
 }
 
 func (m *Manager) SetGit(loc Location, id int64, g GitState) error {
 	return m.tx(loc, id, func(tx *sql.Tx, now int64) error {
-		for col, v := range map[string]*string{"branch": g.Branch, "base": g.Base, "worktree": g.Worktree, "setup": g.Setup, "setup_log": g.SetupLog} {
+		for col, v := range map[string]*string{"branch": g.Branch, "base": g.Base, "worktree": g.Worktree, "setup": g.Setup, "setup_log": g.SetupLog, "pr": g.PR} {
 			if v != nil {
 				if _, err := tx.Exec(`UPDATE tickets SET `+col+` = ? WHERE id = ?`, *v, id); err != nil {
 					return err

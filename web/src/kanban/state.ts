@@ -68,6 +68,8 @@ export interface Ticket extends Summary {
   description: string
   plan: string
   testSummary: string
+  /** Address of the pull request, once opened. */
+  pr?: string
   base: string
   setup: string
   setupLog?: string
@@ -275,9 +277,12 @@ export interface GitInfo {
   main: GitOpState
   into: string
   merged: boolean
+  /** A remote origin and the gh command: a pull request can be opened. */
+  canPR: boolean
 }
 export const gitInfo = (id: number) => request<GitInfo | null>('kanban.gitstate', { id })
 export const mergeTicket = (id: number, squash: boolean) => request<GitInfo>('kanban.merge', { id, squash })
+export const openPR = (id: number) => request<Ticket>('kanban.pr', { id })
 export const rebaseTicket = (id: number) => request<GitInfo>('kanban.rebase', { id })
 export const continueGit = (id: number, where: 'worktree' | 'main') => request<GitInfo>('kanban.continue', { id, where })
 export const abortGit = (id: number, where: 'worktree' | 'main') => request<GitInfo>('kanban.abort', { id, where })

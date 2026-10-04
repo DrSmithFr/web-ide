@@ -199,6 +199,8 @@ INSERT INTO feedback (ticket_id, kind, text, author, created) SELECT n.ticket_id
   WHERE n.kind = 'feedback' AND NOT EXISTS (SELECT 1 FROM goals g WHERE g.ticket_id = n.ticket_id AND g.source = 'feedback' AND g.text = TRIM(n.text));
 DELETE FROM goals WHERE source = 'feedback';
 DELETE FROM notes WHERE kind = 'feedback';`,
+	// 2: address of the pull request of a ticket.
+	`ALTER TABLE tickets ADD COLUMN pr TEXT NOT NULL DEFAULT '';`,
 }
 
 func migrate(db *sql.DB) error {

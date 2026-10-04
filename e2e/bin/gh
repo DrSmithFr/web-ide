@@ -1,0 +1,5 @@
+#!/bin/sh
+# Fake GitHub CLI of the browser tests: records its arguments next to the repository and
+# answers the address of a pull request.
+printf '%s\n' "$@" > "$(git rev-parse --git-common-dir)/gh-args"
+echo https://github.com/demo/repo/pull/7

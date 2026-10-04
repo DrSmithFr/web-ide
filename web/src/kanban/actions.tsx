@@ -7,7 +7,7 @@ import { errorToast } from '../ui/toast'
 import { request } from '../pod/rpc'
 import { openFile, project, root } from '../state/project'
 import {
-  abortGit, continueGit, filePatch, finishTicket, gitInfo, mergeTicket, openWorktreeWindow, rebaseTicket, roleLabels, ticketDiff, ticketVersion, unlinkChat, updateTicket, worktreeProject,
+  abortGit, continueGit, filePatch, finishTicket, gitInfo, mergeTicket, openPR, openWorktreeWindow, rebaseTicket, roleLabels, ticketDiff, ticketVersion, unlinkChat, updateTicket, worktreeProject,
   type ChatRole, type Diff, type GitInfo, type GitOpState, type Status, type Ticket,
 } from './state'
 import { openTicketChat, openWorktree, startTicketChat, startWorkSession } from './sessions'
@@ -383,6 +383,53 @@ function GitOps(props: { tk: Ticket; tick: number; behind: number; onDone: () =>
         </div>
       )}
     </Show>
+  )
+}
+
+/** Pull request of the ticket: its branch pushed to origin, opened with gh (docs/kanban.md). */
+export function PullRequest(props: { tk: Ticket; apply: Apply }) {
+  const tk = () => props.tk
+  const [busy, setBusy] = createSignal(false)
+  const [info] = createResource(
+    () => (tk().branch && !tk().pr ? { id: tk().id, v: ticketVersion(tk().id) } : null),
+    ({ id }) => gitInfo(id).catch(() => null),
+  )
+  const open = async () => {
+    setBusy(true)
+    await props.apply(openPR(tk().id))
+    setBusy(false)
+  }
+  return (
+    <Section title={t('Pull request')}>
+      <Show
+        when={tk().pr}
+        fallback={
+          <Show when={tk().branch} fallback={<p class="muted small">{t('No branch yet: it is created when development starts.')}</p>}>
+            <Show when={info()?.canPR} fallback={<p class="muted small">{t('A pull request needs a remote “origin” and the GitHub command gh.')}</p>}>
+              <div class="tk-git-row">
+                <button
+                  class="btn small"
+                  classList={{ primary: tk().status === 'review' }}
+                  disabled={busy()}
+                  title={t('Pushes the branch {branch} to origin, then opens its pull request with gh', { branch: tk().branch! })}
+                  onClick={() => void open()}
+                  data-testid="ticket-pr"
+                >
+                  <Icon name="branch" size={12} /> {busy() ? t('Opening the pull request…') : t('Create the pull request')}
+                </button>
+              </div>
+            </Show>
+          </Show>
+        }
+      >
+        <div class="tk-git-row">
+          <Icon name="branch" size={12} />
+          <a class="link mono ellipsis" href={tk().pr} target="_blank" rel="noopener" data-testid="ticket-pr-link">
+            {tk().pr}
+          </a>
+        </div>
+      </Show>
+    </Section>
   )
 }
 

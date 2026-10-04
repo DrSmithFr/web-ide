@@ -199,13 +199,14 @@ func (s *Server) registerKanbanGit() {
 		Main     kanban.State  `json:"main"`
 		Into     string        `json:"into"`
 		Merged   bool          `json:"merged"`
+		CanPR    bool          `json:"canPR"`
 	}
 	info := func(ctx context.Context, k gctx, t *kanban.Ticket) gitInfo {
 		base := firstOf(t.Base)
 		if base == "" {
 			base = k.git.DefaultBase(ctx)
 		}
-		gi := gitInfo{Main: k.git.State(ctx, k.root.Path), Into: k.git.LocalBranch(ctx, base)}
+		gi := gitInfo{Main: k.git.State(ctx, k.root.Path), Into: k.git.LocalBranch(ctx, base), CanPR: k.git.CanPR(ctx)}
 		if exists(k, t.Worktree) {
 			st := k.git.State(ctx, t.Worktree)
 			gi.Worktree = &st
@@ -282,6 +283,32 @@ func (s *Server) registerKanbanGit() {
 			done(c, k, t, "Branch merged into {branch} ({how})", kanban.Params{"branch": gi.Into, "how": how})
 		}
 		return info(ctx, k, t), nil
+	}))
+	// kanban.pr pushes the branch of the ticket and opens its pull request with gh.
+	s.handle("kanban.pr", h(func(ctx context.Context, c *Client, k gctx, p json.RawMessage) (any, error) {
+		t, err := ticketOf(k, p)
+		if err != nil {
+			return nil, err
+		}
+		if t.Branch == "" {
+			return nil, i18n.New("this ticket has no branch")
+		}
+		if !k.git.CanPR(ctx) {
+			return nil, i18n.New("a pull request needs a remote “origin” and the gh command")
+		}
+		base := firstOf(t.Base)
+		if base == "" {
+			base = k.git.DefaultBase(ctx)
+		}
+		url, err := k.git.OpenPR(ctx, t.Branch, base, "#"+itoa(t.ID)+" "+t.Title, kanban.PRBody(t, c.language()))
+		if err != nil {
+			return nil, err
+		}
+		if err := s.Kanban.SetGit(k.loc, t.ID, kanban.GitState{PR: &url}); err != nil {
+			return nil, err
+		}
+		done(c, k, t, "Pull request opened: {url}", kanban.Params{"url": url})
+		return s.Kanban.Get(k.loc, t.ID)
 	}))
 	s.handle("kanban.rebase", h(func(ctx context.Context, c *Client, k gctx, p json.RawMessage) (any, error) {
 		t, err := ticketOf(k, p)

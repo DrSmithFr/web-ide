@@ -13,7 +13,7 @@ import {
   moveTicket, priorityLabels, statusLabels, statusOrder, ticketVersion, unlinkCommit, updateTicket,
   MAX_DESCRIPTION, MAX_NOTE, type FeedbackKind, type Goal, type Priority, type Status, type Ticket,
 } from './state'
-import { abandonTicket, ChatLink, ticketActions, TicketChats, TicketGit } from './actions'
+import { abandonTicket, ChatLink, PullRequest, ticketActions, TicketChats, TicketGit } from './actions'
 import { startWorkSession } from './sessions'
 import { fmtAgo, fmtDate, fmtSize, t } from '../i18n'
 import './kanban.css'
@@ -153,6 +153,7 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
 
           <Stage tk={tk()} status="review">
             <FeedbackList tk={tk()} apply={props.apply} areaRef={(el) => (feedbackArea = el)} />
+            <PullRequest tk={tk()} apply={props.apply} />
           </Stage>
 
           <Section title={t('History ({n})', { n: events().length })} folded>

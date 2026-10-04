@@ -16,7 +16,7 @@ Number (#1, #2… per project), title, priority (low, normal, high, critical), l
 - **New**: description (Markdown, 1500 characters max: the model tends to be verbose), notes (1000 characters max each, with the conversation that wrote them), briefing conversations.
 - **To do**: implementation plan (Markdown), goals (a title and a description of how to check it, checkable), plan conversations.
 - **In progress**: development conversations, git and changes, how to test (written by the model when it finishes).
-- **To test**: test feedback (info, bug or new feature; 1000 characters max; checked once handled, by the model or the user; with the conversation handling it).
+- **To test**: test feedback (info, bug or new feature; 1000 characters max; checked once handled, by the model or the user; with the conversation handling it), pull request.
 
 The ticket view shows every stage, always open, the current one marked.
 
@@ -29,7 +29,7 @@ Tickets move with buttons only (no drag and drop).
 | New | Briefing, Generate the plan, Abandon | — (a plan moves the ticket to *To do* by itself, whoever writes it) |
 | To do | Back to New, Redo the plan, Start development (→ In progress), Abandon | — |
 | In progress | New session, Send to testing, Abandon | move to *To test* (with how to test) |
-| To test | Add feedback, Fix session (per open feedback), Back to In progress, Close (→ Done), Abandon | mark feedback handled |
+| To test | Add feedback, Fix session (per open feedback), Create the pull request, Back to In progress, Close (→ Done), Abandon | mark feedback handled |
 | Done / Abandoned | Reopen (Done → To test, Abandoned → New) | — |
 
 A feedback leaves the ticket in *To test*. Closing or abandoning removes the worktree; the branch is kept (abandoning offers to delete it). The change is frozen in the ticket when it is merged, or else when it is closed.
@@ -64,6 +64,7 @@ The usual path: a briefing makes the tickets, *Generate the plan* writes the pla
 - A configurable setup command runs in a new worktree (`npm install && cp ../../../.env .`…).
 - The worktree opens as a separate project in its own window: not listed on the home page, opened from its ticket or from the worktree selector of the menu bar, which shows the ticket and its status in place of the branch.
 - The model manages the branch and its commits (messages start with `#<n>`). The user triggers the merge (`merge --no-ff` by default, or squash) into the local base branch of the main folder (never pushed; uncommitted changes of the main folder are put aside with `--autostash` and applied again after the merge, also after a conflict once it is committed or aborted) and the rebase on the base (`--autostash` as well for the changes of the worktree).
+- Pull request (*To test* stage): with a remote `origin` and the `gh` command, *Create the pull request* pushes the branch (`git push --set-upstream origin`) then runs `gh pr create` (title `#<n> <title>`, base the ticket base without `origin/`, body: description, goals, how to test); its address is kept in the ticket. The only push of the IDE, always asked by the user.
 - Conflicts: no automatic abort; the ticket lists the conflicted files with *Continue*, *Abort* and *Resolution session*.
 - From *In progress* on: changed files and their diff against the chosen base (from the merge base), including uncommitted changes and untracked files of the worktree.
 

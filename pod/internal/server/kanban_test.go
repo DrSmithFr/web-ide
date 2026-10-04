@@ -257,3 +257,45 @@ func TestKanbanMergeRebase(t *testing.T) {
 		t.Fatalf("after the merge: a=%q b=%q", got, got2)
 	}
 }
+
+// The pull request of a ticket: branch pushed to origin, gh called with its title and base.
+func TestKanbanPR(t *testing.T) {
+	for k, v := range map[string]string{"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@x", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@x"} {
+		t.Setenv(k, v)
+	}
+	// A fake gh: records its arguments and answers the address of the pull request.
+	bin := t.TempDir()
+	os.WriteFile(filepath.Join(bin, "gh"), []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$(git rev-parse --git-common-dir)/gh-args\"\necho https://github.com/o/r/pull/7\n"), 0o755)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	_, ts := newServer(t)
+	a, _ := dial(t, ts, "secret-token-0123456789abcdef0123")
+	dir, origin := t.TempDir(), t.TempDir()
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("un\n"), 0o644)
+	gitIn(t, dir, "init", "-q", "-b", "main")
+	gitIn(t, dir, "add", "-A")
+	gitIn(t, dir, "commit", "-q", "-m", "init")
+	id := a.call("projects.create", map[string]any{"type": "local", "path": dir})["result"].(map[string]any)["id"].(string)
+	a.call("project.open", map[string]any{"id": id})
+	a.call("kanban.create", map[string]any{"title": "Export", "description": "Need"})
+	a.call("kanban.plan", map[string]any{"id": 1, "plan": "p", "goals": []string{"g"}})
+	a.call("kanban.start", map[string]any{"id": 1})
+	if gi := a.call("kanban.gitstate", map[string]any{"id": 1})["result"].(map[string]any); gi["canPR"] != false {
+		t.Fatalf("pull request without origin: %+v", gi)
+	}
+	gitIn(t, origin, "init", "-q", "--bare")
+	gitIn(t, dir, "remote", "add", "origin", origin)
+	if gi := a.call("kanban.gitstate", map[string]any{"id": 1})["result"].(map[string]any); gi["canPR"] != true {
+		t.Fatalf("pull request with origin and gh: %+v", gi)
+	}
+	tk := a.call("kanban.pr", map[string]any{"id": 1})["result"].(map[string]any)
+	if tk["pr"] != "https://github.com/o/r/pull/7" {
+		t.Fatalf("pr: %+v", tk)
+	}
+	if gitIn(t, origin, "branch", "--list", "ticket/1-export") == "" {
+		t.Fatal("branch not pushed")
+	}
+	args, _ := os.ReadFile(filepath.Join(dir, ".git", "gh-args"))
+	if s := string(args); !strings.Contains(s, "--base\nmain\n") || !strings.Contains(s, "--title\n#1 Export\n") || !strings.Contains(s, "Need\n\n## Goals\n- [ ] g") {
+		t.Fatalf("gh args: %s", s)
+	}
+}

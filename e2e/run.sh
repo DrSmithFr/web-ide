@@ -36,7 +36,7 @@ c.commit()
 PY
   # Global instructions and skills of the assistant come from the fixtures, not ~/.claude.
   rm -rf "$TMP/home" && cp -r home "$TMP/home"
-  WEBIDE_INSTRUCTIONS_HOME="$TMP/home" PATH="$HOME/go/bin:$HOME/sdk/go/bin:$PATH" "$ROOT/bin/web-ide-pod" -addr "127.0.0.1:$PORT" -data "$TMP/data" -workspace "$TMP/ws" \
+  WEBIDE_INSTRUCTIONS_HOME="$TMP/home" PATH="$ROOT/e2e/bin:$HOME/go/bin:$HOME/sdk/go/bin:$PATH" "$ROOT/bin/web-ide-pod" -addr "127.0.0.1:$PORT" -data "$TMP/data" -workspace "$TMP/ws" \
     -static "$ROOT/pod/webdist/dist" >"$TMP/pod.log" 2>&1 </dev/null &
   POD_PID=$!
   for _ in $(seq 50); do [ -s "$TMP/data/token" ] && curl -s -o /dev/null "http://127.0.0.1:$PORT/" && break; sleep 0.1; done

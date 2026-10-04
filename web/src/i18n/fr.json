@@ -1138,5 +1138,11 @@
   "To do": "Todo",
   "What did you notice while testing?": "Qu'as-tu remarqué en testant ?",
   "Write the implementation plan of ticket #{id} “{title}” and its goals.": "Rédige le plan d'implémentation du ticket #{id} « {title} » et ses goals.",
-  "{n} open": "{n} ouvert(s)"
+  "{n} open": "{n} ouvert(s)",
+  "Pull request": "Pull request",
+  "A pull request needs a remote “origin” and the GitHub command gh.": "Une pull request demande un remote « origin » et la commande GitHub gh.",
+  "Pushes the branch {branch} to origin, then opens its pull request with gh": "Pousse la branche {branch} sur origin, puis ouvre sa pull request avec gh",
+  "Opening the pull request…": "Ouverture de la pull request…",
+  "Create the pull request": "Créer la pull request",
+  "Pull request opened: {url}": "Pull request ouverte : {url}"
 }

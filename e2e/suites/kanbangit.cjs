@@ -2,6 +2,7 @@
 // the worktree as a project in its own window where the conversation runs; changes and
 // diff in the ticket; closing removes the worktree and freezes the change.
 const fs = require('fs')
+const path = require('path')
 const http = require('http')
 const { execSync } = require('child_process')
 const { run, openProject, assert, WS, OUT } = require('../common.cjs')
@@ -115,6 +116,13 @@ run(async ({ page, ctx }) => {
     assert((await page.textContent('.tk-events')).includes('Worktree set up') || (await page.textContent('.tk-events')).includes('Worktree setup finished'), 'setup in the history')
     await page.screenshot({ path: OUT + '/kanban-git.png' })
 
+    // No pull request without a remote; with one (and gh), the branch is pushed and the
+    // pull request opened.
+    assert(await page.isVisible('.tk-stage[data-stage=review] .tk-section:has-text("Pull request") p:has-text("origin")'), 'no pull request without a remote')
+    const origin = path.join(path.dirname(repo), 'origin.git')
+    execSync(`git init -q --bare ${origin}`)
+    git(`remote add origin ${origin}`)
+
     // Rebase with a conflict, resolved by hand, then merge into main.
     fs.writeFileSync(repo + '/notes.txt', 'main\n')
     git('commit -q -am "notes sur main"')
@@ -134,6 +142,11 @@ run(async ({ page, ctx }) => {
     assert(fs.existsSync(repo + '/export.txt') && fs.readFileSync(repo + '/notes.txt', 'utf8') === 'main\nticket\n', 'branch merged into main')
     assert(git('log -1 --format=%s').startsWith('Merge #1 Data export'), 'merge commit')
     await page.screenshot({ path: OUT + '/kanban-merge.png' })
+    await page.click('[data-testid=ticket-pr]')
+    await page.waitForSelector('[data-testid=ticket-pr-link]:has-text("pull/7")', { timeout: 10000 })
+    assert(execSync(`git -C ${origin} branch --list ticket/1-data-export`).toString().trim() !== '', 'branch pushed to origin')
+    const ghArgs = fs.readFileSync(repo + '/.git/gh-args', 'utf8')
+    assert(ghArgs.includes('--title\n#1 Data export\n') && ghArgs.includes('--base\nmain\n') && ghArgs.includes('export.txt exists'), 'gh pr create with title, base and goals: ' + ghArgs.replace(/\n/g, ' '))
 
     // Close: worktree removed, its window leaves, the change stays readable.
     await page.click('[data-testid=ticket-close]')
