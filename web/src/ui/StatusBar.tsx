@@ -1,6 +1,7 @@
-// Status bar under the editor area: caret position, then the format of the active file
-// (line separator, encoding, indentation) and its language. A click on a format item
-// opens a menu to convert the file (saved at once) or to choose its indentation.
+// Status bar under the editor area: caret position (a click opens "Go to line"), then the
+// format of the active file (line separator, encoding, indentation) and its language. A
+// click on a format item opens a menu to convert the file (saved at once) or to choose its
+// indentation.
 import { createMemo, Show } from 'solid-js'
 import { activeTab, docsVersion, getDoc, saveDoc } from '../state/project'
 import { settings } from '../state/settings'
@@ -8,6 +9,7 @@ import type { Doc, FileFormat } from '../editor/doc'
 import type { Indent } from '../editor/indent'
 import { contextMenu, type MenuItem } from './overlay'
 import { cursorInfo } from './status'
+import { runAction, shortcutOf } from '../keys/bindings'
 import { t, tn } from '../i18n'
 
 const encodings: [string, string][] = [
@@ -47,10 +49,10 @@ export function StatusBar() {
       <span class="grow" />
       <Show when={cursorInfo()}>
         {(c) => (
-          <span class="sb-item" data-testid="status-cursor">
+          <button class="sb-item" data-testid="status-cursor" title={`${t('Go to line…')} (${shortcutOf('nav.gotoLine')})`} onClick={() => runAction('nav.gotoLine')}>
             {c().line}:{c().col}
             {c().sel ? ` (${tn(c().sel, '{n} char', '{n} chars')})` : ''}
-          </span>
+          </button>
         )}
       </Show>
       <Show when={doc()}>

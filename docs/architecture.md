@@ -27,8 +27,8 @@ The front end is built by Vite and embedded in the pod binary (`pod/webdist`), s
 
 ## Data on disk
 
-- `~/.web-ide/` (pod data, `-data` flag): `config.json` (address, workspace), `token`, `projects.json`, `settings.json` (with history), `sessions/<project>.json`, `secrets.json` (0600), `known_hosts` (trust on first use, in addition to `~/.ssh/known_hosts`), `sql-history/`, `llm.json` (model servers), `system-prompt.md` / `plan-prompt.md` / `briefing-prompt.md`, `models/hf/` (speech models), `chats/` and `kanban/` (bases of SSH projects), `icons/<project>.svg` (copy of the project icons for the home page: an SSH project is not reached to list it).
-- `<project>/.ide/`: `connections.json` (database connections, no secret), `project.json` (`lsp`: command per language; `tests`: pattern per extension, e.g. `{".php": "{name}Spec.php"}`), `chats.db` (conversations), `kanban.db` (tickets), `worktrees/` (one git worktree per ticket in development), `icon.svg` and `icon.json` (project icon, drawn by the page: `ui/projectIcon.ts`, `ui/IconEditor.tsx`). `.ide/.gitignore` keeps the bases and the worktrees out of git.
+- `~/.web-ide/` (pod data, `-data` flag): `config.json` (address, workspace), `token`, `projects.json`, `settings.json` (with history), `sessions/<project>.json` (layout, tabs, tool zones, explorer options, and per file the cursor, folds and chosen indentation), `secrets.json` (0600), `known_hosts` (trust on first use, in addition to `~/.ssh/known_hosts`), `sql-history/`, `llm.json` (model servers), `system-prompt.md` / `plan-prompt.md` / `briefing-prompt.md`, `models/hf/` (speech models), `chats/` and `kanban/` (bases of SSH projects), `icons/<project>.svg` (copy of the project icons for the home page: an SSH project is not reached to list it).
+- `<project>/.ide/`: `connections.json` (database connections, no secret), `folders.json` (folder marks: source, tests, excluded), `project.json` (`lsp`: command per language; `tests`: pattern per extension, e.g. `{".php": "{name}Spec.php"}`), `chats.db` (conversations), `kanban.db` (tickets), `worktrees/` (one git worktree per ticket in development), `icon.svg` and `icon.json` (project icon, drawn by the page: `ui/projectIcon.ts`, `ui/IconEditor.tsx`). `.ide/.gitignore` keeps the bases and the worktrees out of git.
 
 ## Protocol
 
@@ -41,7 +41,7 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 | Package | Role |
 |---|---|
 | `server` | HTTP, pairing, WebSocket RPC; handlers per domain (`handlers*.go`) |
-| `runtime` | One per open project: file system, watches, revisions, buffers shared between windows, consoles, LSP, databases, git |
+| `runtime` | One per open project: file system, watches, revisions, buffers shared between windows, consoles, LSP, databases, git, folder marks; text files decoded to UTF-8 with LF and encoded back in their format (`textfmt.go`) |
 | `fsx` | Local and SFTP file systems, watching (fsnotify or polling) |
 | `sshx` | SSH agent, keys, passwords, host keys (TOFU), connection pool |
 | `execx` | Local or SSH processes, PTYs |
@@ -61,12 +61,12 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 
 | Folder | Role |
 |---|---|
-| `editor/` | `Doc` (buffer, revisions, undo), `EditorView` (block rendering, Custom Highlight API), tokenizer and grammars, three-way merge, line diff, sub-word moves, find bar |
-| `state/` | Open project and session (tabs, split tree, tool zones), settings, git state |
+| `editor/` | `Doc` (buffer, revisions, undo, file format, indentation), `EditorView` (block rendering, Custom Highlight API, indentation guides, whitespace overlay, multiple carets, folding), `carets.ts` (words, occurrences), `folding.ts` (fold ranges), `indent.ts` (indentation detection), tokenizer and grammars, three-way merge, line diff, sub-word moves, find bar |
+| `state/` | Open project and session (tabs, split tree, tool zones), settings, git state, folder marks |
 | `keys/` | Binding table and QWERTY / AZERTY presets |
 | `lsp/` | Client, completion, edits, rename and formatting |
-| `ui/` | Editor area, diff view, overlays (modal, prompt, pick list, context menu), toasts, icons |
-| `panels/` | Explorer, global search, Git |
+| `ui/` | Editor area, status bar, diff view, overlays (modal, prompt, pick list, context menu), toasts, icons |
+| `panels/` | Explorer (with file type icons, `fileIcons.tsx`), global search, Git |
 | `tools/`, `db/`, `console/`, `conflict/`, `settings/`, `pages/` | Right-panel tools, database explorer, Console and Problems tools, conflict dialog, settings modal, pages |
 | `llm/` | AI assistant: state, agent loop, tools, prompt, Markdown, attachments, speech recognition |
 | `kanban/` | Board, ticket view, workflow actions, linked conversations |
@@ -98,7 +98,7 @@ make build          # front end (Vite) then pod binary bin/web-ide-pod (front en
 make dev            # pod with -allow-remote on 0.0.0.0:4433 + Vite on 0.0.0.0:5173 (hot reload)
 make test           # go vet + go test + tsc
 make e2e            # browser tests, all suites (a few minutes)
-./e2e/run.sh git    # one suite: editing features restore+ git lsp llm agent chat plan kanban kanbanai kanbangit i18n speech perf
+./e2e/run.sh git    # one suite: editing editor features restore+ git projects explorer lsp llm agent chat plan kanban kanbanai kanbangit i18n speech perf
 ```
 
 - Each e2e suite gets a fresh pod with temporary data and a workspace copied from `e2e/fixtures`; a suite ending with `+` reuses the previous pod. The assistant suites use a scripted fake OpenAI-compatible server. Chromium comes from the Playwright cache or `CHROME=…`; the `speech` suite downloads `whisper-tiny` once (kept in `~/.cache/web-ide-e2e/models`); the `lsp` suite needs `gopls`.
@@ -110,6 +110,10 @@ make e2e            # browser tests, all suites (a few minutes)
 - **Solid empties a container** whose only child is dynamic: a node mounted by hand (the editor view) needs its own element (`.editor-mount`).
 - **View callbacks run under `untrack`** (`useEditorView`), otherwise an effect calling `setSelection` subscribes to what the callback reads.
 - **Editor blocks use `width: max-content`**, otherwise lengthening the longest line re-lays out the whole file.
+- **Editor rows are not lines** once something is folded: positions go through `lineTop` / `lineAtY` (`rowOf`, `lineOfRow`), never `line * lineHeight`. Folding splits a block (`splitText` then a move to a new element), which loses the DOM selection: it is set again afterwards.
+- **The editor overlays share the global CSS**: a class such as `.tab` (editor tabs) also styles an element of the whitespace overlay; overlay elements use short editor-specific names.
+- **The browser draws no caret at the end of a non-empty selection**: with several carets the editor hides the native caret and draws them all.
+- **`caretPositionFromPoint` at the left edge** of the text can land in the gutter: `offsetAt` keeps the point inside the content.
 - **No `push(...bigArray)`** (stack overflow on large pastes): copy in a loop.
 - **A Solid store merges objects**: `setChat('running', {})` clears nothing; write `{ stream: undefined }`.
 - **DOMPurify** drops attributes containing `-->` (Mermaid sources are stored URI-encoded) and HTML inside `foreignObject` (Mermaid uses `htmlLabels: false`).

@@ -16,7 +16,8 @@ Un IDE auto-hébergé qui tourne dans le navigateur, adossé à un petit agent l
 
 ## Fonctionnalités
 
-- **Éditeur** : rendu par blocs rapide (fichiers de 100 000 lignes), coloration syntaxique par la CSS Custom Highlight API (Go, PHP, JavaScript, TypeScript, Python, nginx…), panneaux divisés partageant les buffers, recherche dans le fichier et dans tout le projet, navigation par sous-mots, raccourcis QWERTY et AZERTY, thèmes.
+- **Éditeur** : rendu par blocs rapide (fichiers de 100 000 lignes), coloration syntaxique par la CSS Custom Highlight API (Go, PHP, JavaScript, TypeScript, Python, nginx…), panneaux divisés partageant les buffers, multi-curseur (occurrence suivante, sélection en colonne), repli de code, guides d'indentation, espaces visibles, recherche dans le fichier et dans tout le projet, navigation par sous-mots, barre d'état avec séparateur de ligne, encodage (UTF-8, UTF-16, Windows-1252) et indentation, raccourcis QWERTY et AZERTY, thèmes.
+- **Explorateur de fichiers** : icônes par type de fichier, couleurs git, marques de dossiers source / tests / exclus.
 - **Sûr avec les autres outils** : quand un agent d'IA ou un autre programme modifie un fichier ouvert, la modification est fusionnée dans votre buffer (fusion à trois voies) ; les vrais conflits ouvrent une fenêtre de résolution à trois volets.
 - **Navigation dans le code** par les serveurs de langage (gopls, intelephense, pyright, typescript-language-server…) : définition, références, implémentations, symboles, complétion, renommage, formatage, diagnostics.
 - **Projets locaux et SSH** : les mêmes fonctions sur un hôte distant en SSH/SFTP, avec vos clés locales.

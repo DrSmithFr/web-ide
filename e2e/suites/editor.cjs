@@ -245,6 +245,11 @@ run(async ({ page }) => {
   assert(!(await page.$('.menubar [data-testid=status-cursor]')) && /^\d+:\d+$/.test(await item('cursor')), 'caret position in the status bar ' + (await item('cursor')))
   assert((await page.textContent('[data-testid=status-bar]')).includes('YAML') && (await item('indent')) === '2 spaces', 'YAML indented by 2 spaces')
   await open(page, 'main.go')
+  await page.click('[data-testid=status-cursor]')
+  await page.keyboard.type('3')
+  await page.keyboard.press('Enter')
+  await page.waitForFunction(() => document.querySelector('[data-testid=status-cursor]').textContent.startsWith('3:'))
+  assert(true, 'a click on the caret position opens "Go to line"')
   assert((await item('eol')) === 'LF' && (await item('encoding')) === 'UTF-8' && (await item('indent')) === 'Tab', 'Go file: LF, UTF-8, tabs')
   const menuItem = async (id, label) => {
     await page.click(`[data-testid=status-${id}]`)

@@ -16,7 +16,8 @@ A self-hosted IDE that runs in your browser, backed by a small local agent — t
 
 ## Features
 
-- **Editor** — fast block rendering (100,000-line files), syntax highlighting with the CSS Custom Highlight API (Go, PHP, JavaScript, TypeScript, Python, nginx…), split panes sharing buffers, find in file and project-wide search, sub-word navigation, QWERTY and AZERTY shortcut presets, themes.
+- **Editor** — fast block rendering (100,000-line files), syntax highlighting with the CSS Custom Highlight API (Go, PHP, JavaScript, TypeScript, Python, nginx…), split panes sharing buffers, multiple carets (next occurrence, column selection), code folding, indentation guides, visible whitespace, find in file and project-wide search, sub-word navigation, status bar with line separator, encoding (UTF-8, UTF-16, Windows-1252) and indentation, QWERTY and AZERTY shortcut presets, themes.
+- **File explorer** — file type icons, git colors, source / test / excluded folder marks.
 - **Safe with other tools** — when an AI agent or any program changes an open file, the change is merged into your buffer (three-way merge); real conflicts open a three-pane resolution dialog.
 - **Code navigation** through language servers (gopls, intelephense, pyright, typescript-language-server…): definition, references, implementations, symbols, completion, rename, formatting, diagnostics.
 - **Local and SSH projects** — the same features on a remote host over SSH/SFTP, with your local keys.

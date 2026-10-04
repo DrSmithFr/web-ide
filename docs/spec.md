@@ -54,6 +54,7 @@ To treat local and SSH projects the same way, the pod exposes one interface (`li
 | on |           |  Editor               | o | on  |
 | s  |           |                       | o | s   |
 |    |           |                       | l |     |
+|    |           | Status bar  1:1 LF …  |   |     |
 |    +-----------+-----------+-----------+---+     |
 |    | Console (tabs)        | Problems      |     |
 +----+-----------------------+---------------+-----+
@@ -62,7 +63,7 @@ To treat local and SSH projects the same way, the pod exposes one interface (`li
 - **Menu bar**, from left to right: home button; project icon (click: icon editor), project title and the **worktree selector** (current branch, or the ticket of a worktree window); the File, Edit, Navigate… menus; then on the right conflicts, pod status (connection state, download and upload rate in bytes/s over a sliding window of about one second) and settings.
 - **Worktree selector**: lists the main folder, the worktrees of the tickets (with their status) and the other worktrees of the repository; choosing one opens its window, or brings back the one already open. *Open a branch…* checks an existing or new branch out in its own worktree (`.ide/worktrees/b-<branch>`) opened in its own window: the main folder is never switched, so its uncommitted changes never get in the way. The setup command of the kanban (`npm install`…) runs in a console of the new worktree window. *Remove a worktree…* deletes one of these worktrees and its project (confirmation when it has uncommitted changes); the branch is kept, and a window open on it goes back to the main folder. Ticket worktrees go with their ticket.
 - **Editor window**: explorer panel on the left, central editor with a tab bar, tools panel on the right.
-- **Status bar** under the editor area (one for all the split panes, about the active one): caret position and selected characters, then for a file its line separator (`LF`/`CRLF`), encoding and indentation, and the language. A click on the line separator or the encoding converts the file (written at once); a click on the indentation chooses tabs or 2, 4 or 8 spaces for this file (kept in the session).
+- **Status bar** under the editor area (one for all the split panes, about the active one): caret position and selected characters (a click opens *Go to line*), then for a file its line separator (`LF`/`CRLF`), encoding and indentation, and the language. A click on the line separator or the encoding converts the file; a click on the indentation chooses tabs or 2, 4 or 8 spaces for this file (section 6.7).
 - **Icon rails** on both sides, the full height of the window, each with a top and a bottom group: four tool zones (top left, bottom left, bottom right, top right). Each icon toggles its tool; clicking the active icon hides it; each zone shows one tool at a time.
   - Top left: file explorer, global search, Git, kanban.
   - Top right: AI assistant, database explorer, structure, conflicts, infos. Infos stacks three sections: properties (project, target, pod, active tab), connections (local SSH keys, hosts of `~/.ssh/config`) and extensions (language servers).
@@ -99,26 +100,39 @@ To treat local and SSH projects the same way, the pod exposes one interface (`li
 
 ### 6.3 Navigation shortcuts
 
-- `Ctrl+Arrow`: native browser behaviour, not intercepted.
+- `Ctrl+Arrow`: native browser behaviour, not intercepted (with several carets, the editor moves them all by word).
 - `Alt+Arrow`: jump between case boundaries inside a word (`foo|Bar`, `XML|Http|Request`, around `_` and `-`, between letters and digits). `Shift+Alt+Arrow` extends the selection.
 - `Ctrl+Alt+R`: opens the conflict resolution dialog of the current file (no effect without a conflict).
 
-### 6.5 Multiple carets
-
-- The primary caret is the browser selection; the other selections are drawn by the editor (a `Highlight` for their text) and follow the edits made elsewhere. With several carets, the editor draws them all, the primary one included (the browser shows no caret at the end of a selection).
-- `Alt+J` selects the word at the caret, then adds the next occurrence of the selected text (whole words when started from the word at the caret), which becomes the primary caret; `Shift+Alt+J` removes the last one added; `Ctrl+Alt+Shift+J` selects every occurrence.
-- Column selection by dragging with the middle button (lines too short for a caret at the column of the mouse are left out) (the paste of the primary selection that Linux does on release is dropped) or with `Alt+Shift` and the left button; `Alt+click` adds a caret or removes the one clicked; `Escape`, a click or a move made by the browser (`Ctrl+Home`, select all, page keys) leaves a single caret.
-- Typing, `Backspace`/`Delete` (also by word or line), `Enter` (auto-indent), `Tab`, the arrows (`Ctrl` by word, `Alt` by sub-word), `Home`/`End` and their `Shift` variants act on every caret; each such edit is one undo step. Copy joins the selections one per line (the lines of the carets when nothing is selected); a paste with as many lines as there are carets gives one line to each.
-
 ### 6.4 Display
-
-- **File format**: the pod decodes UTF-8, UTF-8 with BOM, UTF-16 (with BOM) and, for other non-binary data, Windows-1252; CRLF line ends become LF in the editor. Files are written back in their encoding and with their line separator (the most frequent one when they were mixed). A character the encoding cannot hold makes the save fail with a message.
-- **Indentation** of each file is detected (tabs, or the most frequent increase of spaces): `Tab`, auto-indent and the guides follow it; files without indentation follow the settings.
 
 - The text starts right against the gutter, without a left margin.
 - **Indentation guides** (setting, on by default): a thin vertical line at each indentation level, the step being the most frequent indentation increase of the file (else the tab size); blank lines take the smaller indentation of the lines around them. The guide of the block holding the caret (or opened by the caret line) is brighter.
 - **Whitespace** (setting and *View › Show whitespace*, off by default): a dot for each space, an arrow for each tab, `↵` at each line end, drawn faintly over the text by an overlay copying the visible lines in transparent characters (exact widths, tab stops included).
-- **Folding**: brackets outside strings and comments for the C-like languages (the line of the closing bracket is hidden too and its text follows the placeholder: `func main() {⋯}`), the indentation for Python, YAML, HTML and plain text, the headings for Markdown. A chevron in the gutter (shown on hover, always for a folded range) folds or unfolds; a folded range shows a `⋯` placeholder after its header, a click on it unfolds. `Ctrl+-` / `Ctrl+=` fold and unfold the block of the caret, `Ctrl+Shift+-` / `Ctrl+Shift+=` every block (numeric keypad too; `Ctrl+-` is the `-` key of the AZERTY row). Hidden lines stay in the DOM in blocks set to `display: none`: offsets, copy and search are unchanged. An edit inside a range, or adding or removing lines at its header, unfolds it; moving the caret to a hidden line (go to line, search, navigation) unfolds it. Folded ranges are kept in the session with the cursor of the file.
+
+### 6.5 Folding
+
+- Ranges: brackets outside strings and comments for the C-like languages (the line of the closing bracket is hidden too and its text follows the placeholder: `func main() {⋯}`), the indentation for Python, YAML, HTML and plain text, the headings for Markdown (outside code fences).
+- A chevron in the gutter (shown on hover, always for a folded range) folds or unfolds; a folded range shows a `⋯` placeholder after its header, a click on it unfolds.
+- `Ctrl+-` / `Ctrl+=` fold and unfold the block of the caret, `Ctrl+Shift+-` / `Ctrl+Shift+=` every block (numeric keypad too; on AZERTY, `-` is the key of the `6`). Also in the *Code* menu.
+- Hidden lines stay in the DOM, in blocks set to `display: none`: offsets, copy and search are unchanged.
+- An edit inside a range, or adding or removing lines at its header, unfolds it; moving the caret to a hidden line (go to line, search, navigation) unfolds it. Typing on the header line keeps the fold.
+- Folded ranges are kept in the session with the cursor of the file.
+
+### 6.6 Multiple carets
+
+- The primary caret is the browser selection; the other selections are drawn by the editor (a `Highlight` for their text) and follow the edits made elsewhere. With several carets, the editor draws them all, the primary one included (the browser shows no caret at the end of a selection).
+- `Alt+J` selects the word at the caret, then adds the next occurrence of the selected text (whole words when started from the word at the caret), which becomes the primary caret; `Shift+Alt+J` removes the last one added; `Ctrl+Alt+Shift+J` selects every occurrence. The first and the last are also in the *Edit* menu.
+- Column selection: drag with the middle button, or with `Alt+Shift` and the left button. Lines too short for a caret at the column of the mouse are left out. The paste of the primary selection that Linux does when the middle button is released is dropped.
+- `Alt+click` adds a caret or removes the one clicked. `Escape`, a click or a move made by the browser (`Ctrl+Home`, select all, page keys) leaves a single caret.
+- Typing, `Backspace`/`Delete` (also by word or line), `Enter` (auto-indent), `Tab`, the arrows (`Ctrl` by word, `Alt` by sub-word), `Home`/`End` and their `Shift` variants act on every caret; each such edit is one undo step, and undo leaves a single caret. A dead key or an input method types at every caret too. Copy joins the selections one per line (the lines of the carets when nothing is selected); a paste with as many lines as there are carets gives one line to each.
+
+### 6.7 File format and indentation
+
+- **Encoding**: the pod decodes UTF-8, UTF-8 with BOM, UTF-16 (with BOM) and, for other non-binary data, Windows-1252; anything else opens as binary. The editor always works on UTF-8 text.
+- **Line separator**: CRLF line ends become LF in the editor. A file is written back in its encoding and with its line separator (the most frequent one when they were mixed). A character the encoding cannot hold makes the save fail with a message, and the file keeps its format.
+- **Indentation** of each file is detected (tabs, or the most frequent increase of spaces): `Tab`, auto-indent and the guides follow it; files without indentation follow the settings.
+- The status bar (section 5) shows the three and changes them: converting the line separator or the encoding saves the file at once (with its unsaved changes); choosing an indentation only changes what the editor inserts from then on, and is kept in the session.
 
 ## 7. Keyboard shortcuts
 
@@ -143,7 +157,7 @@ To treat local and SSH projects the same way, the pod exposes one interface (`li
 
 ## 9. Session and persistence
 
-**Pod side, per project**: open files, cursor position per file, consoles, split layout (tree, sizes, active file per pane). Pushed over the WebSocket on every change (debounced for the cursor), restored on load or reconnection, so the session is the same from another browser or machine.
+**Pod side, per project**: open files, per file the cursor position, folded ranges and chosen indentation, explorer options, consoles, split layout (tree, sizes, active file per pane). Pushed over the WebSocket on every change (debounced for the cursor), restored on load or reconnection, so the session is the same from another browser or machine.
 
 **Settings** (`~/.web-ide/settings.json`): themes, fonts, shortcuts, custom highlighting rules, language.
 
@@ -156,7 +170,7 @@ To treat local and SSH projects the same way, the pod exposes one interface (`li
 
 ### Settings
 
-Large modal with navigation on the left: themes (with the accent color and the visual focus mode), fonts, keyboard shortcuts, syntax highlighting (add, edit, export rules as JSON per language), language of the interface.
+Large modal with navigation on the left: themes (with the accent color and the visual focus mode), fonts, editor (tab size, indentation with spaces, current line, indentation guides, whitespace), keyboard shortcuts, syntax highlighting (add, edit, export rules as JSON per language), language of the interface.
 
 ### Home page and projects
 
@@ -164,7 +178,7 @@ Large modal with navigation on the left: themes (with the accent color and the v
 - The project registry lives in the pod. Each project has its own URL, `/project/:id`, with its own pod session.
 - Every project is a git repository: creating a project runs `git init` (first branch `main`, an empty first commit when the folder is empty) unless the folder is already in a repository, and adds the optional remote as `origin`. An SSH host not reachable at creation (password) gets it at the first opening (`gitSetup` pending in the registry).
 - **Project icon**: a glyph (a subset of Lucide) or 1 to 3 characters on a shape (circle, rounded square, square, hexagon, diamond) filled with a colour or a two-colour gradient in one of 8 directions. Shown on the home page, and as the favicon of every window of the project so that browser tabs tell the projects apart; the worktree of a ticket shows the icon of its project with a dot. The page draws the SVG and saves it in `.ide/icon.svg` with its description in `.ide/icon.json`; a project without one gets one generated (initials, colour and shape from its id).
-- Each project has a `.ide` folder: project settings, database connections (without secrets), conversations of the assistant and the kanban (both ignored by git).
+- Each project has a `.ide` folder: project settings, folder marks, database connections (without secrets), conversations of the assistant and the kanban (both ignored by git).
 
 ### Detached windows
 
@@ -237,7 +251,7 @@ Right-panel tool talking to a **llama.cpp** or **Ollama** server (address and op
 
 ## 14. Decisions
 
-- **Q1**: the pod pushes the whole file (`fs.changed`) on each change, after 150 ms of stability (AI tools often write in several steps).
+- **Q1**: the pod pushes the whole file (`fs.changed`, decoded to UTF-8 with LF line ends, with its encoding and line separator) on each change, after 150 ms of stability (AI tools often write in several steps).
 - **Q2**: "accept both" concatenates local then remote.
 - **Q3**: credentials are never written in `.ide`. Remembered passwords go to `~/.web-ide/secrets.json` (mode 0600, same model as `~/.pgpass`, not encrypted); otherwise they stay in the pod's memory for the session.
 - **Q4**: Redis keys get a dedicated node (type and TTL) under each `dbN`.
