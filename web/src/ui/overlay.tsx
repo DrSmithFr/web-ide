@@ -104,6 +104,9 @@ interface PickReq {
   initial?: number
   noFilter?: boolean
   anchor?: { left: number; top: number }
+  /** Labels are code (monospace); details are paths (monospace). */
+  codeLabel?: boolean
+  pathDetail?: boolean
   resolve: (v: any) => void
   onPreview?: (v: any) => void
 }
@@ -116,6 +119,8 @@ export function pick<T>(o: {
   initial?: number
   noFilter?: boolean
   anchor?: { left: number; top: number }
+  codeLabel?: boolean
+  pathDetail?: boolean
 }): Promise<T | null> {
   return new Promise((resolve) => setPickReq({ ...(o as any), resolve }))
 }
@@ -244,9 +249,9 @@ function PickHost() {
                       <Show when={it.icon}>
                         <span class="pick-icon">{it.icon}</span>
                       </Show>
-                      <span class="pick-label">{it.label}</span>
+                      <span class="pick-label" classList={{ mono: r().codeLabel }}>{it.label}</span>
                       <Show when={it.detail}>
-                        <span class="pick-detail">{it.detail}</span>
+                        <span class="pick-detail" classList={{ mono: r().pathDetail }}>{it.detail}</span>
                       </Show>
                       <Show when={it.hint}>
                         <kbd class="pick-hint">{it.hint}</kbd>

@@ -7,6 +7,7 @@ import { fileState, gitStatus, refreshGit, type GitFile } from '../../state/git'
 import { contextMenu } from '../../ui/overlay'
 import { errorToast, toast } from '../../ui/toast'
 import { Icon } from '../../ui/icons'
+import { EmptyState } from '../../ui/EmptyState'
 import { t, tn } from '../../i18n'
 import { discard, openChange, push, pushMenu, stage, unstage, type PushMode } from './actions'
 import { FileTree } from './FileTree'
@@ -129,7 +130,7 @@ export function ChangesTab() {
   return (
     <div class="git-split">
       <div class="panel-body">
-        <Show when={files().length} fallback={<p class="muted pad small">{t('No change.')}</p>}>
+        <Show when={files().length} fallback={<EmptyState icon="check" text={t('No change.')} />}>
           <FileTree
             root={tree()}
             testid="git-changes"

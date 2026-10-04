@@ -11,6 +11,7 @@ import { Icon } from '../ui/icons'
 import { connect, connections, connById, refreshConnections, withAuth, type ConnView, type DbNode } from './api'
 import { ConnectionsModal } from './ConnectionForm'
 import { t } from '../i18n'
+import { EmptyState } from '../ui/EmptyState'
 
 interface Sel {
   connId: string
@@ -208,30 +209,30 @@ export function DatabaseTool() {
   return (
     <div class="panel db-tool">
       <div class="panel-head">
-        <span class="panel-title">Database explorer</span>
+        <span class="panel-title">{t('Database explorer')}</span>
       </div>
       <div class="toolbar compact">
         <button class="icon-btn" title={t('Add a connection')} onClick={() => setEditing('new')}>
-          <Icon name="plus" />
+          <Icon name="plus" size={14} />
         </button>
         <button class="icon-btn" title={t('Edit the connections')} onClick={() => setEditing(sel()?.connId ?? connections()[0]?.id ?? 'new')}>
-          <Icon name="edit" />
+          <Icon name="edit" size={14} />
         </button>
         <button class="icon-btn" title={t('Refresh the selected connection')} disabled={!conn()} onClick={() => conn() && refresh(conn()!)}>
-          <Icon name="refresh" />
+          <Icon name="refresh" size={14} />
         </button>
         <button class="icon-btn" title={t('Close the selected connection')} disabled={conn()?.status.state !== 'connected'} onClick={() => conn() && close(conn()!)}>
-          <Icon name="stop" />
+          <Icon name="stop" size={14} />
         </button>
         <button class="icon-btn" title={t('Open a console (selected connection)')} disabled={!conn()} onClick={() => conn() && openConsole(conn()!.id, sel()?.node?.db)}>
-          <Icon name="terminal" />
+          <Icon name="terminal" size={14} />
         </button>
         <button class="icon-btn" title={t('Open the selected table')} disabled={!selTable()} onClick={() => selTable() && openTable(sel()!.connId, selTable()!)}>
-          <Icon name="table" />
+          <Icon name="table" size={14} />
         </button>
       </div>
       <div class="panel-body tree">
-        <For each={connections()} fallback={<div class="muted pad small">{t('No connection. “+” to add one (SQLite, Postgres, Redis).')}</div>}>
+        <For each={connections()} fallback={<EmptyState icon="database" text={t('No connection yet: SQLite, PostgreSQL or Redis.')} action={t('Add a connection')} onAction={() => setEditing('new')} />}>
           {(c) => {
             const k = () => key(c.id, null)
             return (

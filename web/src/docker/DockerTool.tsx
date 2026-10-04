@@ -4,6 +4,7 @@ import { For, onCleanup, onMount, Show, type JSX } from 'solid-js'
 import { isLocal, mutate, session } from '../state/project'
 import { contextMenu, prompt, type MenuItem } from '../ui/overlay'
 import { Icon } from '../ui/icons'
+import { EmptyState } from '../ui/EmptyState'
 import { t } from '../i18n'
 import {
   busy, composeAction, composeTask, containerAction, host, portLabel, profiles, refreshHost, refreshStack, refreshStats, refreshStatus, selected, setSelected, shell,
@@ -265,7 +266,7 @@ function ProjectList() {
     )
 
   return (
-    <Show when={st().composeFile} fallback={<p class="muted pad">{t('No Compose file at the project root (compose.yaml, docker-compose.yml…).')}</p>}>
+    <Show when={st().composeFile} fallback={<EmptyState icon="docker" text={t('No Compose file at the project root (compose.yaml, docker-compose.yml…).')} />}>
       <Show when={st().compose} fallback={<p class="muted pad">{t('The Docker Compose plugin is not installed (docker compose).')}</p>}>
         <Show when={stack()} fallback={<p class="muted pad">{t('Loading…')}</p>}>
           <Show when={!stack()!.error} fallback={<p class="danger pad mono small dk-error">{stack()!.error}</p>}>
@@ -360,7 +361,7 @@ function HostList() {
   return (
     <Show when={host()} fallback={<p class="muted pad">{t('Loading…')}</p>}>
       <Show when={!host()!.error} fallback={<p class="danger pad mono small dk-error">{host()!.error}</p>}>
-        <Show when={host()!.list!.length} fallback={<p class="muted pad">{t('No container on this host.')}</p>}>
+        <Show when={host()!.list!.length} fallback={<EmptyState icon="docker" text={t('No container on this host.')} />}>
           <For each={groups()}>
             {(g) => (
               <>

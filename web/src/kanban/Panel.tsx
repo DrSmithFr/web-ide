@@ -1,6 +1,7 @@
 // Side panel of the kanban: the open tickets of the project, grouped by status.
 import { For, onMount, Show } from 'solid-js'
 import { Icon } from '../ui/icons'
+import { EmptyState } from '../ui/EmptyState'
 import { Card } from './Board'
 import { board, ensureBoard, openBoard, refreshBoard, setNewTicketOpen, statusLabels, type Status } from './state'
 import { t } from '../i18n'
@@ -31,7 +32,7 @@ export function KanbanPanel() {
           <p class="danger pad small">{board.error}</p>
         </Show>
         <Show when={board.loaded && !shown.some((s) => of(s).length)}>
-          <p class="muted pad small">{t('No open ticket.')}</p>
+          <EmptyState icon="kanban" text={t('No open ticket.')} action={t('New ticket')} onAction={() => setNewTicketOpen(true)} />
         </Show>
         <For each={shown}>
           {(s) => (

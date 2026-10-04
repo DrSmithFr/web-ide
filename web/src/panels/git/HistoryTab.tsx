@@ -6,6 +6,7 @@ import { mutate, session } from '../../state/project'
 import { gitRevision } from '../../state/git'
 import { contextMenu } from '../../ui/overlay'
 import { errorToast } from '../../ui/toast'
+import { EmptyState } from '../../ui/EmptyState'
 import { fmtAgo, fmtDate, t } from '../../i18n'
 import { commitMenuItems, type LogCommit } from './actions'
 import { layoutGraph } from './graph'
@@ -98,7 +99,11 @@ export function HistoryTab() {
           e.preventDefault()
         }}
       >
-        <For each={commits()} fallback={<p class="muted small pad">{loading() ? t('Loading…') : query() ? t('No commit found.') : t('No commit.')}</p>}>
+        <For each={commits()} fallback={
+            <Show when={!loading()} fallback={<p class="muted small pad">{t('Loading…')}</p>}>
+              <EmptyState icon="history" text={query() ? t('No commit found.') : t('No commit.')} />
+            </Show>
+          }>
           {(c, i) => (
             <div
               class="git-log-row"

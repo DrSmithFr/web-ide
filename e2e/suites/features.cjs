@@ -10,6 +10,8 @@ run(async ({ page }) => {
   await page.keyboard.type('apph')
   await page.waitForTimeout(400)
   assert((await page.textContent('.pick-item.selected')).includes('app.php'), 'goto file fuzzy finds app.php')
+  const fonts = await page.evaluate(() => [...document.querySelectorAll('.pick-item.selected > span')].map((e) => getComputedStyle(e).fontFamily.includes('Mono')))
+  assert(JSON.stringify(fonts) === '[false,true]', 'goto file: name in the interface font, path in monospace ' + fonts)
   await page.keyboard.press('Enter')
   await page.waitForTimeout(500)
   assert((await page.textContent('.pane.active .tab.active')).includes('app.php'), 'app.php opened')
@@ -251,7 +253,8 @@ run(async ({ page }) => {
   // Database explorer with SQLite
   await page.click('.rail-right .rail-btn[title="Database explorer"]')
   await page.waitForSelector('.db-tool')
-  await page.click('.db-tool button[title="Add a connection"]')
+  assert((await page.textContent('.db-tool .panel-title')) === 'Database explorer', 'Database explorer header translated like the others')
+  await page.click('.db-tool .empty-state button:has-text("Add a connection")')
   await page.click('.conn-new button:has-text("SQLite")')
   await page.fill('.conn-form input[placeholder="var/data.db"]', 'app.db')
   await page.click('.conn-form button:has-text("Test")')

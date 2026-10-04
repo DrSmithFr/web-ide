@@ -92,7 +92,7 @@ export async function showLocations(locs: Location[], title: string) {
     detail: `${relPath(l.path)}:${l.range.start.line + 1}`,
     value: l,
   }))
-  const chosen = await pick({ placeholder: `${title} (${locs.length})`, items })
+  const chosen = await pick({ placeholder: `${title} (${locs.length})`, items, codeLabel: true, pathDetail: true })
   if (chosen) await jump(chosen)
 }
 

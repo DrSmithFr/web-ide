@@ -51,11 +51,13 @@ func (g *Repo) Log(ctx context.Context, skip, n int, query string) ([]Commit, er
 	} else {
 		args = append(args, "-n", "5000")
 	}
+	// A branch without commit has no history; git's message is translated, so HEAD is
+	// checked first instead of reading it.
+	if !g.ref(ctx, "HEAD") {
+		return []Commit{}, nil
+	}
 	out, err := g.git(ctx, args...)
 	if err != nil {
-		if strings.Contains(err.Error(), "does not have any commits") {
-			return []Commit{}, nil
-		}
 		return nil, err
 	}
 	list := parseLog(out)

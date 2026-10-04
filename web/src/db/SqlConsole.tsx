@@ -109,6 +109,7 @@ export function SqlConsole(props: { tab: TabState; paneId: string }) {
     const c = v.coordsAt(caret)
     const chosen = await pick({
       placeholder: t('Statement to run'),
+      codeLabel: true,
       noFilter: false,
       initial: i,
       anchor: { left: c.left, top: c.bottom + 4 },

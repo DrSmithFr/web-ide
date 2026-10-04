@@ -539,7 +539,7 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
       try {
         const symbols = lspc.flatten(await lspc.documentSymbols(d.path))
         const chosen = await pick({
-          placeholder: `Structure de ${basename(d.path)}`,
+          placeholder: t('Structure of {name}', { name: basename(d.path) }),
           items: symbols.map(({ s, depth }) => ({
             label: '  '.repeat(depth) + s.name,
             detail: s.detail,
@@ -564,7 +564,7 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
         return
       }
       if (list.length === 1) return void openFile(list[0])
-      const p = await pick({ placeholder: r.isTest ? t('Tested sources') : t('Tests'), items: list.map((x) => ({ label: basename(x), detail: relPath(x), value: x })) })
+      const p = await pick({ placeholder: r.isTest ? t('Tested sources') : t('Tests'), pathDetail: true, items: list.map((x) => ({ label: basename(x), detail: relPath(x), value: x })) })
       if (p) openFile(p)
     })),
     registerAction('nav.related', when(async (_, d) => {

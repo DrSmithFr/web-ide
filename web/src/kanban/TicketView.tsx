@@ -404,6 +404,7 @@ async function addFile(tk: Ticket, apply: Apply) {
   }
   const p = await pick<string>({
     placeholder: t('File to link to the ticket'),
+    pathDetail: true,
     provider: async (q) => {
       const list = await files()
       return list

@@ -121,6 +121,7 @@ async function gotoFile() {
   }
   const p = await pick<string>({
     placeholder: t('Go to file (name or path, fuzzy search)'),
+    pathDetail: true,
     provider: async (q) => {
       const list = await files()
       if (!q) return list.slice(0, 100).map((f) => ({ label: basename(f), detail: relPath(f), value: f }))
@@ -150,6 +151,7 @@ async function gotoSymbol() {
   const loc = await pick<lspc.Location>({
     placeholder: t('Go to symbol (class, function, method…)'),
     noFilter: true,
+    pathDetail: true,
     provider: async (q, signal) => {
       if (q.length < 2) return []
       try {

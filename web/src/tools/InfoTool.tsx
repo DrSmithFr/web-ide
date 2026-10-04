@@ -4,6 +4,7 @@ import { createResource, For, onCleanup, Show } from 'solid-js'
 import { request, on as onPod, podState } from '../pod/rpc'
 import { activeTab, basename, docsVersion, getDoc, project, relPath, root, isLocal, diagnostics } from '../state/project'
 import { newConsole } from '../console/consoles'
+import { Icon } from '../ui/icons'
 import { languageName } from '../editor/languages'
 import { fmtDate, fmtNumber, t } from '../i18n'
 
@@ -21,7 +22,7 @@ export function InfoTool() {
         <span class="panel-title">{t('Infos')}</span>
         <span class="grow" />
         <button class="icon-btn" title={t('Refresh')} onClick={refresh}>
-          ↻
+          <Icon name="refresh" size={14} />
         </button>
       </div>
       <div class="panel-body pad">

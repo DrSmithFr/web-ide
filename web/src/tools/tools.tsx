@@ -6,6 +6,8 @@ import { openConflict } from '../conflict/ConflictDialog'
 import * as lspc from '../lsp/client'
 import { shortcutOf } from '../keys/bindings'
 import { t } from '../i18n'
+import { Icon } from '../ui/icons'
+import { EmptyState } from '../ui/EmptyState'
 
 export function ConflictsTool() {
   const list = () => (docsVersion(), conflictedDocs())
@@ -18,7 +20,7 @@ export function ConflictsTool() {
         <p class="muted small">
           {t('Files changed on disk (by the AI or another tool) while you were editing them, and whose automatic merge failed. Resolution: {shortcut}.', { shortcut: shortcutOf('conflict.resolve') })}
         </p>
-        <For each={list()} fallback={<p class="muted">{t('No conflict.')}</p>}>
+        <For each={list()} fallback={<EmptyState icon="check" text={t('No conflict.')} />}>
           {(d) => (
             <div class="conflict-item">
               <button class="link" onClick={() => openFile(d.path)}>
@@ -67,11 +69,11 @@ export function StructureTool() {
         <span class="panel-title">{t('Structure')}</span>
         <span class="grow" />
         <button class="icon-btn" title={t('Refresh')} onClick={() => setTick((t) => t + 1)}>
-          ↻
+          <Icon name="refresh" size={14} />
         </button>
       </div>
       <div class="panel-body tree">
-        <Show when={path()} fallback={<p class="muted pad">{t('No active file.')}</p>}>
+        <Show when={path()} fallback={<EmptyState icon="outline" text={t('No active file.')} />}>
           <Show when={symbols()?.error}>
             <p class="muted pad small">{symbols()!.error}</p>
           </Show>

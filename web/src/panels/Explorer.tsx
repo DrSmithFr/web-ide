@@ -346,7 +346,10 @@ export function Explorer() {
       </div>
       <div class="panel-body tree" role="tree" onContextMenu={(e) => e.target === e.currentTarget && menuFor(e, rootEntry())}>
         <div class="tree-root" onContextMenu={(e) => menuFor(e, rootEntry())}>
-          {rootEntry().name} <span class="muted">{relPath(root()) === root() ? root() : ''}</span>
+          <span>{rootEntry().name}</span>
+          <span class="muted" title={root()}>
+            <bdi>{relPath(root()) === root() ? root() : ''}</bdi>
+          </span>
         </div>
         <Rows dir={root()} depth={0} inherited={{ ignored: false, excluded: false }} />
       </div>

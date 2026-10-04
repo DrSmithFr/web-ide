@@ -94,3 +94,17 @@ func TestHistory(t *testing.T) {
 		t.Fatal("branch created at the first commit")
 	}
 }
+
+func TestHistoryWithoutCommit(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git absent")
+	}
+	// git speaks the language of the user: its message must not be needed.
+	t.Setenv("LANGUAGE", "fr")
+	dir := t.TempDir()
+	run(t, dir, "init", "-q", "-b", "main")
+	list, err := New(execx.Local{}, dir).Log(context.Background(), 0, 50, "")
+	if err != nil || list == nil || len(list) != 0 {
+		t.Fatalf("Log of a repository without commit: %v %v", list, err)
+	}
+}

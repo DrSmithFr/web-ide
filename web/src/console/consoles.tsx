@@ -13,6 +13,7 @@ import { accentOf, themeById } from '../settings/themes'
 import { prompt } from '../ui/overlay'
 import { errorToast } from '../ui/toast'
 import { Icon } from '../ui/icons'
+import { EmptyState } from '../ui/EmptyState'
 import { shortcutOf } from '../keys/bindings'
 import { t } from '../i18n'
 
@@ -214,7 +215,7 @@ function Problems() {
       .sort((a, b) => (a.d.severity ?? 4) - (b.d.severity ?? 4))
   return (
     <div class="problems">
-      <For each={list()} fallback={<div class="muted pad">{t('No problem reported by the language servers.')}</div>}>
+      <For each={list()} fallback={<EmptyState icon="check" text={t('No problem reported by the language servers.')} />}>
         {({ path, d }) => (
           <div class="problem" onClick={() => openFile({ path, line: d.range.start.line, col: d.range.start.character })}>
             <span class={`sev sev-${d.severity ?? 3}`}>{d.severity === 1 ? t('error') : d.severity === 2 ? t('warn.') : t('info')}</span>
@@ -316,7 +317,7 @@ export function ConsoleTool() {
       </div>
       <div class="tool-body">
         <Show when={consoles().length === 0}>
-          <div class="muted pad">{t('No open console.')}</div>
+          <EmptyState icon="terminal" text={t('No open console.')} action={t('New terminal')} onAction={() => newConsole()} />
         </Show>
         <For each={consoles()}>
           {(c) => (
