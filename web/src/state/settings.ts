@@ -14,8 +14,12 @@ export interface Settings {
   accent: string
   /** Everything but the focused part of the window in grayscale. */
   visualFocus: boolean
-  /** Accent outline around the focused part. */
+  /** Accent outline around the focused part, and its width in pixels (1 to 3). */
   focusOutline: boolean
+  focusOutlineWidth: number
+  /** The parts out of focus dimmed, by focusDimLevel percent. */
+  focusDim: boolean
+  focusDimLevel: number
   tokenColors: Record<string, Record<string, string>>
   font: { family: string; size: number; lineHeight: number; ligatures: boolean; uiSize: number }
   editor: { tabSize: number; insertSpaces: boolean; highlightLine: boolean; indentGuides: boolean; showWhitespace: boolean }
@@ -29,6 +33,9 @@ export const defaultSettings: Settings = {
   accent: '',
   visualFocus: false,
   focusOutline: false,
+  focusOutlineWidth: 1,
+  focusDim: false,
+  focusDimLevel: 35,
   tokenColors: {},
   font: { family: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace", size: 13, lineHeight: 1.55, ligatures: true, uiSize: 13 },
   editor: { tabSize: 4, insertSpaces: true, highlightLine: true, indentGuides: true, showWhitespace: false },
@@ -45,6 +52,9 @@ function merge(raw: any): Settings {
     accent: typeof raw.accent === 'string' ? raw.accent : d.accent,
     visualFocus: raw.visualFocus === true,
     focusOutline: raw.focusOutline === true,
+    focusOutlineWidth: [1, 2, 3].includes(raw.focusOutlineWidth) ? raw.focusOutlineWidth : d.focusOutlineWidth,
+    focusDim: raw.focusDim === true,
+    focusDimLevel: typeof raw.focusDimLevel === 'number' ? Math.min(70, Math.max(10, raw.focusDimLevel)) : d.focusDimLevel,
     tokenColors: raw.tokenColors ?? {},
     font: { ...d.font, ...(raw.font ?? {}) },
     editor: { ...d.editor, ...(raw.editor ?? {}) },
@@ -110,6 +120,8 @@ createRoot(() => {
     root.style.setProperty('--line-height-code', String(settings.font.lineHeight))
     root.style.setProperty('--font-size-ui', `${settings.font.uiSize}px`)
     root.style.setProperty('--ligatures', settings.font.ligatures ? 'normal' : 'none')
+    root.style.setProperty('--focus-outline-width', `${settings.focusOutlineWidth}px`)
+    root.style.setProperty('--focus-dim', String(1 - settings.focusDimLevel / 100))
     const overrides = settings.tokenColors[t.id] ?? {}
     // Visual focus mode: tones of the theme instead of its colors out of focus.
     const tones: Record<string, string> = { ...t.ui, accent, 'accent-fg': accentFg }

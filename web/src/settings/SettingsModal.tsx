@@ -129,6 +129,15 @@ function Themes() {
         <label class="check">
           <input type="checkbox" checked={settings.focusOutline} onChange={(e) => updateSettings((s) => (s.focusOutline = e.currentTarget.checked), 'Focus outline')} />
           {t('Outline around the focused part')}
+          <select class="small" value={settings.focusOutlineWidth} disabled={!settings.focusOutline} aria-label={t('Outline width')} onChange={(e) => updateSettings((s) => (s.focusOutlineWidth = Number(e.currentTarget.value)), 'Focus outline')}>
+            <For each={[1, 2, 3]}>{(n) => <option value={n}>{n} px</option>}</For>
+          </select>
+        </label>
+        <label class="check">
+          <input type="checkbox" checked={settings.focusDim} onChange={(e) => updateSettings((s) => (s.focusDim = e.currentTarget.checked), 'Dim out of focus')} data-testid="focus-dim" />
+          {t('Dim everything but the focused part')}
+          <input type="range" min="10" max="70" step="5" value={settings.focusDimLevel} disabled={!settings.focusDim} aria-label={t('Dimming')} onInput={(e) => updateSettings((s) => (s.focusDimLevel = Number(e.currentTarget.value)), 'Dim out of focus')} />
+          <span class="muted">{settings.focusDimLevel} %</span>
         </label>
       </div>
       <h3>{t('Token colors · {theme}', { theme: t(theme().name) })}</h3>

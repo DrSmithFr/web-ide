@@ -78,10 +78,10 @@ export const themes: Theme[] = [
     name: 'High contrast',
     dark: true,
     ui: {
-      bg: '#000000', 'bg-2': '#0d0d0d', 'bg-3': '#1a1a1a', 'bg-hover': '#262626', 'bg-active': '#333333',
-      fg: '#ffffff', 'fg-muted': '#c8c8c8', 'fg-faint': '#8c8c8c', line: '#4d4d4d', accent: '#ffd400', 'accent-fg': '#000000',
+      bg: '#000000', 'bg-2': '#0d0d0d', 'bg-3': '#1a1a1a', 'bg-hover': '#2b2b2b', 'bg-active': '#3d3d3d',
+      fg: '#ffffff', 'fg-muted': '#d0d0d0', 'fg-faint': '#a6a6a6', line: '#6b6b6b', accent: '#ffd400', 'accent-fg': '#000000',
       'sel-bg': '#264f78', 'cur-line': '#141414', danger: '#ff6b6b', warn: '#ffd400', ok: '#7CFC00', info: '#5cc8ff',
-      'match-bg': '#665500', 'match-cur-bg': '#b38f00', gutter: '#8c8c8c', 'conflict-bg': '#4d0000',
+      'match-bg': '#665500', 'match-cur-bg': '#b38f00', gutter: '#a6a6a6', 'conflict-bg': '#4d0000',
     },
     tokens: {
       keyword: '#ff9cf7', string: '#9cff9c', comment: '#9e9e9e', number: '#ffcc66', function: '#82d4ff', type: '#ffe066',

@@ -179,24 +179,28 @@ const menus: [string, string[]][] = [
   ['menu|Edit', ['edit.undo', 'edit.redo', 'edit.duplicateLine', 'edit.deleteLine', 'edit.toggleComment', 'edit.nextOccurrence', 'edit.allOccurrences', 'search.find', 'search.global']],
   ['menu|Navigate', ['nav.back', 'nav.forward', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', 'nav.related', 'nav.test']],
   ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover', 'edit.fold', 'edit.unfold', 'edit.foldAll', 'edit.unfoldAll']],
-  ['menu|View', ['view.splitRight', 'view.splitDown', 'view.closeTab', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', 'view.visualFocus', 'view.focusOutline', 'view.whitespace', 'console.new', 'palette.open']],
+  ['menu|View', ['view.splitRight', 'view.splitDown', 'view.closeTab', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', 'view.visualFocus', 'view.focusOutline', 'view.focusDim', 'view.whitespace', 'console.new', 'palette.open']],
 ]
 
 // Menu entries switching a setting, shown with a check box.
 const menuChecks: Record<string, () => boolean> = {
   'view.visualFocus': () => settings.visualFocus,
   'view.focusOutline': () => settings.focusOutline,
+  'view.focusDim': () => settings.focusDim,
   'view.whitespace': () => settings.editor.showWhitespace,
 }
 
 function openMenu(e: MouseEvent, ids: string[]) {
   const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  // The action runs where the focus was (the menu buttons do not take it), the editor otherwise.
+  const prev = document.activeElement as HTMLElement | null
   const items: MenuItem[] = ids.map((id) => ({
     label: t(actions.find((a) => a.id === id)?.label ?? id),
     hint: shortcutOf(id),
     checked: menuChecks[id]?.(),
     action: () => {
-      focusActiveEditor()
+      if (prev && prev !== document.body && prev.isConnected && !prev.closest('.menubar')) prev.focus()
+      else focusActiveEditor()
       requestAnimationFrame(() => runAction(id) || toast(t('Action not available here'), 'info'))
     },
   }))
@@ -224,7 +228,7 @@ function MenuBar() {
       <nav class="menus">
         <For each={menus}>
           {([label, ids]) => (
-            <button class="menu-btn" onClick={(e) => openMenu(e, ids)}>
+            <button class="menu-btn" onMouseDown={(e) => e.preventDefault()} onClick={(e) => openMenu(e, ids)}>
               {t(label)}
             </button>
           )}
@@ -427,6 +431,7 @@ export function ProjectPage(props: { id: string }) {
     registerAction('view.resetTools', () => mutate((s) => (s.placement = normalizePlacement(defaultPlacement)))),
     registerAction('view.visualFocus', () => updateSettings((s) => (s.visualFocus = !s.visualFocus), 'Visual focus')),
     registerAction('view.focusOutline', () => updateSettings((s) => (s.focusOutline = !s.focusOutline), 'Focus outline')),
+    registerAction('view.focusDim', () => updateSettings((s) => (s.focusDim = !s.focusDim), 'Dim out of focus')),
     registerAction('view.whitespace', () => updateSettings((s) => (s.editor.showWhitespace = !s.editor.showWhitespace), 'Whitespace')),
     registerAction('console.new', () => void newConsole()),
     registerAction('view.toggleBottom', () => mutate((s) => toggleTool(s, 'console'))),
@@ -463,7 +468,7 @@ export function ProjectPage(props: { id: string }) {
         </div>
       }
     >
-      <div class="app" classList={{ 'visual-focus': settings.visualFocus, 'focus-outline': settings.focusOutline }}>
+      <div class="app" classList={{ 'visual-focus': settings.visualFocus, 'focus-outline': settings.focusOutline, 'focus-dim': settings.focusDim }}>
         <MenuBar />
         <NewTicketHost />
         <div class="workbench" onPointerDown={trackFocus} onFocusIn={trackFocus}>
