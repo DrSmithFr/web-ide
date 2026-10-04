@@ -1123,8 +1123,12 @@ export class EditorView {
     const list: Selection[] = []
     const dir = a.line <= b.line ? 1 : -1
     for (let l = a.line; l >= 0; l = l === b.line ? -1 : this.nextLine(l, dir)) {
+      // Lines too short for a caret at the column of the mouse are left out.
+      if (this.visualCol(l, this.doc.lineEnd(l)) < b.col && l !== b.line) continue
       list.push({ anchor: this.offsetAtCol(l, a.col), head: this.offsetAtCol(l, b.col) })
     }
+    // The line of the mouse itself is kept only when it reaches the column, or alone.
+    if (list.length > 1 && this.visualCol(b.line, this.doc.lineEnd(b.line)) < b.col) list.pop()
     this.setSelections(list, list.length - 1, false)
   }
 
@@ -1180,6 +1184,8 @@ export class EditorView {
 
   /** Other carets and selections of lines a..b. */
   private renderCarets(a: number, b: number) {
+    // With several carets, the editor draws them all: the browser shows none at the end of a selection.
+    this.root.classList.toggle('multi', this.extra.length > 0)
     if (!this.extra.length) {
       if (this.caretLayer.firstChild) this.caretLayer.replaceChildren()
       return
@@ -1187,8 +1193,8 @@ export class EditorView {
     const from = this.doc.lineStart(a)
     const to = this.doc.lineEnd(b)
     let html = ''
-    for (const x of this.extra) {
-      if (x.anchor !== x.head && selTo(x) >= from && selFrom(x) <= to && registry()) {
+    for (const x of [...this.extra, this.lastSel]) {
+      if (x !== this.lastSel && x.anchor !== x.head && selTo(x) >= from && selFrom(x) <= to && registry()) {
         this.addOwn('ed-sel2', this.range(Math.max(selFrom(x), from), Math.min(selTo(x), to)))
       }
       if (x.head < from || x.head > to) continue
@@ -1233,8 +1239,7 @@ export class EditorView {
     for (let l = line, k = 0; l >= 0 && k < 5000; l = this.nextLine(l, -1), k++) {
       if (this.folds.some((f) => f.line === l)) continue
       const end = this.folder.end(l)
-      // With brackets, the line of the closing one belongs to the range too.
-      if (end > l && (end >= line || (end + 1 === line && /^\s*[}\])]/.test(this.doc.lineText(line))))) {
+      if (end >= line && end > l) {
         this.setFolds([...this.folds, { line: l, end }])
         return
       }
@@ -1436,9 +1441,14 @@ export class EditorView {
       const m = this.marks.get(l)
       const top = this.lineTop(l)
       if (m) marks += `<div class="ed-mark mark-${m}" style="top:${top}px;height:${lh}px"></div>`
-      if (this.folds.some((f) => f.line === l)) {
+      const f = this.folds.find((x) => x.line === l)
+      if (f) {
         folds += `<div class="ed-fold folded" data-fold="${l}" style="top:${top}px;height:${lh}px"></div>`
-        holders += `<div class="ed-placeholder" data-fold="${l}" style="left:${this.xAt(this.doc.lineEnd(l)) + 6}px;top:${top + 2}px;height:${lh - 4}px;line-height:${lh - 4}px">\u22ef</div>`
+        // With brackets, the hidden closing line follows the placeholder: func main() {⋯}
+        const close = this.folder.closes ? this.doc.lineText(f.end).trimStart().replace(/[&<>]/g, (c) => `&#${c.charCodeAt(0)};`) : ''
+        holders +=
+          `<div class="ed-placeholder" data-fold="${l}" style="left:${this.xAt(this.doc.lineEnd(l))}px;top:${top}px;height:${lh}px;line-height:${lh}px">` +
+          `<span>\u22ef</span>${close}</div>`
       } else if (this.canFold(l)) folds += `<div class="ed-fold" data-fold="${l}" style="top:${top}px;height:${lh}px"></div>`
     }
     this.gutterMarks.innerHTML = marks

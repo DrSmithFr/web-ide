@@ -1,7 +1,7 @@
 // Fold ranges: brackets for the C-like languages (outside strings and comments), the
 // indentation for Python, YAML, HTML and plain text, the headings for Markdown. A range is
-// a header line, which stays visible, and the last line it hides; with brackets, the line
-// of the closing one stays visible too.
+// a header line, which stays visible, and the last line it hides; with brackets, that is
+// the line of the closing one, shown after the placeholder (`{⋯}`).
 import type { Doc } from './doc'
 import type { Highlighter } from './tokenizer'
 
@@ -74,6 +74,11 @@ export class Folder {
     return stack
   }
 
+  /** The last line of a range holds its closing bracket, shown after the placeholder. */
+  get closes() {
+    return this.mode === 'brackets'
+  }
+
   /** Cheap test for the gutter: the line seems to open a range. */
   canFold(line: number): boolean {
     const n = this.doc.lineCount
@@ -137,7 +142,7 @@ export class Folder {
             if (pairs[c]) depth++
             else depth--
           })
-          if (depth === 0) last = l - 1
+          if (depth === 0) last = l
         }
       }
     }
@@ -154,7 +159,7 @@ export class Folder {
       for (let l = 0; l < n; l++) {
         this.brackets(l, (c) => {
           if (pairs[c]) stack.push(l)
-          else if (stack.length) add(stack.pop()!, l - 1)
+          else if (stack.length) add(stack.pop()!, l)
         })
       }
     } else if (this.mode === 'indent') {

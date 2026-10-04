@@ -262,8 +262,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .ed-gutter:hover .ed-fold, .ed-fold.folded { opacity: 1; }
 .ed-fold:hover::before { border-color: var(--fg); }
 .ed-placeholders { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
-.ed-placeholder { position: absolute; pointer-events: auto; cursor: pointer; padding: 0 5px; border-radius: 3px; font-family: var(--font-code); font-size: var(--font-size-code); color: var(--fg-muted); background: color-mix(in srgb, var(--fg) 10%, transparent); }
-.ed-placeholder:hover { color: var(--fg); background: color-mix(in srgb, var(--fg) 18%, transparent); }
+.ed-placeholder { position: absolute; pointer-events: auto; cursor: pointer; white-space: pre; font-family: var(--font-code); font-size: var(--font-size-code); color: var(--fg); }
+.ed-placeholder span { display: inline-block; margin: 0 2px; padding: 0 4px; line-height: 1.3; border-radius: 3px; color: var(--fg-muted); background: color-mix(in srgb, var(--fg) 10%, transparent); }
+.ed-placeholder:hover span { color: var(--fg); background: color-mix(in srgb, var(--fg) 18%, transparent); }
 .ed-main { position: relative; flex: 1; isolation: isolate; }
 .ed-content { position: relative; z-index: 1; padding-left: 0; padding-right: 40px; white-space: pre; outline: none; caret-color: var(--accent); min-height: 100%; color: var(--fg); }
 .ed-content::selection { background: var(--sel-bg); }
@@ -279,6 +280,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .ed-carets { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
 .ed-caret { position: absolute; width: 1.5px; margin-left: -0.5px; background: var(--accent); animation: ed-blink 1.05s steps(1) infinite; }
 .ed:not(:focus-within) .ed-caret { visibility: hidden; }
+.ed.multi .ed-content { caret-color: transparent; }
 @keyframes ed-blink { 50% { opacity: 0; } }
 .ed-guide.active { background: color-mix(in srgb, var(--fg) 32%, transparent); }
 .ed-statement { position: absolute; left: 0; border: 1px solid var(--accent); border-radius: 4px; background: color-mix(in srgb, var(--accent) 7%, transparent); }
