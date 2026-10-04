@@ -118,6 +118,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .workbench { display: flex; flex: 1; min-height: 0; }
 .rail { display: flex; flex-direction: column; padding: 6px 4px; width: 40px; background: var(--bg-2); flex: none; }
 .rail-group { display: flex; flex-direction: column; gap: 2px; }
+.rail-dragging .rail-group { min-height: 40px; border-radius: 6px; outline: 1px dashed var(--line); outline-offset: 1px; }
+.rail-btn.dragging { opacity: 0.4; }
+.rail-btn.drop-before { box-shadow: 0 -2px 0 var(--accent); }
+.rail-group.drop-end::after { content: ''; height: 2px; background: var(--accent); }
 .rail-left { border-right: 1px solid var(--line); }
 .rail-right { border-left: 1px solid var(--line); }
 .rail-btn { width: 32px; height: 32px; border: 0; border-radius: 6px; background: transparent; color: var(--fg-muted); display: flex; align-items: center; justify-content: center; cursor: pointer; }

@@ -1,5 +1,6 @@
 // Tool zones of the project window. Each icon rail has two groups: the top one opens a side
 // panel, the bottom one a tool of the strip under the editor. Each zone shows at most one tool.
+// Icons are dragged between groups; the placement is saved in the session.
 import type { SessionData } from './project'
 
 export type Zone = 'left' | 'bottomLeft' | 'bottomRight' | 'right'
@@ -14,8 +15,34 @@ export const defaultPlacement: Record<Zone, string[]> = {
 
 export const toolIds = zones.flatMap((z) => defaultPlacement[z])
 
-export function toolsIn(_s: SessionData, zone: Zone): string[] {
-  return defaultPlacement[zone]
+export function toolsIn(s: SessionData, zone: Zone): string[] {
+  return s.placement[zone]
+}
+
+/** Saved placement checked: unknown ids dropped, missing tools back in their default zone. */
+export function normalizePlacement(raw: any): Record<Zone, string[]> {
+  const seen = new Set<string>()
+  const out = {} as Record<Zone, string[]>
+  for (const z of zones) {
+    const list: unknown[] = Array.isArray(raw?.[z]) ? raw[z] : defaultPlacement[z]
+    out[z] = list.filter((id): id is string => typeof id === 'string' && toolIds.includes(id) && !seen.has(id) && !!seen.add(id))
+  }
+  for (const z of zones) for (const id of defaultPlacement[z]) if (!seen.has(id)) out[z].push(id)
+  return out
+}
+
+/** Moves a tool to a zone, before the tool at `index`; a shown tool stays shown. */
+export function moveTool(s: SessionData, id: string, zone: Zone, index: number) {
+  const from = zoneOf(s, id)
+  if (!from) return
+  const shown = shownIn(s, from) === id
+  s.placement[from] = s.placement[from].filter((x) => x !== id)
+  const list = s.placement[zone]
+  s.placement[zone] = [...list.slice(0, index), id, ...list.slice(index)]
+  if (shown && from !== zone) {
+    setShown(s, from, null)
+    setShown(s, zone, id)
+  }
 }
 
 export function zoneOf(s: SessionData, id: string): Zone | undefined {

@@ -67,6 +67,7 @@ To treat local and SSH projects the same way, the pod exposes one interface (`li
   - Top right: AI assistant, database explorer, structure, conflicts, infos. Infos stacks three sections: properties (project, target, pod, active tab), connections (local SSH keys, hosts of `~/.ssh/config`) and extensions (language servers).
   - Bottom left: Console, the consoles as tabs (terminals, build output, commands).
   - Bottom right: Problems, with two tabs: the diagnostics of the language servers and their output. A dot on its icon signals errors.
+- **Moving tools**: an icon is dragged to another group of the rails (same zone to reorder it); a shown tool stays shown in its new zone. The placement is saved in the session; *View › Reset the tool layout* restores the default one.
 - **Bottom strip**: the tools of the two bottom zones, under the side panels and the editor. One shared height; side by side, the border between them can be dragged; alone, a tool takes the whole width.
 - **Split view**: recursive pane tree (split right, split down). A file open in several panes shares one buffer, never two copies.
 

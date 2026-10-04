@@ -70,6 +70,33 @@ run(async ({ page }) => {
   await page.click('.rail-right .rail-btn[title="Problems"]')
   assert(!(await page.isVisible('[data-tool=problems]')), 'Problems closed from its rail icon')
 
+  // Icons dragged between the zones; the placement is kept by the session
+  const group = (zone) => page.$$eval(`[data-zone=${zone}] .rail-btn`, (els) => els.map((e) => e.title))
+  await page.click('.rail-right .rail-btn[title="Problems"]')
+  await page.dragAndDrop('.rail-right .rail-btn[title="Problems"]', '[data-zone=left] .rail-btn[title="Search"]', { targetPosition: { x: 16, y: 3 } })
+  assert(JSON.stringify(await group('left')) === JSON.stringify(['Explorer', 'Problems', 'Search', 'Git', 'Kanban']), 'Problems dropped before Search: ' + JSON.stringify(await group('left')))
+  assert(await page.isVisible('.zone-left[data-tool=problems]'), 'a shown tool stays shown in its new zone')
+  // An empty group only gets a height once the drag has started.
+  await page.hover('[data-zone=bottomLeft] .rail-btn[title="Console"]')
+  await page.mouse.down()
+  await page.mouse.move(20, 300, { steps: 3 })
+  await page.hover('[data-zone=bottomRight]')
+  await page.mouse.up()
+  assert((await group('bottomRight'))[0] === 'Console' && (await group('bottomLeft')).length === 0, 'Console moved to the empty bottom right zone')
+  assert(await page.isVisible('.zone-bottomRight[data-tool=console] .xterm'), 'the console keeps its terminal')
+  await page.waitForTimeout(600)
+  await page.reload()
+  await page.waitForSelector('.rail-left')
+  assert(JSON.stringify(await group('left')) === JSON.stringify(['Explorer', 'Problems', 'Search', 'Git', 'Kanban']) && (await group('bottomRight'))[0] === 'Console', 'placement kept after a reload')
+  await page.screenshot({ path: OUT + '/s5-moved.png' })
+  await page.keyboard.press('Control+Shift+a')
+  await page.waitForSelector('.pick-input')
+  await page.keyboard.type('Reset the tool layout')
+  await page.waitForTimeout(200)
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(200)
+  assert((await group('bottomLeft'))[0] === 'Console' && (await group('bottomRight'))[0] === 'Problems' && (await group('left')).length === 4, 'default placement restored')
+
   // Palette
   await page.keyboard.press('Control+Shift+a')
   await page.waitForSelector('.pick-input')

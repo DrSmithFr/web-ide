@@ -6,7 +6,7 @@ import {
   activeLeaf, activeTab, closeTab, conflictedDocs, cycleTab, docsVersion, mutate, navigate as navHistory, openFile, openProject, project, relPath, reopenProject,
   saveAll, session, setConflictOpener, splitPane, closeProject, basename,
 } from '../state/project'
-import { shownIn, toggleTool, toolsIn, type Zone } from '../state/zones'
+import { defaultPlacement, moveTool, normalizePlacement, shownIn, toggleTool, toolsIn, type Zone } from '../state/zones'
 import { navigate } from '../app/router'
 import { EditorArea } from '../ui/EditorArea'
 import { ConsoleTool, ProblemsTool, newConsole, problemCount, setConsoleList } from '../console/consoles'
@@ -174,7 +174,7 @@ const menus: [string, string[]][] = [
   ['menu|Edit', ['edit.undo', 'edit.redo', 'edit.duplicateLine', 'edit.deleteLine', 'edit.toggleComment', 'search.find', 'search.global']],
   ['menu|Navigate', ['nav.back', 'nav.forward', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', 'nav.related', 'nav.test']],
   ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover']],
-  ['menu|View', ['view.splitRight', 'view.splitDown', 'view.closeTab', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'console.new', 'palette.open']],
+  ['menu|View', ['view.splitRight', 'view.splitDown', 'view.closeTab', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', 'console.new', 'palette.open']],
 ]
 
 function openMenu(e: MouseEvent, ids: string[]) {
@@ -244,7 +244,7 @@ function MenuBar() {
 function Rail(props: { side: 'left' | 'right' }) {
   const bottom: Zone = props.side === 'left' ? 'bottomLeft' : 'bottomRight'
   return (
-    <nav class={`rail rail-${props.side}`} aria-label={props.side === 'left' ? t('Panels') : t('Tools')}>
+    <nav class={`rail rail-${props.side}`} classList={{ 'rail-dragging': !!dragged() }} aria-label={props.side === 'left' ? t('Panels') : t('Tools')}>
       <RailGroup zone={props.side} />
       <span class="grow" />
       <RailGroup zone={bottom} />
@@ -252,13 +252,62 @@ function Rail(props: { side: 'left' | 'right' }) {
   )
 }
 
+// Icon dragged between the groups of the rails, and where it would land.
+const [dragged, setDragged] = createSignal<string | null>(null)
+const [dropAt, setDropAt] = createSignal<{ zone: Zone; index: number } | null>(null)
+
 function RailGroup(props: { zone: Zone }) {
   const current = () => shownIn(session, props.zone)
+  const list = () => toolsIn(session, props.zone).filter((id) => toolPanels[id])
+  // Insertion index among the icons of the group, the dragged one left out.
+  const indexAt = (el: HTMLElement, y: number) => {
+    const btns = [...el.querySelectorAll<HTMLElement>('.rail-btn')].filter((b) => b.dataset.id !== dragged())
+    const i = btns.findIndex((b) => y < b.getBoundingClientRect().top + b.offsetHeight / 2)
+    return i < 0 ? btns.length : i
+  }
+  const marker = (id: string) => {
+    const d = dropAt()
+    if (!d || d.zone !== props.zone) return false
+    return list().filter((x) => x !== dragged())[d.index] === id
+  }
   return (
-    <div class="rail-group" data-zone={props.zone}>
-      <For each={toolsIn(session, props.zone).filter((id) => toolPanels[id])}>
+    <div
+      class="rail-group"
+      data-zone={props.zone}
+      classList={{ 'drop-end': dropAt()?.zone === props.zone && dropAt()!.index === list().filter((x) => x !== dragged()).length }}
+      onDragOver={(e) => {
+        if (!dragged()) return
+        e.preventDefault()
+        setDropAt({ zone: props.zone, index: indexAt(e.currentTarget, e.clientY) })
+      }}
+      onDrop={(e) => {
+        e.preventDefault()
+        const id = dragged()
+        if (id) mutate((s) => moveTool(s, id, props.zone, indexAt(e.currentTarget, e.clientY)))
+        setDragged(null)
+        setDropAt(null)
+      }}
+    >
+      <For each={list()}>
         {(id) => (
-          <button class="rail-btn" classList={{ active: current() === id }} title={t(toolPanels[id].label)} aria-pressed={current() === id} onClick={() => mutate((s) => toggleTool(s, id))}>
+          <button
+            class="rail-btn"
+            classList={{ active: current() === id, 'drop-before': marker(id), dragging: dragged() === id }}
+            data-id={id}
+            draggable="true"
+            title={t(toolPanels[id].label)}
+            aria-pressed={current() === id}
+            onClick={() => mutate((s) => toggleTool(s, id))}
+            onDragStart={(e) => {
+              e.dataTransfer!.effectAllowed = 'move'
+              e.dataTransfer!.setData('text/plain', id)
+              setDragged(id)
+            }}
+            onDragEnd={() => {
+              setDragged(null)
+              setDropAt(null)
+            }}
+          >
             <Icon name={toolPanels[id].icon} size={18} />
             <Show when={toolPanels[id].badge?.()}>
               <span class="rail-badge" />
@@ -360,8 +409,9 @@ export function ProjectPage(props: { id: string }) {
   })
   useProjectActions()
   const offs = [
-    registerAction('view.toggleLeft', () => mutate((s) => (s.left.panel = s.left.panel ? null : 'explorer'))),
-    registerAction('view.toggleRight', () => mutate((s) => (s.right.panel = s.right.panel ? null : 'database'))),
+    registerAction('view.toggleLeft', () => mutate((s) => (s.left.panel = s.left.panel ? null : (toolsIn(s, 'left')[0] ?? null)))),
+    registerAction('view.toggleRight', () => mutate((s) => (s.right.panel = s.right.panel ? null : (toolsIn(s, 'right')[0] ?? null)))),
+    registerAction('view.resetTools', () => mutate((s) => (s.placement = normalizePlacement(defaultPlacement)))),
     registerAction('console.new', () => void newConsole()),
     registerAction('view.toggleBottom', () => mutate((s) => toggleTool(s, 'console'))),
     registerAction('search.global', () => {

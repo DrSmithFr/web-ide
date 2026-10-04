@@ -59,6 +59,7 @@ export const actions: ActionDef[] = [
   { id: 'view.toggleLeft', label: 'Show / hide the left panel', category: 'View', inTerminal: true },
   { id: 'view.toggleRight', label: 'Show / hide the tools', category: 'View', inTerminal: true },
   { id: 'view.toggleBottom', label: 'Show / hide the consoles', category: 'View', inTerminal: true },
+  { id: 'view.resetTools', label: 'Reset the tool layout', category: 'View' },
   { id: 'settings.open', label: 'Settings', category: 'General', inTerminal: true },
   { id: 'kanban.open', label: 'Open the kanban', category: 'General' },
   { id: 'palette.open', label: 'Command palette', category: 'General', inTerminal: true },

@@ -9,6 +9,7 @@ import { detectLanguage, lspLanguage, lspLanguageId } from '../editor/languages'
 import { merge3 } from '../editor/merge'
 import { toast } from '../ui/toast'
 import { t, tn } from '../i18n'
+import { normalizePlacement, type Zone } from './zones'
 
 export type TabKind = 'file' | 'sql' | 'table' | 'text' | 'diff' | 'kanban' | 'ticket'
 
@@ -44,6 +45,8 @@ export interface SessionData {
   cursors: Record<string, Cursor>
   left: { panel: string | null; width: number }
   right: { panel: string | null; width: number }
+  /** Tools of each zone of the icon rails (state/zones). */
+  placement: Record<Zone, string[]>
   /** Strip under the editor: tools of the two bottom zones, split at `split` (fraction). */
   bottom: { left: string | null; right: string | null; height: number; split: number; active: string | null; problemsTab: 'problems' | 'output' }
   sqlText: Record<string, string>
@@ -78,6 +81,7 @@ function emptySession(): SessionData {
     left: { panel: 'explorer', width: 260 },
     right: { panel: null, width: 300 },
     bottom: { left: null, right: null, height: 240, split: 0.5, active: null, problemsTab: 'problems' },
+    placement: normalizePlacement(null),
     sqlText: {},
     expanded: [],
   }
@@ -136,6 +140,7 @@ function normalize(raw: any): SessionData {
     s.left.panel = null
   }
   if (s.right.panel && panelAliases[s.right.panel]) s.right.panel = panelAliases[s.right.panel]
+  s.placement = normalizePlacement(raw.placement)
   // Former bottom panel: consoles, problems and output in one strip.
   if (raw.bottom && 'open' in raw.bottom) {
     const { open, order: _order, ...rest } = s.bottom as any
