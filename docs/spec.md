@@ -54,18 +54,20 @@ To treat local and SSH projects the same way, the pod exposes one interface (`li
 | on |           |  Editor               | o | on  |
 | s  |           |                       | o | s   |
 |    |           |                       | l |     |
-+----+-----------+-----------------------+---+-----+
-| Consoles (tabs)                                  |
-+--------------------------------------------------+
+|    +-----------+-----------+-----------+---+     |
+|    | Console (tabs)        | Problems      |     |
++----+-----------------------+---------------+-----+
 ```
 
 - **Menu bar**, from left to right: home button; project icon (click: icon editor), project title and the **worktree selector** (current branch, or the ticket of a worktree window); the File, Edit, Navigate… menus; then on the right conflicts, cursor position, pod status (connection state, download and upload rate in bytes/s over a sliding window of about one second) and settings.
 - **Worktree selector**: lists the main folder, the worktrees of the tickets (with their status) and the other worktrees of the repository; choosing one opens its window, or brings back the one already open. *Open a branch…* checks an existing or new branch out in its own worktree (`.ide/worktrees/b-<branch>`) opened in its own window: the main folder is never switched, so its uncommitted changes never get in the way. The setup command of the kanban (`npm install`…) runs in a console of the new worktree window. *Remove a worktree…* deletes one of these worktrees and its project (confirmation when it has uncommitted changes); the branch is kept, and a window open on it goes back to the main folder. Ticket worktrees go with their ticket.
 - **Editor window**: explorer panel on the left, central editor with a tab bar, tools panel on the right.
-- **Icon rails** on both sides: each icon toggles a panel; clicking the active icon hides it.
-  - Left: file explorer, global search, Git, kanban.
-  - Right: tools (AI assistant, database explorer, structure, conflicts, infos). Infos stacks three sections: properties (project, target, pod, active tab), connections (local SSH keys, hosts of `~/.ssh/config`) and extensions (language servers).
-- **Bottom panel**: consoles, as tabs (terminals, build output, commands).
+- **Icon rails** on both sides, the full height of the window, each with a top and a bottom group: four tool zones (top left, bottom left, bottom right, top right). Each icon toggles its tool; clicking the active icon hides it; each zone shows one tool at a time.
+  - Top left: file explorer, global search, Git, kanban.
+  - Top right: AI assistant, database explorer, structure, conflicts, infos. Infos stacks three sections: properties (project, target, pod, active tab), connections (local SSH keys, hosts of `~/.ssh/config`) and extensions (language servers).
+  - Bottom left: Console, the consoles as tabs (terminals, build output, commands).
+  - Bottom right: Problems, with two tabs: the diagnostics of the language servers and their output. A dot on its icon signals errors.
+- **Bottom strip**: the tools of the two bottom zones, under the side panels and the editor. One shared height; side by side, the border between them can be dragged; alone, a tool takes the whole width.
 - **Split view**: recursive pane tree (split right, split down). A file open in several panes shares one buffer, never two copies.
 
 ## 6. Editor

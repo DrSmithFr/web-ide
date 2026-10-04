@@ -570,6 +570,7 @@
   "No model for the compaction": "Aucun modèle pour la compaction",
   "No model “{name}”": "Aucun modèle « {name} »",
   "No note.": "Aucune note.",
+  "No open console.": "Aucune console ouverte.",
   "No open ticket.": "Aucun ticket ouvert.",
   "No plan yet.": "Pas encore de plan.",
   "No problem reported by the language servers.": "Aucun problème signalé par les serveurs de langage.",

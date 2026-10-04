@@ -44,7 +44,8 @@ export interface SessionData {
   cursors: Record<string, Cursor>
   left: { panel: string | null; width: number }
   right: { panel: string | null; width: number }
-  bottom: { open: boolean; height: number; active: string | null; order: string[] }
+  /** Strip under the editor: tools of the two bottom zones, split at `split` (fraction). */
+  bottom: { left: string | null; right: string | null; height: number; split: number; active: string | null; problemsTab: 'problems' | 'output' }
   sqlText: Record<string, string>
   expanded: string[]
 }
@@ -76,7 +77,7 @@ function emptySession(): SessionData {
     cursors: {},
     left: { panel: 'explorer', width: 260 },
     right: { panel: null, width: 300 },
-    bottom: { open: false, height: 240, active: null, order: [] },
+    bottom: { left: null, right: null, height: 240, split: 0.5, active: null, problemsTab: 'problems' },
     sqlText: {},
     expanded: [],
   }
@@ -135,6 +136,16 @@ function normalize(raw: any): SessionData {
     s.left.panel = null
   }
   if (s.right.panel && panelAliases[s.right.panel]) s.right.panel = panelAliases[s.right.panel]
+  // Former bottom panel: consoles, problems and output in one strip.
+  if (raw.bottom && 'open' in raw.bottom) {
+    const { open, order: _order, ...rest } = s.bottom as any
+    s.bottom = rest
+    if (rest.active === 'problems' || rest.active === 'output') {
+      s.bottom.problemsTab = rest.active
+      s.bottom.active = null
+      if (open) s.bottom.right = 'problems'
+    } else if (open) s.bottom.left = 'console'
+  }
   // Drop the tabs that no pane references and the pane references to missing tabs.
   const used = new Set<string>()
   const walk = (n: LayoutNode) => {

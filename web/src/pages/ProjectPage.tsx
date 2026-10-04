@@ -1,4 +1,4 @@
-// Main window of a project: menu bar, icon rails, side panels, editor area, consoles.
+// Main window of a project: menu bar, icon rails, side panels, editor area, bottom tools.
 import { createSignal, For, type JSX, onCleanup, onMount, Show } from 'solid-js'
 import { Dynamic } from 'solid-js/web'
 import { RpcError, formatRate, on as onPod, podRates, podState, request } from '../pod/rpc'
@@ -6,9 +6,10 @@ import {
   activeLeaf, activeTab, closeTab, conflictedDocs, cycleTab, docsVersion, mutate, navigate as navHistory, openFile, openProject, project, relPath, reopenProject,
   saveAll, session, setConflictOpener, splitPane, closeProject, basename,
 } from '../state/project'
+import { shownIn, toggleTool, toolsIn, type Zone } from '../state/zones'
 import { navigate } from '../app/router'
 import { EditorArea } from '../ui/EditorArea'
-import { BottomPanel, newConsole, setConsoleList } from '../console/consoles'
+import { ConsoleTool, ProblemsTool, newConsole, problemCount, setConsoleList } from '../console/consoles'
 import { Explorer } from '../panels/Explorer'
 import { GlobalSearch, focusGlobalSearch } from '../panels/GlobalSearch'
 import { GitPanel } from '../panels/GitPanel'
@@ -33,14 +34,14 @@ import { toast } from '../ui/toast'
 import { t, tn } from '../i18n'
 import { ProjectBar } from './ProjectBar'
 
-export const leftPanels: Record<string, { label: string; icon: string; component: () => JSX.Element }> = {
+/** Tools of the four zones; their placement comes from state/zones. */
+export const toolPanels: Record<string, { label: string; icon: string; component: () => JSX.Element; badge?: () => number }> = {
   explorer: { label: 'Explorer', icon: 'files', component: Explorer },
   search: { label: 'Search', icon: 'search', component: GlobalSearch },
   git: { label: 'Git', icon: 'branch', component: GitPanel },
   kanban: { label: 'Kanban', icon: 'kanban', component: KanbanPanel },
-}
-
-export const rightPanels: Record<string, { label: string; icon: string; component: () => JSX.Element }> = {
+  console: { label: 'Console', icon: 'terminal', component: ConsoleTool },
+  problems: { label: 'Problems', icon: 'problems', component: ProblemsTool, badge: problemCount },
   database: { label: 'Database explorer', icon: 'database', component: DatabaseTool },
   assistant: { label: 'AI assistant', icon: 'sparkle', component: AssistantTool },
   structure: { label: 'Structure', icon: 'outline', component: StructureTool },
@@ -240,19 +241,32 @@ function MenuBar() {
 
 // ---------- rails & side panels ----------
 
-function Rail(props: { side: 'left' | 'right'; panels: typeof leftPanels }) {
-  const current = () => session[props.side].panel
-  const toggle = (id: string) => mutate((s) => (s[props.side].panel = s[props.side].panel === id ? null : id))
+function Rail(props: { side: 'left' | 'right' }) {
+  const bottom: Zone = props.side === 'left' ? 'bottomLeft' : 'bottomRight'
   return (
     <nav class={`rail rail-${props.side}`} aria-label={props.side === 'left' ? t('Panels') : t('Tools')}>
-      <For each={Object.entries(props.panels)}>
-        {([id, p]) => (
-          <button class="rail-btn" classList={{ active: current() === id }} title={t(p.label)} aria-pressed={current() === id} onClick={() => toggle(id)}>
-            <Icon name={p.icon} size={18} />
+      <RailGroup zone={props.side} />
+      <span class="grow" />
+      <RailGroup zone={bottom} />
+    </nav>
+  )
+}
+
+function RailGroup(props: { zone: Zone }) {
+  const current = () => shownIn(session, props.zone)
+  return (
+    <div class="rail-group" data-zone={props.zone}>
+      <For each={toolsIn(session, props.zone).filter((id) => toolPanels[id])}>
+        {(id) => (
+          <button class="rail-btn" classList={{ active: current() === id }} title={t(toolPanels[id].label)} aria-pressed={current() === id} onClick={() => mutate((s) => toggleTool(s, id))}>
+            <Icon name={toolPanels[id].icon} size={18} />
+            <Show when={toolPanels[id].badge?.()}>
+              <span class="rail-badge" />
+            </Show>
           </button>
         )}
       </For>
-    </nav>
+    </div>
   )
 }
 
@@ -277,18 +291,43 @@ function Resizer(props: { onDrag: (delta: number) => void; dir: 'x' | 'y' }) {
   return <div class={`resizer resizer-${props.dir}`} onPointerDown={down} />
 }
 
-function SidePanel(props: { side: 'left' | 'right'; panels: typeof leftPanels }) {
-  const id = () => session[props.side].panel!
+/** One zone with its tool, a side panel when `width` is given. */
+function ZonePanel(props: { zone: Zone; width?: number; style?: JSX.CSSProperties }) {
+  const id = () => shownIn(session, props.zone)!
   const detach = () => window.open(`/project/${project()!.id}/tool/${id()}`, `tool-${id()}`, id() === 'assistant' ? 'popup,width=1100,height=820' : 'popup,width=420,height=760')
+  const side = props.zone === 'left' || props.zone === 'right'
   return (
-    <aside class={`side side-${props.side}`} style={{ width: `${session[props.side].width}px` }}>
+    <aside class={`zone zone-${props.zone}`} classList={{ side, [`side-${props.zone}`]: side }} data-tool={id()} style={props.width ? { width: `${props.width}px` } : props.style}>
       <button class="icon-btn detach" title={t('Open in a window')} onClick={detach}>
         <Icon name="external" size={13} />
       </button>
-      <Show when={props.panels[id()]} keyed>
+      <Show when={toolPanels[id()]} keyed>
         {(p) => <Dynamic component={p.component} />}
       </Show>
     </aside>
+  )
+}
+
+function BottomStrip() {
+  let el!: HTMLDivElement
+  const left = () => shownIn(session, 'bottomLeft')
+  const right = () => shownIn(session, 'bottomRight')
+  const both = () => !!left() && !!right()
+  return (
+    <>
+      <Resizer dir="y" onDrag={(d) => mutate((s) => (s.bottom.height = Math.max(100, Math.min(innerHeight - 200, s.bottom.height - d))))} />
+      <div class="bottom" ref={el} style={{ height: `${session.bottom.height}px` }}>
+        <Show when={left()}>
+          <ZonePanel zone="bottomLeft" style={{ flex: both() ? `0 0 ${session.bottom.split * 100}%` : '1 1 0' }} />
+        </Show>
+        <Show when={both()}>
+          <Resizer dir="x" onDrag={(d) => mutate((s) => (s.bottom.split = Math.max(0.15, Math.min(0.85, s.bottom.split + d / el.offsetWidth))))} />
+        </Show>
+        <Show when={right()}>
+          <ZonePanel zone="bottomRight" style={{ flex: '1 1 0' }} />
+        </Show>
+      </div>
+    </>
   )
 }
 
@@ -324,7 +363,7 @@ export function ProjectPage(props: { id: string }) {
     registerAction('view.toggleLeft', () => mutate((s) => (s.left.panel = s.left.panel ? null : 'explorer'))),
     registerAction('view.toggleRight', () => mutate((s) => (s.right.panel = s.right.panel ? null : 'database'))),
     registerAction('console.new', () => void newConsole()),
-    registerAction('view.toggleBottom', () => mutate((s) => (s.bottom.open = !s.bottom.open))),
+    registerAction('view.toggleBottom', () => mutate((s) => toggleTool(s, 'console'))),
     registerAction('search.global', () => {
       mutate((s) => (s.left.panel = 'search'))
       requestAnimationFrame(focusGlobalSearch)
@@ -362,33 +401,27 @@ export function ProjectPage(props: { id: string }) {
         <MenuBar />
         <NewTicketHost />
         <div class="workbench">
-          <Rail side="left" panels={leftPanels} />
-          <Show when={session.left.panel && leftPanels[session.left.panel]}>
-            <SidePanel side="left" panels={leftPanels} />
-            <Resizer dir="x" onDrag={(d) => mutate((s) => (s.left.width = Math.max(160, Math.min(700, s.left.width + d))))} />
-          </Show>
-          <main class="center">
-            <EditorArea />
-          </main>
-          <Show when={session.right.panel && rightPanels[session.right.panel]}>
-            <Resizer dir="x" onDrag={(d) => mutate((s) => (s.right.width = Math.max(200, Math.min(800, s.right.width - d))))} />
-            <SidePanel side="right" panels={rightPanels} />
-          </Show>
-          <Rail side="right" panels={rightPanels} />
-        </div>
-        <Show
-          when={session.bottom.open}
-          fallback={
-            <button class="bottom-toggle" onClick={() => mutate((s) => (s.bottom.open = true))} title={`Consoles (${shortcutOf('view.toggleBottom')})`}>
-              <Icon name="terminal" size={13} /> {t('Consoles')}
-            </button>
-          }
-        >
-          <Resizer dir="y" onDrag={(d) => mutate((s) => (s.bottom.height = Math.max(100, Math.min(innerHeight - 200, s.bottom.height - d))))} />
-          <div class="bottom" style={{ height: `${session.bottom.height}px` }}>
-            <BottomPanel />
+          <Rail side="left" />
+          <div class="work">
+            <div class="work-top">
+              <Show when={shownIn(session, 'left')}>
+                <ZonePanel zone="left" width={session.left.width} />
+                <Resizer dir="x" onDrag={(d) => mutate((s) => (s.left.width = Math.max(160, Math.min(700, s.left.width + d))))} />
+              </Show>
+              <main class="center">
+                <EditorArea />
+              </main>
+              <Show when={shownIn(session, 'right')}>
+                <Resizer dir="x" onDrag={(d) => mutate((s) => (s.right.width = Math.max(200, Math.min(800, s.right.width - d))))} />
+                <ZonePanel zone="right" width={session.right.width} />
+              </Show>
+            </div>
+            <Show when={shownIn(session, 'bottomLeft') || shownIn(session, 'bottomRight')}>
+              <BottomStrip />
+            </Show>
           </div>
-        </Show>
+          <Rail side="right" />
+        </div>
       </div>
     </Show>
   )

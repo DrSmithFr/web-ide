@@ -62,12 +62,12 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 | Folder | Role |
 |---|---|
 | `editor/` | `Doc` (buffer, revisions, undo), `EditorView` (block rendering, Custom Highlight API), tokenizer and grammars, three-way merge, line diff, sub-word moves, find bar |
-| `state/` | Open project and session (tabs, split tree, panels), settings, git state |
+| `state/` | Open project and session (tabs, split tree, tool zones), settings, git state |
 | `keys/` | Binding table and QWERTY / AZERTY presets |
 | `lsp/` | Client, completion, edits, rename and formatting |
 | `ui/` | Editor area, diff view, overlays (modal, prompt, pick list, context menu), toasts, icons |
 | `panels/` | Explorer, global search, Git |
-| `tools/`, `db/`, `console/`, `conflict/`, `settings/`, `pages/` | Right-panel tools, database explorer, terminals, conflict dialog, settings modal, pages |
+| `tools/`, `db/`, `console/`, `conflict/`, `settings/`, `pages/` | Right-panel tools, database explorer, Console and Problems tools, conflict dialog, settings modal, pages |
 | `llm/` | AI assistant: state, agent loop, tools, prompt, Markdown, attachments, speech recognition |
 | `kanban/` | Board, ticket view, workflow actions, linked conversations |
 | `i18n/` | `t()` and the catalogs (English source strings, French translation) |

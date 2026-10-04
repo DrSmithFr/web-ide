@@ -46,6 +46,30 @@ run(async ({ page }) => {
   const term = await page.textContent('.xterm-rows')
   assert(term.includes('pod-42'), 'terminal runs commands')
 
+  // Bottom tools: Console at the bottom of the left rail, Problems at the bottom of the right one
+  const box = (sel) => page.$eval(sel, (e) => e.getBoundingClientRect().toJSON())
+  assert(await page.isVisible('.rail-left [data-zone=bottomLeft] .rail-btn.active[title="Console"]'), 'Console in the bottom group of the left rail')
+  assert(await page.isVisible('.rail-right [data-zone=bottomRight] .rail-btn[title="Problems"]'), 'Problems in the bottom group of the right rail')
+  const [railL, strip, sideL] = [await box('.rail-left'), await box('.bottom'), await box('.zone-left')]
+  assert(Math.abs(railL.bottom - (await page.evaluate(() => innerHeight))) < 2, 'the rails take the full height')
+  assert(strip.left >= railL.right - 1 && sideL.bottom <= strip.top + 1, 'the strip spans under the side panels')
+  assert((await box('[data-tool=console]')).width > strip.width - 2, 'Console alone takes the whole strip')
+  await page.click('.rail-right .rail-btn[title="Problems"]')
+  await page.waitForSelector('[data-tool=problems] .btab:has-text("Output")')
+  const before = await box('[data-tool=console]')
+  assert(Math.abs(before.width - strip.width / 2) < 10, 'Console and Problems share the strip: ' + before.width)
+  const handle = await box('.bottom > .resizer-x')
+  await page.mouse.move(handle.x + 2, handle.y + 40)
+  await page.mouse.down()
+  await page.mouse.move(handle.x + 122, handle.y + 40, { steps: 4 })
+  await page.mouse.up()
+  const after = await box('[data-tool=console]')
+  assert(Math.abs(after.width - before.width - 120) < 6, 'the border between the two tools moves: ' + (after.width - before.width))
+  assert((await box('[data-tool=problems]')).top === after.top, 'one height for the strip')
+  await page.screenshot({ path: OUT + '/s5-bottom.png' })
+  await page.click('.rail-right .rail-btn[title="Problems"]')
+  assert(!(await page.isVisible('[data-tool=problems]')), 'Problems closed from its rail icon')
+
   // Palette
   await page.keyboard.press('Control+Shift+a')
   await page.waitForSelector('.pick-input')

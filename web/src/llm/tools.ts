@@ -4,6 +4,7 @@ import { on as onPod, request } from '../pod/rpc'
 import { activeTab, applyRemote, diagnostics, fileUri, flushLsp, getDoc, loadDoc, mutate, openFile, relPath, root, session } from '../state/project'
 import { consoles, setConsoleList } from '../console/consoles'
 import { refreshGit } from '../state/git'
+import { showTool, toolIds } from '../state/zones'
 import { lspLanguage, lspLanguageId } from '../editor/languages'
 import { lineHunks } from '../editor/linediff'
 import { flatten, symbolKinds, toLocations, type DocumentSymbol, type Location } from '../lsp/client'
@@ -73,7 +74,7 @@ export const toolDefs = [
   ),
   fn(
     'focus',
-    'Brings an element of the IDE to the front: an open file, a panel (explorer, search, git, kanban, database, assistant, structure, conflicts, info), a console or the problems list.',
+    'Brings an element of the IDE to the front: an open file, a panel (explorer, search, git, kanban, console, problems, database, assistant, structure, conflicts, info), a console or the problems list.',
     {
       target: { type: 'string', enum: ['file', 'panel', 'console', 'problems'], description: 'Kind of element' },
       path: str('File (target=file)'),
@@ -577,9 +578,6 @@ async function showFile(p: string, line?: number, endLine?: number): Promise<Too
   return ok(`${relPath(abs)} opened in the editor, ${range}.`, `${relPath(abs)} · ${endLine ? t('lines {from}-{to}', { from: l1 + 1, to: l2 + 1 }) : t('line {n}', { n: l1 + 1 })}`)
 }
 
-const leftIds = ['explorer', 'search', 'git', 'kanban']
-const rightIds = ['database', 'assistant', 'structure', 'conflicts', 'info']
-
 async function focus(a: Record<string, any>): Promise<ToolResult> {
   switch (a.target) {
     case 'file': {
@@ -589,24 +587,23 @@ async function focus(a: Record<string, any>): Promise<ToolResult> {
     }
     case 'panel': {
       const id = String(a.panel ?? '')
-      if (leftIds.includes(id)) mutate((s) => (s.left.panel = id))
-      else if (rightIds.includes(id)) mutate((s) => (s.right.panel = id))
-      else throw new Error(`unknown panel: ${id} (${[...leftIds, ...rightIds].join(', ')})`)
+      if (!toolIds.includes(id)) throw new Error(`unknown panel: ${id} (${toolIds.join(', ')})`)
+      mutate((s) => showTool(s, id))
       return ok(`Panel ${id} shown.`, t('panel {id}', { id }))
     }
     case 'console': {
       const c = consoles().find((x) => x.id === a.console_id)
       if (!c) throw new Error(`console not found: ${a.console_id} (see list_consoles)`)
       mutate((s) => {
-        s.bottom.open = true
+        showTool(s, 'console')
         s.bottom.active = c.id
       })
       return ok(`Console "${c.title}" shown.`, `console ${c.title}`)
     }
     case 'problems':
       mutate((s) => {
-        s.bottom.open = true
-        s.bottom.active = 'problems'
+        showTool(s, 'problems')
+        s.bottom.problemsTab = 'problems'
       })
       return ok('Problems list shown.', t('problems'))
   }
@@ -671,7 +668,7 @@ async function runCommand(command: string, cwd?: string, timeout?: number): Prom
   })
   setConsoleList([...consoles().filter((c) => c.id !== info.id), info])
   mutate((s) => {
-    s.bottom.open = true
+    showTool(s, 'console')
     s.bottom.active = info.id
   })
   const until = Date.now() + limit

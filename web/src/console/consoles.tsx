@@ -1,11 +1,12 @@
-// Bottom panel: terminals and tasks run by the pod (they survive reloads), diagnostics,
-// language server output. One xterm instance per console, kept while the page lives.
+// Console tool: terminals and tasks run by the pod (they survive reloads), one xterm instance
+// per console, kept while the page lives. Problems tool: diagnostics and language server output.
 import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { notify, on as onPod, request } from '../pod/rpc'
 import { diagnostics, mutate, openFile, project, relPath, root, session } from '../state/project'
+import { showTool } from '../state/zones'
 import { settings } from '../state/settings'
 import { themeById } from '../settings/themes'
 import { prompt } from '../ui/overlay'
@@ -171,7 +172,7 @@ export async function newConsole(o: { cwd?: string; command?: string[]; title?: 
     const info: ConsoleInfo = await request('console.create', { kind: o.kind ?? 'terminal', title: o.title, command: o.command, cwd: o.cwd, cols: 120, rows: 30 })
     setConsoles((l) => (l.some((x) => x.id === info.id) ? l : [...l, info]))
     mutate((s) => {
-      s.bottom.open = true
+      showTool(s, 'console')
       s.bottom.active = info.id
     })
     return info
@@ -194,7 +195,7 @@ async function closeConsole(id: string) {
   }
   setConsoles((l) => l.filter((c) => c.id !== id))
   disposeTerm(id)
-  if (session.bottom.active === id) mutate((s) => (s.bottom.active = consoles()[0]?.id ?? 'problems'))
+  if (session.bottom.active === id) mutate((s) => (s.bottom.active = consoles()[0]?.id ?? null))
 }
 
 async function renameConsole(c: ConsoleInfo) {
@@ -206,7 +207,7 @@ function detach(id: string) {
   window.open(`/project/${project()!.id}/console/${id}`, `console-${id}`, 'popup,width=900,height=500')
 }
 
-// ---------- panel ----------
+// ---------- tools ----------
 
 function Problems() {
   const list = () =>
@@ -243,19 +244,17 @@ function Output() {
   )
 }
 
-export function BottomPanel() {
+export function ConsoleTool() {
   // A console that no longer exists (pod restarted) falls back to the first one.
   const active = () => {
     const a = session.bottom.active
-    if (a === 'problems' || a === 'output' || consoles().some((c) => c.id === a)) return a!
-    return consoles()[0]?.id ?? 'problems'
+    return consoles().some((c) => c.id === a) ? a : (consoles()[0]?.id ?? null)
   }
-  const problemCount = () => Object.values(diagnostics).reduce((n, l) => n + (l?.filter((d) => d.severity === 1).length ?? 0), 0)
   const setActive = (id: string) => mutate((s) => (s.bottom.active = id))
 
   return (
-    <div class="bottom-panel">
-      <div class="bottom-tabs" role="tablist">
+    <div class="panel">
+      <div class="tool-tabs" role="tablist">
         <For each={consoles()}>
           {(c) => (
             <div
@@ -287,26 +286,10 @@ export function BottomPanel() {
         <button class="icon-btn" title={t('Run a command (build output)')} onClick={runTask}>
           <Icon name="play" />
         </button>
-        <span class="grow" />
-        <div class="btab" classList={{ active: active() === 'problems' }} onClick={() => setActive('problems')}>
-          {t('Problems')}
-          <Show when={problemCount()}>
-            <span class="badge danger">{problemCount()}</span>
-          </Show>
-        </div>
-        <div class="btab" classList={{ active: active() === 'output' }} onClick={() => setActive('output')}>
-          {t('Output')}
-        </div>
-        <button class="icon-btn" title={`${t('Hide')} (${shortcutOf('view.toggleBottom')})`} onClick={() => mutate((s) => (s.bottom.open = false))}>
-          ✕
-        </button>
       </div>
-      <div class="bottom-body">
-        <Show when={active() === 'problems'}>
-          <Problems />
-        </Show>
-        <Show when={active() === 'output'}>
-          <Output />
+      <div class="tool-body">
+        <Show when={consoles().length === 0}>
+          <div class="muted pad">{t('No open console.')}</div>
         </Show>
         <For each={consoles()}>
           {(c) => (
@@ -315,6 +298,34 @@ export function BottomPanel() {
             </div>
           )}
         </For>
+      </div>
+    </div>
+  )
+}
+
+/** Number of errors reported by the language servers. */
+export const problemCount = () => Object.values(diagnostics).reduce((n, l) => n + (l?.filter((d) => d.severity === 1).length ?? 0), 0)
+
+export function ProblemsTool() {
+  const tab = () => session.bottom.problemsTab
+  const setTab = (id: 'problems' | 'output') => mutate((s) => (s.bottom.problemsTab = id))
+  return (
+    <div class="panel">
+      <div class="tool-tabs" role="tablist">
+        <div class="btab" role="tab" aria-selected={tab() === 'problems'} classList={{ active: tab() === 'problems' }} onClick={() => setTab('problems')}>
+          {t('Problems')}
+          <Show when={problemCount()}>
+            <span class="badge danger">{problemCount()}</span>
+          </Show>
+        </div>
+        <div class="btab" role="tab" aria-selected={tab() === 'output'} classList={{ active: tab() === 'output' }} onClick={() => setTab('output')}>
+          {t('Output')}
+        </div>
+      </div>
+      <div class="tool-body">
+        <Show when={tab() === 'output'} fallback={<Problems />}>
+          <Output />
+        </Show>
       </div>
     </div>
   )

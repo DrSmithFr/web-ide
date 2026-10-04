@@ -6,7 +6,7 @@ import { project, closeProject, reopenProject, panelAliases } from '../state/pro
 import { EditorArea } from '../ui/EditorArea'
 import { TermView, consoles, setConsoleList } from '../console/consoles'
 import { NewTicketHost } from '../kanban/Board'
-import { leftPanels, openWithAuth, rightPanels, useProjectActions, PodStatus } from './ProjectPage'
+import { openWithAuth, toolPanels, useProjectActions, PodStatus } from './ProjectPage'
 import { on as onPod, request } from '../pod/rpc'
 import { t } from '../i18n'
 import { useProjectIcon } from '../ui/projectIcon'
@@ -80,7 +80,7 @@ export function DetachedTool(props: { id: string; toolId: string }) {
   const s = useProject(props.id, () => 'Tool')
   useProjectActions()
   const id = panelAliases[props.toolId] ?? props.toolId
-  const tool = () => rightPanels[id] ?? leftPanels[id]
+  const tool = () => toolPanels[id]
   return (
     <Frame title={`${tool() ? t(tool()!.label) : props.toolId} · ${project()?.name ?? ''}`} ready={s.ready()} error={s.error()}>
       <Show when={tool()} fallback={<p class="muted pad">{t('Unknown tool.')}</p>}>
