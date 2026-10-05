@@ -31,3 +31,10 @@ test('an edit of Claude adds its file to the band', async ($, on) => {
     expect(await band.find({ key: '/p/src/b.go' })).toBe(undefined)
   }
 })
+
+test('the mobile app gets the links in a pane', async ($, on) => {
+  on('tool.call', () => ({ result: 'edited' }))
+  await $.tool.call({ tool: 'Write', file_path: '/p/src/c.go', content: 'x' })
+  const pane = await $.ui.mount({ plugin: 'web-ide', surface: 'mobile', component: 'Pane', requestId: 'web-ide', props: { title: 'IDE', isFocused: false, bodyColumns: 40, placement: 'inline', scroll: { offset: 0, bodyRows: 10 }, view: {} } })
+  expect((await pane.find({ key: '/p/src/c.go' }))?.props.label).toBe('↗ c.go')
+})

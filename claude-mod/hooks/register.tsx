@@ -1,7 +1,9 @@
 // Web IDE in Claude Code, above the prompt: links to the project Claude works in and to
 // the ticket of its worktree (at the public address of the IDE, publicUrl of the pod),
 // and the files Claude changes as buttons opening them in the IDE windows (the /open
-// endpoint of the pod, with its token). /ide <file[:line]> opens any file.
+// endpoint of the pod, with its token). The band above the prompt is drawn by the
+// terminal and the desktop app only: the mobile app gets the same links in a pane, opened
+// when it joins the session and by /ide. /ide <file[:line]> opens any file.
 //
 // The pod: WEBIDE_URL (default http://127.0.0.1:4433), its data folder WEBIDE_DATA
 // (default ~/.web-ide), where the token is.
@@ -15,6 +17,7 @@ const files = atom({ plugin: 'web-ide', key: 'files' } as const, [])
 
 const EDITS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit'])
 const MAX_FILES = 4
+const PANE = 'web-ide'
 
 type Pod = { url: string; token: string }
 
@@ -106,8 +109,15 @@ async function open($: EngineInterface, path: string, line = 0): Promise<string>
 
 export const register: Register = (on) => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'ide', description: 'Open a file in the Web IDE (default: the last file changed)', argumentHint: '[file[:line]]' })
+    await $.command.register({ name: 'ide', description: 'Links to the Web IDE (project, ticket, files), or open a file in it', argumentHint: '[file[:line]]' })
     void refresh($)
+    return next(e)
+  })
+
+  // The mobile app draws no band above the prompt: the links go in a pane there.
+  on('session.attach', { surface: 'mobile' }, async ($, e, next) => {
+    void refresh($)
+    void $.ui.open({ id: PANE, title: 'IDE' })
     return next(e)
   })
 
@@ -128,11 +138,27 @@ export const register: Register = (on) => {
       const t = parseTarget(e.args, await $.session.cwd())
       return { text: await open($, t.path, t.line) }
     }
-    const [last] = await read($, files)
-    if (last) return { text: await open($, last) }
+    await refresh($)
+    await $.ui.open({ id: PANE, title: 'IDE' })
     const here = await read($, ide)
-    if (!here) return { text: 'Usage: /ide <file[:line]> (this folder is not a project of the IDE)' }
+    if (!here) return { text: 'This folder is not a project of the IDE.' }
     return { text: [`Project: ${here.project}`, ...(here.ticket ? [`Ticket #${here.ticket.id}: ${here.ticket.url}`] : [])].join('\n') }
+  })
+
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    const here = await read($, ide)
+    const list = await read($, files)
+    const { Box, Button, Link, Text } = $.ui.resolve(e)
+    const tk = here?.ticket
+    return (
+      <Box flexDirection="column">
+        {here ? <Link key="project" href={here.project} label="Project in the IDE" /> : <Text dimColor>This folder is not a project of the IDE.</Text>}
+        {tk && <Link key="ticket" href={tk.url} label={`#${tk.id} ${tk.title} · ${tk.status}`} />}
+        {list.map((path) => (
+          <Button key={path} label={`↗ ${basename(path)}`} plain onPress={() => void open($, path).then((text) => $.ui.toast(text))} />
+        ))}
+      </Box>
+    )
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
