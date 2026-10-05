@@ -41,15 +41,7 @@ func (j *job) publish(d Delta) {
 	if d.Tool != "" {
 		j.acc.Tool = d.Tool
 	}
-	if d.Tokens > 0 {
-		j.acc.Tokens = d.Tokens
-	}
-	if d.Speed > 0 {
-		j.acc.Speed = d.Speed
-	}
-	if d.PromptTotal > 0 {
-		j.acc.PromptDone, j.acc.PromptTotal = d.PromptDone, d.PromptTotal
-	}
+	addCounters(&j.acc, d)
 	subs := make([]func(Delta), 0, len(j.subs))
 	for _, f := range j.subs {
 		subs = append(subs, f)

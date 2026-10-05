@@ -52,6 +52,8 @@ type Usage struct {
 	Cached     int     `json:"cached,omitempty"`
 	PerSecond  float64 `json:"perSecond,omitempty"`
 	DurationMs float64 `json:"durationMs,omitempty"`
+	// PromptPerSecond: speed of the prompt reading (tokens not in the cache).
+	PromptPerSecond float64 `json:"promptPerSecond,omitempty"`
 }
 
 type ChatResult struct {
@@ -63,7 +65,7 @@ type ChatResult struct {
 // Delta is a piece of the answer pushed while it streams. Tool is the name of a tool
 // call being written (its arguments are not streamed). The counters are totals so far:
 // tokens generated, speed told by the server (0: the page computes it), and the progress
-// of the prompt reading (llama.cpp).
+// of the prompt reading (llama.cpp): tokens read, total, tokens found in the cache, speed.
 type Delta struct {
 	Content     string  `json:"content,omitempty"`
 	Reasoning   string  `json:"reasoning,omitempty"`
@@ -72,6 +74,24 @@ type Delta struct {
 	Speed       float64 `json:"speed,omitempty"`
 	PromptDone  int     `json:"promptDone,omitempty"`
 	PromptTotal int     `json:"promptTotal,omitempty"`
+	PromptCache int     `json:"promptCache,omitempty"`
+	PromptSpeed float64 `json:"promptSpeed,omitempty"`
+}
+
+// addCounters copies the counters of d (totals: the last value wins) into acc.
+func addCounters(acc *Delta, d Delta) {
+	if d.Tokens > 0 {
+		acc.Tokens = d.Tokens
+	}
+	if d.Speed > 0 {
+		acc.Speed = d.Speed
+	}
+	if d.PromptTotal > 0 {
+		acc.PromptDone, acc.PromptTotal, acc.PromptCache = d.PromptDone, d.PromptTotal, d.PromptCache
+	}
+	if d.PromptSpeed > 0 {
+		acc.PromptSpeed = d.PromptSpeed
+	}
 }
 
 // Chat runs one completion. onDelta receives the pieces grouped every ~40 ms.
@@ -112,16 +132,7 @@ func (b *batcher) add(d Delta) {
 	if d.Tool != "" {
 		b.cur.Tool = d.Tool
 	}
-	// Counters are totals: the last value wins.
-	if d.Tokens > 0 {
-		b.cur.Tokens = d.Tokens
-	}
-	if d.Speed > 0 {
-		b.cur.Speed = d.Speed
-	}
-	if d.PromptTotal > 0 {
-		b.cur.PromptDone, b.cur.PromptTotal = d.PromptDone, d.PromptTotal
-	}
+	addCounters(&b.cur, d)
 	if b.timer == nil {
 		b.timer = time.AfterFunc(40*time.Millisecond, b.flush)
 	}
@@ -213,14 +224,20 @@ func (m *Manager) openaiChat(ctx context.Context, s Server, req ChatRequest, b *
 				} `json:"prompt_tokens_details"`
 			} `json:"usage"`
 			Timings *struct {
+				CacheN             int     `json:"cache_n"`
+				PromptN            int     `json:"prompt_n"`
+				PromptMs           float64 `json:"prompt_ms"`
+				PromptPerSecond    float64 `json:"prompt_per_second"`
 				PredictedN         int     `json:"predicted_n"`
 				PredictedMs        float64 `json:"predicted_ms"`
-				PromptMs           float64 `json:"prompt_ms"`
 				PredictedPerSecond float64 `json:"predicted_per_second"`
 			} `json:"timings"`
+			// processed counts the tokens found in the cache too.
 			Progress *struct {
-				Total     int `json:"total"`
-				Processed int `json:"processed"`
+				Total     int     `json:"total"`
+				Cache     int     `json:"cache"`
+				Processed int     `json:"processed"`
+				TimeMs    float64 `json:"time_ms"`
 			} `json:"prompt_progress"`
 			Error json.RawMessage `json:"error"`
 		}
@@ -237,7 +254,15 @@ func (m *Manager) openaiChat(ctx context.Context, s Server, req ChatRequest, b *
 		}
 		stats.Tokens = serverTokens
 		if p := chunk.Progress; p != nil && p.Total > 0 {
-			stats.PromptDone, stats.PromptTotal = p.Processed, p.Total
+			stats.PromptDone, stats.PromptTotal, stats.PromptCache = p.Processed, p.Total, p.Cache
+			if p.TimeMs > 0 && p.Processed > p.Cache {
+				stats.PromptSpeed = float64(p.Processed-p.Cache) / (p.TimeMs / 1000)
+			}
+		}
+		if t := chunk.Timings; t != nil && t.PromptN+t.CacheN > 0 {
+			total := t.PromptN + t.CacheN
+			stats.PromptDone, stats.PromptTotal, stats.PromptCache = total, total, t.CacheN
+			stats.PromptSpeed = t.PromptPerSecond
 		}
 		for _, c := range chunk.Choices {
 			d := c.Delta
@@ -281,6 +306,10 @@ func (m *Manager) openaiChat(ctx context.Context, s Server, req ChatRequest, b *
 			if t := chunk.Timings; t != nil {
 				u.PerSecond = t.PredictedPerSecond
 				u.DurationMs = t.PredictedMs + t.PromptMs
+				u.PromptPerSecond = t.PromptPerSecond
+				if u.Cached == 0 {
+					u.Cached = t.CacheN
+				}
 			}
 			res.Usage = u
 		}
@@ -423,6 +452,7 @@ func (m *Manager) ollamaChat(ctx context.Context, s Server, req ChatRequest, b *
 			Done       bool          `json:"done"`
 			DoneReason string        `json:"done_reason"`
 			PromptN    int           `json:"prompt_eval_count"`
+			PromptNs   float64       `json:"prompt_eval_duration"`
 			EvalN      int           `json:"eval_count"`
 			EvalNs     float64       `json:"eval_duration"`
 			TotalNs    float64       `json:"total_duration"`
@@ -464,6 +494,9 @@ func (m *Manager) ollamaChat(ctx context.Context, s Server, req ChatRequest, b *
 			u := &Usage{Prompt: chunk.PromptN, Completion: chunk.EvalN, DurationMs: chunk.TotalNs / 1e6}
 			if chunk.EvalNs > 0 {
 				u.PerSecond = float64(chunk.EvalN) / (chunk.EvalNs / 1e9)
+			}
+			if chunk.PromptNs > 0 {
+				u.PromptPerSecond = float64(chunk.PromptN) / (chunk.PromptNs / 1e9)
 			}
 			res.Usage = u
 			break

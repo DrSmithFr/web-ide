@@ -79,15 +79,15 @@ func TestOpenAIChatStream(t *testing.T) {
 			}
 			_ = json.NewDecoder(r.Body).Decode(&got)
 			sse(w,
-				`{"choices":[{"delta":{"content":null}}],"prompt_progress":{"total":40,"processed":20}}`,
+				`{"choices":[{"delta":{"content":null}}],"prompt_progress":{"total":40,"cache":10,"processed":20,"time_ms":100}}`,
 				`{"choices":[{"delta":{"reasoning_content":"I "}}]}`,
 				`{"choices":[{"delta":{"reasoning_content":"think"}}]}`,
-				`{"choices":[{"delta":{"content":"Here"}}],"timings":{"predicted_n":7,"predicted_per_second":31.5}}`,
+				`{"choices":[{"delta":{"content":"Here"}}],"timings":{"cache_n":10,"prompt_n":30,"prompt_per_second":400,"predicted_n":7,"predicted_per_second":31.5}}`,
 				`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a","type":"function","function":{"name":"read_file","arguments":"{\"pa"}}]}}]}`,
 				`{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"th\":\"x\"}"}}]}}]}`,
 				`{"choices":[{"delta":{"tool_calls":[{"index":1,"id":"b","type":"function","function":{"name":"list_dir","arguments":""}}]}}]}`,
 				`{"choices":[{"finish_reason":"tool_calls","delta":{}}]}`,
-				`{"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":3}},"timings":{"predicted_ms":100,"prompt_ms":50,"predicted_per_second":50}}`)
+				`{"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":3}},"timings":{"predicted_ms":100,"prompt_ms":50,"prompt_per_second":200,"predicted_per_second":50}}`)
 		}
 	}))
 	defer ts.Close()
@@ -109,7 +109,7 @@ func TestOpenAIChatStream(t *testing.T) {
 	if len(msg.ToolCalls) != 2 || msg.ToolCalls[0].Function.Arguments != `{"path":"x"}` || msg.ToolCalls[1].Function.Arguments != "{}" || msg.ToolCalls[1].ID != "b" {
 		t.Fatalf("tool calls: %+v", msg.ToolCalls)
 	}
-	if res.Usage == nil || res.Usage.Prompt != 10 || res.Usage.Cached != 3 || res.Usage.PerSecond != 50 {
+	if res.Usage == nil || res.Usage.Prompt != 10 || res.Usage.Cached != 3 || res.Usage.PerSecond != 50 || res.Usage.PromptPerSecond != 200 {
 		t.Fatalf("usage: %+v", res.Usage)
 	}
 	var all Delta
@@ -120,13 +120,14 @@ func TestOpenAIChatStream(t *testing.T) {
 	if all.Content != "Here" || all.Reasoning != "I think" {
 		t.Fatalf("deltas: %+v", deltas)
 	}
-	var tokens, total int
-	var speed float64
+	var tokens, total, cache int
+	var speed, promptSpeed float64
 	for _, d := range deltas {
-		tokens, speed, total = max(tokens, d.Tokens), max(speed, d.Speed), max(total, d.PromptTotal)
+		tokens, speed, total, cache = max(tokens, d.Tokens), max(speed, d.Speed), max(total, d.PromptTotal), max(cache, d.PromptCache)
+		promptSpeed = max(promptSpeed, d.PromptSpeed)
 	}
-	if tokens < 7 || speed != 31.5 || total != 40 {
-		t.Fatalf("stats: tokens=%d speed=%v prompt=%d %+v", tokens, speed, total, deltas)
+	if tokens < 7 || speed != 31.5 || total != 40 || cache != 10 || promptSpeed != 400 {
+		t.Fatalf("stats: tokens=%d speed=%v prompt=%d cache=%d prompt speed=%v %+v", tokens, speed, total, cache, promptSpeed, deltas)
 	}
 	if got["timings_per_token"] != true || got["return_progress"] != true {
 		t.Fatalf("llama.cpp options missing: %v", got)

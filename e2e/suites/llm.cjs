@@ -1,12 +1,13 @@
 // AI assistant: server setup, model list, streamed answer with tool calls (read, language
 // server, confirmed edit), Markdown + Mermaid rendering, saved conversations, image
-// attachment and stop. The model is a scripted fake OpenAI server.
+// attachment, stop, and resume after a crash. The model is a scripted fake OpenAI server.
 const fs = require('fs')
 const http = require('http')
 const { run, openProject, open, assert, text, WS, OUT } = require('../common.cjs')
 
 const requests = []
 let slowClosed = false
+let crashed = false
 
 function chunk(res, delta, extra = {}) {
   res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: null }], ...extra })}\n\n`)
@@ -72,8 +73,21 @@ const fake = http.createServer(async (req, res) => {
     chunk(res, { content: 'Starting\n\n```mermaid\ngraph TD\n  A-->B\n```\n\n' })
     for (let i = 0; i < 100 && !res.destroyed; i++) {
       await sleep(100)
-      chunk(res, { content: '.' }, { timings: { predicted_n: i + 5, predicted_per_second: 10 } })
+      chunk(res, { content: '.' }, { timings: { cache_n: 50, prompt_n: 150, prompt_per_second: 820.4, predicted_n: i + 5, predicted_per_second: 10 } })
     }
+    return finish(res, 'stop')
+  }
+  if (userText(lastUser).includes('crash after a step')) {
+    if (last.role === 'user') {
+      chunk(res, { tool_calls: [call('k1', 'read_file', { path: 'src/main.go' })] })
+      return finish(res, 'tool_calls')
+    }
+    if (!crashed) {
+      crashed = true
+      res.write(`data: ${JSON.stringify({ error: { message: 'model server crashed' } })}\n\n`)
+      return res.end()
+    }
+    chunk(res, { content: 'Resumed after the step.' })
     return finish(res, 'stop')
   }
   if (userText(lastUser).includes('think long')) {
@@ -233,6 +247,8 @@ run(async ({ page }) => {
     assert(drawn, 'Mermaid diagram drawn during the stream')
     const stats = await page.waitForFunction(() => /10\.0 tokens\/s · \d+ tokens · [\d.]+ s/.test(document.querySelector('[data-testid=ai-live-stats]')?.textContent ?? ''), null, { timeout: 5000 }).then(() => true, () => false)
     assert(stats, 'speed, tokens and elapsed time during the answer: ' + (await page.textContent('[data-testid=ai-live-stats]').catch(() => '')))
+    const promptStats = await page.textContent('[data-testid=ai-live-stats]').catch(() => '')
+    assert(promptStats.includes('prompt 820 tokens/s · cache 25 %'), 'prompt reading speed and cache ratio during the answer: ' + promptStats)
     await page.screenshot({ path: OUT + '/llm-live.png' })
     await page.click('[data-testid=stop]')
     await page.waitForSelector('.ai-error:has-text("Stopped")', { timeout: 5000 })
@@ -240,6 +256,19 @@ run(async ({ page }) => {
     assert(slowClosed, 'the request to the model server is canceled')
     assert((await page.$$eval('.ai-msg.assistant .md', (e) => e[e.length - 1].textContent)).startsWith('Starting'), 'the start of the answer is kept')
     assert(await page.isVisible('.ai-act[title="Generate the answer again"]'), 'regenerate button offered')
+
+    // A crash after a step: Resume keeps the step and asks only the failed answer again.
+    const before = requests.length
+    await page.fill('.ai-composer textarea', 'crash after a step')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid=ai-resume]', { timeout: 10000 })
+    assert(await page.isVisible('.ai-error:has-text("model server crashed")'), 'error of the model server shown')
+    await page.click('[data-testid=ai-resume]')
+    await page.waitForSelector('.ai-msg.assistant .md:has-text("Resumed after the step.")', { timeout: 10000 })
+    const sent = requests.slice(before)
+    const resumed = sent[2]?.messages ?? []
+    assert(sent.length === 3 && resumed.filter((m) => m.role === 'tool' && m.tool_call_id === 'k1').length === 1 && resumed[resumed.length - 1].role === 'tool', 'resume sends the step already done, without running it again: ' + sent.length + ' requests')
+    assert(!(await page.isVisible('[data-testid=ai-resume]')), 'no resume button once the answer is complete')
   } finally {
     fake.close()
   }

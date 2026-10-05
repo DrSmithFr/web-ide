@@ -63,6 +63,8 @@ export interface Usage {
   cached?: number
   perSecond?: number
   durationMs?: number
+  /** Speed of the prompt reading (tokens not found in the cache). */
+  promptPerSecond?: number
 }
 
 export interface ChatMessage {
@@ -167,7 +169,8 @@ export const [chatList, setChatList] = createSignal<ChatInfo[]>([])
 
 /**
  * Answer being streamed, with its counters: request start, first token, reasoning span,
- * tokens so far, speed told by the server, progress of the prompt reading.
+ * tokens so far, speed told by the server, progress of the prompt reading (tokens read,
+ * total, tokens found in the cache, reading speed).
  */
 export const [live, setLive] = createStore({
   busy: false,
@@ -186,6 +189,8 @@ export const [live, setLive] = createStore({
   speed: 0,
   promptDone: 0,
   promptTotal: 0,
+  promptCache: 0,
+  promptSpeed: 0,
 })
 
 /** Live speed in tokens per second (server value, else measured since the first token). */

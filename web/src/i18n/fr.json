@@ -999,7 +999,6 @@
   "{n} B/s": "{n} o/s",
   "{n} behind {base}": "{n} de retard sur {base}",
   "{n} bytes": "{n} octets",
-  "{n} cached": "{n} en cache",
   "{n} char": "{n} car.",
   "{n} chars": "{n} car.",
   "{n} commit ahead": "{n} commit d'avance",
@@ -1436,5 +1435,11 @@
   "Develop the ticket": "Développer le ticket",
   "Handle the test feedback": "Traiter les retours de test",
   "Run Claude Code on this ticket in a terminal": "Lancer Claude Code sur ce ticket dans un terminal",
-  "Claude Code: add the kanban tools of this IDE (once, in a terminal)": "Claude Code : ajouter les outils du kanban de cet IDE (une fois, dans un terminal)"
+  "Claude Code: add the kanban tools of this IDE (once, in a terminal)": "Claude Code : ajouter les outils du kanban de cet IDE (une fois, dans un terminal)",
+  "{n} cached, {pct} %": "{n} en cache, {pct} %",
+  "prompt {n} tokens/s": "prompt {n} tokens/s",
+  "cache {pct} %": "cache {pct} %",
+  "Resume": "Reprendre",
+  "Go on from the last completed step: the steps already done are kept": "Continuer depuis la dernière étape terminée : les étapes déjà faites sont gardées",
+  "Start the answer again from your message": "Recommencer la réponse depuis votre message"
 }

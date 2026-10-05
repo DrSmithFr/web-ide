@@ -5,7 +5,7 @@ import { Icon } from '../ui/icons'
 import { errorToast, toast } from '../ui/toast'
 import { activeTab, openFile, project, relPath } from '../state/project'
 import { approval, chat, config, live, liveSpeed, savePrefs, setChat, setPrefs, type Attachment, type ChatMessage, type Part, type ToolCall } from './state'
-import { retry } from './agent'
+import { resume, retry, stepsSinceUser } from './agent'
 import { AttachmentChip, callLabel, DiffBlock, formatDuration, formatTokens, Markdown, safeArgs, toolIcons, toolVerbs } from './parts'
 import { absPath } from './tools'
 import { focusComposer, reuseDoodle, runCommand } from './Composer'
@@ -373,7 +373,11 @@ function Stats(props: { msg: ChatMessage }) {
     if (u()?.perSecond) out.push(t('{n} tokens/s', { n: u()!.perSecond!.toFixed(1) }))
     const ms = props.msg.elapsedMs ?? u()?.durationMs
     if (ms) out.push(formatDuration(ms))
-    if (u()) out.push(`${formatTokens(u()!.prompt)} → ${t('{n} tokens', { n: formatTokens(u()!.completion) })}${u()!.cached ? ` (${t('{n} cached', { n: formatTokens(u()!.cached!) })})` : ''}`)
+    if (u()) {
+      const cached = u()!.cached && u()!.prompt ? ` (${t('{n} cached, {pct} %', { n: formatTokens(u()!.cached!), pct: Math.round((u()!.cached! / u()!.prompt) * 100) })})` : ''
+      out.push(`${formatTokens(u()!.prompt)} → ${t('{n} tokens', { n: formatTokens(u()!.completion) })}${cached}`)
+    }
+    if (u()?.promptPerSecond) out.push(t('prompt {n} tokens/s', { n: Math.round(u()!.promptPerSecond!) }))
     return out
   }
   return (
@@ -487,6 +491,9 @@ function LiveStats() {
       if (live.tokens) parts.push(t('{n} tokens', { n: live.tokens }))
     }
     if (live.startedAt) parts.push(formatDuration(at - live.startedAt))
+    // Prompt reading: its speed and the part found in the cache of the server.
+    if (live.promptSpeed) parts.push(t('prompt {n} tokens/s', { n: Math.round(live.promptSpeed) }))
+    if (live.promptTotal) parts.push(t('cache {pct} %', { pct: Math.round((live.promptCache / live.promptTotal) * 100) }))
     return parts.join(' · ')
   }
   return (
@@ -748,9 +755,13 @@ export function Thread(props: { onSuggest: (t: string) => void; onSettings: () =
     return -1
   })
   const compactedCount = () => chat.messages.filter((m) => m.compacted).length
+  // The turn ended without an answer: an error, a stop, or tools interrupted (not a plan
+  // or questions waiting for the user).
   const lastFailed = () => {
     const m = chat.messages[chat.messages.length - 1]
-    return !live.busy && m && (m.role === 'user' || (m.role === 'assistant' && !!m.error && !m.content))
+    if (live.busy || !m) return false
+    if (m.role === 'tool') return !m.plan && !m.questions
+    return m.role === 'user' || (m.role === 'assistant' && !!m.error && !m.tool_calls?.length)
   }
   return (
     <div class="ai-thread">
@@ -799,7 +810,12 @@ export function Thread(props: { onSuggest: (t: string) => void; onSettings: () =
       </Show>
       <Show when={lastFailed()}>
         <div class="ai-retry">
-          <button class="btn small" onClick={() => retry().catch(errorToast)}>
+          <Show when={stepsSinceUser()}>
+            <button class="btn small primary" data-testid="ai-resume" title={t('Go on from the last completed step: the steps already done are kept')} onClick={() => resume().catch(errorToast)}>
+              <Icon name="play" size={12} /> {t('Resume')}
+            </button>
+          </Show>
+          <button class="btn small" title={t('Start the answer again from your message')} onClick={() => retry().catch(errorToast)}>
             <Icon name="refresh" size={12} /> {t('Retry')}
           </button>
         </div>

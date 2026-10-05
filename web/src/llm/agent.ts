@@ -46,6 +46,8 @@ interface DeltaEvent {
   speed?: number
   promptDone?: number
   promptTotal?: number
+  promptCache?: number
+  promptSpeed?: number
 }
 
 on('llm.delta', (d: DeltaEvent) => {
@@ -60,6 +62,8 @@ on('llm.delta', (d: DeltaEvent) => {
       speed: d.speed ?? 0,
       promptDone: d.promptDone ?? 0,
       promptTotal: d.promptTotal ?? 0,
+      promptCache: d.promptCache ?? 0,
+      promptSpeed: d.promptSpeed ?? 0,
       startedAt: d.startedAt || now,
       firstAt: d.content || d.reasoning || d.tool ? d.startedAt || now : 0,
       thinkStart: d.reasoning ? d.startedAt || now : 0,
@@ -84,12 +88,14 @@ on('llm.delta', (d: DeltaEvent) => {
       if (d.promptTotal) {
         l.promptDone = d.promptDone ?? 0
         l.promptTotal = d.promptTotal
+        l.promptCache = d.promptCache ?? 0
       }
+      if (d.promptSpeed) l.promptSpeed = d.promptSpeed
     }),
   )
 })
 
-const resetLive = { content: '', reasoning: '', tool: '', startedAt: 0, firstAt: 0, thinkStart: 0, thinkEnd: 0, tokens: 0, speed: 0, promptDone: 0, promptTotal: 0 }
+const resetLive = { content: '', reasoning: '', tool: '', startedAt: 0, firstAt: 0, thinkStart: 0, thinkEnd: 0, tokens: 0, speed: 0, promptDone: 0, promptTotal: 0, promptCache: 0, promptSpeed: 0 }
 
 /** Timing of the answer just finished, kept on its message. */
 function timing() {
@@ -291,30 +297,58 @@ export async function resumeIfNeeded() {
     return
   }
   stopWatch()
+  setChat(produce((c) => closeToolCalls(c.messages, 'Interrupted by a reload of the page.')))
+  await run(true)
+}
+
+/** Tool calls left without a result (interrupted run) get one: the API expects it. */
+function closeToolCalls(messages: ChatMessage[], reason: string) {
+  const done = new Set(messages.filter((m) => m.role === 'tool').map((m) => m.tool_call_id))
+  for (const m of messages) {
+    if (m.role === 'tool' && !m.status) {
+      m.status = 'error'
+      m.content = reason
+      m.summary = t('interrupted')
+    }
+  }
+  const last = [...messages].reverse().find((m) => m.role === 'assistant')
+  for (const call of last?.tool_calls ?? []) {
+    if (!done.has(call.id)) messages.push({ role: 'tool', tool_call_id: call.id, name: call.function.name, content: reason, status: 'error', summary: t('interrupted') })
+  }
+}
+
+/** Index of the last message written by the user (not a summary), -1 when none. */
+function lastUserIndex(): number {
+  let i = chat.messages.length - 1
+  while (i >= 0 && (chat.messages[i].role !== 'user' || chat.messages[i].kind === 'summary')) i--
+  return i
+}
+
+/** Steps (answers with tool calls) done since the last user message: a resume keeps them. */
+export function stepsSinceUser(): number {
+  return chat.messages.slice(lastUserIndex() + 1).filter((m) => m.role === 'assistant' && m.tool_calls?.length).length
+}
+
+/**
+ * Goes on from the last completed step (after an error or a stop): only the failed
+ * answer is written again, the steps before it and their tool results are kept.
+ */
+export async function resume() {
+  if (live.busy) return
   setChat(
     produce((c) => {
-      const done = new Set(c.messages.filter((m) => m.role === 'tool').map((m) => m.tool_call_id))
-      for (const m of c.messages) {
-        if (m.role === 'tool' && !m.status) {
-          m.status = 'error'
-          m.content = 'Interrupted by a reload of the page.'
-          m.summary = t('interrupted')
-        }
-      }
-      const last = [...c.messages].reverse().find((m) => m.role === 'assistant')
-      for (const call of last?.tool_calls ?? []) {
-        if (!done.has(call.id)) c.messages.push({ role: 'tool', tool_call_id: call.id, name: call.function.name, content: 'Interrupted by a reload of the page.', status: 'error', summary: t('interrupted') })
-      }
+      const last = c.messages[c.messages.length - 1]
+      if (last?.role === 'assistant' && last.error && !last.tool_calls?.length) c.messages.pop()
+      closeToolCalls(c.messages, 'Interrupted: the run stopped before this tool ended.')
     }),
   )
-  await run(true)
+  await run()
 }
 
 /** Asks again from the last user message (after an error or a stop). */
 export async function retry() {
   if (live.busy) return
-  let last = chat.messages.length - 1
-  while (last >= 0 && (chat.messages[last].role !== 'user' || chat.messages[last].kind === 'summary')) last--
+  const last = lastUserIndex()
   if (last < 0) return
   setChat(produce((c) => c.messages.splice(last + 1)))
   await run()
