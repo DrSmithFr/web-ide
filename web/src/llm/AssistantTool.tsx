@@ -80,6 +80,7 @@ export function AssistantTool() {
   let rootEl!: HTMLDivElement
   let list!: HTMLDivElement
   let stick = true
+  let lastTop = 0
 
   onMount(() => {
     const ro = new ResizeObserver(() => setWidth(rootEl.clientWidth))
@@ -99,9 +100,12 @@ export function AssistantTool() {
     onCleanup(() => thread.disconnect())
   })
 
-  // Follow the answer while the view is at the bottom.
+  // Follow the answer while the view is at the bottom. Only a move up stops following: the
+  // event of our own scroll to the end may come after the thread grew again (a large step).
   const onScroll = () => {
-    stick = list.scrollHeight - list.scrollTop - list.clientHeight < 60
+    if (list.scrollHeight - list.scrollTop - list.clientHeight < 60) stick = true
+    else if (list.scrollTop < lastTop) stick = false
+    lastTop = list.scrollTop
   }
   const toBottom = () => requestAnimationFrame(() => list && (list.scrollTop = list.scrollHeight))
   createEffect(

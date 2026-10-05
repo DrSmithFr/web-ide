@@ -145,6 +145,20 @@ run(async ({ page, ctx }) => {
     await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Answer to Describe in detail (+1 image)")', { timeout: 10000 })
     assert((await page.$$eval('.ai-msg.user', (e) => e.length)) === before && !(await page.isVisible('.md:has-text("Answer to Describe (+1 image)")')), 'message edited in place, answer generated again, image kept')
 
+    // The thread grows again between our scroll to the end and its event: still following.
+    await page.evaluate(async () => {
+      const list = document.querySelector('.ai-messages')
+      const pad = (h) => list.firstElementChild.appendChild(Object.assign(document.createElement('div'), { className: 'e2e-pad', style: `height:${h}px` }))
+      pad(100)
+      list.scrollTop = list.scrollHeight
+      pad(400)
+      await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)))
+    })
+    await page.waitForTimeout(200)
+    const grown = await atEnd(page)
+    await page.evaluate(() => document.querySelectorAll('.e2e-pad').forEach((e) => e.remove()))
+    assert(grown < 40, `a step arriving right after the scroll to the end is followed (gap ${Math.round(grown)} px)`)
+
     // Long answer, reload: the view ends at the bottom.
     await ask(page, 'long text', 'Last line.')
     await page.reload()
