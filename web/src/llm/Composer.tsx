@@ -30,6 +30,7 @@ import { prepare, type Prepared } from './attachments'
 import { prepareDoodle } from './doodle/export'
 import { newDoc, type DoodleDoc } from './doodle/model'
 import { doodleSession, openDoodle } from './doodle/session'
+import { canCapture, captureScreen, type Picture } from './doodle/background'
 import { contextMenu } from '../ui/overlay'
 import { shortcutOf } from '../keys/bindings'
 import { cancelRecording, canRecord, modelById, speech, startRecording, stopRecording, transcribe } from './transcribe'
@@ -66,11 +67,20 @@ export async function addFiles(files: Iterable<File>) {
 }
 
 /** Opens a new doodle; Attach joins it to the draft. */
-export function newDoodle() {
+export function newDoodle(background?: Picture) {
   if (doodleSession()) return
   const n = pending().filter((p) => p.attachment.kind === 'doodle').length + 1
   const name = t('Doodle {n}', { n })
-  openDoodle({ doc: newDoc(), name, onAttach: (doc) => attachDoodle(doc, name) })
+  openDoodle({ doc: newDoc(background), name, onAttach: (doc) => attachDoodle(doc, name) })
+}
+
+/** A screenshot chosen by the user, opened as the background of a new doodle. */
+async function screenshotDoodle() {
+  try {
+    newDoodle(await captureScreen())
+  } catch (e) {
+    if ((e as Error).name !== 'NotAllowedError' && (e as Error).name !== 'AbortError') errorToast(e)
+  }
 }
 
 /** Opens a doodle of the draft again; Attach replaces it. */
@@ -766,6 +776,7 @@ export function Composer(props: {
               contextMenu(new MouseEvent('contextmenu', { clientX: r.left, clientY: r.top - 4 }), [
                 { label: t('File…'), hint: t('image, video, audio, PDF, text'), action: () => fileInput.click() },
                 ...(props.inDoodle ? [] : [{ label: t('Doodle…'), hint: shortcutOf('assistant.doodle'), action: () => newDoodle() }]),
+                ...(props.inDoodle || !canCapture() ? [] : [{ label: t('Screenshot…'), hint: t('to annotate'), action: () => void screenshotDoodle() }]),
               ])
             }}
           >

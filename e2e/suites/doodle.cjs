@@ -71,7 +71,7 @@ run(async ({ page }) => {
     // The paperclip opens a menu: a file or a doodle.
     await page.click('[data-testid=ai-attach]')
     const items = await page.$$eval('.ctx-menu .ctx-item .ctx-label', (e) => e.map((x) => x.textContent.trim()))
-    assert(items.join('|') === 'File…|Doodle…', `paperclip menu: ${items.join(', ')}`)
+    assert(items.join('|') === 'File…|Doodle…|Screenshot…', `paperclip menu: ${items.join(', ')}`)
     await page.click('.ctx-menu .ctx-item:has-text("Doodle…")')
     await page.waitForSelector('[data-testid=doodle]')
     assert(await page.isVisible('[data-testid=doodle] .ai-composer textarea'), 'the doodle modal shows the conversation and its composer')
@@ -239,9 +239,72 @@ run(async ({ page }) => {
     await page.focus('[data-testid=dd-canvas]')
     await page.keyboard.press('Control+v')
     assert((await count(page)) === 4, 'elements pasted from another doodle')
-    await page.click('[data-testid=dd-close]')
     page.once('dialog', (d) => d.accept())
-    await page.waitForSelector('[data-testid=doodle]', { state: 'detached' }).catch(() => {})
+    await page.click('[data-testid=dd-close]')
+    await page.waitForSelector('[data-testid=doodle]', { state: 'detached' })
+
+    // Screenshot (the screen picker is replaced by a canvas stream): background of a new doodle.
+    await page.evaluate(() => {
+      const c = document.createElement('canvas')
+      c.width = 640
+      c.height = 360
+      const g = c.getContext('2d')
+      const paint = () => {
+        g.fillStyle = '#2a6'
+        g.fillRect(0, 0, 640, 360)
+      }
+      paint()
+      setInterval(paint, 50)
+      navigator.mediaDevices.getDisplayMedia = async () => c.captureStream(20)
+    })
+    await page.click('[data-testid=ai-attach]')
+    await page.click('.ctx-menu .ctx-item:has-text("Screenshot…")')
+    await page.waitForSelector('[data-testid=doodle] image.dd-bg')
+    assert((await page.textContent('.dd-frame-label')).includes('Image · 640×360'), 'a screenshot opens a doodle with it as background, the frame at its size')
+    // Crop: the frame is free to resize over the image.
+    const se = await page.locator('[data-testid=dd-handle-se]').boundingBox()
+    await page.mouse.move(se.x + 6, se.y + 6)
+    await page.mouse.down()
+    await page.mouse.move(se.x - 100, se.y - 20, { steps: 5 })
+    await page.mouse.up()
+    const label = await page.textContent('.dd-frame-label')
+    const [fw, fh] = label.split('· ')[1].split('×').map(Number)
+    assert(fw < 640 && fh < 360 && Math.abs(fw / fh - 640 / 360) > 0.05, `the frame crops the image freely (${label})`)
+    await page.click('[data-testid=dd-bg-remove]')
+    assert(!(await page.$('image.dd-bg')), 'the background can be removed')
+    await page.keyboard.press('Control+z')
+    assert(!!(await page.$('image.dd-bg')), 'removing the background is undone')
+
+    // Background from a file, then pasted from the clipboard.
+    const png = Buffer.from((await page.evaluate(() => {
+      const c = document.createElement('canvas')
+      c.width = 300
+      c.height = 200
+      c.getContext('2d').fillRect(0, 0, 300, 200)
+      return c.toDataURL('image/png')
+    })).split(',')[1], 'base64')
+    await page.setInputFiles('[data-testid=dd-bg-input]', { name: 'shot.png', mimeType: 'image/png', buffer: png })
+    await page.waitForFunction(() => document.querySelector('.dd-frame-label')?.textContent.includes('300×200'))
+    assert(true, 'a picked image becomes the background')
+    await page.evaluate(() => {
+      const c = document.createElement('canvas')
+      c.width = 120
+      c.height = 90
+      return new Promise((r) =>
+        c.toBlob((b) => {
+          const dt = new DataTransfer()
+          dt.items.add(new File([b], 'pasted.png', { type: 'image/png' }))
+          document.querySelector('[data-testid=dd-canvas]').dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true }))
+          r()
+        }),
+      )
+    })
+    await page.waitForFunction(() => document.querySelector('.dd-frame-label')?.textContent.includes('120×90'))
+    assert(true, 'a pasted image becomes the background')
+    await page.keyboard.press('r')
+    await stroke(page, 0.4, 0.4, 0.6, 0.6)
+    await page.click('[data-testid=dd-attach]')
+    await page.waitForSelector('[data-testid=doodle]', { state: 'detached' })
 
     // Description: numbered shapes, label, arrow ends.
     await page.fill('.ai-composer textarea', 'Shapes')
@@ -249,6 +312,7 @@ run(async ({ page }) => {
     await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Got Shapes")', { timeout: 15000 })
     user = [...requests[requests.length - 1].messages].reverse().find((m) => m.role === 'user')
     const d2 = text(user)
+    assert(d2.includes('annotates an image given by the user') && d2.includes('120×90 (cropped from the image)'), `background described: ${d2}`)
     assert(/\[1\] rectangle, blue, [^\n]*labeled "Login page"/.test(d2) && /\[3\] arrow, blue, from \[1\] to \[2\]/.test(d2) && /\[4\] text "Login page", medium, blue, [^\n]*inside \[1\]/.test(d2), `description of shapes: ${d2}`)
   } finally {
     fake.close()

@@ -116,8 +116,10 @@ function primSVG(p: Prim): string {
 /** Standalone SVG of the frame, light colors on white. */
 export function toSVG(doc: DoodleDoc, width: number, height: number): string {
   const { x, y, w, h } = doc.frame
+  const bg = doc.background
+  const image = bg ? `<image href="${esc(bg.src)}" x="${bg.x}" y="${bg.y}" width="${bg.w}" height="${bg.h}" preserveAspectRatio="none"/>` : ''
   const body = layered(doc)
     .map((el) => primSVG(primOf(el, false)))
     .join('')
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${x} ${y} ${w} ${h}"><rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#fff"/>${body}</svg>`
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${x} ${y} ${w} ${h}"><rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#fff"/>${image}${body}</svg>`
 }

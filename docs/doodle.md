@@ -7,7 +7,7 @@ A drawing joined to a message of the assistant: a sketch, a layout or an annotat
 - The composer bar starts with the mode button (Build / Plan / Briefing), then the paperclip.
 - The paperclip opens a menu: **File…** (any file, as today), **Doodle…**, **Screenshot…**.
 - Ctrl+Shift+D opens a new doodle (when the browser lets the page take it).
-- *Screenshot…* asks the browser what to share (`getDisplayMedia`, one frame), then opens a new doodle with the capture as background image.
+- *Screenshot…* asks the browser what to share (`getDisplayMedia`, one frame), then opens a new doodle with the capture as background image; the tool bar of the modal takes one as well.
 
 ## The modal
 
@@ -21,11 +21,11 @@ A modal over the IDE: the canvas on the left, the conversation (thread and compo
 ## Canvas
 
 - Infinite: Ctrl+wheel zooms, Space+drag or middle button pans, two-finger pinch and pan on touch screens.
-- The **frame** is the area sent to the model. Presets set its ratio: 16:9, mobile, square, image (the size of the background image). It can be moved and resized like a shape; nothing outside it is sent.
+- The **frame** is the area sent to the model. Presets set its ratio: 16:9, mobile, square, free, image (the size of the background image). It is moved by its label and resized by its corners (keeping the ratio of a 16:9, mobile or square preset; free over an image, to crop it); nothing outside it is sent.
 - The canvas follows the theme of the IDE. Colors are semantic (ink, red, blue, green…): drawn for the current theme, always exported in their light version on a white background, so the model sees the same picture in both themes.
 - A magnetic grid (G) for the frame, shapes and layout dividers, not for free strokes.
 - The tool, sizes, colors and options are remembered by the browser.
-- A background image (upload, paste with Ctrl+V, or screenshot) lies under everything, at full opacity.
+- A background image (upload, paste with Ctrl+V, or screenshot) lies under everything, at full opacity, reduced to 2048 px at most. It takes the corner of the frame, and the frame its size (preset *image*); the tool bar removes it. Ctrl+V pastes an image as the background, else the copied elements.
 
 ## Tools
 

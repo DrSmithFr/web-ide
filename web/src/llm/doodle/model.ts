@@ -47,13 +47,19 @@ export interface Frame {
   h: number
 }
 
-export type Preset = '16:9' | 'mobile' | 'square' | 'free'
+export type Preset = '16:9' | 'mobile' | 'square' | 'free' | 'image'
+
+/** Image under the drawing (a screenshot to annotate), in world coordinates. */
+export interface Background extends Frame {
+  src: string
+}
 
 export interface DoodleDoc {
   v: 1
   frame: Frame
   preset: Preset
   elements: Element[]
+  background?: Background
 }
 
 export const presets: { id: Preset; label: string; w: number; h: number }[] = [
@@ -61,6 +67,7 @@ export const presets: { id: Preset; label: string; w: number; h: number }[] = [
   { id: 'mobile', label: 'Mobile', w: 390, h: 844 },
   { id: 'square', label: 'Square', w: 800, h: 800 },
   { id: 'free', label: 'Free', w: 1280, h: 720 },
+  { id: 'image', label: 'Image', w: 0, h: 0 },
 ]
 
 /** Colors per theme; the export always uses the light ones. */
@@ -97,9 +104,9 @@ export function colorName(el: Element): string {
   return (el.type === 'marker' ? fluoColors[el.color as FluoColor] : penColors[el.color as PenColor])?.name ?? 'black'
 }
 
-export function newDoc(preset: Preset = '16:9'): DoodleDoc {
-  const p = presets.find((x) => x.id === preset)!
-  return { v: 1, frame: { x: 0, y: 0, w: p.w, h: p.h }, preset, elements: [] }
+export function newDoc(background?: { src: string; w: number; h: number }): DoodleDoc {
+  if (background) return { v: 1, frame: { x: 0, y: 0, w: background.w, h: background.h }, preset: 'image', elements: [], background: { ...background, x: 0, y: 0 } }
+  return { v: 1, frame: { x: 0, y: 0, w: 1280, h: 720 }, preset: '16:9', elements: [] }
 }
 
 let seq = 0
@@ -274,4 +281,4 @@ export function rescale(el: Element, from: Frame, to: Frame): Element {
   return mapPoints(el, (x, y) => [to.x + (x - from.x) * sx, to.y + (y - from.y) * sy])
 }
 
-export const isEmpty = (d: DoodleDoc) => d.elements.length === 0
+export const isEmpty = (d: DoodleDoc) => d.elements.length === 0 && !d.background

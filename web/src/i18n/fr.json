@@ -1378,5 +1378,10 @@
   "Ellipse": "Ellipse",
   "Line": "Ligne",
   "Arrow": "Flèche",
-  "Delete (Del)": "Supprimer (Suppr)"
+  "Delete (Del)": "Supprimer (Suppr)",
+  "Screenshot…": "Capture d'écran…",
+  "to annotate": "à annoter",
+  "Background image… (or paste one with Ctrl+V)": "Image de fond… (ou collez-en une avec Ctrl+V)",
+  "Screenshot as background": "Capture d'écran en fond",
+  "Remove the background image": "Retirer l'image de fond"
 }

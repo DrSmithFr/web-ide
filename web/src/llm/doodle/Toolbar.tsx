@@ -4,6 +4,7 @@ import { Icon } from '../../ui/icons'
 import { t } from '../../i18n'
 import { fluoColors, PEN_SIZES, penColors, presets, type FluoColor, type PenColor, type Preset, type TextSize } from './model'
 import type { History } from './history'
+import { canCapture } from './background'
 
 export type Tool = 'select' | 'pen' | 'marker' | 'eraser' | 'rect' | 'ellipse' | 'line' | 'arrow' | 'text'
 
@@ -41,7 +42,7 @@ export const toolKeys: Record<string, Tool> = { v: 'select', p: 'pen', m: 'marke
 const colorLabel = (c: PenColor | FluoColor) =>
   ({ ink: t('Black'), red: t('Red'), blue: t('Blue'), green: t('Green'), yellow: t('Yellow'), lime: t('Green'), pink: t('Pink'), cyan: t('Cyan') })[c]
 
-export const presetLabel = (id: Preset) => (id === 'square' ? t('Square') : id === 'mobile' ? t('Mobile') : id === 'free' ? t('Free') : id)
+export const presetLabel = (id: Preset) => (id === 'square' ? t('Square') : id === 'mobile' ? t('Mobile') : id === 'free' ? t('Free') : id === 'image' ? t('Image') : id)
 
 const textSizeLabel = { s: () => t('Small text'), m: () => t('Medium text'), l: () => t('Large text') }
 
@@ -56,6 +57,9 @@ export function Toolbar(props: {
   onTextSize: (s: TextSize) => void
   onDelete: () => void
   onPreset: (p: Preset) => void
+  onPickBackground: () => void
+  onRemoveBackground: () => void
+  onScreenshot: () => void
   zoom: number
   onZoom: (factor: number) => void
   onFit: () => void
@@ -144,11 +148,25 @@ export function Toolbar(props: {
         <Icon name="redo" size={16} />
       </button>
       <span class="grow" />
+      <button class="dd-btn" title={t('Background image… (or paste one with Ctrl+V)')} onClick={props.onPickBackground} data-testid="dd-bg">
+        <Icon name="image" size={16} />
+      </button>
+      <Show when={canCapture()}>
+        <button class="dd-btn" title={t('Screenshot as background')} onClick={props.onScreenshot} data-testid="dd-screenshot">
+          <Icon name="screen" size={16} />
+        </button>
+      </Show>
+      <Show when={props.h.doc().background}>
+        <button class="dd-btn" title={t('Remove the background image')} onClick={props.onRemoveBackground} data-testid="dd-bg-remove">
+          <Icon name="imageOff" size={16} />
+        </button>
+      </Show>
+      <span class="sep" />
       <button class="dd-btn" classList={{ on: tl().grid }} title={t('Magnetic grid (G)')} aria-pressed={tl().grid} onClick={() => props.setTools({ grid: !tl().grid })} data-testid="dd-grid">
         <Icon name="grid" size={16} />
       </button>
       <select class="dd-select" title={t('Frame')} value={props.h.doc().preset} onChange={(e) => props.onPreset(e.currentTarget.value as Preset)} data-testid="dd-preset">
-        <For each={presets}>{(p) => <option value={p.id}>{presetLabel(p.id)}</option>}</For>
+        <For each={presets.filter((p) => p.id !== 'image' || props.h.doc().background)}>{(p) => <option value={p.id}>{presetLabel(p.id)}</option>}</For>
       </select>
       <div class="dd-zoom">
         <button title={t('Zoom out')} onClick={() => props.onZoom(1 / 1.25)}>

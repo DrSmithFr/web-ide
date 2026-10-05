@@ -41,6 +41,7 @@ import {
 } from './model'
 import { baseline, layered, primOf } from './render'
 import { createHistory } from './history'
+import { captureScreen, pictureOf, type Picture } from './background'
 import { loadTools, presetLabel, saveTools, Toolbar, toolKeys, type Tools } from './Toolbar'
 import { closeDoodle, doodleSession, type DoodleSession } from './session'
 import './doodle.css'
@@ -110,6 +111,7 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
   const [busy, setBusy] = createSignal(false)
   let wrap!: HTMLDivElement
   let thread!: HTMLDivElement
+  let bgInput!: HTMLInputElement
   let gesture: Gesture | null = null
   let pasted = 0
   const touchPts = new Map<number, { x: number; y: number }>()
@@ -381,7 +383,7 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
       setView({ z, x: g.vx - (e.clientX - g.sx) / z, y: g.vy - (e.clientY - g.sy) / z })
     } else if (g.kind === 'frame') {
       const z = view().z
-      h.set({ ...h.doc(), frame: resizeBox(g.start, g.handle, (e.clientX - g.sx) / z, (e.clientY - g.sy) / z, h.doc().preset !== 'free', 40) })
+      h.set({ ...h.doc(), frame: resizeBox(g.start, g.handle, (e.clientX - g.sx) / z, (e.clientY - g.sy) / z, !['free', 'image'].includes(h.doc().preset), 40) })
     } else if (g.kind === 'move') {
       // The box of the selection lands on the grid when it is on.
       const dx = snap(g.box.x + p.x - g.sx) - g.box.x
@@ -464,11 +466,52 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
     capture(e.pointerId)
   }
 
+  // ---------- background ----------
+
+  /** Puts an image under the drawing, at the corner of the frame, which takes its size. */
+  const setBackground = (pic: Picture) => {
+    const d = h.doc()
+    const background = { src: pic.src, x: d.frame.x, y: d.frame.y, w: pic.w, h: pic.h }
+    h.apply({ ...d, background, preset: 'image', frame: { x: background.x, y: background.y, w: pic.w, h: pic.h } })
+    requestAnimationFrame(fit)
+  }
+
+  const addBackground = (file: Blob) => pictureOf(file).then(setBackground).catch(errorToast)
+
+  const removeBackground = () => {
+    const d = h.doc()
+    h.apply({ ...d, background: undefined, preset: d.preset === 'image' ? 'free' : d.preset })
+  }
+
+  const screenshot = async () => {
+    try {
+      setBackground(await captureScreen())
+    } catch (e) {
+      // The user cancelled the choice of the screen.
+      if ((e as Error).name !== 'NotAllowedError' && (e as Error).name !== 'AbortError') errorToast(e)
+    }
+  }
+
+  /** Ctrl+V: an image becomes the background, else the copied elements are pasted. */
+  const onPaste = (e: ClipboardEvent) => {
+    if (isTyping(e.target) || document.querySelector('.dd-modal .ai-pop')) return
+    const file = [...(e.clipboardData?.files ?? [])].find((f) => f.type.startsWith('image/'))
+    if (file) {
+      e.preventDefault()
+      void addBackground(file)
+    } else if (clipboard.length) {
+      e.preventDefault()
+      pasted++
+      insertCopies(clipboard, 20 * pasted, 20 * pasted)
+    }
+  }
+
   const setPreset = (id: Preset) => {
     const d = h.doc()
     const p = presets.find((x) => x.id === id)!
     const f = d.frame
-    const frame = id === 'free' ? f : { x: f.x + f.w / 2 - p.w / 2, y: f.y + f.h / 2 - p.h / 2, w: p.w, h: p.h }
+    const bg = d.background
+    const frame = id === 'free' ? f : id === 'image' ? (bg ? { x: bg.x, y: bg.y, w: bg.w, h: bg.h } : f) : { x: f.x + f.w / 2 - p.w / 2, y: f.y + f.h / 2 - p.h / 2, w: p.w, h: p.h }
     h.apply({ ...d, preset: id, frame })
     requestAnimationFrame(fit)
   }
@@ -524,9 +567,6 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
       clipboard = structuredClone(sel)
       pasted = 0
       if (k === 'x') deleteSelected()
-    } else if (mod && k === 'v' && clipboard.length) {
-      pasted++
-      insertCopies(clipboard, 20 * pasted, 20 * pasted)
     } else if (mod || e.altKey) done = false
     else if ((e.key === 'Delete' || e.key === 'Backspace') && sel.length) deleteSelected()
     else if (e.key.startsWith('Arrow') && sel.length) {
@@ -570,6 +610,7 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
     wrap.addEventListener('wheel', wheel, { passive: false })
     window.addEventListener('keydown', onKey, true)
     window.addEventListener('keyup', onKeyUp, true)
+    window.addEventListener('paste', onPaste, true)
     wrap.focus({ preventScroll: true })
     onCleanup(() => {
       ro.disconnect()
@@ -577,6 +618,7 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
       wrap.removeEventListener('wheel', wheel)
       window.removeEventListener('keydown', onKey, true)
       window.removeEventListener('keyup', onKeyUp, true)
+      window.removeEventListener('paste', onPaste, true)
     })
   })
 
@@ -621,6 +663,18 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
           </header>
           <div class="dd-body">
             <div class="dd-canvas-col">
+              <input
+                ref={bgInput}
+                type="file"
+                accept="image/*"
+                hidden
+                data-testid="dd-bg-input"
+                onChange={(e) => {
+                  const f = e.currentTarget.files?.[0]
+                  if (f) void addBackground(f)
+                  e.currentTarget.value = ''
+                }}
+              />
               <Toolbar
                 tools={tools()}
                 setTools={setTools}
@@ -631,6 +685,9 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
                 onTextSize={setTextSize}
                 onDelete={deleteSelected}
                 onPreset={setPreset}
+                onPickBackground={() => bgInput.click()}
+                onRemoveBackground={removeBackground}
+                onScreenshot={() => void screenshot()}
                 zoom={view().z}
                 onZoom={zoomCenter}
                 onFit={fit}
@@ -662,6 +719,7 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
                     <rect width="100%" height="100%" fill="url(#dd-grid)" />
                   </Show>
                   <g transform={transform()}>
+                    <Show when={h.doc().background}>{(bg) => <image class="dd-bg" href={bg().src} x={bg().x} y={bg().y} width={bg().w} height={bg().h} preserveAspectRatio="none" />}</Show>
                     <For each={shown()}>{(el) => <ElementView el={el} dark={dark()} />}</For>
                     <Show when={drawing()}>{(el) => <ElementView el={el()} dark={dark()} />}</Show>
                   </g>
