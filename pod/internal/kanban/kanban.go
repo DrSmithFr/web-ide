@@ -72,6 +72,10 @@ func CanMove(from, to, by string) bool {
 		return from != Done && from != Abandoned
 	}
 	if IsAgent(by) {
+		// Claude Code may also start the development of a ticket (kanban_start).
+		if by == ByClaude && from == Todo && to == InProgress {
+			return true
+		}
 		return modelMoves[[2]string{from, to}]
 	}
 	return userMoves[[2]string{from, to}]

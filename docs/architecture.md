@@ -34,6 +34,8 @@ The front end is built by Vite and embedded in the pod binary (`pod/webdist`), s
 
 JSON over one WebSocket per window. Request `{id, method, params}` → response `{id, result | error}`; events pushed as `{event, data}` (`fs.changed`, `buffer.synced`, `session.changed`, `console.output`, `lsp.diagnostics`, `git.changed`, `llm.delta`, `kanban.changed`…). `id: 0` is a notification without answer; `$/cancel` cancels a request. Some methods run in order per group (document changes, terminal input), and a language server request waits for the document changes sent before it (`barrier` in `server.go`).
 
+`POST /mcp` is the MCP endpoint for Claude Code (`server/mcp*.go`, JSON-RPC over HTTP without streaming, the token as a bearer): tools and prompts on the kanban, see [kanban.md](kanban.md#claude-code).
+
 Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a message translated into the language of the window.
 
 ## Pod (`pod/internal`)

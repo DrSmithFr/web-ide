@@ -58,6 +58,19 @@ The usual path: a briefing makes the tickets, *Generate the plan* writes the pla
 - Only in a conversation linked to a ticket, and only on that ticket: `kanban_update` (title, description, priority, how to test, files), `kanban_add_note` (1000 characters max: notes are for decisions, not reports), `kanban_set_plan` (plan and goals with their description), `kanban_goal` (check, uncheck, add), `kanban_feedback` (mark a feedback handled or open again), `kanban_move` (*To test* only, with how to test), `kanban_link_commit`.
 - A description over 1500 characters is refused with advice to shorten it.
 
+## Claude Code
+
+The pod serves an MCP endpoint (`POST /mcp`, the token of the pod as a bearer) so that Claude Code can work on the kanban next to the local assistant: a planning or a debug that needs a stronger model, a task to go faster. Setup, once:
+
+```
+claude mcp add --transport http --scope user web-ide http://127.0.0.1:4433/mcp --header "Authorization: Bearer $(cat ~/.web-ide/token)"
+```
+
+- Every tool takes `cwd`, the folder Claude works in: the deepest local project holding it gives the kanban; in the worktree of a ticket, that ticket is the default one.
+- Tools: those of the assistant, on any ticket (`kanban_list`, `kanban_get`, `kanban_create`, `kanban_update`, `kanban_add_note`, `kanban_set_plan`, `kanban_goal`, `kanban_feedback`, `kanban_move`, `kanban_link_commit`), plus `kanban_conversation` (a linked conversation of the assistant: messages and `ask_user` answers) and `kanban_start` (*Start development*: branch, worktree, setup command).
+- Author `claude`: the rules of the model, plus *To do* → *In progress* through `kanban_start`; shown as Claude in the notes and the history.
+- Prompts, commands of Claude Code: `/mcp__web-ide__brief <n>` (take over a briefing of the local assistant: check the need, complete the ticket), `plan`, `dev`, `fix`.
+
 ## Git
 
 - *Start development*: `git fetch` (when there is a remote), then the branch `ticket/<n>-<slug>` is created from the base (default `origin/main`, else `main`, configurable per project and per ticket) in a worktree `<project>/.ide/worktrees/<n>-<slug>`. Without a repository, or in one without a commit yet, the IDE offers to develop in the project folder instead.

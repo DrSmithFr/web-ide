@@ -270,6 +270,32 @@ func (r *Registry) put(p Project, parent *Project) (View, error) {
 	return view(&p), r.save()
 }
 
+// At is the local project whose folder holds dir, the deepest one: the worktree of a
+// ticket (inside .ide/worktrees of its parent) wins over its parent.
+func (r *Registry) At(dir string) (*Project, bool) {
+	dir = path.Clean(dir)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var best *Project
+	for _, p := range r.items {
+		if p.Type != "local" || p.Path == "" {
+			continue
+		}
+		root := path.Clean(p.Path)
+		if dir != root && !strings.HasPrefix(dir, strings.TrimSuffix(root, "/")+"/") {
+			continue
+		}
+		if best == nil || len(root) > len(path.Clean(best.Path)) {
+			best = p
+		}
+	}
+	if best == nil {
+		return nil, false
+	}
+	cp := *best
+	return &cp, true
+}
+
 // ChildAt is the worktree project of parent opened on dir, if any.
 func (r *Registry) ChildAt(parent, dir string) (string, int64) {
 	r.mu.Lock()

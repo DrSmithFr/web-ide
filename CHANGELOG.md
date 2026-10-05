@@ -2,6 +2,12 @@
 
 All notable changes of Web IDE. The release workflow publishes the section of a version as the notes of its GitHub release.
 
+## [Unreleased]
+
+### Added
+
+- Claude Code on the kanban: an MCP endpoint of the pod (`/mcp`) gives Claude Code the tools of the assistant on the tickets, the conversations of a briefing, the start of the development, and the commands `brief`, `plan`, `dev` and `fix`; its changes are shown as written by Claude.
+
 ## [1.0.0] - 2026-10-05
 
 First release.

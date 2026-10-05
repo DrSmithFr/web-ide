@@ -17,13 +17,24 @@ import (
 
 // Git side of the tickets: worktree and branch of a ticket, its changes, and the end of
 // its worktree when it is closed or abandoned (docs/kanban.md).
-func (s *Server) registerKanbanGit() {
-	type gctx struct {
-		loc  kanban.Location
-		root *projects.Project
-		rt   *runtime.Runtime
-		git  kanban.Git
+// gctx is what the git side of a ticket works on: the kanban, the main project, its
+// runtime and git.
+type gctx struct {
+	loc  kanban.Location
+	root *projects.Project
+	rt   *runtime.Runtime
+	git  kanban.Git
+}
+
+func (k gctx) exists(p string) bool {
+	if p == "" {
+		return false
 	}
+	_, err := k.rt.FS.Stat(p)
+	return err == nil
+}
+
+func (s *Server) registerKanbanGit() {
 	h := func(f func(ctx context.Context, c *Client, k gctx, p json.RawMessage) (any, error)) handler {
 		return func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 			root, err := s.kanbanProject(c.project)
@@ -37,13 +48,7 @@ func (s *Server) registerKanbanGit() {
 			return f(ctx, c, gctx{loc: kanbanLoc(root), root: root, rt: rt, git: kanban.Git{Run: rt.Runner, Root: root.Path}}, p)
 		}
 	}
-	exists := func(k gctx, p string) bool {
-		if p == "" {
-			return false
-		}
-		_, err := k.rt.FS.Stat(p)
-		return err == nil
-	}
+	exists := func(k gctx, p string) bool { return k.exists(p) }
 	type idArg struct {
 		ID   int64  `json:"id"`
 		Base string `json:"base"`
@@ -54,68 +59,11 @@ func (s *Server) registerKanbanGit() {
 		if err != nil {
 			return nil, err
 		}
-		t, err := s.Kanban.Get(k.loc, a.ID)
+		t, child, err := s.startTicket(ctx, k, a.ID, a.Base, kanban.ByUser)
 		if err != nil {
 			return nil, err
 		}
-		if t.Status == kanban.Done || t.Status == kanban.Abandoned || t.Status == kanban.New {
-			return nil, i18n.New("the ticket must be “To do”, “In progress” or “To test”")
-		}
-		if !exists(k, t.Worktree) {
-			if !k.git.IsRepo(ctx) {
-				return nil, &codeError{"not_git", i18n.New("the project is not a git repository: cannot create the branch of the ticket")}
-			}
-			if !k.git.HasCommit(ctx) {
-				return nil, &codeError{"not_git", i18n.New("the repository has no commit yet: cannot create the branch of the ticket")}
-			}
-			if err := s.ignoreWorktrees(k.root, k.rt); err != nil {
-				return nil, err
-			}
-			fetchErr := k.git.Fetch(ctx)
-			meta, _ := s.Kanban.Meta(k.loc)
-			base := firstOf(a.Base, t.Base, meta["base"])
-			if base == "" {
-				base = k.git.DefaultBase(ctx)
-			}
-			branch, dir := k.git.Names(t.ID, t.Title)
-			if t.Branch != "" {
-				branch = t.Branch
-			}
-			if err := k.git.AddWorktree(ctx, dir, branch, base); err != nil {
-				return nil, err
-			}
-			setup := strings.TrimSpace(meta["setup"])
-			state := ""
-			if setup != "" {
-				state = "running"
-			}
-			if err := s.Kanban.SetGit(k.loc, t.ID, kanban.GitState{Branch: &branch, Base: &base, Worktree: &dir, Setup: &state}); err != nil {
-				return nil, err
-			}
-			if fetchErr != nil {
-				_ = s.Kanban.Event(k.loc, t.ID, kanban.ByUser, "Worktree created: branch {branch} from {base} (git fetch failed: {error})", kanban.Params{"branch": branch, "base": base, "error": fetchErr.Error()})
-			} else {
-				_ = s.Kanban.Event(k.loc, t.ID, kanban.ByUser, "Worktree created: branch {branch} from {base}", kanban.Params{"branch": branch, "base": base})
-			}
-			if setup != "" {
-				go s.runSetup(k.loc, k.root.ID, t.ID, dir, setup, k.rt.Runner)
-			}
-		}
-		if t.Status == kanban.Todo {
-			if err := s.Kanban.Move(k.loc, t.ID, kanban.InProgress, kanban.ByUser, ""); err != nil {
-				return nil, err
-			}
-		}
-		t, err = s.Kanban.Get(k.loc, a.ID)
-		if err != nil {
-			return nil, err
-		}
-		child, err := s.Projects.PutChild(k.root, t.ID, "#"+itoa(t.ID)+" "+t.Title, t.Worktree)
-		if err != nil {
-			return nil, err
-		}
-		s.emitKanban(k.root.ID, t.ID, nil)
-		return map[string]any{"ticket": t, "project": child.ID}, nil
+		return map[string]any{"ticket": t, "project": child}, nil
 	}))
 
 	// kanban.open returns the project of the worktree of a ticket (registered again if needed).
@@ -466,6 +414,74 @@ func (s *Server) removeWorktree(ctx context.Context, loc kanban.Location, root *
 }
 
 // ignoreWorktrees keeps .ide/worktrees out of the repository (also on an SSH host).
+// startTicket starts the development of a ticket (Start development, or Claude Code
+// through the MCP endpoint): branch and worktree created from the base, setup command,
+// ticket In progress, worktree registered as a child project.
+func (s *Server) startTicket(ctx context.Context, k gctx, id int64, base0, by string) (*kanban.Ticket, string, error) {
+	t, err := s.Kanban.Get(k.loc, id)
+	if err != nil {
+		return nil, "", err
+	}
+	if t.Status == kanban.Done || t.Status == kanban.Abandoned || t.Status == kanban.New {
+		return nil, "", i18n.New("the ticket must be “To do”, “In progress” or “To test”")
+	}
+	if !k.exists(t.Worktree) {
+		if !k.git.IsRepo(ctx) {
+			return nil, "", &codeError{"not_git", i18n.New("the project is not a git repository: cannot create the branch of the ticket")}
+		}
+		if !k.git.HasCommit(ctx) {
+			return nil, "", &codeError{"not_git", i18n.New("the repository has no commit yet: cannot create the branch of the ticket")}
+		}
+		if err := s.ignoreWorktrees(k.root, k.rt); err != nil {
+			return nil, "", err
+		}
+		fetchErr := k.git.Fetch(ctx)
+		meta, _ := s.Kanban.Meta(k.loc)
+		base := firstOf(base0, t.Base, meta["base"])
+		if base == "" {
+			base = k.git.DefaultBase(ctx)
+		}
+		branch, dir := k.git.Names(t.ID, t.Title)
+		if t.Branch != "" {
+			branch = t.Branch
+		}
+		if err := k.git.AddWorktree(ctx, dir, branch, base); err != nil {
+			return nil, "", err
+		}
+		setup := strings.TrimSpace(meta["setup"])
+		state := ""
+		if setup != "" {
+			state = "running"
+		}
+		if err := s.Kanban.SetGit(k.loc, t.ID, kanban.GitState{Branch: &branch, Base: &base, Worktree: &dir, Setup: &state}); err != nil {
+			return nil, "", err
+		}
+		if fetchErr != nil {
+			_ = s.Kanban.Event(k.loc, t.ID, by, "Worktree created: branch {branch} from {base} (git fetch failed: {error})", kanban.Params{"branch": branch, "base": base, "error": fetchErr.Error()})
+		} else {
+			_ = s.Kanban.Event(k.loc, t.ID, by, "Worktree created: branch {branch} from {base}", kanban.Params{"branch": branch, "base": base})
+		}
+		if setup != "" {
+			go s.runSetup(k.loc, k.root.ID, t.ID, dir, setup, k.rt.Runner)
+		}
+	}
+	if t.Status == kanban.Todo {
+		if err := s.Kanban.Move(k.loc, t.ID, kanban.InProgress, by, ""); err != nil {
+			return nil, "", err
+		}
+	}
+	t, err = s.Kanban.Get(k.loc, id)
+	if err != nil {
+		return nil, "", err
+	}
+	child, err := s.Projects.PutChild(k.root, t.ID, "#"+itoa(t.ID)+" "+t.Title, t.Worktree)
+	if err != nil {
+		return nil, "", err
+	}
+	s.emitKanban(k.root.ID, t.ID, nil)
+	return t, child.ID, nil
+}
+
 func (s *Server) ignoreWorktrees(root *projects.Project, rt *runtime.Runtime) error {
 	dir := path.Join(root.Path, ".ide")
 	if root.Type == "local" {

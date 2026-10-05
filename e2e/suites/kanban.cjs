@@ -58,6 +58,16 @@ run(async ({ page, ctx }) => {
   await page.click('[data-testid=ticket-note-add]')
   await page.waitForSelector('[data-testid=ticket-note]:has-text("separator")')
   assert(true, 'note added')
+
+  // Claude Code writes through the MCP endpoint of the pod: the window follows, author Claude.
+  const mcp = await fetch(process.env.E2E_URL + '/mcp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + process.env.E2E_TOKEN },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'kanban_add_note', arguments: { cwd: WS + '/demo', id: 1, text: 'Checked by Claude' } } }),
+  }).then((r) => r.json())
+  assert(mcp.result && !mcp.result.isError, 'note through MCP')
+  await page.waitForSelector('[data-testid=ticket-note]:has-text("Checked by Claude")')
+  assert((await page.textContent('[data-testid=ticket-note]:has-text("Checked by Claude") .tk-note-head')).includes('Claude'), 'a note of Claude is shown as written by Claude')
   await page.click('[data-testid=ticket-file-add]')
   await page.waitForSelector('.pick-input')
   await page.keyboard.type('main.go')

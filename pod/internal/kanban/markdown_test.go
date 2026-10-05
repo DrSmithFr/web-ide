@@ -24,6 +24,9 @@ func TestClaudeAuthor(t *testing.T) {
 	if n := tk.Notes[len(tk.Notes)-1]; n.Author != ByClaude {
 		t.Fatalf("note: %+v", n)
 	}
+	if !CanMove(Todo, InProgress, ByClaude) || CanMove(Todo, InProgress, ByModel) || CanMove(Review, Done, ByClaude) {
+		t.Fatal("moves of Claude")
+	}
 	md := Markdown(tk)
 	for _, want := range []string{"# Ticket #1 · Export", "Status: To do · priority: Normal", "## Description\nNeed a CSV export", "(Claude, ", "decided: comma separator", "# Plan\nsteps", "- [ ] (id 1) exported\n  open the file"} {
 		if !strings.Contains(md, want) {

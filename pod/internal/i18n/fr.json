@@ -144,5 +144,6 @@
   "unknown folder mark: %s": "marque de dossier inconnue : %s",
   "only a folder of the project can be marked": "seul un dossier du projet peut être marqué",
   "unknown encoding: %s": "encodage inconnu : %s",
-  "the text has characters that %s cannot encode": "le texte contient des caractères que %s ne peut pas encoder"
+  "the text has characters that %s cannot encode": "le texte contient des caractères que %s ne peut pas encoder",
+  "commit not found: %s": "commit introuvable : %s"
 }
