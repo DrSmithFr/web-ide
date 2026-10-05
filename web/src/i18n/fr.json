@@ -1398,5 +1398,10 @@
   "Name…": "Nommer…",
   "Merge the parts of this zone": "Fusionner les parties de cette zone",
   "Merge": "Fusionner",
-  "Delete the layout": "Supprimer le layout"
+  "Delete the layout": "Supprimer le layout",
+  "Enlarge": "Agrandir",
+  "Copy the description": "Copier la description",
+  "Opens an editable copy, joined to the next message": "Ouvre une copie modifiable, jointe au prochain message",
+  "Reuse the doodle": "Reprendre le doodle",
+  "Description sent to the model": "Description envoyée au modèle"
 }

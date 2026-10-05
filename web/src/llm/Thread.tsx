@@ -4,11 +4,14 @@ import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'so
 import { Icon } from '../ui/icons'
 import { errorToast, toast } from '../ui/toast'
 import { activeTab, openFile, project, relPath } from '../state/project'
-import { approval, chat, config, live, liveSpeed, savePrefs, setChat, setPrefs, type ChatMessage, type Part, type ToolCall } from './state'
+import { approval, chat, config, live, liveSpeed, savePrefs, setChat, setPrefs, type Attachment, type ChatMessage, type Part, type ToolCall } from './state'
 import { retry } from './agent'
 import { AttachmentChip, callLabel, DiffBlock, formatDuration, formatTokens, Markdown, safeArgs, toolIcons, toolVerbs } from './parts'
 import { absPath } from './tools'
-import { focusComposer, runCommand } from './Composer'
+import { focusComposer, reuseDoodle, runCommand } from './Composer'
+import { openDiagram } from './DiagramViewer'
+import { toSVG } from './doodle/render'
+import { doodleSession } from './doodle/session'
 import { answerQuestions, dismissPlan, executePlan, send } from './agent'
 import { produce } from 'solid-js/store'
 import { t, tn } from '../i18n'
@@ -170,6 +173,38 @@ function EditBox(props: { index: number; text: string }) {
   )
 }
 
+/** A doodle sent: preview (click to enlarge), the description the model read, and a copy to reuse. */
+function DoodleCard(props: { a: Attachment }) {
+  const doc = () => props.a.doodle!
+  const svg = (max: number) => {
+    const { w, h } = doc().frame
+    const k = max / Math.max(w, h)
+    return toSVG(doc(), Math.round(w * k), Math.round(h * k))
+  }
+  const preview = createMemo(() => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg(220)))
+  return (
+    <div class="ai-doodle" data-testid="ai-doodle">
+      <button class="ai-doodle-img" title={t('Enlarge')} onClick={() => openDiagram(svg(1600), props.a.description ?? '', t('Copy the description'))}>
+        <img src={preview()} alt={props.a.name} />
+      </button>
+      <div class="ai-doodle-side">
+        <span class="ai-doodle-name">{props.a.name}</span>
+        <Show when={!doodleSession()}>
+          <button class="btn small" title={t('Opens an editable copy, joined to the next message')} onClick={() => reuseDoodle(props.a)} data-testid="ai-doodle-reuse">
+            <Icon name="edit" size={13} /> {t('Reuse the doodle')}
+          </button>
+        </Show>
+        <Show when={props.a.description}>
+          <details class="ai-doodle-desc">
+            <summary>{t('Description sent to the model')}</summary>
+            <pre>{props.a.description}</pre>
+          </details>
+        </Show>
+      </div>
+    </div>
+  )
+}
+
 function UserMessage(props: { msg: ChatMessage; index: number }) {
   return (
     <div class="ai-msg user" classList={{ editing: editing() === props.index }}>
@@ -180,7 +215,7 @@ function UserMessage(props: { msg: ChatMessage; index: number }) {
             <div class="ai-user-bubble">
               <Show when={props.msg.attachments?.length}>
                 <div class="ai-atts">
-                  <For each={props.msg.attachments}>{(a) => <AttachmentChip a={a} />}</For>
+                  <For each={props.msg.attachments}>{(a) => (a.kind === 'doodle' && a.doodle ? <DoodleCard a={a} /> : <AttachmentChip a={a} />)}</For>
                 </div>
               </Show>
               <Show when={textOf(props.msg)}>

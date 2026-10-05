@@ -16,7 +16,7 @@ A modal over the IDE: the canvas on the left, the conversation (thread and compo
 - **Attach** adds the doodle to the draft of the message and closes the modal. Sending from the composer of the modal attaches the doodle first. A message may hold several doodles mixed with files and text.
 - Closing without attaching discards the doodle, after a confirmation when it is not empty.
 - The chip of a doodle in the draft shows a thumbnail; a click opens it again to retouch it before sending.
-- In the thread, a sent doodle shows as an image (click to enlarge) with its text description folded below, and a **Reuse the doodle** button that opens an editable clone (the sent one never changes).
+- In the thread, a sent doodle shows as a preview (click to enlarge in the diagram viewer, which copies the description) with the description sent folded below, and a **Reuse the doodle** button that opens an editable copy, joined as a new doodle (the sent one never changes).
 
 ## Canvas
 
@@ -61,7 +61,7 @@ For each doodle, in order:
 
 A model without image input gets the description alone.
 
-The prompts of the three modes ask the model to rely on the description for proportions and on the image for the rest; in Briefing mode, a ticket written from a doodle carries its structure as a Mermaid diagram.
+The tools text of the three modes (part of the prompt even when the template is edited) and the end of each description ask the model to rely on the description for positions, proportions, labels and structure, and on the image for the rest; a ticket or a plan written from a doodle carries its structure as a Mermaid diagram, not the image.
 
 ## Storage
 

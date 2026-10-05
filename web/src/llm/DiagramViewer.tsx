@@ -6,10 +6,11 @@ import { Icon } from '../ui/icons'
 import { toast } from '../ui/toast'
 import { t } from '../i18n'
 
-const [diagram, setDiagram] = createSignal<{ svg: string; source: string } | null>(null)
+const [diagram, setDiagram] = createSignal<{ svg: string; source: string; copyLabel?: string } | null>(null)
 
-export function openDiagram(svg: string, source: string) {
-  setDiagram({ svg, source })
+/** Shows an SVG full screen; source is what the copy button copies (Mermaid source by default). */
+export function openDiagram(svg: string, source: string, copyLabel?: string) {
+  setDiagram({ svg, source, copyLabel })
 }
 
 function download(name: string, blob: Blob) {
@@ -20,7 +21,7 @@ function download(name: string, blob: Blob) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000)
 }
 
-function Viewer(props: { svg: string; source: string; onClose: () => void }) {
+function Viewer(props: { svg: string; source: string; copyLabel?: string; onClose: () => void }) {
   let stage!: HTMLDivElement
   let content!: HTMLDivElement
   const [view, setView] = createSignal({ x: 0, y: 0, k: 1 })
@@ -138,7 +139,7 @@ function Viewer(props: { svg: string; source: string; onClose: () => void }) {
         <button class="btn small" onClick={exportPng}>
           PNG
         </button>
-        <button class="btn small" title={t('Copy the Mermaid source')} onClick={() => navigator.clipboard?.writeText(props.source).then(() => toast(t('Source copied'), 'ok'))}>
+        <button class="btn small" title={props.copyLabel ?? t('Copy the Mermaid source')} onClick={() => navigator.clipboard?.writeText(props.source).then(() => toast(t('Source copied'), 'ok'))}>
           {t('Source')}
         </button>
         <button class="icon-btn" title={t('Close (Esc)')} onClick={props.onClose}>
@@ -158,7 +159,7 @@ export function DiagramViewer() {
     <Show when={diagram()}>
       {(d) => (
         <Portal>
-          <Viewer svg={d().svg} source={d().source} onClose={() => setDiagram(null)} />
+          <Viewer svg={d().svg} source={d().source} copyLabel={d().copyLabel} onClose={() => setDiagram(null)} />
         </Portal>
       )}
     </Show>

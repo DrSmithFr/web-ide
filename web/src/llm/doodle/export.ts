@@ -2,7 +2,7 @@
 // description built from the elements, which gives the proportions an image does not.
 import type { Caps, Part } from '../state'
 import type { Prepared } from '../attachments'
-import { bounds, colorName, contains, isShape, presets, zoneAt, type DoodleDoc, type Element, type Frame, type Layout, type Zone } from './model'
+import { bounds, cloneDoc, colorName, contains, isShape, presets, zoneAt, type DoodleDoc, type Element, type Frame, type Layout, type Zone } from './model'
 import { toSVG } from './render'
 
 const MAX_SIDE = 1600
@@ -160,6 +160,7 @@ export function describe(doc: DoodleDoc, name: string): string {
     ...strokes(seen.filter((x) => x.el.type === 'marker'), 'Highlighter strokes (emphasis)'),
   ]
   if (!seen.length && !doc.background) lines.push('The frame is empty.')
+  else lines.push('Rely on this description for positions, proportions, labels and structure; the image shows the rest.')
   return lines.join('\n')
 }
 
@@ -172,6 +173,6 @@ export async function prepareDoodle(doc: DoodleDoc, name: string, caps: Caps | u
   const parts: Part[] = vision ? [{ type: 'image_url', image_url: { url: image } }, { type: 'text', text }] : [{ type: 'text', text }]
   return {
     parts,
-    attachment: { name, kind: 'doodle', size: Math.round((image.length * 3) / 4), thumb, doodle: structuredClone(doc), description: text },
+    attachment: { name, kind: 'doodle', size: Math.round((image.length * 3) / 4), thumb, doodle: cloneDoc(doc), description: text },
   }
 }

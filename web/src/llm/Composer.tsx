@@ -23,12 +23,13 @@ import {
   serverKind,
   resetChat,
   setPrefs,
+  type Attachment,
   type Model,
 } from './state'
 import { compactNow, currentMode, nextMode, send, setMode, stop, unqueue } from './agent'
 import { prepare, type Prepared } from './attachments'
 import { prepareDoodle } from './doodle/export'
-import { newDoc, type DoodleDoc } from './doodle/model'
+import { cloneDoc, newDoc, type DoodleDoc } from './doodle/model'
 import { doodleSession, openDoodle } from './doodle/session'
 import { canCapture, captureScreen, type Picture } from './doodle/background'
 import { contextMenu } from '../ui/overlay'
@@ -74,6 +75,14 @@ export function newDoodle(background?: Picture) {
   openDoodle({ doc: newDoc(background), name, onAttach: (doc) => attachDoodle(doc, name) })
 }
 
+/** Opens an editable copy of a doodle sent earlier: Attach joins it as a new one. */
+export function reuseDoodle(a: Attachment) {
+  if (doodleSession() || !a.doodle) return
+  const n = pending().filter((p) => p.attachment.kind === 'doodle').length + 1
+  const name = t('Doodle {n}', { n })
+  openDoodle({ doc: cloneDoc(a.doodle), name, onAttach: (doc) => attachDoodle(doc, name) })
+}
+
 /** A screenshot chosen by the user, opened as the background of a new doodle. */
 async function screenshotDoodle() {
   try {
@@ -86,7 +95,7 @@ async function screenshotDoodle() {
 /** Opens a doodle of the draft again; Attach replaces it. */
 function editDoodle(p: Prepared) {
   const { name, doodle } = p.attachment
-  openDoodle({ doc: structuredClone(doodle!), name, onAttach: (doc) => attachDoodle(doc, name, p) })
+  openDoodle({ doc: cloneDoc(doodle!), name, onAttach: (doc) => attachDoodle(doc, name, p) })
 }
 
 async function attachDoodle(doc: DoodleDoc, name: string, replace?: Prepared) {

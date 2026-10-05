@@ -149,7 +149,24 @@ run(async ({ page }) => {
     const desc = text(user)
     assert(kinds.includes('image_url') && user.content.find((p) => p.type === 'image_url').image_url.url.startsWith('data:image/png'), 'PNG sent to a model reading images')
     assert(desc.includes('Doodle "Doodle 1"') && desc.includes('Frame 800×800 (Square)') && desc.includes('Free pen strokes (hand drawn, shapes approximate): 1') && desc.includes('- red'), `description sent: ${desc}`)
-    assert(await page.isVisible('.ai-msg.user .ai-att[data-kind=doodle]'), 'the message shows the doodle')
+    assert(text(requests[requests.length - 1].messages[0]).includes('A doodle joined by the user comes as an image followed by its text description'), 'the system prompt explains the doodles')
+    assert(desc.includes('Rely on this description'), 'the description says how to read it')
+
+    // In the thread: preview, description, enlarge, reuse.
+    const card = '.ai-panel .ai-msg.user [data-testid=ai-doodle]'
+    await page.waitForSelector(card)
+    await page.click(`${card} summary`)
+    assert((await page.textContent(`${card} pre`)).includes('Doodle "Doodle 1"'), 'the description sent can be read in the thread')
+    await page.click(`${card} .ai-doodle-img`)
+    await page.waitForSelector('[data-testid=diagram-viewer]')
+    assert(true, 'the preview enlarges')
+    await page.keyboard.press('Escape')
+    await page.waitForSelector('[data-testid=diagram-viewer]', { state: 'detached' })
+    await page.click(`${card} [data-testid=ai-doodle-reuse]`)
+    await page.waitForSelector('[data-testid=doodle]')
+    assert((await paths(page)).length === 1 && (await page.textContent('[data-testid=doodle] .dd-head h2')) === 'Doodle 1', 'Reuse opens an editable copy of the doodle')
+    await page.click('[data-testid=dd-close]')
+    await page.waitForSelector('[data-testid=doodle]', { state: 'detached' })
 
     // Ctrl+Shift+D, then sending from the composer of the modal attaches the doodle.
     await page.click('.ai-composer textarea')

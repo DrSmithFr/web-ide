@@ -394,4 +394,7 @@ export function borderZone(z: Zone): Zone {
   return { ...z, split: { dir: 'rows', sizes: [0.15, 0.7, 0.15], children: [{ name: 'north' }, middle, { name: 'south' }] } }
 }
 
+/** Plain copy (a document read from the conversation store is a proxy). */
+export const cloneDoc = (d: DoodleDoc): DoodleDoc => JSON.parse(JSON.stringify(d))
+
 export const isEmpty = (d: DoodleDoc) => d.elements.length === 0 && !d.background

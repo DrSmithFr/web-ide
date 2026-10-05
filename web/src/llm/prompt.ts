@@ -60,19 +60,25 @@ Answer in the language of the user, in Markdown. For a diagram, use a \`\`\`merm
 
 {{tools}}`
 
+/** How to read the doodles of the user (drawings joined to a message). */
+const DOODLES_TEXT = 'A doodle joined by the user comes as an image followed by its text description: rely on the description for positions, proportions, labels and the structure of layouts, on the image for the rest. A ticket or a plan written from a doodle carries its structure as a ```mermaid diagram (flowchart or block diagram), not the image.'
+
 export const BRIEFING_TOOLS_TEXT = `Reading tools: list_dir, find_files, read_file, search_text, the language servers (lsp_symbols, lsp_workspace_symbols, lsp_definition, lsp_references, lsp_hover, lsp_diagnostics), open_file and focus to show something to the user, bash for reading commands (ls, grep, git log…) and the build and test commands of the project, which run freely; any other command asks the user first. edit_file and write_file are not available in Briefing mode.
 In the messages of the user, @path designates a file or folder of the project (path relative to the root).
+${DOODLES_TEXT}
 ask_user asks the user multiple-choice questions (up to 10 per call): your main tool in this mode.
 Kanban of the project: kanban_list and kanban_get read the tickets, kanban_create creates one. The first ticket created links this conversation to it: kanban_update and kanban_add_note then refine that ticket.
 When the conversation gets long, you can summarize it with compact_conversation.`
 
 export const PLAN_TOOLS_TEXT = `Reading tools: list_dir, find_files, read_file, search_text, the language servers (lsp_symbols, lsp_workspace_symbols, lsp_definition, lsp_references, lsp_hover, lsp_diagnostics), open_file and focus to show something to the user, bash for reading commands (ls, grep, git log, git diff…) and the build, test and lint commands of the project (make test, go test, npm run check…), which run freely; any other command asks the user first. edit_file and write_file are not available in Plan mode.
 In the messages of the user, @path designates a file or folder of the project (path relative to the root).
+${DOODLES_TEXT}
 When a task is done or the conversation gets long, you can summarize it with compact_conversation.
 Kanban of the project: kanban_list and kanban_get read the tickets, kanban_create creates one. ask_user asks the user multiple-choice questions (up to 10) when information is missing.`
 
 export const TOOLS_TEXT = `You have tools to explore and change the project: list_dir, find_files, read_file, search_text, edit_file, write_file; the language servers (lsp_symbols, lsp_workspace_symbols, lsp_definition, lsp_references, lsp_hover, lsp_diagnostics); bash to run your commands (tests, builds, git…); the IDE (open_file to show a file to the user, focus to show a panel or a console); the consoles visible to the user (run_command for a development server or a command they should follow, list_consoles, read_console, console_input); Docker, read-only (docker_ps for the state of the Compose services, docker_logs for the logs of a service or container).
 In the messages of the user, @path designates a file or folder of the project (path relative to the root): read it with the tools when needed.
+${DOODLES_TEXT}
 Read a file before changing it. Prefer edit_file (exact, unique replacement) to write_file to change an existing file. Paths are relative to the project root.
 Do not make up the content of files: check with the tools. After a change, summarize what changed.
 When a task is done or the conversation gets long, you can summarize it with compact_conversation to free context.
