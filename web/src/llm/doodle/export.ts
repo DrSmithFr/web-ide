@@ -119,8 +119,10 @@ function items(list: { el: Element; r: Frame }[], fr: Frame): string[] {
     } else if (el.type === 'line' || el.type === 'arrow') {
       const a = frac(el.x1, el.y1)
       const b = frac(el.x2, el.y2)
-      const from = at(el.x1, el.y1)
-      const to = at(el.x2, el.y2)
+      // A tied end names its element; a loose one, what it touches.
+      const tied = (id?: string) => (id ? shown.find((x) => x.el.id === id)?.el : undefined)
+      const from = tied(el.from?.id) ?? at(el.x1, el.y1)
+      const to = tied(el.to?.id) ?? at(el.x2, el.y2)
       const pt = (x: number, y: number): Frame => ({ x, y, w: 0, h: 0 })
       const link = from || to ? ` from ${ref(from, pt(el.x1, el.y1)) || 'nothing'} to ${ref(to, pt(el.x2, el.y2)) || 'nothing'}` : ''
       lines.push(`${n} ${el.type}, ${colorName(el)},${link} (${pct(a.x)} %, ${pct(a.y)} % → ${pct(b.x)} %, ${pct(b.y)} %)`)

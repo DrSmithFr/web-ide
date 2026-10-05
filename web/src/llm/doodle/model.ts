@@ -13,7 +13,17 @@ export interface Stroke {
   pts: number[]
 }
 
-/** Rectangle and ellipse fill the box of the two points; line and arrow go from 1 to 2. */
+/** An end of a line or an arrow tied to an element, at a place of its box (fractions). */
+export interface Bind {
+  id: string
+  fx: number
+  fy: number
+}
+
+/**
+ * Rectangle and ellipse fill the box of the two points; line and arrow go from 1 to 2, their
+ * ends possibly tied to elements (they follow them).
+ */
 export interface Shape {
   id: string
   type: 'rect' | 'ellipse' | 'line' | 'arrow'
@@ -23,6 +33,8 @@ export interface Shape {
   y1: number
   x2: number
   y2: number
+  from?: Bind
+  to?: Bind
 }
 
 export type TextSize = 's' | 'm' | 'l'
@@ -412,5 +424,69 @@ export function borderZone(z: Zone): Zone {
 
 /** Plain copy (a document read from the conversation store is a proxy). */
 export const cloneDoc = (d: DoodleDoc): DoodleDoc => JSON.parse(JSON.stringify(d))
+
+// ---------- ties of arrows ----------
+
+export const isLink = (el: Element): el is Shape => el.type === 'line' || el.type === 'arrow'
+
+/** Can an end of a line or an arrow be tied to this element? */
+export const bindable = (el: Element) => !isLink(el) && !isStroke(el)
+
+/** The tie of a point to an element: where it falls in its box, kept inside the box. */
+export function bindTo(el: Element, x: number, y: number): Bind {
+  const b = bounds(el)
+  const clamp = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 1000) / 1000
+  return { id: el.id, fx: b.w ? clamp((x - b.x) / b.w) : 0.5, fy: b.h ? clamp((y - b.y) / b.h) : 0.5 }
+}
+
+/** Moves the tied ends to their elements; a tie to an element gone is dropped. */
+export function follow(d: DoodleDoc): DoodleDoc {
+  const byId = new Map(d.elements.map((e) => [e.id, e]))
+  let changed = false
+  const elements = d.elements.map((el) => {
+    if (!isShape(el) || !isLink(el) || (!el.from && !el.to)) return el
+    let n: Shape = el
+    for (const end of ['from', 'to'] as const) {
+      const tie = n[end]
+      if (!tie) continue
+      const target = byId.get(tie.id)
+      if (!target) {
+        n = { ...n, [end]: undefined }
+        continue
+      }
+      const b = bounds(target)
+      const x = round(b.x + tie.fx * b.w)
+      const y = round(b.y + tie.fy * b.h)
+      if (end === 'from' && (x !== n.x1 || y !== n.y1)) n = { ...n, x1: x, y1: y }
+      if (end === 'to' && (x !== n.x2 || y !== n.y2)) n = { ...n, x2: x, y2: y }
+    }
+    if (n !== el) changed = true
+    return n
+  })
+  return changed ? { ...d, elements } : d
+}
+
+/** Lines and arrows moved without the element an end is tied to come loose from it. */
+export function loosen(d: DoodleDoc, moved: Set<string>): DoodleDoc {
+  let changed = false
+  const elements = d.elements.map((el) => {
+    if (!moved.has(el.id) || !isShape(el) || !isLink(el)) return el
+    const from = el.from && moved.has(el.from.id) ? el.from : undefined
+    const to = el.to && moved.has(el.to.id) ? el.to : undefined
+    if (from === el.from && to === el.to) return el
+    changed = true
+    return { ...el, from, to }
+  })
+  return changed ? { ...d, elements } : d
+}
+
+/** Copies keep their ties among themselves only. */
+export function retie(copies: Element[], ids: Map<string, string>): Element[] {
+  return copies.map((el) => {
+    if (!isShape(el) || !isLink(el)) return el
+    const map = (b?: Bind) => (b && ids.has(b.id) ? { ...b, id: ids.get(b.id)! } : undefined)
+    return { ...el, from: map(el.from), to: map(el.to) }
+  })
+}
 
 export const isEmpty = (d: DoodleDoc) => d.elements.length === 0 && !d.background

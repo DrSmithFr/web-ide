@@ -36,7 +36,7 @@ A modal over the IDE: the canvas on the left, the conversation (thread and compo
 | M | Marker | wide, semi-transparent, 4 fluo colors, drawn under the pen strokes |
 | E | Eraser | pixel by default (cuts strokes; shapes and texts go whole), toggle to object (removes a whole element); the stylus eraser end switches to it by itself |
 | R / O | Rectangle / ellipse | outline in the current color and pen width; Shift draws a square / circle |
-| L / A | Line / arrow | Shift by steps of 45° |
+| L / A | Line / arrow | Shift by steps of 45°; an end dropped on a shape, a text or a layout is tied to it (the target is outlined) and follows it when it moves or is resized; selected alone, its ends are dragged by their handles (filled when tied); moved without its targets, it comes loose |
 | T | Text | 3 sizes (S, M, L), current color; typed in place, Escape or Ctrl+Enter ends it, a click on a text edits it |
 | K | Layout | see below |
 
@@ -57,7 +57,7 @@ The layout is a tree, which gives the model an exact description of the structur
 For each doodle, in order:
 
 1. A PNG of the frame (light version), when the model reads images.
-2. A text description built from the elements: frame size and ratio, layouts as trees with proportions and names, shapes and texts numbered with their position in the frame (as percentages), the texts inside a shape as its label, the shape or the zone of a layout each element is inside (a zone by its name, else by its place: `column 2 › row 1`), each zone with what it holds, arrows and lines with the elements their ends touch, free strokes with their color and place only.
+2. A text description built from the elements: frame size and ratio, layouts as trees with proportions and names, shapes and texts numbered with their position in the frame (as percentages), the texts inside a shape as its label, the shape or the zone of a layout each element is inside (a zone by its name, else by its place: `column 2 › row 1`), each zone with what it holds, arrows and lines with the elements their ends are tied to (else touch), free strokes with their color and place only.
 
 A model without image input gets the description alone.
 

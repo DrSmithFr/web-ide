@@ -31,7 +31,13 @@ import {
   penColors,
   presets,
   pressureWidth,
+  bindable,
+  bindTo,
+  follow,
+  isLink,
+  loosen,
   removeZone,
+  retie,
   rescale,
   TEXT_SIZES,
   textBox,
@@ -71,6 +77,7 @@ type Gesture =
   | { kind: 'move'; id: number; start: DoodleDoc; ids: Set<string>; box: Frame; sx: number; sy: number }
   | { kind: 'resize'; id: number; start: DoodleDoc; ids: Set<string>; box: Frame; handle: string; sx: number; sy: number }
   | { kind: 'band'; id: number; wx: number; wy: number; keep: string[] }
+  | { kind: 'end'; id: number; el: Shape; end: 'from' | 'to' }
   | { kind: 'layout'; id: number; el: Layout; sx: number; sy: number }
   | { kind: 'divider'; id: number; start: DoodleDoc; el: Layout; div: Divider; sizes: number[] }
 
@@ -104,7 +111,7 @@ export function DoodleHost(props: { onSettings: () => void }) {
 
 function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) {
   const initial = props.session.doc
-  const h = createHistory(initial)
+  const h = createHistory(initial, follow)
   const [tools, setToolsState] = createSignal<Tools>(loadTools())
   const [selected, setSelected] = createSignal<string[]>([])
   const setTools = (p: Partial<Tools>) => {
@@ -123,6 +130,8 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
   const [zoneSel, setZoneSel] = createSignal<{ id: string; path: number[] } | null>(null)
   const [naming, setNaming] = createSignal<{ id: string; path: number[]; value: string } | null>(null)
   const [hoverDiv, setHoverDiv] = createSignal<'rows' | 'cols' | null>(null)
+  // Element an end of the line or arrow being drawn would be tied to.
+  const [target, setTarget] = createSignal<Element | null>(null)
   const [cursor, setCursor] = createSignal<{ x: number; y: number } | null>(null)
   const [space, setSpace] = createSignal(false)
   const [busy, setBusy] = createSignal(false)
@@ -203,7 +212,11 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
   /** Adds copies of elements, moved by an offset, and selects them. */
   const insertCopies = (els: Element[], dx: number, dy: number) => {
     if (!els.length) return
-    const copies = els.map((el) => ({ ...translate(el, dx, dy), id: newId() }))
+    const ids = new Map(els.map((el) => [el.id, newId()]))
+    const copies = retie(
+      els.map((el) => ({ ...translate(el, dx, dy), id: ids.get(el.id)! })),
+      ids,
+    )
     const d = h.doc()
     h.apply({ ...d, elements: [...d.elements, ...copies] })
     setToolsState({ ...tools(), tool: 'select' })
@@ -239,6 +252,14 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
     const list = layered(h.doc())
     const r = 4 / view().z
     for (let i = list.length - 1; i >= 0; i--) if (hit(list[i], x, y, r)) return list[i]
+    return null
+  }
+
+  /** The element an end of a line or an arrow at this point ties to. */
+  const targetAt = (x: number, y: number, self?: string) => {
+    const list = layered(h.doc())
+    const r = 8 / view().z
+    for (let i = list.length - 1; i >= 0; i--) if (list[i].id !== self && bindable(list[i]) && hit(list[i], x, y, r)) return list[i]
     return null
   }
 
@@ -373,7 +394,8 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
         else if (!sel.includes(el.id)) setSelected([el.id])
         if (!selected().includes(el.id)) return
         h.begin()
-        gesture = { kind: 'move', id: e.pointerId, start: h.doc(), ids: new Set(selected()), box: selectionBox()!, sx: p.x, sy: p.y }
+        const ids = new Set(selected())
+        gesture = { kind: 'move', id: e.pointerId, start: loosen(h.doc(), ids), ids, box: selectionBox()!, sx: p.x, sy: p.y }
       }
     } else if (tl.tool === 'text') {
       e.preventDefault()
@@ -457,6 +479,14 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
       }
       g.el = { ...g.el, x2: x, y2: y }
       setDrawing(g.el)
+      if (isLink(g.el)) setTarget(targetAt(x, y))
+    } else if (g.kind === 'end') {
+      const x = snap(p.x)
+      const y = snap(p.y)
+      const tied = g.end === 'from' ? { x1: x, y1: y, from: undefined } : { x2: x, y2: y, to: undefined }
+      const el = { ...g.el, ...tied }
+      h.set({ ...h.doc(), elements: h.doc().elements.map((x) => (x.id === el.id ? el : x)) })
+      setTarget(targetAt(x, y, el.id))
     } else if (g.kind === 'pan') {
       const z = view().z
       setView({ z, x: g.vx - (e.clientX - g.sx) / z, y: g.vy - (e.clientY - g.sy) / z })
@@ -526,7 +556,26 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
     } else if (g.kind === 'shape') {
       setDrawing(null)
       // A click without drag draws nothing.
-      if (!cancel && Math.hypot(g.el.x2 - g.el.x1, g.el.y2 - g.el.y1) * view().z >= 4) h.apply({ ...h.doc(), elements: [...h.doc().elements, g.el] })
+      setTarget(null)
+      if (!cancel && Math.hypot(g.el.x2 - g.el.x1, g.el.y2 - g.el.y1) * view().z >= 4) {
+        let el = g.el
+        if (isLink(el)) {
+          // Ends dropped on an element are tied to it.
+          const a = targetAt(el.x1, el.y1)
+          const b = targetAt(el.x2, el.y2)
+          el = { ...el, from: a ? bindTo(a, el.x1, el.y1) : undefined, to: b ? bindTo(b, el.x2, el.y2) : undefined }
+        }
+        h.apply({ ...h.doc(), elements: [...h.doc().elements, el] })
+      }
+    } else if (g.kind === 'end') {
+      setTarget(null)
+      const el = h.doc().elements.find((x) => x.id === g.el.id) as Shape | undefined
+      if (el) {
+        const [x, y] = g.end === 'from' ? [el.x1, el.y1] : [el.x2, el.y2]
+        const t = targetAt(x, y, el.id)
+        if (t) h.set({ ...h.doc(), elements: h.doc().elements.map((e) => (e.id === el.id ? { ...el, [g.end]: bindTo(t, x, y) } : e)) })
+      }
+      h.end()
     } else if (g.kind === 'layout') {
       setDrawing(null)
       if (!cancel && g.el.w * view().z >= 8 && g.el.h * view().z >= 8) {
@@ -564,7 +613,8 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
     e.stopPropagation()
     const p = world(e.clientX, e.clientY)
     h.begin()
-    gesture = { kind: 'resize', id: e.pointerId, start: h.doc(), ids: new Set(selected()), box: selectionBox()!, handle, sx: p.x, sy: p.y }
+    const ids = new Set(selected())
+    gesture = { kind: 'resize', id: e.pointerId, start: loosen(h.doc(), ids), ids, box: selectionBox()!, handle, sx: p.x, sy: p.y }
     capture(e.pointerId)
   }
 
@@ -606,6 +656,14 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
       pasted++
       insertCopies(clipboard, 20 * pasted, 20 * pasted)
     }
+  }
+
+  const startEnd = (e: PointerEvent, el: Shape, end: 'from' | 'to') => {
+    if (e.button !== 0) return
+    e.stopPropagation()
+    h.begin()
+    gesture = { kind: 'end', id: e.pointerId, el, end }
+    capture(e.pointerId)
   }
 
   const setPreset = (id: Preset) => {
@@ -676,7 +734,9 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
       const step = tools().grid ? GRID : e.shiftKey ? 10 : 1
       const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0
       const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0
-      replaceSelected((el) => translate(el, dx, dy))
+      const ids = new Set(selected())
+      const d = loosen(h.doc(), ids)
+      h.apply({ ...d, elements: d.elements.map((el) => (ids.has(el.id) ? translate(el, dx, dy) : el)) })
     } else if (toolKeys[k]) setTools({ tool: toolKeys[k] })
     else if (k === 'g') setTools({ grid: !tools().grid })
     else if (k === '0') fit()
@@ -833,6 +893,12 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
                       return <rect class="dd-sel" x={b().left - 3} y={b().top - 3} width={b().width + 6} height={b().height + 6} data-testid="dd-sel" />
                     }}
                   </For>
+                  <Show when={target()}>
+                    {(el) => {
+                      const b = () => screen(bounds(el()))
+                      return <rect class="dd-target" x={b().left - 4} y={b().top - 4} width={b().width + 8} height={b().height + 8} data-testid="dd-target" />
+                    }}
+                  </Show>
                   <Show when={band()}>{(b) => <rect class="dd-band" x={screen(b()).left} y={screen(b()).top} width={screen(b()).width} height={screen(b()).height} />}</Show>
                   <Show when={cursor()}>
                     {(c) => <circle class="dd-eraser-cursor" cx={(c().x - view().x) * view().z} cy={(c().y - view().y) * view().z} r={ERASER_RADIUS} />}
@@ -844,7 +910,21 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
                 <For each={corners}>
                   {(c) => <div class={`dd-handle ${c}`} style={cornerStyle(frameBox(), c)} onPointerDown={(e) => startFrame(e, c)} data-testid={`dd-handle-${c}`} />}
                 </For>
-                <Show when={selection().length > 0 && !selection().every((el) => el.type === 'text') && selectionBox()}>
+                <Show when={selection().length === 1 && isLink(selection()[0]) && (selection()[0] as Shape)}>
+                  {(el) => (
+                    <For each={['from', 'to'] as const}>
+                      {(end) => {
+                        const pos = () => {
+                          const v = view()
+                          const [x, y] = end === 'from' ? [el().x1, el().y1] : [el().x2, el().y2]
+                          return { left: `${(x - v.x) * v.z}px`, top: `${(y - v.y) * v.z}px` }
+                        }
+                        return <div class="dd-handle sel end" classList={{ tied: !!el()[end] }} style={pos()} onPointerDown={(e) => startEnd(e, el(), end)} data-testid={`dd-end-${end}`} />
+                      }}
+                    </For>
+                  )}
+                </Show>
+                <Show when={selection().length > 0 && !selection().every((el) => el.type === 'text') && !(selection().length === 1 && isLink(selection()[0])) && selectionBox()}>
                   {(box) => (
                     <For each={corners}>
                       {(c) => <div class={`dd-handle sel ${c}`} style={cornerStyle(screen(box()), c)} onPointerDown={(e) => startResize(e, c)} data-testid={`dd-sel-${c}`} />}

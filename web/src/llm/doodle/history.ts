@@ -4,7 +4,8 @@ import type { DoodleDoc } from './model'
 
 export type History = ReturnType<typeof createHistory>
 
-export function createHistory(initial: DoodleDoc) {
+/** normalize runs on every change (arrows following what they are tied to). */
+export function createHistory(initial: DoodleDoc, normalize: (d: DoodleDoc) => DoodleDoc = (d) => d) {
   const [doc, setDoc] = createSignal(initial)
   const [undos, setUndos] = createSignal<DoodleDoc[]>([])
   const [redos, setRedos] = createSignal<DoodleDoc[]>([])
@@ -14,6 +15,7 @@ export function createHistory(initial: DoodleDoc) {
     canUndo: () => undos().length > 0,
     canRedo: () => redos().length > 0,
     apply(d: DoodleDoc) {
+      d = normalize(d)
       batch(() => {
         setUndos([...undos(), doc()])
         setRedos([])
@@ -25,7 +27,7 @@ export function createHistory(initial: DoodleDoc) {
     },
     /** Change inside a gesture, recorded when it ends. */
     set(d: DoodleDoc) {
-      setDoc(d)
+      setDoc(normalize(d))
     },
     end() {
       if (before && before !== doc()) {
