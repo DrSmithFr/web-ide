@@ -35,6 +35,8 @@ export interface Shape {
   y2: number
   from?: Bind
   to?: Bind
+  /** Rectangle and ellipse: a light tint of their color inside. */
+  fill?: boolean
 }
 
 export type TextSize = 's' | 'm' | 'l'
@@ -116,6 +118,7 @@ export const fluoColors: Record<FluoColor, { light: string; dark: string; name: 
 }
 
 export const MARKER_OPACITY = 0.45
+export const FILL_OPACITY = 0.2
 export const PEN_SIZES = { thin: 2, normal: 4 } as const
 export const MARKER_SIZE = 18
 export const TEXT_SIZES: Record<TextSize, number> = { s: 16, m: 24, l: 36 }

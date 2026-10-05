@@ -7,8 +7,8 @@ const { run, openProject, assert } = require('../common.cjs')
 
 const requests = []
 const sse = (res, delta) => res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`)
-function end(res) {
-  res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })}\n\n`)
+function end(res, reason = 'stop') {
+  res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: reason }] })}\n\n`)
   res.write(`data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 100, completion_tokens: 10 } })}\n\n`)
   res.end('data: [DONE]\n\n')
 }
@@ -24,6 +24,12 @@ const fake = http.createServer(async (req, res) => {
   requests.push(r)
   res.writeHead(200, { 'Content-Type': 'text/event-stream' })
   const lastUser = [...r.messages].reverse().find((m) => m.role === 'user')
+  const last = r.messages[r.messages.length - 1]
+  if (text(lastUser).startsWith('Make a ticket')) {
+    if (last.role === 'tool') sse(res, { content: 'Ticket made.' })
+    else sse(res, { tool_calls: [{ index: 0, id: 'k1', type: 'function', function: { name: 'kanban_create', arguments: JSON.stringify({ title: 'Login page', description: 'From the doodles.' }) } }] })
+    return end(res, last.role === 'tool' ? 'stop' : 'tool_calls')
+  }
   sse(res, { content: `Got ${text(lastUser).split('\n')[0].slice(0, 40)}` })
   end(res)
 })
@@ -414,9 +420,30 @@ run(async ({ page }) => {
     assert((await parts()) === 1 && !(await page.$('[data-testid=dd-zone-delete]')), 'the last part merges into the layout')
     await page.keyboard.press('Control+z')
     assert((await parts()) === 2, 'deleting a zone is undone')
+
+    // Filled rectangle; help of the keys.
+    await page.keyboard.press('r')
+    await page.click('[data-testid=dd-fill]')
+    await stroke(page, 0.4, 0.3, 0.6, 0.5)
+    const filled = await page.$eval('[data-testid=dd-canvas] svg g path:last-child', (p) => [p.getAttribute('fill'), p.getAttribute('fill-opacity')])
+    assert(filled[0] !== 'none' && filled[1] === '0.2', `a filled rectangle has a light tint: ${filled}`)
+    await page.click('[data-testid=dd-fill]')
+    await page.keyboard.press('?')
+    await page.waitForSelector('[data-testid=dd-help]:has-text("Keyboard shortcuts")')
+    assert((await page.textContent('[data-testid=dd-help]')).includes('Duplicate'), '? shows the keys')
+    await page.keyboard.press('Escape')
+    assert(!(await page.$('[data-testid=dd-help]')) && (await page.isVisible('[data-testid=doodle]')), 'Escape closes the help first')
     page.once('dialog', (d) => d.accept())
     await page.click('[data-testid=dd-close]')
     await page.waitForSelector('[data-testid=doodle]', { state: 'detached' })
+
+    // A ticket created by the model gets the doodles of the conversation.
+    await page.fill('.ai-composer textarea', 'Make a ticket of it')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Ticket made.")', { timeout: 15000 })
+    const toolMsg = requests[requests.length - 1].messages.find((m) => m.role === 'tool')
+    assert(/Ticket #\d+ created in the backlog \(status New\)\. \d+ doodles of the conversation attached to it as PNG files\./.test(text(toolMsg)), `doodles attached to the ticket: ${text(toolMsg)}`)
+    assert(text(requests[requests.length - 1].messages[0]).includes('attached to the tickets you create or update as PNG files'), 'the prompt says the doodles go to the tickets')
   } finally {
     fake.close()
   }

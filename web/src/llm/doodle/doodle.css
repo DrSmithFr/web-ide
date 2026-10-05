@@ -70,3 +70,9 @@
 .dd-target { fill: color-mix(in srgb, var(--accent) 10%, transparent); stroke: var(--accent); stroke-width: 2; pointer-events: none; }
 .dd-handle.sel.end { cursor: move; }
 .dd-handle.sel.end.tied { background: var(--accent); }
+.dd-help { position: absolute; right: 12px; top: 12px; width: min(620px, calc(100% - 24px)); max-height: calc(100% - 24px); display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-2); box-shadow: 0 10px 30px rgb(0 0 0 / 0.4); z-index: 3; cursor: default; }
+.dd-help-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.dd-help-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 4px 18px; padding: 8px 12px 12px; overflow: auto; }
+.dd-help-body h3 { margin: 6px 0 4px; font-size: 12px; color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.dd-help-row { display: flex; align-items: baseline; gap: 10px; padding: 2px 0; font-size: 12px; }
+.dd-help-row kbd { flex: none; min-width: 64px; text-align: center; }

@@ -56,6 +56,7 @@ import {
 } from './model'
 import { baseline, layered, primsOf, type Prim } from './render'
 import { ZoneMenu } from './ZoneMenu'
+import { Help } from './Help'
 import { createHistory } from './history'
 import { captureScreen, pictureOf, type Picture } from './background'
 import { loadTools, presetLabel, saveTools, Toolbar, toolKeys, type Tools } from './Toolbar'
@@ -132,6 +133,7 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
   const [hoverDiv, setHoverDiv] = createSignal<'rows' | 'cols' | null>(null)
   // Element an end of the line or arrow being drawn would be tied to.
   const [target, setTarget] = createSignal<Element | null>(null)
+  const [help, setHelp] = createSignal(false)
   const [cursor, setCursor] = createSignal<{ x: number; y: number } | null>(null)
   const [space, setSpace] = createSignal(false)
   const [busy, setBusy] = createSignal(false)
@@ -226,6 +228,11 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
   const setColor = (c: PenColor) => {
     setTools({ penColor: c })
     if (tools().tool === 'select' && selection().length) replaceSelected((el) => (el.type === 'marker' ? el : ({ ...el, color: c } as Element)))
+  }
+
+  const setFill = (fill: boolean) => {
+    setTools({ fill })
+    if (tools().tool === 'select') replaceSelected((el) => (el.type === 'rect' || el.type === 'ellipse' ? { ...el, fill: fill || undefined } : el))
   }
 
   const setTextSize = (s: TextSize) => {
@@ -412,7 +419,8 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
     } else {
       const x = snap(p.x)
       const y = snap(p.y)
-      const el: Shape = { id: newId(), type: tl.tool as Shape['type'], color: tl.penColor, width: PEN_SIZES[tl.penSize], x1: x, y1: y, x2: x, y2: y }
+      const type = tl.tool as Shape['type']
+      const el: Shape = { id: newId(), type, color: tl.penColor, width: PEN_SIZES[tl.penSize], x1: x, y1: y, x2: x, y2: y, fill: tl.fill && (type === 'rect' || type === 'ellipse') ? true : undefined }
       gesture = { kind: 'shape', id: e.pointerId, el }
       setDrawing(el)
     }
@@ -709,7 +717,8 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
     if (e.key === 'Escape' && !typing) {
       e.preventDefault()
       e.stopPropagation()
-      if (zoneSel()) setZoneSel(null)
+      if (help()) setHelp(false)
+      else if (zoneSel()) setZoneSel(null)
       else if (selected().length) setSelected([])
       else close()
       return
@@ -738,6 +747,7 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
       const d = loosen(h.doc(), ids)
       h.apply({ ...d, elements: d.elements.map((el) => (ids.has(el.id) ? translate(el, dx, dy) : el)) })
     } else if (toolKeys[k]) setTools({ tool: toolKeys[k] })
+    else if (e.key === '?') setHelp(!help())
     else if (k === 'g') setTools({ grid: !tools().grid })
     else if (k === '0') fit()
     else if (e.key === ' ') {
@@ -817,6 +827,9 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
             <h2>{props.session.name}</h2>
             <span class="muted small">{t('The frame is what the model sees.')}</span>
             <span class="grow" />
+            <button class="icon-btn" classList={{ on: help() }} title={t('Keyboard shortcuts (?)')} aria-pressed={help()} onClick={() => setHelp(!help())} data-testid="dd-help-btn">
+              ?
+            </button>
             <button class="btn primary small" disabled={busy()} onClick={() => void attach()} data-testid="dd-attach">
               <Icon name="paperclip" size={14} /> {t('Attach')}
             </button>
@@ -846,6 +859,8 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
                 selection={selection().length > 0}
                 onColor={setColor}
                 onTextSize={setTextSize}
+                onFill={setFill}
+                fillable={selection().some((el) => el.type === 'rect' || el.type === 'ellipse')}
                 onDelete={deleteSelected}
                 onPreset={setPreset}
                 onPickBackground={() => bgInput.click()}
@@ -991,6 +1006,9 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
                     )
                   }}
                 </Show>
+                <Show when={help()}>
+                  <Help onClose={() => setHelp(false)} />
+                </Show>
                 <Show when={editing()}>{(ed) => <TextEditor ed={ed()} view={view()} dark={dark()} onInput={(text) => setEditing({ ...ed(), text })} onDone={commitText} />}</Show>
               </div>
             </div>
@@ -1082,7 +1100,7 @@ function PrimView(props: { v: Prim }) {
             </text>
           )
         if (v.width !== undefined)
-          return <path d={v.d} fill="none" stroke={v.color} stroke-width={v.width} stroke-linecap="round" stroke-linejoin="round" stroke-opacity={v.opacity} />
+          return <path d={v.d} fill={v.fill ? v.color : 'none'} fill-opacity={v.fill} stroke={v.color} stroke-width={v.width} stroke-linecap="round" stroke-linejoin="round" stroke-opacity={v.opacity} />
         return <path d={v.d} fill={v.color} fill-opacity={v.opacity} />
       })()}
     </>

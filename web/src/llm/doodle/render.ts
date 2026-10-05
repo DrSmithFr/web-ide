@@ -1,5 +1,5 @@
 // SVG geometry of the elements, shared by the canvas and the export.
-import { colorOf, dividers, FONT, isShape, LINE_HEIGHT, MARKER_OPACITY, TEXT_SIZES, textLines, zones, type DoodleDoc, type Element, type Layout, type Shape } from './model'
+import { colorOf, dividers, FILL_OPACITY, FONT, isLink, isShape, LINE_HEIGHT, MARKER_OPACITY, TEXT_SIZES, textLines, zones, type DoodleDoc, type Element, type Layout, type Shape } from './model'
 
 type Pt = [number, number]
 
@@ -20,7 +20,7 @@ function smooth(pts: Pt[]): string {
 
 /** What is drawn: a path (stroked when width is set, else filled) or text lines. */
 export type Prim =
-  | { kind: 'path'; d: string; width?: number; color: string; opacity: number }
+  | { kind: 'path'; d: string; width?: number; color: string; opacity: number; fill?: number }
   | { kind: 'text'; x: number; y: number; lines: string[]; size: number; color: string; anchor?: 'middle' }
 
 /** Outline of a stroke whose width changes along the way, with round ends. */
@@ -97,7 +97,7 @@ export function primsOf(el: Element, dark: boolean): Prim[] {
 
 function primOf(el: Exclude<Element, Layout>, color: string): Prim {
   if (el.type === 'text') return { kind: 'text', x: el.x, y: el.y, lines: textLines(el), size: TEXT_SIZES[el.size], color }
-  if (isShape(el)) return { kind: 'path', d: shapePath(el), width: el.width, color, opacity: 1 }
+  if (isShape(el)) return { kind: 'path', d: shapePath(el), width: el.width, color, opacity: 1, fill: el.fill && !isLink(el) ? FILL_OPACITY : undefined }
   const p = el.pts
   const opacity = el.type === 'marker' ? MARKER_OPACITY : 1
   let constant = true
@@ -129,7 +129,7 @@ function primSVG(p: Prim): string {
     return `<text x="${p.x}" y="${f(p.y + baseline(p.size))}"${p.anchor ? ` text-anchor="${p.anchor}"` : ''} font-size="${p.size}" font-family="${esc(FONT)}" fill="${p.color}" xml:space="preserve">${spans}</text>`
   }
   return p.width !== undefined
-    ? `<path d="${esc(p.d)}" fill="none" stroke="${p.color}" stroke-width="${p.width}" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${p.opacity}"/>`
+    ? `<path d="${esc(p.d)}" fill="${p.fill ? p.color : 'none'}"${p.fill ? ` fill-opacity="${p.fill}"` : ''} stroke="${p.color}" stroke-width="${p.width}" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${p.opacity}"/>`
     : `<path d="${esc(p.d)}" fill="${p.color}" fill-opacity="${p.opacity}"/>`
 }
 

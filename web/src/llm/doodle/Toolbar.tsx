@@ -17,10 +17,11 @@ export interface Tools {
   eraser: 'pixel' | 'object'
   pressure: boolean
   grid: boolean
+  fill: boolean
 }
 
 const TOOLS_KEY = 'doodle.tools'
-const defaults: Tools = { tool: 'pen', penSize: 'normal', penColor: 'ink', fluoColor: 'yellow', textSize: 'm', eraser: 'pixel', pressure: true, grid: false }
+const defaults: Tools = { tool: 'pen', penSize: 'normal', penColor: 'ink', fluoColor: 'yellow', textSize: 'm', eraser: 'pixel', pressure: true, grid: false, fill: false }
 
 export function loadTools(): Tools {
   try {
@@ -55,6 +56,9 @@ export function Toolbar(props: {
   selection: boolean
   onColor: (c: PenColor) => void
   onTextSize: (s: TextSize) => void
+  onFill: (fill: boolean) => void
+  /** The selection holds rectangles or ellipses. */
+  fillable: boolean
   onDelete: () => void
   onPreset: (p: Preset) => void
   onPickBackground: () => void
@@ -113,6 +117,11 @@ export function Toolbar(props: {
             <button class="dd-swatch" classList={{ on: tl().penColor === c }} title={colorLabel(c)} style={{ background: penColors[c][props.dark ? 'dark' : 'light'] }} onClick={() => props.onColor(c)} data-testid={`dd-color-${c}`} />
           )}
         </For>
+      </Show>
+      <Show when={tl().tool === 'rect' || tl().tool === 'ellipse' || (tl().tool === 'select' && props.fillable)}>
+        <button class="dd-btn" classList={{ on: tl().fill }} title={t('Filled: a light tint of the color inside')} aria-pressed={tl().fill} onClick={() => props.onFill(!tl().fill)} data-testid="dd-fill">
+          <Icon name="fill" size={16} />
+        </button>
       </Show>
       <Show when={tl().tool === 'pen'}>
         <label class="dd-check small" title={t('The width follows the pressure of the stylus')}>

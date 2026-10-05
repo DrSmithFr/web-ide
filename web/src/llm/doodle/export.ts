@@ -17,7 +17,8 @@ function svgImage(svg: string): Promise<HTMLImageElement> {
   })
 }
 
-async function png(doc: DoodleDoc, max: number): Promise<string> {
+/** PNG (data URL) of the frame, its longest side at most max pixels. */
+export async function png(doc: DoodleDoc, max: number): Promise<string> {
   const { w, h } = doc.frame
   const scale = Math.min(2, max / Math.max(w, h))
   const cw = Math.max(1, Math.round(w * scale))
@@ -129,7 +130,7 @@ function items(list: { el: Element; r: Frame }[], fr: Frame): string[] {
     } else {
       const labels = shown.filter((x) => x.el.type === 'text' && around(bounds(x.el), x.el.id)?.id === el.id).map((x) => quote((x.el as { text: string }).text))
       const inside = around(bounds(el), el.id)
-      lines.push(`${n} ${el.type === 'rect' ? 'rectangle' : 'ellipse'}, ${colorName(el)}, ${place(r)}${labels.length ? `, labeled ${labels.join(' ')}` : ''}${inside ? `, inside ${ref(inside, bounds(el))}` : ''}`)
+      lines.push(`${n} ${isShape(el) && el.fill ? 'filled ' : ''}${el.type === 'rect' ? 'rectangle' : 'ellipse'}, ${colorName(el)}, ${place(r)}${labels.length ? `, labeled ${labels.join(' ')}` : ''}${inside ? `, inside ${ref(inside, bounds(el))}` : ''}`)
     }
   }
   return lines

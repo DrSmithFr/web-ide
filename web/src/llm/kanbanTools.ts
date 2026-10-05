@@ -10,6 +10,7 @@ import {
 } from '../kanban/state'
 import { chat, setChat, type Mode } from './state'
 import type { ToolResult } from './tools'
+import { attachDoodles, doodlesNote } from './doodle/tickets'
 
 const str = (description: string) => ({ type: 'string', description })
 const fn = (name: string, description: string, properties: Record<string, any>, required: string[] = []) => ({
@@ -194,7 +195,8 @@ export async function runKanbanTool(name: string, a: Record<string, any>, ticket
         { title: String(a.title), description: a.description ? String(a.description) : '', priority: a.priority as Priority, addFiles: Array.isArray(a.files) ? a.files.map(String) : undefined },
         'model',
       )
-      const done = `Ticket #${tk.id} created in the backlog (status New).`
+      const drawn = await attachDoodles(tk.id, tk.attachments.map((x) => x.name)).catch(() => 0)
+      const done = `Ticket #${tk.id} created in the backlog (status New).${doodlesNote(drawn)}`
       if (mode !== 'briefing') return ok(done, t('#{id} created', { id: tk.id }))
       // Briefing: the ticket lists this conversation; the first one created is linked to it.
       if (!chat.ticket) {
@@ -223,7 +225,8 @@ export async function runKanbanTool(name: string, a: Record<string, any>, ticket
         },
         'model',
       )
-      return ok(`Ticket #${tk.id} updated.`, t('#{id} updated', { id: tk.id }))
+      const drawn = await attachDoodles(tk.id, tk.attachments.map((x) => x.name)).catch(() => 0)
+      return ok(`Ticket #${tk.id} updated.${doodlesNote(drawn)}`, t('#{id} updated', { id: tk.id }))
     }
     case 'kanban_add_note': {
       const text = String(a.text ?? '').trim()

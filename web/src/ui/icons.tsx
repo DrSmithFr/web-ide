@@ -41,6 +41,7 @@ const paths: Record<string, string> = {
   imageOff: 'M4 5h16v14H4zM4 16l5-5 4 4M3 3l18 18',
   screen: 'M3 4h18v12H3zM8 20h8M12 16v4',
   layout: 'M4 4h16v16H4zM10 4v16M10 10h10',
+  fill: 'M4 6h16v12H4zM4 14l6-6M4 18l10-10M8 18l10-10M12 18l8-8M16 18l4-4',
   trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
   table: 'M3 5h18v14H3zM3 10h18M3 15h18M9 5v14',
   key: 'M14 4a6 6 0 1 1-4.5 10L4 19.5V21h3v-2h2v-2h2l1-1A6 6 0 0 1 14 4zM16 8.5v.5',

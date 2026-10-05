@@ -61,7 +61,7 @@ Answer in the language of the user, in Markdown. For a diagram, use a \`\`\`merm
 {{tools}}`
 
 /** How to read the doodles of the user (drawings joined to a message). */
-const DOODLES_TEXT = 'A doodle joined by the user comes as an image followed by its text description: rely on the description for positions, proportions, labels and the structure of layouts, on the image for the rest. A ticket or a plan written from a doodle carries its structure as a ```mermaid diagram (flowchart or block diagram), not the image.'
+const DOODLES_TEXT = 'A doodle joined by the user comes as an image followed by its text description: rely on the description for positions, proportions, labels and the structure of layouts, on the image for the rest. A ticket or a plan written from a doodle carries its structure as a ```mermaid diagram (flowchart or block diagram); the doodles of the conversation are attached to the tickets you create or update as PNG files by themselves.'
 
 export const BRIEFING_TOOLS_TEXT = `Reading tools: list_dir, find_files, read_file, search_text, the language servers (lsp_symbols, lsp_workspace_symbols, lsp_definition, lsp_references, lsp_hover, lsp_diagnostics), open_file and focus to show something to the user, bash for reading commands (ls, grep, git log…) and the build and test commands of the project, which run freely; any other command asks the user first. edit_file and write_file are not available in Briefing mode.
 In the messages of the user, @path designates a file or folder of the project (path relative to the root).

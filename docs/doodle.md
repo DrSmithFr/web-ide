@@ -35,12 +35,12 @@ A modal over the IDE: the canvas on the left, the conversation (thread and compo
 | P | Pen | thin or normal, 4 colors; width follows the stylus pressure (option to turn it off), fixed with a mouse |
 | M | Marker | wide, semi-transparent, 4 fluo colors, drawn under the pen strokes |
 | E | Eraser | pixel by default (cuts strokes; shapes and texts go whole), toggle to object (removes a whole element); the stylus eraser end switches to it by itself |
-| R / O | Rectangle / ellipse | outline in the current color and pen width; Shift draws a square / circle |
+| R / O | Rectangle / ellipse | outline in the current color and pen width, optionally filled with a light tint of it; Shift draws a square / circle |
 | L / A | Line / arrow | Shift by steps of 45°; an end dropped on a shape, a text or a layout is tied to it (the target is outlined) and follows it when it moves or is resized; selected alone, its ends are dragged by their handles (filled when tied); moved without its targets, it comes loose |
 | T | Text | 3 sizes (S, M, L), current color; typed in place, Escape or Ctrl+Enter ends it, a click on a text edits it |
 | K | Layout | see below |
 
-Ctrl+Z / Ctrl+Shift+Z undo and redo every change. Escape clears the selection, then closes the modal. Everything stays editable until the doodle is attached.
+Ctrl+Z / Ctrl+Shift+Z undo and redo every change. Escape closes the help or the zone menu, clears the selection, then closes the modal. `?` (key or button of the head) shows every key. Everything stays editable until the doodle is attached.
 
 ## Layouts
 
@@ -62,6 +62,10 @@ For each doodle, in order:
 A model without image input gets the description alone.
 
 The tools text of the three modes (part of the prompt even when the template is edited) and the end of each description ask the model to rely on the description for positions, proportions, labels and structure, and on the image for the rest; a ticket or a plan written from a doodle carries its structure as a Mermaid diagram, not the image.
+
+## Tickets
+
+When the model creates a ticket (`kanban_create`) or updates its ticket (`kanban_update`), the doodles of the conversation not attached yet are joined to it as PNG files (`Doodle 1.png`, `Doodle 1 (2).png` for a second Doodle 1); the tool result tells the model.
 
 ## Storage
 
