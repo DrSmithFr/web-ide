@@ -87,28 +87,28 @@ type Summary struct {
 	Chats     int    `json:"chats"`
 	// Feedback not handled yet.
 	FeedbackOpen int   `json:"feedbackOpen"`
-	Created   int64  `json:"created"`
-	Updated   int64  `json:"updated"`
-	Closed    int64  `json:"closed,omitempty"`
+	Created      int64 `json:"created"`
+	Updated      int64 `json:"updated"`
+	Closed       int64 `json:"closed,omitempty"`
 }
 
 type Ticket struct {
 	Summary
-	Description string       `json:"description"`
-	Plan        string       `json:"plan"`
-	TestSummary string       `json:"testSummary"`
-	PR          string       `json:"pr,omitempty"`
-	Base        string       `json:"base"`
-	Setup       string       `json:"setup"`
-	SetupLog    string       `json:"setupLog,omitempty"`
-	Snapshot    *Snapshot    `json:"snapshot,omitempty"`
-	GoalList    []Goal       `json:"goalList"`
-	Notes       []Note       `json:"notes"`
-	FeedbackList []Feedback  `json:"feedbackList"`
-	Files       []string     `json:"files"`
-	ChatList    []ChatLink   `json:"chatList"`
-	Commits     []CommitLink `json:"commits"`
-	Attachments []Attachment `json:"attachments"`
+	Description  string       `json:"description"`
+	Plan         string       `json:"plan"`
+	TestSummary  string       `json:"testSummary"`
+	PR           string       `json:"pr,omitempty"`
+	Base         string       `json:"base"`
+	Setup        string       `json:"setup"`
+	SetupLog     string       `json:"setupLog,omitempty"`
+	Snapshot     *Snapshot    `json:"snapshot,omitempty"`
+	GoalList     []Goal       `json:"goalList"`
+	Notes        []Note       `json:"notes"`
+	FeedbackList []Feedback   `json:"feedbackList"`
+	Files        []string     `json:"files"`
+	ChatList     []ChatLink   `json:"chatList"`
+	Commits      []CommitLink `json:"commits"`
+	Attachments  []Attachment `json:"attachments"`
 }
 
 var ErrNotFound = i18n.New("ticket not found")
