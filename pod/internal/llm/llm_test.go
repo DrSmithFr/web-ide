@@ -297,6 +297,8 @@ func TestContext(t *testing.T) {
 	m, _ := newManager(t, "h:1", "llamacpp")
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	// Set when the tests run from a pod started by the browser tests or the screenshots.
+	t.Setenv("WEBIDE_INSTRUCTIONS_HOME", "")
 	root := t.TempDir()
 	write := func(p, s string) {
 		_ = os.MkdirAll(filepath.Dir(p), 0o755)
