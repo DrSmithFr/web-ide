@@ -70,6 +70,8 @@ const fake = http.createServer(async (req, res) => {
 
   if (userText(lastUser).includes('slowly')) {
     res.on('close', () => (slowClosed = true))
+    chunk(res, {}, { prompt_progress: { total: 200, cache: 50, processed: 120, time_ms: 100 } })
+    await sleep(800)
     chunk(res, { content: 'Starting\n\n```mermaid\ngraph TD\n  A-->B\n```\n\n' })
     for (let i = 0; i < 100 && !res.destroyed; i++) {
       await sleep(100)
@@ -242,13 +244,15 @@ run(async ({ page }) => {
     // Stop a slow answer.
     await page.fill('.ai-composer textarea', 'answer slowly')
     await page.keyboard.press('Enter')
+    const reading = await page.waitForFunction(() => /Reading the prompt · 60 % .* · prompt 700 tokens\/s · cache 25 %/.test(document.querySelector('[data-testid=ai-live-stats]')?.textContent ?? ''), null, { timeout: 5000 }).then(() => true, () => false)
+    assert(reading, 'prompt reading speed and cache ratio while the prompt is read: ' + (await page.textContent('[data-testid=ai-live-stats]').catch(() => '')))
     await page.waitForSelector('.ai-msg.live .md:has-text("Starting")', { timeout: 5000 })
     const drawn = await page.waitForSelector('.ai-msg.live .md-mermaid-svg svg', { timeout: 8000 }).then(() => true, () => false)
     assert(drawn, 'Mermaid diagram drawn during the stream')
     const stats = await page.waitForFunction(() => /10\.0 tokens\/s · \d+ tokens · [\d.]+ s/.test(document.querySelector('[data-testid=ai-live-stats]')?.textContent ?? ''), null, { timeout: 5000 }).then(() => true, () => false)
     assert(stats, 'speed, tokens and elapsed time during the answer: ' + (await page.textContent('[data-testid=ai-live-stats]').catch(() => '')))
     const promptStats = await page.textContent('[data-testid=ai-live-stats]').catch(() => '')
-    assert(promptStats.includes('prompt 820 tokens/s · cache 25 %'), 'prompt reading speed and cache ratio during the answer: ' + promptStats)
+    assert(!promptStats.includes('prompt') && !promptStats.includes('cache'), 'only the generation once the prompt is read: ' + promptStats)
     await page.screenshot({ path: OUT + '/llm-live.png' })
     await page.click('[data-testid=stop]')
     await page.waitForSelector('.ai-error:has-text("Stopped")', { timeout: 5000 })

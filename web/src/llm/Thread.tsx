@@ -483,6 +483,9 @@ function LiveStats() {
       if (live.promptTotal) {
         const pct = Math.round((live.promptDone / live.promptTotal) * 100)
         parts.push(t('Reading the prompt · {pct} % ({done} / {total})', { pct, done: formatTokens(live.promptDone), total: formatTokens(live.promptTotal) }))
+        // Its speed and the part found in the cache of the server (kept in the final stats).
+        if (live.promptSpeed) parts.push(t('prompt {n} tokens/s', { n: Math.round(live.promptSpeed) }))
+        parts.push(t('cache {pct} %', { pct: Math.round((live.promptCache / live.promptTotal) * 100) }))
       } else parts.push(live.watching ? t('Answer running in another window') : t('Waiting for the model'))
     } else {
       parts.push(live.tool ? t('Preparing the call to {tool}', { tool: live.tool }) : live.content ? t('Writing') : t('Thinking'))
@@ -490,10 +493,7 @@ function LiveStats() {
       if (speed) parts.push(t('{n} tokens/s', { n: speed.toFixed(1) }))
       if (live.tokens) parts.push(t('{n} tokens', { n: live.tokens }))
     }
-    if (live.startedAt) parts.push(formatDuration(at - live.startedAt))
-    // Prompt reading: its speed and the part found in the cache of the server.
-    if (live.promptSpeed) parts.push(t('prompt {n} tokens/s', { n: Math.round(live.promptSpeed) }))
-    if (live.promptTotal) parts.push(t('cache {pct} %', { pct: Math.round((live.promptCache / live.promptTotal) * 100) }))
+    if (live.startedAt) parts.push(formatDuration(Math.max(0, at - live.startedAt)))
     return parts.join(' · ')
   }
   return (
