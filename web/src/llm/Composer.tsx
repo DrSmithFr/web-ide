@@ -23,12 +23,15 @@ import {
   serverKind,
   resetChat,
   setPrefs,
-  type Attachment,
   type Model,
-  type Part,
 } from './state'
 import { compactNow, currentMode, nextMode, send, setMode, stop, unqueue } from './agent'
-import { prepare } from './attachments'
+import { prepare, type Prepared } from './attachments'
+import { prepareDoodle } from './doodle/export'
+import { newDoc, type DoodleDoc } from './doodle/model'
+import { doodleSession, openDoodle } from './doodle/session'
+import { contextMenu } from '../ui/overlay'
+import { shortcutOf } from '../keys/bindings'
 import { cancelRecording, canRecord, modelById, speech, startRecording, stopRecording, transcribe } from './transcribe'
 import { AttachmentChip, formatSize, formatTokens, Popover, Switch } from './parts'
 
@@ -42,7 +45,7 @@ const modeTitles = {
 import { t, tn } from '../i18n'
 
 const [draft, setDraft] = createSignal('')
-const [pending, setPending] = createSignal<{ parts: Part[]; attachment: Attachment }[]>([])
+const [pending, setPending] = createSignal<Prepared[]>([])
 const [preparing, setPreparing] = createSignal(0)
 let textareaRef: HTMLTextAreaElement | undefined
 
@@ -59,6 +62,32 @@ export async function addFiles(files: Iterable<File>) {
     } finally {
       setPreparing((n) => n - 1)
     }
+  }
+}
+
+/** Opens a new doodle; Attach joins it to the draft. */
+export function newDoodle() {
+  if (doodleSession()) return
+  const n = pending().filter((p) => p.attachment.kind === 'doodle').length + 1
+  const name = t('Doodle {n}', { n })
+  openDoodle({ doc: newDoc(), name, onAttach: (doc) => attachDoodle(doc, name) })
+}
+
+/** Opens a doodle of the draft again; Attach replaces it. */
+function editDoodle(p: Prepared) {
+  const { name, doodle } = p.attachment
+  openDoodle({ doc: structuredClone(doodle!), name, onAttach: (doc) => attachDoodle(doc, name, p) })
+}
+
+async function attachDoodle(doc: DoodleDoc, name: string, replace?: Prepared) {
+  setPreparing((n) => n + 1)
+  try {
+    const p = await prepareDoodle(doc, name, currentModel()?.caps)
+    const list = pending()
+    const i = replace ? list.indexOf(replace) : -1
+    setPending(i >= 0 ? list.map((x, j) => (j === i ? p : x)) : [...list, p])
+  } finally {
+    setPreparing((n) => n - 1)
   }
 }
 
@@ -397,11 +426,19 @@ function Options() {
   )
 }
 
-export function Composer(props: { onSettings: () => void; onSent: () => void }) {
+export function Composer(props: {
+  onSettings: () => void
+  onSent: () => void
+  /** In the doodle modal: no new doodle from here, the doodle being drawn can be sent. */
+  inDoodle?: boolean
+  sendable?: () => boolean
+  beforeSend?: () => Promise<void>
+}) {
   let fileInput!: HTMLInputElement
+  let ta: HTMLTextAreaElement | undefined
 
   const grow = () => {
-    const el = textareaRef
+    const el = ta
     if (!el) return
     el.style.height = 'auto'
     el.style.height = `${Math.min(el.scrollHeight, Math.round(innerHeight * 0.4))}px`
@@ -413,7 +450,7 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
 
   const insertText = (t: string) => {
     if (!t) return
-    const el = textareaRef
+    const el = ta
     const v = draft()
     const start = el?.selectionStart ?? v.length
     const end = el?.selectionEnd ?? v.length
@@ -465,7 +502,7 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
   onMount(() => {
     if (!promptContext()) loadPromptContext().catch(() => {})
   })
-  const trackCaret = () => setCaret(textareaRef?.selectionStart ?? draft().length)
+  const trackCaret = () => setCaret(ta?.selectionStart ?? draft().length)
   const query = createMemo(() => {
     const v = draft()
     const before = v.slice(0, caret())
@@ -508,15 +545,17 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
     const pos = qy.start + it.insert.length
     setDraft(next)
     queueMicrotask(() => {
-      textareaRef?.focus()
-      textareaRef?.setSelectionRange(pos, pos)
+      ta?.focus()
+      ta?.setSelectionRange(pos, pos)
       setCaret(pos)
     })
   }
 
-  const canSend = () => (!!draft().trim() || pending().length > 0) && !preparing()
+  const canSend = () => (!!draft().trim() || pending().length > 0 || !!props.sendable?.()) && !preparing()
 
   const submit = async () => {
+    if (!canSend()) return
+    if (props.beforeSend && !live.watching) await props.beforeSend()
     const text = draft().trim()
     const atts = pending()
     if (!canSend()) return
@@ -642,7 +681,7 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
         </Show>
         <Show when={pending().length || preparing()}>
           <div class="ai-atts">
-            <For each={pending()}>{(p, i) => <AttachmentChip a={p.attachment} onRemove={() => setPending(pending().filter((_, j) => j !== i()))} />}</For>
+            <For each={pending()}>{(p, i) => <AttachmentChip a={p.attachment} onOpen={p.attachment.doodle && !props.inDoodle ? () => editDoodle(p) : undefined} onRemove={() => setPending(pending().filter((_, j) => j !== i()))} />}</For>
             <Show when={preparing()}>
               <span class="ai-att muted">
                 <span class="spinner" /> {t('preparing…')}
@@ -685,7 +724,12 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
           </div>
         </Show>
         <textarea
-          ref={(el) => (textareaRef = el)}
+          ref={(el) => {
+            ta = el
+            const prev = textareaRef
+            textareaRef = el
+            onCleanup(() => textareaRef === el && (textareaRef = prev))
+          }}
           rows="1"
           placeholder={live.watching ? t('Answer running in another window…') : live.busy ? t('Write on: the message will wait for the next step…') : config.model ? t('Message to {model}…', { model: config.model }) : t('Choose a model to start…')}
           value={draft()}
@@ -712,7 +756,19 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
               <span class="ai-mode-model ellipsis">· {prefs.planModel}</span>
             </Show>
           </button>
-          <button class="ai-icon" title={t('Attach files (image, video, audio, PDF, text)')} onClick={() => fileInput.click()}>
+          <button
+            class="ai-icon"
+            title={t('Attach a file or a doodle')}
+            aria-haspopup="menu"
+            data-testid="ai-attach"
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect()
+              contextMenu(new MouseEvent('contextmenu', { clientX: r.left, clientY: r.top - 4 }), [
+                { label: t('File…'), hint: t('image, video, audio, PDF, text'), action: () => fileInput.click() },
+                ...(props.inDoodle ? [] : [{ label: t('Doodle…'), hint: shortcutOf('assistant.doodle'), action: () => newDoodle() }]),
+              ])
+            }}
+          >
             <Icon name="paperclip" size={16} />
           </button>
           <input

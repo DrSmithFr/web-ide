@@ -50,10 +50,16 @@ export function DiffBlock(props: { lines: DiffLine[] }) {
   )
 }
 
-export function AttachmentChip(props: { a: Attachment; onRemove?: () => void }) {
-  const icons: Record<string, string> = { image: '🖼', video: '🎞', audio: '🔊', pdf: '📄', text: '📃' }
+export function AttachmentChip(props: { a: Attachment; onRemove?: () => void; onOpen?: () => void }) {
+  const icons: Record<string, string> = { image: '🖼', video: '🎞', audio: '🔊', pdf: '📄', text: '📃', doodle: '✏️' }
   return (
-    <span class="ai-att" title={`${props.a.name} · ${formatSize(props.a.size)}${props.a.note ? ` · ${props.a.note}` : ''}`}>
+    <span
+      class="ai-att"
+      classList={{ open: !!props.onOpen }}
+      title={props.onOpen ? t('Click to edit the doodle') : `${props.a.name} · ${formatSize(props.a.size)}${props.a.note ? ` · ${props.a.note}` : ''}`}
+      onClick={(e) => props.onOpen && !(e.target as HTMLElement).closest('.ai-att-x') && props.onOpen()}
+      data-kind={props.a.kind}
+    >
       <Show when={props.a.thumb} fallback={<span class="ai-att-icon">{icons[props.a.kind]}</span>}>
         <img src={props.a.thumb} alt="" />
       </Show>

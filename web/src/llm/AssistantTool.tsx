@@ -12,6 +12,7 @@ import { Thread } from './Thread'
 import { addFiles, Composer, focusComposer, suggest } from './Composer'
 import { Sidebar } from './Sidebar'
 import { DiagramViewer } from './DiagramViewer'
+import { DoodleHost } from './doodle/DoodleModal'
 import { board, ensureBoard, openTicket, roleLabels, statusLabels, summary, type ChatRole } from '../kanban/state'
 import { pick } from '../ui/overlay'
 import { setChat, saveChat } from './state'
@@ -196,6 +197,7 @@ export function AssistantTool() {
         <SettingsModal onClose={() => setSettings(false)} />
       </Show>
       <DiagramViewer />
+      <DoodleHost onSettings={() => setSettings(true)} />
     </div>
   )
 }

@@ -13,7 +13,7 @@ A drawing joined to a message of the assistant: a sketch, a layout or an annotat
 
 A modal over the IDE: the canvas on the left, the conversation (thread and composer) on the right, so the user draws while reading and writing.
 
-- **Attach** adds the doodle to the draft of the message and closes the modal. A message may hold several doodles mixed with files and text.
+- **Attach** adds the doodle to the draft of the message and closes the modal. Sending from the composer of the modal attaches the doodle first. A message may hold several doodles mixed with files and text.
 - Closing without attaching discards the doodle, after a confirmation when it is not empty.
 - The chip of a doodle in the draft shows a thumbnail; a click opens it again to retouch it before sending.
 - In the thread, a sent doodle shows as an image (click to enlarge) with its text description folded below, and a **Reuse the doodle** button that opens an editable clone (the sent one never changes).
@@ -23,7 +23,8 @@ A modal over the IDE: the canvas on the left, the conversation (thread and compo
 - Infinite: Ctrl+wheel zooms, Space+drag or middle button pans, two-finger pinch and pan on touch screens.
 - The **frame** is the area sent to the model. Presets set its ratio: 16:9, mobile, square, image (the size of the background image). It can be moved and resized like a shape; nothing outside it is sent.
 - The canvas follows the theme of the IDE. Colors are semantic (ink, red, blue, green…): drawn for the current theme, always exported in their light version on a white background, so the model sees the same picture in both themes.
-- A magnetic grid (G) for shapes and layout dividers, not for free strokes.
+- A magnetic grid (G) for the frame, shapes and layout dividers, not for free strokes.
+- The tool, sizes, colors and options are remembered by the browser.
 - A background image (upload, paste with Ctrl+V, or screenshot) lies under everything, at full opacity.
 
 ## Tools

@@ -176,6 +176,9 @@
     "tool.assistant": [
       "Alt+Digit5"
     ],
+    "assistant.doodle": [
+      "Ctrl+Shift+KeyD"
+    ],
     "tool.database": [
       "Alt+Digit6"
     ],

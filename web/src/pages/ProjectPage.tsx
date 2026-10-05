@@ -36,6 +36,7 @@ import { ProjectBar } from './ProjectBar'
 import { SearchEverywhereHost, searchEverywhere } from '../popups/SearchEverywhere'
 import { RecentFilesHost, recentFiles } from '../popups/RecentFiles'
 import { ClipboardHistoryHost, pasteFromHistory } from '../popups/ClipboardHistory'
+import { newDoodle } from '../llm/Composer'
 
 /** Tools of the four zones; their placement comes from state/zones. */
 export const toolPanels: Record<string, { label: string; icon: string; component: () => JSX.Element; badge?: () => number }> = {
@@ -110,6 +111,10 @@ export function useProjectActions() {
     registerAction('nav.recentFiles', () => recentFiles('recent')),
     registerAction('nav.switcher', () => recentFiles('switcher')),
     registerAction('edit.pasteHistory', () => pasteFromHistory()),
+    registerAction('assistant.doodle', () => {
+      mutate((s) => showTool(s, 'assistant'))
+      newDoodle()
+    }),
     registerAction('conflict.resolve', () => {
       const list = conflictedDocs()
       if (!list.length) return false

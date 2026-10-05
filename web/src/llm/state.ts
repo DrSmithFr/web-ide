@@ -4,6 +4,7 @@ import { createSignal } from 'solid-js'
 import { createStore, produce, reconcile } from 'solid-js/store'
 import { on, request } from '../pod/rpc'
 import { project } from '../state/project'
+import type { DoodleDoc } from './doodle/model'
 
 export interface ServerView {
   id: string
@@ -46,11 +47,14 @@ export type Part =
 
 export interface Attachment {
   name: string
-  kind: 'image' | 'video' | 'audio' | 'pdf' | 'text'
+  kind: 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'doodle'
   size: number
   /** Small preview (data URL) for images and video frames. */
   thumb?: string
   note?: string
+  /** Vector document of a doodle (to open it again) and the description sent with it. */
+  doodle?: DoodleDoc
+  description?: string
 }
 
 export interface Usage {

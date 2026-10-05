@@ -261,6 +261,7 @@ Right-panel tool talking to a **llama.cpp** or **Ollama** server (address and op
 - Instructions and skills loaded the same way as Claude Code (`CLAUDE.md`, `AGENTS.md`, `.claude/skills`…), editable system prompt, Build / Plan / Briefing modes (the Briefing mode questions the user and writes kanban tickets), context compaction.
 - Conversations stored per project in SQLite; an answer survives a page reload and can be followed from another window.
 - Local speech recognition: dictation and audio files are transcribed in the browser by Whisper; audio never leaves the page.
+- Attachments from the paperclip menu: files (images, video, audio, PDF, text) and doodles, drawings sent as an image with a text description ([doodle.md](doodle.md), `Ctrl+Shift+D`).
 
 ## 14. Docker
 

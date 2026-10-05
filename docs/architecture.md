@@ -72,7 +72,7 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 | `ui/` | Editor area, status bar, diff view, overlays (modal, prompt, pick list, context menu), toasts, icons, empty states, keyboard navigation of the toolbars and tab bars (`roving.ts`) |
 | `panels/` | Explorer (with file type icons, `fileIcons.tsx`), global search, Git tool (`panels/git/`: tabs, tree of changes, graph lanes `graph.ts`, commit detail) |
 | `tools/`, `db/`, `console/`, `conflict/`, `settings/`, `pages/` | Right-panel tools, database explorer, Console and Problems tools, conflict dialog, settings modal, pages |
-| `llm/` | AI assistant: state, agent loop, tools, prompt, Markdown, attachments, speech recognition |
+| `llm/` | AI assistant: state, agent loop, tools, prompt, Markdown, attachments, speech recognition, doodles (`llm/doodle/`: document model, SVG rendering, export, modal) |
 | `kanban/` | Board, ticket view, workflow actions, linked conversations |
 | `docker/` | Docker tool: lists and polling (`state.ts`), detail pane, logs with ANSI colors (`ansi.ts`), disk usage, tunnels (and their list on the home page) |
 | `i18n/` | `t()` and the catalogs (English source strings, French translation) |
@@ -103,7 +103,7 @@ make build          # front end (Vite) then pod binary bin/web-ide-pod (front en
 make dev            # pod with -allow-remote on 0.0.0.0:4433 + Vite on 0.0.0.0:5173 (hot reload)
 make test           # go vet + go test + tsc
 make e2e            # browser tests, all suites (a few minutes)
-./e2e/run.sh git    # one suite: editing editor features restore+ keyboard git projects explorer lsp llm agent chat plan kanban kanbanai kanbangit docker tunnels i18n speech perf
+./e2e/run.sh git    # one suite: editing editor features restore+ keyboard git projects explorer lsp llm agent chat plan doodle kanban kanbanai kanbangit docker tunnels i18n speech perf
 ```
 
 - Each e2e suite gets a fresh pod with temporary data and a workspace copied from `e2e/fixtures`; a suite ending with `+` reuses the previous pod. The assistant suites use a scripted fake OpenAI-compatible server. Chromium comes from the Playwright cache or `CHROME=…`; the `speech` suite downloads `whisper-tiny` once (kept in `~/.cache/web-ide-e2e/models`); the `lsp` suite needs `gopls`; the `docker` suite needs Docker with Compose and the `postgres:17-alpine` image (skipped otherwise); the `tunnels` suite builds `sshtestd` (Go) and opens an SSH project on it.
