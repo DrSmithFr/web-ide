@@ -2,7 +2,7 @@
 // description built from the elements, which gives the proportions an image does not.
 import type { Caps, Part } from '../state'
 import type { Prepared } from '../attachments'
-import { bounds, colorName, contains, isShape, presets, type DoodleDoc, type Element, type Frame } from './model'
+import { bounds, colorName, contains, isShape, presets, zoneAt, type DoodleDoc, type Element, type Frame, type Layout, type Zone } from './model'
 import { toSVG } from './render'
 
 const MAX_SIDE = 1600
@@ -67,7 +67,7 @@ const sizeNames = { s: 'small', m: 'medium', l: 'large' }
 
 /** Shapes and texts, numbered so that arrows and containers can refer to them. */
 function items(list: { el: Element; r: Frame }[], fr: Frame): string[] {
-  const shown = list.filter((x) => x.el.type === 'text' || isShape(x.el))
+  const shown = list.filter((x) => x.el.type === 'text' || x.el.type === 'layout' || isShape(x.el))
   if (!shown.length) return []
   const num = new Map(shown.map((x, i) => [x.el.id, i + 1]))
   const frac = (x: number, y: number) => ({ x: (x - fr.x) / fr.w, y: (y - fr.y) / fr.h })
@@ -75,7 +75,7 @@ function items(list: { el: Element; r: Frame }[], fr: Frame): string[] {
   const around = (b: Frame, self: string) => {
     let best: { el: Element; area: number } | null = null
     for (const { el } of shown) {
-      if (el.id === self || (el.type !== 'rect' && el.type !== 'ellipse')) continue
+      if (el.id === self || (el.type !== 'rect' && el.type !== 'ellipse' && el.type !== 'layout')) continue
       const o = bounds(el)
       if (!contains({ x: o.x - 12, y: o.y - 12, w: o.w + 24, h: o.h + 24 }, b)) continue
       if (!best || o.w * o.h < best.area) best = { el, area: o.w * o.h }
@@ -92,26 +92,52 @@ function items(list: { el: Element; r: Frame }[], fr: Frame): string[] {
     }
     return best?.el
   }
-  const ref = (el: Element | undefined) => (el ? `[${num.get(el.id)}]` : '')
+  // A layout names the zone of what it holds.
+  const ref = (el: Element | undefined, b?: Frame) => {
+    if (!el) return ''
+    const z = el.type === 'layout' && b ? zoneAt(el, b.x + b.w / 2, b.y + b.h / 2)?.zone.name : undefined
+    return `[${num.get(el.id)}]${z ? ` zone ${quote(z)}` : ''}`
+  }
   const lines = ['Shapes and texts:']
   for (const { el, r } of shown.slice(0, MAX_LISTED * 2)) {
     const n = `[${num.get(el.id)}]`
     if (el.type === 'text') {
       const inside = around(bounds(el), el.id)
-      lines.push(`${n} text ${quote(el.text)}, ${sizeNames[el.size]}, ${colorName(el)}, ${place(r)}${inside ? `, inside ${ref(inside)}` : ''}`)
+      lines.push(`${n} text ${quote(el.text)}, ${sizeNames[el.size]}, ${colorName(el)}, ${place(r)}${inside ? `, inside ${ref(inside, bounds(el))}` : ''}`)
+    } else if (el.type === 'layout') {
+      lines.push(...layoutLines(el, n, r))
     } else if (el.type === 'line' || el.type === 'arrow') {
       const a = frac(el.x1, el.y1)
       const b = frac(el.x2, el.y2)
       const from = at(el.x1, el.y1)
       const to = at(el.x2, el.y2)
-      const link = from || to ? ` from ${ref(from) || 'nothing'} to ${ref(to) || 'nothing'}` : ''
+      const pt = (x: number, y: number): Frame => ({ x, y, w: 0, h: 0 })
+      const link = from || to ? ` from ${ref(from, pt(el.x1, el.y1)) || 'nothing'} to ${ref(to, pt(el.x2, el.y2)) || 'nothing'}` : ''
       lines.push(`${n} ${el.type}, ${colorName(el)},${link} (${pct(a.x)} %, ${pct(a.y)} % → ${pct(b.x)} %, ${pct(b.y)} %)`)
     } else {
       const labels = shown.filter((x) => x.el.type === 'text' && around(bounds(x.el), x.el.id)?.id === el.id).map((x) => quote((x.el as { text: string }).text))
       const inside = around(bounds(el), el.id)
-      lines.push(`${n} ${el.type === 'rect' ? 'rectangle' : 'ellipse'}, ${colorName(el)}, ${place(r)}${labels.length ? `, labeled ${labels.join(' ')}` : ''}${inside ? `, inside ${ref(inside)}` : ''}`)
+      lines.push(`${n} ${el.type === 'rect' ? 'rectangle' : 'ellipse'}, ${colorName(el)}, ${place(r)}${labels.length ? `, labeled ${labels.join(' ')}` : ''}${inside ? `, inside ${ref(inside, bounds(el))}` : ''}`)
     }
   }
+  return lines
+}
+
+const dirName = (z: Zone) => (z.split?.dir === 'cols' ? 'columns (left to right)' : 'rows (top to bottom)')
+
+/** A layout as a tree: each part with its size in % of the zone it splits, and its name. */
+function layoutLines(el: Layout, n: string, r: Frame): string[] {
+  const root = el.root
+  const lines = [`${n} layout${root.name ? ` ${quote(root.name)}` : ''}, ${colorName(el)}, ${place(r)}${root.split ? `, split in ${dirName(root)}:` : ', not split'}`]
+  const walk = (z: Zone, depth: number) => {
+    const s = z.split
+    if (!s) return
+    s.children.forEach((c, i) => {
+      lines.push(`${'  '.repeat(depth + 1)}- ${pct(s.sizes[i])} %${c.name ? ` ${quote(c.name)}` : ''}${c.split ? `, split in ${dirName(c)}:` : ''}`)
+      walk(c, depth + 1)
+    })
+  }
+  walk(root, 0)
   return lines
 }
 

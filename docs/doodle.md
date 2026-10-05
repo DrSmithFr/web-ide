@@ -38,17 +38,17 @@ A modal over the IDE: the canvas on the left, the conversation (thread and compo
 | R / O | Rectangle / ellipse | outline in the current color and pen width; Shift draws a square / circle |
 | L / A | Line / arrow | Shift by steps of 45° |
 | T | Text | 3 sizes (S, M, L), current color; typed in place, Escape or Ctrl+Enter ends it, a click on a text edits it |
-| — | Layout | see below |
+| K | Layout | see below |
 
 Ctrl+Z / Ctrl+Shift+Z undo and redo every change. Escape clears the selection, then closes the modal. Everything stays editable until the doodle is attached.
 
 ## Layouts
 
-A layout is an element like the others (several per doodle, movable, drawn over): a rectangle split recursively.
+A layout is an element like the others (several per doodle, movable and resizable with the select tool, drawn under the rest): a rectangle split recursively.
 
-- Split a zone horizontally or vertically into 2 to N parts (columns, rows, grid), or as a border layout (north, south, west, east, center).
-- Dividers can be dragged; they snap to the grid when it is on.
-- A double-click names a zone (`sidebar`, `header`…).
+- The layout tool (K) draws its box; a click on a zone opens its menu: split it into 2 to 4 columns or rows, a grid (2×2, 3×3) or a border layout (north, south, west, east and center, named), merge its parts, name it, or delete the layout (on its outer zone). Escape closes the menu.
+- Dividers are dragged with the layout or the select tool (within the two parts they separate, 5 % at least); they snap to the grid when it is on.
+- A double-click names a zone (`sidebar`, `header`…); the name is drawn at its center.
 
 The layout is a tree, which gives the model an exact description of the structure.
 

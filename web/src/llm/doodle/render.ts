@@ -1,5 +1,5 @@
 // SVG geometry of the elements, shared by the canvas and the export.
-import { colorOf, FONT, isShape, LINE_HEIGHT, MARKER_OPACITY, TEXT_SIZES, textLines, type DoodleDoc, type Element, type Shape } from './model'
+import { colorOf, dividers, FONT, isShape, LINE_HEIGHT, MARKER_OPACITY, TEXT_SIZES, textLines, zones, type DoodleDoc, type Element, type Layout, type Shape } from './model'
 
 type Pt = [number, number]
 
@@ -21,7 +21,7 @@ function smooth(pts: Pt[]): string {
 /** What is drawn: a path (stroked when width is set, else filled) or text lines. */
 export type Prim =
   | { kind: 'path'; d: string; width?: number; color: string; opacity: number }
-  | { kind: 'text'; x: number; y: number; lines: string[]; size: number; color: string }
+  | { kind: 'text'; x: number; y: number; lines: string[]; size: number; color: string; anchor?: 'middle' }
 
 /** Outline of a stroke whose width changes along the way, with round ends. */
 function outline(p: number[]): string {
@@ -75,8 +75,27 @@ function shapePath(el: Shape): string {
   return d
 }
 
-export function primOf(el: Element, dark: boolean): Prim {
+export const ZONE_NAME_SIZE = 18
+
+/** A layout: its outline, its dividers and the names of its zones. */
+function layoutPrims(el: Layout, color: string): Prim[] {
+  let d = `M${f(el.x)} ${f(el.y)}h${f(el.w)}v${f(el.h)}h${f(-el.w)}Z`
+  for (const v of dividers(el)) d += `M${f(v.x1)} ${f(v.y1)}L${f(v.x2)} ${f(v.y2)}`
+  const out: Prim[] = [{ kind: 'path', d, width: 2, color, opacity: 1 }]
+  for (const { zone, box } of zones(el)) {
+    if (!zone.name || zone.split) continue
+    out.push({ kind: 'text', x: box.x + box.w / 2, y: box.y + box.h / 2 - (ZONE_NAME_SIZE * LINE_HEIGHT) / 2, lines: [zone.name], size: ZONE_NAME_SIZE, color, anchor: 'middle' })
+  }
+  return out
+}
+
+export function primsOf(el: Element, dark: boolean): Prim[] {
   const color = colorOf(el, dark)
+  if (el.type === 'layout') return layoutPrims(el, color)
+  return [primOf(el, color)]
+}
+
+function primOf(el: Exclude<Element, Layout>, color: string): Prim {
   if (el.type === 'text') return { kind: 'text', x: el.x, y: el.y, lines: textLines(el), size: TEXT_SIZES[el.size], color }
   if (isShape(el)) return { kind: 'path', d: shapePath(el), width: el.width, color, opacity: 1 }
   const p = el.pts
@@ -91,9 +110,10 @@ export function primOf(el: Element, dark: boolean): Prim {
   return { kind: 'path', d: outline(p), color, opacity }
 }
 
-/** Markers under everything else, like a highlighter. */
+/** Layouts at the bottom, then markers (like a highlighter), then everything else. */
 export function layered(doc: DoodleDoc): Element[] {
-  return [...doc.elements.filter((e) => e.type === 'marker'), ...doc.elements.filter((e) => e.type !== 'marker')]
+  const rank = (e: Element) => (e.type === 'layout' ? 0 : e.type === 'marker' ? 1 : 2)
+  return [0, 1, 2].flatMap((r) => doc.elements.filter((e) => rank(e) === r))
 }
 
 /** Baseline of the first line of a text from its top. */
@@ -106,7 +126,7 @@ function esc(s: string) {
 function primSVG(p: Prim): string {
   if (p.kind === 'text') {
     const spans = p.lines.map((l, i) => `<tspan x="${p.x}" dy="${i ? p.size * LINE_HEIGHT : 0}">${esc(l) || ' '}</tspan>`).join('')
-    return `<text x="${p.x}" y="${f(p.y + baseline(p.size))}" font-size="${p.size}" font-family="${esc(FONT)}" fill="${p.color}" xml:space="preserve">${spans}</text>`
+    return `<text x="${p.x}" y="${f(p.y + baseline(p.size))}"${p.anchor ? ` text-anchor="${p.anchor}"` : ''} font-size="${p.size}" font-family="${esc(FONT)}" fill="${p.color}" xml:space="preserve">${spans}</text>`
   }
   return p.width !== undefined
     ? `<path d="${esc(p.d)}" fill="none" stroke="${p.color}" stroke-width="${p.width}" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${p.opacity}"/>`
@@ -119,7 +139,7 @@ export function toSVG(doc: DoodleDoc, width: number, height: number): string {
   const bg = doc.background
   const image = bg ? `<image href="${esc(bg.src)}" x="${bg.x}" y="${bg.y}" width="${bg.w}" height="${bg.h}" preserveAspectRatio="none"/>` : ''
   const body = layered(doc)
-    .map((el) => primSVG(primOf(el, false)))
+    .flatMap((el) => primsOf(el, false).map(primSVG))
     .join('')
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${x} ${y} ${w} ${h}"><rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#fff"/>${image}${body}</svg>`
 }

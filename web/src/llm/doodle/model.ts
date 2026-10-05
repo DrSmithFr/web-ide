@@ -38,7 +38,25 @@ export interface Text {
   text: string
 }
 
-export type Element = Stroke | Shape | Text
+/** A zone of a layout, split into rows or columns (sizes are fractions summing to 1), or not. */
+export interface Zone {
+  name?: string
+  split?: { dir: 'rows' | 'cols'; sizes: number[]; children: Zone[] }
+}
+
+/** A rectangle split recursively: the structure of a page or a screen. */
+export interface Layout {
+  id: string
+  type: 'layout'
+  color: PenColor
+  x: number
+  y: number
+  w: number
+  h: number
+  root: Zone
+}
+
+export type Element = Stroke | Shape | Text | Layout
 
 export interface Frame {
   x: number
@@ -160,6 +178,7 @@ export function textBox(el: Text): { w: number; h: number } {
 // ---------- geometry ----------
 
 export function bounds(el: Element): Frame {
+  if (el.type === 'layout') return { x: el.x, y: el.y, w: el.w, h: el.h }
   if (el.type === 'text') {
     const b = textBox(el)
     return { x: el.x, y: el.y, w: b.w, h: b.h }
@@ -205,7 +224,7 @@ function segDist(px: number, py: number, ax: number, ay: number, bx: number, by:
 
 /** Is the point within r of the element? Closed shapes and texts count their inside. */
 export function hit(el: Element, x: number, y: number, r: number): boolean {
-  if (el.type === 'text') {
+  if (el.type === 'text' || el.type === 'layout') {
     const b = bounds(el)
     return x >= b.x - r && x <= b.x + b.w + r && y >= b.y - r && y <= b.y + b.h + r
   }
@@ -254,6 +273,11 @@ export function erase(el: Element, x: number, y: number, r: number, pixel: boole
 
 /** The element with every point moved by f. */
 export function mapPoints(el: Element, f: (x: number, y: number) => [number, number]): Element {
+  if (el.type === 'layout') {
+    const [x1, y1] = f(el.x, el.y)
+    const [x2, y2] = f(el.x + el.w, el.y + el.h)
+    return { ...el, x: round(Math.min(x1, x2)), y: round(Math.min(y1, y2)), w: round(Math.abs(x2 - x1)), h: round(Math.abs(y2 - y1)) }
+  }
   if (el.type === 'text') {
     const [x, y] = f(el.x, el.y)
     return { ...el, x: round(x), y: round(y) }
@@ -279,6 +303,95 @@ export function rescale(el: Element, from: Frame, to: Frame): Element {
   const sx = from.w ? to.w / from.w : 1
   const sy = from.h ? to.h / from.h : 1
   return mapPoints(el, (x, y) => [to.x + (x - from.x) * sx, to.y + (y - from.y) * sy])
+}
+
+// ---------- layouts ----------
+
+export interface ZoneBox {
+  path: number[]
+  zone: Zone
+  box: Frame
+}
+
+/** Every zone of a layout with its box, parents before their children. */
+export function zones(el: Layout): ZoneBox[] {
+  const out: ZoneBox[] = []
+  const walk = (zone: Zone, box: Frame, path: number[]) => {
+    out.push({ path, zone, box })
+    const s = zone.split
+    if (!s) return
+    let at = 0
+    s.children.forEach((child, i) => {
+      const f = s.sizes[i]
+      const b = s.dir === 'cols' ? { x: box.x + box.w * at, y: box.y, w: box.w * f, h: box.h } : { x: box.x, y: box.y + box.h * at, w: box.w, h: box.h * f }
+      at += f
+      walk(child, b, [...path, i])
+    })
+  }
+  walk(el.root, { x: el.x, y: el.y, w: el.w, h: el.h }, [])
+  return out
+}
+
+export interface Divider {
+  /** Path of the split zone, and the divider after its child i. */
+  path: number[]
+  i: number
+  dir: 'rows' | 'cols'
+  box: Frame
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+}
+
+export function dividers(el: Layout): Divider[] {
+  const out: Divider[] = []
+  for (const { path, zone, box } of zones(el)) {
+    const s = zone.split
+    if (!s) continue
+    let at = 0
+    for (let i = 0; i < s.sizes.length - 1; i++) {
+      at += s.sizes[i]
+      if (s.dir === 'cols') out.push({ path, i, dir: s.dir, box, x1: box.x + box.w * at, y1: box.y, x2: box.x + box.w * at, y2: box.y + box.h })
+      else out.push({ path, i, dir: s.dir, box, x1: box.x, y1: box.y + box.h * at, x2: box.x + box.w, y2: box.y + box.h * at })
+    }
+  }
+  return out
+}
+
+/** The deepest zone under a point. */
+export function zoneAt(el: Layout, x: number, y: number): ZoneBox | null {
+  let found: ZoneBox | null = null
+  for (const z of zones(el)) if (x >= z.box.x && x <= z.box.x + z.box.w && y >= z.box.y && y <= z.box.y + z.box.h) found = z
+  return found
+}
+
+/** The layout with the zone at path replaced. */
+export function updateZone(el: Layout, path: number[], f: (z: Zone) => Zone): Layout {
+  const go = (z: Zone, depth: number): Zone => {
+    if (depth === path.length) return f(z)
+    const s = z.split!
+    return { ...z, split: { ...s, children: s.children.map((c, i) => (i === path[depth] ? go(c, depth + 1) : c)) } }
+  }
+  return { ...el, root: go(el.root, 0) }
+}
+
+export const zoneAtPath = (el: Layout, path: number[]): Zone | undefined => path.reduce<Zone | undefined>((z, i) => z?.split?.children[i], el.root)
+
+const even = (n: number) => Array.from({ length: n }, () => 1 / n)
+
+export function splitZone(z: Zone, dir: 'rows' | 'cols', n: number): Zone {
+  return { ...z, split: { dir, sizes: even(n), children: Array.from({ length: n }, () => ({})) } }
+}
+
+export function gridZone(z: Zone, rows: number, cols: number): Zone {
+  return { ...z, split: { dir: 'rows', sizes: even(rows), children: Array.from({ length: rows }, () => splitZone({}, 'cols', cols)) } }
+}
+
+/** North, south, west, east and center. */
+export function borderZone(z: Zone): Zone {
+  const middle: Zone = { split: { dir: 'cols', sizes: [0.2, 0.6, 0.2], children: [{ name: 'west' }, { name: 'center' }, { name: 'east' }] } }
+  return { ...z, split: { dir: 'rows', sizes: [0.15, 0.7, 0.15], children: [{ name: 'north' }, middle, { name: 'south' }] } }
 }
 
 export const isEmpty = (d: DoodleDoc) => d.elements.length === 0 && !d.background

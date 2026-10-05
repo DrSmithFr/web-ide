@@ -6,7 +6,7 @@ import { fluoColors, PEN_SIZES, penColors, presets, type FluoColor, type PenColo
 import type { History } from './history'
 import { canCapture } from './background'
 
-export type Tool = 'select' | 'pen' | 'marker' | 'eraser' | 'rect' | 'ellipse' | 'line' | 'arrow' | 'text'
+export type Tool = 'select' | 'pen' | 'marker' | 'eraser' | 'rect' | 'ellipse' | 'line' | 'arrow' | 'text' | 'layout'
 
 export interface Tools {
   tool: Tool
@@ -37,7 +37,7 @@ export function saveTools(v: Tools) {
 }
 
 /** Keys of the tools. */
-export const toolKeys: Record<string, Tool> = { v: 'select', p: 'pen', m: 'marker', e: 'eraser', r: 'rect', o: 'ellipse', l: 'line', a: 'arrow', t: 'text' }
+export const toolKeys: Record<string, Tool> = { v: 'select', p: 'pen', m: 'marker', e: 'eraser', r: 'rect', o: 'ellipse', l: 'line', a: 'arrow', t: 'text', k: 'layout' }
 
 const colorLabel = (c: PenColor | FluoColor) =>
   ({ ink: t('Black'), red: t('Red'), blue: t('Blue'), green: t('Green'), yellow: t('Yellow'), lime: t('Green'), pink: t('Pink'), cyan: t('Cyan') })[c]
@@ -70,7 +70,7 @@ export function Toolbar(props: {
       <Icon name={icon} size={16} />
     </button>
   )
-  const inks = () => ['pen', 'rect', 'ellipse', 'line', 'arrow', 'text'].includes(tl().tool) || (tl().tool === 'select' && props.selection)
+  const inks = () => ['pen', 'rect', 'ellipse', 'line', 'arrow', 'text', 'layout'].includes(tl().tool) || (tl().tool === 'select' && props.selection)
   const sizes = () => ['pen', 'rect', 'ellipse', 'line', 'arrow'].includes(tl().tool)
   const textSizes = () => tl().tool === 'text' || (tl().tool === 'select' && props.selection)
   return (
@@ -85,6 +85,7 @@ export function Toolbar(props: {
       {tool('line', 'line', t('Line'), 'L')}
       {tool('arrow', 'arrow', t('Arrow'), 'A')}
       {tool('text', 'text', t('Text'), 'T')}
+      {tool('layout', 'layout', t('Layout: draw a box, then split its zones'), 'K')}
       <span class="sep" />
       <Show when={sizes()}>
         <For each={['thin', 'normal'] as const}>

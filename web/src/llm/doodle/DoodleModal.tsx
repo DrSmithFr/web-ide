@@ -15,7 +15,14 @@ import {
   contains,
   erase,
   FONT,
+  dividers,
   hit,
+  updateZone,
+  zoneAt,
+  zoneAtPath,
+  type Divider,
+  type Layout,
+  type Zone,
   isEmpty,
   LINE_HEIGHT,
   MARKER_SIZE,
@@ -29,6 +36,7 @@ import {
   textBox,
   translate,
   union,
+  zones,
   type DoodleDoc,
   type Element,
   type Frame,
@@ -39,7 +47,8 @@ import {
   type Text,
   type TextSize,
 } from './model'
-import { baseline, layered, primOf } from './render'
+import { baseline, layered, primsOf, type Prim } from './render'
+import { ZoneMenu } from './ZoneMenu'
 import { createHistory } from './history'
 import { captureScreen, pictureOf, type Picture } from './background'
 import { loadTools, presetLabel, saveTools, Toolbar, toolKeys, type Tools } from './Toolbar'
@@ -61,6 +70,8 @@ type Gesture =
   | { kind: 'move'; id: number; start: DoodleDoc; ids: Set<string>; box: Frame; sx: number; sy: number }
   | { kind: 'resize'; id: number; start: DoodleDoc; ids: Set<string>; box: Frame; handle: string; sx: number; sy: number }
   | { kind: 'band'; id: number; wx: number; wy: number; keep: string[] }
+  | { kind: 'layout'; id: number; el: Layout; sx: number; sy: number }
+  | { kind: 'divider'; id: number; start: DoodleDoc; el: Layout; div: Divider; sizes: number[] }
 
 interface View {
   x: number
@@ -97,6 +108,7 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
   const [selected, setSelected] = createSignal<string[]>([])
   const setTools = (p: Partial<Tools>) => {
     if (p.tool && p.tool !== 'select') setSelected([])
+    if (p.tool && p.tool !== 'layout') setZoneSel(null)
     setToolsState({ ...tools(), ...p })
     saveTools(tools())
   }
@@ -106,6 +118,10 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
   const [drawing, setDrawing] = createSignal<Element | null>(null)
   const [band, setBand] = createSignal<Frame | null>(null)
   const [editing, setEditing] = createSignal<Editing | null>(null)
+  // Zone of a layout picked with the layout tool, and the zone being named.
+  const [zoneSel, setZoneSel] = createSignal<{ id: string; path: number[] } | null>(null)
+  const [naming, setNaming] = createSignal<{ id: string; path: number[]; value: string } | null>(null)
+  const [hoverDiv, setHoverDiv] = createSignal<'rows' | 'cols' | null>(null)
   const [cursor, setCursor] = createSignal<{ x: number; y: number } | null>(null)
   const [space, setSpace] = createSignal(false)
   const [busy, setBusy] = createSignal(false)
@@ -225,6 +241,49 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
     return null
   }
 
+  /** A divider of a layout under a point (dragged to change the proportions). */
+  const dividerAt = (x: number, y: number) => {
+    const tol = 5 / view().z
+    const list = layered(h.doc())
+    for (let i = list.length - 1; i >= 0; i--) {
+      const el = list[i]
+      if (el.type !== 'layout') continue
+      for (const v of dividers(el)) {
+        const on = v.dir === 'cols' ? Math.abs(x - v.x1) <= tol && y >= v.y1 && y <= v.y2 : Math.abs(y - v.y1) <= tol && x >= v.x1 && x <= v.x2
+        if (on) return { el, div: v }
+      }
+    }
+    return null
+  }
+
+  const layoutAt = (x: number, y: number) => {
+    const list = layered(h.doc())
+    for (let i = list.length - 1; i >= 0; i--) {
+      const el = list[i]
+      if (el.type === 'layout' && hit(el, x, y, 0)) return el
+    }
+    return null
+  }
+
+  const replaceLayout = (id: string, f: (el: Layout) => Layout) => {
+    const d = h.doc()
+    h.apply({ ...d, elements: d.elements.map((el) => (el.id === id && el.type === 'layout' ? f(el) : el)) })
+  }
+
+  const nameZone = (el: Layout, x: number, y: number) => {
+    const z = zoneAt(el, x, y)
+    if (z) setNaming({ id: el.id, path: z.path, value: z.zone.name ?? '' })
+  }
+
+  const commitName = (keep: boolean) => {
+    const n = naming()
+    if (!n) return
+    setNaming(null)
+    const name = n.value.trim() || undefined
+    if (keep && name !== zoneAtPath(h.doc().elements.find((el) => el.id === n.id) as Layout, n.path)?.name) replaceLayout(n.id, (el) => updateZone(el, n.path, (z) => ({ ...z, name })))
+    wrap.focus({ preventScroll: true })
+  }
+
   // ---------- text ----------
 
   const editText = (el: Text | null, x: number, y: number) => {
@@ -287,7 +346,22 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
       gesture = { kind: 'erase', id: e.pointerId }
       eraseAt(p.x, p.y)
     } else if (e.button !== 0) return
-    else if (tl.tool === 'select') {
+    else if ((tl.tool === 'select' || tl.tool === 'layout') && dividerAt(p.x, p.y)) {
+      const { el, div } = dividerAt(p.x, p.y)!
+      h.begin()
+      gesture = { kind: 'divider', id: e.pointerId, start: h.doc(), el, div, sizes: zoneAtPath(el, div.path)!.split!.sizes }
+    } else if (tl.tool === 'layout') {
+      const el = layoutAt(p.x, p.y)
+      if (el) {
+        setZoneSel({ id: el.id, path: zoneAt(el, p.x, p.y)?.path ?? [] })
+        return
+      }
+      setZoneSel(null)
+      const x = snap(p.x)
+      const y = snap(p.y)
+      gesture = { kind: 'layout', id: e.pointerId, sx: x, sy: y, el: { id: newId(), type: 'layout', color: tl.penColor, x, y, w: 0, h: 0, root: {} } }
+      setDrawing(gesture.el)
+    } else if (tl.tool === 'select') {
       const el = elementAt(p.x, p.y)
       if (!el) {
         gesture = { kind: 'band', id: e.pointerId, wx: p.x, wy: p.y, keep: e.shiftKey ? selected() : [] }
@@ -327,6 +401,10 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
     const g = gesture
     if (tools().tool === 'eraser' || (e.pointerType === 'pen' && (e.buttons & 32) !== 0)) setCursor(world(e.clientX, e.clientY))
     else if (cursor()) setCursor(null)
+    if (!g && (tools().tool === 'select' || tools().tool === 'layout')) {
+      const q = world(e.clientX, e.clientY)
+      setHoverDiv(dividerAt(q.x, q.y)?.div.dir ?? null)
+    }
     if (!g) return
     if (g.kind === 'pinch') {
       if (touchPts.size < 2) return
@@ -392,6 +470,21 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
     } else if (g.kind === 'resize') {
       const to = resizeBox(g.box, g.handle, p.x - g.sx, p.y - g.sy, e.shiftKey, 4)
       h.set({ ...g.start, elements: g.start.elements.map((el) => (g.ids.has(el.id) ? rescale(el, g.box, to) : el)) })
+    } else if (g.kind === 'layout') {
+      const x = snap(p.x)
+      const y = snap(p.y)
+      g.el = { ...g.el, x: Math.min(g.sx, x), y: Math.min(g.sy, y), w: Math.abs(x - g.sx), h: Math.abs(y - g.sy) }
+      setDrawing(g.el)
+    } else if (g.kind === 'divider') {
+      // The divider between the children i and i + 1 moves within their two sizes.
+      const { div, sizes } = g
+      const pos = div.dir === 'cols' ? (snap(p.x) - div.box.x) / div.box.w : (snap(p.y) - div.box.y) / div.box.h
+      const before = sizes.slice(0, div.i).reduce((a, b) => a + b, 0)
+      const pair = sizes[div.i] + sizes[div.i + 1]
+      const first = Math.min(pair - 0.05, Math.max(0.05, pos - before))
+      const next = sizes.map((v, i) => (i === div.i ? first : i === div.i + 1 ? pair - first : v))
+      const el = updateZone(g.el, div.path, (z) => ({ ...z, split: { ...z.split!, sizes: next } }))
+      h.set({ ...g.start, elements: g.start.elements.map((x) => (x.id === el.id ? el : x)) })
     } else if (g.kind === 'band') {
       setBand({ x: Math.min(g.wx, p.x), y: Math.min(g.wy, p.y), w: Math.abs(p.x - g.wx), h: Math.abs(p.y - g.wy) })
     }
@@ -433,6 +526,12 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
       setDrawing(null)
       // A click without drag draws nothing.
       if (!cancel && Math.hypot(g.el.x2 - g.el.x1, g.el.y2 - g.el.y1) * view().z >= 4) h.apply({ ...h.doc(), elements: [...h.doc().elements, g.el] })
+    } else if (g.kind === 'layout') {
+      setDrawing(null)
+      if (!cancel && g.el.w * view().z >= 8 && g.el.h * view().z >= 8) {
+        h.apply({ ...h.doc(), elements: [...h.doc().elements, g.el] })
+        setZoneSel({ id: g.el.id, path: [] })
+      }
     } else if (g.kind === 'band') {
       const b = band()
       setBand(null)
@@ -442,10 +541,12 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
   }
 
   const onDblClick = (e: MouseEvent) => {
-    if (tools().tool !== 'select') return
+    const tool = tools().tool
+    if (tool !== 'select' && tool !== 'layout') return
     const p = world(e.clientX, e.clientY)
-    const el = elementAt(p.x, p.y)
+    const el = tool === 'layout' ? layoutAt(p.x, p.y) : elementAt(p.x, p.y)
     if (el?.type === 'text') editText(el, el.x, el.y)
+    else if (el?.type === 'layout') nameZone(el, p.x, p.y)
   }
 
   const startFrame = (e: PointerEvent, handle: string) => {
@@ -549,7 +650,8 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
     if (e.key === 'Escape' && !typing) {
       e.preventDefault()
       e.stopPropagation()
-      if (selected().length) setSelected([])
+      if (zoneSel()) setZoneSel(null)
+      else if (selected().length) setSelected([])
       else close()
       return
     }
@@ -694,7 +796,7 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
               />
               <div
                 class={`dd-canvas tool-${tools().tool}`}
-                classList={{ panning: space() }}
+                classList={{ panning: space(), 'col-resize': hoverDiv() === 'cols', 'row-resize': hoverDiv() === 'rows' }}
                 ref={wrap}
                 tabIndex={0}
                 onPointerDown={onDown}
@@ -747,6 +849,61 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
                       {(c) => <div class={`dd-handle sel ${c}`} style={cornerStyle(screen(box()), c)} onPointerDown={(e) => startResize(e, c)} data-testid={`dd-sel-${c}`} />}
                     </For>
                   )}
+                </Show>
+                <Show when={zoneSel()}>
+                  {(zs) => {
+                    const el = () => h.doc().elements.find((x) => x.id === zs().id) as Layout | undefined
+                    const box = () => {
+                      const l = el()
+                      return l ? (zones(l).find((z) => z.path.join() === zs().path.join())?.box ?? null) : null
+                    }
+                    return (
+                      <Show when={el() && box()}>
+                        <div class="dd-zone-hl" style={{ left: `${screen(box()!).left}px`, top: `${screen(box()!).top}px`, width: `${screen(box()!).width}px`, height: `${screen(box()!).height}px` }} />
+                        <ZoneMenu
+                          at={screen(box()!)}
+                          zone={zoneAtPath(el()!, zs().path)!}
+                          root={zs().path.length === 0}
+                          onChange={(f: (z: Zone) => Zone) => replaceLayout(zs().id, (l) => updateZone(l, zs().path, f))}
+                          onName={() => setNaming({ id: zs().id, path: zs().path, value: zoneAtPath(el()!, zs().path)?.name ?? '' })}
+                          onDelete={() => {
+                            const d = h.doc()
+                            h.apply({ ...d, elements: d.elements.filter((x) => x.id !== zs().id) })
+                            setZoneSel(null)
+                          }}
+                        />
+                      </Show>
+                    )
+                  }}
+                </Show>
+                <Show when={naming()}>
+                  {(n) => {
+                    const box = () => {
+                      const l = h.doc().elements.find((x) => x.id === n().id) as Layout | undefined
+                      return l ? zones(l).find((z) => z.path.join() === n().path.join())?.box : undefined
+                    }
+                    return (
+                      <Show when={box()}>
+                        <input
+                          class="dd-zone-name"
+                          ref={(el) => queueMicrotask(() => (el.focus(), el.select()))}
+                          value={n().value}
+                          placeholder={t('Name of the zone')}
+                          style={{ left: `${screen(box()!).left + screen(box()!).width / 2}px`, top: `${screen(box()!).top + screen(box()!).height / 2}px` }}
+                          onInput={(e) => setNaming({ ...n(), value: e.currentTarget.value })}
+                          onBlur={() => commitName(true)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === 'Escape') {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              commitName(e.key === 'Enter')
+                            }
+                          }}
+                          data-testid="dd-zone-name"
+                        />
+                      </Show>
+                    )
+                  }}
                 </Show>
                 <Show when={editing()}>{(ed) => <TextEditor ed={ed()} view={view()} dark={dark()} onInput={(text) => setEditing({ ...ed(), text })} onDone={commitText} />}</Show>
               </div>
@@ -817,14 +974,18 @@ function TextEditor(props: { ed: Editing; view: View; dark: boolean; onInput: (t
 }
 
 function ElementView(props: { el: Element; dark: boolean }) {
-  const p = createMemo(() => primOf(props.el, props.dark))
+  const prims = createMemo(() => primsOf(props.el, props.dark))
+  return <For each={prims()}>{(v) => <PrimView v={v} />}</For>
+}
+
+function PrimView(props: { v: Prim }) {
   return (
     <>
       {(() => {
-        const v = p()
+        const v = props.v
         if (v.kind === 'text')
           return (
-            <text x={v.x} y={v.y + baseline(v.size)} font-size={String(v.size)} font-family={FONT} fill={v.color} style={{ 'white-space': 'pre' }}>
+            <text x={v.x} y={v.y + baseline(v.size)} text-anchor={v.anchor} font-size={String(v.size)} font-family={FONT} fill={v.color} style={{ 'white-space': 'pre' }}>
               <For each={v.lines}>
                 {(l, i) => (
                   <tspan x={v.x} dy={i() ? v.size * LINE_HEIGHT : 0}>

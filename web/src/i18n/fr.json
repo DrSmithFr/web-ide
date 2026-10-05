@@ -1383,5 +1383,20 @@
   "to annotate": "à annoter",
   "Background image… (or paste one with Ctrl+V)": "Image de fond… (ou collez-en une avec Ctrl+V)",
   "Screenshot as background": "Capture d'écran en fond",
-  "Remove the background image": "Retirer l'image de fond"
+  "Remove the background image": "Retirer l'image de fond",
+  "Name of the zone": "Nom de la zone",
+  "Layout: draw a box, then split its zones": "Layout : tracer un cadre, puis découper ses zones",
+  "Columns": "Colonnes",
+  "Split in {n} columns": "Découper en {n} colonnes",
+  "Rows": "Lignes",
+  "Split in {n} rows": "Découper en {n} lignes",
+  "Grid": "Grille",
+  "Grid of {n}": "Grille de {n}",
+  "Border": "Cardinal",
+  "North, south, west, east and center": "Nord, sud, ouest, est et centre",
+  "Name the zone (double click)": "Nommer la zone (double clic)",
+  "Name…": "Nommer…",
+  "Merge the parts of this zone": "Fusionner les parties de cette zone",
+  "Merge": "Fusionner",
+  "Delete the layout": "Supprimer le layout"
 }
