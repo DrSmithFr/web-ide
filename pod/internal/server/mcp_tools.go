@@ -467,8 +467,8 @@ var mcpTools = []mcpTool{
 			if t.Setup == "running" {
 				setup = "\nThe setup command of the kanban is running in the worktree; kanban_get shows when it is done (Setup)."
 			}
-			return fmt.Sprintf("Ticket #%d is %q.\nBranch: %s (base %s)\nWorktree: %s\nWorktree in the IDE: %s\nWork in the worktree (absolute paths, `cd %s && …` for commands); commit messages start with \"#%d \".%s",
-				t.ID, kanban.StatusNames[t.Status], t.Branch, t.Base, t.Worktree, s.projectURL(child), t.Worktree, t.ID, setup), nil
+			return fmt.Sprintf("Ticket #%d is %q.\nBranch: %s (base %s)\nWorktree: %s\nWorktree in the IDE: %s\nSwitch this session into the worktree with EnterWorktree (path %s), or work in it with absolute paths (`cd %s && …` for commands); commit messages start with \"#%d \".%s",
+				t.ID, kanban.StatusNames[t.Status], t.Branch, t.Base, t.Worktree, s.projectURL(child), t.Worktree, t.Worktree, t.ID, setup), nil
 		}),
 	},
 }

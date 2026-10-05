@@ -8,7 +8,7 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 - Claude Code on the kanban: an MCP endpoint of the pod (`/mcp`) gives Claude Code the tools of the assistant on the tickets, the conversations of a briefing, the start of the development, and the commands `brief`, `plan`, `dev` and `fix`; its changes are shown as written by Claude.
 - *Claude Code* menu of a ticket (brief, plan, develop, fix) running Claude Code in a terminal of the IDE; the setup command in the kanban settings.
-- Claude Code mod (`claude-mod/`): links to the project and to the ticket of the worktree, and the files changed by Claude, above the prompt, opened in the IDE in one key; `/ide <file[:line]>`.
+- Claude Code mod (`claude-mod/`): links to the project and to the ticket of the worktree, and the files changed by Claude, above the prompt, opened in the IDE in one key; `/webide <file[:line]>`.
 - `publicUrl` (config, `-public-url`): the address of the IDE in the links given to Claude Code (a Tailscale name…); `/project/<id>?ticket=<n>` opens a ticket.
 - File links (`/open?path=…&line=…`): a click on a file mentioned by Claude Code opens it in the IDE.
 

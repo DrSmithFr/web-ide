@@ -3,7 +3,8 @@
 // and the files Claude changes as buttons opening them in the IDE windows (the /open
 // endpoint of the pod, with its token). The band above the prompt is drawn by the
 // terminal and the desktop app only: the mobile app gets the same links in a pane, opened
-// when it joins the session and by /ide. /ide <file[:line]> opens any file.
+// when it joins the session and by /webide. /webide <file[:line]> opens any file (/ide
+// is a command of Claude Code).
 //
 // The pod: WEBIDE_URL (default http://127.0.0.1:4433), its data folder WEBIDE_DATA
 // (default ~/.web-ide), where the token is.
@@ -18,6 +19,8 @@ const files = atom({ plugin: 'web-ide', key: 'files' } as const, [])
 const EDITS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit'])
 const MAX_FILES = 4
 const PANE = 'web-ide'
+// Tools moving the session to another folder: the project and the ticket change.
+const MOVES = new Set(['EnterWorktree', 'ExitWorktree'])
 
 type Pod = { url: string; token: string }
 
@@ -109,7 +112,7 @@ async function open($: EngineInterface, path: string, line = 0): Promise<string>
 
 export const register: Register = (on) => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'ide', description: 'Links to the Web IDE (project, ticket, files), or open a file in it', argumentHint: '[file[:line]]' })
+    await $.command.register({ name: 'webide', description: 'Links to the Web IDE (project, ticket, files), or open a file in it', argumentHint: '[file[:line]]' })
     void refresh($)
     return next(e)
   })
@@ -130,10 +133,11 @@ export const register: Register = (on) => {
     const ran = await next(e)
     const path = (e as { file_path?: string }).file_path ?? (e as { notebook_path?: string }).notebook_path
     if (EDITS.has(e.tool) && path && ran.deny === undefined) await update($, files, (list) => touched(list, path))
+    if (MOVES.has(e.tool) && ran.deny === undefined) void refresh($)
     return ran
   })
 
-  on('command.run', { command: 'ide' }, async ($, e) => {
+  on('command.run', { command: 'webide' }, async ($, e) => {
     if (e.args.trim()) {
       const t = parseTarget(e.args, await $.session.cwd())
       return { text: await open($, t.path, t.line) }
