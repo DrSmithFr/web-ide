@@ -357,6 +357,14 @@ run(async ({ page }) => {
     assert(names.includes('sidebar') && names.includes('header'), `zone names drawn: ${names}`)
     await page.keyboard.press('Escape')
     assert(!(await page.$('[data-testid=dd-zone-menu]')) && (await page.isVisible('[data-testid=doodle]')), 'Escape closes the zone menu first')
+    // A text in the sidebar, a rectangle in the unnamed zone below the header.
+    await page.keyboard.press('t')
+    await page.mouse.click(lb.x + lb.width * 0.15, lb.y + lb.height * 0.2)
+    await page.waitForSelector('[data-testid=dd-text-edit]')
+    await page.keyboard.type('Menu')
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('r')
+    await stroke(page, 0.5, 0.6, 0.7, 0.8)
     await page.click('[data-testid=dd-attach]')
     await page.waitForSelector('[data-testid=doodle]', { state: 'detached' })
     await page.fill('.ai-composer textarea', 'Layout')
@@ -364,7 +372,11 @@ run(async ({ page }) => {
     await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Got Layout")', { timeout: 15000 })
     user = [...requests[requests.length - 1].messages].reverse().find((m) => m.role === 'user')
     const d3 = text(user)
-    assert(/\[1\] layout, [^\n]*split in columns \(left to right\):\n  - 25 % "sidebar"\n  - 75 %, split in rows \(top to bottom\):\n    - 50 % "header"\n    - 50 %/.test(d3), `layout described as a tree: ${d3}`)
+    assert(
+      /\[1\] layout, [^\n]*split in columns \(left to right\):\n  - column 1: 25 % "sidebar", holds \[2\]\n  - column 2: 75 %, split in rows \(top to bottom\):\n    - row 1: 50 % "header"\n    - row 2: 50 %, holds \[3\]/.test(d3),
+      `layout described as a tree with what its zones hold: ${d3}`,
+    )
+    assert(/\[2\] text "Menu", [^\n]*inside \[1\] zone "sidebar"/.test(d3) && /\[3\] rectangle, [^\n]*inside \[1\] zone column 2 › row 2/.test(d3), `elements name their zone: ${d3}`)
 
     // Deleting zones: the neighbor takes the place, a single part left merges into its parent.
     await page.click('.ai-composer textarea')

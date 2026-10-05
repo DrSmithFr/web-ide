@@ -57,7 +57,7 @@ The layout is a tree, which gives the model an exact description of the structur
 For each doodle, in order:
 
 1. A PNG of the frame (light version), when the model reads images.
-2. A text description built from the elements: frame size and ratio, layouts as trees with proportions and names, shapes and texts numbered with their position in the frame (as percentages), the texts inside a shape as its label, arrows and lines with the elements their ends touch, free strokes with their color and place only.
+2. A text description built from the elements: frame size and ratio, layouts as trees with proportions and names, shapes and texts numbered with their position in the frame (as percentages), the texts inside a shape as its label, the shape or the zone of a layout each element is inside (a zone by its name, else by its place: `column 2 › row 1`), each zone with what it holds, arrows and lines with the elements their ends touch, free strokes with their color and place only.
 
 A model without image input gets the description alone.
 

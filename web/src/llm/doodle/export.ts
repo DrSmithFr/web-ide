@@ -95,8 +95,18 @@ function items(list: { el: Element; r: Frame }[], fr: Frame): string[] {
   // A layout names the zone of what it holds.
   const ref = (el: Element | undefined, b?: Frame) => {
     if (!el) return ''
-    const z = el.type === 'layout' && b ? zoneAt(el, b.x + b.w / 2, b.y + b.h / 2)?.zone.name : undefined
-    return `[${num.get(el.id)}]${z ? ` zone ${quote(z)}` : ''}`
+    const path = el.type === 'layout' && b ? zoneAt(el, b.x + b.w / 2, b.y + b.h / 2)?.path : undefined
+    return `[${num.get(el.id)}]${path?.length ? ` zone ${zoneLabel(el as Layout, path)}` : ''}`
+  }
+  // What each zone of a layout holds, for the tree of the layout.
+  const held = new Map<string, string[]>()
+  for (const { el } of shown) {
+    if (el.type === 'layout') continue
+    const b = bounds(el)
+    const c = el.type === 'line' || el.type === 'arrow' ? undefined : around(b, el.id)
+    if (c?.type !== 'layout') continue
+    const key = `${c.id}:${zoneAt(c, b.x + b.w / 2, b.y + b.h / 2)?.path.join('.') ?? ''}`
+    held.set(key, [...(held.get(key) ?? []), `[${num.get(el.id)}]`])
   }
   const lines = ['Shapes and texts:']
   for (const { el, r } of shown.slice(0, MAX_LISTED * 2)) {
@@ -105,7 +115,7 @@ function items(list: { el: Element; r: Frame }[], fr: Frame): string[] {
       const inside = around(bounds(el), el.id)
       lines.push(`${n} text ${quote(el.text)}, ${sizeNames[el.size]}, ${colorName(el)}, ${place(r)}${inside ? `, inside ${ref(inside, bounds(el))}` : ''}`)
     } else if (el.type === 'layout') {
-      lines.push(...layoutLines(el, n, r))
+      lines.push(...layoutLines(el, n, r, (path) => held.get(`${el.id}:${path.join('.')}`) ?? []))
     } else if (el.type === 'line' || el.type === 'arrow') {
       const a = frac(el.x1, el.y1)
       const b = frac(el.x2, el.y2)
@@ -123,21 +133,41 @@ function items(list: { el: Element; r: Frame }[], fr: Frame): string[] {
   return lines
 }
 
+const partName = (dir: 'rows' | 'cols', i: number) => `${dir === 'cols' ? 'column' : 'row'} ${i + 1}`
+
+/** A zone by its name, else by its place: "sidebar", column 2 › row 1, "main" › row 2. */
+function zoneLabel(el: Layout, path: number[]): string {
+  const parts: string[] = []
+  let z = el.root
+  for (const i of path) {
+    const s = z.split!
+    z = s.children[i]
+    if (z.name) parts.splice(0, parts.length, quote(z.name))
+    else parts.push(partName(s.dir, i))
+  }
+  return parts.join(' › ')
+}
+
 const dirName = (z: Zone) => (z.split?.dir === 'cols' ? 'columns (left to right)' : 'rows (top to bottom)')
 
 /** A layout as a tree: each part with its size in % of the zone it splits, and its name. */
-function layoutLines(el: Layout, n: string, r: Frame): string[] {
+function layoutLines(el: Layout, n: string, r: Frame, holds: (path: number[]) => string[]): string[] {
   const root = el.root
-  const lines = [`${n} layout${root.name ? ` ${quote(root.name)}` : ''}, ${colorName(el)}, ${place(r)}${root.split ? `, split in ${dirName(root)}:` : ', not split'}`]
-  const walk = (z: Zone, depth: number) => {
+  const has = (path: number[]) => {
+    const h = holds(path)
+    return h.length ? `, holds ${h.join(' ')}` : ''
+  }
+  const lines = [`${n} layout${root.name ? ` ${quote(root.name)}` : ''}, ${colorName(el)}, ${place(r)}${root.split ? `, split in ${dirName(root)}:` : `, not split${has([])}`}`]
+  const walk = (z: Zone, path: number[], depth: number) => {
     const s = z.split
     if (!s) return
     s.children.forEach((c, i) => {
-      lines.push(`${'  '.repeat(depth + 1)}- ${pct(s.sizes[i])} %${c.name ? ` ${quote(c.name)}` : ''}${c.split ? `, split in ${dirName(c)}:` : ''}`)
-      walk(c, depth + 1)
+      const p = [...path, i]
+      lines.push(`${'  '.repeat(depth + 1)}- ${partName(s.dir, i)}: ${pct(s.sizes[i])} %${c.name ? ` ${quote(c.name)}` : ''}${c.split ? `, split in ${dirName(c)}:` : has(p)}`)
+      walk(c, p, depth + 1)
     })
   }
-  walk(root, 0)
+  walk(root, [], 0)
   return lines
 }
 
