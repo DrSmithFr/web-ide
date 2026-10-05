@@ -23,6 +23,7 @@ The front end is built by Vite and embedded in the pod binary (`pod/webdist`), s
 | `pod/` | The pod: `main.go` (flags, wiring), `internal/…` packages, `webdist/` (embedded front end) |
 | `web/` | The front end (SolidJS + TypeScript, Vite) |
 | `e2e/` | Browser tests (Playwright core driving headless Chromium); `e2e/shots/` makes the pictures of the documentation |
+| `claude-mod/` | Claude Code mod: ticket and changed files above the prompt, opened in the IDE (`/open`) |
 | `docs/` | User guide, specification, architecture, kanban and doodle designs, pictures (`docs/images`) |
 
 ## Data on disk

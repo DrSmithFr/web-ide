@@ -71,6 +71,7 @@ claude mcp add --transport http --scope user web-ide http://127.0.0.1:4433/mcp -
 - Author `claude`: the rules of the model, plus *To do* → *In progress* through `kanban_start`; shown as Claude in the notes and the history.
 - File links: `/open?path=<absolute path>&line=<n>` (cookie or bearer) opens the file in the windows of its project (`ide.open` event), or the project page on it (`?open=`) when none has it; the instructions of the endpoint ask Claude to write the files it mentions as such links.
 - In the IDE: the *Claude Code* menu of a ticket runs `claude` with the prompt fitting its status in a terminal of the project (in the worktree for `dev` and `fix`; `--model opus` for `brief` and `plan`; `WEBIDE_CLAUDE` in the environment of the pod names another command), and the kanban settings show the `claude mcp add` command to copy.
+- The Claude Code mod `claude-mod/` (`claude --plugin-dir claude-mod`, or copied into a plugin folder): above the prompt, the ticket of the worktree Claude works in and the files it changed, each a button opening the file in the IDE; `/ide <file[:line]>` opens any file. It reads the token in `~/.web-ide/token` (`WEBIDE_DATA`, `WEBIDE_URL` to change). Tests: `claude plugin test claude-mod`.
 - Prompts, commands of Claude Code: `/mcp__web-ide__brief <n>` (take over a briefing of the local assistant: check the need, complete the ticket), `plan`, `dev`, `fix`.
 
 ## Git

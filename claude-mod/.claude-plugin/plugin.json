@@ -1,0 +1,6 @@
+{
+  "name": "web-ide",
+  "version": "0.1.0",
+  "description": "Web IDE: the ticket of the worktree above the prompt, and the files Claude changes opened in the IDE with one key",
+  "types": "./types/index.d.ts"
+}
