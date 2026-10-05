@@ -7,6 +7,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"path"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -272,21 +273,24 @@ func (r *Registry) put(p Project, parent *Project) (View, error) {
 
 // At is the local project whose folder holds dir, the deepest one: the worktree of a
 // ticket (inside .ide/worktrees of its parent) wins over its parent.
+// Symbolic links are resolved on both sides: a project opened as ~/Apps/x is found from
+// the folder the link leads to.
 func (r *Registry) At(dir string) (*Project, bool) {
-	dir = path.Clean(dir)
+	dir = resolved(dir)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var best *Project
+	bestLen := 0
 	for _, p := range r.items {
 		if p.Type != "local" || p.Path == "" {
 			continue
 		}
-		root := path.Clean(p.Path)
+		root := resolved(p.Path)
 		if dir != root && !strings.HasPrefix(dir, strings.TrimSuffix(root, "/")+"/") {
 			continue
 		}
-		if best == nil || len(root) > len(path.Clean(best.Path)) {
-			best = p
+		if best == nil || len(root) > bestLen {
+			best, bestLen = p, len(root)
 		}
 	}
 	if best == nil {
@@ -294,6 +298,15 @@ func (r *Registry) At(dir string) (*Project, bool) {
 	}
 	cp := *best
 	return &cp, true
+}
+
+// resolved is a local path with its symbolic links followed, as it is when it does not
+// exist (yet).
+func resolved(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return path.Clean(p)
 }
 
 // ChildAt is the worktree project of parent opened on dir, if any.

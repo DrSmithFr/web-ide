@@ -203,3 +203,19 @@ func TestOpenLink(t *testing.T) {
 	}
 	a.waitEvent("ide.open", func(d map[string]any) bool { return d["path"] == file && d["line"] == float64(3) })
 }
+
+// A project opened through a symbolic link is found from the folder the link leads to.
+func TestMCPSymlinkedProject(t *testing.T) {
+	_, ts := newServer(t)
+	a, _ := dial(t, ts, "secret-token-0123456789abcdef0123")
+	real := t.TempDir()
+	link := filepath.Join(t.TempDir(), "apps")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skip(err)
+	}
+	a.call("projects.create", map[string]any{"type": "local", "path": link})
+	m := &mcpClient{t: t, url: ts.URL, token: "secret-token-0123456789abcdef0123"}
+	if text := m.ok("kanban_list", map[string]any{"cwd": real}); !strings.Contains(text, "No ticket.") {
+		t.Fatalf("list: %s", text)
+	}
+}
