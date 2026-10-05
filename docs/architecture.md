@@ -22,8 +22,8 @@ The front end is built by Vite and embedded in the pod binary (`pod/webdist`), s
 |---|---|
 | `pod/` | The pod: `main.go` (flags, wiring), `internal/…` packages, `webdist/` (embedded front end) |
 | `web/` | The front end (SolidJS + TypeScript, Vite) |
-| `e2e/` | Browser tests (Playwright core driving headless Chromium) |
-| `docs/` | Specification, architecture, kanban design |
+| `e2e/` | Browser tests (Playwright core driving headless Chromium); `e2e/shots/` makes the pictures of the documentation |
+| `docs/` | User guide, specification, architecture, kanban and doodle designs, pictures (`docs/images`) |
 
 ## Data on disk
 
@@ -101,6 +101,7 @@ See [kanban.md](kanban.md). A ticket worktree is registered as a hidden child pr
 ```
 make build          # front end (Vite) then pod binary bin/web-ide-pod (front end embedded)
 make dev            # pod with -allow-remote on 0.0.0.0:4434 and data in ~/.web-ide-dev + Vite on 0.0.0.0:5173 (hot reload)
+make shots          # pictures of docs/images, replaying e2e/shots/recording.json.gz (see docs/guide.md)
 make service        # this build as a systemd user service started at boot (scripts/install.sh)
 make test           # go vet + go test + tsc
 make e2e            # browser tests, all suites (a few minutes)

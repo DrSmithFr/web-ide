@@ -2,71 +2,68 @@
 
 *[Version française](README.fr.md)*
 
-A self-hosted IDE that runs in your browser, backed by a small local agent — the **pod** — that gives it what a web page cannot have: your disk, SSH, terminals, language servers, databases, git and local AI models.
+A self-hosted IDE in your browser, with an AI agent that runs on **your** models (llama.cpp, Ollama) and a kanban that takes each change from an idea to a merged branch.
 
-- **One binary.** The pod is a single Go executable with the web app embedded. No Electron, no cloud, no account.
-- **Local first.** Everything (settings, projects, sessions, conversations) is stored by the pod in `~/.web-ide` and in the project's `.ide` folder. Private keys and audio never leave your machine.
-- **Same session everywhere.** Open the IDE from another browser or another machine connected to the same pod and find your tabs, splits, cursors and terminals as you left them.
+![The model develops a ticket in its own git worktree: it reads the code, edits, runs the tests and commits](docs/images/develop.gif)
 
-![The AI assistant editing a file, with its tool steps, the diff it applied and a Mermaid diagram](docs/images/assistant.png)
+- **One binary, local first.** A small Go program, the *pod*, serves the interface and does the work on your machine: files, git, terminals, language servers, databases, model calls. No Electron, no cloud, no account.
+- **The same session everywhere.** Open it from another browser or device (over Tailscale) and find your tabs, splits and terminals as you left them.
+- **A development cycle with the agent.** Briefing → plan → development in a worktree → test → merge, each step with its conversation, each decision yours.
 
-![A ticket after development in its own worktree: goals, test summary, changed files, merged branch](docs/images/kanban.png)
+## From an idea to a merged branch
 
-![The Git panel and a side-by-side diff](docs/images/git-diff.png)
+| | |
+|---|---|
+| **1. Briefing**: describe the need; the model reads the code, asks its questions, then writes the ticket. <br><br> ![Briefing](docs/images/briefing.gif) | **2. Plan**: the model writes the implementation plan and goals you can check. <br><br> ![Plan](docs/images/plan.png) |
+| **3. Development**: a branch and a worktree per ticket, in its own window; the model codes, tests, commits. <br><br> ![Development](docs/images/develop.png) | **4. Test and merge**: how to test, the goals, the diff; feedback goes back to the model; merge when it is right. <br><br> ![Review](docs/images/review.png) |
 
-## Features
+The full walk-through is in the **[user guide](docs/guide.md)**.
 
-- **Editor** — fast block rendering (100,000-line files), syntax highlighting with the CSS Custom Highlight API (Go, PHP, JavaScript, TypeScript, Python, nginx…), split panes sharing buffers, multiple carets (next occurrence, column selection), code folding, indentation guides, visible whitespace, find in file and project-wide search, sub-word navigation, status bar with line separator, encoding (UTF-8, UTF-16, Windows-1252) and indentation, QWERTY and AZERTY shortcut presets, themes.
-- **File explorer** — file type icons, git colors, source / test / excluded folder marks.
-- **Safe with other tools** — when an AI agent or any program changes an open file, the change is merged into your buffer (three-way merge); real conflicts open a three-pane resolution dialog.
-- **Code navigation** through language servers (gopls, intelephense, pyright, typescript-language-server…): definition, references, implementations, symbols, completion, rename, formatting, diagnostics.
-- **Local and SSH projects** — the same features on a remote host over SSH/SFTP, with your local keys.
-- **Terminals and commands** in a bottom panel, detachable into their own windows.
-- **Git** — status, staging, commits, branches, history, side-by-side diffs, gutter markers.
-- **Database explorer** — SQLite, PostgreSQL and Redis, SQL console with transactions, table view, optional SSH tunnels.
-- **AI assistant** for llama.cpp and Ollama servers: an agent that reads, searches and edits the project, uses the language servers, runs commands, asks you questions, follows `CLAUDE.md` / `AGENTS.md` instructions and skills, with Build / Plan / Briefing modes, automatic context compaction, Mermaid diagrams, image / PDF / audio attachments and local speech-to-text (Whisper in the browser).
-- **Kanban per project** — a Briefing conversation questions you and writes the tickets; they go from plan to development to testing with linked assistant conversations; each ticket in development gets its own git branch and worktree, opened in its own window, with its diff, merge and rebase. See [docs/kanban.md](docs/kanban.md).
-- **English and French** interface.
+## And a real editor
 
-## Requirements
+![The editor with completion from gopls, and a terminal](docs/images/editor.png)
 
-- Linux or macOS (developed on Linux).
-- To build: Go 1.27+, Node.js 20.19+ and npm.
-- Optional: `git`; language servers in the pod's `PATH` (`gopls`, `intelephense`, `pyright`, `typescript-language-server`); a [llama.cpp](https://github.com/ggml-org/llama.cpp) or [Ollama](https://ollama.com) server for the assistant.
+- **Editor**: fast on 100,000-line files, splits, multiple carets, folding, Search Everywhere, Recent Files, clipboard history, themes (this is *High contrast*), QWERTY and AZERTY shortcuts, full keyboard navigation.
+- **Language servers**: definition, references, completion, rename, formatting, diagnostics (gopls, typescript-language-server, pyright, intelephense…).
+- **Git**: changes, staging, commits, branches, history graph, side-by-side diffs, worktrees.
+- **Terminals**, **databases** (SQLite, PostgreSQL, Redis), **Docker** (Compose, containers, logs) and SSH tunnels.
+- **Local and SSH projects**, with your local keys.
+- **Safe with other tools**: changes made to open files by another program are merged into your buffer.
+- **Assistant**: Build, Plan and Briefing modes, `CLAUDE.md` / `AGENTS.md` and skills, Mermaid diagrams, image / PDF / audio attachments, local dictation (Whisper in the browser), doodles.
+- Interface in **English and French**.
 
-## Quick start
+| | |
+|---|---|
+| ![The kanban](docs/images/kanban.png) | ![The Git panel](docs/images/git.png) |
 
-```sh
-git clone https://github.com/DrSmithFr/web-ide.git
-cd web-ide
-make build
-./bin/web-ide-pod
-```
+## Install
 
-The pod prints a URL such as `http://127.0.0.1:4433/?token=…`. Open it once: the token is stored in a cookie and pairs the browser with the pod (it is also in `~/.web-ide/token`).
-
-Options: `-addr` (listen address), `-workspace` (default folder for new projects, `~/Apps`), `-data` (data folder, `~/.web-ide`), `-allow-remote` (accept other machines), `-static` (serve the front end from a folder).
-
-To start the pod with your session, install it as a systemd user service:
+Linux, as a service started at boot ([details](docs/guide.md#install)):
 
 ```sh
-make service   # binary in ~/.local/bin, service web-ide-pod
-journalctl --user -u web-ide-pod   # shows the URL with the token
+curl -fsSL https://raw.githubusercontent.com/DrSmithFr/web-ide/main/scripts/install.sh | sh
+# from your other devices, over HTTPS on your Tailscale network:
+curl -fsSL https://raw.githubusercontent.com/DrSmithFr/web-ide/main/scripts/install.sh | sh -s -- --tailscale
 ```
+
+It prints the address to open once, with the pairing token. On macOS, download the archive of the [latest release](https://github.com/DrSmithFr/web-ide/releases/latest) and run `./web-ide-pod`.
+
+From the sources (Go 1.27+, Node.js 20.19+):
+
+```sh
+git clone https://github.com/DrSmithFr/web-ide.git && cd web-ide
+make build && ./bin/web-ide-pod
+```
+
+Optional: `git`, language servers in the `PATH`, a [llama.cpp](https://github.com/ggml-org/llama.cpp) or [Ollama](https://ollama.com) server for the assistant.
 
 ## Security
 
-The pod has the rights of the user running it: it reads and writes files, runs commands and opens SSH connections on your behalf. By default it only accepts connections from the local machine, and every request needs the pairing token. With `-allow-remote` the token is the only protection: use it on a trusted network only, or behind a TLS reverse proxy. See [SECURITY.md](SECURITY.md).
+The pod has the rights of your user: it reads and writes files and runs commands for the page. It only answers the local machine, every request needs the pairing token, and the agent should only be connected to model servers you trust. See [SECURITY.md](SECURITY.md).
 
-## Development
+## Contributing
 
-```sh
-make dev    # pod on :4433 (with -allow-remote) + Vite dev server with hot reload on :5173
-make test   # go vet, Go tests, TypeScript check
-make e2e    # browser tests (headless Chromium from the Playwright cache, or CHROME=/path/to/chrome)
-```
-
-Read [docs/architecture.md](docs/architecture.md) for the code layout and [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+[CONTRIBUTING.md](CONTRIBUTING.md) to get started, [docs/architecture.md](docs/architecture.md) for the code, [docs/spec.md](docs/spec.md) for the intended behaviour, [CHANGELOG.md](CHANGELOG.md) for the releases.
 
 ## License
 

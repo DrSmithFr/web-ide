@@ -2,71 +2,68 @@
 
 *[English version](README.md)*
 
-Un IDE auto-hébergé qui tourne dans le navigateur, adossé à un petit agent local — le **pod** — qui lui donne ce qu'une page web ne peut pas avoir : votre disque, SSH, des terminaux, les serveurs de langage, les bases de données, git et des modèles d'IA locaux.
+Un IDE auto-hébergé dans votre navigateur, avec un agent d'IA qui tourne sur **vos** modèles (llama.cpp, Ollama) et un kanban qui mène chaque modification de l'idée à la branche fusionnée.
 
-- **Un seul binaire.** Le pod est un exécutable Go qui embarque l'application web. Pas d'Electron, pas de cloud, pas de compte.
-- **Local avant tout.** Tout (réglages, projets, sessions, conversations) est stocké par le pod dans `~/.web-ide` et dans le dossier `.ide` du projet. Les clés privées et l'audio ne quittent jamais votre machine.
-- **La même session partout.** Ouvrez l'IDE depuis un autre navigateur ou une autre machine reliée au même pod : onglets, découpages, curseurs et terminaux sont tels que vous les avez laissés.
+![Le modèle développe un ticket dans son propre worktree git : il lit le code, modifie, lance les tests et commite](docs/images/develop.gif)
 
-![L'assistant IA modifie un fichier : étapes d'outils, diff appliqué et diagramme Mermaid](docs/images/assistant.png)
+- **Un binaire, local avant tout.** Un petit programme Go, le *pod*, sert l'interface et fait le travail sur votre machine : fichiers, git, terminaux, serveurs de langage, bases de données, appels au modèle. Pas d'Electron, pas de cloud, pas de compte.
+- **La même session partout.** Ouvrez-le depuis un autre navigateur ou appareil (via Tailscale) : onglets, découpages et terminaux sont tels que vous les avez laissés.
+- **Un cycle de développement avec l'agent.** Briefing → plan → développement dans un worktree → test → fusion, chaque étape avec sa conversation, chaque décision à vous.
 
-![Un ticket développé dans son worktree : goals, résumé de test, fichiers changés, branche fusionnée](docs/images/kanban.png)
+## De l'idée à la branche fusionnée
 
-![Le panneau Git et un diff côte à côte](docs/images/git-diff.png)
+| | |
+|---|---|
+| **1. Briefing** : décrivez le besoin ; le modèle lit le code, pose ses questions, puis écrit le ticket. <br><br> ![Briefing](docs/images/briefing.gif) | **2. Plan** : le modèle écrit le plan d'implémentation et des objectifs vérifiables. <br><br> ![Plan](docs/images/plan.png) |
+| **3. Développement** : une branche et un worktree par ticket, dans sa propre fenêtre ; le modèle code, teste, commite. <br><br> ![Développement](docs/images/develop.png) | **4. Test et fusion** : comment tester, les objectifs, le diff ; les retours repartent au modèle ; fusion quand c'est bon. <br><br> ![Revue](docs/images/review.png) |
 
-## Fonctionnalités
+Le parcours complet est dans le **[guide d'utilisation](docs/guide.fr.md)**.
 
-- **Éditeur** : rendu par blocs rapide (fichiers de 100 000 lignes), coloration syntaxique par la CSS Custom Highlight API (Go, PHP, JavaScript, TypeScript, Python, nginx…), panneaux divisés partageant les buffers, multi-curseur (occurrence suivante, sélection en colonne), repli de code, guides d'indentation, espaces visibles, recherche dans le fichier et dans tout le projet, navigation par sous-mots, barre d'état avec séparateur de ligne, encodage (UTF-8, UTF-16, Windows-1252) et indentation, raccourcis QWERTY et AZERTY, thèmes.
-- **Explorateur de fichiers** : icônes par type de fichier, couleurs git, marques de dossiers source / tests / exclus.
-- **Sûr avec les autres outils** : quand un agent d'IA ou un autre programme modifie un fichier ouvert, la modification est fusionnée dans votre buffer (fusion à trois voies) ; les vrais conflits ouvrent une fenêtre de résolution à trois volets.
-- **Navigation dans le code** par les serveurs de langage (gopls, intelephense, pyright, typescript-language-server…) : définition, références, implémentations, symboles, complétion, renommage, formatage, diagnostics.
-- **Projets locaux et SSH** : les mêmes fonctions sur un hôte distant en SSH/SFTP, avec vos clés locales.
-- **Terminaux et commandes** dans le panneau du bas, détachables dans leur propre fenêtre.
-- **Git** : état, index, commits, branches, historique, diffs côte à côte, marqueurs de gouttière.
-- **Explorateur de bases de données** : SQLite, PostgreSQL et Redis, console SQL avec transactions, vue tableur, tunnels SSH.
-- **Assistant IA** pour serveurs llama.cpp et Ollama : un agent qui lit, cherche et modifie le projet, utilise les serveurs de langage, lance des commandes, vous pose des questions, suit les instructions `CLAUDE.md` / `AGENTS.md` et les skills, avec modes Build / Plan / Briefing, compaction automatique du contexte, diagrammes Mermaid, pièces jointes image / PDF / audio et dictée locale (Whisper dans le navigateur).
-- **Kanban par projet** : une conversation en mode Briefing vous interroge et écrit les tickets ; ils passent du plan au développement et au test avec des conversations liées ; chaque ticket en développement a sa branche et son worktree git, ouverts dans leur propre fenêtre, avec diff, fusion et rebase. Voir [docs/kanban.md](docs/kanban.md).
+## Et un vrai éditeur
+
+![L'éditeur avec la complétion de gopls, et un terminal](docs/images/editor.png)
+
+- **Éditeur** : rapide sur des fichiers de 100 000 lignes, découpages, multi-curseur, repli, Search Everywhere, Recent Files, historique du presse-papier, thèmes (ici *High contrast*), raccourcis QWERTY et AZERTY, navigation complète au clavier.
+- **Serveurs de langage** : définition, références, complétion, renommage, formatage, diagnostics (gopls, typescript-language-server, pyright, intelephense…).
+- **Git** : modifications, index, commits, branches, graphe de l'historique, diffs côte à côte, worktrees.
+- **Terminaux**, **bases de données** (SQLite, PostgreSQL, Redis), **Docker** (Compose, conteneurs, journaux) et tunnels SSH.
+- **Projets locaux et SSH**, avec vos clés locales.
+- **Sûr avec les autres outils** : les modifications faites par un autre programme aux fichiers ouverts sont fusionnées dans votre buffer.
+- **Assistant** : modes Build, Plan et Briefing, `CLAUDE.md` / `AGENTS.md` et skills, diagrammes Mermaid, pièces jointes image / PDF / audio, dictée locale (Whisper dans le navigateur), croquis.
 - Interface en **anglais et en français**.
 
-## Prérequis
+| | |
+|---|---|
+| ![Le kanban](docs/images/kanban.png) | ![Le panneau Git](docs/images/git.png) |
 
-- Linux ou macOS (développé sous Linux).
-- Pour compiler : Go 1.27+, Node.js 20.19+ et npm.
-- Facultatif : `git` ; des serveurs de langage dans le `PATH` du pod (`gopls`, `intelephense`, `pyright`, `typescript-language-server`) ; un serveur [llama.cpp](https://github.com/ggml-org/llama.cpp) ou [Ollama](https://ollama.com) pour l'assistant.
+## Installation
 
-## Démarrage rapide
-
-```sh
-git clone https://github.com/DrSmithFr/web-ide.git
-cd web-ide
-make build
-./bin/web-ide-pod
-```
-
-Le pod affiche une adresse comme `http://127.0.0.1:4433/?token=…`. Ouvrez-la une fois : le jeton est gardé dans un cookie et appaire le navigateur avec le pod (il est aussi dans `~/.web-ide/token`).
-
-Options : `-addr` (adresse d'écoute), `-workspace` (dossier par défaut des nouveaux projets, `~/Apps`), `-data` (dossier des données, `~/.web-ide`), `-allow-remote` (accepter d'autres machines), `-static` (servir le front depuis un dossier).
-
-Pour lancer le pod avec votre session, installez-le comme service utilisateur systemd :
+Linux, en service lancé au démarrage ([détails](docs/guide.fr.md#installation)) :
 
 ```sh
-make service   # binaire dans ~/.local/bin, service web-ide-pod
-journalctl --user -u web-ide-pod   # affiche l'adresse avec le jeton
+curl -fsSL https://raw.githubusercontent.com/DrSmithFr/web-ide/main/scripts/install.sh | sh
+# depuis vos autres appareils, en HTTPS sur votre réseau Tailscale :
+curl -fsSL https://raw.githubusercontent.com/DrSmithFr/web-ide/main/scripts/install.sh | sh -s -- --tailscale
 ```
+
+Le script affiche l'adresse à ouvrir une fois, avec le jeton d'appairage. Sous macOS, téléchargez l'archive de la [dernière version](https://github.com/DrSmithFr/web-ide/releases/latest) et lancez `./web-ide-pod`.
+
+Depuis les sources (Go 1.27+, Node.js 20.19+) :
+
+```sh
+git clone https://github.com/DrSmithFr/web-ide.git && cd web-ide
+make build && ./bin/web-ide-pod
+```
+
+Facultatif : `git`, des serveurs de langage dans le `PATH`, un serveur [llama.cpp](https://github.com/ggml-org/llama.cpp) ou [Ollama](https://ollama.com) pour l'assistant.
 
 ## Sécurité
 
-Le pod a les droits de l'utilisateur qui le lance : il lit et écrit des fichiers, lance des commandes et ouvre des connexions SSH pour vous. Par défaut il n'accepte que la machine locale, et chaque requête exige le jeton d'appairage. Avec `-allow-remote`, le jeton est la seule protection : à réserver à un réseau de confiance, ou derrière un proxy TLS. Voir [SECURITY.md](SECURITY.md).
+Le pod a les droits de votre utilisateur : il lit et écrit des fichiers et lance des commandes pour la page. Il ne répond qu'à la machine locale, chaque requête exige le jeton d'appairage, et l'agent ne doit être branché qu'à des serveurs de modèles de confiance. Voir [SECURITY.md](SECURITY.md).
 
-## Développement
+## Contribuer
 
-```sh
-make dev    # pod sur :4433 (avec -allow-remote) + serveur Vite avec rechargement à chaud sur :5173
-make test   # go vet, tests Go, vérification TypeScript
-make e2e    # tests navigateur (Chromium sans fenêtre du cache Playwright, ou CHROME=/chemin/vers/chrome)
-```
-
-Lire [docs/architecture.md](docs/architecture.md) pour l'organisation du code et [CONTRIBUTING.md](CONTRIBUTING.md) avant de proposer une pull request.
+[CONTRIBUTING.md](CONTRIBUTING.md) pour démarrer, [docs/architecture.md](docs/architecture.md) pour le code, [docs/spec.md](docs/spec.md) pour le comportement attendu, [CHANGELOG.md](CHANGELOG.md) pour les versions.
 
 ## Licence
 

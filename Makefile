@@ -3,7 +3,7 @@ GO ?= $(shell command -v go || echo $(HOME)/sdk/go/bin/go)
 BIN := bin/web-ide-pod
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: build web pod run dev test e2e check clean install service
+.PHONY: build web pod run dev test e2e shots check clean install service
 
 build: web pod
 
@@ -42,6 +42,11 @@ test: pod/webdist/dist
 # Browser tests (headless Chromium from the Playwright cache, or CHROME=/path/to/chrome).
 e2e: build
 	./e2e/run.sh
+
+# Screenshots and GIFs of docs/images, from the recorded conversations (e2e/shots/shots.cjs).
+shots: build
+	cd e2e && { [ -d node_modules/playwright-core ] || npm install --no-audit --no-fund >/dev/null; }
+	node e2e/shots/shots.cjs
 
 # Installs the binary in ~/.local/bin.
 install: build
