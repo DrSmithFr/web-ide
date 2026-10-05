@@ -306,7 +306,7 @@
 .ai-mention.file { cursor: pointer; }
 
 /* Plan / Build */
-.ai-mode { display: inline-flex; align-items: center; gap: 5px; height: 28px; max-width: 200px; padding: 0 9px; margin-left: 2px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--fg-muted); cursor: pointer; font-size: 12px; min-width: 0; }
+.ai-mode { display: inline-flex; align-items: center; gap: 5px; height: 28px; max-width: 200px; padding: 0 9px; margin-right: 4px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--fg-muted); cursor: pointer; font-size: 12px; min-width: 0; }
 .ai-mode:hover { color: var(--fg); background: var(--bg-hover); }
 .ai-mode.plan { color: var(--info); border-color: color-mix(in srgb, var(--info) 55%, var(--line)); background: color-mix(in srgb, var(--info) 12%, transparent); }
 .ai-mode-model { color: var(--fg-muted); }

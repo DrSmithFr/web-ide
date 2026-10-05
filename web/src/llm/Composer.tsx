@@ -699,6 +699,19 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
           onPaste={onPaste}
         />
         <div class="ai-composer-bar">
+          <button
+            class="ai-mode"
+            classList={{ plan: currentMode() === 'plan', briefing: currentMode() === 'briefing' }}
+            title={modeTitles[currentMode()]()}
+            onClick={() => setMode(nextMode())}
+            data-testid="ai-mode"
+          >
+            <Icon name={modeIcons[currentMode()]} size={13} />
+            <span class="ai-mode-label">{modeLabels[currentMode()]()}</span>
+            <Show when={currentMode() === 'plan' && prefs.planServer && prefs.planModel}>
+              <span class="ai-mode-model ellipsis">· {prefs.planModel}</span>
+            </Show>
+          </button>
           <button class="ai-icon" title={t('Attach files (image, video, audio, PDF, text)')} onClick={() => fileInput.click()}>
             <Icon name="paperclip" size={16} />
           </button>
@@ -722,19 +735,6 @@ export function Composer(props: { onSettings: () => void; onSent: () => void }) 
             <Icon name="mic" size={16} />
           </button>
           <Options />
-          <button
-            class="ai-mode"
-            classList={{ plan: currentMode() === 'plan', briefing: currentMode() === 'briefing' }}
-            title={modeTitles[currentMode()]()}
-            onClick={() => setMode(nextMode())}
-            data-testid="ai-mode"
-          >
-            <Icon name={modeIcons[currentMode()]} size={13} />
-            <span class="ai-mode-label">{modeLabels[currentMode()]()}</span>
-            <Show when={currentMode() === 'plan' && prefs.planServer && prefs.planModel}>
-              <span class="ai-mode-model ellipsis">· {prefs.planModel}</span>
-            </Show>
-          </button>
           <span class="grow" />
           <Show when={chat.messages.length}>
             <ContextMenu />

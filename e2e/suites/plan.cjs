@@ -83,6 +83,7 @@ run(async ({ page }) => {
     await page.keyboard.press('Shift+Tab')
     await page.waitForSelector('[data-testid=ai-mode].plan:has-text("fake-plan")')
     assert(true, 'Shift+Tab switches to Plan mode (dedicated model shown)')
+    assert(await page.$eval('.ai-composer-bar', (b) => b.firstElementChild.dataset.testid === 'ai-mode'), 'the mode button starts the composer bar')
 
     await page.fill('.ai-composer textarea', 'Plan the renaming')
     await page.keyboard.press('Enter')
