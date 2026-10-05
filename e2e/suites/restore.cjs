@@ -7,7 +7,12 @@ run(async ({ ctx, page }) => {
   const panesBefore = (await page.$$('.pane')).length
   console.log('     tabs', JSON.stringify(tabsBefore), 'panes', panesBefore)
   assert(tabsBefore.length >= 4 && panesBefore === 2, 'session restored after reload (tabs and split)')
+  // The features suite ends with the console panel closed: the session keeps it closed.
+  assert(!(await page.isVisible('.zone-bottomLeft')), 'closed console panel still closed after reload')
+  await page.click('.rail-left .rail-btn[title="Console"]')
+  await page.waitForSelector('.xterm', { timeout: 5000 }).catch(() => {})
   assert(await page.isVisible('.xterm'), 'terminal still there after reload')
+  await page.waitForFunction(() => document.querySelector('.xterm-rows')?.textContent.includes('pod-42'), null, { timeout: 5000 }).catch(() => {})
   const term = await page.textContent('.xterm-rows')
   assert(term.includes('pod-42'), 'terminal scrollback restored')
 
