@@ -7,6 +7,7 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 ### Added
 
 - Claude Code on the kanban: an MCP endpoint of the pod (`/mcp`) gives Claude Code the tools of the assistant on the tickets, the conversations of a briefing, the start of the development, and the commands `brief`, `plan`, `dev` and `fix`; its changes are shown as written by Claude.
+- *Claude Code* menu of a ticket (brief, plan, develop, fix) running Claude Code in a terminal of the IDE; the setup command in the kanban settings.
 - File links (`/open?path=…&line=…`): a click on a file mentioned by Claude Code opens it in the IDE.
 
 ## [1.0.0] - 2026-10-05

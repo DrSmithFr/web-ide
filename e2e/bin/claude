@@ -1,0 +1,4 @@
+#!/bin/sh
+# Fake Claude Code of the browser tests: shows its arguments and waits like a session.
+echo "fake claude: $*"
+exec sleep 600

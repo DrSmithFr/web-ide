@@ -1,9 +1,11 @@
 // Board of the kanban (tab of the editor): one column per status, Done and Abandoned
 // folded. Tickets move with the buttons of their view, never by drag and drop.
-import { createMemo, createSignal, For, onMount, Show } from 'solid-js'
+import { createMemo, createResource, createSignal, For, onMount, Show } from 'solid-js'
 import { Icon } from '../ui/icons'
 import { Modal } from '../ui/overlay'
 import { errorToast } from '../ui/toast'
+import { copyText } from '../ui/clipboard'
+import { mcpAddCommand } from './claude'
 import {
   board, createTicket, ensureBoard, setMeta, newTicketOpen, openTicket, priorityLabels, setNewTicketOpen, statusLabels,
   MAX_DESCRIPTION, type Priority, type Status, type Summary,
@@ -127,6 +129,7 @@ export function Card(props: { tk: Summary; compact?: boolean }) {
 function KanbanSettings(props: { onClose: () => void }) {
   const [base, setBase] = createSignal(board.meta.base ?? '')
   const [setup, setSetup] = createSignal(board.meta.setup ?? '')
+  const [mcp] = createResource(mcpAddCommand)
   const save = async () => {
     try {
       await setMeta({ base: base().trim(), setup: setup().trim() })
@@ -160,6 +163,15 @@ function KanbanSettings(props: { onClose: () => void }) {
           <textarea class="mono" rows={3} placeholder="npm install && cp ../../../.env ." value={setup()} onInput={(e) => setSetup(e.currentTarget.value)} data-testid="kanban-setup" />
         </label>
         <p class="muted small">{t('Worktrees are created in {dir}, ignored by git.', { dir: '.ide/worktrees/' })}</p>
+        <div class="field">
+          <span>{t('Claude Code: add the kanban tools of this IDE (once, in a terminal)')}</span>
+          <div class="field-row">
+            <input class="mono grow" readonly value={mcp() ?? ''} data-testid="kanban-mcp-command" />
+            <button class="btn small" onClick={() => void copyText(mcp() ?? '')}>
+              {t('Copy')}
+            </button>
+          </div>
+        </div>
       </div>
     </Modal>
   )

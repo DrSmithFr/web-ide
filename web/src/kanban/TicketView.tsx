@@ -15,6 +15,7 @@ import {
 } from './state'
 import { abandonTicket, ChatLink, PullRequest, ticketActions, TicketChats, TicketGit } from './actions'
 import { startWorkSession } from './sessions'
+import { claudeItems } from './claude'
 import { fmtAgo, fmtDate, fmtSize, t } from '../i18n'
 import './kanban.css'
 
@@ -97,6 +98,11 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
               </button>
             )}
           </For>
+          <Show when={claudeItems(tk()).length}>
+            <button class="btn small" title={t('Run Claude Code on this ticket in a terminal')} onClick={(e) => contextMenu(e, claudeItems(tk()))} data-testid="ticket-claude">
+              Claude Code
+            </button>
+          </Show>
           <button
             class="icon-btn"
             title={t('More actions')}

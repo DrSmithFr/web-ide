@@ -38,7 +38,7 @@ PY
   rm -rf "$TMP/home" && cp -r home "$TMP/home"
   # A git identity for the commits of the tests: CI runners have none.
   GIT_AUTHOR_NAME=e2e GIT_AUTHOR_EMAIL=e2e@x GIT_COMMITTER_NAME=e2e GIT_COMMITTER_EMAIL=e2e@x \
-  WEBIDE_INSTRUCTIONS_HOME="$TMP/home" PATH="$ROOT/e2e/bin:$HOME/go/bin:$HOME/sdk/go/bin:$PATH" "$ROOT/bin/web-ide-pod" -addr "127.0.0.1:$PORT" -data "$TMP/data" -workspace "$TMP/ws" \
+  WEBIDE_INSTRUCTIONS_HOME="$TMP/home" WEBIDE_CLAUDE="$ROOT/e2e/bin/claude" PATH="$ROOT/e2e/bin:$HOME/go/bin:$HOME/sdk/go/bin:$PATH" "$ROOT/bin/web-ide-pod" -addr "127.0.0.1:$PORT" -data "$TMP/data" -workspace "$TMP/ws" \
     -static "$ROOT/pod/webdist/dist" >"$TMP/pod.log" 2>&1 </dev/null &
   POD_PID=$!
   for _ in $(seq 50); do [ -s "$TMP/data/token" ] && curl -s -o /dev/null "http://127.0.0.1:$PORT/" && break; sleep 0.1; done
