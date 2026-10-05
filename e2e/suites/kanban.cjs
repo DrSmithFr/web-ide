@@ -68,6 +68,16 @@ run(async ({ page, ctx }) => {
   assert(mcp.result && !mcp.result.isError, 'note through MCP')
   await page.waitForSelector('[data-testid=ticket-note]:has-text("Checked by Claude")')
   assert((await page.textContent('[data-testid=ticket-note]:has-text("Checked by Claude") .tk-note-head')).includes('Claude'), 'a note of Claude is shown as written by Claude')
+  // A file link of Claude Code opens the file in the window of the project.
+  const opened = await fetch(`${process.env.E2E_URL}/open?path=${encodeURIComponent(WS + '/demo/notes.txt')}&line=1`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + process.env.E2E_TOKEN },
+  }).then((r) => r.json())
+  assert(opened.opened, 'file link sent to the window')
+  await page.waitForSelector('.pane .tab.active:has-text("notes.txt")')
+  assert(true, 'file link opened in the editor')
+  await page.click('.pane .tab:has-text("#1")')
+  await page.waitForSelector('[data-testid=ticket-view]')
   await page.click('[data-testid=ticket-file-add]')
   await page.waitForSelector('.pick-input')
   await page.keyboard.type('main.go')

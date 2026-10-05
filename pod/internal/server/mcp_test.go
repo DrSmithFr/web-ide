@@ -168,3 +168,38 @@ func TestMCPConversation(t *testing.T) {
 		t.Error("other tool results are left out")
 	}
 }
+
+func TestOpenLink(t *testing.T) {
+	_, ts := newServer(t)
+	a, _ := dial(t, ts, "secret-token-0123456789abcdef0123")
+	dir := t.TempDir()
+	file := filepath.Join(dir, "a.go")
+	os.WriteFile(file, []byte("package a\n"), 0o644)
+	id := a.call("projects.create", map[string]any{"type": "local", "path": dir})["result"].(map[string]any)["id"].(string)
+	link := ts.URL + "/open?path=" + file + "&line=3"
+	noRedirect := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+
+	// Without a token: the pairing page.
+	if res, _ := noRedirect.Get(link); res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("anonymous: %d", res.StatusCode)
+	}
+	// No window on the project: the browser goes to the project page.
+	req, _ := http.NewRequest(http.MethodGet, link, nil)
+	req.Header.Set("Authorization", "Bearer secret-token-0123456789abcdef0123")
+	res, _ := noRedirect.Do(req)
+	if loc := res.Header.Get("Location"); res.StatusCode != http.StatusFound || !strings.HasPrefix(loc, "/project/"+id+"?open=") {
+		t.Fatalf("no window: %d %s", res.StatusCode, loc)
+	}
+	// A window has it: it is asked to open the file.
+	a.call("project.open", map[string]any{"id": id})
+	req, _ = http.NewRequest(http.MethodPost, link, nil)
+	req.Header.Set("Authorization", "Bearer secret-token-0123456789abcdef0123")
+	res, _ = http.DefaultClient.Do(req)
+	var out map[string]any
+	json.NewDecoder(res.Body).Decode(&out)
+	res.Body.Close()
+	if out["opened"] != true {
+		t.Fatalf("opened: %v", out)
+	}
+	a.waitEvent("ide.open", func(d map[string]any) bool { return d["path"] == file && d["line"] == float64(3) })
+}

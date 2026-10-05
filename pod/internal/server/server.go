@@ -188,6 +188,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.serveMCP(w, r)
 		return
 	}
+	if r.URL.Path == openPath && (s.bearer(r) || s.authorized(r)) {
+		s.serveOpen(w, r)
+		return
+	}
 	if r.URL.Path == "/auth" && r.Method == http.MethodPost {
 		if subtle.ConstantTimeCompare([]byte(strings.TrimSpace(r.FormValue("token"))), []byte(s.Token)) != 1 {
 			w.WriteHeader(http.StatusUnauthorized)

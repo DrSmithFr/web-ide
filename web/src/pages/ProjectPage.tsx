@@ -4,7 +4,7 @@ import { Dynamic } from 'solid-js/web'
 import { RpcError, formatRate, on as onPod, podRates, podState, request } from '../pod/rpc'
 import {
   activeLeaf, activeTab, closeTab, conflictedDocs, cycleTab, docsVersion, mutate, navigate as navHistory, openProject, project, relPath, reopenProject, root,
-  saveAll, session, setConflictOpener, splitPane, closeProject,
+  openFile, saveAll, session, setConflictOpener, splitPane, closeProject,
 } from '../state/project'
 import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, toggleTool, toolsIn, zoneOf, zones, type Zone } from '../state/zones'
 import { focusEditor, focusPart, setFocusPart, trackFocus } from '../state/focus'
@@ -428,6 +428,13 @@ export function ProjectPage(props: { id: string }) {
         await refreshBoard()
         const cmd = board.meta.setup?.trim()
         if (cmd) void newConsole({ kind: 'task', command: ['sh', '-c', cmd], title: t('Worktree setup') })
+      }
+      // Opened from a file link of Claude Code while no window had the project.
+      const open = new URLSearchParams(location.search).get('open')
+      if (open) {
+        history.replaceState(null, '', location.pathname)
+        const [, path, line] = /^(.*?)(?::(\d+))?$/.exec(open)!
+        void openFile(Number(line) > 0 ? { path, line: Number(line) - 1 } : path)
       }
       setReady(true)
       refreshGit(0)

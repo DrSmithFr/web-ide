@@ -69,6 +69,7 @@ claude mcp add --transport http --scope user web-ide http://127.0.0.1:4433/mcp -
 - Every tool takes `cwd`, the folder Claude works in: the deepest local project holding it gives the kanban; in the worktree of a ticket, that ticket is the default one.
 - Tools: those of the assistant, on any ticket (`kanban_list`, `kanban_get`, `kanban_create`, `kanban_update`, `kanban_add_note`, `kanban_set_plan`, `kanban_goal`, `kanban_feedback`, `kanban_move`, `kanban_link_commit`), plus `kanban_conversation` (a linked conversation of the assistant: messages and `ask_user` answers) and `kanban_start` (*Start development*: branch, worktree, setup command).
 - Author `claude`: the rules of the model, plus *To do* → *In progress* through `kanban_start`; shown as Claude in the notes and the history.
+- File links: `/open?path=<absolute path>&line=<n>` (cookie or bearer) opens the file in the windows of its project (`ide.open` event), or the project page on it (`?open=`) when none has it; the instructions of the endpoint ask Claude to write the files it mentions as such links.
 - Prompts, commands of Claude Code: `/mcp__web-ide__brief <n>` (take over a briefing of the local assistant: check the need, complete the ticket), `plan`, `dev`, `fix`.
 
 ## Git

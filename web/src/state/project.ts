@@ -603,6 +603,12 @@ on('fs.changed', (e: { path: string; content: string; rev: number; saved?: boole
   if (e.encoding && e.eol) d.setFormat({ encoding: e.encoding, eol: e.eol })
   applyRemote(d, e.content, e.rev, e.saved)
 })
+// A file link of Claude Code (/open on the pod): line counts from 1.
+on('ide.open', (e: { path: string; line: number }) => {
+  void openFile(e.line > 0 ? { path: e.path, line: e.line - 1 } : e.path)
+  window.focus()
+})
+
 on('fs.deleted', (e: { path: string }) => {
   const d = getDoc(e.path)
   if (d) {
