@@ -11,7 +11,7 @@ Thanks for your interest! Bug reports, ideas and pull requests are welcome.
 
 ```sh
 make build   # installs the npm dependencies, builds the front end, then the pod
-make dev     # pod + Vite dev server with hot reload (http://<host>:5173/?token=…)
+make dev     # pod (port 4434, data in ~/.web-ide-dev) + Vite dev server with hot reload (http://<host>:5173/?token=…)
 ```
 
 ## Checks

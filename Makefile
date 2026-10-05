@@ -1,6 +1,7 @@
 # Web IDE: pod Go (single binary) + front SolidJS embedded in it.
 GO ?= $(shell command -v go || echo $(HOME)/sdk/go/bin/go)
 BIN := bin/web-ide-pod
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 .PHONY: build web pod run dev test e2e check clean install service
 
@@ -14,7 +15,7 @@ pod/webdist/dist:
 	mkdir -p $@ && [ -e $@/index.html ] || echo '<!doctype html><p>Front end not built: run make web</p>' > $@/index.html
 
 pod: pod/webdist/dist
-	cd pod && $(GO) build -trimpath -ldflags "-s -w" -o ../$(BIN) .
+	cd pod && $(GO) build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o ../$(BIN) .
 
 run: build
 	./$(BIN)
@@ -22,9 +23,17 @@ run: build
 # Development: the pod serves the API, Vite serves the front with hot reload.
 # Both accept other machines (-allow-remote): open http://<host>:5173/?token=… from anywhere,
 # the pairing goes through the Vite proxy. The token stays the only protection.
-DEV_ADDR ?= 0.0.0.0:4433
-dev: pod/webdist/dist
-	cd pod && $(GO) run . -addr $(DEV_ADDR) -allow-remote & cd web && npm run dev -- --host 0.0.0.0
+# The dev pod has its own port and data folder, so it never touches the installed one (make
+# service); its data starts as a copy of ~/.web-ide (the speech models are shared).
+DEV_ADDR ?= 0.0.0.0:4434
+DEV_DATA ?= $(HOME)/.web-ide-dev
+dev: pod/webdist/dist $(DEV_DATA)
+	cd pod && $(GO) run . -addr $(DEV_ADDR) -data $(DEV_DATA) -allow-remote & cd web && POD=http://127.0.0.1:$(lastword $(subst :, ,$(DEV_ADDR))) npm run dev -- --host 0.0.0.0
+
+$(DEV_DATA):
+	mkdir -p $@
+	[ ! -d $(HOME)/.web-ide ] || for f in $(HOME)/.web-ide/*; do \
+	  case $$f in */models) ln -s $$f $@/models ;; */config.json) ;; *) cp -r $$f $@/ ;; esac; done
 
 test: pod/webdist/dist
 	cd pod && $(GO) vet ./... && $(GO) test ./...
@@ -38,13 +47,11 @@ e2e: build
 install: build
 	install -Dm755 $(BIN) $(HOME)/.local/bin/web-ide-pod
 
-# Starts the pod with the user session (systemd user service). The URL with the token is in
+# Runs this build as a systemd user service started at boot (scripts/install.sh; releases are
+# installed the same way: scripts/install.sh v1.0.0). The URL with the token is in
 # `journalctl --user -u web-ide-pod`, or in ~/.web-ide/token.
-service: install
-	install -Dm644 pod/web-ide-pod.service $(HOME)/.config/systemd/user/web-ide-pod.service
-	systemctl --user daemon-reload
-	systemctl --user enable --now web-ide-pod
-	systemctl --user restart web-ide-pod
+service: build
+	./scripts/install.sh --binary $(BIN)
 
 clean:
 	rm -rf bin pod/webdist/dist/assets

@@ -55,7 +55,7 @@ func (s *Server) registerGlobal() {
 	})
 	s.handle("workspace.get", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 		home, _ := os.UserHomeDir()
-		return map[string]string{"workspace": s.Cfg.Workspace, "home": home, "dataDir": s.Store.Dir()}, nil
+		return map[string]string{"workspace": s.Cfg.Workspace, "home": home, "dataDir": s.Store.Dir(), "version": s.Version}, nil
 	})
 	s.handle("workspace.set", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 		a, err := bind[struct{ Path string }](p)

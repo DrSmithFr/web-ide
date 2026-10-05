@@ -26,6 +26,9 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/webdist"
 )
 
+// version is set at build time (make build: git describe).
+var version = "dev"
+
 func main() {
 	home, _ := os.UserHomeDir()
 	dataDir := flag.String("data", filepath.Join(home, ".web-ide"), "folder of the settings, projects and sessions")
@@ -33,7 +36,12 @@ func main() {
 	workspace := flag.String("workspace", "", "default workspace (default: ~/Apps)")
 	allowRemote := flag.Bool("allow-remote", false, "accept connections from other machines (protected by the token only)")
 	static := flag.String("static", "", "serve the front end from this folder instead of the embedded one")
+	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
 
 	st, err := store.Open(config.ExpandHome(*dataDir))
 	check(err)
@@ -65,6 +73,7 @@ func main() {
 		Pool:        sshx.NewPool(sshx.NewHostKeys(st.Path("known_hosts"))),
 		Static:      webdist.FS(),
 		AllowRemote: *allowRemote,
+		Version:     version,
 	}
 	if *static != "" {
 		srv.Static = os.DirFS(*static)
@@ -83,7 +92,7 @@ func main() {
 		_ = httpSrv.Shutdown(ctx)
 	}()
 
-	fmt.Printf("Web IDE pod\n  data      : %s\n  workspace : %s\n  open      : http://%s/?token=%s\n", st.Dir(), cfg.Workspace, cfg.Addr, token)
+	fmt.Printf("Web IDE pod %s\n  data      : %s\n  workspace : %s\n  open      : http://%s/?token=%s\n", version, st.Dir(), cfg.Workspace, cfg.Addr, token)
 	if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}

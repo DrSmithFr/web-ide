@@ -1,0 +1,49 @@
+name: Release
+
+# Pushing a tag v* builds the pod for Linux and macOS and publishes a GitHub release with the
+# notes of that version in CHANGELOG.md. scripts/install.sh downloads these archives.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: pod/go.mod
+          cache-dependency-path: pod/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Unit tests
+        run: make build test
+      - name: Build the archives
+        run: |
+          mkdir -p dist
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            os=${target%/*} arch=${target#*/}
+            dir=$(mktemp -d)
+            (cd pod && CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath \
+              -ldflags "-s -w -X main.version=$GITHUB_REF_NAME" -o "$dir/web-ide-pod" .)
+            cp README.md LICENSE "$dir/"
+            tar -czf "dist/web-ide-pod-$os-$arch.tar.gz" -C "$dir" .
+          done
+          (cd dist && sha256sum *.tar.gz > SHA256SUMS)
+      - name: Release notes from CHANGELOG.md
+        run: |
+          awk -v v="${GITHUB_REF_NAME#v}" '/^## /{p = index($0, "[" v "]") > 0; next} p' CHANGELOG.md > notes.md
+          test -s notes.md
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "Web IDE $GITHUB_REF_NAME" --notes-file notes.md

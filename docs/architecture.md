@@ -100,7 +100,8 @@ See [kanban.md](kanban.md). A ticket worktree is registered as a hidden child pr
 
 ```
 make build          # front end (Vite) then pod binary bin/web-ide-pod (front end embedded)
-make dev            # pod with -allow-remote on 0.0.0.0:4433 + Vite on 0.0.0.0:5173 (hot reload)
+make dev            # pod with -allow-remote on 0.0.0.0:4434 and data in ~/.web-ide-dev + Vite on 0.0.0.0:5173 (hot reload)
+make service        # this build as a systemd user service started at boot (scripts/install.sh)
 make test           # go vet + go test + tsc
 make e2e            # browser tests, all suites (a few minutes)
 ./e2e/run.sh git    # one suite: editing editor features restore+ keyboard git projects explorer lsp llm agent chat plan doodle kanban kanbanai kanbangit docker tunnels i18n speech perf
@@ -108,7 +109,8 @@ make e2e            # browser tests, all suites (a few minutes)
 
 - Each e2e suite gets a fresh pod with temporary data and a workspace copied from `e2e/fixtures`; a suite ending with `+` reuses the previous pod. The assistant suites use a scripted fake OpenAI-compatible server. Chromium comes from the Playwright cache or `CHROME=…`; the `speech` suite downloads `whisper-tiny` once (kept in `~/.cache/web-ide-e2e/models`); the `lsp` suite needs `gopls`; the `docker` suite needs Docker with Compose and the `postgres:17-alpine` image (skipped otherwise); the `tunnels` suite builds `sshtestd` (Go) and opens an SSH project on it.
 - Optional database driver tests against real servers: `WEBIDE_TEST_PG=host:port:user:pass WEBIDE_TEST_REDIS=host:port:pass go test ./internal/db/`.
-- Code navigation needs the language servers in the pod's `PATH` (`gopls` also needs `go`).
+- Code navigation needs the language servers in the pod's `PATH` (`gopls` also needs `go`). The service keeps the `PATH` of the shell that installed it.
+- Versions: `make build` stamps the binary with `git describe` (`web-ide-pod -version`, shown on the home page). Pushing a tag `v*` runs `.github/workflows/release.yml`, which builds the Linux and macOS archives and publishes the release with the notes of that version in `CHANGELOG.md`; `scripts/install.sh v1.2.3` installs one as the service.
 
 ## Pitfalls
 

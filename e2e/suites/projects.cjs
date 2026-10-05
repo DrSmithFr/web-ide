@@ -10,6 +10,10 @@ const env = { ...process.env, GIT_AUTHOR_NAME: 'e2e', GIT_AUTHOR_EMAIL: 'e2e@x',
 const git = (cmd, cwd = WS + '/demo') => execSync(`git ${cmd}`, { cwd, env, encoding: 'utf8' }).trim()
 
 run(async ({ page, ctx }) => {
+  // The home page shows the version of the pod (git describe of the build).
+  await page.waitForFunction(() => document.querySelector('[data-testid=pod-version]')?.textContent)
+  const version = execSync(`${__dirname}/../../bin/web-ide-pod -version`, { encoding: 'utf8' }).trim()
+  assert((await page.textContent('[data-testid=pod-version]')) === version, 'home page: version of the pod')
   await openProject(page)
   // A project without an icon gets one generated: initials of its name, saved in .ide.
   await page.waitForFunction(() => decodeURIComponent(document.querySelector('link[rel="icon"]').href).includes('>DE</text>'), null, { timeout: 5000 }).catch(() => {})

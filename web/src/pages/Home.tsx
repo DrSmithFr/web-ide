@@ -78,6 +78,7 @@ export function Home() {
     <div class="home">
       <header class="home-head">
         <h1>Web IDE</h1>
+        <span class="muted small mono" data-testid="pod-version">{ws()?.version}</span>
         <span class="grow" />
         <button class="icon-btn" title={t('Settings')} onClick={() => openSettings('workspace')}>
           <Icon name="gear" />

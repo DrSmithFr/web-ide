@@ -57,6 +57,8 @@ type Server struct {
 	Static  fs.FS
 	// AllowRemote accepts connections from other machines (the token is then the only protection).
 	AllowRemote bool
+	// Version of the pod, shown by the page.
+	Version string
 
 	mu       sync.Mutex
 	clients  map[*Client]struct{}
