@@ -46,7 +46,7 @@ Ctrl+Z / Ctrl+Shift+Z undo and redo every change. Escape clears the selection, t
 
 A layout is an element like the others (several per doodle, movable and resizable with the select tool, drawn under the rest): a rectangle split recursively.
 
-- The layout tool (K) draws its box; a click on a zone opens its menu: split it into 2 to 4 columns or rows, a grid (2×2, 3×3) or a border layout (north, south, west, east and center, named), merge its parts, name it, or delete the layout (on its outer zone). Escape closes the menu.
+- The layout tool (K) draws its box; a click on a zone opens its menu: split it into 2 to 4 columns or rows, a grid (2×2, 3×3) or a border layout (north, south, west, east and center, named), merge its parts, name it, delete it (the previous part, else the next, takes its place; a zone left with one part takes its content), or delete the layout (on its outer zone). One line per group of options; Escape closes the menu.
 - Dividers are dragged with the layout or the select tool (within the two parts they separate, 5 % at least); they snap to the grid when it is on.
 - A double-click names a zone (`sidebar`, `header`…); the name is drawn at its center.
 

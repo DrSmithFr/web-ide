@@ -57,11 +57,11 @@
 .dd-canvas.col-resize { cursor: col-resize; }
 .dd-canvas.row-resize { cursor: row-resize; }
 .dd-zone-hl { position: absolute; border: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); pointer-events: none; }
-.dd-zone-menu { position: absolute; display: flex; align-items: center; flex-wrap: wrap; gap: 2px; max-width: 460px; padding: 4px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg-3); box-shadow: 0 6px 20px rgb(0 0 0 / 0.35); font-size: 12px; z-index: 2; }
+.dd-zone-menu { position: absolute; display: flex; flex-direction: column; gap: 2px; padding: 4px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg-3); box-shadow: 0 6px 20px rgb(0 0 0 / 0.35); font-size: 12px; z-index: 2; }
 .dd-zone-menu button { min-width: 26px; height: 24px; padding: 0 6px; border: 1px solid transparent; border-radius: 4px; background: none; color: var(--fg); cursor: pointer; }
 .dd-zone-menu button:hover { background: var(--bg-hover); border-color: var(--line); }
 .dd-zone-menu button.danger { color: var(--danger); }
-.dd-zone-label { margin: 0 2px 0 6px; color: var(--fg-muted); }
-.dd-zone-label:first-child { margin-left: 2px; }
-.dd-zone-sep { width: 1px; height: 18px; margin: 0 4px; background: var(--line); }
+.dd-zone-row { display: flex; align-items: center; gap: 2px; }
+.dd-zone-row.actions { margin-top: 2px; padding-top: 4px; border-top: 1px solid var(--line); }
+.dd-zone-label { width: 64px; padding-left: 4px; color: var(--fg-muted); }
 .dd-zone-name { position: absolute; transform: translate(-50%, -50%); width: 140px; padding: 3px 6px; border: 1px solid var(--accent); border-radius: 4px; background: var(--bg); color: var(--fg); font-size: 13px; text-align: center; }

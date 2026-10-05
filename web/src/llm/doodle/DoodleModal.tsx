@@ -31,6 +31,7 @@ import {
   penColors,
   presets,
   pressureWidth,
+  removeZone,
   rescale,
   TEXT_SIZES,
   textBox,
@@ -866,6 +867,11 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
                           root={zs().path.length === 0}
                           onChange={(f: (z: Zone) => Zone) => replaceLayout(zs().id, (l) => updateZone(l, zs().path, f))}
                           onName={() => setNaming({ id: zs().id, path: zs().path, value: zoneAtPath(el()!, zs().path)?.name ?? '' })}
+                          onRemove={() => {
+                            const path = zs().path
+                            replaceLayout(zs().id, (l) => removeZone(l, path))
+                            setZoneSel({ id: zs().id, path: path.slice(0, -1) })
+                          }}
                           onDelete={() => {
                             const d = h.doc()
                             h.apply({ ...d, elements: d.elements.filter((x) => x.id !== zs().id) })

@@ -378,6 +378,22 @@ export function updateZone(el: Layout, path: number[], f: (z: Zone) => Zone): La
 
 export const zoneAtPath = (el: Layout, path: number[]): Zone | undefined => path.reduce<Zone | undefined>((z, i) => z?.split?.children[i], el.root)
 
+/**
+ * Removes a part of a split zone: its neighbor (the previous one, else the next) takes its
+ * place; a zone left with a single part takes the content of that part.
+ */
+export function removeZone(el: Layout, path: number[]): Layout {
+  const i = path[path.length - 1]
+  return updateZone(el, path.slice(0, -1), (z) => {
+    const s = z.split!
+    const to = i > 0 ? i - 1 : 1
+    const sizes = s.sizes.map((v, j) => (j === to ? v + s.sizes[i] : v)).filter((_, j) => j !== i)
+    const children = s.children.filter((_, j) => j !== i)
+    if (children.length === 1) return { name: z.name ?? children[0].name, split: children[0].split }
+    return { ...z, split: { ...s, sizes, children } }
+  })
+}
+
 const even = (n: number) => Array.from({ length: n }, () => 1 / n)
 
 export function splitZone(z: Zone, dir: 'rows' | 'cols', n: number): Zone {

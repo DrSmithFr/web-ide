@@ -1403,5 +1403,7 @@
   "Copy the description": "Copier la description",
   "Opens an editable copy, joined to the next message": "Ouvre une copie modifiable, jointe au prochain message",
   "Reuse the doodle": "Reprendre le doodle",
-  "Description sent to the model": "Description envoyée au modèle"
+  "Description sent to the model": "Description envoyée au modèle",
+  "Its neighbor takes its place": "Sa voisine prend sa place",
+  "Delete the zone": "Supprimer la zone"
 }
