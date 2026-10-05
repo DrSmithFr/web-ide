@@ -75,7 +75,8 @@ func gitIn(t *testing.T, dir string, args ...string) string {
 }
 
 func TestKanbanWorktree(t *testing.T) {
-	for k, v := range map[string]string{"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@x", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@x"} {
+	// No global configuration: a global ignore file (.ide/) would hide what the test checks.
+	for k, v := range map[string]string{"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@x", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@x", "GIT_CONFIG_GLOBAL": os.DevNull} {
 		t.Setenv(k, v)
 	}
 	s, ts := newServer(t)
@@ -107,8 +108,9 @@ func TestKanbanWorktree(t *testing.T) {
 			t.Fatal("worktree project listed")
 		}
 	}
-	if gitIn(t, dir, "status", "--porcelain") != "" {
-		t.Fatalf("main folder not clean: %s", gitIn(t, dir, "status", "--porcelain"))
+	// The worktree and the bases stay out of git; .ide/.gitignore itself is for the user to commit.
+	if st := gitIn(t, dir, "status", "--porcelain", "--untracked-files=all"); st != "?? .ide/.gitignore" {
+		t.Fatalf("main folder not clean: %s", st)
 	}
 	b, _ := dial(t, ts, "secret-token-0123456789abcdef0123")
 	b.call("project.open", map[string]any{"id": child})

@@ -89,7 +89,9 @@ run(async ({ page, ctx }) => {
     assert(true, 'worktree window opened with its banner')
     assert(fs.existsSync(wt + '/src/main.go'), 'worktree created in .ide/worktrees')
     assert(git('branch --show-current', wt) === 'ticket/1-data-export', 'branch of the ticket')
-    assert(git('status --porcelain') === '', 'the main folder stays clean (worktrees ignored)')
+    // Only the files of .ide meant to be committed may show up (icon, .gitignore), never the worktree or the bases.
+    const status = git('status --porcelain --untracked-files=all')
+    assert(!/worktrees|\.db/.test(status) && status.split('\n').every((l) => !l || l.startsWith('?? .ide/')), 'the main folder stays clean (worktrees ignored): ' + status)
     await win.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Fait.")', { timeout: 20000 })
     const r0 = requests[0]
     const bashOut = (requests[1].messages.find((m) => m.tool_call_id === 'b1') ?? {}).content ?? ''
