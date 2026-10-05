@@ -2,7 +2,7 @@
 // description built from the elements, which gives the proportions an image does not.
 import type { Caps, Part } from '../state'
 import type { Prepared } from '../attachments'
-import { bounds, colorName, presets, type DoodleDoc, type Element, type Frame } from './model'
+import { bounds, colorName, contains, isShape, presets, type DoodleDoc, type Element, type Frame } from './model'
 import { toSVG } from './render'
 
 const MAX_SIDE = 1600
@@ -50,14 +50,75 @@ function area(r: Frame): string {
   return v === 'middle' && hz === 'center' ? 'center' : `${v} ${hz}`
 }
 
+function place(r: Frame): string {
+  return `${area(r)} (x ${pct(r.x)}–${pct(r.x + r.w)} %, y ${pct(r.y)}–${pct(r.y + r.h)} %)`
+}
+
 function strokes(list: { el: Element; r: Frame }[], label: string): string[] {
   if (!list.length) return []
   const lines = [`${label}: ${list.length}`]
-  for (const { el, r } of list.slice(0, MAX_LISTED)) {
-    lines.push(`- ${colorName(el)}, ${area(r)} (x ${pct(r.x)}–${pct(r.x + r.w)} %, y ${pct(r.y)}–${pct(r.y + r.h)} %)`)
-  }
+  for (const { el, r } of list.slice(0, MAX_LISTED)) lines.push(`- ${colorName(el)}, ${place(r)}`)
   if (list.length > MAX_LISTED) lines.push(`- … ${list.length - MAX_LISTED} more`)
   return lines
+}
+
+const quote = (s: string) => JSON.stringify(s.replace(/\s+/g, ' ').trim())
+const sizeNames = { s: 'small', m: 'medium', l: 'large' }
+
+/** Shapes and texts, numbered so that arrows and containers can refer to them. */
+function items(list: { el: Element; r: Frame }[], fr: Frame): string[] {
+  const shown = list.filter((x) => x.el.type === 'text' || isShape(x.el))
+  if (!shown.length) return []
+  const num = new Map(shown.map((x, i) => [x.el.id, i + 1]))
+  const frac = (x: number, y: number) => ({ x: (x - fr.x) / fr.w, y: (y - fr.y) / fr.h })
+  // The smallest closed shape around a point or a box.
+  const around = (b: Frame, self: string) => {
+    let best: { el: Element; area: number } | null = null
+    for (const { el } of shown) {
+      if (el.id === self || (el.type !== 'rect' && el.type !== 'ellipse')) continue
+      const o = bounds(el)
+      if (!contains({ x: o.x - 12, y: o.y - 12, w: o.w + 24, h: o.h + 24 }, b)) continue
+      if (!best || o.w * o.h < best.area) best = { el, area: o.w * o.h }
+    }
+    return best?.el
+  }
+  // The smallest shape or text an end of an arrow touches.
+  const at = (x: number, y: number) => {
+    let best: { el: Element; area: number } | null = null
+    for (const { el } of shown) {
+      if (el.type === 'line' || el.type === 'arrow' || !hitBox(el, x, y)) continue
+      const o = bounds(el)
+      if (!best || o.w * o.h < best.area) best = { el, area: o.w * o.h }
+    }
+    return best?.el
+  }
+  const ref = (el: Element | undefined) => (el ? `[${num.get(el.id)}]` : '')
+  const lines = ['Shapes and texts:']
+  for (const { el, r } of shown.slice(0, MAX_LISTED * 2)) {
+    const n = `[${num.get(el.id)}]`
+    if (el.type === 'text') {
+      const inside = around(bounds(el), el.id)
+      lines.push(`${n} text ${quote(el.text)}, ${sizeNames[el.size]}, ${colorName(el)}, ${place(r)}${inside ? `, inside ${ref(inside)}` : ''}`)
+    } else if (el.type === 'line' || el.type === 'arrow') {
+      const a = frac(el.x1, el.y1)
+      const b = frac(el.x2, el.y2)
+      const from = at(el.x1, el.y1)
+      const to = at(el.x2, el.y2)
+      const link = from || to ? ` from ${ref(from) || 'nothing'} to ${ref(to) || 'nothing'}` : ''
+      lines.push(`${n} ${el.type}, ${colorName(el)},${link} (${pct(a.x)} %, ${pct(a.y)} % → ${pct(b.x)} %, ${pct(b.y)} %)`)
+    } else {
+      const labels = shown.filter((x) => x.el.type === 'text' && around(bounds(x.el), x.el.id)?.id === el.id).map((x) => quote((x.el as { text: string }).text))
+      const inside = around(bounds(el), el.id)
+      lines.push(`${n} ${el.type === 'rect' ? 'rectangle' : 'ellipse'}, ${colorName(el)}, ${place(r)}${labels.length ? `, labeled ${labels.join(' ')}` : ''}${inside ? `, inside ${ref(inside)}` : ''}`)
+    }
+  }
+  return lines
+}
+
+/** Does a point touch the box of an element (an arrow end on a shape)? */
+function hitBox(el: Element, x: number, y: number): boolean {
+  const b = bounds(el)
+  return x >= b.x - 12 && x <= b.x + b.w + 12 && y >= b.y - 12 && y <= b.y + b.h + 12
 }
 
 /** Text read by the model (always English, like the rest of what it reads). */
@@ -67,6 +128,7 @@ export function describe(doc: DoodleDoc, name: string): string {
   const seen = doc.elements.map((el) => ({ el, r: inFrame(bounds(el), fr) })).filter((x): x is { el: Element; r: Frame } => !!x.r)
   const lines = [
     `Doodle "${name}" drawn by the user. Frame ${Math.round(fr.w)}×${Math.round(fr.h)} (${preset}); positions in % of the frame from its top left corner.`,
+    ...items(seen, fr),
     ...strokes(seen.filter((x) => x.el.type === 'pen'), 'Free pen strokes (hand drawn, shapes approximate)'),
     ...strokes(seen.filter((x) => x.el.type === 'marker'), 'Highlighter strokes (emphasis)'),
   ]

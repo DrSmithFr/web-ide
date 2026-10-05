@@ -28,7 +28,7 @@
 
 .dd-canvas { position: relative; flex: 1; min-height: 0; overflow: hidden; background: var(--bg-3); touch-action: none; cursor: crosshair; outline: none; }
 .dd-canvas.panning { cursor: grab; }
-.dd-canvas.eraser { cursor: none; }
+
 .dd-svg { position: absolute; inset: 0; display: block; }
 .dd-frame-bg { fill: var(--bg); }
 .dd-frame { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 6 4; pointer-events: none; }
@@ -45,3 +45,11 @@
   .dd-body { flex-direction: column; }
   .dd-chat { width: auto; height: 38%; border-left: 0; border-top: 1px solid var(--line); }
 }
+
+.dd-canvas.tool-select { cursor: default; }
+.dd-canvas.tool-text { cursor: text; }
+.dd-canvas.tool-eraser { cursor: none; }
+.dd-sel { fill: none; stroke: var(--accent); stroke-width: 1; stroke-dasharray: 4 3; pointer-events: none; }
+.dd-band { fill: color-mix(in srgb, var(--accent) 12%, transparent); stroke: var(--accent); stroke-width: 1; pointer-events: none; }
+.dd-handle.sel { width: 10px; height: 10px; margin: -5px 0 0 -5px; border-width: 1.5px; border-radius: 50%; }
+.dd-text-edit { position: absolute; min-width: 40px; padding: 0; margin: 0; border: 0; outline: 1px dashed var(--accent); background: transparent; resize: none; overflow: hidden; white-space: pre; }

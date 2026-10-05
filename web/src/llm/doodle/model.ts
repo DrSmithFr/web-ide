@@ -1,5 +1,6 @@
 // Document of a doodle: elements in world coordinates, the frame sent to the model, and the
-// geometry of the tools (pressure, erasing). Kept as plain JSON: it is stored in the message.
+// geometry of the tools (pressure, erasing, hit test, moves). Kept as plain JSON: it is
+// stored in the message.
 
 export type PenColor = 'ink' | 'red' | 'blue' | 'green'
 export type FluoColor = 'yellow' | 'lime' | 'pink' | 'cyan'
@@ -12,7 +13,32 @@ export interface Stroke {
   pts: number[]
 }
 
-export type Element = Stroke
+/** Rectangle and ellipse fill the box of the two points; line and arrow go from 1 to 2. */
+export interface Shape {
+  id: string
+  type: 'rect' | 'ellipse' | 'line' | 'arrow'
+  color: PenColor
+  width: number
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+}
+
+export type TextSize = 's' | 'm' | 'l'
+
+/** Text from its top left corner, lines separated by \n. */
+export interface Text {
+  id: string
+  type: 'text'
+  color: PenColor
+  size: TextSize
+  x: number
+  y: number
+  text: string
+}
+
+export type Element = Stroke | Shape | Text
 
 export interface Frame {
   x: number
@@ -55,6 +81,12 @@ export const fluoColors: Record<FluoColor, { light: string; dark: string; name: 
 export const MARKER_OPACITY = 0.45
 export const PEN_SIZES = { thin: 2, normal: 4 } as const
 export const MARKER_SIZE = 18
+export const TEXT_SIZES: Record<TextSize, number> = { s: 16, m: 24, l: 36 }
+export const LINE_HEIGHT = 1.25
+export const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
+
+export const isStroke = (el: Element): el is Stroke => el.type === 'pen' || el.type === 'marker'
+export const isShape = (el: Element): el is Shape => el.type === 'rect' || el.type === 'ellipse' || el.type === 'line' || el.type === 'arrow'
 
 export function colorOf(el: Element, dark: boolean): string {
   const c = el.type === 'marker' ? fluoColors[el.color as FluoColor] : penColors[el.color as PenColor]
@@ -98,7 +130,39 @@ export function addPoint(pts: number[], x: number, y: number, w: number, minGap:
   pts.push(round(x), round(y), round(w))
 }
 
+// ---------- text metrics ----------
+
+let ctx: CanvasRenderingContext2D | null = null
+
+export function textLines(el: Text): string[] {
+  return el.text.split('\n')
+}
+
+/** Size of a text block (measured with the font of the canvas and the export). */
+export function textBox(el: Text): { w: number; h: number } {
+  const fs = TEXT_SIZES[el.size]
+  ctx ??= document.createElement('canvas').getContext('2d')
+  let w = fs * 0.6
+  if (ctx) {
+    ctx.font = `${fs}px ${FONT}`
+    for (const l of textLines(el)) w = Math.max(w, ctx.measureText(l).width)
+  }
+  return { w, h: textLines(el).length * fs * LINE_HEIGHT }
+}
+
+// ---------- geometry ----------
+
 export function bounds(el: Element): Frame {
+  if (el.type === 'text') {
+    const b = textBox(el)
+    return { x: el.x, y: el.y, w: b.w, h: b.h }
+  }
+  if (isShape(el)) {
+    const r = el.width / 2
+    const x = Math.min(el.x1, el.x2)
+    const y = Math.min(el.y1, el.y2)
+    return { x: x - r, y: y - r, w: Math.abs(el.x2 - el.x1) + 2 * r, h: Math.abs(el.y2 - el.y1) + 2 * r }
+  }
   let x0 = Infinity
   let y0 = Infinity
   let x1 = -Infinity
@@ -113,6 +177,17 @@ export function bounds(el: Element): Frame {
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
 }
 
+export function union(boxes: Frame[]): Frame | null {
+  if (!boxes.length) return null
+  const x0 = Math.min(...boxes.map((b) => b.x))
+  const y0 = Math.min(...boxes.map((b) => b.y))
+  const x1 = Math.max(...boxes.map((b) => b.x + b.w))
+  const y1 = Math.max(...boxes.map((b) => b.y + b.h))
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
+}
+
+export const contains = (outer: Frame, inner: Frame) => inner.x >= outer.x && inner.y >= outer.y && inner.x + inner.w <= outer.x + outer.w && inner.y + inner.h <= outer.y + outer.h
+
 function segDist(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
   const dx = bx - ax
   const dy = by - ay
@@ -121,8 +196,24 @@ function segDist(px: number, py: number, ax: number, ay: number, bx: number, by:
   return Math.hypot(px - ax - t * dx, py - ay - t * dy)
 }
 
-/** Does a circle of the eraser touch the element? */
-export function touches(el: Element, x: number, y: number, r: number): boolean {
+/** Is the point within r of the element? Closed shapes and texts count their inside. */
+export function hit(el: Element, x: number, y: number, r: number): boolean {
+  if (el.type === 'text') {
+    const b = bounds(el)
+    return x >= b.x - r && x <= b.x + b.w + r && y >= b.y - r && y <= b.y + b.h + r
+  }
+  if (isShape(el)) {
+    const tol = r + el.width / 2
+    if (el.type === 'line' || el.type === 'arrow') return segDist(x, y, el.x1, el.y1, el.x2, el.y2) <= tol
+    const x0 = Math.min(el.x1, el.x2) - tol
+    const y0 = Math.min(el.y1, el.y2) - tol
+    const x1 = Math.max(el.x1, el.x2) + tol
+    const y1 = Math.max(el.y1, el.y2) + tol
+    if (el.type === 'rect') return x >= x0 && x <= x1 && y >= y0 && y <= y1
+    const rx = (x1 - x0) / 2 || 1
+    const ry = (y1 - y0) / 2 || 1
+    return ((x - x0 - rx) / rx) ** 2 + ((y - y0 - ry) / ry) ** 2 <= 1
+  }
   const p = el.pts
   if (p.length === 3) return Math.hypot(p[0] - x, p[1] - y) <= r + p[2] / 2
   for (let i = 0; i + 3 < p.length; i += 3) {
@@ -131,22 +222,56 @@ export function touches(el: Element, x: number, y: number, r: number): boolean {
   return false
 }
 
-/** Pixel eraser: removes the points under the circle, the stroke splits into what remains. */
-export function erasePoints(el: Element, x: number, y: number, r: number): Element[] | null {
+/**
+ * Eraser: the pixel eraser removes the points of a stroke under the circle (the stroke splits
+ * into what remains); shapes and texts, and everything with the object eraser, go whole.
+ * Returns null when the element is not touched.
+ */
+export function erase(el: Element, x: number, y: number, r: number, pixel: boolean): Element[] | null {
+  if (!pixel || !isStroke(el)) return hit(el, x, y, r) ? [] : null
   const p = el.pts
   const pieces: number[][] = []
   let cur: number[] = []
-  let hit = false
+  let touched = false
   for (let i = 0; i < p.length; i += 3) {
     if (Math.hypot(p[i] - x, p[i + 1] - y) <= r + p[i + 2] / 2) {
-      hit = true
+      touched = true
       if (cur.length) pieces.push(cur)
       cur = []
     } else cur.push(p[i], p[i + 1], p[i + 2])
   }
-  if (!hit) return null
+  if (!touched) return null
   if (cur.length) pieces.push(cur)
   return pieces.filter((pts) => pts.length >= 6).map((pts, i) => ({ ...el, id: i ? newId() : el.id, pts }))
+}
+
+/** The element with every point moved by f. */
+export function mapPoints(el: Element, f: (x: number, y: number) => [number, number]): Element {
+  if (el.type === 'text') {
+    const [x, y] = f(el.x, el.y)
+    return { ...el, x: round(x), y: round(y) }
+  }
+  if (isShape(el)) {
+    const [x1, y1] = f(el.x1, el.y1)
+    const [x2, y2] = f(el.x2, el.y2)
+    return { ...el, x1: round(x1), y1: round(y1), x2: round(x2), y2: round(y2) }
+  }
+  const pts = el.pts.slice()
+  for (let i = 0; i < pts.length; i += 3) {
+    const [x, y] = f(pts[i], pts[i + 1])
+    pts[i] = round(x)
+    pts[i + 1] = round(y)
+  }
+  return { ...el, pts }
+}
+
+export const translate = (el: Element, dx: number, dy: number) => mapPoints(el, (x, y) => [x + dx, y + dy])
+
+/** Moves an element from one box to another (resizing a selection). */
+export function rescale(el: Element, from: Frame, to: Frame): Element {
+  const sx = from.w ? to.w / from.w : 1
+  const sy = from.h ? to.h / from.h : 1
+  return mapPoints(el, (x, y) => [to.x + (x - from.x) * sx, to.y + (y - from.y) * sy])
 }
 
 export const isEmpty = (d: DoodleDoc) => d.elements.length === 0

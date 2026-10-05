@@ -1369,5 +1369,14 @@
   "Zoom in": "Zoomer",
   "Fit the frame (0)": "Ajuster au cadre (0)",
   "Drag to move the frame": "Glisser pour déplacer le cadre",
-  "Click to edit the doodle": "Cliquer pour modifier le doodle"
+  "Click to edit the doodle": "Cliquer pour modifier le doodle",
+  "Small text": "Petit texte",
+  "Medium text": "Texte moyen",
+  "Large text": "Grand texte",
+  "Select": "Sélection",
+  "Rectangle": "Rectangle",
+  "Ellipse": "Ellipse",
+  "Line": "Ligne",
+  "Arrow": "Flèche",
+  "Delete (Del)": "Supprimer (Suppr)"
 }
