@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"strings"
 
@@ -48,6 +49,7 @@ var ticketID = map[string]any{"type": "integer", "description": "Ticket number (
 
 // mcpScope is the kanban a call works on, found from the working directory of the client.
 type mcpScope struct {
+	here   *projects.Project // project of the working directory (a worktree has its own)
 	root   *projects.Project
 	loc    kanban.Location
 	ticket int64 // ticket of the worktree the client works in, 0 elsewhere
@@ -65,7 +67,16 @@ func (s *Server) mcpScope(cwd string) (mcpScope, error) {
 	if err != nil {
 		return mcpScope{}, err
 	}
-	return mcpScope{root: root, loc: kanbanLoc(root), ticket: p.Ticket}, nil
+	return mcpScope{here: p, root: root, loc: kanbanLoc(root), ticket: p.Ticket}, nil
+}
+
+// projectURL and ticketURL are the pages of the IDE, at the address the user opens it.
+func (s *Server) projectURL(id string) string {
+	return s.publicURL() + "/project/" + url.PathEscape(id)
+}
+
+func (s *Server) ticketURL(sc mcpScope, id int64) string {
+	return fmt.Sprintf("%s?ticket=%d", s.projectURL(sc.root.ID), id)
 }
 
 // id is the ticket of a call: the one given, else the one of the worktree.
@@ -154,7 +165,7 @@ var mcpTools = []mcpTool{
 				return "", err
 			}
 			var b strings.Builder
-			fmt.Fprintf(&b, "Kanban of %s (%s)\n", sc.root.Name(), sc.root.Path)
+			fmt.Fprintf(&b, "Kanban of %s (%s)\nProject in the IDE: %s\n", sc.root.Name(), sc.root.Path, s.projectURL(sc.here.ID))
 			n := 0
 			for _, t := range list {
 				if (a.Status != "" && t.Status != a.Status) || (a.Query != "" && !strings.Contains(strings.ToLower(t.Title), strings.ToLower(a.Query))) {
@@ -185,7 +196,7 @@ var mcpTools = []mcpTool{
 			if err != nil {
 				return "", err
 			}
-			return kanban.Markdown(t), nil
+			return fmt.Sprintf("%s\n\nTicket in the IDE: %s\nProject in the IDE: %s", kanban.Markdown(t), s.ticketURL(sc, id), s.projectURL(sc.here.ID)), nil
 		}),
 	},
 	{
@@ -242,7 +253,7 @@ var mcpTools = []mcpTool{
 				return "", err
 			}
 			s.emitKanban(sc.root.ID, id, nil)
-			return fmt.Sprintf("Ticket #%d created in the backlog (status New).", id), nil
+			return fmt.Sprintf("Ticket #%d created in the backlog (status New): %s", id, s.ticketURL(sc, id)), nil
 		},
 	},
 	{
@@ -448,7 +459,7 @@ var mcpTools = []mcpTool{
 			if err != nil {
 				return "", err
 			}
-			t, _, err := s.startTicket(ctx, k, id, a.Base, kanban.ByClaude)
+			t, child, err := s.startTicket(ctx, k, id, a.Base, kanban.ByClaude)
 			if err != nil {
 				return "", err
 			}
@@ -456,8 +467,8 @@ var mcpTools = []mcpTool{
 			if t.Setup == "running" {
 				setup = "\nThe setup command of the kanban is running in the worktree; kanban_get shows when it is done (Setup)."
 			}
-			return fmt.Sprintf("Ticket #%d is %q.\nBranch: %s (base %s)\nWorktree: %s\nWork in the worktree (absolute paths, `cd %s && …` for commands); commit messages start with \"#%d \".%s",
-				t.ID, kanban.StatusNames[t.Status], t.Branch, t.Base, t.Worktree, t.Worktree, t.ID, setup), nil
+			return fmt.Sprintf("Ticket #%d is %q.\nBranch: %s (base %s)\nWorktree: %s\nWorktree in the IDE: %s\nWork in the worktree (absolute paths, `cd %s && …` for commands); commit messages start with \"#%d \".%s",
+				t.ID, kanban.StatusNames[t.Status], t.Branch, t.Base, t.Worktree, s.projectURL(child), t.Worktree, t.ID, setup), nil
 		}),
 	},
 }

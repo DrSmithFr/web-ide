@@ -17,7 +17,7 @@ import { GlobalSearch, focusGlobalSearch } from '../panels/GlobalSearch'
 import { GitPanel } from '../panels/git/GitPanel'
 import { KanbanPanel } from '../kanban/Panel'
 import { NewTicketHost } from '../kanban/Board'
-import { board, ensureBoard, openBoard, refreshBoard } from '../kanban/state'
+import { board, ensureBoard, openBoard, openTicket, refreshBoard } from '../kanban/state'
 import { refreshGit } from '../state/git'
 import { DatabaseTool } from '../db/DatabaseTool'
 import { AssistantTool } from '../llm/AssistantTool'
@@ -428,6 +428,12 @@ export function ProjectPage(props: { id: string }) {
         await refreshBoard()
         const cmd = board.meta.setup?.trim()
         if (cmd) void newConsole({ kind: 'task', command: ['sh', '-c', cmd], title: t('Worktree setup') })
+      }
+      // A ticket link of Claude Code: /project/<id>?ticket=<n>.
+      const ticket = Number(new URLSearchParams(location.search).get('ticket'))
+      if (ticket > 0) {
+        history.replaceState(null, '', location.pathname)
+        openTicket(ticket)
       }
       // Opened from a file link of Claude Code while no window had the project.
       const open = new URLSearchParams(location.search).get('open')

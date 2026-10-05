@@ -1,10 +1,13 @@
 import { expect, test } from 'claude-code/testing'
 
-import { parseTarget, parseTicket, touched } from '../hooks/register'
+import { parseProject, parseTarget, parseTicket, touched } from '../hooks/register'
 
 test('reads the ticket of a kanban_get answer', async () => {
-  expect(parseTicket('# Ticket #12 · CSV export\nStatus: In progress · priority: High · branch: ticket/12-csv')).toEqual({ id: 12, title: 'CSV export', status: 'In progress' })
-  expect(parseTicket('Error: id is missing')).toBe(null)
+  const get = '# Ticket #12 · CSV export\nStatus: In progress · priority: High · branch: ticket/12-csv\n\n## Plan\n…\n\nTicket in the IDE: https://ide.ts.net/project/web-ide?ticket=12\nProject in the IDE: https://ide.ts.net/project/web-ide-t12'
+  expect(parseTicket(get)).toEqual({ id: 12, title: 'CSV export', status: 'In progress', url: 'https://ide.ts.net/project/web-ide?ticket=12' })
+  expect(parseProject(get)).toBe('https://ide.ts.net/project/web-ide-t12')
+  expect(parseTicket('Kanban of web-ide (/p)\nProject in the IDE: https://ide.ts.net/project/web-ide\nNo ticket.')).toBe(null)
+  expect(parseProject('Error: no project of the IDE holds /tmp')).toBe(null)
 })
 
 test('resolves /ide arguments against the working directory', async () => {

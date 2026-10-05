@@ -1,15 +1,16 @@
-// Web IDE in Claude Code: the ticket of the worktree Claude works in, above the prompt,
-// and the files Claude changes as buttons opening them in the IDE (the /open endpoint of
-// the pod, with its token). /ide <file[:line]> opens any file.
+// Web IDE in Claude Code, above the prompt: links to the project Claude works in and to
+// the ticket of its worktree (at the public address of the IDE, publicUrl of the pod),
+// and the files Claude changes as buttons opening them in the IDE windows (the /open
+// endpoint of the pod, with its token). /ide <file[:line]> opens any file.
 //
 // The pod: WEBIDE_URL (default http://127.0.0.1:4433), its data folder WEBIDE_DATA
 // (default ~/.web-ide), where the token is.
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Ticket } from '../types'
+import type { Ide, Ticket } from '../types'
 
-const ticket = atom({ plugin: 'web-ide', key: 'ticket' } as const, null)
+const ide = atom({ plugin: 'web-ide', key: 'ide' } as const, null)
 const files = atom({ plugin: 'web-ide', key: 'files' } as const, [])
 
 const EDITS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit'])
@@ -17,10 +18,16 @@ const MAX_FILES = 4
 
 type Pod = { url: string; token: string }
 
-/** "# Ticket #12 · Export\nStatus: In progress · …" → the ticket. */
+/** "# Ticket #12 · Export\nStatus: In progress · …\n…\nTicket in the IDE: <url>" → the ticket. */
 export function parseTicket(markdown: string): Ticket | null {
   const [, id, title = '', status = ''] = /^# Ticket #(\d+) · (.*)\nStatus: ([^·\n]+)/.exec(markdown) ?? []
-  return id ? { id: Number(id), title: title.trim(), status: status.trim() } : null
+  const url = /^Ticket in the IDE: (\S+)$/m.exec(markdown)?.[1]
+  return id && url ? { id: Number(id), title: title.trim(), status: status.trim(), url } : null
+}
+
+/** The page of the project in an answer of kanban_list or kanban_get. */
+export function parseProject(text: string): string | null {
+  return /^Project in the IDE: (\S+)$/m.exec(text)?.[1] ?? null
 }
 
 /** "src/a.go:12" → the absolute path and the line (0 without one). */
@@ -52,22 +59,31 @@ async function connect($: EngineInterface): Promise<Pod | null> {
   return pod
 }
 
-/** The ticket of the worktree Claude works in, asked to the MCP endpoint of the pod. */
+/** Calls a tool of the MCP endpoint of the pod: its text, null on an error. */
+async function tool($: EngineInterface, p: Pod, name: string, args: Record<string, unknown>): Promise<string | null> {
+  const res = await $.http.fetch(`${p.url}/mcp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${p.token}` },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }),
+  })
+  const r = JSON.parse(res.text)?.result
+  return r && !r.isError ? (r.content?.[0]?.text ?? '') : null
+}
+
+/** The project Claude works in and the ticket of its worktree. */
 async function refresh($: EngineInterface) {
   const p = await connect($)
   if (!p) return
   const cwd = await $.session.cwd()
   try {
-    const res = await $.http.fetch(`${p.url}/mcp`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${p.token}` },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'kanban_get', arguments: { cwd } } }),
-    })
-    const r = JSON.parse(res.text)?.result
-    const tk = r && !r.isError ? parseTicket(r.content?.[0]?.text ?? '') : null
-    await update($, ticket, () => tk)
+    // In a worktree, kanban_get answers its ticket; elsewhere it fails and kanban_list
+    // still gives the project (or fails too: not a project of the IDE).
+    const text = (await tool($, p, 'kanban_get', { cwd })) ?? (await tool($, p, 'kanban_list', { cwd }))
+    const project = text ? parseProject(text) : null
+    const next: Ide | null = project ? { project, ticket: parseTicket(text ?? '') } : null
+    await update($, ide, () => next)
   } catch {
-    await update($, ticket, () => null) // the pod is not running
+    await update($, ide, () => null) // the pod is not running
   }
 }
 
@@ -113,17 +129,22 @@ export const register: Register = (on) => {
       return { text: await open($, t.path, t.line) }
     }
     const [last] = await read($, files)
-    return { text: last ? await open($, last) : 'Usage: /ide <file[:line]> (no file changed yet)' }
+    if (last) return { text: await open($, last) }
+    const here = await read($, ide)
+    if (!here) return { text: 'Usage: /ide <file[:line]> (this folder is not a project of the IDE)' }
+    return { text: [`Project: ${here.project}`, ...(here.ticket ? [`Ticket #${here.ticket.id}: ${here.ticket.url}`] : [])].join('\n') }
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    const tk = await read($, ticket)
+    const here = await read($, ide)
     const list = await read($, files)
-    if (e.props.hasSurvey || (!tk && list.length === 0)) return next(e)
-    const { Box, Button, Text } = $.ui.resolve(e)
+    if (e.props.hasSurvey || (!here && list.length === 0)) return next(e)
+    const { Box, Button, Link, Text } = $.ui.resolve(e)
+    const tk = here?.ticket
     return (
       <Box flexDirection="row" gap={1}>
-        <Text dimColor>{tk ? `IDE #${tk.id} ${tk.title} · ${tk.status}` : 'IDE'}</Text>
+        {here ? <Link key="project" href={here.project} label="IDE" /> : <Text dimColor>IDE</Text>}
+        {tk && <Link key="ticket" href={tk.url} label={`#${tk.id} ${tk.title} · ${tk.status}`} />}
         {list.map((path) => (
           <Button key={path} label={`↗ ${basename(path)}`} plain dimColor onPress={() => void open($, path).then((text) => $.ui.toast(text))} />
         ))}

@@ -173,8 +173,12 @@ func (s *Server) mcpCall(ctx context.Context, m mcpMessage) mcpReply {
 	return reply
 }
 
-// publicURL is the address of the pod as a local client reaches it.
+// publicURL is the address the user opens the IDE at: the configured one (a Tailscale
+// name…), else the address of the pod as a local client reaches it.
 func (s *Server) publicURL() string {
+	if s.Cfg.PublicURL != "" {
+		return strings.TrimSuffix(s.Cfg.PublicURL, "/")
+	}
 	addr := s.Cfg.Addr
 	if strings.HasPrefix(addr, ":") || strings.HasPrefix(addr, "0.0.0.0:") {
 		addr = "127.0.0.1:" + addr[strings.LastIndex(addr, ":")+1:]

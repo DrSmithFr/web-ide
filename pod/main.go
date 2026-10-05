@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -35,6 +36,7 @@ func main() {
 	addr := flag.String("addr", "", "listen address (default: config.json, else "+config.DefaultAddr+")")
 	workspace := flag.String("workspace", "", "default workspace (default: ~/Apps)")
 	allowRemote := flag.Bool("allow-remote", false, "accept connections from other machines (protected by the token only)")
+	publicURL := flag.String("public-url", "", "address the IDE is opened at, for the links given to Claude Code (default: config.json, else http://<addr>)")
 	static := flag.String("static", "", "serve the front end from this folder instead of the embedded one")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
@@ -52,6 +54,9 @@ func main() {
 	}
 	if *workspace != "" {
 		cfg.Workspace = config.ExpandHome(*workspace)
+	}
+	if *publicURL != "" {
+		cfg.PublicURL = strings.TrimSuffix(*publicURL, "/")
 	}
 	check(cfg.Save(st))
 	token, err := config.Token(st)

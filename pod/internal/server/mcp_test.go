@@ -204,18 +204,28 @@ func TestOpenLink(t *testing.T) {
 	a.waitEvent("ide.open", func(d map[string]any) bool { return d["path"] == file && d["line"] == float64(3) })
 }
 
-// A project opened through a symbolic link is found from the folder the link leads to.
+// A project opened through a symbolic link is found from the folder the link leads to;
+// the links to the IDE use its public address.
 func TestMCPSymlinkedProject(t *testing.T) {
-	_, ts := newServer(t)
+	s, ts := newServer(t)
+	s.Cfg.PublicURL = "https://ide.example.ts.net/"
 	a, _ := dial(t, ts, "secret-token-0123456789abcdef0123")
 	real := t.TempDir()
 	link := filepath.Join(t.TempDir(), "apps")
 	if err := os.Symlink(real, link); err != nil {
 		t.Skip(err)
 	}
-	a.call("projects.create", map[string]any{"type": "local", "path": link})
+	id := a.call("projects.create", map[string]any{"type": "local", "path": link})["result"].(map[string]any)["id"].(string)
 	m := &mcpClient{t: t, url: ts.URL, token: "secret-token-0123456789abcdef0123"}
 	if text := m.ok("kanban_list", map[string]any{"cwd": real}); !strings.Contains(text, "No ticket.") {
 		t.Fatalf("list: %s", text)
+	}
+	// Links to the IDE use its public address.
+	m.ok("kanban_create", map[string]any{"cwd": real, "title": "Export"})
+	got := m.ok("kanban_get", map[string]any{"cwd": real, "id": 1})
+	for _, want := range []string{"Ticket in the IDE: https://ide.example.ts.net/project/" + id + "?ticket=1", "Project in the IDE: https://ide.example.ts.net/project/" + id} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
 	}
 }

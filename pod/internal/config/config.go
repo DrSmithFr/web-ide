@@ -16,6 +16,9 @@ const DefaultAddr = "127.0.0.1:4433"
 type Config struct {
 	Addr      string `json:"addr"`
 	Workspace string `json:"workspace"`
+	// PublicURL is the address the user opens the IDE at (a Tailscale name…), for the
+	// links given to Claude Code; empty: http://<addr>.
+	PublicURL string `json:"publicUrl,omitempty"`
 }
 
 func Load(st *store.Store) (*Config, error) {

@@ -156,5 +156,10 @@ run(async ({ page, ctx }) => {
   assert(true, 'new ticket from the panel')
   await page.waitForSelector('[data-testid=ticket-view] [data-testid=ticket-title]:has-text("Second ticket")')
   await page.screenshot({ path: OUT + '/kanban-ticket.png' })
+
+  // A ticket link of Claude Code: /project/<id>?ticket=<n> opens its tab.
+  await page.goto(page.url().replace(/[?#].*$/, '') + '?ticket=1')
+  await page.waitForSelector('[data-testid=ticket-view] [data-testid=ticket-title]:has-text("CSV export")')
+  assert(!page.url().includes('ticket='), 'a ticket link opens the ticket, then leaves the address clean')
   await page2.close()
 })
