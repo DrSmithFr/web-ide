@@ -156,7 +156,7 @@ export function ticketMarkdown(tk: Ticket): string {
   if (tk.files.length) out.push(`\n## Linked files\n${tk.files.map((f) => `- ${f}`).join('\n')}`)
   if (tk.attachments.length) out.push(`\n## Attachments\n${tk.attachments.map((a) => `- ${a.name} (${a.mime || 'file'})`).join('\n')}`)
   const notes = tk.notes.filter((n) => n.kind !== 'event')
-  if (notes.length) out.push(`\n## Notes\n${notes.map((n) => `- (${n.author === 'model' ? 'assistant' : 'user'}, ${isoDate(n.created)}) ${n.text.trim()}`).join('\n')}`)
+  if (notes.length) out.push(`\n## Notes\n${notes.map((n) => `- (${n.author === 'model' ? 'assistant' : n.author === 'claude' ? 'Claude' : 'user'}, ${isoDate(n.created)}) ${n.text.trim()}`).join('\n')}`)
   out.push(`\n## Plan\n${tk.plan.trim() || '(no plan yet)'}`)
   if (tk.goalList.length)
     out.push(`\n## Goals\n${tk.goalList.map((g) => `- [${g.done ? 'x' : ' '}] (id ${g.id}) ${g.text}${g.description.trim() ? `\n  ${g.description.trim().replace(/\n/g, '\n  ')}` : ''}`).join('\n')}`)

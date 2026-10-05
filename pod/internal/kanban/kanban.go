@@ -42,11 +42,16 @@ const (
 	MaxNote        = 1000
 )
 
-// Actors of a change: the model may only do some transitions.
+// Actors of a change: the agents (the local model, Claude Code through the MCP endpoint)
+// may only do some transitions.
 const (
-	ByUser  = "user"
-	ByModel = "model"
+	ByUser   = "user"
+	ByModel  = "model"
+	ByClaude = "claude"
 )
+
+// IsAgent tells whether a change comes from a model rather than from the user.
+func IsAgent(by string) bool { return by == ByModel || by == ByClaude }
 
 // modelMoves are the transitions the model may do (docs/kanban.md). New → To do also
 // happens by itself when a plan is written.
@@ -66,7 +71,7 @@ func CanMove(from, to, by string) bool {
 	if to == Abandoned && by == ByUser {
 		return from != Done && from != Abandoned
 	}
-	if by == ByModel {
+	if IsAgent(by) {
 		return modelMoves[[2]string{from, to}]
 	}
 	return userMoves[[2]string{from, to}]

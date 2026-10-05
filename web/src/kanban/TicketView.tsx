@@ -162,8 +162,8 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
                 {(n) => (
                   <li>
                     <span class="muted small">{fmtDate(n.created)}</span> · {eventText(n.text)}
-                    <Show when={n.author === 'model'}>
-                      <span class="badge">{t('assistant')}</span>
+                    <Show when={n.author !== 'user'}>
+                      <span class="badge">{n.author === 'claude' ? 'Claude' : t('assistant')}</span>
                     </Show>
                   </li>
                 )}
@@ -294,7 +294,7 @@ function Notes(props: { tk: Ticket; apply: Apply }) {
           <div class="tk-note" data-testid="ticket-note">
             <div class="tk-note-head">
               <span class="muted small">
-                {n.author === 'model' ? t('Assistant') : t('You')} · {fmtDate(n.created)}
+                {n.author === 'claude' ? 'Claude' : n.author === 'model' ? t('Assistant') : t('You')} · {fmtDate(n.created)}
               </span>
               <Show when={n.chatId}>
                 <ChatLink tk={props.tk} chatId={n.chatId!} />

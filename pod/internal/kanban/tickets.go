@@ -22,7 +22,7 @@ type Goal struct {
 type Note struct {
 	ID      int64  `json:"id"`
 	Kind    string `json:"kind"`   // note | event
-	Author  string `json:"author"` // user | model
+	Author  string `json:"author"` // user | model | claude
 	Text    string `json:"text"`
 	ChatID  string `json:"chatId,omitempty"`
 	Created int64  `json:"created"`
@@ -417,7 +417,7 @@ func (m *Manager) Move(loc Location, id int64, to, by, comment string) error {
 			return nil
 		}
 		if !CanMove(from, to, by) {
-			if by == ByModel {
+			if IsAgent(by) {
 				return i18n.Errorf("the model cannot move the ticket from “%s” to “%s”", i18n.Text(StatusNames[from]), i18n.Text(StatusNames[to]))
 			}
 			return i18n.Errorf("a ticket cannot go from “%s” to “%s”", i18n.Text(StatusNames[from]), i18n.Text(StatusNames[to]))

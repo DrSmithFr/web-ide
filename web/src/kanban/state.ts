@@ -38,10 +38,13 @@ export interface Goal {
   source: 'plan' | 'user'
 }
 
+/** Who wrote a note or a history line: Claude writes through the MCP endpoint of the pod. */
+export type Author = 'user' | 'model' | 'claude'
+
 export interface Note {
   id: number
   kind: 'note' | 'event'
-  author: 'user' | 'model'
+  author: Author
   text: string
   chatId?: string
   created: number
@@ -52,7 +55,7 @@ export interface Feedback {
   kind: FeedbackKind
   text: string
   done: boolean
-  author: 'user' | 'model'
+  author: Author
   chatId?: string
   created: number
 }
