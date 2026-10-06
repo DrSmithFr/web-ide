@@ -65,7 +65,8 @@ type Server struct {
 	runtimes map[string]*runtime.Runtime
 	opening  map[string]*sync.Mutex
 	handlers map[string]handler
-	claims   map[string]*Client // conversation of the assistant → window running it
+	// agents are the conversations of the assistant running in the pod.
+	agents agents
 	// tunnelIdle closes the tunnels once no window is left (windowsChanged).
 	tunnelIdle *time.Timer
 }
@@ -83,7 +84,7 @@ func (s *Server) Init() {
 	s.runtimes = map[string]*runtime.Runtime{}
 	s.opening = map[string]*sync.Mutex{}
 	s.handlers = map[string]handler{}
-	s.claims = map[string]*Client{}
+	s.agents = agents{runs: map[string]*agentRun{}, slots: map[string]chan struct{}{}, waiting: map[string]int{}, ui: map[string]chan uiResult{}}
 	if s.Kanban == nil {
 		s.Kanban = kanban.NewManager(s.Store)
 	}
@@ -98,6 +99,7 @@ func (s *Server) Init() {
 	s.registerIcons()
 	s.registerWorktrees()
 	s.registerLLM()
+	s.registerAgent()
 	s.registerExec()
 	s.registerDocker()
 	s.registerDockerLogs()
@@ -263,6 +265,8 @@ type Client struct {
 	streams sync.Map
 	// lang is the language of the window (messages are translated for it).
 	lang atomic.Value
+	// watching is the conversation of the assistant the window shows.
+	watching atomic.Value
 }
 
 // language is the language of the window (English until it tells its own).
@@ -326,20 +330,9 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	delete(s.clients, c)
 	s.windowsChanged()
-	var released []string
-	for id, owner := range s.claims {
-		if owner == c {
-			delete(s.claims, id)
-			released = append(released, id)
-		}
-	}
 	project := c.project
 	rt := s.runtimes[project]
 	s.mu.Unlock()
-	// A window following a conversation this one was running takes it over.
-	for _, id := range released {
-		s.emitter(project)("llm.released", map[string]string{"id": id}, c.id)
-	}
 	if rt != nil {
 		rt.Detach()
 	}

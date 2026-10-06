@@ -77,55 +77,76 @@ func (s *Server) registerExec() {
 		if a.Command == "" {
 			return nil, i18n.New("empty command")
 		}
-		dir := rt.Root
-		if a.Cwd != "" {
-			if dir, err = rt.Abs(a.Cwd); err != nil {
-				return nil, err
-			}
-		}
-		limit := time.Duration(min(max(a.Timeout, 1), 1800)) * time.Second
-		if a.Timeout <= 0 {
-			limit = 120 * time.Second
-		}
-		start := time.Now()
-		proc, err := rt.Runner.Start([]string{"sh", "-c", "{\n" + a.Command + "\n} 2>&1"}, dir)
+		r, err := runShell(ctx, rt, a.Command, a.Cwd, a.Timeout)
 		if err != nil {
 			return nil, err
 		}
-		proc.Stdin().Close() // no input: a command waiting for one gets end of file
-		out := &capped{}
-		copied := make(chan struct{})
-		go func() {
-			_, _ = io.Copy(out, proc.Stdout())
-			close(copied)
-		}()
-		timer := time.NewTimer(limit)
-		defer timer.Stop()
-		timedOut, canceled := false, false
-		// After a kill, a process left in the background may still hold the output open.
-		drain := func() {
-			select {
-			case <-copied:
-			case <-time.After(2 * time.Second):
-			}
-		}
-		select {
-		case <-copied:
-		case <-timer.C:
-			timedOut = true
-			_ = proc.Kill()
-			drain()
-		case <-ctx.Done():
-			canceled = true
-			_ = proc.Kill()
-			drain()
-		}
-		code := execx.ExitCode(proc.Wait())
-		// Read the buffer only once the copy is over (or abandoned).
-		text, truncated := out.String()
 		return map[string]any{
-			"output": text, "code": code, "timedOut": timedOut, "canceled": canceled,
-			"truncated": truncated, "durationMs": time.Since(start).Milliseconds(), "cwd": dir,
+			"output": r.Output, "code": r.Code, "timedOut": r.TimedOut, "canceled": r.Canceled,
+			"truncated": r.Truncated, "durationMs": r.DurationMs, "cwd": r.Cwd,
 		}, nil
 	}))
+}
+
+type shellResult struct {
+	Output     string
+	Code       int
+	TimedOut   bool
+	Canceled   bool
+	Truncated  bool
+	DurationMs int64
+	Cwd        string
+}
+
+// runShell runs a shell command without a terminal (no input): the output (stdout and stderr
+// together) and the exit code once it ends, or when the time limit or ctx stops it.
+func runShell(ctx context.Context, rt *runtime.Runtime, command, cwd string, timeout int) (shellResult, error) {
+	var err error
+	dir := rt.Root
+	if cwd != "" {
+		if dir, err = rt.Abs(cwd); err != nil {
+			return shellResult{}, err
+		}
+	}
+	limit := time.Duration(min(max(timeout, 1), 1800)) * time.Second
+	if timeout <= 0 {
+		limit = 120 * time.Second
+	}
+	start := time.Now()
+	proc, err := rt.Runner.Start([]string{"sh", "-c", "{\n" + command + "\n} 2>&1"}, dir)
+	if err != nil {
+		return shellResult{}, err
+	}
+	proc.Stdin().Close() // no input: a command waiting for one gets end of file
+	out := &capped{}
+	copied := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(out, proc.Stdout())
+		close(copied)
+	}()
+	timer := time.NewTimer(limit)
+	defer timer.Stop()
+	timedOut, canceled := false, false
+	// After a kill, a process left in the background may still hold the output open.
+	drain := func() {
+		select {
+		case <-copied:
+		case <-time.After(2 * time.Second):
+		}
+	}
+	select {
+	case <-copied:
+	case <-timer.C:
+		timedOut = true
+		_ = proc.Kill()
+		drain()
+	case <-ctx.Done():
+		canceled = true
+		_ = proc.Kill()
+		drain()
+	}
+	code := execx.ExitCode(proc.Wait())
+	// Read the buffer only once the copy is over (or abandoned).
+	text, truncated := out.String()
+	return shellResult{Output: text, Code: code, TimedOut: timedOut, Canceled: canceled, Truncated: truncated, DurationMs: time.Since(start).Milliseconds(), Cwd: dir}, nil
 }

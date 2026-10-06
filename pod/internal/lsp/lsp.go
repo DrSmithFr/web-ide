@@ -36,6 +36,27 @@ var Defaults = []Spec{
 	{Lang: "typescript", Candidates: [][]string{{"typescript-language-server", "--stdio"}}, Markers: []string{"package.json", "tsconfig.json", "jsconfig.json"}, Exts: []string{".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"}},
 }
 
+// LanguageID is the language id of a document for textDocument/didOpen.
+func LanguageID(p string) string {
+	switch strings.ToLower(path.Ext(p)) {
+	case ".go":
+		return "go"
+	case ".php", ".phtml":
+		return "php"
+	case ".py", ".pyi":
+		return "python"
+	case ".ts", ".mts", ".cts":
+		return "typescript"
+	case ".tsx":
+		return "typescriptreact"
+	case ".jsx":
+		return "javascriptreact"
+	case ".js", ".mjs", ".cjs":
+		return "javascript"
+	}
+	return "plaintext"
+}
+
 // LangOf returns the server language handling a file, from its extension.
 func LangOf(p string) string {
 	ext := strings.ToLower(path.Ext(p))
@@ -70,12 +91,36 @@ type Manager struct {
 	mu       sync.Mutex
 	servers  map[string]*server
 	resolved map[string][]string
+
+	// Last diagnostics published per document (read by the assistant), and how many times
+	// they changed.
+	dmu   sync.Mutex
+	diags map[string]docDiagnostics
+}
+
+type docDiagnostics struct {
+	Lang  string
+	Items []Diagnostic
+	Seq   int
+}
+
+// Diagnostic as published by a language server (the fields the assistant reads).
+type Diagnostic struct {
+	Range struct {
+		Start struct {
+			Line      int `json:"line"`
+			Character int `json:"character"`
+		} `json:"start"`
+	} `json:"range"`
+	Severity int    `json:"severity"`
+	Message  string `json:"message"`
+	Source   string `json:"source"`
 }
 
 // NewManager: overrides come from .ide/lsp.json ({"php": ["phpactor", "language-server"]}).
 func NewManager(r execx.Runner, root string, local bool, overrides map[string][]string, exists func(string) bool, emit func(string, any)) *Manager {
 	return &Manager{runner: r, root: root, local: local, overrides: overrides, exists: exists, emit: emit,
-		servers: map[string]*server{}, resolved: map[string][]string{}}
+		servers: map[string]*server{}, resolved: map[string][]string{}, diags: map[string]docDiagnostics{}}
 }
 
 func spec(lang string) (Spec, bool) {
@@ -530,6 +575,7 @@ func (s *server) handle(msg *message) {
 			ch <- msg
 		}
 	case msg.Method == "textDocument/publishDiagnostics":
+		s.m.keepDiagnostics(s.lang, msg.Params)
 		s.m.emit("lsp.diagnostics", map[string]any{"lang": s.lang, "params": msg.Params})
 	case msg.Method == "window/showMessage" || msg.Method == "window/logMessage":
 		s.m.emit("lsp.log", map[string]any{"lang": s.lang, "method": msg.Method, "params": msg.Params})
@@ -552,4 +598,39 @@ func (s *server) stop() {
 		_ = s.proc.Kill()
 	}
 	s.m.emit("lsp.status", map[string]any{"lang": s.lang, "running": false})
+}
+
+func (m *Manager) keepDiagnostics(lang string, params json.RawMessage) {
+	var p struct {
+		URI         string       `json:"uri"`
+		Diagnostics []Diagnostic `json:"diagnostics"`
+	}
+	if json.Unmarshal(params, &p) != nil || p.URI == "" {
+		return
+	}
+	m.dmu.Lock()
+	d := m.diags[p.URI]
+	m.diags[p.URI] = docDiagnostics{Lang: lang, Items: p.Diagnostics, Seq: d.Seq + 1}
+	m.dmu.Unlock()
+}
+
+// Diagnostics returns the last diagnostics of a document and how many times they changed.
+func (m *Manager) Diagnostics(uri string) ([]Diagnostic, int) {
+	m.dmu.Lock()
+	defer m.dmu.Unlock()
+	d := m.diags[uri]
+	return d.Items, d.Seq
+}
+
+// AllDiagnostics returns the last diagnostics of every document that has some.
+func (m *Manager) AllDiagnostics() map[string][]Diagnostic {
+	m.dmu.Lock()
+	defer m.dmu.Unlock()
+	out := map[string][]Diagnostic{}
+	for uri, d := range m.diags {
+		if len(d.Items) > 0 {
+			out[uri] = d.Items
+		}
+	}
+	return out
 }
