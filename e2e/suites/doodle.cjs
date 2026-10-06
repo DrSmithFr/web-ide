@@ -44,7 +44,8 @@ const fake = http.createServer(async (req, res) => {
           call(2, 'b3', 'board_draw_image', { image: 'img/logo.png' }),
           call(3, 'b4', 'board_draw_image', { image: 'notes.txt' }),
           call(4, 'b5', 'board_draw_image', { image: '../outside.png' }),
-          call(5, 'b6', 'board_draw_image', { image: 'screen' }),
+          call(5, 'b7', 'board_draw_image', { image: 'img/anim.gif' }),
+          call(6, 'b6', 'board_draw_image', { image: 'screen' }),
         ],
       })
       return end(res, 'tool_calls')
@@ -91,6 +92,8 @@ const fake = http.createServer(async (req, res) => {
   end(res)
 })
 
+// An 8×6 animated GIF, transparent around a square.
+const GIF = Buffer.from('R0lGODlhCAAGAIEAAAAAAP8AAAAAAAAAACH/C05FVFNDQVBFMi4wAwEAAAAh+QQJFAAAACwAAAAACAAGAAAIEQABCBxIsCDBAAEMIjTI0GBAACH5BAkUAAAALAMAAgACAAIAgQAAAAAA/wAAAAAAAAgGAAMIDBAQADs=', 'base64')
 // A 4×3 red PNG.
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAEElEQVR4nGP4z8AARww4OQD1MQv1NXv7ggAAAABJRU5ErkJggg==', 'base64')
 
@@ -603,6 +606,7 @@ run(async ({ page }) => {
     // as a page; an image that is neither an SVG nor "screen"; a capture of the screen refused.
     fs.mkdirSync(WS + '/demo/img', { recursive: true })
     fs.writeFileSync(WS + '/demo/img/logo.png', PNG)
+    fs.writeFileSync(WS + '/demo/img/anim.gif', GIF)
     await page.click('.ai-panel button[title="New conversation"]')
     await page.setInputFiles('.ai-composer input[type=file]', { name: 'shot.png', mimeType: 'image/png', buffer: PNG })
     await page.waitForSelector('.ai-composer .ai-att[data-kind=image]')
@@ -620,10 +624,25 @@ run(async ({ page }) => {
     assert(b('b4').startsWith('Error:') && b('b4').includes('"notes.txt" is none of them'), 'not an image: ' + b('b4'))
     assert(b('b5').startsWith('Error:') && b('b5').includes('outside the project'), 'no image outside the project: ' + b('b5'))
     assert(b('b6').includes('refused to share their screen'), 'capture refused: ' + b('b6'))
+    // A transparent animated GIF: a page of its size, its transparent part white (not black).
+    assert(b('b7').includes('Page 5 "b7"') && b('b7').includes('the image img/anim.gif (8×6)'), 'a GIF of the project as a page: ' + b('b7'))
+    const gifPage = bm.find((m) => m.role === 'user' && Array.isArray(m.content) && m.content.some((p) => p.type === 'text' && p.text.includes('"b7"')))
+    const gifPNG = gifPage.content[gifPage.content.findIndex((p) => p.type === 'text' && p.text.includes('"b7"')) + 1].image_url.url
+    const corner = await page.evaluate(async (src) => {
+      const img = new Image()
+      await new Promise((r) => ((img.onload = r), (img.src = src)))
+      const c = document.createElement('canvas')
+      c.width = img.width
+      c.height = img.height
+      const g = c.getContext('2d')
+      g.drawImage(img, 0, 0)
+      return [...g.getImageData(1, 1, 1, 1).data]
+    }, gifPNG)
+    assert(corner[0] > 200 && corner[1] > 200 && corner[2] > 200, `the transparent part of the GIF is white: ${corner}`)
     assert(!(await page.$('[data-testid=ai-capture]')), 'the card goes once answered')
     await page.click('[data-testid=ai-board-toggle]')
-    await page.waitForSelector('[data-testid=bd-title]:has-text("Page 4")')
-    assert((await page.$$('[data-testid=bd-thumb]')).length === 4 && (await page.$$('[data-testid=bd-view] image')).length === 1, 'four pages: the image sent, its copy, the SVG, the image of the project')
+    await page.waitForSelector('[data-testid=bd-title]:has-text("Page 5")')
+    assert((await page.$$('[data-testid=bd-thumb]')).length === 5 && (await page.$$('[data-testid=bd-view] image')).length === 1, 'five pages: the image sent, its clone, the SVG, the PNG and the GIF of the project')
     await page.click('[data-testid=bd-thumb] >> nth=0')
     assert((await page.textContent('[data-testid=bd-title]')) === 'Page 1 · shot.png', 'the image sent is page 1')
     await page.screenshot({ path: OUT + '/board-background.png' })
