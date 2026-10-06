@@ -4,6 +4,14 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+### Added
+
+- Sub-agents: the assistant delegates a task with `spawn_agent` to a child conversation (fresh context, same rights) running in the background; the child notes its progress, asks its parent and reports, its questions and report waking the parent, which replies (after asking the user if needed), writes to or stops it. What a child needs confirmed goes to the user. Cards in the parent thread, children nested under their parent in the history.
+
+### Fixed
+
+- A message queued just as a conversation ended stayed in its queue: the conversation now starts again with it.
+
 ## [1.3.0] - 2026-10-07
 
 ### Added
