@@ -3,7 +3,8 @@
 // frame presets, attach (chip opened again), PNG and description sent to the model,
 // Ctrl+Shift+D and sending from the composer of the modal.
 const http = require('http')
-const { run, openProject, assert, OUT } = require('../common.cjs')
+const fs = require('fs')
+const { run, openProject, assert, OUT, WS } = require('../common.cjs')
 
 const requests = []
 const sse = (res, delta) => res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`)
@@ -31,6 +32,25 @@ const fake = http.createServer(async (req, res) => {
     return end(res, last.role === 'tool' ? 'stop' : 'tool_calls')
   }
   const firstUser = r.messages.find((m) => m.role === 'user')
+  if (text(firstUser).startsWith('Back:')) {
+    // board_draw on backgrounds: a project file, an SVG, a captured page, a file outside the
+    // project (refused) and a capture of the screen of the user (waits for them).
+    if (!r.messages.some((m) => m.role === 'tool')) {
+      const call = (i, id, background) => ({ index: i, id, type: 'function', function: { name: 'board_draw', arguments: JSON.stringify({ title: id, background, elements: [{ type: 'stroke', points: [[2, 2], [40, 20]], color: 'red' }] }) } })
+      sse(res, {
+        tool_calls: [
+          call(0, 'b1', { file: 'shot.png' }),
+          call(1, 'b2', { svg: '<svg viewBox="0 0 300 200"><rect x="10" y="10" width="280" height="180" fill="#9cf"/><circle cx="150" cy="100" r="60" fill="#f80"/></svg>' }),
+          call(2, 'b3', { url: `http://127.0.0.1:${site.address().port}/`, width: 640, height: 400 }),
+          call(3, 'b4', { file: '../outside.png' }),
+          call(4, 'b5', { ide: true }),
+        ],
+      })
+      return end(res, 'tool_calls')
+    }
+    sse(res, { content: 'Backgrounds done.' })
+    return end(res)
+  }
   if (text(firstUser).startsWith('Draw:')) {
     // board_draw: a page, then a copy of it with a red stroke and an invalid arrow, then the end.
     const tools = r.messages.filter((m) => m.role === 'tool').length
@@ -70,6 +90,11 @@ const fake = http.createServer(async (req, res) => {
   end(res)
 })
 
+// A page for the URL capture of board_draw.
+const site = http.createServer((req, res) => res.end('<body style="margin:0;background:#2a6"><h1 style="color:#fff">Local app</h1></body>'))
+// A 4×3 red PNG.
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAEElEQVR4nGP4z8AARww4OQD1MQv1NXv7ggAAAABJRU5ErkJggg==', 'base64')
+
 const count = (page) => page.$$eval('[data-testid=dd-canvas] svg g > *', (e) => e.length)
 const paths = (page) => page.$$eval('[data-testid=dd-canvas] svg g path', (ps) => ps.map((p) => ({ fill: p.getAttribute('fill'), opacity: p.getAttribute('stroke-opacity') })))
 
@@ -100,6 +125,7 @@ function penStroke(page, x0, y0, x1, y1, opts) {
 
 run(async ({ page }) => {
   await new Promise((r) => fake.listen(0, '127.0.0.1', r))
+  await new Promise((r) => site.listen(0, '127.0.0.1', r))
   try {
     await openProject(page)
     await page.click('.rail-right .rail-btn[title="AI assistant"]')
@@ -573,7 +599,32 @@ run(async ({ page }) => {
     await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Ticket made.") >> nth=-1', { timeout: 15000 })
     const tk = text([...requests[requests.length - 1].messages].reverse().find((m) => m.role === 'tool'))
     assert(tk.includes('2 doodles of the conversation attached'), 'the pages of the model go to the ticket: ' + tk)
+
+    // Backgrounds: a project file, an SVG, a local page captured, a file outside the project,
+    // and a capture of the screen that the user refuses.
+    fs.writeFileSync(WS + '/demo/shot.png', PNG)
+    await page.click('.ai-panel button[title="New conversation"]')
+    await page.fill('.ai-composer textarea', 'Back: annotate')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid=ai-capture]', { timeout: 30000 })
+    assert(true, 'the capture of the screen waits for the user')
+    await page.click('[data-testid=ai-capture-refuse]')
+    await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Backgrounds done.")', { timeout: 20000 })
+    const bm = requests[requests.length - 1].messages
+    const b = (id) => text(bm.find((m) => m.role === 'tool' && m.tool_call_id === id))
+    assert(b('b1').includes('background image: file shot.png (4×3)'), 'page on a project image: ' + b('b1'))
+    assert(b('b2').includes('background image: SVG written by you (300×200)'), 'page on an SVG of the model: ' + b('b2'))
+    assert(b('b3').includes('background image: capture of http://127.0.0.1') && b('b3').includes('(640×400)'), 'page on a captured page: ' + b('b3'))
+    assert(b('b4').startsWith('Error:') && b('b4').includes('outside the project'), 'no file outside the project: ' + b('b4'))
+    assert(b('b5').includes('refused to share their screen'), 'capture refused: ' + b('b5'))
+    assert(!(await page.$('[data-testid=ai-capture]')), 'the card goes once answered')
+    await page.click('[data-testid=ai-board-toggle]')
+    await page.waitForSelector('[data-testid=bd-title]:has-text("Page 3")')
+    assert((await page.$$('[data-testid=bd-thumb]')).length === 3 && (await page.$$('[data-testid=bd-view] image')).length === 1, 'three pages, each on its image')
+    await page.screenshot({ path: OUT + '/board-background.png' })
+    await page.click('[data-testid=ai-board-toggle]')
   } finally {
+    site.close()
     fake.close()
   }
 })

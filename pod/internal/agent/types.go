@@ -104,8 +104,10 @@ type Message struct {
 	Path       []int           `json:"path,omitempty"`    // questions asked, in order (a graph)
 	OffPath    *int            `json:"offPath,omitempty"` // question where the user left the path
 	AskState   string          `json:"askState,omitempty"`
-	// Page drawn on the board by board_draw (tool message).
-	Page *Page `json:"page,omitempty"`
+	// Page drawn on the board by board_draw (tool message), and the state of the capture of
+	// the screen it waits for (pending, done, refused, skipped).
+	Page    *Page  `json:"page,omitempty"`
+	Capture string `json:"capture,omitempty"`
 }
 
 // Page drawn by the model on the board of the conversation: its document (a doodle, see

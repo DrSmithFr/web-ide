@@ -113,8 +113,10 @@ export interface ChatMessage {
   path?: number[]
   offPath?: number
   askState?: 'pending' | 'answered' | 'skipped'
-  /** Page drawn on the board with board_draw (tool message). */
+  /** Page drawn on the board with board_draw (tool message), and the capture of the screen
+   *  it waits for. */
   page?: ModelPage
+  capture?: 'pending' | 'done' | 'refused' | 'skipped'
 }
 
 /** A page of the board drawn by the model: its document, the description it read, images. */

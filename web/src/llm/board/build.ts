@@ -30,6 +30,8 @@ export interface DrawArgs {
   size?: { w?: number; h?: number }
   /** Document of the page copied (the pod sends it with its number). */
   fromDoc?: DoodleDoc
+  /** A blank page on a background image (its frame). */
+  base?: DoodleDoc
   elements: Record<string, any>[]
 }
 
@@ -43,6 +45,7 @@ const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v)
 
 function frameOf(a: DrawArgs): DoodleDoc {
   if (a.fromDoc) return cloneDoc(a.fromDoc)
+  if (a.base) return a.base
   if (a.size && (a.size.w || a.size.h)) {
     const w = Number(a.size.w)
     const h = Number(a.size.h)

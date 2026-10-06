@@ -181,13 +181,13 @@ function hitBox(el: Element, x: number, y: number): boolean {
 }
 
 /** Text read by the model (always English, like the rest of what it reads). */
-export function describe(doc: DoodleDoc, name: string, page?: number): string {
+export function describe(doc: DoodleDoc, name: string, page?: number, background?: string): string {
   const fr = doc.frame
   const preset = doc.preset === 'free' ? 'free ratio' : doc.preset === 'image' ? 'cropped from the image' : presets.find((p) => p.id === doc.preset)?.label
   const seen = doc.elements.map((el) => ({ el, r: inFrame(bounds(el), fr) })).filter((x): x is { el: Element; r: Frame } => !!x.r)
   const lines = [
     `${page ? `Page ${page} "${name}" drawn by you (board_draw)` : `Doodle "${name}" drawn by the user`}. Frame ${Math.round(fr.w)}×${Math.round(fr.h)} (${preset}); positions in % of the frame from its top left corner.`,
-    ...(doc.background ? ['The drawing annotates an image given by the user (a screenshot or a picture), shown under it.'] : []),
+    ...(doc.background ? [background ? `The page is drawn on a background image: ${background}.` : 'The drawing annotates an image given by the user (a screenshot or a picture), shown under it.'] : []),
     ...items(seen, fr),
     ...strokes(seen.filter((x) => x.el.type === 'pen'), 'Free pen strokes (hand drawn, shapes approximate)'),
     ...strokes(seen.filter((x) => x.el.type === 'marker'), 'Highlighter strokes (emphasis)'),

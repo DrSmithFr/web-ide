@@ -7,6 +7,8 @@ import { showTool, toolIds } from '../state/zones'
 import { t } from '../i18n'
 import { buildPage, type DrawArgs } from './board/build'
 import { describe, MAX_SIDE, png } from './doodle/export'
+import { pictureOf, type Picture } from './doodle/background'
+import { newDoc } from './doodle/model'
 import type { ModelPage } from './state'
 
 interface UiResult {
@@ -81,11 +83,58 @@ async function focus(a: Record<string, any>): Promise<UiResult> {
   throw new Error('target must be file, panel, console or problems')
 }
 
+type Background = { src: string; origin: string } | { svg: string; origin: string }
+
+/** An SVG written by the model as an image: its size from width/height or the viewBox. */
+function svgBlob(svg: string): Blob {
+  const doc = new DOMParser().parseFromString(svg, 'image/svg+xml')
+  const el = doc.documentElement
+  if (el.nodeName !== 'svg') throw new Error('the SVG cannot be read')
+  if (!el.getAttribute('xmlns')) el.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+  const vb = (el.getAttribute('viewBox') ?? '').split(/[\s,]+/).map(Number)
+  if (!parseFloat(el.getAttribute('width') ?? '') && vb.length === 4) el.setAttribute('width', String(vb[2]))
+  if (!parseFloat(el.getAttribute('height') ?? '') && vb.length === 4) el.setAttribute('height', String(vb[3]))
+  if (!parseFloat(el.getAttribute('width') ?? '') || !parseFloat(el.getAttribute('height') ?? '')) throw new Error('the SVG needs a width and a height, or a viewBox')
+  return new Blob([new XMLSerializer().serializeToString(el)], { type: 'image/svg+xml' })
+}
+
+/** The image under a page, reduced like the other pictures (2048 px at most). */
+export async function backgroundPicture(bg: Background): Promise<Picture> {
+  if ('svg' in bg) {
+    // Drawn on a white ground (the elements of a page are made for a light background).
+    const url = URL.createObjectURL(svgBlob(bg.svg))
+    try {
+      const img = new Image()
+      await new Promise((resolve, reject) => {
+        img.onload = resolve
+        img.onerror = () => reject(new Error('the SVG cannot be drawn'))
+        img.src = url
+      })
+      const k = Math.min(1, 2048 / Math.max(img.naturalWidth, img.naturalHeight))
+      const c = document.createElement('canvas')
+      c.width = Math.max(1, Math.round(img.naturalWidth * k))
+      c.height = Math.max(1, Math.round(img.naturalHeight * k))
+      const g = c.getContext('2d')!
+      g.fillStyle = '#fff'
+      g.fillRect(0, 0, c.width, c.height)
+      g.drawImage(img, 0, 0, c.width, c.height)
+      return { src: c.toDataURL('image/png'), w: c.width, h: c.height }
+    } finally {
+      URL.revokeObjectURL(url)
+    }
+  }
+  return pictureOf(await (await fetch(bg.src)).blob())
+}
+
 /** board_draw: the page built from the elements, its description and images. */
-async function drawPage(a: DrawArgs & { number: number; from?: number }): Promise<UiResult> {
+export async function drawPage(a: DrawArgs & { number: number; from?: number; background?: Background }, picture?: Picture, origin?: string): Promise<UiResult> {
   const title = String(a.title ?? '').trim() || t('Page {n}', { n: a.number })
-  const { doc, outside } = buildPage(a)
-  let description = describe(doc, title, a.number)
+  if (a.background) {
+    picture = await backgroundPicture(a.background)
+    origin = a.background.origin
+  }
+  const { doc, outside } = buildPage({ ...a, base: picture ? newDoc(picture) : undefined })
+  let description = describe(doc, title, a.number, origin ? `${origin} (${picture!.w}×${picture!.h})` : undefined)
   if (a.from) description += `\nA copy of page ${a.from}, with your elements on top.`
   if (outside.length) description += `\nWarning: partly outside the frame: ${outside.join(', ')}.`
   const page: ModelPage = { name: title, doc, description, png: await png(doc, MAX_SIDE), thumb: await png(doc, 96) }

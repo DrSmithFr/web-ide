@@ -1,4 +1,10 @@
 {
+  "The assistant wants a capture of your screen to draw on it.": "L’assistant veut une capture de votre écran pour dessiner dessus.",
+  "The assistant wants a capture of your screen, which this browser cannot take.": "L’assistant veut une capture de votre écran, que ce navigateur ne sait pas faire.",
+  "Share the screen": "Partager l’écran",
+  "waiting for a capture of the screen": "en attente d'une capture d'écran",
+  "capture not shared": "capture non partagée",
+  "capture refused": "capture refusée",
   "New page on the board": "Nouvelle page sur le tableau",
   "Show": "Afficher",
   "Page {n} · {name}": "Page {n} · {name}",

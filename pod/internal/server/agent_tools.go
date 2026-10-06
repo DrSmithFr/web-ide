@@ -168,7 +168,7 @@ func (s *Server) agentTool(r *agentRun, ref *runtimeRef, call agent.ToolCall, mo
 	case "open_file", "focus":
 		res, err = s.uiTool(r, name, a)
 	case "board_draw":
-		res, err = s.boardDraw(r, a)
+		res, err = s.boardDraw(r, ref.rt, a)
 	case "bash":
 		res, err = bashTool(r.ctx, ref.rt, a.str("command"), a.str("cwd"), a.num("timeout"))
 	case "run_command":

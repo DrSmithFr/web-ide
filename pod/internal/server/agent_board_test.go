@@ -25,7 +25,7 @@ func TestBoardDrawChecks(t *testing.T) {
 		`{"title":"x","elements":[{"type":"stroke","points":[` + strings.Repeat("[1,2],", 500) + `[1,2]]}]}`: "element 1: 501 points",
 		`{"title":"x","elements":[{"type":"rect","x":1,"y":1,"w":5,"h":5}]}`:                                 "needs an IDE window open",
 	} {
-		if _, err := s.boardDraw(r, args(js)); err == nil || !strings.Contains(err.Error(), want) {
+		if _, err := s.boardDraw(r, nil, args(js)); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%.60s: %v", js, err)
 		}
 	}
@@ -46,5 +46,22 @@ func TestPageImages(t *testing.T) {
 	}
 	if len(apiMessages("sys", msgs, false)) != 6 {
 		t.Fatal("no image for a model without vision")
+	}
+}
+
+func TestAttachmentImage(t *testing.T) {
+	msgs := []*agent.Message{{
+		Role:        "user",
+		Content:     json.RawMessage(`[{"type":"image_url","image_url":{"url":"data:doodle"}},{"type":"image_url","image_url":{"url":"data:shot"}},{"type":"text","text":"look"}]`),
+		Attachments: json.RawMessage(`[{"name":"Doodle 1","kind":"doodle","png":"data:doodle"},{"name":"shot.png","kind":"image"}]`),
+	}}
+	if src, _ := attachmentImage(msgs, "shot.png"); src != "data:shot" {
+		t.Fatalf("image: %q", src)
+	}
+	if src, _ := attachmentImage(msgs, "Doodle 1"); src != "data:doodle" {
+		t.Fatalf("doodle: %q", src)
+	}
+	if src, names := attachmentImage(msgs, "nope"); src != "" || strings.Join(names, ",") != "Doodle 1,shot.png" {
+		t.Fatalf("unknown: %q %v", src, names)
 	}
 }

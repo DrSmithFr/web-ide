@@ -521,6 +521,22 @@ func (s *Server) runCalls(r *agentRun, ref *runtimeRef, calls []agent.ToolCall, 
 			s.publish(r, len(r.chat.Messages)-1)
 			r.mu.Unlock()
 			continue
+		case "board_draw":
+			// A capture of the screen of the user needs their click: the turn ends until they
+			// share it or refuse (agent.capture), like questions.
+			var bg struct {
+				IDE bool `json:"ide"`
+			}
+			if json.Unmarshal(args["background"], &bg) != nil || !bg.IDE {
+				break
+			}
+			m := &agent.Message{Role: "tool", ToolCallID: call.ID, Name: name, Status: "ok", Capture: "pending",
+				Content: agent.String("Waiting for the user to share their screen."), Summary: agent.T("waiting for a capture of the screen", nil).Raw()}
+			r.chat.Messages = append(r.chat.Messages, m)
+			s.publish(r, len(r.chat.Messages)-1)
+			r.mu.Unlock()
+			stop = true
+			continue
 		case "ask_user":
 			// The questions go to the user; the turn ends until they answer.
 			qs, err := agent.NormalizeQuestions(args["questions"])

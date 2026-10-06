@@ -1,4 +1,9 @@
 {
+  "no capture of the screen is waiting here": "aucune capture d'écran n'est attendue ici",
+  "only http and https addresses can be captured: %s": "seules les adresses http et https peuvent être capturées : %s",
+  "no Chromium found: install chromium (or the browser of the e2e tests) on the machine of the pod": "aucun Chromium trouvé : installer chromium (ou le navigateur des tests e2e) sur la machine du pod",
+  "the capture of %s took more than %d s": "la capture de %s a pris plus de %d s",
+  "Chromium cannot use its sandbox on this machine: only local addresses can be captured (%s)": "Chromium ne peut pas utiliser son bac à sable sur cette machine : seules les adresses locales peuvent être capturées (%s)",
   "%d file(s) still in conflict: fix them, then git add": "%d fichier(s) encore en conflit : les corriger puis git add",
   "%s cannot be reached: %v": "%s injoignable : %v",
   "%s: no answer": "%s : pas de réponse",
