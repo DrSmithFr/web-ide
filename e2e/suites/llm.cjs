@@ -129,7 +129,7 @@ const fake = http.createServer(async (req, res) => {
   finish(res, 'stop', { prompt_tokens: 300, completion_tokens: 40, prompt_tokens_details: { cached_tokens: 100 } })
 })
 
-run(async ({ page }) => {
+run(async ({ page, ctx }) => {
   await new Promise((r) => fake.listen(0, '127.0.0.1', r))
   const port = fake.address().port
   page.on('dialog', (d) => d.accept())
@@ -153,6 +153,11 @@ run(async ({ page }) => {
     const stored = JSON.parse(fs.readFileSync(process.env.E2E_WS + '/../data/llm.json', 'utf8'))
     assert(stored.servers[0].url === `http://127.0.0.1:${port}` && stored.model === 'fake-model', 'configuration saved in llm.json')
 
+    // A second window showing another conversation is told when this one waits for the user.
+    const other = await ctx.newPage()
+    await other.goto(new URL(new URL(page.url()).pathname + '/tool/assistant', page.url()).href)
+    await other.waitForSelector('.ai-panel.detached .ai-composer')
+
     // Question → reading tools → confirmed edit → answer.
     await page.fill('.ai-composer textarea', 'Replace Bonjour with Salut in main.go')
     await page.keyboard.press('Enter')
@@ -161,7 +166,14 @@ run(async ({ page }) => {
     assert(diff.includes('- \treturn fmt.Sprintf("Bonjour %s", g.Name)') && diff.includes('+ \treturn fmt.Sprintf("Salut %s", g.Name)'), 'diff preview before the change')
     assert(fs.readFileSync(WS + '/demo/src/main.go', 'utf8').includes('Bonjour'), 'nothing is written before confirmation')
     await page.screenshot({ path: OUT + '/llm-approval.png' })
-    await page.click('[data-testid=ai-approval] button:has-text("Apply")')
+    // The other window opens it from its toast and confirms the change there.
+    await other.waitForSelector('.toast:has-text("asks to change a file")', { timeout: 5000 })
+    await other.click('.toast:has-text("asks to change a file") button:has-text("Open")')
+    await other.waitForSelector('[data-testid=ai-approval] .ai-diff')
+    await other.click('[data-testid=ai-approval] button:has-text("Apply")')
+    assert(true, 'a change waiting for the user is announced to the other windows and confirmed from one of them')
+    await page.waitForSelector('[data-testid=ai-approval]', { state: 'detached', timeout: 5000 })
+    await other.close()
     // The final answer (not the one being written) with its diagram.
     await page.waitForSelector('.ai-msg.assistant:not(.live) .md-codeblock', { timeout: 15000 })
     await page.waitForSelector('.ai-msg.assistant:not(.live) .md-mermaid-svg svg', { timeout: 30000 }).catch(() => {})

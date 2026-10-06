@@ -8,6 +8,7 @@ import { on, request } from '../pod/rpc'
 import { activeTab, project, relPath, session } from '../state/project'
 import { approval, chat, config, emptyChat, live, newId, prefs, refreshChats, setApproval, setChat, setLive, type Chat, type ChatMessage, type Mode, type Part } from './state'
 import { runUiTool } from './uiTools'
+import { toast } from '../ui/toast'
 import { t } from '../i18n'
 
 interface DeltaEvent {
@@ -152,6 +153,17 @@ function listSoon() {
     refreshChats()
   }, 1000)
 }
+
+/**
+ * A conversation waits for the user (a change or a command to confirm): a toast with a way
+ * to open it when this window shows another one, and a notification of the system when the
+ * page is hidden (if allowed).
+ */
+on('agent.attention', (e: { id: string; title: string; kind: string }) => {
+  const text = e.kind === 'command' ? t('“{title}” asks to run a command', { title: e.title }) : t('“{title}” asks to change a file', { title: e.title })
+  if (e.id !== chat.id) toast(text, 'warn', { label: t('Open'), run: () => void openChat(e.id) }, 10000)
+  if (document.hidden && 'Notification' in window && Notification.permission === 'granted') new Notification('Web IDE', { body: text, tag: e.id })
+})
 
 on('agent.error', (e: { id: string; error: string }) => {
   if (e.id === chat.id) console.warn('agent', e.error)
