@@ -4,6 +4,10 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+### Added
+
+- Whiteboard of a conversation: its doodles as read-only pages, next to the conversation in a wide assistant or in its place in a narrow one, with zoom, pan, thumbnails and *Reuse*; *Show on the board* from a doodle of the thread.
+
 ## [1.1.0] - 2026-10-06
 
 ### Added

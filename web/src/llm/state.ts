@@ -275,6 +275,11 @@ export const [prefs, setPrefs] = createStore({
   compactModel: '',
   /** History side bar open (when it is not always shown). */
   sidebarOpen: false,
+  /** Board of the conversation: a column when the assistant is wide (with its share of the
+   *  width), else shown instead of the conversation. */
+  boardOpen: false,
+  boardView: 'chat' as 'chat' | 'board',
+  boardSplit: 0.5,
   /** Model of the Plan mode ('' server: the model of the conversation). */
   planServer: '',
   planModel: '',

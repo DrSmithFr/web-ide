@@ -3,7 +3,7 @@
 // frame presets, attach (chip opened again), PNG and description sent to the model,
 // Ctrl+Shift+D and sending from the composer of the modal.
 const http = require('http')
-const { run, openProject, assert } = require('../common.cjs')
+const { run, openProject, assert, OUT } = require('../common.cjs')
 
 const requests = []
 const sse = (res, delta) => res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`)
@@ -187,6 +187,69 @@ run(async ({ page }) => {
     user = [...requests[requests.length - 1].messages].reverse().find((m) => m.role === 'user')
     assert(user.content.some((p) => p.type === 'image_url') && text(user).includes('Doodle "Doodle 1"'), 'sent from the modal with the doodle')
     assert(!(await page.$('.ai-composer .ai-att')), 'the draft is empty after sending')
+
+    // The board: the doodles of the conversation as read-only pages. The side panel is
+    // narrow: the board shows instead of the conversation.
+    await page.click('[data-testid=ai-board-toggle]')
+    await page.waitForSelector('[data-testid=bd-board] [data-testid=bd-view]')
+    assert((await page.$$('[data-testid=bd-thumb]')).length === 2 && (await page.textContent('[data-testid=bd-title]')).startsWith('Page 2'), 'board: two pages, the last one shown')
+    assert(!(await page.isVisible('.ai-panel .ai-main')), 'narrow assistant: the board replaces the conversation')
+    await page.click('[data-testid=bd-thumb] >> nth=0')
+    assert((await page.textContent('[data-testid=bd-title]')) === 'Page 1 · Doodle 1', 'a thumbnail shows its page')
+    const page1 = await page.$$eval('[data-testid=bd-view] path', (p) => p.length)
+    const vb = () => page.getAttribute('[data-testid=bd-view]', 'viewBox')
+    const fitted = await vb()
+    await page.hover('[data-testid=bd-view]')
+    await page.mouse.wheel(0, -400)
+    assert((await vb()) !== fitted, 'the wheel zooms the page')
+    await page.click('[data-testid=bd-fit]')
+    assert((await vb()) === fitted, 'Fit shows the whole page again')
+    // Reuse: an editable copy, sent as a new page; the page itself stays as it was.
+    await page.click('[data-testid=bd-reuse]')
+    await page.waitForSelector('[data-testid=doodle]')
+    await stroke(page, 0.6, 0.6, 0.8, 0.7)
+    await page.fill('[data-testid=doodle] .ai-composer textarea', 'Third sketch')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid=doodle]', { state: 'detached' })
+    await page.click('[data-testid=ai-board-toggle]')
+    await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Got Third sketch")', { timeout: 15000 })
+    await page.click('[data-testid=ai-board-toggle]')
+    await page.waitForSelector('[data-testid=bd-board]')
+    assert((await page.$$('[data-testid=bd-thumb]')).length === 3 && (await page.textContent('[data-testid=bd-title]')).startsWith('Page 3'), 'the copy sent is a new page, shown')
+    await page.click('[data-testid=bd-thumb] >> nth=0')
+    assert((await page.$$eval('[data-testid=bd-view] path', (p) => p.length)) === page1, 'the reused page is unchanged')
+    await page.screenshot({ path: OUT + '/board-narrow.png' })
+    // Back to the conversation; a doodle card shows its page on the board.
+    await page.click('[data-testid=ai-board-toggle]')
+    await page.waitForSelector('.ai-panel .ai-main', { state: 'visible' })
+    await page.click('.ai-panel .ai-msg.user [data-testid=ai-doodle-board] >> nth=0')
+    await page.waitForSelector('[data-testid=bd-title]:has-text("Page 1")')
+    assert(true, 'Show on the board opens the page of the card')
+    await page.click('[data-testid=ai-board-toggle]')
+    // A wide detached window: the board is a column next to the conversation, resizable.
+    const main = page.url()
+    await page.goto(new URL(new URL(main).pathname.replace(/\/$/, '') + '/tool/assistant', main).href)
+    await page.waitForSelector('.ai-panel.detached')
+    await page.waitForSelector('.ai-panel .ai-msg.user [data-testid=ai-doodle]', { timeout: 10000 })
+    await page.click('[data-testid=ai-board-toggle]')
+    await page.waitForSelector('[data-testid=ai-board-split]')
+    assert((await page.isVisible('.ai-panel .ai-main')) && (await page.$$('[data-testid=bd-thumb]')).length === 3, 'wide window: conversation and board side by side')
+    const col = () => page.$eval('.ai-board-col', (e) => e.getBoundingClientRect().width)
+    const colBefore = await col()
+    const sb = await page.$eval('[data-testid=ai-board-split]', (e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } })
+    await page.mouse.move(sb.x, sb.y)
+    await page.mouse.down()
+    await page.mouse.move(sb.x - 150, sb.y, { steps: 5 })
+    await page.mouse.up()
+    assert((await col()) > colBefore + 100, `the splitter widens the board (${Math.round(colBefore)} → ${Math.round(await col())})`)
+    await page.screenshot({ path: OUT + '/board-wide.png' })
+    // Another conversation: its own board, empty.
+    await page.click('.ai-panel button[title="New conversation"]')
+    await page.waitForSelector('[data-testid=bd-empty]')
+    assert(true, 'a new conversation has an empty board')
+    await page.click('[data-testid=ai-board-toggle]')
+    await page.goto(main)
+    await page.waitForSelector('.ai-panel')
 
     // Shapes, text, selection.
     await page.click('.ai-composer textarea')

@@ -67,10 +67,16 @@ The tools text of the three modes (part of the prompt even when the template is 
 
 When the model creates a ticket (`kanban_create`) or updates its ticket (`kanban_update`), the doodles of the conversation not attached yet are joined to it as PNG files (`Doodle 1.png`, `Doodle 1 (2).png` for a second Doodle 1); the tool result tells the model.
 
+## Whiteboard
+
+Each conversation has a board: its pages are the doodles sent in it (later also the drawings of the assistant), read-only. The *Board* button of the assistant head (with the number of pages) shows it: a column next to the conversation when the assistant is at least 1000 px wide (a splitter sets its share), else in place of the conversation. One page is shown large, with zoom (wheel, pinch), pan (drag) and *Fit* (or a double click); the others are a strip of thumbnails (← / → when the board has the focus). *Reuse* opens an editable copy in the modal, sent as a new doodle: a page never changes. *Show on the board* on a doodle of the thread selects its page.
+
+Pages are numbered from 1 in message order, then in attachment order within a message; the model will refer to them by this number. The board is a view over the messages of the conversation (`web/src/llm/board/pages.ts`), stored nowhere else.
+
 ## Storage
 
 The doodle lives in the conversation, in the message that sent it: the PNG, the description and the vector document (JSON, version field, the background as a data URL) used by *Reuse the doodle*. No file in the project.
 
 ## Code
 
-Hand-made, no drawing library: SVG for the elements, a canvas only for the export. `web/src/llm/doodle/`: the document model and its undo stack, the tools, the layout tree, the export (PNG and description), the modal.
+Hand-made, no drawing library: SVG for the elements, a canvas only for the export. `web/src/llm/doodle/`: the document model and its undo stack, the tools, the layout tree, the export (PNG and description), the modal, the drawing of the elements shared with the board (`Elements.tsx`). `web/src/llm/board/`: the pages of the conversation, the read-only view and the board panel.

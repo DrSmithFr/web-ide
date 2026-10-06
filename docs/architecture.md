@@ -76,7 +76,7 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 | `ui/` | Editor area, status bar, diff view, overlays (modal, prompt, pick list, context menu), toasts, icons, empty states, keyboard navigation of the toolbars and tab bars (`roving.ts`) |
 | `panels/` | Explorer (with file type icons, `fileIcons.tsx`), global search, Git tool (`panels/git/`: tabs, tree of changes, graph lanes `graph.ts`, commit detail) |
 | `tools/`, `db/`, `console/`, `conflict/`, `settings/`, `pages/` | Right-panel tools, database explorer, Console and Problems tools, conflict dialog, settings modal, pages |
-| `llm/` | AI assistant: state, agent loop, tools, prompt, Markdown, attachments, speech recognition, doodles (`llm/doodle/`: document model, SVG rendering, export, modal) |
+| `llm/` | AI assistant: state, agent loop, tools, prompt, Markdown, attachments, speech recognition, doodles (`llm/doodle/`: document model, SVG rendering, export, modal), the board of a conversation (`llm/board/`) |
 | `kanban/` | Board, ticket view, workflow actions, linked conversations |
 | `docker/` | Docker tool: lists and polling (`state.ts`), detail pane, logs with ANSI colors (`ansi.ts`), disk usage, tunnels (and their list on the home page) |
 | `i18n/` | `t()` and the catalogs (English source strings, French translation) |

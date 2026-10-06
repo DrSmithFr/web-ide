@@ -1,4 +1,13 @@
 {
+  "Back to the conversation": "Revenir à la conversation",
+  "Board of the conversation": "Tableau de la conversation",
+  "Show on the board": "Voir sur le tableau",
+  "Page {n}": "Page {n}",
+  "Doodles of this conversation and drawings of the assistant appear here.": "Les doodles de cette conversation et les dessins de l’assistant apparaissent ici.",
+  "drawn by you": "dessinée par vous",
+  "drawn by the assistant": "dessinée par l’assistant",
+  "Reuse": "Réutiliser",
+  "Close the board": "Fermer le tableau",
   "#{id} created": "#{id} créé",
   "#{id} updated": "#{id} modifié",
   "(description of the tools, empty when they are off).": "(description des outils, vide si désactivés).",

@@ -12,6 +12,7 @@ import { focusComposer, reuseDoodle, runCommand } from './Composer'
 import { openDiagram } from './DiagramViewer'
 import { toSVG } from './doodle/render'
 import { doodleSession } from './doodle/session'
+import { pages, showPage } from './board/pages'
 import { answerQuestions, dismissPlan, executePlan, send } from './agent'
 import { AskCard } from './AskCard'
 import { t, tn } from '../i18n'
@@ -193,6 +194,16 @@ function DoodleCard(props: { a: Attachment }) {
             <Icon name="edit" size={13} /> {t('Reuse the doodle')}
           </button>
         </Show>
+        <button
+          class="btn small"
+          onClick={() => {
+            const p = pages().find((x) => x.doc === props.a.doodle) ?? pages().find((x) => x.name === props.a.name)
+            if (p) showPage(p.key)
+          }}
+          data-testid="ai-doodle-board"
+        >
+          <Icon name="layout" size={13} /> {t('Show on the board')}
+        </button>
         <Show when={props.a.description}>
           <details class="ai-doodle-desc">
             <summary>{t('Description sent to the model')}</summary>
