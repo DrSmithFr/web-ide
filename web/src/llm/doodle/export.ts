@@ -206,6 +206,6 @@ export async function prepareDoodle(doc: DoodleDoc, name: string, caps: Caps | u
   const parts: Part[] = vision ? [{ type: 'image_url', image_url: { url: image } }, { type: 'text', text }] : [{ type: 'text', text }]
   return {
     parts,
-    attachment: { name, kind: 'doodle', size: Math.round((image.length * 3) / 4), thumb, doodle: cloneDoc(doc), description: text },
+    attachment: { name, kind: 'doodle', size: Math.round((image.length * 3) / 4), thumb, doodle: cloneDoc(doc), description: text, png: image },
   }
 }

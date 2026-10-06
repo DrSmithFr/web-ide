@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"github.com/DrSmithFr/web-ide/pod/internal/agent"
 	"path"
 	"path/filepath"
 	"strings"
@@ -112,53 +113,6 @@ func (s *Server) registerLLM() {
 		}
 		return wait(ctx, c, a.Stream, true, a.Watch)
 	})
-	// A conversation is run by one window at a time: the one that claimed it. A claim
-	// ends with llm.release or when its window disconnects.
-	s.handle("llm.claim", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
-		a, err := bind[struct{ ID string }](p)
-		if err != nil {
-			return nil, err
-		}
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		if owner := s.claims[a.ID]; owner != nil && owner != c {
-			return false, nil
-		}
-		s.claims[a.ID] = c
-		return true, nil
-	})
-	s.handle("llm.release", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
-		a, err := bind[struct{ ID string }](p)
-		if err != nil {
-			return nil, err
-		}
-		s.mu.Lock()
-		released := s.claims[a.ID] == c
-		if released {
-			delete(s.claims, a.ID)
-		}
-		s.mu.Unlock()
-		if released {
-			s.emitter(c.project)("llm.released", map[string]string{"id": a.ID}, c.id)
-		}
-		return nil, nil
-	})
-	// llm.stop asks the window running a conversation to stop (button of a window that
-	// only follows it).
-	s.handle("llm.stop", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
-		a, err := bind[struct{ ID string }](p)
-		if err != nil {
-			return nil, err
-		}
-		s.mu.Lock()
-		owner := s.claims[a.ID]
-		s.mu.Unlock()
-		if owner != nil {
-			owner.push("llm.stop", map[string]string{"id": a.ID})
-		}
-		return nil, nil
-	})
-
 	// Speech recognition models cached by the pod (downloaded by the page through it).
 	s.handle("models.list", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 		return s.Models.List()
@@ -250,7 +204,10 @@ func (s *Server) registerLLM() {
 		return nil, nil
 	}))
 	s.handle("llm.context", withProject(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
-		return s.LLM.LoadContext(proj(rt)), nil
+		return struct {
+			*llm.Context
+			Defaults map[string]string `json:"defaults"`
+		}{s.LLM.LoadContext(proj(rt)), agent.DefaultTemplates}, nil
 	}))
 	s.handle("llm.skill.read", withProject(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
 		a, err := bind[struct{ Name string }](p)

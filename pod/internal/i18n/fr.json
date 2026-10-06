@@ -167,5 +167,15 @@
   "the lineage is not finished: %s": "la lignée n'est pas terminée : %s",
   "the lineage has no worktree: start #%d first": "la lignée n'a pas de worktree : démarrez d'abord #%d",
   "Steps": "Étapes",
-  "unknown size: %s (%s)": "taille inconnue : %s (%s)"
+  "unknown size: %s (%s)": "taille inconnue : %s (%s)",
+  "Nothing to compact": "Rien à compacter",
+  "No model for the compaction": "Aucun modèle pour la compaction",
+  "the model returned an empty summary": "le modèle a renvoyé un résumé vide",
+  "conversation id is missing": "identifiant de conversation manquant",
+  "Choose a server and a model": "Choisissez un serveur et un modèle",
+  "nothing to retry": "rien à relancer",
+  "these questions are not waiting for an answer": "ces questions n'attendent pas de réponse",
+  "no plan here": "pas de plan ici",
+  "nothing is waiting for an answer": "rien n'attend de réponse",
+  "the conversation is running": "la conversation est en cours"
 }

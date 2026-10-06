@@ -31,16 +31,19 @@ type Server struct {
 	APIKey string `json:"apiKey,omitempty"`
 	// Context is the context size asked to Ollama (num_ctx), 0 for its default.
 	Context int `json:"context,omitempty"`
+	// Parallel is the number of conversations the server runs at once (0: 1, one GPU).
+	Parallel int `json:"parallel,omitempty"`
 }
 
 // ServerView is what the page receives.
 type ServerView struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Kind    string `json:"kind"`
-	URL     string `json:"url"`
-	HasKey  bool   `json:"hasKey"`
-	Context int    `json:"context,omitempty"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Kind     string `json:"kind"`
+	URL      string `json:"url"`
+	HasKey   bool   `json:"hasKey"`
+	Context  int    `json:"context,omitempty"`
+	Parallel int    `json:"parallel,omitempty"`
 }
 
 type Config struct {
@@ -76,7 +79,7 @@ func (m *Manager) View() map[string]any {
 	defer m.mu.Unlock()
 	views := []ServerView{}
 	for _, s := range m.cfg.Servers {
-		views = append(views, ServerView{ID: s.ID, Name: s.Name, Kind: s.Kind, URL: s.URL, HasKey: s.APIKey != "", Context: s.Context})
+		views = append(views, ServerView{ID: s.ID, Name: s.Name, Kind: s.Kind, URL: s.URL, HasKey: s.APIKey != "", Context: s.Context, Parallel: s.Parallel})
 	}
 	return map[string]any{"servers": views, "server": m.cfg.Server, "model": m.cfg.Model}
 }
@@ -290,4 +293,22 @@ func (m *Manager) kind(ctx context.Context, s Server) string {
 	m.kinds[s.URL] = k
 	m.mu.Unlock()
 	return k
+}
+
+// Parallel is the number of conversations a server runs at once (1 when unknown).
+func (m *Manager) Parallel(id string) int {
+	s, err := m.server(id)
+	if err != nil || s.Parallel < 1 {
+		return 1
+	}
+	return s.Parallel
+}
+
+// ServerContext is the context size set for a server (Ollama), 0 when unset.
+func (m *Manager) ServerContext(id string) int {
+	s, err := m.server(id)
+	if err != nil {
+		return 0
+	}
+	return s.Context
 }

@@ -1,7 +1,8 @@
 // AI assistant, conversation features: side bar order, Ctrl+click on @file, queue of
 // messages (after an answer and between tool steps), message edited in place (attachments
 // kept), scroll at the end after a reload, reload during an answer (the page attaches to
-// the completion still running in the pod) and during a tool (interrupted, then goes on).
+// the completion still running in the pod) and during a tool (the pod runs the agent: the
+// tool goes on), windows following the same conversation.
 const http = require('http')
 const { run, openProject, assert, OUT } = require('../common.cjs')
 
@@ -181,15 +182,15 @@ run(async ({ page, ctx }) => {
     assert(full.startsWith('Part 1.') && (full.match(/x/g) ?? []).length === 25 && byScenario.slow === 1, `full answer, without a new request (${byScenario.slow} request)`)
     await page.screenshot({ path: OUT + '/chat-resume.png' })
 
-    // Reload during a tool: marked interrupted, the agent goes on.
+    // Reload during a tool: the agent runs in the pod, the tool goes on and so does the agent.
     await page.waitForSelector('[data-testid=send]')
     await page.fill('.ai-composer textarea', 'slow-tool now')
     await page.keyboard.press('Enter')
     await page.waitForSelector('.ai-tool.running', { timeout: 10000 })
     await page.reload()
-    const resumed = await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Resumed: Interrupted by a reload")', { timeout: 15000 }).then(() => true, () => false)
+    const resumed = await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Resumed: Exit code 0")', { timeout: 15000 }).then(() => true, () => false)
     const rows = await page.$$eval('.ai-tool', (e) => e.filter((x) => x.textContent.includes('sleep 3')).map((x) => x.className))
-    assert(resumed && rows.length === 1 && rows[0].includes('error') && byScenario['slow-tool'] === 2, `tool interrupted by the reload (not run again), then the agent goes on (${rows.length} tool, ${byScenario['slow-tool']} requests)`)
+    assert(resumed && rows.length === 1 && !rows[0].includes('error') && byScenario['slow-tool'] === 2, `tool not interrupted by the reload, then the agent goes on (${rows.length} tool, ${byScenario['slow-tool']} requests)`)
 
     // Another window opened during an answer follows its stream.
     await page.waitForSelector('[data-testid=send]')
@@ -203,9 +204,13 @@ run(async ({ page, ctx }) => {
     await page.keyboard.press('Enter')
     await other.waitForSelector('.ai-msg.live .md:has-text("Part 1. x")', { timeout: 10000 })
     assert(true, 'the other window follows the running answer')
-    assert((await other.getAttribute('.ai-composer textarea', 'placeholder')).includes('another window'), 'message box of the other window read-only')
+    await other.fill('.ai-composer textarea', 'from the other window')
+    await other.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid=ai-queue]:has-text("from the other window")', { timeout: 5000 })
+    assert(true, 'the other window writes too: its message is queued for the next step')
     await other.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("End.")', { timeout: 15000 })
-    assert(byScenario.slow === slowBefore + 1, 'answer received in the other window without a new request')
+    await page.waitForSelector('.ai-msg.user:has-text("from the other window")', { timeout: 15000 })
+    assert(byScenario.slow === slowBefore + 1, 'answer received in the other window without a new request for it')
 
     // Stop from the window that follows.
     await page.waitForSelector('[data-testid=send]')
@@ -227,6 +232,20 @@ run(async ({ page, ctx }) => {
     const ends = await other.$$eval('.ai-msg.assistant:not(.live) .md', (e) => e.filter((x) => x.textContent.includes('End.')).length)
     assert(ends >= 2, 'the remaining window takes the conversation over and receives the end')
     await other.screenshot({ path: OUT + '/chat-other-window.png' })
+
+    // Every window closed during an answer: the pod goes on, a new window shows the end.
+    await other.waitForSelector('[data-testid=send]', { timeout: 10000 })
+    const slowFour = byScenario.slow
+    await other.fill('.ai-composer textarea', 'slow four')
+    await other.keyboard.press('Enter')
+    await other.waitForSelector('.ai-msg.live .md:has-text("Part 1. x")', { timeout: 10000 })
+    await other.close()
+    await sleep(4000)
+    const back = await ctx.newPage()
+    await back.goto(toolUrl)
+    await back.waitForSelector('.ai-panel.detached .ai-composer')
+    await back.waitForFunction(() => [...document.querySelectorAll('.ai-msg.assistant:not(.live) .md')].filter((x) => x.textContent.includes('End.')).length >= 3, null, { timeout: 15000 })
+    assert(byScenario.slow === slowFour + 1 && (await back.isVisible('[data-testid=send]')), 'the answer went on without any window, shown once a window opens again')
   } finally {
     fake.close()
   }

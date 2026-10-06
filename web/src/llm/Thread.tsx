@@ -4,16 +4,15 @@ import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'so
 import { Icon } from '../ui/icons'
 import { errorToast, toast } from '../ui/toast'
 import { activeTab, openFile, project, relPath } from '../state/project'
-import { approval, chat, config, live, liveSpeed, savePrefs, setChat, setPrefs, type Attachment, type ChatMessage, type Part, type ToolCall } from './state'
-import { resume, retry, stepsSinceUser } from './agent'
-import { AttachmentChip, callLabel, DiffBlock, formatDuration, formatTokens, Markdown, safeArgs, toolIcons, toolVerbs } from './parts'
-import { absPath } from './tools'
+import { approval, chat, config, live, liveSpeed, savePrefs, setPrefs, type Attachment, type ChatMessage, type Part, type ToolCall } from './state'
+import { answerApproval, resume, retry, stepsSinceUser } from './agent'
+import { AttachmentChip, callLabel, DiffBlock, formatDuration, formatTokens, Markdown, safeArgs, summaryText, toolIcons, toolVerbs } from './parts'
+import { absPath } from './uiTools'
 import { focusComposer, reuseDoodle, runCommand } from './Composer'
 import { openDiagram } from './DiagramViewer'
 import { toSVG } from './doodle/render'
 import { doodleSession } from './doodle/session'
 import { answerQuestions, dismissPlan, executePlan, send } from './agent'
-import { produce } from 'solid-js/store'
 import { t, tn } from '../i18n'
 
 const textOf = (m: ChatMessage) =>
@@ -93,9 +92,8 @@ async function resend(index: number, text: string) {
   const parts = Array.isArray(m.content) ? m.content.filter((p, i) => !(i === 0 && p.type === 'text' && m.display !== undefined && p.text === m.display)) : []
   const attachments = m.attachments
   setEditing(null)
-  setChat(produce((c) => c.messages.splice(index)))
   if (text.startsWith('/') && !parts.length && (await runCommand(text, () => {}))) return
-  await send(text, parts, attachments)
+  await send(text, parts, attachments, undefined, index)
 }
 
 function UserText(props: { text: string }) {
@@ -297,7 +295,7 @@ function ToolRow(props: { msg: ChatMessage; call?: ToolCall }) {
           {label().extra}
         </span>
         <span class="grow" />
-        <span class="ai-tool-sum ellipsis">{pending() ? '' : props.msg.summary}</span>
+        <span class="ai-tool-sum ellipsis">{pending() ? '' : summaryText(props.msg.summary)}</span>
         <span class="ai-chev" classList={{ open: open() }}>
           <Icon name="chevron" size={11} />
         </span>
@@ -434,7 +432,7 @@ function AssistantMessage(props: { msg: ChatMessage; index: number; lastOfTurn: 
       <For each={asks()}>{(i) => <AskCard msg={chat.messages[i]} index={i} />}</For>
       <Show when={props.msg.error}>
         <div class="ai-error">
-          <Icon name="conflict" size={13} /> {props.msg.error}
+          <Icon name="conflict" size={13} /> {t(props.msg.error!)}
         </div>
       </Show>
       <Show when={props.lastOfTurn && !(live.busy && props.lastTurn)}>
@@ -478,7 +476,8 @@ function LiveStats() {
     const at = now()
     const parts: string[] = []
     if (live.compacting) return t('Compacting the conversation…')
-    if (live.watching && !live.stream) return t('Step running in another window…')
+    if (live.state === 'queued') return live.ahead ? tn(live.ahead, 'Waiting for the model server ({n} conversation before)', 'Waiting for the model server ({n} conversations before)') : t('Waiting for the model server')
+    if (!live.stream) return t('Running the tools…')
     if (!live.firstAt) {
       if (live.promptTotal) {
         const pct = Math.round((live.promptDone / live.promptTotal) * 100)
@@ -486,7 +485,7 @@ function LiveStats() {
         // Its speed and the part found in the cache of the server (kept in the final stats).
         if (live.promptSpeed) parts.push(t('prompt {n} tokens/s', { n: Math.round(live.promptSpeed) }))
         parts.push(t('cache {pct} %', { pct: Math.round((live.promptCache / live.promptTotal) * 100) }))
-      } else parts.push(live.watching ? t('Answer running in another window') : t('Waiting for the model'))
+      } else parts.push(t('Waiting for the model'))
     } else {
       parts.push(live.tool ? t('Preparing the call to {tool}', { tool: live.tool }) : live.content ? t('Writing') : t('Thinking'))
       const speed = liveSpeed(at)
@@ -510,6 +509,7 @@ function LiveStats() {
 
 function ApprovalCard() {
   const a = () => approval()!
+  let always = false
   return (
     <div class="ai-approval" data-testid="ai-approval">
       <Show
@@ -537,15 +537,24 @@ function ApprovalCard() {
       <div class="ai-approval-foot">
         <Show when={a().kind === 'edit'}>
           <label class="check small">
-            <input type="checkbox" onChange={(e) => (setPrefs('autoApply', e.currentTarget.checked), savePrefs())} />
+            <input type="checkbox" onChange={(e) => (always = e.currentTarget.checked)} />
             {t('Do not ask again')}
           </label>
         </Show>
         <span class="grow" />
-        <button class="btn" onClick={() => a().resolve(false)}>
+        <button class="btn" onClick={() => answerApproval(false)}>
           {t('Refuse')}
         </button>
-        <button class="btn primary" onClick={() => a().resolve(true)}>
+        <button
+          class="btn primary"
+          onClick={() => {
+            if (always) {
+              setPrefs('autoApply', true)
+              savePrefs()
+            }
+            answerApproval(true, always)
+          }}
+        >
           {a().kind === 'command' ? t('Run') : t('Apply')}
         </button>
       </div>

@@ -8,7 +8,7 @@ import { errorToast, toast } from '../ui/toast'
 import { applyConfig, config, loadModels, prefs, savePrefs, select, setPrefs, type Mode, type Model, type ServerView } from './state'
 import { languages, probeGpu, speech, whisperModels } from './transcribe'
 import { formatSize } from './parts'
-import { buildSystemPrompt, defaultTemplate, loadPromptContext, promptContext, storedTemplates, templateOf } from './prompt'
+import { defaultTemplate, loadPromptContext, promptContext, storedTemplates, systemPrompt, templateOf } from './prompt'
 import { fmtSize, t } from '../i18n'
 
 const size = (n: number) => fmtSize(n)
@@ -88,7 +88,11 @@ export function PromptSettings() {
         {t('Variables:')} <code>{'{{project}}'}</code> <code>{'{{root}}'}</code> <code>{'{{host}}'}</code> <code>{'{{activeFile}}'}</code> <code>{'{{date}}'}</code> <code>{'{{tools}}'}</code> {t('(description of the tools, empty when they are off).')}
       </p>
       <div class="form-actions">
-        <button type="button" class="btn" onClick={() => openTextTab(kind() === 'plan' ? t('System prompt (Plan)') : kind() === 'briefing' ? t('System prompt (Briefing)') : t('System prompt'), buildSystemPrompt(promptContext(), true, kind()), 'markdown')}>
+        <button type="button" class="btn" onClick={() =>
+            systemPrompt(kind())
+              .then((text) => openTextTab(kind() === 'plan' ? t('System prompt (Plan)') : kind() === 'briefing' ? t('System prompt (Briefing)') : t('System prompt'), text, 'markdown'))
+              .catch(errorToast)
+          }>
           {t('Preview of the full prompt')}
         </button>
         <span class="grow" />
@@ -283,17 +287,17 @@ function SpeechSettings() {
 }
 
 export function SettingsModal(props: { onClose: () => void }) {
-  const blank = { id: '', name: '', kind: 'auto' as ServerView['kind'], url: '', apiKey: '', context: 0, hasKey: false, clearKey: false }
+  const blank = { id: '', name: '', kind: 'auto' as ServerView['kind'], url: '', apiKey: '', context: 0, parallel: 1, hasKey: false, clearKey: false }
   const [form, setForm] = createSignal({ ...blank })
   const [busy, setBusy] = createSignal(false)
-  const edit = (s: ServerView) => setForm({ ...blank, ...s, apiKey: '', context: s.context ?? 0 })
+  const edit = (s: ServerView) => setForm({ ...blank, ...s, apiKey: '', context: s.context ?? 0, parallel: s.parallel || 1 })
   const field = (k: keyof ReturnType<typeof form>) => (e: Event) => setForm({ ...form(), [k]: (e.currentTarget as HTMLInputElement).value })
   const save = async (e: Event) => {
     e.preventDefault()
     setBusy(true)
     try {
       const f = form()
-      const view = await request('llm.server.save', { id: f.id, name: f.name.trim(), kind: f.kind, url: f.url, apiKey: f.apiKey, context: Number(f.context) || 0, clearKey: f.clearKey })
+      const view = await request('llm.server.save', { id: f.id, name: f.name.trim(), kind: f.kind, url: f.url, apiKey: f.apiKey, context: Number(f.context) || 0, parallel: Math.max(1, Number(f.parallel) || 1), clearKey: f.clearKey })
       applyConfig(view)
       const saved = f.id ? view.servers.find((s: ServerView) => s.id === f.id) : view.servers[view.servers.length - 1]
       setForm({ ...blank })
@@ -399,6 +403,10 @@ export function SettingsModal(props: { onClose: () => void }) {
               <input type="number" min="0" step="1024" value={form().context} onInput={field('context')} class="w-next" name="context" />
             </label>
           </Show>
+          <label class="field">
+            <span>{t('Conversations at once (the others wait their turn)')}</span>
+            <input type="number" min="1" max="16" step="1" value={form().parallel} onInput={field('parallel')} class="w-next" name="parallel" />
+          </label>
           <Show when={form().hasKey}>
             <label class="check small">
               <input type="checkbox" checked={form().clearKey} onChange={(e) => setForm({ ...form(), clearKey: e.currentTarget.checked })} />

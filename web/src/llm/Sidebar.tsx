@@ -4,8 +4,8 @@ import { createMemo, createSignal, For, onMount, Show } from 'solid-js'
 import { Icon } from '../ui/icons'
 import { prompt } from '../ui/overlay'
 import { errorToast } from '../ui/toast'
-import { stopWatch } from './agent'
-import { chat, chatList, deleteChat, live, openChat, refreshChats, renameChat, resetChat, type ChatInfo } from './state'
+import { openChat, runStates } from './agent'
+import { chat, chatList, deleteChat, refreshChats, renameChat, resetChat, type ChatInfo } from './state'
 import { t } from '../i18n'
 
 function groupOf(ms: number): string {
@@ -17,6 +17,14 @@ function groupOf(ms: number): string {
   if (ms >= d.getTime() - 7 * day) return t('Last 7 days')
   if (ms >= d.getTime() - 30 * day) return t('Last 30 days')
   return t('Older')
+}
+
+/** What a conversation running in the pod is doing. */
+const runLabels: Record<string, string> = {
+  running: 'Running',
+  queued: 'Waiting for the model server',
+  waiting_user: 'Waiting for you',
+  compacting: 'Compacting',
 }
 
 export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
@@ -35,9 +43,7 @@ export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
     return out
   })
   const open = async (id: string) => {
-    if (live.busy && !live.watching) return
     try {
-      stopWatch()
       await openChat(id)
       props.onPicked()
     } catch (e) {
@@ -60,9 +66,7 @@ export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
       </div>
       <button
         class="ai-new-chat"
-        disabled={live.busy && !live.watching}
         onClick={() => {
-          stopWatch()
           resetChat()
           props.onNew()
         }}
@@ -79,6 +83,9 @@ export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
                   {(c) => (
                     <div class="ai-chat-item" classList={{ active: c.id === chat.id }}>
                       <button class="ai-chat-open" onClick={() => open(c.id)} title={c.model ? `${c.title} · ${c.model}` : c.title}>
+                        <Show when={runStates()[c.id]}>
+                          {(st) => <span class={`ai-run-dot ${st()}`} title={t(runLabels[st()])} data-testid="ai-run-dot" />}
+                        </Show>
                         <span class="ellipsis">{c.title || t('Untitled')}</span>
                       </button>
                       <button class="ai-chat-act" title={t('Rename')} onClick={() => rename(c)}>

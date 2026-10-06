@@ -3,8 +3,8 @@
 import { mutate, project } from '../state/project'
 import { request, RpcError } from '../pod/rpc'
 import { toast, errorToast } from '../ui/toast'
-import { chat, config, emptyChat, live, loadConfig, openChat, resetChat, setChat, type Chat, type ChatRole } from '../llm/state'
-import { resumeIfNeeded, send, stopWatch } from '../llm/agent'
+import { chat, config, emptyChat, loadConfig, resetChat, setChat, type ChatRole } from '../llm/state'
+import { agentOptions, openChat, send } from '../llm/agent'
 import { feedbackOp, inWorktreeOf, moveTicket, openWorktreeWindow, roleLabels, startWork, worktreeProject, type Feedback, type Ticket } from './state'
 import { t } from '../i18n'
 
@@ -26,19 +26,8 @@ function showAssistant() {
   mutate((s) => (s.right.panel = 'assistant'))
 }
 
-function assistantFree(): boolean {
-  if (live.busy && !live.watching) {
-    toast(t('An answer is running in the assistant: wait for it to end or stop it.'), 'warn')
-    showAssistant()
-    return false
-  }
-  return true
-}
-
 /** Starts a conversation linked to a ticket in this window, with its first message. */
 export async function startTicketChat(tk: Ticket, role: ChatRole, text?: string, feedback?: Feedback) {
-  if (!assistantFree()) return
-  stopWatch()
   resetChat()
   void linkFeedback(tk, feedback, chat.id)
   setChat({ ticket: { id: tk.id, role, ...(feedback ? { feedback: feedback.id } : {}) }, mode: role === 'briefing' ? 'briefing' : role === 'plan' ? 'plan' : 'build', title: `#${tk.id} ${roleLabels[role]} · ${tk.title}`.slice(0, 80) })
@@ -57,13 +46,10 @@ export async function startTicketChat(tk: Ticket, role: ChatRole, text?: string,
 
 /** Opens a conversation of a ticket in the assistant of this window. */
 export async function openTicketChat(chatId: string) {
-  if (chat.id !== chatId && !assistantFree()) return
   showAssistant()
   if (chat.id === chatId) return
   try {
-    stopWatch()
     await openChat(chatId)
-    await resumeIfNeeded()
   } catch (e) {
     errorToast(e)
   }
@@ -72,8 +58,7 @@ export async function openTicketChat(chatId: string) {
 /**
  * Development, correction or conflict resolution: the conversation runs in the window of
  * the worktree of the ticket (created on the way). From that window it starts at once;
- * from another one, the conversation is saved with its first message and the worktree
- * window opens on it and runs it.
+ * from another one, the pod starts it in the worktree and the worktree window opens on it.
  */
 export async function startWorkSession(tk: Ticket, role: ChatRole, feedback?: Feedback, force = false) {
   if (project()?.ticket === tk.id) return startTicketChat(tk, role, undefined, feedback)
@@ -98,21 +83,12 @@ export async function startWorkSession(tk: Ticket, role: ChatRole, feedback?: Fe
       openWorktreeWindow(target)
       return
     }
-    const now = Date.now()
-    const c: Chat = {
-      ...emptyChat(),
-      title: `#${tk.id} ${roleLabels[role]} · ${tk.title}`.slice(0, 80),
-      server: config.server,
-      model: config.model,
-      mode: 'build',
-      ticket: { id: tk.id, role, ...(feedback ? { feedback: feedback.id } : {}) },
-      messages: [{ role: 'user', content: firstMessage[role](tk, feedback) }],
-      // Picked up by the worktree window as an answer to resume (resumeIfNeeded).
-      running: {},
-      created: now,
-      updated: now,
-    }
-    await request('llm.chats.save', { chat: c })
+    // The conversation runs in the pod, in the worktree; its window shows it.
+    const id = emptyChat().id
+    const ticket = { id: tk.id, role, ...(feedback ? { feedback: feedback.id } : {}) }
+    const title = `#${tk.id} ${roleLabels[role]} · ${tk.title}`.slice(0, 80)
+    await request('agent.send', { id, text: firstMessage[role](tk, feedback), server: config.server, model: config.model, mode: 'build', options: agentOptions(), ticket, title, project: target })
+    const c = { id, title }
     await request('kanban.chat.link', { id: tk.id, chatId: c.id, role, title: c.title }).catch(() => {})
     await linkFeedback(tk, feedback, c.id)
     try {

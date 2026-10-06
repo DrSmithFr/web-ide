@@ -158,7 +158,7 @@ export async function runCommand(text: string, onSettings: () => void): Promise<
   const m = /^\/(\S+)\s*([\s\S]*)$/.exec(text)
   if (!m) return false
   const [, name, args] = m
-  if (live.busy && ['clear', 'new', 'compact'].includes(name)) {
+  if (live.busy && name === 'compact') {
     toast(t('/{command}: available once the answer is finished', { command: name }), 'warn')
     return true
   }
@@ -574,14 +574,10 @@ export function Composer(props: {
 
   const submit = async () => {
     if (!canSend()) return
-    if (props.beforeSend && !live.watching) await props.beforeSend()
+    if (props.beforeSend) await props.beforeSend()
     const text = draft().trim()
     const atts = pending()
     if (!canSend()) return
-    if (live.watching) {
-      toast(t('Answer running in another window: wait for its end to write here'), 'info')
-      return
-    }
     if (text.startsWith('/') && !atts.length) {
       setDraft('')
       setHelp(false)
@@ -750,7 +746,7 @@ export function Composer(props: {
             onCleanup(() => textareaRef === el && (textareaRef = prev))
           }}
           rows="1"
-          placeholder={live.watching ? t('Answer running in another window…') : live.busy ? t('Write on: the message will wait for the next step…') : config.model ? t('Message to {model}…', { model: config.model }) : t('Choose a model to start…')}
+          placeholder={live.busy ? t('Write on: the message will wait for the next step…') : config.model ? t('Message to {model}…', { model: config.model }) : t('Choose a model to start…')}
           value={draft()}
           onInput={(e) => {
             setDraft(e.currentTarget.value)
@@ -816,7 +812,7 @@ export function Composer(props: {
             <ContextMenu />
           </Show>
           <ModelPicker onSettings={props.onSettings} />
-          <Show when={live.busy && !live.watching && canSend()}>
+          <Show when={live.busy && canSend()}>
             <button class="ai-send queue" onClick={submit} aria-label={t('Queue')} title={t('Queue (Enter): sent at the next step')} data-testid="enqueue">
               <Icon name="arrowUp" size={16} />
             </button>

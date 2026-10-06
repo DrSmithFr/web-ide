@@ -2,9 +2,9 @@
 import { createEffect, createSignal, For, onCleanup, Show, type JSX } from 'solid-js'
 import { relPath, root } from '../state/project'
 import { onMarkdownClick, renderMarkdown, renderMermaid } from './markdown'
-import { absPath } from './tools'
-import type { Attachment, DiffLine, ToolCall } from './state'
-import { fmtSize, t } from '../i18n'
+import { absPath } from './uiTools'
+import type { Attachment, ChatMessage, DiffLine, ToolCall } from './state'
+import { fmtSize, t, tn } from '../i18n'
 
 /** Markdown rendered at most once per frame while it streams; diagrams drawn as they close. */
 export function Markdown(props: { text: string; final: boolean }) {
@@ -36,13 +36,21 @@ export function formatTokens(n: number) {
   return n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n)
 }
 
+/** A summary of a tool result: a text, or a text of the pod to translate. */
+export function summaryText(s: ChatMessage['summary']): string {
+  if (!s || typeof s === 'string') return s ?? ''
+  const params = { ...s.params, n: s.n ?? s.params?.n }
+  const text = s.other ? tn(s.n ?? 0, s.key, s.other, params) : t(s.key, params)
+  return (s.prefix ?? '') + text + (s.suffix ?? '')
+}
+
 export function DiffBlock(props: { lines: DiffLine[] }) {
   return (
     <pre class="ai-diff">
       <For each={props.lines}>
         {(l) => (
           <div class={l.t === '+' ? 'add' : l.t === '-' ? 'del' : l.t === '…' ? 'gap' : ''}>
-            {l.t === '…' ? `⋯ ${l.text}` : `${l.t} ${l.text}`}
+            {l.t === '…' ? `⋯ ${l.text ? t(l.text, { n: l.n ?? 0 }) : ''}` : `${l.t} ${l.text}`}
           </div>
         )}
       </For>
