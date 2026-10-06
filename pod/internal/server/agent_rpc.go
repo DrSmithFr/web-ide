@@ -379,7 +379,11 @@ func (s *Server) registerAgent() {
 		return nil, nil
 	})
 	s.handle("agent.compact", withChat(func(ctx context.Context, c *Client, cc chatCtx, p json.RawMessage) (any, error) {
-		a, err := bind[struct{ ID, Instructions string }](p)
+		a, err := bind[struct {
+			ID           string         `json:"id"`
+			Instructions string         `json:"instructions"`
+			Options      *agent.Options `json:"options"`
+		}](p)
 		if err != nil {
 			return nil, err
 		}
@@ -389,6 +393,9 @@ func (s *Server) registerAgent() {
 		chat, err := s.openChat(cc, a.ID)
 		if err != nil {
 			return nil, err
+		}
+		if a.Options != nil {
+			chat.Options = a.Options
 		}
 		// A short run that only compacts.
 		ctx2, cancel := context.WithCancel(context.Background())
@@ -435,6 +442,19 @@ func (s *Server) registerAgent() {
 			}
 			return -1, nil
 		})
+	}))
+	// agent.prompt: the system prompt of a mode as the agent would send it now (settings).
+	s.handle("agent.prompt", withChat(func(ctx context.Context, c *Client, cc chatCtx, p json.RawMessage) (any, error) {
+		a, err := bind[struct{ Mode, ActiveFile string }](p)
+		if err != nil {
+			return nil, err
+		}
+		ref, err := s.agentRuntime(c.project)
+		if err != nil {
+			return nil, err
+		}
+		chat := &agent.Chat{Mode: a.Mode, Options: &agent.Options{ActiveFile: a.ActiveFile}}
+		return s.systemPrompt(&agentRun{loc: cc.loc, root: cc.root, project: c.project}, ref, chat, true), nil
 	}))
 	// agent.ui.result: the result of a tool run by this window (open_file, focus).
 	s.handle("agent.ui.result", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {

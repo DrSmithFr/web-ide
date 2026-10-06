@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"github.com/DrSmithFr/web-ide/pod/internal/agent"
 	"path"
 	"path/filepath"
 	"strings"
@@ -203,7 +204,10 @@ func (s *Server) registerLLM() {
 		return nil, nil
 	}))
 	s.handle("llm.context", withProject(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
-		return s.LLM.LoadContext(proj(rt)), nil
+		return struct {
+			*llm.Context
+			Defaults map[string]string `json:"defaults"`
+		}{s.LLM.LoadContext(proj(rt)), agent.DefaultTemplates}, nil
 	}))
 	s.handle("llm.skill.read", withProject(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
 		a, err := bind[struct{ Name string }](p)

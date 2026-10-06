@@ -1495,5 +1495,14 @@
   "Blocked": "Bloqué",
   "No plan yet": "Pas encore de plan",
   "In progress or to test": "En cours ou à tester",
-  "Size: {size}": "Taille : {size}"
+  "Size: {size}": "Taille : {size}",
+  "Waiting for the model server": "En attente du serveur de modèles",
+  "Running the tools…": "Exécution des outils…",
+  "Waiting for the model server ({n} conversation before)": "En attente du serveur de modèles ({n} conversation avant)",
+  "Waiting for the model server ({n} conversations before)": "En attente du serveur de modèles ({n} conversations avant)",
+  "Waiting for you": "Vous attend",
+  "Compacting": "Compaction",
+  "no window open": "aucune fenêtre ouverte",
+  "Interrupted: the pod stopped.": "Interrompu : le pod s'est arrêté.",
+  "Conversations at once (the others wait their turn)": "Conversations en même temps (les autres attendent leur tour)"
 }

@@ -257,7 +257,7 @@ Definitions may point outside the project (`lib.es5.d.ts` in `node_modules/types
 Right-panel tool talking to a **llama.cpp** or **Ollama** server (address and optional API key, never sent back to the page).
 
 - Markdown answers with highlighted code and Mermaid diagrams, collapsible reasoning, live token counters.
-- Agent loop with tools: files (read, search, edit with confirmation or automatically), language servers, shell commands, IDE (open a file, focus a panel), consoles, kanban, questions to the user (`ask_user`).
+- Agent loop with tools: files (read, search, edit with confirmation or automatically), language servers, shell commands, IDE (open a file, focus a panel), consoles, kanban, questions to the user (`ask_user`). It runs in the pod: a conversation goes on when its window closes, any window follows it, writes to it or stops it, and several conversations run at once (a limit per model server, the others queued).
 - Instructions and skills loaded the same way as Claude Code (`CLAUDE.md`, `AGENTS.md`, `.claude/skills`…), editable system prompt, Build / Plan / Briefing modes (the Briefing mode questions the user and writes kanban tickets), context compaction.
 - Conversations stored per project in SQLite; an answer survives a page reload and can be followed from another window.
 - Local speech recognition: dictation and audio files are transcribed in the browser by Whisper; audio never leaves the page.

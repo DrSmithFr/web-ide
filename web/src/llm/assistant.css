@@ -373,3 +373,10 @@
 .ai-doodle-name { font-weight: 600; }
 .ai-doodle-desc summary { cursor: pointer; color: var(--fg-muted); }
 .ai-doodle-desc pre { margin: 6px 0 0; max-height: 220px; overflow: auto; white-space: pre-wrap; font-size: 12px; }
+
+/* State of a conversation running in the pod, in the history list. */
+.ai-chat-open { align-items: center; gap: 6px; }
+.ai-run-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: ai-pulse 1.4s ease-in-out infinite; }
+.ai-run-dot.queued { background: var(--fg-muted); animation: none; }
+.ai-run-dot.waiting_user { background: var(--warn); animation: none; }
+@keyframes ai-pulse { 50% { opacity: 0.35; } }

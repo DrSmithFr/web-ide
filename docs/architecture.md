@@ -33,7 +33,7 @@ The front end is built by Vite and embedded in the pod binary (`pod/webdist`), s
 
 ## Protocol
 
-JSON over one WebSocket per window. Request `{id, method, params}` → response `{id, result | error}`; events pushed as `{event, data}` (`fs.changed`, `buffer.synced`, `session.changed`, `console.output`, `lsp.diagnostics`, `git.changed`, `llm.delta`, `kanban.changed`…). `id: 0` is a notification without answer; `$/cancel` cancels a request. Some methods run in order per group (document changes, terminal input), and a language server request waits for the document changes sent before it (`barrier` in `server.go`).
+JSON over one WebSocket per window. Request `{id, method, params}` → response `{id, result | error}`; events pushed as `{event, data}` (`fs.changed`, `buffer.synced`, `session.changed`, `console.output`, `lsp.diagnostics`, `git.changed`, `llm.delta`, `agent.update`, `kanban.changed`…). `id: 0` is a notification without answer; `$/cancel` cancels a request. Some methods run in order per group (document changes, terminal input), and a language server request waits for the document changes sent before it (`barrier` in `server.go`).
 
 `POST /mcp` is the MCP endpoint for Claude Code (`server/mcp*.go`, JSON-RPC over HTTP without streaming, the token as a bearer): tools and prompts on the kanban, see [kanban.md](kanban.md#claude-code). `/open?path=&line=` opens a file in the windows of its project (`server/open.go`).
 
@@ -56,6 +56,7 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 | `docker` | Docker tool: status, Compose stack, containers, inspect, stats, log streams (the `docker` command, JSON formats only) |
 | `search` | Project-wide search (RE2) and file list |
 | `llm` | Model servers, chat completions as jobs that survive the page, conversations (SQLite), instructions and skills |
+| `agent` | What the agent of the assistant needs apart from the server: the stored conversation, the prompts and tool definitions, the Plan mode command rules, the line diff of a change, the questions of `ask_user`; the loop itself is in `server/agent*.go` |
 | `kanban` | Tickets (SQLite), workflow rules, ticket git operations (worktrees, diff, merge, rebase) |
 | `hfcache` | Hugging Face files downloaded once and served offline (speech models) |
 | `i18n` | Translation of the messages sent to the page |
@@ -82,10 +83,10 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 
 ### AI assistant
 
-- Module-level state (`llm/state.ts`) survives panel switches; conversations are saved in the pod one save at a time.
-- `llm/agent.ts`: tool loop without step limit, compaction (automatic past a threshold, manual, or asked by the model), Build / Plan / Briefing modes, `ask_user` (the turn stops until the answers come), message queue, resume after reload (`llm.attach`), resume after an error or a stop from the last completed step (`resume`, the steps done are kept; `retry` starts again from the user message), one window runs a conversation (`llm.claim`) while others follow it.
-- `llm/prompt.ts`: editable system prompt template, instruction files and skills (loaded like Claude Code), linked ticket and role instructions.
-- `llm/tools.ts`, `llm/kanbanTools.ts`: tools the model can call. File changes are confirmed with a diff unless "apply without asking" is on; shell commands run without confirmation (Plan mode runs reading commands and the build, test and lint commands of the project freely, and asks for the others: `llm/commands.ts`).
+- The agent runs in the pod (`server/agent*.go`, `internal/agent`): the turn loop without step limit, the tools on the runtime of the project (a worktree for a development), compaction (automatic past a threshold, manual, or asked by the model), Build / Plan / Briefing modes, `ask_user` and plans (the turn stops until the user answers), the message queue, resume from the last completed step (`agent.resume`) or retry from the user message (`agent.retry`). A conversation goes on with no window open; several run at once, each model server running `parallel` of them (1 by default) while the others wait in a queue.
+- The pod is the only writer of a running conversation: every change is saved and sent as `agent.update` (state, fields, messages from an index) to the windows of the project and of its worktrees; the answer being written is followed with `llm.attach`. Changes and commands that need the user wait in the pod (`approval`, answered by `agent.approve` from any window), with an `agent.attention` event. `open_file` and `focus` run in a window of the project (`agent.ui`, answered by `agent.ui.result`), the one showing the conversation first.
+- `llm/agent.ts` is the client: it shows the conversation from these events and sends what the user does (`agent.send`, `agent.answer`, `agent.plan`, `agent.stop`…), with the options of the page (apply without asking, thinking, compaction, Plan model, active file, Docker profiles). Module-level state (`llm/state.ts`) survives panel switches.
+- `internal/agent/texts.go`: the default templates of the modes and the instructions of the roles of a ticket; `llm/prompt.ts` shows them in the settings (the pod builds the prompt: `agent.prompt`). File changes are confirmed with a diff unless "apply without asking" is on; shell commands run without confirmation (Plan mode runs reading commands and the build, test and lint commands of the project freely, and asks for the others: `internal/agent/commands.go`).
 - Speech recognition runs in a Web Worker (transformers.js, WebGPU or WebAssembly); model files come through the pod cache.
 
 ### Kanban

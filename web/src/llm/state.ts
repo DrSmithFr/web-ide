@@ -1,9 +1,8 @@
 // State of the AI assistant: model servers, models, and the current conversation. Kept at
 // module level so that switching panels does not lose a running answer.
 import { createSignal } from 'solid-js'
-import { createStore, produce, reconcile } from 'solid-js/store'
+import { createStore, reconcile } from 'solid-js/store'
 import { on, request } from '../pod/rpc'
-import { project } from '../state/project'
 import type { DoodleDoc } from './doodle/model'
 
 export interface ServerView {
@@ -13,6 +12,8 @@ export interface ServerView {
   url: string
   hasKey: boolean
   context?: number
+  /** Conversations the server runs at once (1 by default: one GPU). */
+  parallel?: number
 }
 
 export interface Caps {
@@ -55,6 +56,8 @@ export interface Attachment {
   /** Vector document of a doodle (to open it again) and the description sent with it. */
   doodle?: DoodleDoc
   description?: string
+  /** PNG of a doodle (data URL): the pod joins it to the tickets the model writes. */
+  png?: string
 }
 
 export interface Usage {
@@ -82,8 +85,8 @@ export interface ChatMessage {
   error?: string
   /** Tool result: ok, error, or refused by the user. */
   status?: 'ok' | 'error' | 'denied'
-  /** Short summary of a tool result shown folded. */
-  summary?: string
+  /** Short summary of a tool result shown folded: a text, or a text of the pod to translate. */
+  summary?: string | SummaryText
   /** Diff of a file change, shown under the tool call. */
   diff?: DiffLine[]
   /** Model that wrote this answer (the model can change during a conversation). */
@@ -107,6 +110,16 @@ export interface ChatMessage {
   askState?: 'pending' | 'answered' | 'skipped'
 }
 
+/** A text written by the pod and translated here: t(key, params), or tn(n, key, other, params). */
+export interface SummaryText {
+  key: string
+  other?: string
+  n?: number
+  params?: Record<string, any>
+  prefix?: string
+  suffix?: string
+}
+
 export interface Question {
   question: string
   header?: string
@@ -116,7 +129,9 @@ export interface Question {
 
 export interface DiffLine {
   t: ' ' | '+' | '-' | '…'
+  /** For a gap ('…'), a text to translate with n ("line {n}"). */
   text: string
+  n?: number
 }
 
 export interface Chat {
@@ -137,6 +152,8 @@ export interface Chat {
   mode?: Mode
   /** Kanban ticket this conversation works on, and its role (docs/kanban.md). */
   ticket?: { id: number; role: ChatRole; feedback?: number }
+  /** Change or command waiting for the user. */
+  approval?: Approval
 }
 
 export type ChatRole = 'briefing' | 'plan' | 'dev' | 'correction' | 'resolve'
@@ -173,9 +190,11 @@ export const [chatList, setChatList] = createSignal<ChatInfo[]>([])
  * total, tokens found in the cache, reading speed).
  */
 export const [live, setLive] = createStore({
+  /** The conversation shown runs in the pod (state other than idle). */
   busy: false,
-  /** This window only follows an answer run by another window. */
-  watching: false,
+  state: 'idle' as 'idle' | 'running' | 'queued' | 'waiting_user' | 'compacting',
+  /** Queued: conversations before this one for the model server. */
+  ahead: 0,
   content: '',
   reasoning: '',
   tool: '',
@@ -203,13 +222,13 @@ export function liveSpeed(now = Date.now()): number {
 
 /** Action waiting for the user: a file change (diff) or a command (Plan mode). */
 export interface Approval {
+  id: string
   call: ToolCall
   kind: 'edit' | 'command'
   path?: string
   diff?: DiffLine[]
   created?: boolean
   command?: string
-  resolve: (ok: boolean) => void
 }
 export const [approval, setApproval] = createSignal<Approval | null>(null)
 
@@ -363,101 +382,11 @@ export async function refreshChats() {
   }
 }
 
-// Saves run one after the other: two saves handled at the same time by the pod could end
-// in the wrong order and leave an older state. A save asked while one is running is merged
-// into a single next save, which takes the state of that moment.
-let saving: Promise<void> | null = null
-let saveAgain = false
-
-export function saveChat(): Promise<void> {
-  if (!chat.messages.length) return Promise.resolve()
-  if (saving) {
-    saveAgain = true
-    return saving
-  }
-  saving = (async () => {
-    try {
-      do {
-        saveAgain = false
-        await saveNow()
-      } while (saveAgain)
-    } finally {
-      saving = null
-    }
-  })()
-  return saving
-}
-
-async function saveNow() {
-  if (!chat.messages.length) return
-  setChat('updated', Date.now())
-  if (!chat.title) {
-    const first = chat.messages.find((m) => m.role === 'user')
-    const text = first?.display ?? (typeof first?.content === 'string' ? first.content : first?.content?.find((p) => p.type === 'text')?.text)
-    setChat('title', (text ?? first?.attachments?.[0]?.name ?? 'Conversation').replace(/\s+/g, ' ').trim().slice(0, 80))
-  }
-  try {
-    await request('llm.chats.save', { chat: JSON.parse(JSON.stringify(chat)) })
-    rememberActive()
-    refreshChats()
-    linkTicket()
-  } catch {
-    /* kept in memory */
-  }
-}
-
-// The ticket of a conversation lists it once it is saved (with its title).
-const linked = new Set<string>()
-function linkTicket() {
-  const t = chat.ticket
-  const key = `${chat.id}:${t?.id}:${t?.role}:${chat.title}`
-  if (!t || linked.has(key)) return
-  linked.add(key)
-  request('kanban.chat.link', { id: t.id, chatId: chat.id, role: t.role, title: chat.title }).catch(() => linked.delete(key))
-}
-
-export async function openChat(id: string) {
-  const c = await request<Chat>('llm.chats.get', { id })
-  setChat(reconcile(c))
-  rememberActive()
-}
-
+/** The window shows a new conversation (nothing in the pod until its first message). */
 export function resetChat() {
   setChat(reconcile(emptyChat()))
-  rememberActive()
-}
-
-// ---------- active conversation (restored after a reload) ----------
-
-let chatProject = ''
-const activeKey = () => `webide.llm.active.${project()?.id ?? ''}`
-
-function rememberActive() {
-  try {
-    if (chat.messages.length) localStorage.setItem(activeKey(), chat.id)
-    else localStorage.removeItem(activeKey())
-  } catch {
-    /* private mode */
-  }
-}
-
-/**
- * Shows the conversation of the open project: the one last active in this browser, or a
- * new one. Called when the panel opens; nothing changes when the project is the same.
- */
-export async function restoreActive() {
-  const pid = project()?.id ?? ''
-  if (!pid || pid === chatProject) return
-  const changed = chatProject !== ''
-  chatProject = pid
-  if (changed) setChat(reconcile(emptyChat()))
-  let id: string | null = null
-  try {
-    id = localStorage.getItem(activeKey())
-  } catch {
-    /* private mode */
-  }
-  if (id && !chat.messages.length) await openChat(id).catch(() => {})
+  setApproval(null)
+  request('agent.watch', { id: chat.id }).catch(() => {})
 }
 
 export async function renameChat(id: string, title: string) {
@@ -472,10 +401,3 @@ export async function deleteChat(id: string) {
   refreshChats()
 }
 
-export function pushMessage(m: ChatMessage) {
-  setChat(produce((c) => c.messages.push(m)))
-}
-
-export function updateLast(fn: (m: ChatMessage) => void) {
-  setChat(produce((c) => fn(c.messages[c.messages.length - 1])))
-}

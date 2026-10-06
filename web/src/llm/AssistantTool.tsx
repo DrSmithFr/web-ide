@@ -5,9 +5,9 @@ import { createEffect, createSignal, on, onCleanup, onMount, Show } from 'solid-
 import { Icon } from '../ui/icons'
 import { errorToast } from '../ui/toast'
 import { route } from '../app/router'
-import { approval, chat, live, loadConfig, modelsError, prefs, resetChat, restoreActive, savePrefs, setPrefs } from './state'
+import { approval, chat, live, loadConfig, modelsError, prefs, resetChat, savePrefs, setPrefs } from './state'
 import { SettingsModal } from './AssistantSettings'
-import { resumeIfNeeded, stopWatch } from './agent'
+import { restoreActive } from './agent'
 import { Thread } from './Thread'
 import { addFiles, Composer, focusComposer, suggest } from './Composer'
 import { Sidebar } from './Sidebar'
@@ -15,7 +15,8 @@ import { DiagramViewer } from './DiagramViewer'
 import { DoodleHost } from './doodle/DoodleModal'
 import { board, ensureBoard, openTicket, roleLabels, statusLabels, summary, type ChatRole } from '../kanban/state'
 import { pick } from '../ui/overlay'
-import { setChat, saveChat } from './state'
+import { request } from '../pod/rpc'
+import { setChat } from './state'
 import { t } from '../i18n'
 import './assistant.css'
 
@@ -33,8 +34,9 @@ function TicketBar() {
     })
     const s = id ? summary(id) : undefined
     if (!s) return
-    setChat('ticket', { id: s.id, role: roleFor(s.status) })
-    saveChat()
+    const ticket = { id: s.id, role: roleFor(s.status) }
+    setChat('ticket', ticket)
+    await request('agent.set', { id: chat.id, ticket }).catch(errorToast)
   }
   return (
     <Show
@@ -91,7 +93,6 @@ export function AssistantTool() {
     // The conversation of the project, and the answer it was waiting for before a reload.
     restoreActive()
       .then(() => loadConfig())
-      .then(() => resumeIfNeeded())
       .catch(() => {})
     focusComposer()
     // Late renders (Markdown, diagrams) make the thread grow after a load: stay at the end.
@@ -125,8 +126,6 @@ export function AssistantTool() {
   )
 
   const newChat = () => {
-    if (live.busy && !live.watching) return
-    stopWatch()
     resetChat()
     focusComposer()
   }
@@ -143,7 +142,7 @@ export function AssistantTool() {
           {chat.title || t('New conversation')}
         </span>
         <span class="grow" />
-        <button class="icon-btn" title={t('New conversation')} disabled={live.busy && !live.watching} onClick={newChat}>
+        <button class="icon-btn" title={t('New conversation')} onClick={newChat}>
           <Icon name="plus" size={15} />
         </button>
         <button class="icon-btn" title={t('Settings (servers, prompt, compaction, transcription)')} onClick={() => setSettings(true)}>
