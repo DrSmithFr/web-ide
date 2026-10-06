@@ -2,7 +2,8 @@
 // a time, full screen: the editor or a tool. The view follows what the user opens: a tool
 // shown (icon, shortcut, the assistant…) comes to the front, a file opened brings the editor
 // back. The visible height follows the on-screen keyboard, the caret line staying in sight.
-import { createSignal } from 'solid-js'
+import { createEffect, createRoot, createSignal } from 'solid-js'
+import { EditorView } from '../editor/view'
 
 const query = matchMedia('(max-width: 720px)')
 const [phone, setPhone] = createSignal(query.matches)
@@ -52,48 +53,55 @@ document.addEventListener(
 )
 for (const name of ['gesturestart', 'gesturechange']) document.addEventListener(name, (e) => !(e.target as HTMLElement).closest?.('[data-pinch]') && e.preventDefault())
 
-// Editor on a phone: a touch moves the caret without opening the keyboard (inputmode none);
-// a double tap opens it, until the editor loses the focus.
-let editing = false
-const quiet = (ed: HTMLElement) => {
-  if (!editing) ed.inputMode = 'none'
-}
-document.addEventListener(
-  'pointerdown',
-  (e) => {
-    const ed = phone() && ((e.target as HTMLElement).closest?.('.ed-content') as HTMLElement | null)
-    if (ed) quiet(ed)
-  },
-  true,
-)
-let lastTap = 0
-document.addEventListener('touchend', (e) => {
-  const ed = phone() && ((e.target as HTMLElement).closest?.('.ed-content') as HTMLElement | null)
-  if (!ed) return
-  const now = Date.now()
-  if (now - lastTap < 350 && !editing) {
-    // The keyboard opens on a focus given during the gesture.
-    ed.blur()
-    editing = true
-    ed.inputMode = 'text'
-    ed.focus()
-    setTimeout(revealCaret, 400)
-  }
-  lastTap = now
-})
-document.addEventListener('focusout', (e) => {
-  const ed = (e.target as HTMLElement).closest?.('.ed-content') as HTMLElement | null
-  if (!ed || !phone()) return
-  editing = false
-  ed.inputMode = 'none'
-})
+// Editor on a phone: locked (read only) so that a touch neither moves a caret nor opens
+// the keyboard; scrolling and selecting (long press) still work. A tap shows a hint, a
+// double tap unlocks it with the caret under the finger and the keyboard open; the padlock
+// of the file view, or another view or file shown, locks it again.
+export const [unlocked, setUnlocked] = createSignal(false)
+/** Time of the last tap on a locked editor: the hint "Double-tap to edit" shows a moment. */
+export const [hintAt, setHintAt] = createSignal(0)
 
-/** Gives the focus to the editor without opening the keyboard. */
+createRoot(() => createEffect(() => EditorView.lockAll(phone() && !unlocked())))
+
+let last = { at: 0, x: 0, y: 0 }
+document.addEventListener(
+  'touchend',
+  (e) => {
+    if (!phone() || unlocked() || e.changedTouches.length !== 1) return
+    const ed = (e.target as HTMLElement).closest?.('.ed-content')
+    const view = ed && EditorView.of(ed)
+    if (!view || view.doc.readOnly) return
+    const t = e.changedTouches[0]
+    const now = Date.now()
+    if (now - last.at < 400 && Math.hypot(t.clientX - last.x, t.clientY - last.y) < 30) {
+      // Unlocked and focused during the gesture: iOS opens the keyboard.
+      e.preventDefault()
+      last = { at: 0, x: 0, y: 0 }
+      const off = view.offsetAt(t.clientX, t.clientY)
+      EditorView.lockAll(false)
+      setUnlocked(true)
+      if (off != null) view.setSelection(off, off, false)
+      view.focus()
+      setTimeout(revealCaret, 400)
+      return
+    }
+    last = { at: now, x: t.clientX, y: t.clientY }
+    setHintAt(now)
+  },
+  { passive: false },
+)
+
+/** Locks the editors again (the padlock, another view): the keyboard closes. */
+export function lockEditor() {
+  if (!unlocked()) return
+  setUnlocked(false)
+  const el = document.activeElement as HTMLElement | null
+  if (el?.closest('.ed-content')) el.blur()
+}
+
+/** Gives the focus to the editor (locked on a phone: no keyboard). */
 export function focusEditorQuietly() {
-  const ed = document.querySelector<HTMLElement>('.pane.active .ed-content')
-  if (!ed) return
-  quiet(ed)
-  ed.focus({ preventScroll: true })
+  document.querySelector<HTMLElement>('.pane.active .ed-content')?.focus({ preventScroll: true })
 }
 
 // Fields that open the keyboard: on a phone they take the focus only when the user touches

@@ -8,7 +8,7 @@ import {
 } from '../state/project'
 import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, toggleTool, toolsIn, zoneOf, zones, type Zone } from '../state/zones'
 import { focusEditor, focusPart, setFocusPart, trackFocus } from '../state/focus'
-import { focusEditorQuietly, isTyping, mobileView, phone, revealCaret, setMobileView } from '../state/mobile'
+import { focusEditorQuietly, isTyping, lockEditor, mobileView, phone, revealCaret, setMobileView } from '../state/mobile'
 import { settings, updateSettings } from '../state/settings'
 import { navigate } from '../app/router'
 import { EditorArea } from '../ui/EditorArea'
@@ -348,6 +348,8 @@ function MobileRail() {
  * assistant) comes to the front, a file opened brings the editor back, a tool closed too.
  */
 function MobileSync() {
+  // Another view: the editor is locked again.
+  createEffect(() => mobileView() !== 'editor' && lockEditor())
   // Becoming a phone (a narrower window), the part in use stays in front.
   let wasPhone = phone()
   createEffect(() => {
@@ -374,6 +376,8 @@ function MobileSync() {
     const tab = activeTab()
     const key = tab ? `${tab.kind}:${tab.path ?? tab.title}` : undefined
     if (phone() && started && key && key !== lastTab) setMobileView('editor')
+    // Another file: the editor is locked again.
+    if (started && key !== lastTab) lockEditor()
     lastTab = key
     started = true
   })
