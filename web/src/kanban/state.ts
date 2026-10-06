@@ -9,6 +9,8 @@ import { t } from '../i18n'
 
 export type Status = 'new' | 'todo' | 'in_progress' | 'review' | 'done' | 'abandoned'
 export type Priority = 'low' | 'normal' | 'high' | 'critical'
+/** Estimated effort of a whole ticket, written with its plan. */
+export type Size = 's' | 'm' | 'l' | 'xl'
 export type ChatRole = 'briefing' | 'plan' | 'dev' | 'correction' | 'resolve'
 export type FeedbackKind = 'info' | 'bug' | 'feature'
 
@@ -27,6 +29,7 @@ export interface Summary {
   created: number
   updated: number
   closed?: number
+  size?: Size
   /** Lineage: the parent (developed in its worktree after it), the place among its children. */
   parent?: number
   pos?: number
@@ -125,6 +128,7 @@ export const statusNames: Record<Status, string> = {
 const legacyNames: Record<string, string> = { ready: 'Ready', fix: 'Fix' }
 export const feedbackNames: Record<FeedbackKind, string> = { info: 'Info', bug: 'Bug', feature: 'New feature' }
 export const priorityNames: Record<Priority, string> = { low: 'Low', normal: 'Normal', high: 'High', critical: 'Critical' }
+export const sizeNames: Record<Size, string> = { s: 'S', m: 'M', l: 'L', xl: 'XL' }
 export const roleNames: Record<ChatRole, string> = { briefing: 'Briefing', plan: 'Plan', dev: 'Development', correction: 'Correction', resolve: 'Conflicts' }
 
 /** A record whose values are translated when read (reactive in views). */
@@ -228,6 +232,7 @@ export interface TicketPatch {
   files?: string[]
   addFiles?: string[]
   removeFiles?: string[]
+  size?: Size | ''
   /** 0 takes the ticket out of its lineage. */
   parent?: number
   dependsOn?: number[]
@@ -240,7 +245,7 @@ export const deleteTicket = (id: number) => request('kanban.delete', { id })
 export const addNote = (id: number, text: string, by: By = 'user', chatId = '') => request<Ticket>('kanban.note', { id, text, by, chatId })
 export const deleteNote = (id: number, noteId: number) => request<Ticket>('kanban.note.delete', { id, noteId })
 export type GoalInput = { title: string; description?: string }
-export const setPlan = (id: number, plan: string, goals: GoalInput[] | null, by: By = 'user') => request<Ticket>('kanban.plan', { id, plan, goals, by })
+export const setPlan = (id: number, plan: string, goals: GoalInput[] | null, by: By = 'user', size?: Size) => request<Ticket>('kanban.plan', { id, plan, goals, by, size })
 export const goalOp = (
   id: number,
   goal: { op: 'add' | 'check' | 'edit' | 'delete'; id?: number; text?: string; description?: string; done?: boolean; source?: string },

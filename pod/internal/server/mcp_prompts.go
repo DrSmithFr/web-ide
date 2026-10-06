@@ -24,7 +24,7 @@ var mcpRoles = []mcpRole{
 - Do not change any file. Sum up what you changed and offer to write the plan (/mcp__web-ide__plan {{id}}).`},
 	{"plan", "Write the implementation plan of a ticket", `Write the **implementation plan** of ticket #{{id}}.
 - Read the ticket (kanban_get) and, if useful, its briefing conversations (kanban_conversation); explore the code concerned. Ask the user when essential information is missing.
-- Save the plan with kanban_set_plan: Markdown (approach, files to change, steps, risks, tests) and goals, each one a verifiable objective with a short title and, if useful, how to check it. The ticket then moves to "To do" by itself.
+- Save the plan with kanban_set_plan: Markdown (approach, files to change, steps, risks, tests), the estimated size of the ticket, and goals, each one a verifiable objective with a short title and, if useful, how to check it. The ticket then moves to "To do" by itself.
 - Sum up the plan in a few lines. Do not change any file.`},
 	{"dev", "Develop a ticket in its worktree", `**Develop** ticket #{{id}}.
 - Read the ticket (kanban_get). If it has no worktree yet, start it with kanban_start; if it cannot start yet (a previous step or a dependency), tell the user and stop.

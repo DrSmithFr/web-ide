@@ -239,9 +239,15 @@ func (s *Server) registerKanban() {
 		b, err := bind[struct {
 			Plan  string             `json:"plan"`
 			Goals []kanban.GoalInput `json:"goals"`
+			Size  *string            `json:"size"`
 		}](p)
 		if err != nil {
 			return err
+		}
+		if b.Size != nil {
+			if err := s.Kanban.Update(k.loc, a.ID, kanban.Patch{Size: b.Size}, a.By); err != nil {
+				return err
+			}
 		}
 		return s.Kanban.SetPlan(k.loc, a.ID, b.Plan, b.Goals, a.By)
 	}))

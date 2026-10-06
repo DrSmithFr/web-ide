@@ -127,7 +127,7 @@ In **To test**, the ticket shows how to test, the goals, and the change against 
 - **Merge** into the local base branch (`merge --no-ff` or squash), or *Create the pull request* (with `gh`).
 - **Close** the ticket: the worktree is removed, the branch is kept.
 
-A big change can be split into a **lineage**: the next steps are tickets whose parent is the first one (the briefing proposes it, or *Make it a step of…* in the *Lineage* section of a ticket). Each step is developed in the same worktree once the previous one is validated (*Validate the step* on the first ticket, *Close* on a step), and the first ticket is merged once all its steps are finished. A ticket can also wait for another lineage to be merged; a blocked ticket shows what it waits for, and *Start anyway…* goes past it.
+A big change can be split into a **lineage**: the next steps are tickets whose parent is the first one (the briefing proposes it, or *Make it a step of…* in the *Lineage* section of a ticket). Each step is developed in the same worktree once the previous one is validated (*Validate the step* on the first ticket, *Close* on a step), and the first ticket is merged once all its steps are finished. A ticket can also wait for another lineage to be merged; a blocked ticket shows what it waits for, and *Start anyway…* goes past it. The *Roadmap* view of the board shows the lineages as rows of blocks as wide as their size, so you see what can start and how big the work ahead is.
 
 ![The kanban after the merge](images/kanban.png)
 

@@ -11,16 +11,35 @@ import {
   MAX_DESCRIPTION, type Priority, type Status, type Summary,
 } from './state'
 import { blockerText } from './Lineage'
+import { Roadmap } from './Roadmap'
 import { t } from '../i18n'
 import './kanban.css'
 
 const active: Status[] = ['new', 'todo', 'in_progress', 'review']
+
+const VIEW_KEY = 'webide.kanban.view'
+function savedView(): 'board' | 'roadmap' {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'roadmap' ? 'roadmap' : 'board'
+  } catch {
+    return 'board'
+  }
+}
 
 export function Board() {
   onMount(ensureBoard)
   const [query, setQuery] = createSignal('')
   const [showClosed, setShowClosed] = createSignal(false)
   const [settingsOpen, setSettingsOpen] = createSignal(false)
+  const [view, setView] = createSignal<'board' | 'roadmap'>(savedView())
+  const choose = (v: 'board' | 'roadmap') => {
+    setView(v)
+    try {
+      localStorage.setItem(VIEW_KEY, v)
+    } catch {
+      /* private mode: the choice lasts for this window */
+    }
+  }
   const filtered = createMemo(() => {
     const q = query().trim().toLowerCase()
     return board.tickets.filter(
@@ -36,13 +55,23 @@ export function Board() {
           <Icon name="plus" size={13} /> {t('New ticket')}
         </button>
         <input class="input small kb-search" placeholder={t('Filter (title or #number)')} value={query()} onInput={(e) => setQuery(e.currentTarget.value)} />
+        <div class="kb-views" role="group" aria-label={t('View')}>
+          <button class="btn small" classList={{ on: view() === 'board' }} aria-pressed={view() === 'board'} onClick={() => choose('board')} data-testid="kanban-view-board">
+            <Icon name="kanban" size={13} /> {t('Board')}
+          </button>
+          <button class="btn small" classList={{ on: view() === 'roadmap' }} aria-pressed={view() === 'roadmap'} onClick={() => choose('roadmap')} data-testid="kanban-view-roadmap">
+            <Icon name="history" size={13} /> {t('Roadmap')}
+          </button>
+        </div>
         <span class="grow" />
         <button class="btn small" onClick={() => setSettingsOpen(true)} data-testid="kanban-settings">
           <Icon name="gear" size={13} /> {t('Settings')}
         </button>
-        <button class="btn small" classList={{ on: showClosed() }} onClick={() => setShowClosed(!showClosed())}>
-          {t('Done and abandoned ({n})', { n: board.tickets.filter((tk) => tk.status === 'done' || tk.status === 'abandoned').length })}
-        </button>
+        <Show when={view() === 'board'}>
+          <button class="btn small" classList={{ on: showClosed() }} onClick={() => setShowClosed(!showClosed())}>
+            {t('Done and abandoned ({n})', { n: board.tickets.filter((tk) => tk.status === 'done' || tk.status === 'abandoned').length })}
+          </button>
+        </Show>
       </div>
       <Show when={board.error}>
         <p class="danger pad">{board.error}</p>
@@ -50,7 +79,10 @@ export function Board() {
       <Show when={settingsOpen()}>
         <KanbanSettings onClose={() => setSettingsOpen(false)} />
       </Show>
-      <div class="kb-columns">
+      <Show when={view() === 'roadmap'}>
+        <Roadmap tickets={board.tickets} query={query()} />
+      </Show>
+      <div class="kb-columns" hidden={view() !== 'board'}>
         <For each={active}>
           {(s) => (
             <section class={`kb-col st-${s}`} data-status={s}>

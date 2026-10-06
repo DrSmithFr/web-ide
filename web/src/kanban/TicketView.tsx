@@ -10,8 +10,8 @@ import { request } from '../pod/rpc'
 import { basename, closeTab, leaves, openFile, relPath, root, type TabState } from '../state/project'
 import {
   addAttachment, addNote, eventText, attachmentBlob, deleteAttachment, deleteNote, deleteTicket, ensureBoard, feedbackLabels, feedbackOp, getTicket, goalOp, linkCommit,
-  moveTicket, priorityLabels, statusLabels, statusOrder, ticketVersion, unlinkCommit, updateTicket,
-  MAX_DESCRIPTION, MAX_NOTE, type FeedbackKind, type Goal, type Priority, type Status, type Ticket,
+  moveTicket, priorityLabels, sizeNames, statusLabels, statusOrder, ticketVersion, unlinkCommit, updateTicket,
+  MAX_DESCRIPTION, MAX_NOTE, type FeedbackKind, type Goal, type Priority, type Size, type Status, type Ticket,
 } from './state'
 import { abandonTicket, ChatLink, PullRequest, ticketActions, TicketChats, TicketGit } from './actions'
 import { startWorkSession } from './sessions'
@@ -89,6 +89,10 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
         <div class="tk-meta-row">
           <select class="small" value={tk().priority} onChange={(e) => props.apply(updateTicket(tk().id, { priority: e.currentTarget.value as Priority }))} title={t('Priority')}>
             <For each={Object.entries(priorityLabels)}>{([v, l]) => <option value={v}>{t('{priority} priority', { priority: l })}</option>}</For>
+          </select>
+          <select class="small" value={tk().size ?? ''} onChange={(e) => props.apply(updateTicket(tk().id, { size: e.currentTarget.value as Size | '' }))} title={t('Estimated size, written with the plan')} data-testid="ticket-size">
+            <option value="">{t('Size not estimated')}</option>
+            <For each={Object.entries(sizeNames)}>{([v, l]) => <option value={v}>{t('Size {size}', { size: l })}</option>}</For>
           </select>
           <span class="muted small">{t('created on {date}', { date: fmtDate(tk().created) })}</span>
           <span class="grow" />

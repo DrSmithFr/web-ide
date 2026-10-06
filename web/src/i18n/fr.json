@@ -1483,5 +1483,17 @@
   "Step validated: the lineage goes on": "Étape validée : la lignée continue",
   "Started despite: {blockers}": "Démarré malgré : {blockers}",
   "Started in the worktree of #{parent}, from {commit}": "Démarré dans le worktree de #{parent}, depuis {commit}",
-  "Started from {local}: it holds #{dep}, not in {base} yet": "Démarré depuis {local} : elle contient #{dep}, pas encore dans {base}"
+  "Started from {local}: it holds #{dep}, not in {base} yet": "Démarré depuis {local} : elle contient #{dep}, pas encore dans {base}",
+  "Board": "Tableau",
+  "Roadmap": "Feuille de route",
+  "Size {size}": "Taille {size}",
+  "Size not estimated": "Taille non estimée",
+  "Width: estimated size (S, M, L, XL)": "Largeur : taille estimée (S, M, L, XL)",
+  "Nothing to plan: no open ticket.": "Rien à planifier : aucun ticket ouvert.",
+  "Estimated size, written with the plan": "Taille estimée, écrite avec le plan",
+  "Ready to start": "Prêt à démarrer",
+  "Blocked": "Bloqué",
+  "No plan yet": "Pas encore de plan",
+  "In progress or to test": "En cours ou à tester",
+  "Size: {size}": "Taille : {size}"
 }

@@ -95,7 +95,7 @@ export const ROLE_INSTRUCTIONS: Record<ChatRole, string> = {
 - Do not write the implementation plan and do not change any file: the plan comes next.`,
   plan: `You write the **implementation plan** of this ticket.
 - Explore the code concerned; if essential information is missing, ask with ask_user.
-- Save the plan with kanban_set_plan: text in Markdown (approach, files to change, steps, risks, tests) and a list of goals, each one a verifiable objective (visible feature, passing test…) with a short title and, if useful, a description of how to check it. The ticket then moves to "To do" by itself.
+- Save the plan with kanban_set_plan: text in Markdown (approach, files to change, steps, risks, tests), the estimated size of the ticket, and a list of goals, each one a verifiable objective (visible feature, passing test…) with a short title and, if useful, a description of how to check it. The ticket then moves to "To do" by itself.
 - Sum up the plan in a few lines.
 - Do not change any file.`,
   dev: `You **develop** this ticket{{branch}}.

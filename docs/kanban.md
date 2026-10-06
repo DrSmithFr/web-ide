@@ -14,7 +14,7 @@ Each project has a kanban, a tool of the IDE that is also where the user and the
 Number (#1, #2… per project), title, priority (low, normal, high, critical), linked files (paths), attachments, linked commits, history, and what each stage adds:
 
 - **New**: description (Markdown, 1500 characters max: the model tends to be verbose), notes (1000 characters max each, with the conversation that wrote them), briefing conversations.
-- **To do**: implementation plan (Markdown), goals (a title and a description of how to check it, checkable), plan conversations.
+- **To do**: implementation plan (Markdown), goals (a title and a description of how to check it, checkable), plan conversations, estimated size (S, M, L, XL: required when a model writes the plan, editable by the user).
 - **In progress**: development conversations, git and changes, how to test (written by the model when it finishes).
 - **To test**: test feedback (info, bug or new feature; 1000 characters max; checked once handled, by the model or the user; with the conversation handling it), pull request.
 
@@ -101,4 +101,4 @@ claude mcp add --transport http --scope user web-ide http://127.0.0.1:4433/mcp -
 
 ## Interface
 
-Board in an editor tab (columns New, To do, In progress and To test; Done and Abandoned folded; cards show the open feedback), ticket detail in an editor tab, compact list in a side panel, kanban settings (default base, worktree setup command). Every window follows the changes (`kanban.changed` event).
+Board in an editor tab (columns New, To do, In progress and To test; Done and Abandoned folded; cards show the open feedback), and its **Roadmap** view (switch in the toolbar, remembered by the browser): one row per lineage not merged yet, its blocks in order on a sequence axis without dates, each one as wide as the size of its ticket (a dotted edge when not estimated); a row waiting for another lineage starts where that one ends, with an arrow. Ready tickets stand out (accent border, ▶), blocked ones are dimmed with a lock, New ones hatched, the finished steps of an open lineage greyed; a click or Enter opens the ticket, the arrow keys move between blocks; the filter applies to both views. ticket detail in an editor tab, compact list in a side panel, kanban settings (default base, worktree setup command). Every window follows the changes (`kanban.changed` event).

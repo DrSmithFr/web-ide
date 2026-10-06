@@ -166,5 +166,6 @@
   "a child ticket is merged with its lineage: see #%d": "une étape se fusionne avec sa lignée : voir #%d",
   "the lineage is not finished: %s": "la lignée n'est pas terminée : %s",
   "the lineage has no worktree: start #%d first": "la lignée n'a pas de worktree : démarrez d'abord #%d",
-  "Steps": "Étapes"
+  "Steps": "Étapes",
+  "unknown size: %s (%s)": "taille inconnue : %s (%s)"
 }
