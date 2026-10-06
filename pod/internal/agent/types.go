@@ -100,6 +100,7 @@ type Message struct {
 	PlanState  string          `json:"planState,omitempty"`
 	Questions  []Question      `json:"questions,omitempty"`
 	Answers    [][]string      `json:"answers,omitempty"`
+	Notes      []string        `json:"notes,omitempty"`
 	AskState   string          `json:"askState,omitempty"`
 }
 
@@ -167,17 +168,22 @@ type Approval struct {
 	Command string     `json:"command,omitempty"`
 }
 
-// Question asked with ask_user.
+// Question asked with ask_user. Its type picks how the page shows it (ask.go).
 type Question struct {
-	Question string   `json:"question"`
-	Header   string   `json:"header,omitempty"`
-	Options  []Option `json:"options"`
-	Multiple bool     `json:"multiple,omitempty"`
+	Question  string   `json:"question"`
+	Header    string   `json:"header,omitempty"`
+	Type      string   `json:"type,omitempty"`      // choice (default) | idea | compare | rank | scenario
+	Situation string   `json:"situation,omitempty"` // scenario: the concrete case
+	Top       int      `json:"top,omitempty"`       // rank: only the top N is picked
+	Options   []Option `json:"options"`
+	Multiple  bool     `json:"multiple,omitempty"`
 }
 
 type Option struct {
-	Label       string `json:"label"`
-	Description string `json:"description,omitempty"`
+	Label       string   `json:"label"`
+	Description string   `json:"description,omitempty"`
+	Pros        []string `json:"pros,omitempty"`
+	Cons        []string `json:"cons,omitempty"`
 }
 
 // ContentText is the text of a content: the string, or its text parts joined.

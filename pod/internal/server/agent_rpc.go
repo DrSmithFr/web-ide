@@ -310,6 +310,7 @@ func (s *Server) registerAgent() {
 			ID      string     `json:"id"`
 			Index   int        `json:"index"`
 			Answers [][]string `json:"answers"`
+			Notes   []string   `json:"notes"`
 		}](p)
 		if err != nil {
 			return nil, err
@@ -319,8 +320,8 @@ func (s *Server) registerAgent() {
 				return -1, i18n.New("these questions are not waiting for an answer")
 			}
 			m := chat.Messages[a.Index]
-			m.Answers, m.AskState = a.Answers, "answered"
-			m.Content = agent.String(agent.AnswersText(m.Questions, a.Answers))
+			m.Answers, m.Notes, m.AskState = a.Answers, a.Notes, "answered"
+			m.Content = agent.String(agent.AnswersText(m.Questions, a.Answers, a.Notes))
 			m.Summary = agent.T("answers received", nil).Raw()
 			return a.Index, nil
 		})

@@ -498,13 +498,13 @@ func (s *Server) runCalls(r *agentRun, ref *runtimeRef, calls []agent.ToolCall, 
 			continue
 		case "ask_user":
 			// The questions go to the user; the turn ends until they answer.
-			qs := agent.NormalizeQuestions(args["questions"])
+			qs, err := agent.NormalizeQuestions(args["questions"])
 			m := &agent.Message{Role: "tool", ToolCallID: call.ID, Name: name}
-			if len(qs) > 0 {
+			if err == nil {
 				m.Content, m.Status, m.Summary, m.Questions, m.AskState = agent.String("Questions asked to the user: waiting for their answers."), "ok", agent.Tn(len(qs), "{n} question", "{n} questions", nil).Raw(), qs, "pending"
 				stop = true
 			} else {
-				m.Content, m.Status, m.Summary = agent.String("Error: 1 to 10 questions are needed, each with at least one choice."), "error", agent.T("invalid questions", nil).Raw()
+				m.Content, m.Status, m.Summary = agent.String("Error: "+err.Error()+". Fix the questions and ask again."), "error", agent.T("invalid questions", nil).Raw()
 			}
 			r.chat.Messages = append(r.chat.Messages, m)
 			s.publish(r, len(r.chat.Messages)-1)

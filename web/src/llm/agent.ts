@@ -8,6 +8,7 @@ import { on, request } from '../pod/rpc'
 import { activeTab, project, relPath, session } from '../state/project'
 import { approval, chat, config, emptyChat, live, newId, prefs, refreshChats, setApproval, setChat, setLive, type Chat, type ChatMessage, type Mode, type Part } from './state'
 import { runUiTool } from './uiTools'
+import { entryToString, type AnswerEntry } from './ask'
 import { toast } from '../ui/toast'
 import { t } from '../i18n'
 
@@ -308,8 +309,9 @@ export function unqueue(id: string) {
 }
 
 /** The user answers the questions of a tool message: the agent goes on with them. */
-export async function answerQuestions(index: number, answers: string[][]) {
-  await request('agent.answer', { id: chat.id, index, answers })
+export async function answerQuestions(index: number, answers: (AnswerEntry | null)[][], notes: string[] = []) {
+  const strings = answers.map((a) => a.map(entryToString).filter((s) => s.trim()))
+  await request('agent.answer', { id: chat.id, index, answers: strings, notes })
 }
 
 /** The user accepts the plan of a tool message: Build mode, then its execution. */
