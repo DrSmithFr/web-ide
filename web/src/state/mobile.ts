@@ -12,31 +12,19 @@ export { phone }
 /** 'editor', or the id of the tool shown full screen. */
 export const [mobileView, setMobileView] = createSignal('editor')
 
-/** The on-screen keyboard is open (the visible area much shorter than the window). */
-export const [keyboard, setKeyboard] = createSignal(false)
-
-// The visual viewport shrinks when the keyboard opens, and iOS scrolls the whole page to show
-// the focused field (it keeps the layout viewport): the page is fixed on the visible area
-// (its height and its offset), and the line of the caret is scrolled back into view.
+// The visual viewport shrinks when the keyboard opens (iOS keeps the layout viewport): the
+// page takes its height, and the line of the caret is scrolled back into view.
 const vv = window.visualViewport
 if (vv) {
   let timer: ReturnType<typeof setTimeout> | undefined
-  const style = document.documentElement.style
-  // Full height of the visible area for the current width (rotation resets it).
-  let full = 0
-  let width = 0
   const fit = () => {
-    if (vv.width !== width) [full, width] = [0, vv.width]
-    full = Math.max(full, vv.height)
     if (!phone()) {
-      style.removeProperty('--app-h')
-      style.removeProperty('--app-top')
-      setKeyboard(false)
+      document.documentElement.style.removeProperty('--app-h')
       return
     }
-    style.setProperty('--app-h', `${Math.round(vv.height)}px`)
-    style.setProperty('--app-top', `${Math.round(vv.offsetTop)}px`)
-    setKeyboard(vv.height < full * 0.8)
+    document.documentElement.style.setProperty('--app-h', `${Math.round(vv.height)}px`)
+    // iOS scrolls the whole page to show the focused field: the page stays at the top.
+    if (vv.offsetTop) window.scrollTo(0, 0)
     clearTimeout(timer)
     timer = setTimeout(revealCaret, 60)
   }

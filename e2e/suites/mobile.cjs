@@ -68,16 +68,6 @@ run(
     assert(caret.top >= 0 && caret.bottom <= caret.h, `the caret line stays visible above the keyboard: ${JSON.stringify(caret)}`)
     const appH = await page.$eval('.app', (e) => e.getBoundingClientRect().height)
     assert(Math.abs(appH - 420) < 2, 'the page takes the visible height: ' + appH)
-    assert((await visible(page, '.menubar-row')) && !(await visible(page, '[data-testid=mobile-rail]')) && !(await visible(page, '.menubar .menus')), 'keyboard open: the bar keeps its first row only')
-    // The assistant with the keyboard open: its message box stays at the bottom of the visible area.
-    await page.setViewportSize({ width: 375, height: 812 })
-    await page.waitForSelector('[data-testid=mobile-rail]')
-    await page.click('[data-testid=mobile-rail] [data-id=assistant]')
-    await page.setViewportSize({ width: 375, height: 420 })
-    await page.waitForTimeout(300)
-    const composer = await page.$eval('.ai-composer', (e) => e.getBoundingClientRect().bottom)
-    assert(composer <= 420 && composer > 330, 'the message box of the assistant sits just above the keyboard: ' + composer)
-    await page.screenshot({ path: OUT + '/mobile-chat-keyboard.png' })
     await page.screenshot({ path: OUT + '/mobile-keyboard.png' })
   },
   { mobile: true, viewport: { width: 375, height: 812 } },
