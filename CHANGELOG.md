@@ -4,6 +4,8 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-06
+
 ### Added
 
 - Claude Code on the kanban: an MCP endpoint of the pod (`/mcp`) gives Claude Code the tools of the assistant on the tickets, the conversations of a briefing, the start of the development, and the commands `brief`, `plan`, `dev` and `fix`; its changes are shown as written by Claude.
@@ -16,6 +18,12 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 - Question types of `ask_user`: an idea to validate (swipe on a phone), two approaches compared side by side, items to rank (or a top N), a concrete scenario, or choices with their pros and cons; on any question "I don't know", "Up to you" and a note. A call breaking the rules of a type is refused with an error naming the question.
 - Graphs of questions in `ask_user`: a follow-up is asked only when the answer leading to it is chosen, with a breadcrumb; leaving the anticipated path (free answer, "Yes, but…", "I don't know") sends the round at once so the model rethinks.
 - Roadmap view of the kanban: a row per lineage, blocks as wide as the estimated size of their ticket (S, M, L, XL, written with the plan), what can start, what is blocked, and the dependencies between lineages at a glance.
+
+### Changed
+
+- A stopped or failed answer of the assistant resumes from its last completed step (*Resume*) or starts again from the user message (*Retry*).
+- The counters of an answer show the speed of the prompt reading and the share of the prompt found in the cache of the model server.
+- Reloading the page or closing it no longer stops a conversation, and a second window following it can write to it instead of being read-only.
 
 ## [1.0.0] - 2026-10-05
 
