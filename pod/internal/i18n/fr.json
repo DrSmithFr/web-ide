@@ -1,4 +1,5 @@
 {
+  "no capture of the screen is waiting here": "aucune capture d'écran n'est attendue ici",
   "%d file(s) still in conflict: fix them, then git add": "%d fichier(s) encore en conflit : les corriger puis git add",
   "%s cannot be reached: %v": "%s injoignable : %v",
   "%s: no answer": "%s : pas de réponse",

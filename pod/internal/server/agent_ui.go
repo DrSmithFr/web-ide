@@ -16,6 +16,8 @@ type uiResult struct {
 	Content string          `json:"content"`
 	Summary json.RawMessage `json:"summary"`
 	Status  string          `json:"status"`
+	// A page drawn by board_draw.
+	Page *agent.Page `json:"page,omitempty"`
 }
 
 // uiClient picks the window that runs a tool for a run.
@@ -46,9 +48,24 @@ func (s *Server) uiClient(r *agentRun) *Client {
 
 func (s *Server) uiTool(r *agentRun, name string, a toolArgs) (toolResult, error) {
 	quiet := a.boolean("quiet", false)
+	res, window, answered := s.uiCall(r, name, a, !quiet, 10*time.Second)
+	switch {
+	case !window:
+		return toolResult{Content: "No IDE window is open: the user will not see it.", Summary: agent.T("no window open", nil).Raw(), Status: "ok"}, nil
+	case quiet:
+		return toolResult{}, nil
+	case !answered:
+		return toolResult{Content: "No IDE window answered: the user may not see it.", Summary: agent.T("no window open", nil).Raw(), Status: "ok"}, nil
+	}
+	return toolResult{Content: res.Content, Summary: res.Summary, Status: res.Status}, nil
+}
+
+// uiCall asks a window of the project to run a tool and, with wait, waits for its result:
+// window tells whether a window was there, answered whether it answered in time.
+func (s *Server) uiCall(r *agentRun, name string, args any, wait bool, timeout time.Duration) (res uiResult, window, answered bool) {
 	c := s.uiClient(r)
 	if c == nil {
-		return toolResult{Content: "No IDE window is open: the user will not see it.", Summary: agent.T("no window open", nil).Raw(), Status: "ok"}, nil
+		return res, false, false
 	}
 	id := newID()
 	ch := make(chan uiResult, 1)
@@ -60,17 +77,17 @@ func (s *Server) uiTool(r *agentRun, name string, a toolArgs) (toolResult, error
 		delete(s.agents.ui, id)
 		s.agents.mu.Unlock()
 	}()
-	c.push("agent.ui", map[string]any{"id": id, "chat": r.id, "tool": name, "args": a})
-	if quiet {
-		return toolResult{}, nil
+	c.push("agent.ui", map[string]any{"id": id, "chat": r.id, "tool": name, "args": args})
+	if !wait {
+		return res, true, false
 	}
-	ctx, cancel := context.WithTimeout(r.ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.ctx, timeout)
 	defer cancel()
 	select {
-	case res := <-ch:
-		return toolResult{Content: res.Content, Summary: res.Summary, Status: res.Status}, nil
+	case res = <-ch:
+		return res, true, true
 	case <-ctx.Done():
-		return toolResult{Content: "No IDE window answered: the user may not see it.", Summary: agent.T("no window open", nil).Raw(), Status: "ok"}, nil
+		return res, true, false
 	}
 }
 

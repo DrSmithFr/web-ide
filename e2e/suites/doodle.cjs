@@ -3,7 +3,8 @@
 // frame presets, attach (chip opened again), PNG and description sent to the model,
 // Ctrl+Shift+D and sending from the composer of the modal.
 const http = require('http')
-const { run, openProject, assert } = require('../common.cjs')
+const fs = require('fs')
+const { run, openProject, assert, OUT, WS } = require('../common.cjs')
 
 const requests = []
 const sse = (res, delta) => res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`)
@@ -30,9 +31,71 @@ const fake = http.createServer(async (req, res) => {
     else sse(res, { tool_calls: [{ index: 0, id: 'k1', type: 'function', function: { name: 'kanban_create', arguments: JSON.stringify({ title: 'Login page', description: 'From the doodles.' }) } }] })
     return end(res, last.role === 'tool' ? 'stop' : 'tool_calls')
   }
+  const firstUser = r.messages.find((m) => m.role === 'user')
+  if (text(firstUser).startsWith('Back:')) {
+    // The image sent by the user is page 1: annotated on a copy; an SVG of the model as a page;
+    // an image that is neither an SVG nor "screen" (refused); a capture of the screen (waits).
+    if (!r.messages.some((m) => m.role === 'tool')) {
+      const call = (i, id, name, args) => ({ index: i, id, type: 'function', function: { name, arguments: JSON.stringify({ title: id, ...args }) } })
+      sse(res, {
+        tool_calls: [
+          call(0, 'b1', 'board_draw_doodle', { clone: 1, elements: [{ type: 'ellipse', x: 1, y: 1, w: 2, h: 1, color: 'red' }] }),
+          call(1, 'b2', 'board_draw_image', { image: '<svg viewBox="0 0 300 200"><rect x="10" y="10" width="280" height="180" fill="#9cf"/><circle cx="150" cy="100" r="60" fill="#f80"/></svg>' }),
+          call(2, 'b3', 'board_draw_image', { image: 'img/logo.png' }),
+          call(3, 'b4', 'board_draw_image', { image: 'notes.txt' }),
+          call(4, 'b5', 'board_draw_image', { image: '../outside.png' }),
+          call(5, 'b7', 'board_draw_image', { image: 'img/anim.gif' }),
+          call(6, 'b6', 'board_draw_image', { image: 'screen' }),
+        ],
+      })
+      return end(res, 'tool_calls')
+    }
+    sse(res, { content: 'Backgrounds done.' })
+    return end(res)
+  }
+  if (text(firstUser).startsWith('Draw:')) {
+    // board_draw: a page, then a copy of it with a red stroke and an invalid arrow, then the end.
+    const tools = r.messages.filter((m) => m.role === 'tool').length
+    const call = (id, args) => ({ index: 0, id, type: 'function', function: { name: 'board_draw_doodle', arguments: JSON.stringify(args) } })
+    if (tools === 0) {
+      sse(res, {
+        tool_calls: [
+          call('d1', {
+            title: 'Login flow',
+            size: '16:9',
+            elements: [
+              { type: 'layout', x: 40, y: 40, w: 500, h: 600, root: { split: { dir: 'rows', sizes: [1, 4], children: [{ name: 'header' }, { name: 'form' }] } } },
+              { type: 'rect', id: 'btn', x: 700, y: 100, w: 240, h: 90, label: 'Sign in', fill: true, color: 'blue' },
+              { type: 'ellipse', id: 'ok', x: 760, y: 450, w: 200, h: 120, label: 'Home' },
+              { type: 'arrow', from: 'btn', to: 'ok' },
+              { type: 'text', x: 600, y: 650, text: 'Happy path', size: 's' },
+              { type: 'stroke', points: [[60, 700], [300, 690], [520, 700]], color: 'red' },
+            ],
+          }),
+        ],
+      })
+      return end(res, 'tool_calls')
+    }
+    if (tools === 1) {
+      sse(res, {
+        tool_calls: [
+          call('d2', { title: 'Login flow, fixed', clone: 1, elements: [{ type: 'stroke', points: [[700, 80], [960, 80]], color: 'red' }] }),
+          { ...call('d3', { title: 'Bad', elements: [{ type: 'arrow', from: [0, 0], to: 'nope' }] }), index: 1 },
+        ],
+      })
+      return end(res, 'tool_calls')
+    }
+    sse(res, { content: 'Drawn.' })
+    return end(res)
+  }
   sse(res, { content: `Got ${text(lastUser).split('\n')[0].slice(0, 40)}` })
   end(res)
 })
+
+// An 8×6 animated GIF, transparent around a square.
+const GIF = Buffer.from('R0lGODlhCAAGAIEAAAAAAP8AAAAAAAAAACH/C05FVFNDQVBFMi4wAwEAAAAh+QQJFAAAACwAAAAACAAGAAAIEQABCBxIsCDBAAEMIjTI0GBAACH5BAkUAAAALAMAAgACAAIAgQAAAAAA/wAAAAAAAAgGAAMIDBAQADs=', 'base64')
+// A 4×3 red PNG.
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAEElEQVR4nGP4z8AARww4OQD1MQv1NXv7ggAAAABJRU5ErkJggg==', 'base64')
 
 const count = (page) => page.$$eval('[data-testid=dd-canvas] svg g > *', (e) => e.length)
 const paths = (page) => page.$$eval('[data-testid=dd-canvas] svg g path', (ps) => ps.map((p) => ({ fill: p.getAttribute('fill'), opacity: p.getAttribute('stroke-opacity') })))
@@ -187,6 +250,69 @@ run(async ({ page }) => {
     user = [...requests[requests.length - 1].messages].reverse().find((m) => m.role === 'user')
     assert(user.content.some((p) => p.type === 'image_url') && text(user).includes('Doodle "Doodle 1"'), 'sent from the modal with the doodle')
     assert(!(await page.$('.ai-composer .ai-att')), 'the draft is empty after sending')
+
+    // The board: the doodles of the conversation as read-only pages. The side panel is
+    // narrow: the board shows instead of the conversation.
+    await page.click('[data-testid=ai-board-toggle]')
+    await page.waitForSelector('[data-testid=bd-board] [data-testid=bd-view]')
+    assert((await page.$$('[data-testid=bd-thumb]')).length === 2 && (await page.textContent('[data-testid=bd-title]')).startsWith('Page 2'), 'board: two pages, the last one shown')
+    assert(!(await page.isVisible('.ai-panel .ai-main')), 'narrow assistant: the board replaces the conversation')
+    await page.click('[data-testid=bd-thumb] >> nth=0')
+    assert((await page.textContent('[data-testid=bd-title]')) === 'Page 1 · Doodle 1', 'a thumbnail shows its page')
+    const page1 = await page.$$eval('[data-testid=bd-view] path', (p) => p.length)
+    const vb = () => page.getAttribute('[data-testid=bd-view]', 'viewBox')
+    const fitted = await vb()
+    await page.hover('[data-testid=bd-view]')
+    await page.mouse.wheel(0, -400)
+    assert((await vb()) !== fitted, 'the wheel zooms the page')
+    await page.click('[data-testid=bd-fit]')
+    assert((await vb()) === fitted, 'Fit shows the whole page again')
+    // Reuse: an editable copy, sent as a new page; the page itself stays as it was.
+    await page.click('[data-testid=bd-reuse]')
+    await page.waitForSelector('[data-testid=doodle]')
+    await stroke(page, 0.6, 0.6, 0.8, 0.7)
+    await page.fill('[data-testid=doodle] .ai-composer textarea', 'Third sketch')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid=doodle]', { state: 'detached' })
+    await page.click('[data-testid=ai-board-toggle]')
+    await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Got Third sketch")', { timeout: 15000 })
+    await page.click('[data-testid=ai-board-toggle]')
+    await page.waitForSelector('[data-testid=bd-board]')
+    assert((await page.$$('[data-testid=bd-thumb]')).length === 3 && (await page.textContent('[data-testid=bd-title]')).startsWith('Page 3'), 'the copy sent is a new page, shown')
+    await page.click('[data-testid=bd-thumb] >> nth=0')
+    assert((await page.$$eval('[data-testid=bd-view] path', (p) => p.length)) === page1, 'the reused page is unchanged')
+    await page.screenshot({ path: OUT + '/board-narrow.png' })
+    // Back to the conversation; a doodle card shows its page on the board.
+    await page.click('[data-testid=ai-board-toggle]')
+    await page.waitForSelector('.ai-panel .ai-main', { state: 'visible' })
+    await page.click('.ai-panel .ai-msg.user [data-testid=ai-doodle-board] >> nth=0')
+    await page.waitForSelector('[data-testid=bd-title]:has-text("Page 1")')
+    assert(true, 'Show on the board opens the page of the card')
+    await page.click('[data-testid=ai-board-toggle]')
+    // A wide detached window: the board is a column next to the conversation, resizable.
+    const main = page.url()
+    await page.goto(new URL(new URL(main).pathname.replace(/\/$/, '') + '/tool/assistant', main).href)
+    await page.waitForSelector('.ai-panel.detached')
+    await page.waitForSelector('.ai-panel .ai-msg.user [data-testid=ai-doodle]', { timeout: 10000 })
+    await page.click('[data-testid=ai-board-toggle]')
+    await page.waitForSelector('[data-testid=ai-board-split]')
+    assert((await page.isVisible('.ai-panel .ai-main')) && (await page.$$('[data-testid=bd-thumb]')).length === 3, 'wide window: conversation and board side by side')
+    const col = () => page.$eval('.ai-board-col', (e) => e.getBoundingClientRect().width)
+    const colBefore = await col()
+    const sb = await page.$eval('[data-testid=ai-board-split]', (e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } })
+    await page.mouse.move(sb.x, sb.y)
+    await page.mouse.down()
+    await page.mouse.move(sb.x - 150, sb.y, { steps: 5 })
+    await page.mouse.up()
+    assert((await col()) > colBefore + 100, `the splitter widens the board (${Math.round(colBefore)} → ${Math.round(await col())})`)
+    await page.screenshot({ path: OUT + '/board-wide.png' })
+    // Another conversation: its own board, empty.
+    await page.click('.ai-panel button[title="New conversation"]')
+    await page.waitForSelector('[data-testid=bd-empty]')
+    assert(true, 'a new conversation has an empty board')
+    await page.click('[data-testid=ai-board-toggle]')
+    await page.goto(main)
+    await page.waitForSelector('.ai-panel')
 
     // Shapes, text, selection.
     await page.click('.ai-composer textarea')
@@ -444,6 +570,84 @@ run(async ({ page }) => {
     const toolMsg = requests[requests.length - 1].messages.find((m) => m.role === 'tool')
     assert(/Ticket #\d+ created in the backlog \(status New\)\. \d+ doodles of the conversation attached to it as PNG files\./.test(text(toolMsg)), `doodles attached to the ticket: ${text(toolMsg)}`)
     assert(text(requests[requests.length - 1].messages[0]).includes('attached to the tickets you create or update as PNG files'), 'the prompt says the doodles go to the tickets')
+
+    // The model draws on the board: a page, a copy of it, an invalid call; the image reaches
+    // the model; the board says so; the pages go to the tickets.
+    await page.click('.ai-panel button[title="New conversation"]')
+    await page.fill('.ai-composer textarea', 'Draw: the login flow')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Drawn.")', { timeout: 20000 })
+    const msgs = requests[requests.length - 1].messages
+    const d = (id) => text(msgs.find((m) => m.role === 'tool' && m.tool_call_id === id))
+    assert(d('d1').includes('A new blank page (not a clone'), 'a blank page says it is no clone')
+    assert(d('d1').includes('Page 1 "Login flow" drawn by you') && d('d1').includes('"header"') && d('d1').includes('Sign in') && d('d1').includes('Happy path'), 'page described to the model: ' + d('d1'))
+    const afterD1 = msgs[msgs.findIndex((m) => m.tool_call_id === 'd1') + 1]
+    assert(afterD1.role === 'user' && afterD1.content.some((p) => p.type === 'image_url' && p.image_url.url.startsWith('data:image/png')), 'the image of the page follows the tool result')
+    assert(d('d2').includes('Page 2 "Login flow, fixed"') && d('d2').includes('A clone of page 1'), 'copy of page 1: ' + d('d2'))
+    assert(d('d3').startsWith('Error:') && d('d3').includes('element 1 (arrow): to "nope" is no element id'), 'invalid arrow refused: ' + d('d3'))
+    assert((await page.$$('[data-testid=ai-page-card]')).length === 2, 'a card per page in the thread')
+    await page.waitForSelector('.toast:has-text("New page on the board")')
+    await page.click('[data-testid=ai-board-toggle]')
+    await page.waitForSelector('[data-testid=bd-title]:has-text("Page 2")')
+    assert((await page.textContent('[data-testid=bd-board] .bd-by')).includes('drawn by the assistant'), 'drawn by the assistant')
+    const p2 = await page.$$eval('[data-testid=bd-view] path', (p) => p.length)
+    await page.click('[data-testid=bd-thumb] >> nth=0')
+    const p1 = await page.$$eval('[data-testid=bd-view] path', (p) => p.length)
+    assert(p2 === p1 + 1, `the copy has one stroke more, page 1 unchanged (${p1} → ${p2})`)
+    await page.screenshot({ path: OUT + '/board-model.png' })
+    await page.click('[data-testid=ai-board-toggle]')
+    await page.fill('.ai-composer textarea', 'Make a ticket of it')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Ticket made.") >> nth=-1', { timeout: 15000 })
+    const tk = text([...requests[requests.length - 1].messages].reverse().find((m) => m.role === 'tool'))
+    assert(tk.includes('2 doodles of the conversation attached'), 'the pages of the model go to the ticket: ' + tk)
+
+    // Images: the image sent by the user is a page, annotated on a copy; an SVG of the model
+    // as a page; an image that is neither an SVG nor "screen"; a capture of the screen refused.
+    fs.mkdirSync(WS + '/demo/img', { recursive: true })
+    fs.writeFileSync(WS + '/demo/img/logo.png', PNG)
+    fs.writeFileSync(WS + '/demo/img/anim.gif', GIF)
+    await page.click('.ai-panel button[title="New conversation"]')
+    await page.setInputFiles('.ai-composer input[type=file]', { name: 'shot.png', mimeType: 'image/png', buffer: PNG })
+    await page.waitForSelector('.ai-composer .ai-att[data-kind=image]')
+    await page.fill('.ai-composer textarea', 'Back: annotate')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid=ai-capture]', { timeout: 30000 })
+    assert(true, 'the capture of the screen waits for the user')
+    await page.click('[data-testid=ai-capture-refuse]')
+    await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Backgrounds done.")', { timeout: 20000 })
+    const bm = requests[requests.length - 1].messages
+    const b = (id) => text(bm.find((m) => m.role === 'tool' && m.tool_call_id === id))
+    assert(b('b1').includes('Page 2 "b1"') && b('b1').includes('Frame 4×3') && b('b1').includes('A clone of page 1'), 'the image sent, annotated on a copy: ' + b('b1'))
+    assert(b('b2').includes('Page 3 "b2"') && b('b2').includes('background image: an SVG written by you (300×200)'), 'an SVG of the model as a page: ' + b('b2'))
+    assert(b('b3').includes('Page 4 "b3"') && b('b3').includes('background image: the image img/logo.png (4×3)'), 'an image of the project as a page: ' + b('b3'))
+    assert(b('b4').startsWith('Error:') && b('b4').includes('"notes.txt" is none of them'), 'not an image: ' + b('b4'))
+    assert(b('b5').startsWith('Error:') && b('b5').includes('outside the project'), 'no image outside the project: ' + b('b5'))
+    assert(b('b6').includes('refused to share their screen'), 'capture refused: ' + b('b6'))
+    // A transparent animated GIF: a page of its size, its transparent part white (not black).
+    assert(b('b7').includes('Page 5 "b7"') && b('b7').includes('the image img/anim.gif (8×6)'), 'a GIF of the project as a page: ' + b('b7'))
+    const gifPage = bm.find((m) => m.role === 'user' && Array.isArray(m.content) && m.content.some((p) => p.type === 'text' && p.text.includes('"b7"')))
+    const gifPNG = gifPage.content[gifPage.content.findIndex((p) => p.type === 'text' && p.text.includes('"b7"')) + 1].image_url.url
+    const corner = await page.evaluate(async (src) => {
+      const img = new Image()
+      await new Promise((r) => ((img.onload = r), (img.src = src)))
+      const c = document.createElement('canvas')
+      c.width = img.width
+      c.height = img.height
+      const g = c.getContext('2d')
+      g.drawImage(img, 0, 0)
+      return [...g.getImageData(1, 1, 1, 1).data]
+    }, gifPNG)
+    assert(corner[0] > 200 && corner[1] > 200 && corner[2] > 200, `the transparent part of the GIF is white: ${corner}`)
+    assert(!(await page.$('[data-testid=ai-capture]')), 'the card goes once answered')
+    await page.click('[data-testid=ai-board-toggle]')
+    await page.waitForSelector('[data-testid=bd-title]:has-text("Page 5")')
+    assert((await page.$$('[data-testid=bd-thumb]')).length === 5 && (await page.$$('[data-testid=bd-view] image')).length === 1, 'five pages: the image sent, its clone, the SVG, the PNG and the GIF of the project')
+    assert((await page.getAttribute('[data-testid=bd-view] image', 'href')).startsWith('data:image/gif'), 'the GIF of the project stays a GIF on its page (animated)')
+    await page.click('[data-testid=bd-thumb] >> nth=0')
+    assert((await page.textContent('[data-testid=bd-title]')) === 'Page 1 · shot.png', 'the image sent is page 1')
+    await page.screenshot({ path: OUT + '/board-background.png' })
+    await page.click('[data-testid=ai-board-toggle]')
   } finally {
     fake.close()
   }

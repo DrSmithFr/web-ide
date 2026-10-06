@@ -85,9 +85,33 @@ const summaryPrefix = "Summary of the earlier conversation (automatic compaction
 
 // apiMessages are the messages as the API expects them (fields of the page and compacted
 // messages removed).
-func apiMessages(system string, msgs []*agent.Message) []llm.Message {
+//
+// A page drawn by the model reaches a model reading images as an image: in a user message
+// right after the tool results of its step, since servers often take only text in a tool
+// result.
+func apiMessages(system string, msgs []*agent.Message, vision bool) []llm.Message {
 	out := []llm.Message{{Role: "system", Content: agent.String(system)}}
+	var images []*agent.Message
+	flush := func() {
+		if len(images) == 0 {
+			return
+		}
+		var parts []map[string]any
+		for _, m := range images {
+			parts = append(parts, map[string]any{"type": "text", "text": "Image of the page \"" + m.Page.Name + "\" drawn by board_draw:"},
+				map[string]any{"type": "image_url", "image_url": map[string]string{"url": m.Page.PNG}})
+		}
+		data, _ := json.Marshal(parts)
+		out = append(out, llm.Message{Role: "user", Content: data})
+		images = nil
+	}
 	for _, m := range msgs {
+		if m.Role != "tool" {
+			flush()
+		}
+		if vision && m.Role == "tool" && !m.Compacted && m.Page != nil && m.Page.PNG != "" {
+			images = append(images, m)
+		}
 		if m.Compacted || m.Error != "" && m.Role == "assistant" && len(m.Content) == 0 && len(m.ToolCalls) == 0 {
 			continue
 		}
@@ -108,6 +132,7 @@ func apiMessages(system string, msgs []*agent.Message) []llm.Message {
 		}
 		out = append(out, msg)
 	}
+	flush()
 	return out
 }
 
@@ -375,7 +400,7 @@ func (s *Server) loop(r *agentRun) {
 			mode = agent.Build
 		}
 		system := s.systemPrompt(r, ref, r.chat, tools)
-		req := llm.ChatRequest{Server: server, Model: model, Messages: apiMessages(system, r.chat.Messages)}
+		req := llm.ChatRequest{Server: server, Model: model, Messages: apiMessages(system, r.chat.Messages, !info.found || info.caps.Vision)}
 		if tools {
 			req.Tools = agent.ToolsFor(mode, r.chat.Ticket)
 		}
@@ -496,6 +521,20 @@ func (s *Server) runCalls(r *agentRun, ref *runtimeRef, calls []agent.ToolCall, 
 			s.publish(r, len(r.chat.Messages)-1)
 			r.mu.Unlock()
 			continue
+		case "board_draw_image":
+			// A capture of the screen of the user needs their click: the turn ends until they
+			// share it or refuse (agent.capture), like questions.
+			var image string
+			if json.Unmarshal(args["image"], &image) != nil || strings.TrimSpace(image) != "screen" {
+				break
+			}
+			m := &agent.Message{Role: "tool", ToolCallID: call.ID, Name: name, Status: "ok", Capture: "pending",
+				Content: agent.String("Waiting for the user to share their screen."), Summary: agent.T("waiting for a capture of the screen", nil).Raw()}
+			r.chat.Messages = append(r.chat.Messages, m)
+			s.publish(r, len(r.chat.Messages)-1)
+			r.mu.Unlock()
+			stop = true
+			continue
 		case "ask_user":
 			// The questions go to the user; the turn ends until they answer.
 			qs, err := agent.NormalizeQuestions(args["questions"])
@@ -537,7 +576,7 @@ func (s *Server) runCalls(r *agentRun, ref *runtimeRef, calls []agent.ToolCall, 
 		// The compaction may have moved the message: it is the last tool result of this call.
 		for i := len(r.chat.Messages) - 1; i >= 0; i-- {
 			if mm := r.chat.Messages[i]; mm.Role == "tool" && mm.ToolCallID == call.ID {
-				mm.Content, mm.Summary, mm.Status, mm.Diff = agent.String(res.Content), res.Summary, res.Status, res.Diff
+				mm.Content, mm.Summary, mm.Status, mm.Diff, mm.Page = agent.String(res.Content), res.Summary, res.Status, res.Diff, res.Page
 				idx = i
 				break
 			}

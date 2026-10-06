@@ -54,7 +54,8 @@ import {
   type Text,
   type TextSize,
 } from './model'
-import { baseline, layered, primsOf, type Prim } from './render'
+import { layered } from './render'
+import { ElementView } from './Elements'
 import { ZoneMenu } from './ZoneMenu'
 import { Help } from './Help'
 import { createHistory } from './history'
@@ -1074,35 +1075,5 @@ function TextEditor(props: { ed: Editing; view: View; dark: boolean; onInput: (t
       }}
       data-testid="dd-text-edit"
     />
-  )
-}
-
-function ElementView(props: { el: Element; dark: boolean }) {
-  const prims = createMemo(() => primsOf(props.el, props.dark))
-  return <For each={prims()}>{(v) => <PrimView v={v} />}</For>
-}
-
-function PrimView(props: { v: Prim }) {
-  return (
-    <>
-      {(() => {
-        const v = props.v
-        if (v.kind === 'text')
-          return (
-            <text x={v.x} y={v.y + baseline(v.size)} text-anchor={v.anchor} font-size={String(v.size)} font-family={FONT} fill={v.color} style={{ 'white-space': 'pre' }}>
-              <For each={v.lines}>
-                {(l, i) => (
-                  <tspan x={v.x} dy={i() ? v.size * LINE_HEIGHT : 0}>
-                    {l || ' '}
-                  </tspan>
-                )}
-              </For>
-            </text>
-          )
-        if (v.width !== undefined)
-          return <path d={v.d} fill={v.fill ? v.color : 'none'} fill-opacity={v.fill} stroke={v.color} stroke-width={v.width} stroke-linecap="round" stroke-linejoin="round" stroke-opacity={v.opacity} />
-        return <path d={v.d} fill={v.color} fill-opacity={v.opacity} />
-      })()}
-    </>
   )
 }

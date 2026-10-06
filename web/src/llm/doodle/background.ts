@@ -9,12 +9,19 @@ export interface Picture {
   h: number
 }
 
+/** JPEG only for a photo or a capture (png false); a GIF, a WebP or a PNG stays a PNG to keep its transparency. */
 function draw(src: CanvasImageSource, w: number, h: number, png: boolean): Picture {
   const scale = Math.min(1, MAX_SIDE / Math.max(w, h))
   const c = document.createElement('canvas')
   c.width = Math.max(1, Math.round(w * scale))
   c.height = Math.max(1, Math.round(h * scale))
-  c.getContext('2d')!.drawImage(src, 0, 0, c.width, c.height)
+  const g = c.getContext('2d')!
+  if (!png) {
+    // JPEG has no transparency: white rather than black.
+    g.fillStyle = '#fff'
+    g.fillRect(0, 0, c.width, c.height)
+  }
+  g.drawImage(src, 0, 0, c.width, c.height)
   return { src: png ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', 0.85), w: c.width, h: c.height }
 }
 
@@ -27,7 +34,7 @@ export async function pictureOf(file: Blob): Promise<Picture> {
       img.onerror = () => reject(new Error(t('unreadable image')))
       img.src = url
     })
-    return draw(img, img.naturalWidth, img.naturalHeight, file.type === 'image/png')
+    return draw(img, img.naturalWidth, img.naturalHeight, file.type !== 'image/jpeg')
   } finally {
     URL.revokeObjectURL(url)
   }

@@ -1,0 +1,137 @@
+package server
+
+import (
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/DrSmithFr/web-ide/pod/internal/agent"
+	"github.com/DrSmithFr/web-ide/pod/internal/fsx"
+	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
+)
+
+// The model draws new pages on the board of the conversation: board_draw_doodle (a frame or
+// a clone of a page, with elements) and board_draw_image (an SVG it writes, or a capture of
+// the screen of the user: agent_loop.go, agent.capture). Building a page needs the browser
+// (text measured on a canvas, the description and the PNG of the doodle code), so a window
+// of the project draws it (web/src/llm/board/build.ts) and the pod keeps it on the tool
+// message. Pages never change: a fix is a new page, possibly a copy.
+
+func (s *Server) boardDoodle(r *agentRun, a toolArgs) (toolResult, error) {
+	var elements []map[string]json.RawMessage
+	if err := json.Unmarshal(a["elements"], &elements); err != nil {
+		return toolResult{}, fmt.Errorf("elements must be a list of elements")
+	}
+	if len(elements) > agent.MaxPageElements {
+		return toolResult{}, fmt.Errorf("%d elements: %d at most", len(elements), agent.MaxPageElements)
+	}
+	for i, el := range elements {
+		var pts []json.RawMessage
+		if json.Unmarshal(el["points"], &pts) == nil && len(pts) > agent.MaxStrokePoints {
+			return toolResult{}, fmt.Errorf("element %d: %d points, %d at most", i+1, len(pts), agent.MaxStrokePoints)
+		}
+	}
+	if a.has("clone") && a.str("size") != "" {
+		return toolResult{}, fmt.Errorf("size and clone cannot go together: a clone keeps the size of its page")
+	}
+	r.mu.Lock()
+	pages := agent.Pages(r.chat.Messages)
+	r.mu.Unlock()
+	args := map[string]any{"title": a.str("title"), "size": a.str("size"), "elements": elements, "number": len(pages) + 1}
+	if a.has("clone") {
+		n := a.num("clone")
+		if n < 1 || n > len(pages) {
+			if len(pages) == 0 {
+				return toolResult{}, fmt.Errorf("page %d does not exist: the board has no page yet", n)
+			}
+			return toolResult{}, fmt.Errorf("page %d does not exist: the board has pages 1 to %d", n, len(pages))
+		}
+		if pages[n-1].Doc == nil {
+			return toolResult{}, fmt.Errorf("page %d cannot be copied: its image is not kept in the conversation", n)
+		}
+		// The document goes with the call: any window of the project can draw the copy.
+		args["clone"], args["cloneDoc"] = n, pages[n-1].Doc
+	}
+	return s.drawPage(r, args)
+}
+
+var unsafeSVG = regexp.MustCompile(`(?i)<script|<foreignobject|\bon[a-z]+\s*=|javascript:|(href|src)\s*=\s*["'](https?:|//)`)
+
+const maxImage = 10 << 20
+
+var imageTypes = map[string]string{".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif", ".svg": "image/svg+xml"}
+
+// boardImage puts an image as a page: an SVG written by the model or an image file of the
+// project ("screen" stops the turn before: the capture needs a click of the user).
+func (s *Server) boardImage(r *agentRun, rt *runtime.Runtime, a toolArgs) (toolResult, error) {
+	image := strings.TrimSpace(a.str("image"))
+	if !strings.HasPrefix(image, "<") {
+		return s.boardFile(r, rt, a.str("title"), image)
+	}
+	svg := image
+	if !strings.HasPrefix(svg, "<svg") && !strings.HasPrefix(svg, "<?xml") {
+		return toolResult{}, fmt.Errorf(`image is an SVG ("<svg …>…</svg>"), the path of an image of the project, or "screen" (a capture of the screen of the user)`)
+	}
+	if len(svg) > 1<<20 {
+		return toolResult{}, fmt.Errorf("the SVG is too large (1 MB at most)")
+	}
+	if m := unsafeSVG.FindString(svg); m != "" {
+		return toolResult{}, fmt.Errorf("the SVG may not contain %q (no script, event handler, foreignObject or external reference)", m)
+	}
+	r.mu.Lock()
+	n := len(agent.Pages(r.chat.Messages)) + 1
+	r.mu.Unlock()
+	return s.drawPage(r, map[string]any{"title": a.str("title"), "svg": svg, "number": n})
+}
+
+// boardFile puts an image file of the project as a page (an SVG file is checked like an SVG
+// of the model).
+func (s *Server) boardFile(r *agentRun, rt *runtime.Runtime, title, path string) (toolResult, error) {
+	abs := absPath(rt.Root, path)
+	mime := imageTypes[strings.ToLower(filepath.Ext(abs))]
+	switch {
+	case !fsx.Within(rt.Root, abs):
+		return toolResult{}, fmt.Errorf("%s is outside the project", path)
+	case mime == "":
+		return toolResult{}, fmt.Errorf(`image is an SVG ("<svg …>…</svg>"), the path of an image of the project (png, jpg, webp, gif, svg), or "screen": %q is none of them`, path)
+	}
+	st, err := rt.FS.Stat(abs)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("%s: %v", path, err)
+	}
+	if st.Size > maxImage {
+		return toolResult{}, fmt.Errorf("%s is too large (%d MB, 10 MB at most)", path, st.Size>>20)
+	}
+	data, err := rt.FS.Read(abs)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("%s: %v", path, err)
+	}
+	if mime == "image/svg+xml" {
+		if m := unsafeSVG.FindString(string(data)); m != "" {
+			return toolResult{}, fmt.Errorf("%s may not contain %q (no script, event handler, foreignObject or external reference)", path, m)
+		}
+	}
+	r.mu.Lock()
+	n := len(agent.Pages(r.chat.Messages)) + 1
+	r.mu.Unlock()
+	src := "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)
+	return s.drawPage(r, map[string]any{"title": title, "src": src, "origin": "the image " + relPath(rt.Root, abs), "number": n})
+}
+
+// drawPage asks a window to draw a page.
+func (s *Server) drawPage(r *agentRun, args map[string]any) (toolResult, error) {
+	res, window, answered := s.uiCall(r, "board_draw", args, true, 30*time.Second)
+	switch {
+	case !window:
+		return toolResult{}, fmt.Errorf("drawing needs an IDE window open on the project: describe it in text instead")
+	case !answered:
+		return toolResult{}, fmt.Errorf("no IDE window drew the page in time: describe it in text instead")
+	case res.Status == "error" || res.Page == nil:
+		return toolResult{}, fmt.Errorf("%s", strings.TrimPrefix(res.Content, "Error: "))
+	}
+	return toolResult{Content: res.Content, Summary: res.Summary, Status: "ok", Page: res.Page}, nil
+}

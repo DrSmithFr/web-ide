@@ -1,0 +1,25 @@
+/* Board of the conversation */
+.bd-board { container-type: inline-size; display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; background: var(--bg-2); outline: none; }
+.bd-head { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--line); min-height: 36px; }
+.bd-head strong { min-width: 0; }
+.bd-by { white-space: nowrap; }
+@container (max-width: 420px) {
+  .bd-by { display: none; }
+}
+.bd-stage { flex: 1; min-height: 0; display: flex; }
+.bd-view { flex: 1; width: 100%; height: 100%; touch-action: none; cursor: grab; user-select: none; }
+.bd-view:active { cursor: grabbing; }
+.bd-frame { fill: var(--bg); stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.bd-desc { padding: 4px 10px; border-top: 1px solid var(--line); font-size: 12px; }
+.bd-desc pre { white-space: pre-wrap; max-height: 160px; overflow: auto; margin: 4px 0; }
+.bd-strip { display: flex; gap: 6px; padding: 6px 10px; overflow-x: auto; border-top: 1px solid var(--line); flex: none; }
+.bd-thumb { position: relative; flex: none; padding: 0; border: 2px solid var(--line); border-radius: 6px; background: #fff; cursor: pointer; overflow: hidden; }
+.bd-thumb img { display: block; height: 54px; width: auto; max-width: 110px; object-fit: contain; }
+.bd-thumb span { position: absolute; left: 3px; bottom: 2px; font-size: 12px; padding: 0 4px; border-radius: 4px; background: var(--bg); color: var(--fg); }
+.bd-thumb.on { border-color: var(--accent); }
+.bd-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px; text-align: center; color: var(--fg-muted); }
+.bd-empty p { max-width: 280px; margin: 0; }
+/* Layout in the assistant: the board next to the conversation, or in its place */
+.ai-split { flex: none; width: 5px; cursor: col-resize; background: var(--line); touch-action: none; }
+.ai-split:hover, .ai-split.on { background: var(--accent); }
+.ai-board-col { display: flex; min-width: 280px; min-height: 0; }

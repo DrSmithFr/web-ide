@@ -65,7 +65,22 @@ The tools text of the three modes (part of the prompt even when the template is 
 
 ## Tickets
 
-When the model creates a ticket (`kanban_create`) or updates its ticket (`kanban_update`), the doodles of the conversation not attached yet are joined to it as PNG files (`Doodle 1.png`, `Doodle 1 (2).png` for a second Doodle 1); the tool result tells the model.
+When the model creates a ticket (`kanban_create`) or updates its ticket (`kanban_update`), the doodles of the conversation not attached yet are joined to it as PNG files (`Doodle 1.png`, `Doodle 1 (2).png` for a second Doodle 1), and so are the pages drawn by the model (`Page 3 Login flow.png`); the tool result tells the model.
+
+## Whiteboard
+
+Each conversation has a board: its pages are the doodles and the images sent in it and the pages drawn by the assistant, read-only. The *Board* button of the assistant head (with the number of pages) shows it: a column next to the conversation when the assistant is at least 1000 px wide (a splitter sets its share), else in place of the conversation. One page is shown large, with zoom (wheel, pinch), pan (drag) and *Fit* (or a double click); the others are a strip of thumbnails (← / → when the board has the focus). *Reuse* opens an editable copy in the modal, sent as a new doodle: a page never changes. *Show on the board* on a doodle of the thread selects its page.
+
+The assistant draws pages too, in every mode, with two tools:
+
+- `board_draw_doodle(title, size, clone, elements)`: a frame (`size`: `16:9` by default, `mobile`, `square` or `WIDTHxHEIGHT` like `1000x600`) or a clone of a page (`clone`: its number, keeping its size; not `from`, which the ends of arrows use), then elements in pixels from the top left corner of the frame: rectangles and ellipses (with a centred label), lines and arrows tied to elements by the ids the model gives, texts, layouts (a zone tree) and pen or marker strokes. Drawing on a clone is how the model annotates an image, a capture or a doodle.
+- `board_draw_image(title, image)`: an SVG written by the model (no script, event handler, foreignObject or external reference; a viewBox or a width and height), the path of an image of the project (png, jpg, webp, gif or svg, inside the project, 10 MB at most), or `"screen"`, a capture of the screen of the user. The page takes the size of the image (2048 px at most). A GIF that needs no reduction (4 MB at most) is kept as it is, so it stays animated on the board, like the GIFs sent by the user; the image given to the model shows its first frame.
+
+The browser asks a click for a capture of the screen, so `"screen"` stops the turn on a card *Share the screen* / *Refuse*, like questions: the window that shares it draws the page and the agent goes on (`agent.capture`); a message sent instead leaves it aside.
+
+The agent runs in the pod but a page needs the browser (text measures, description, PNG), so a window of the project draws it (`board/build.ts`), and without any window the tool answers that the model should describe it in text. The model gets the description of the page (`Page N "title" drawn by you`), and, if it reads images, its PNG in a user message right after the tool results (servers often take only text in a tool result). A new page selects itself, opens the board in a wide assistant or shows a toast in a narrow one, and has a card in the thread.
+
+Pages are numbered from 1 in message order, then in attachment order within a message; the model refers to them by this number (the pod counts them the same way, `agent.Pages`). The board is a view over the messages of the conversation (`web/src/llm/board/pages.ts`), stored nowhere else.
 
 ## Storage
 
@@ -73,4 +88,4 @@ The doodle lives in the conversation, in the message that sent it: the PNG, the 
 
 ## Code
 
-Hand-made, no drawing library: SVG for the elements, a canvas only for the export. `web/src/llm/doodle/`: the document model and its undo stack, the tools, the layout tree, the export (PNG and description), the modal.
+Hand-made, no drawing library: SVG for the elements, a canvas only for the export. `web/src/llm/doodle/`: the document model and its undo stack, the tools, the layout tree, the export (PNG and description), the modal, the drawing of the elements shared with the board (`Elements.tsx`). `web/src/llm/board/`: the pages of the conversation, the read-only view and the board panel.

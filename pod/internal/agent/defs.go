@@ -131,6 +131,59 @@ var askUserDef = fn("ask_user",
 		},
 	}}, "questions")
 
+// MaxPageElements and MaxStrokePoints bound a board_draw call.
+const (
+	MaxPageElements = 200
+	MaxStrokePoints = 500
+)
+
+var (
+	point     = obj{"type": "array", "items": obj{"type": "number"}, "description": "[x, y]"}
+	endOfLine = obj{"description": "An element id, or [x, y]"}
+	zoneTree  = obj{"type": "object", "description": `Zone: {"name"?, "split"?: {"dir": "rows"|"cols", "sizes": [fractions], "children": [zones]}}`}
+)
+
+var boardDoodleDef = fn("board_draw_doodle",
+	"Draws a new page on the board shared with the user (next to the conversation): a layout, a flow, a sketch, or annotations on a clone of a page (clone: the number of an image, a doodle of the user or one of your pages). Pages never change: to fix one, draw on a clone. Returns the description of the page and its image.",
+	obj{
+		"title": str("Short name of the page"),
+		"size":  str(`Frame of a blank page: "16:9" (1280x720, default), "mobile" (390x844), "square" (800x800), or "WIDTHxHEIGHT" like "1000x600"`),
+		"clone": integer("Number of a page of the board to clone: the elements are drawn on top of it (it keeps its size). Without clone, the page is blank"),
+		"elements": obj{
+			"type":        "array",
+			"description": fmt.Sprintf("At most %d, in px from the top left corner of the frame. Colors: ink, red, blue, green (marker: yellow, lime, pink, cyan)", MaxPageElements),
+			"items": obj{
+				"type": "object",
+				"properties": obj{
+					"type":   enum("", "rect", "ellipse", "line", "arrow", "text", "layout", "stroke"),
+					"id":     str("To tie lines and arrows to this element"),
+					"x":      integer("rect, ellipse, text, layout"),
+					"y":      integer("rect, ellipse, text, layout"),
+					"w":      integer("rect, ellipse, layout"),
+					"h":      integer("rect, ellipse, layout"),
+					"color":  str("ink (default), red, blue, green"),
+					"fill":   boolean("rect, ellipse: a light tint inside"),
+					"label":  str("rect, ellipse: text centred inside"),
+					"from":   endOfLine,
+					"to":     endOfLine,
+					"text":   str("text: lines separated by \\n"),
+					"size":   enum("text: s, m (default), l", "s", "m", "l"),
+					"root":   zoneTree,
+					"points": obj{"type": "array", "items": point, "description": fmt.Sprintf("stroke: [[x, y]…], %d at most", MaxStrokePoints)},
+					"marker": boolean("stroke: a highlighter"),
+				},
+				"required": []string{"type"},
+			},
+		},
+	}, "title", "elements")
+
+var boardImageDef = fn("board_draw_image",
+	"Puts an image on the board as a new page, its size the size of the image: an SVG you write, an image file of the project, or a capture of the screen of the user (they choose it; the turn waits for them). To annotate it, draw on a clone of that page with board_draw_doodle (clone).",
+	obj{
+		"title": str("Short name of the page"),
+		"image": str(`SVG markup ("<svg …>…</svg>", with a viewBox or a width and height; no script nor external reference), the path of an image of the project (png, jpg, webp, gif, svg), or "screen"`),
+	}, "title", "image")
+
 var (
 	statuses      = []string{"new", "todo", "in_progress", "review", "done", "abandoned"}
 	priorities    = []string{"low", "normal", "high", "critical"}
@@ -243,7 +296,7 @@ func ToolsFor(mode string, ticket *TicketLink) []json.RawMessage {
 			out = append(out, d.JSON)
 		}
 	}
-	out = append(out, askUserDef.JSON)
+	out = append(out, askUserDef.JSON, boardDoodleDef.JSON, boardImageDef.JSON)
 	if mode == Plan && (ticket == nil || ticket.Role != "briefing" && ticket.Role != "plan") {
 		out = append(out, exitPlanDef.JSON)
 	}

@@ -58,6 +58,9 @@ export interface Attachment {
   description?: string
   /** PNG of a doodle (data URL): the pod joins it to the tickets the model writes. */
   png?: string
+  /** Size of an image as sent (its page on the board). */
+  w?: number
+  h?: number
 }
 
 export interface Usage {
@@ -113,6 +116,19 @@ export interface ChatMessage {
   path?: number[]
   offPath?: number
   askState?: 'pending' | 'answered' | 'skipped'
+  /** Page drawn on the board with board_draw (tool message), and the capture of the screen
+   *  it waits for. */
+  page?: ModelPage
+  capture?: 'pending' | 'done' | 'refused' | 'skipped'
+}
+
+/** A page of the board drawn by the model: its document, the description it read, images. */
+export interface ModelPage {
+  name: string
+  doc: DoodleDoc
+  description: string
+  thumb?: string
+  png?: string
 }
 
 /** A text written by the pod and translated here: t(key, params), or tn(n, key, other, params). */
@@ -275,6 +291,11 @@ export const [prefs, setPrefs] = createStore({
   compactModel: '',
   /** History side bar open (when it is not always shown). */
   sidebarOpen: false,
+  /** Board of the conversation: a column when the assistant is wide (with its share of the
+   *  width), else shown instead of the conversation. */
+  boardOpen: false,
+  boardView: 'chat' as 'chat' | 'board',
+  boardSplit: 0.5,
   /** Model of the Plan mode ('' server: the model of the conversation). */
   planServer: '',
   planModel: '',

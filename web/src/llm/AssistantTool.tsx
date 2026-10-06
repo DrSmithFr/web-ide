@@ -13,6 +13,8 @@ import { addFiles, Composer, focusComposer, suggest } from './Composer'
 import { Sidebar } from './Sidebar'
 import { DiagramViewer } from './DiagramViewer'
 import { DoodleHost } from './doodle/DoodleModal'
+import { Board } from './board/Board'
+import { boardShown, pages, setBoardWide, showBoard } from './board/pages'
 import { board, ensureBoard, openTicket, roleLabels, statusLabels, summary, type ChatRole } from '../kanban/state'
 import { pick } from '../ui/overlay'
 import { request } from '../pod/rpc'
@@ -65,6 +67,8 @@ function TicketBar() {
 
 /** Width from which the side bar sits next to the conversation instead of over it. */
 const WIDE = 720
+/** Width from which the board is a column next to the conversation instead of in its place. */
+const BOARD_WIDE = 1000
 
 export function AssistantTool() {
   const detached = route().name === 'tool'
@@ -72,6 +76,11 @@ export function AssistantTool() {
   const [settings, setSettings] = createSignal(false)
   const [dragging, setDragging] = createSignal(false)
   const wide = () => width() >= WIDE
+  const boardWide = () => width() >= BOARD_WIDE
+  createEffect(() => setBoardWide(boardWide()))
+  const [splitting, setSplitting] = createSignal(false)
+  let mainEl!: HTMLDivElement
+  let bodyEl!: HTMLDivElement
   // In a wide detached window the history is always there.
   const pinned = () => detached && wide()
   const sidebarShown = () => pinned() || prefs.sidebarOpen
@@ -142,6 +151,18 @@ export function AssistantTool() {
           {chat.title || t('New conversation')}
         </span>
         <span class="grow" />
+        <button
+          class="icon-btn ai-board-btn"
+          classList={{ on: boardShown() }}
+          title={boardShown() && !boardWide() ? t('Back to the conversation') : t('Board of the conversation')}
+          onClick={() => showBoard(!boardShown())}
+          data-testid="ai-board-toggle"
+        >
+          <Icon name="layout" size={15} />
+          <Show when={pages().length}>
+            <span class="ai-board-count">{pages().length}</span>
+          </Show>
+        </button>
         <button class="icon-btn" title={t('New conversation')} onClick={newChat}>
           <Icon name="plus" size={15} />
         </button>
@@ -155,7 +176,7 @@ export function AssistantTool() {
           <Icon name="conflict" size={13} /> {modelsError()}
         </div>
       </Show>
-      <div class="ai-body">
+      <div class="ai-body" ref={bodyEl}>
         <Show when={sidebarShown()}>
           <Show when={!wide()}>
             <div class="ai-scrim" onClick={() => setSidebar(false)} />
@@ -164,7 +185,11 @@ export function AssistantTool() {
             <Sidebar onPicked={() => !wide() && setSidebar(false)} onNew={() => (!wide() && setSidebar(false), focusComposer())} />
           </div>
         </Show>
-        <div class="ai-main">
+        <div
+          class="ai-main"
+          ref={mainEl}
+          style={{ display: boardShown() && !boardWide() ? 'none' : undefined, flex: boardShown() && boardWide() ? `${prefs.boardSplit} 1 0` : undefined }}
+        >
           <div
             class="ai-messages"
             classList={{ dragging: dragging() }}
@@ -195,6 +220,32 @@ export function AssistantTool() {
             }}
           />
         </div>
+        <Show when={boardShown()}>
+          <Show when={boardWide()}>
+            <div
+              class="ai-split"
+              classList={{ on: splitting() }}
+              data-testid="ai-board-split"
+              onPointerDown={(e) => {
+                setSplitting(true)
+                e.currentTarget.setPointerCapture(e.pointerId)
+              }}
+              onPointerMove={(e) => {
+                if (!splitting()) return
+                const left = mainEl.getBoundingClientRect().left
+                const right = bodyEl.getBoundingClientRect().right
+                setPrefs('boardSplit', Math.min(0.75, Math.max(0.25, (e.clientX - left) / (right - left))))
+              }}
+              onPointerUp={() => {
+                setSplitting(false)
+                savePrefs()
+              }}
+            />
+          </Show>
+          <div class="ai-board-col" style={{ flex: boardWide() ? `${1 - prefs.boardSplit} 1 0` : '1 1 0' }}>
+            <Board closable={boardWide()} />
+          </div>
+        </Show>
       </div>
       <Show when={settings()}>
         <SettingsModal onClose={() => setSettings(false)} />

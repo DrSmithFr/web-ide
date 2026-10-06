@@ -49,10 +49,19 @@ func (s *Server) change(cc chatCtx, id string, f func(c *agent.Chat, r *agentRun
 	return s.publishIdle(cc.loc, cc.root, c, from)
 }
 
-// skipQuestions: a message sent instead of answering leaves the pending questions aside.
+// skipQuestions: a message sent instead of answering leaves the pending questions (and a
+// capture of the screen waiting for the user) aside.
 func skipQuestions(c *agent.Chat) int {
 	from := -1
 	for i, m := range c.Messages {
+		if m.Capture == "pending" {
+			m.Capture, m.Status = "skipped", "denied"
+			m.Content = agent.String("The user did not share their screen; their message follows.")
+			m.Summary = agent.T("capture not shared", nil).Raw()
+			if from < 0 {
+				from = i
+			}
+		}
 		if m.AskState == "pending" {
 			m.AskState = "skipped"
 			m.Content = agent.String("The user did not answer these questions; their message follows.")
@@ -330,6 +339,40 @@ func (s *Server) registerAgent() {
 			m.Answers, m.Notes, m.Path, m.OffPath, m.AskState = a.Answers, a.Notes, a.Path, a.OffPath, "answered"
 			m.Content = agent.String(agent.AnswersText(m.Questions, a.Answers, a.Notes, a.Path, a.OffPath))
 			m.Summary = agent.T("answers received", nil).Raw()
+			return a.Index, nil
+		})
+	}))
+	// agent.capture: the page drawn by the window that captured the screen for board_draw, or
+	// the refusal of the user; the agent goes on.
+	s.handle("agent.capture", withChat(func(ctx context.Context, c *Client, cc chatCtx, p json.RawMessage) (any, error) {
+		a, err := bind[struct {
+			ID      string          `json:"id"`
+			Index   int             `json:"index"`
+			Refused bool            `json:"refused"`
+			Error   string          `json:"error"`
+			Content string          `json:"content"`
+			Summary json.RawMessage `json:"summary"`
+			Page    *agent.Page     `json:"page"`
+		}](p)
+		if err != nil {
+			return nil, err
+		}
+		return nil, restart(c, cc, a.ID, func(chat *agent.Chat) (int, error) {
+			if a.Index < 0 || a.Index >= len(chat.Messages) || chat.Messages[a.Index].Capture != "pending" {
+				return -1, i18n.New("no capture of the screen is waiting here")
+			}
+			m := chat.Messages[a.Index]
+			switch {
+			case a.Refused:
+				m.Capture, m.Status = "refused", "denied"
+				m.Content, m.Summary = agent.String("The user refused to share their screen."), agent.T("capture refused", nil).Raw()
+			case a.Error != "" || a.Page == nil:
+				m.Capture, m.Status = "refused", "error"
+				m.Content, m.Summary = agent.String("Error: "+a.Error), agent.Plain(a.Error)
+			default:
+				m.Capture, m.Status, m.Page = "done", "ok", a.Page
+				m.Content, m.Summary = agent.String(a.Content), a.Summary
+			}
 			return a.Index, nil
 		})
 	}))

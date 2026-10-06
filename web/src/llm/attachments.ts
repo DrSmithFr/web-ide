@@ -56,10 +56,17 @@ async function image(file: File): Promise<Prepared> {
   // Big images are reduced: the model sees them at a few hundred pixels anyway.
   const big = Math.max(img.naturalWidth, img.naturalHeight) > MAX_IMAGE_SIDE || file.size > 4 << 20
   const supported = /^data:image\/(png|jpeg|webp|gif)/.test(url)
-  if (big || !supported) url = draw(img, img.naturalWidth, img.naturalHeight, MAX_IMAGE_SIDE, file.type === 'image/png' ? 'image/png' : 'image/jpeg')
+  let scale = 1
+  if (big || !supported) {
+    url = draw(img, img.naturalWidth, img.naturalHeight, MAX_IMAGE_SIDE, file.type === 'image/png' ? 'image/png' : 'image/jpeg')
+    scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(img.naturalWidth, img.naturalHeight))
+  }
+  // The size of the image sent: it is a page of the board too.
+  const w = Math.max(1, Math.round(img.naturalWidth * scale))
+  const h = Math.max(1, Math.round(img.naturalHeight * scale))
   return {
     parts: [{ type: 'image_url', image_url: { url } }],
-    attachment: { name: file.name, kind: 'image', size: file.size, thumb: draw(img, img.naturalWidth, img.naturalHeight, 96) },
+    attachment: { name: file.name, kind: 'image', size: file.size, thumb: draw(img, img.naturalWidth, img.naturalHeight, 96), w, h },
   }
 }
 

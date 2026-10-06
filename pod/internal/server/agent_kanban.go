@@ -86,8 +86,9 @@ func (a toolArgs) links(p *kanban.Patch) {
 	}
 }
 
-// attachDoodles joins the doodles of the conversation not attached yet to a ticket, as PNG
-// files (the page stores the PNG of a doodle when it sends it).
+// attachDoodles joins the pages of the board not attached yet to a ticket, as PNG files: the
+// doodles of the user (the page stores the PNG of a doodle when it sends it) and the pages
+// drawn by the model.
 func (s *Server) attachDoodles(r *agentRun, id int64) int {
 	t, err := s.Kanban.Get(kanbanLocOf(r.loc), id)
 	if err != nil {
@@ -98,40 +99,31 @@ func (s *Server) attachDoodles(r *agentRun, id int64) int {
 		existing[a.Name] = true
 	}
 	r.mu.Lock()
-	msgs := append([]*agent.Message{}, r.chat.Messages...)
+	pages := agent.Pages(r.chat.Messages)
 	r.mu.Unlock()
 	seen := map[string]int{}
 	added := 0
-	for _, m := range msgs {
-		var atts []struct {
-			Name string `json:"name"`
-			Kind string `json:"kind"`
-			PNG  string `json:"png"`
-		}
-		if json.Unmarshal(m.Attachments, &atts) != nil {
+	for _, p := range pages {
+		if p.PNG == "" {
 			continue
 		}
-		for _, a := range atts {
-			if a.Kind != "doodle" || a.PNG == "" {
-				continue
-			}
+		name := p.Name
+		if p.Kind == "model" {
+			name = fmt.Sprintf("Page %d %s", p.Number, p.Name)
+		} else if seen[p.Name]++; seen[p.Name] > 1 {
 			// Doodle 1 of two messages: "Doodle 1.png", "Doodle 1 (2).png".
-			seen[a.Name]++
-			name := a.Name
-			if n := seen[a.Name]; n > 1 {
-				name = fmt.Sprintf("%s (%d)", a.Name, n)
-			}
-			name += ".png"
-			if existing[name] {
-				continue
-			}
-			data, err := base64.StdEncoding.DecodeString(a.PNG[strings.Index(a.PNG, ",")+1:])
-			if err != nil {
-				continue
-			}
-			if _, err := s.Kanban.AddAttachment(kanbanLocOf(r.loc), id, name, "image/png", data); err == nil {
-				added++
-			}
+			name = fmt.Sprintf("%s (%d)", p.Name, seen[p.Name])
+		}
+		name += ".png"
+		if existing[name] {
+			continue
+		}
+		data, err := base64.StdEncoding.DecodeString(p.PNG[strings.Index(p.PNG, ",")+1:])
+		if err != nil {
+			continue
+		}
+		if _, err := s.Kanban.AddAttachment(kanbanLocOf(r.loc), id, name, "image/png", data); err == nil {
+			added++
 		}
 	}
 	return added

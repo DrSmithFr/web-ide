@@ -12,6 +12,10 @@ import { focusComposer, reuseDoodle, runCommand } from './Composer'
 import { openDiagram } from './DiagramViewer'
 import { toSVG } from './doodle/render'
 import { doodleSession } from './doodle/session'
+import { pages, showPage } from './board/pages'
+import { captureScreen, canCapture, type Picture } from './doodle/background'
+import { drawPage } from './uiTools'
+import { request } from '../pod/rpc'
 import { answerQuestions, dismissPlan, executePlan, send } from './agent'
 import { AskCard } from './AskCard'
 import { t, tn } from '../i18n'
@@ -172,6 +176,54 @@ function EditBox(props: { index: number; text: string }) {
   )
 }
 
+/**
+ * board_draw on a capture of the screen: the browser needs a click of the user to capture it.
+ * Share draws the page here on the capture and gives it to the agent; Refuse tells it.
+ */
+function CaptureCard(props: { msg: ChatMessage; call?: ToolCall }) {
+  const [busy, setBusy] = createSignal(false)
+  const send = (body: Record<string, unknown>) => request('agent.capture', { id: chat.id, index: chat.messages.indexOf(props.msg), ...body })
+  const share = async () => {
+    let pic: Picture
+    try {
+      pic = await captureScreen()
+    } catch (e) {
+      // Closed without choosing: the card stays.
+      if ((e as Error).name !== 'NotAllowedError' && (e as Error).name !== 'AbortError') errorToast(e)
+      return
+    }
+    setBusy(true)
+    try {
+      const res = await drawPage({ title: String(safeArgs(props.call).title ?? ''), elements: [], number: pages().length + 1 }, pic, 'a capture of the screen of the user')
+      await send({ content: res.content, summary: res.summary, page: res.page })
+    } catch (e) {
+      await send({ error: (e as Error).message }).catch(errorToast)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div class="ai-capture" data-testid="ai-capture">
+      <Icon name="screen" size={14} />
+      <span class="grow">
+        {canCapture()
+          ? t('The assistant wants a capture of your screen to draw on it.')
+          : window.isSecureContext
+            ? t('The assistant wants a capture of your screen, which this browser cannot take.')
+            : t('The assistant wants a capture of your screen: the browser allows it only on a secure address (https, or localhost).')}
+      </span>
+      <button class="btn small" disabled={busy()} onClick={() => send({ refused: true }).catch(errorToast)} data-testid="ai-capture-refuse">
+        {t('Refuse')}
+      </button>
+      <Show when={canCapture()}>
+        <button class="btn small primary" disabled={busy()} onClick={() => void share()} data-testid="ai-capture-share">
+          {t('Share the screen')}
+        </button>
+      </Show>
+    </div>
+  )
+}
+
 /** A doodle sent: preview (click to enlarge), the description the model read, and a copy to reuse. */
 function DoodleCard(props: { a: Attachment }) {
   const doc = () => props.a.doodle!
@@ -193,6 +245,16 @@ function DoodleCard(props: { a: Attachment }) {
             <Icon name="edit" size={13} /> {t('Reuse the doodle')}
           </button>
         </Show>
+        <button
+          class="btn small"
+          onClick={() => {
+            const p = pages().find((x) => x.doc === props.a.doodle) ?? pages().find((x) => x.name === props.a.name)
+            if (p) showPage(p.key)
+          }}
+          data-testid="ai-doodle-board"
+        >
+          <Icon name="layout" size={13} /> {t('Show on the board')}
+        </button>
         <Show when={props.a.description}>
           <details class="ai-doodle-desc">
             <summary>{t('Description sent to the model')}</summary>
@@ -304,6 +366,17 @@ function ToolRow(props: { msg: ChatMessage; call?: ToolCall }) {
       <Show when={props.msg.diff?.length && (open() || props.msg.status === 'ok')}>
         <DiffBlock lines={props.msg.diff!} />
       </Show>
+      <Show when={props.msg.page}>
+        {(pg) => (
+          <div class="ai-page-card" data-testid="ai-page-card">
+            <img src={pg().thumb} alt="" />
+            <span class="ellipsis">{pg().name}</span>
+            <button class="btn small" onClick={() => { const p = pages().find((x) => x.doc === pg().doc) ?? pages().find((x) => x.from === 'model' && x.name === pg().name); if (p) showPage(p.key) }} data-testid="ai-page-show">
+              <Icon name="layout" size={13} /> {t('Show on the board')}
+            </button>
+          </div>
+        )}
+      </Show>
       <Show when={open()}>
         <div class="ai-tool-detail">
           <Show when={path()}>
@@ -412,6 +485,12 @@ function AssistantMessage(props: { msg: ChatMessage; index: number; lastOfTurn: 
     for (let i = props.index + 1; i < chat.messages.length && chat.messages[i].role === 'tool'; i++) if (chat.messages[i].questions) out.push(i)
     return out
   }
+  // A capture of the screen waiting for the user, out of the folded steps.
+  const captures = () => {
+    const out: number[] = []
+    for (let i = props.index + 1; i < chat.messages.length && chat.messages[i].role === 'tool'; i++) if (chat.messages[i].capture === 'pending') out.push(i)
+    return out
+  }
   const turnText = () =>
     chat.messages
       .slice(props.turnStart, props.index + 1)
@@ -430,6 +509,7 @@ function AssistantMessage(props: { msg: ChatMessage; index: number; lastOfTurn: 
         <ToolSteps items={results()} />
       </Show>
       <For each={plans()}>{(i) => <PlanCard msg={chat.messages[i]} index={i} />}</For>
+      <For each={captures()}>{(i) => <CaptureCard msg={chat.messages[i]} call={props.msg.tool_calls?.find((c) => c.id === chat.messages[i].tool_call_id)} />}</For>
       <For each={asks()}>{(i) => <AskCard msg={chat.messages[i]} index={i} onSend={(idx, answers, notes, path, off) => answerQuestions(idx, answers, notes, path, off).catch(errorToast)} />}</For>
       <Show when={props.msg.error}>
         <div class="ai-error">
@@ -624,7 +704,7 @@ export function Thread(props: { onSuggest: (t: string) => void; onSettings: () =
   const lastFailed = () => {
     const m = chat.messages[chat.messages.length - 1]
     if (live.busy || !m) return false
-    if (m.role === 'tool') return !m.plan && !m.questions
+    if (m.role === 'tool') return !m.plan && !m.questions && m.capture !== 'pending'
     return m.role === 'user' || (m.role === 'assistant' && !!m.error && !m.tool_calls?.length)
   }
   return (

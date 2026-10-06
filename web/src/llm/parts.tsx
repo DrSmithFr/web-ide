@@ -99,7 +99,7 @@ export function callLabel(call: ToolCall | undefined, name: string) {
   const target =
     a.path !== undefined
       ? abs === root() ? '.' : relPath(abs)
-      : a.query ?? a.pattern ?? a.command ?? a.name ?? a.panel ?? a.console_id ?? (name.startsWith('kanban_') ? (a.id ? `#${a.id}` : a.title ?? a.status ?? a.hash ?? '') : '')
+      : a.query ?? a.pattern ?? a.command ?? a.name ?? a.panel ?? a.console_id ?? (name.startsWith('board_draw') ? a.title ?? '' : name.startsWith('kanban_') ? (a.id ? `#${a.id}` : a.title ?? a.status ?? a.hash ?? '') : '')
   const extra = a.symbol ? ` · ${a.symbol}${a.line ? ` (l. ${a.line})` : ''}` : a.start_line ? ` · l. ${a.start_line}${a.end_line ? `-${a.end_line}` : ''}` : a.line ? ` · l. ${a.line}${a.end_line ? `-${a.end_line}` : ''}` : ''
   return { name, target: String(target), extra }
 }
@@ -137,6 +137,8 @@ export const toolVerbs: Record<string, string> = {
   kanban_move: 'Moves the ticket',
   kanban_link_commit: 'Links the commit',
   ask_user: 'Asks questions',
+  board_draw_doodle: 'Draws on the board',
+  board_draw_image: 'Puts an image on the board',
 }
 
 export const toolIcons: Record<string, string> = {
@@ -145,7 +147,7 @@ export const toolIcons: Record<string, string> = {
   load_skill: 'puzzle', read_skill_file: 'puzzle', lsp_symbols: 'outline', lsp_workspace_symbols: 'outline', lsp_definition: 'outline',
   lsp_references: 'outline', lsp_hover: 'info', lsp_diagnostics: 'conflict',
   kanban_list: 'kanban', kanban_get: 'kanban', kanban_create: 'kanban', kanban_update: 'kanban', kanban_add_note: 'kanban', kanban_set_plan: 'kanban',
-  kanban_goal: 'check', kanban_move: 'kanban', kanban_link_commit: 'branch', ask_user: 'info',
+  kanban_goal: 'check', kanban_move: 'kanban', kanban_link_commit: 'branch', ask_user: 'info', board_draw_doodle: 'pen', board_draw_image: 'image',
 }
 
 /** Menu opened above (or below) its trigger, closed by a click outside or Escape. */
