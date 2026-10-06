@@ -52,6 +52,7 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 | `lsp` | Language servers per project and language |
 | `db` | SQLite (modernc), PostgreSQL (pgx), Redis (go-redis), SSH tunnels |
 | `git` | Git panel operations |
+| `preview` | App previews: a reverse proxy per preview (cookie of the IDE, or the token of a public one), exposed by `tailscale serve` / `funnel` (`Tailscale` interface, faked in tests), stopped with the command of the app |
 | `tunnels` | Local ports forwarded to the SSH host of a project (open while a window of the pod is connected, closed `TunnelIdle` after the last one) |
 | `docker` | Docker tool: status, Compose stack, containers, inspect, stats, log streams (the `docker` command, JSON formats only) |
 | `search` | Project-wide search (RE2) and file list |
@@ -76,9 +77,9 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 | `ui/` | Editor area, status bar, diff view, overlays (modal, prompt, pick list, context menu), toasts, icons, empty states, keyboard navigation of the toolbars and tab bars (`roving.ts`) |
 | `panels/` | Explorer (with file type icons, `fileIcons.tsx`), global search, Git tool (`panels/git/`: tabs, tree of changes, graph lanes `graph.ts`, commit detail) |
 | `tools/`, `db/`, `console/`, `conflict/`, `settings/`, `pages/` | Right-panel tools, database explorer, Console and Problems tools, conflict dialog, settings modal, pages |
-| `llm/` | AI assistant: state, agent loop, tools, prompt, Markdown, attachments, speech recognition, doodles (`llm/doodle/`: document model, SVG rendering, export, modal), the board of a conversation (`llm/board/`) |
+| `llm/` | AI assistant: state, agent loop, tools, prompt, Markdown, attachments, speech recognition, doodles (`llm/doodle/`: document model, SVG rendering, export, modal), the board of a conversation (`llm/board/`), app previews (`previews.ts`, `PreviewCard.tsx`) |
 | `kanban/` | Board, ticket view, workflow actions, linked conversations |
-| `docker/` | Docker tool: lists and polling (`state.ts`), detail pane, logs with ANSI colors (`ansi.ts`), disk usage, tunnels (and their list on the home page) |
+| `docker/` | Docker tool: lists and polling (`state.ts`), detail pane, logs with ANSI colors (`ansi.ts`), disk usage, tunnels (and their list on the home page), app previews |
 | `i18n/` | `t()` and the catalogs (English source strings, French translation) |
 
 ### AI assistant
@@ -109,10 +110,10 @@ make shots          # pictures of docs/images, replaying e2e/shots/recording.jso
 make service        # this build as a systemd user service started at boot (scripts/install.sh)
 make test           # go vet + go test + tsc
 make e2e            # browser tests, all suites (a few minutes)
-./e2e/run.sh git    # one suite: editing editor features restore+ keyboard git projects explorer lsp llm agent chat plan doodle kanban kanbanai kanbangit docker tunnels i18n speech perf
+./e2e/run.sh git    # one suite: editing editor features restore+ keyboard git projects explorer lsp llm agent chat plan doodle kanban kanbanai kanbangit docker tunnels preview i18n speech perf
 ```
 
-- Each e2e suite gets a fresh pod with temporary data and a workspace copied from `e2e/fixtures`; a suite ending with `+` reuses the previous pod. The assistant suites use a scripted fake OpenAI-compatible server. Chromium comes from the Playwright cache or `CHROME=…`; the `speech` suite downloads `whisper-tiny` once (kept in `~/.cache/web-ide-e2e/models`); the `lsp` suite needs `gopls`; the `docker` suite needs Docker with Compose and the `postgres:17-alpine` image (skipped otherwise); the `tunnels` suite builds `sshtestd` (Go) and opens an SSH project on it.
+- Each e2e suite gets a fresh pod with temporary data and a workspace copied from `e2e/fixtures`; a suite ending with `+` reuses the previous pod. The assistant suites use a scripted fake OpenAI-compatible server. Chromium comes from the Playwright cache or `CHROME=…`; the `speech` suite downloads `whisper-tiny` once (kept in `~/.cache/web-ide-e2e/models`); the `lsp` suite needs `gopls`; the `docker` suite needs Docker with Compose and the `postgres:17-alpine` image (skipped otherwise); the `tunnels` suite builds `sshtestd` (Go) and opens an SSH project on it. `e2e/bin` (first in the `PATH` of the pod) holds fake `claude`, `gh` and `tailscale` commands: the `preview` suite keeps its previews on `127.0.0.1`.
 - Optional database driver tests against real servers: `WEBIDE_TEST_PG=host:port:user:pass WEBIDE_TEST_REDIS=host:port:pass go test ./internal/db/`.
 - Code navigation needs the language servers in the pod's `PATH` (`gopls` also needs `go`). The service keeps the `PATH` of the shell that installed it.
 - Versions: `make build` stamps the binary with `git describe` (`web-ide-pod -version`, shown on the home page). Pushing a tag `v*` runs `.github/workflows/release.yml`, which builds the Linux and macOS archives and publishes the release with the notes of that version in `CHANGELOG.md`; `scripts/install.sh v1.2.3` installs one as the service.

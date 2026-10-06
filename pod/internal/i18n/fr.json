@@ -178,5 +178,16 @@
   "these questions are not waiting for an answer": "ces questions n'attendent pas de réponse",
   "no plan here": "pas de plan ici",
   "nothing is waiting for an answer": "rien n'attend de réponse",
-  "the conversation is running": "la conversation est en cours"
+  "the conversation is running": "la conversation est en cours",
+  "command is missing": "commande manquante",
+  "preview not found": "aperçu introuvable",
+  "no free port for a preview": "aucun port libre pour un aperçu",
+  "a public preview needs Tailscale Funnel": "un aperçu public demande Tailscale Funnel",
+  "two previews are public already (Funnel allows ports 8443 and 10000)": "deux aperçus sont déjà publics (Funnel n'autorise que les ports 8443 et 10000)",
+  "tailscale serve failed: %w": "échec de tailscale serve : %w",
+  "tailscale funnel failed (is Funnel allowed in the tailnet policy?): %w": "échec de tailscale funnel (Funnel est-il autorisé dans la politique du tailnet ?) : %w",
+  "the command ended before listening on port %d: %s": "la commande s'est arrêtée avant d'écouter sur le port %d : %s",
+  "nothing listens on port %d after %d s (see the console)": "rien n'écoute sur le port %d après %d s (voir la console)",
+  "The app does not answer yet on port {port}.": "L'app ne répond pas encore sur le port {port}.",
+  "This preview is private: open it from the IDE.": "Cet aperçu est privé : ouvrez-le depuis l'IDE."
 }

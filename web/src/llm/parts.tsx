@@ -139,6 +139,7 @@ export const toolVerbs: Record<string, string> = {
   ask_user: 'Asks questions',
   board_draw_doodle: 'Draws on the board',
   board_draw_image: 'Puts an image on the board',
+  share_preview: 'Offers to try the app',
 }
 
 export const toolIcons: Record<string, string> = {
@@ -147,7 +148,7 @@ export const toolIcons: Record<string, string> = {
   load_skill: 'puzzle', read_skill_file: 'puzzle', lsp_symbols: 'outline', lsp_workspace_symbols: 'outline', lsp_definition: 'outline',
   lsp_references: 'outline', lsp_hover: 'info', lsp_diagnostics: 'conflict',
   kanban_list: 'kanban', kanban_get: 'kanban', kanban_create: 'kanban', kanban_update: 'kanban', kanban_add_note: 'kanban', kanban_set_plan: 'kanban',
-  kanban_goal: 'check', kanban_move: 'kanban', kanban_link_commit: 'branch', ask_user: 'info', board_draw_doodle: 'pen', board_draw_image: 'image',
+  kanban_goal: 'check', kanban_move: 'kanban', kanban_link_commit: 'branch', ask_user: 'info', board_draw_doodle: 'pen', board_draw_image: 'image', share_preview: 'play',
 }
 
 /** Menu opened above (or below) its trigger, closed by a click outside or Escape. */

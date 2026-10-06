@@ -1,0 +1,4 @@
+#!/bin/sh
+# Fake Tailscale of the browser tests: not running, so previews stay on 127.0.0.1.
+echo "tailscale: not running (browser tests)" >&2
+exit 1

@@ -18,6 +18,7 @@ import { drawPage } from './uiTools'
 import { request } from '../pod/rpc'
 import { answerQuestions, dismissPlan, executePlan, send } from './agent'
 import { AskCard } from './AskCard'
+import { PreviewCard } from './PreviewCard'
 import { t, tn } from '../i18n'
 
 const textOf = (m: ChatMessage) =>
@@ -491,6 +492,12 @@ function AssistantMessage(props: { msg: ChatMessage; index: number; lastOfTurn: 
     for (let i = props.index + 1; i < chat.messages.length && chat.messages[i].role === 'tool'; i++) if (chat.messages[i].capture === 'pending') out.push(i)
     return out
   }
+  // Apps offered by share_preview: their card stays in sight.
+  const previewCards = () => {
+    const out: number[] = []
+    for (let i = props.index + 1; i < chat.messages.length && chat.messages[i].role === 'tool'; i++) if (chat.messages[i].preview) out.push(i)
+    return out
+  }
   const turnText = () =>
     chat.messages
       .slice(props.turnStart, props.index + 1)
@@ -510,6 +517,7 @@ function AssistantMessage(props: { msg: ChatMessage; index: number; lastOfTurn: 
       </Show>
       <For each={plans()}>{(i) => <PlanCard msg={chat.messages[i]} index={i} />}</For>
       <For each={captures()}>{(i) => <CaptureCard msg={chat.messages[i]} call={props.msg.tool_calls?.find((c) => c.id === chat.messages[i].tool_call_id)} />}</For>
+      <For each={previewCards()}>{(i) => <PreviewCard spec={chat.messages[i].preview!} />}</For>
       <For each={asks()}>{(i) => <AskCard msg={chat.messages[i]} index={i} onSend={(idx, answers, notes, path, off) => answerQuestions(idx, answers, notes, path, off).catch(errorToast)} />}</For>
       <Show when={props.msg.error}>
         <div class="ai-error">

@@ -108,6 +108,18 @@ type Message struct {
 	// the screen it waits for (pending, done, refused, skipped).
 	Page    *Page  `json:"page,omitempty"`
 	Capture string `json:"capture,omitempty"`
+	// Preview offered by share_preview (tool message): the card starts it on a click.
+	Preview *Preview `json:"preview,omitempty"`
+}
+
+// Preview is an app the user can start and open from the conversation (see the preview
+// package); Project is the runtime of the run (the worktree of a development).
+type Preview struct {
+	Project string `json:"project"`
+	Title   string `json:"title"`
+	Command string `json:"command"`
+	Cwd     string `json:"cwd,omitempty"`
+	Port    int    `json:"port"`
 }
 
 // Page drawn by the model on the board of the conversation: its document (a doodle, see

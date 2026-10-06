@@ -430,3 +430,9 @@
 .ai-page-card { display: flex; align-items: center; gap: 8px; margin: 2px 0 4px 22px; }
 .ai-page-card img { height: 40px; width: auto; border: 1px solid var(--line); border-radius: 4px; background: #fff; }
 .ai-capture { display: flex; align-items: center; gap: 8px; margin: 4px 0 4px 22px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line)); border-radius: 10px; background: var(--bg-2); flex-wrap: wrap; }
+.ai-preview { display: grid; gap: 6px; margin: 4px 0 4px 22px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-2); }
+.ai-preview.running { border-color: color-mix(in srgb, var(--ok) 55%, var(--line)); }
+.ai-preview-head, .ai-preview-actions, .ai-preview-public { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ai-preview-actions { flex-wrap: wrap; }
+.ai-preview-actions a { min-width: 0; max-width: 100%; }
+.ai-preview p { margin: 0; }

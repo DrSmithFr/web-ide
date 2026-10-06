@@ -576,7 +576,7 @@ func (s *Server) runCalls(r *agentRun, ref *runtimeRef, calls []agent.ToolCall, 
 		// The compaction may have moved the message: it is the last tool result of this call.
 		for i := len(r.chat.Messages) - 1; i >= 0; i-- {
 			if mm := r.chat.Messages[i]; mm.Role == "tool" && mm.ToolCallID == call.ID {
-				mm.Content, mm.Summary, mm.Status, mm.Diff, mm.Page = agent.String(res.Content), res.Summary, res.Status, res.Diff, res.Page
+				mm.Content, mm.Summary, mm.Status, mm.Diff, mm.Page, mm.Preview = agent.String(res.Content), res.Summary, res.Status, res.Diff, res.Page, res.Preview
 				idx = i
 				break
 			}
