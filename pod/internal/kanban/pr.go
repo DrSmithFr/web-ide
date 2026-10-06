@@ -63,6 +63,16 @@ func PRBody(t *Ticket, lang string) string {
 			fmt.Fprintf(&b, "- [%s] %s\n", x, g.Text)
 		}
 	}
+	if len(t.Children) > 0 {
+		b.WriteString("\n## " + i18n.T(lang, "Steps") + "\n")
+		for _, c := range t.Children {
+			x := " "
+			if c.Status == Done {
+				x = "x"
+			}
+			fmt.Fprintf(&b, "- [%s] #%d %s\n", x, c.ID, c.Title)
+		}
+	}
 	if s := strings.TrimSpace(t.TestSummary); s != "" {
 		b.WriteString("\n## " + i18n.T(lang, "How to test") + "\n" + s + "\n")
 	}

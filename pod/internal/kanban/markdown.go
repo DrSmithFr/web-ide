@@ -33,6 +33,9 @@ func Markdown(t *Ticket) string {
 	if t.Worktree != "" {
 		fmt.Fprintf(&b, " · worktree: %s", t.Worktree)
 	}
+	if lines := lineageLines(t); len(lines) > 0 {
+		b.WriteString("\n\n## Lineage\n" + strings.Join(lines, "\n"))
+	}
 	desc := strings.TrimSpace(t.Description)
 	if desc == "" {
 		desc = "(empty)"
@@ -117,4 +120,37 @@ func Markdown(t *Ticket) string {
 		}
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+func lineageLines(t *Ticket) []string {
+	var out []string
+	if t.Parent != 0 {
+		out = append(out, fmt.Sprintf("- Child of #%d: developed in its worktree, on its branch, after the previous steps; merged with it.", t.Parent))
+	}
+	if len(t.Children) > 0 {
+		out = append(out, "- Children, in order (developed in this worktree after this ticket; it is merged once they are finished):")
+		for _, c := range t.Children {
+			out = append(out, fmt.Sprintf("  - #%d [%s] %s", c.ID, StatusNames[c.Status], c.Title))
+		}
+	}
+	if len(t.DependsOn) > 0 {
+		ids := make([]string, len(t.DependsOn))
+		for i, d := range t.DependsOn {
+			ids[i] = fmt.Sprintf("#%d", d)
+		}
+		out = append(out, fmt.Sprintf("- Depends on %s: starts once they are merged or done.", strings.Join(ids, ", ")))
+	}
+	if len(t.Blockers) > 0 {
+		out = append(out, fmt.Sprintf("- Cannot start yet: %s.", BlockersText(t.Blockers)))
+	}
+	return out
+}
+
+// BlockersText is a list of blockers as the models read it: "#3 (previous step not validated)".
+func BlockersText(bl []Blocker) string {
+	parts := make([]string, len(bl))
+	for i, b := range bl {
+		parts[i] = fmt.Sprintf("#%d (%s)", b.ID, BlockerNames[b.Kind])
+	}
+	return strings.Join(parts, ", ")
 }

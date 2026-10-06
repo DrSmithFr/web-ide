@@ -15,6 +15,7 @@ import {
 } from './state'
 import { abandonTicket, ChatLink, PullRequest, ticketActions, TicketChats, TicketGit } from './actions'
 import { startWorkSession } from './sessions'
+import { LineageSection } from './Lineage'
 import { claudeItems } from './claude'
 import { fmtAgo, fmtDate, fmtSize, t } from '../i18n'
 import './kanban.css'
@@ -179,6 +180,7 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
         </div>
 
         <aside class="tk-side">
+          <LineageSection tk={tk()} apply={props.apply} />
           <Section title={t('Linked files')}>
             <For each={tk().files} fallback={<p class="muted small">{t('No file.')}</p>}>
               {(f) => (

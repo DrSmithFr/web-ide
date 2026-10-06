@@ -139,6 +139,24 @@ func TestMCPKanban(t *testing.T) {
 		t.Fatalf("after dev: %v %v %v", tk["status"], tk["commits"], tk["goalsDone"])
 	}
 
+	// Lineage: a child waits for the step of its parent, then works in its worktree, where
+	// it becomes the default ticket.
+	text = m.ok("kanban_create", map[string]any{"cwd": cwd, "title": "Export step 2", "parent": 1})
+	m.ok("kanban_set_plan", map[string]any{"cwd": cwd, "id": 2, "plan": "p", "goals": []any{"g"}})
+	if text := m.ok("kanban_list", map[string]any{"cwd": cwd}); !strings.Contains(text, "#2 [To do] (Normal) Export step 2 · goals 0/1 · child of #1 · blocked by #1 (previous step not validated)") {
+		t.Fatalf("list with a lineage: %s", text)
+	}
+	if text, failed := m.tool("kanban_start", map[string]any{"cwd": cwd, "id": 2}); !failed || !strings.Contains(text, "#1 (previous step not validated)") || !strings.Contains(text, "Only the user") {
+		t.Fatalf("start of a blocked child: %s", text)
+	}
+	a.call("kanban.step", map[string]any{"id": 1})
+	if text := m.ok("kanban_start", map[string]any{"cwd": cwd, "id": 2}); !strings.Contains(text, "Worktree: "+wt) || !strings.Contains(text, "step of the lineage of #1") {
+		t.Fatalf("start of the child: %s", text)
+	}
+	if md := m.ok("kanban_get", map[string]any{"cwd": wt}); !strings.HasPrefix(md, "# Ticket #2") || !strings.Contains(md, "## Lineage\n- Child of #1") {
+		t.Fatalf("default ticket of the lineage: %s", md)
+	}
+
 	// Prompts.
 	if prompts := m.rpc("prompts/list", nil)["prompts"].([]any); len(prompts) != len(mcpRoles) {
 		t.Fatalf("prompts: %v", prompts)

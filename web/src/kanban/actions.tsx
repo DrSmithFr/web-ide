@@ -7,10 +7,11 @@ import { errorToast } from '../ui/toast'
 import { request } from '../pod/rpc'
 import { openFile, project, root } from '../state/project'
 import {
-  abortGit, continueGit, filePatch, finishTicket, gitInfo, mergeTicket, openPR, openWorktreeWindow, rebaseTicket, roleLabels, ticketDiff, ticketVersion, unlinkChat, updateTicket, worktreeProject,
-  type ChatRole, type Diff, type GitInfo, type GitOpState, type Status, type Ticket,
+  abortGit, continueGit, filePatch, finishTicket, gitInfo, inWorktreeOf, mergeTicket, openPR, openWorktreeWindow, rebaseTicket, roleLabels, ticketDiff, ticketVersion, unlinkChat, updateTicket,
+  validateStep, worktreeProject, type ChatRole, type Diff, type GitInfo, type GitOpState, type Status, type Ticket,
 } from './state'
 import { openTicketChat, openWorktree, startTicketChat, startWorkSession } from './sessions'
+import { blockerText } from './Lineage'
 import { Section, type Apply } from './TicketView'
 import { t, tn } from '../i18n'
 
@@ -32,7 +33,9 @@ interface Ctx {
 
 /** Buttons of the header of a ticket for its status. */
 export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
-  const here = project()?.ticket === tk.id
+  const here = inWorktreeOf(tk)
+  const blocked = tk.blockers?.length ? tk.blockers.map(blockerText).join(', ') : ''
+  const openChildren = (tk.children ?? []).filter((c) => c.status !== 'done' && c.status !== 'abandoned')
   const worktree: ActionButton[] = tk.worktree && !here ? [{ label: t('Open the worktree'), run: () => void openWorktree(tk), testid: 'ticket-open-worktree' }] : []
   switch (tk.status) {
     case 'new':
@@ -53,10 +56,27 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
         {
           label: t('Start development'),
           primary: true,
-          title: t('Creates the branch and the worktree of the ticket, then starts a development conversation in its window'),
+          disabled: !!blocked,
+          title: blocked
+            ? t('Cannot start yet: {blockers}', { blockers: blocked })
+            : tk.parent
+              ? t('Starts this step in the worktree of #{id}, then a development conversation in its window', { id: tk.parent })
+              : t('Creates the branch and the worktree of the ticket, then starts a development conversation in its window'),
           run: () => void startWorkSession(tk, 'dev'),
           testid: 'ticket-start',
         },
+        ...(blocked
+          ? [
+              {
+                label: t('Start anyway…'),
+                title: t('Cannot start yet: {blockers}', { blockers: blocked }),
+                run: () => {
+                  if (confirm(t('Ticket #{id} waits for {blockers}. Start it anyway?', { id: tk.id, blockers: blocked }))) void startWorkSession(tk, 'dev', undefined, true)
+                },
+                testid: 'ticket-start-force',
+              },
+            ]
+          : []),
       ]
     case 'in_progress':
       return [
@@ -69,7 +89,25 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
         ...worktree,
         { label: t('Back to “In progress”'), run: () => void ctx.move('in_progress'), testid: 'ticket-to-progress' },
         { label: t('Add feedback'), run: ctx.focusFeedback, testid: 'ticket-feedback' },
-        { label: t('Close the ticket'), primary: true, run: () => void closeTicket(tk, ctx.apply), testid: 'ticket-close' },
+        ...(openChildren.length && !tk.stepDone
+          ? [
+              {
+                label: t('Validate the step'),
+                primary: true,
+                title: t('Its work is tested: the next step of the lineage (#{id}) may start in this worktree', { id: openChildren[0].id }),
+                run: () => void ctx.apply(validateStep(tk.id)),
+                testid: 'ticket-step',
+              },
+            ]
+          : []),
+        {
+          label: t('Close the ticket'),
+          primary: !openChildren.length,
+          disabled: !!openChildren.length,
+          title: openChildren.length ? t('The lineage is not finished: {ids}', { ids: openChildren.map((c) => `#${c.id}`).join(', ') }) : undefined,
+          run: () => void closeTicket(tk, ctx.apply),
+          testid: 'ticket-close',
+        },
       ]
     case 'done':
       return [{ label: t('Reopen (→ To test)'), run: () => void ctx.move('review'), testid: 'ticket-reopen' }]
@@ -87,16 +125,20 @@ async function closeTicket(tk: Ticket, apply: Apply) {
 }
 
 export async function abandonTicket(tk: Ticket, apply: Apply) {
+  const open = (tk.children ?? []).filter((c) => c.status !== 'done' && c.status !== 'abandoned')
+  if (open.length && !confirm(t('Its steps {ids} are abandoned with it. Continue?', { ids: open.map((c) => `#${c.id}`).join(', ') }))) return
+  if (tk.parent && tk.branch && !confirm(t('Its commits stay on the branch of the lineage (#{id}): revert them there if needed. Continue?', { id: tk.parent }))) return
   const why = await prompt({ title: t('Abandon ticket #{id}', { id: tk.id }), label: t('Reason (optional)') })
   if (why === null) return
-  const deleteBranch = !!tk.branch && confirm(t('Also delete the branch {branch}?', { branch: tk.branch }))
-  await apply(finishTicket(tk.id, 'abandoned', why, deleteBranch))
+  // The branch of a lineage belongs to its root.
+  const deleteBranch = !tk.parent && !!tk.branch && confirm(t('Also delete the branch {branch}?', { branch: tk.branch }))
+  await apply(finishTicket(tk.id, 'abandoned', why, deleteBranch, open.length > 0))
 }
 
 /** Opens a conversation of a ticket: development ones in the window of the worktree. */
 async function openChatOf(tk: Ticket, chatId: string, role: ChatRole) {
   const inWorktree = role === 'dev' || role === 'correction' || role === 'resolve'
-  if (inWorktree && tk.worktree && project()?.ticket !== tk.id) {
+  if (inWorktree && tk.worktree && !inWorktreeOf(tk)) {
     try {
       const target = (await worktreeProject(tk.id)).project
       localStorage.setItem(`webide.llm.active.${target}`, chatId)
@@ -195,7 +237,7 @@ export function TicketGit(props: { tk: Ticket; apply: Apply }) {
                 <span class="mono ellipsis" title={tk().worktree}>
                   {tk().worktree!.replace(root() + '/', '')}
                 </span>
-                <Show when={project()?.ticket !== tk().id}>
+                <Show when={!inWorktreeOf(tk())}>
                   <button class="link" onClick={() => void openWorktree(tk())}>
                     {t('open')}
                   </button>
@@ -240,8 +282,13 @@ export function TicketGit(props: { tk: Ticket; apply: Apply }) {
               </>
             )}
           </Show>
-          <Show when={tk().branch}>
+          <Show when={tk().branch && !tk().parent}>
             <GitOps tk={tk()} tick={tick()} behind={diff()?.d?.behind ?? 0} onDone={() => setTick((n) => n + 1)} />
+          </Show>
+          <Show when={tk().parent && tk().branch}>
+            <p class="muted small" data-testid="ticket-lineage-git">
+              {t('A step of the lineage of #{id}: merged with it, from its ticket.', { id: tk().parent! })}
+            </p>
           </Show>
         </div>
       </Section>
@@ -255,7 +302,7 @@ function ChangedFile(props: { tk: Ticket; d: Diff; f: { path: string; status: st
     () => (open() ? { v: ticketVersion(props.tk.id), from: props.d.from } : null),
     ({ from }) => filePatch(props.tk.id, props.f.path, from, props.d.source).catch((e) => t('Error: {message}', { message: (e as Error).message })),
   )
-  const here = () => project()?.ticket === props.tk.id
+  const here = () => inWorktreeOf(props.tk)
   return (
     <div class="tk-file" data-testid="ticket-diff-file">
       <div class="tk-file-head" onClick={() => setOpen(!open())}>
@@ -341,6 +388,7 @@ function GitOps(props: { tk: Ticket; tick: number; behind: number; onDone: () =>
     await run('merge', () => mergeTicket(tk().id, squash()))
   }
   const busyState = (s?: GitOpState) => !!s && (s.rebase || s.merge || s.squash)
+  const openChildren = () => (tk().children ?? []).filter((c) => c.status !== 'done' && c.status !== 'abandoned').map((c) => `#${c.id}`)
   return (
     <Show when={info()}>
       {(i) => (
@@ -364,7 +412,13 @@ function GitOps(props: { tk: Ticket; tick: number; behind: number; onDone: () =>
                 <option value="merge">merge --no-ff</option>
                 <option value="squash">squash</option>
               </select>
-              <button class="btn small" disabled={!!busy() || busyState(i().main)} onClick={() => void merge()} data-testid="ticket-merge">
+              <button
+                class="btn small"
+                disabled={!!busy() || busyState(i().main) || openChildren().length > 0}
+                title={openChildren().length ? t('The lineage is not finished: {ids}', { ids: openChildren().join(', ') }) : undefined}
+                onClick={() => void merge()}
+                data-testid="ticket-merge"
+              >
                 <Icon name="branch" size={12} /> {busy() === 'merge' ? t('Merging…') : t('Merge into {branch}', { branch: i().into })}
               </button>
             </Show>
@@ -399,37 +453,44 @@ export function PullRequest(props: { tk: Ticket; apply: Apply }) {
     await props.apply(openPR(tk().id))
     setBusy(false)
   }
+  const openChildren = () => (tk().children ?? []).filter((c) => c.status !== 'done' && c.status !== 'abandoned').map((c) => `#${c.id}`)
   return (
-    <Section title={t('Pull request')}>
-      <Show
-        when={tk().pr}
-        fallback={
-          <Show when={tk().branch} fallback={<p class="muted small">{t('No branch yet: it is created when development starts.')}</p>}>
-            <Show when={info()?.canPR} fallback={<p class="muted small">{t('A pull request needs a remote “origin” and the GitHub command gh.')}</p>}>
-              <div class="tk-git-row">
-                <button
-                  class="btn small"
-                  classList={{ primary: tk().status === 'review' }}
-                  disabled={busy()}
-                  title={t('Pushes the branch {branch} to origin, then opens its pull request with gh', { branch: tk().branch! })}
-                  onClick={() => void open()}
-                  data-testid="ticket-pr"
-                >
-                  <Icon name="branch" size={12} /> {busy() ? t('Opening the pull request…') : t('Create the pull request')}
-                </button>
-              </div>
+    <Show when={!tk().parent}>
+      <Section title={t('Pull request')}>
+        <Show
+          when={tk().pr}
+          fallback={
+            <Show when={tk().branch} fallback={<p class="muted small">{t('No branch yet: it is created when development starts.')}</p>}>
+              <Show when={info()?.canPR} fallback={<p class="muted small">{t('A pull request needs a remote “origin” and the GitHub command gh.')}</p>}>
+                <div class="tk-git-row">
+                  <button
+                    class="btn small"
+                    classList={{ primary: tk().status === 'review' }}
+                    disabled={busy() || openChildren().length > 0}
+                    title={
+                      openChildren().length
+                        ? t('The lineage is not finished: {ids}', { ids: openChildren().join(', ') })
+                        : t('Pushes the branch {branch} to origin, then opens its pull request with gh', { branch: tk().branch! })
+                    }
+                    onClick={() => void open()}
+                    data-testid="ticket-pr"
+                  >
+                    <Icon name="branch" size={12} /> {busy() ? t('Opening the pull request…') : t('Create the pull request')}
+                  </button>
+                </div>
+              </Show>
             </Show>
-          </Show>
-        }
-      >
-        <div class="tk-git-row">
-          <Icon name="branch" size={12} />
-          <a class="link mono ellipsis" href={tk().pr} target="_blank" rel="noopener" data-testid="ticket-pr-link">
-            {tk().pr}
-          </a>
-        </div>
-      </Show>
-    </Section>
+          }
+        >
+          <div class="tk-git-row">
+            <Icon name="branch" size={12} />
+            <a class="link mono ellipsis" href={tk().pr} target="_blank" rel="noopener" data-testid="ticket-pr-link">
+              {tk().pr}
+            </a>
+          </div>
+        </Show>
+      </Section>
+    </Show>
   )
 }
 
@@ -441,7 +502,7 @@ function Conflicts(props: {
   run: (label: string, f: () => Promise<GitInfo>) => Promise<void>
 }) {
   const what = () => (props.where === 'worktree' ? t('Rebase in progress in the worktree') : props.state.squash ? t('Merge (squash) in progress in the main folder') : t('Merge in progress in the main folder'))
-  const here = () => (props.where === 'worktree' ? project()?.ticket === props.tk.id : !project()?.parent)
+  const here = () => (props.where === 'worktree' ? inWorktreeOf(props.tk) : !project()?.parent)
   const resolve = () => (props.where === 'worktree' ? startWorkSession(props.tk, 'resolve') : startTicketChat(props.tk, 'resolve'))
   return (
     <div class="tk-conflicts" data-testid={`ticket-conflicts-${props.where}`}>

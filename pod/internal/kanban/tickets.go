@@ -90,6 +90,15 @@ type Summary struct {
 	Created      int64 `json:"created"`
 	Updated      int64 `json:"updated"`
 	Closed       int64 `json:"closed,omitempty"`
+	// Lineage: the parent (0: none), the place among its children, and for a parent its
+	// own step validated (its children may start).
+	Parent    int64   `json:"parent,omitempty"`
+	Pos       int     `json:"pos,omitempty"`
+	StepDone  bool    `json:"stepDone,omitempty"`
+	DependsOn []int64 `json:"dependsOn"`
+	// Blockers keep a ticket from starting (filled by the server for the tickets that may
+	// start: it needs git).
+	Blockers []Blocker `json:"blockers,omitempty"`
 }
 
 type Ticket struct {
@@ -109,6 +118,8 @@ type Ticket struct {
 	ChatList     []ChatLink   `json:"chatList"`
 	Commits      []CommitLink `json:"commits"`
 	Attachments  []Attachment `json:"attachments"`
+	// Children of the lineage, in order.
+	Children []Summary `json:"children"`
 }
 
 var ErrNotFound = i18n.New("ticket not found")
@@ -117,10 +128,55 @@ const summaryCols = `t.id, t.title, t.priority, t.status, t.branch, t.worktree, 
   (SELECT COUNT(*) FROM goals g WHERE g.ticket_id = t.id AND g.done = 1),
   (SELECT COUNT(*) FROM goals g WHERE g.ticket_id = t.id),
   (SELECT COUNT(*) FROM chats c WHERE c.ticket_id = t.id),
-  (SELECT COUNT(*) FROM feedback f WHERE f.ticket_id = t.id AND f.done = 0)`
+  (SELECT COUNT(*) FROM feedback f WHERE f.ticket_id = t.id AND f.done = 0),
+  t.parent_id, t.pos, t.step_done`
 
 func scanSummary(row interface{ Scan(...any) error }, s *Summary) error {
-	return row.Scan(&s.ID, &s.Title, &s.Priority, &s.Status, &s.Branch, &s.Worktree, &s.Created, &s.Updated, &s.Closed, &s.GoalsDone, &s.Goals, &s.Chats, &s.FeedbackOpen)
+	s.DependsOn = []int64{}
+	return row.Scan(&s.ID, &s.Title, &s.Priority, &s.Status, &s.Branch, &s.Worktree, &s.Created, &s.Updated, &s.Closed, &s.GoalsDone, &s.Goals, &s.Chats, &s.FeedbackOpen,
+		&s.Parent, &s.Pos, &s.StepDone)
+}
+
+// summaries reads tickets with their dependencies (where: an SQL condition on t).
+func summaries(q interface {
+	Query(string, ...any) (*sql.Rows, error)
+}, where string, args ...any) ([]Summary, error) {
+	rows, err := q.Query(`SELECT `+summaryCols+` FROM tickets t `+where, args...)
+	if err != nil {
+		return nil, err
+	}
+	list := []Summary{}
+	for rows.Next() {
+		var s Summary
+		if err := scanSummary(rows, &s); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		list = append(list, s)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	deps, err := q.Query(`SELECT ticket_id, dep_id FROM deps ORDER BY dep_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer deps.Close()
+	byID := map[int64]*Summary{}
+	for i := range list {
+		byID[list[i].ID] = &list[i]
+	}
+	for deps.Next() {
+		var id, dep int64
+		if err := deps.Scan(&id, &dep); err != nil {
+			return nil, err
+		}
+		if s := byID[id]; s != nil {
+			s.DependsOn = append(s.DependsOn, dep)
+		}
+	}
+	return list, deps.Err()
 }
 
 func (m *Manager) List(loc Location) ([]Summary, error) {
@@ -128,20 +184,7 @@ func (m *Manager) List(loc Location) ([]Summary, error) {
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.Query(`SELECT ` + summaryCols + ` FROM tickets t ORDER BY t.updated DESC`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	list := []Summary{}
-	for rows.Next() {
-		var s Summary
-		if err := scanSummary(rows, &s); err != nil {
-			return nil, err
-		}
-		list = append(list, s)
-	}
-	return list, rows.Err()
+	return summaries(db, `ORDER BY t.updated DESC`)
 }
 
 func (m *Manager) Get(loc Location, id int64) (*Ticket, error) {
@@ -157,12 +200,26 @@ func get(db *sql.DB, id int64) (*Ticket, error) {
 	var snap string
 	row := db.QueryRow(`SELECT `+summaryCols+`, t.description, t.plan, t.test_summary, t.pr, t.base, t.setup, t.setup_log, t.snapshot FROM tickets t WHERE t.id = ?`, id)
 	err := row.Scan(&t.ID, &t.Title, &t.Priority, &t.Status, &t.Branch, &t.Worktree, &t.Created, &t.Updated, &t.Closed, &t.GoalsDone, &t.Goals, &t.Chats, &t.FeedbackOpen,
+		&t.Parent, &t.Pos, &t.StepDone,
 		&t.Description, &t.Plan, &t.TestSummary, &t.PR, &t.Base, &t.Setup, &t.SetupLog, &snap)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
+	}
+	if t.Children, err = summaries(db, `WHERE t.parent_id = ? ORDER BY t.pos, t.id`, id); err != nil {
+		return nil, err
+	}
+	t.DependsOn = []int64{}
+	if deps, err := db.Query(`SELECT dep_id FROM deps WHERE ticket_id = ? ORDER BY dep_id`, id); err == nil {
+		for deps.Next() {
+			var d int64
+			if deps.Scan(&d) == nil {
+				t.DependsOn = append(t.DependsOn, d)
+			}
+		}
+		deps.Close()
 	}
 	if snap != "" {
 		t.Snapshot = &Snapshot{}
@@ -251,6 +308,9 @@ type Patch struct {
 	Files       *[]string `json:"files"`
 	AddFiles    []string  `json:"addFiles"`
 	RemoveFiles []string  `json:"removeFiles"`
+	// Parent: 0 takes the ticket out of its lineage. DependsOn replaces the dependencies.
+	Parent    *int64   `json:"parent"`
+	DependsOn *[]int64 `json:"dependsOn"`
 }
 
 func (p *Patch) validate() error {
@@ -339,7 +399,10 @@ func (m *Manager) Create(loc Location, p Patch, by string) (int64, error) {
 		if err := setFiles(tx, id, p); err != nil {
 			return err
 		}
-		return event(tx, id, by, "Ticket created", nil, now)
+		if err := event(tx, id, by, "Ticket created", nil, now); err != nil {
+			return err
+		}
+		return setLinks(tx, id, p, by, now)
 	})
 	return id, err
 }
@@ -391,6 +454,9 @@ func (m *Manager) Update(loc Location, id int64, p Patch, by string) error {
 		if err := setFiles(tx, id, p); err != nil {
 			return err
 		}
+		if err := setLinks(tx, id, p, by, now); err != nil {
+			return err
+		}
 		if p.Plan != nil {
 			return planned(tx, id, *p.Plan, by, now)
 		}
@@ -422,8 +488,31 @@ func (m *Manager) Move(loc Location, id int64, to, by, comment string) error {
 			}
 			return i18n.Errorf("a ticket cannot go from “%s” to “%s”", i18n.Text(StatusNames[from]), i18n.Text(StatusNames[to]))
 		}
+		if err := lineageMove(tx, id, from, to); err != nil {
+			return err
+		}
 		return setStatus(tx, id, from, to, by, comment, now)
 	})
+}
+
+// lineageMove keeps a lineage in order: a parent is closed after its children, and goes
+// back to In progress only while none of them started (its validated step is then undone).
+func lineageMove(tx *sql.Tx, id int64, from, to string) error {
+	var open, started int
+	if err := tx.QueryRow(`SELECT COUNT(*) FILTER (WHERE status NOT IN ('done', 'abandoned')), COUNT(*) FILTER (WHERE status NOT IN ('new', 'todo')) FROM tickets WHERE parent_id = ?`, id).Scan(&open, &started); err != nil {
+		return err
+	}
+	if to == Done && open > 0 {
+		return i18n.Errorf("%d child ticket(s) of this lineage are not finished", open)
+	}
+	if from == Review && to == InProgress {
+		if started > 0 {
+			return i18n.New("its children have started: the lineage goes on in them")
+		}
+		_, err := tx.Exec(`UPDATE tickets SET step_done = 0 WHERE id = ?`, id)
+		return err
+	}
+	return nil
 }
 
 func setStatus(tx *sql.Tx, id int64, from, to, by, comment string, now int64) error {
@@ -456,6 +545,13 @@ func (m *Manager) Delete(loc Location, id int64) error {
 	db, err := m.db(loc)
 	if err != nil {
 		return err
+	}
+	var children int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM tickets WHERE parent_id = ?`, id).Scan(&children); err != nil {
+		return err
+	}
+	if children > 0 {
+		return i18n.New("this ticket has children: take them out of its lineage first")
 	}
 	res, err := db.Exec(`DELETE FROM tickets WHERE id = ?`, id)
 	if err != nil {

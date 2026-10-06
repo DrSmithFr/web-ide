@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"path/filepath"
@@ -47,6 +48,11 @@ func enum(description string, values ...string) map[string]any {
 
 var ticketID = map[string]any{"type": "integer", "description": "Ticket number (default: the ticket of the worktree you are in)"}
 
+var (
+	parentProp    = map[string]any{"type": "integer", "description": "Parent ticket: this one becomes the next step of its lineage, developed in the parent's worktree after it (0 takes it out). Only before its development starts"}
+	dependsOnProp = map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "Tickets of other lineages this one waits for: it starts once they are merged or done (replaces the list)"}
+)
+
 // mcpScope is the kanban a call works on, found from the working directory of the client.
 type mcpScope struct {
 	here   *projects.Project // project of the working directory (a worktree has its own)
@@ -67,7 +73,12 @@ func (s *Server) mcpScope(cwd string) (mcpScope, error) {
 	if err != nil {
 		return mcpScope{}, err
 	}
-	return mcpScope{here: p, root: root, loc: kanbanLoc(root), ticket: p.Ticket}, nil
+	sc := mcpScope{here: p, root: root, loc: kanbanLoc(root), ticket: p.Ticket}
+	// The worktree of a lineage works on its current step.
+	if sc.ticket != 0 {
+		sc.ticket = s.activeStep(sc.loc, sc.ticket)
+	}
+	return sc, nil
 }
 
 // projectURL and ticketURL are the pages of the IDE, at the address the user opens it.
@@ -164,6 +175,9 @@ var mcpTools = []mcpTool{
 			if err != nil {
 				return "", err
 			}
+			if k, err := s.mcpGit(sc); err == nil {
+				s.fillBlockers(ctx, k, list)
+			}
 			var b strings.Builder
 			fmt.Fprintf(&b, "Kanban of %s (%s)\nProject in the IDE: %s\n", sc.root.Name(), sc.root.Path, s.projectURL(sc.here.ID))
 			n := 0
@@ -178,6 +192,12 @@ var mcpTools = []mcpTool{
 				}
 				if t.FeedbackOpen > 0 {
 					fmt.Fprintf(&b, " · open feedback %d", t.FeedbackOpen)
+				}
+				if t.Parent != 0 {
+					fmt.Fprintf(&b, " · child of #%d", t.Parent)
+				}
+				if len(t.Blockers) > 0 {
+					fmt.Fprintf(&b, " · blocked by %s", kanban.BlockersText(t.Blockers))
 				}
 				b.WriteString("\n")
 			}
@@ -195,6 +215,11 @@ var mcpTools = []mcpTool{
 			t, err := s.Kanban.Get(sc.loc, id)
 			if err != nil {
 				return "", err
+			}
+			if kanban.Startable(t.Status) && (t.Parent != 0 || len(t.DependsOn) > 0) {
+				if k, err := s.mcpGit(sc); err == nil {
+					t.Blockers, _ = s.ticketBlockers(ctx, k, id)
+				}
 			}
 			return fmt.Sprintf("%s\n\nTicket in the IDE: %s\nProject in the IDE: %s", kanban.Markdown(t), s.ticketURL(sc, id), s.projectURL(sc.here.ID)), nil
 		}),
@@ -231,12 +256,16 @@ var mcpTools = []mcpTool{
 			"description": str(fmt.Sprintf("Description in Markdown, %d characters max: context, need, acceptance criteria", kanban.MaxDescription)),
 			"priority":    enum("Priority", kanban.Priorities...),
 			"files":       strList("Paths of the files concerned (relative to the root of the project)"),
+			"parent":      parentProp,
+			"depends_on":  dependsOnProp,
 		},
 		required: []string{"title"},
 		run: func(ctx context.Context, s *Server, raw json.RawMessage) (string, error) {
 			a, err := bind[struct {
 				Cwd, Title, Description, Priority string
 				Files                             []string
+				Parent                            *int64
+				DependsOn                         *[]int64 `json:"depends_on"`
 			}](raw)
 			if err != nil {
 				return "", err
@@ -248,7 +277,7 @@ var mcpTools = []mcpTool{
 			if err != nil {
 				return "", err
 			}
-			id, err := s.Kanban.Create(sc.loc, kanban.Patch{Title: &a.Title, Description: nonEmpty(a.Description), Priority: nonEmpty(a.Priority), AddFiles: a.Files}, kanban.ByClaude)
+			id, err := s.Kanban.Create(sc.loc, kanban.Patch{Title: &a.Title, Description: nonEmpty(a.Description), Priority: nonEmpty(a.Priority), AddFiles: a.Files, Parent: a.Parent, DependsOn: a.DependsOn}, kanban.ByClaude)
 			if err != nil {
 				return "", err
 			}
@@ -267,17 +296,21 @@ var mcpTools = []mcpTool{
 			"test_summary": str("How to test the ticket (Markdown): steps, commands, expected results"),
 			"add_files":    strList("Files to link"),
 			"remove_files": strList("Files to unlink"),
+			"parent":       parentProp,
+			"depends_on":   dependsOnProp,
 		},
 		run: ticketTool(func(ctx context.Context, s *Server, sc mcpScope, id int64, a struct {
 			Title, Description, Priority string
 			TestSummary                  string   `json:"test_summary"`
 			AddFiles                     []string `json:"add_files"`
 			RemoveFiles                  []string `json:"remove_files"`
+			Parent                       *int64
+			DependsOn                    *[]int64 `json:"depends_on"`
 		}) (string, error) {
 			if err := tooLong(a.Description, kanban.MaxDescription, descriptionAdvice); err != nil {
 				return "", err
 			}
-			p := kanban.Patch{Title: nonEmpty(a.Title), Description: nonEmpty(a.Description), Priority: nonEmpty(a.Priority), TestSummary: nonEmpty(a.TestSummary), AddFiles: a.AddFiles, RemoveFiles: a.RemoveFiles}
+			p := kanban.Patch{Title: nonEmpty(a.Title), Description: nonEmpty(a.Description), Priority: nonEmpty(a.Priority), TestSummary: nonEmpty(a.TestSummary), AddFiles: a.AddFiles, RemoveFiles: a.RemoveFiles, Parent: a.Parent, DependsOn: a.DependsOn}
 			if err := s.Kanban.Update(sc.loc, id, p, kanban.ByClaude); err != nil {
 				return "", err
 			}
@@ -451,7 +484,7 @@ var mcpTools = []mcpTool{
 		}),
 	},
 	{
-		name: "kanban_start",
+		name:        "kanban_start",
 		description: `Starts the development of a ticket ("To do", or "In progress" / "To test" without a worktree): creates the branch ticket/<n>-<slug> from the base in a worktree of the project, runs the setup command of the kanban there, and moves the ticket to "In progress". Answers the worktree: work there, with absolute paths, and commit on that branch.`,
 		props:       map[string]any{"id": ticketID, "base": str("Base branch (optional: the base of the ticket or of the kanban, else origin/main or main)")},
 		run: ticketTool(func(ctx context.Context, s *Server, sc mcpScope, id int64, a struct{ Base string }) (string, error) {
@@ -459,13 +492,22 @@ var mcpTools = []mcpTool{
 			if err != nil {
 				return "", err
 			}
-			t, child, err := s.startTicket(ctx, k, id, a.Base, kanban.ByClaude)
+			t, child, err := s.startTicket(ctx, k, id, a.Base, kanban.ByClaude, false)
+			var ce *codeError
+			if errors.As(err, &ce) && ce.code == "blocked" {
+				if bl, e := s.ticketBlockers(ctx, k, id); e == nil && len(bl) > 0 {
+					return "", fmt.Errorf("ticket #%d cannot start yet: %s. Only the user can start it anyway, from the IDE", id, kanban.BlockersText(bl))
+				}
+			}
 			if err != nil {
 				return "", err
 			}
 			setup := ""
+			if t.Parent != 0 {
+				setup = fmt.Sprintf("\nThis ticket is a step of the lineage of #%d: it shares its worktree and branch; commit only this step.", t.Parent)
+			}
 			if t.Setup == "running" {
-				setup = "\nThe setup command of the kanban is running in the worktree; kanban_get shows when it is done (Setup)."
+				setup += "\nThe setup command of the kanban is running in the worktree; kanban_get shows when it is done (Setup)."
 			}
 			return fmt.Sprintf("Ticket #%d is %q.\nBranch: %s (base %s)\nWorktree: %s\nWorktree in the IDE: %s\nSwitch this session into the worktree with EnterWorktree (path %s), or work in it with absolute paths (`cd %s && …` for commands); commit messages start with \"#%d \".%s",
 				t.ID, kanban.StatusNames[t.Status], t.Branch, t.Base, t.Worktree, s.projectURL(child), t.Worktree, t.Worktree, t.ID, setup), nil

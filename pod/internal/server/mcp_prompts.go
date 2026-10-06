@@ -20,13 +20,15 @@ var mcpRoles = []mcpRole{
 - Look for what is missing or fragile: unclear need, unstated acceptance criteria, edge cases, risks, conflicts with the existing code, a ticket that should be split.
 - Ask the user about what only they can decide; record the answers.
 - Improve the ticket: kanban_update (description, 1500 characters max; linked files), kanban_add_note (decisions, a few lines each).
+- Work too big for one ticket: split it into a lineage (kanban_create with parent: steps developed one after the other in the same worktree, merged together) and use depends_on for work that must be merged first.
 - Do not change any file. Sum up what you changed and offer to write the plan (/mcp__web-ide__plan {{id}}).`},
 	{"plan", "Write the implementation plan of a ticket", `Write the **implementation plan** of ticket #{{id}}.
 - Read the ticket (kanban_get) and, if useful, its briefing conversations (kanban_conversation); explore the code concerned. Ask the user when essential information is missing.
 - Save the plan with kanban_set_plan: Markdown (approach, files to change, steps, risks, tests) and goals, each one a verifiable objective with a short title and, if useful, how to check it. The ticket then moves to "To do" by itself.
 - Sum up the plan in a few lines. Do not change any file.`},
 	{"dev", "Develop a ticket in its worktree", `**Develop** ticket #{{id}}.
-- Read the ticket (kanban_get). If it has no worktree yet, start it with kanban_start. Then switch this session into the worktree with EnterWorktree (path: the worktree) unless you already work there; if you cannot, work in it with absolute paths (cd <worktree> && … for commands).
+- Read the ticket (kanban_get). If it has no worktree yet, start it with kanban_start; if it cannot start yet (a previous step or a dependency), tell the user and stop.
+- A child ticket (Lineage in kanban_get) works in the worktree and on the branch of its parent: develop only this step, on top of the previous ones. Then switch this session into the worktree with EnterWorktree (path: the worktree) unless you already work there; if you cannot, work in it with absolute paths (cd <worktree> && … for commands).
 - Follow the plan. Check each goal with kanban_goal as soon as it is reached and verified (tests, build).
 - Commit regularly on the ticket branch; each commit message starts with "#{{id}} ". Link each commit with kanban_link_commit.
 - Do not merge or push the branch: the user does it from the IDE.

@@ -5,7 +5,7 @@ import { request, RpcError } from '../pod/rpc'
 import { toast, errorToast } from '../ui/toast'
 import { chat, config, emptyChat, live, loadConfig, openChat, resetChat, setChat, type Chat, type ChatRole } from '../llm/state'
 import { resumeIfNeeded, send, stopWatch } from '../llm/agent'
-import { feedbackOp, moveTicket, openWorktreeWindow, roleLabels, startWork, worktreeProject, type Feedback, type Ticket } from './state'
+import { feedbackOp, inWorktreeOf, moveTicket, openWorktreeWindow, roleLabels, startWork, worktreeProject, type Feedback, type Ticket } from './state'
 import { t } from '../i18n'
 
 const firstMessage: Record<ChatRole, (tk: Ticket, f?: Feedback) => string> = {
@@ -75,15 +75,17 @@ export async function openTicketChat(chatId: string) {
  * from another one, the conversation is saved with its first message and the worktree
  * window opens on it and runs it.
  */
-export async function startWorkSession(tk: Ticket, role: ChatRole, feedback?: Feedback) {
+export async function startWorkSession(tk: Ticket, role: ChatRole, feedback?: Feedback, force = false) {
   if (project()?.ticket === tk.id) return startTicketChat(tk, role, undefined, feedback)
   let target: string
   try {
-    target = (await startWork(tk.id)).project
+    target = (await startWork(tk.id, '', force)).project
+    // A step of a lineage started from the window of its worktree goes on there.
+    if (inWorktreeOf(tk)) return startTicketChat(tk, role, undefined, feedback)
   } catch (e) {
     const msg = (e as Error).message
     if (e instanceof RpcError && e.code === 'not_git' && confirm(t('{error}.\n\nDevelop in the project folder, without branch or worktree?', { error: msg }))) {
-      if (tk.status === 'todo') await moveTicket(tk.id, 'in_progress').catch(() => {})
+      if (tk.status === 'todo') await moveTicket(tk.id, 'in_progress', 'user', '', force).catch(() => {})
       return startTicketChat(tk, role, undefined, feedback)
     }
     errorToast(e)
@@ -126,7 +128,7 @@ export async function startWorkSession(tk: Ticket, role: ChatRole, feedback?: Fe
 
 /** Opens the window of the worktree of a ticket. */
 export async function openWorktree(tk: Ticket) {
-  if (project()?.ticket === tk.id) return
+  if (inWorktreeOf(tk)) return
   try {
     openWorktreeWindow((await worktreeProject(tk.id)).project)
   } catch (e) {

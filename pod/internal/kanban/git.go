@@ -87,6 +87,12 @@ func (g Git) verify(ctx context.Context, dir, ref string) bool {
 	return err == nil
 }
 
+// Head is the commit checked out in a folder.
+func (g Git) Head(ctx context.Context, dir string) (string, error) {
+	out, err := g.git(ctx, dir, "rev-parse", "HEAD")
+	return strings.TrimSpace(out), err
+}
+
 // DefaultBase is origin/main when it exists, else main, else the current branch.
 func (g Git) DefaultBase(ctx context.Context) string {
 	for _, ref := range []string{"origin/main", "origin/master", "main", "master"} {

@@ -127,6 +127,8 @@ En **To test**, le ticket montre comment tester, les objectifs, et la modificati
 - **Merge** dans la branche de base locale (`merge --no-ff` ou squash), ou *Create the pull request* (avec `gh`).
 - **Close** : le worktree est supprimé, la branche est gardée.
 
+Un gros changement se découpe en **lignée** : les étapes suivantes sont des tickets dont le parent est le premier (le briefing le propose, ou *En faire une étape de…* dans la section *Lignée* d'un ticket). Chaque étape se développe dans le même worktree une fois la précédente validée (*Valider l'étape* sur le premier ticket, *Close* sur une étape), et le premier ticket est fusionné quand toutes ses étapes sont terminées. Un ticket peut aussi attendre qu'une autre lignée soit fusionnée ; un ticket bloqué montre ce qu'il attend, et *Démarrer quand même…* passe outre.
+
 ![Le kanban après la fusion](images/kanban.png)
 
 ![Le panneau Git : la branche du ticket fusionnée dans main](images/git.png)

@@ -6,7 +6,7 @@ import { request } from '../pod/rpc'
 import { t, tn } from '../i18n'
 import {
   addNote, createTicket, feedbackNames, feedbackOp, getTicket, goalOp, linkChat, linkCommit, moveTicket, priorityNames, refreshBoard, roleNames, setPlan, statusLabels, statusNames, updateTicket,
-  board, MAX_DESCRIPTION, MAX_NOTE, type GoalInput, type Priority, type Status, type Ticket,
+  blockersText, board, MAX_DESCRIPTION, MAX_NOTE, type GoalInput, type Priority, type Status, type Ticket,
 } from '../kanban/state'
 import { chat, setChat, type Mode } from './state'
 import type { ToolResult } from './tools'
@@ -47,6 +47,18 @@ export const askUserDef = fn(
   ['questions'],
 )
 
+const lineageProps = {
+  parent: {
+    type: 'integer',
+    description: "Parent ticket: this one becomes the next step of its lineage, developed in the parent's worktree after it (0 takes it out). Only before its development starts",
+  },
+  depends_on: { type: 'array', items: { type: 'integer' }, description: 'Tickets of other lineages this one waits for: it starts once they are merged or done (replaces the list)' },
+}
+const linkPatch = (a: Record<string, any>) => ({
+  parent: a.parent === undefined || a.parent === null ? undefined : Number(a.parent),
+  dependsOn: Array.isArray(a.depends_on) ? a.depends_on.map(Number) : undefined,
+})
+
 const statusEnum = { type: 'string', enum: Object.keys(statusNames), description: 'Status' }
 
 /** Tools of every conversation. */
@@ -61,6 +73,7 @@ export const kanbanReadDefs = [
       description: str(`Description in Markdown, ${MAX_DESCRIPTION} characters max: context, need, acceptance criteria`),
       priority: { type: 'string', enum: Object.keys(priorityNames) },
       files: strList('Paths of the files concerned (relative to the root)'),
+      ...lineageProps,
     },
     ['title'],
   ),
@@ -78,6 +91,7 @@ export const kanbanWriteDefs = [
       test_summary: str('How to test the ticket (Markdown): steps, commands, expected results'),
       add_files: strList('Files to link'),
       remove_files: strList('Files to unlink'),
+      ...lineageProps,
     },
   ),
   fn(
@@ -152,6 +166,8 @@ const isoDate = (ms: number) => new Date(ms).toISOString().slice(0, 16).replace(
 export function ticketMarkdown(tk: Ticket): string {
   const out: string[] = [`# Ticket #${tk.id} · ${tk.title}`]
   out.push(`Status: ${statusNames[tk.status]} · priority: ${priorityNames[tk.priority]}${tk.branch ? ` · branch: ${tk.branch}` : ''}${tk.base ? ` · base: ${tk.base}` : ''}`)
+  const lineage = lineageLines(tk)
+  if (lineage.length) out.push(`\n## Lineage\n${lineage.join('\n')}`)
   out.push(`\n## Description\n${tk.description.trim() || '(empty)'}`)
   if (tk.files.length) out.push(`\n## Linked files\n${tk.files.map((f) => `- ${f}`).join('\n')}`)
   if (tk.attachments.length) out.push(`\n## Attachments\n${tk.attachments.map((a) => `- ${a.name} (${a.mime || 'file'})`).join('\n')}`)
@@ -170,6 +186,19 @@ export function ticketMarkdown(tk: Ticket): string {
   return out.join('\n')
 }
 
+/** Parent, children and dependencies of a ticket (port of lineageLines, pod/internal/kanban/markdown.go). */
+function lineageLines(tk: Ticket): string[] {
+  const out: string[] = []
+  if (tk.parent) out.push(`- Child of #${tk.parent}: developed in its worktree, on its branch, after the previous steps; merged with it.`)
+  if (tk.children?.length) {
+    out.push('- Children, in order (developed in this worktree after this ticket; it is merged once they are finished):')
+    for (const c of tk.children) out.push(`  - #${c.id} [${statusNames[c.status]}] ${c.title}`)
+  }
+  if (tk.dependsOn?.length) out.push(`- Depends on ${tk.dependsOn.map((d) => `#${d}`).join(', ')}: starts once they are merged or done.`)
+  if (tk.blockers?.length) out.push(`- Cannot start yet: ${blockersText(tk.blockers)}.`)
+  return out
+}
+
 export async function runKanbanTool(name: string, a: Record<string, any>, ticket: number | undefined, mode: Mode = 'build'): Promise<ToolResult> {
   switch (name) {
     case 'kanban_list': {
@@ -179,7 +208,7 @@ export async function runKanbanTool(name: string, a: Record<string, any>, ticket
       if (!list.length) return ok('No ticket.', tn(0, '{n} ticket', '{n} tickets'))
       const lines = list.map(
         (tk) =>
-          `#${tk.id} [${statusNames[tk.status]}] (${priorityNames[tk.priority]}) ${tk.title}${tk.goals ? ` · goals ${tk.goalsDone}/${tk.goals}` : ''}${tk.feedbackOpen ? ` · open feedback ${tk.feedbackOpen}` : ''}`,
+          `#${tk.id} [${statusNames[tk.status]}] (${priorityNames[tk.priority]}) ${tk.title}${tk.goals ? ` · goals ${tk.goalsDone}/${tk.goals}` : ''}${tk.feedbackOpen ? ` · open feedback ${tk.feedbackOpen}` : ''}${tk.parent ? ` · child of #${tk.parent}` : ''}${tk.blockers?.length ? ` · blocked by ${blockersText(tk.blockers)}` : ''}`,
       )
       return ok(lines.join('\n'), tn(list.length, '{n} ticket', '{n} tickets'))
     }
@@ -192,7 +221,7 @@ export async function runKanbanTool(name: string, a: Record<string, any>, ticket
       const long = tooLong(a.description)
       if (long) return long
       const tk = await createTicket(
-        { title: String(a.title), description: a.description ? String(a.description) : '', priority: a.priority as Priority, addFiles: Array.isArray(a.files) ? a.files.map(String) : undefined },
+        { title: String(a.title), description: a.description ? String(a.description) : '', priority: a.priority as Priority, addFiles: Array.isArray(a.files) ? a.files.map(String) : undefined, ...linkPatch(a) },
         'model',
       )
       const drawn = await attachDoodles(tk.id, tk.attachments.map((x) => x.name)).catch(() => 0)
@@ -222,6 +251,7 @@ export async function runKanbanTool(name: string, a: Record<string, any>, ticket
           testSummary: a.test_summary,
           addFiles: Array.isArray(a.add_files) ? a.add_files.map(String) : undefined,
           removeFiles: Array.isArray(a.remove_files) ? a.remove_files.map(String) : undefined,
+          ...linkPatch(a),
         },
         'model',
       )
