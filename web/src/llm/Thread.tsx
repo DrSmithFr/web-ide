@@ -430,7 +430,7 @@ function AssistantMessage(props: { msg: ChatMessage; index: number; lastOfTurn: 
         <ToolSteps items={results()} />
       </Show>
       <For each={plans()}>{(i) => <PlanCard msg={chat.messages[i]} index={i} />}</For>
-      <For each={asks()}>{(i) => <AskCard msg={chat.messages[i]} index={i} onSend={(idx, answers, notes) => answerQuestions(idx, answers, notes).catch(errorToast)} />}</For>
+      <For each={asks()}>{(i) => <AskCard msg={chat.messages[i]} index={i} onSend={(idx, answers, notes, path, off) => answerQuestions(idx, answers, notes, path, off).catch(errorToast)} />}</For>
       <Show when={props.msg.error}>
         <div class="ai-error">
           <Icon name="conflict" size={13} /> {t(props.msg.error!)}

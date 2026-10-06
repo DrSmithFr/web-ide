@@ -360,6 +360,7 @@
 .ai-ask .ai-plan-foot { width: 100%; }
 
 /* ask_user: the widgets, one per type */
+.ai-ask-crumbs { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ai-ask-quick { display: flex; gap: 6px; flex-wrap: wrap; }
 .ai-ask-quick .btn.on { border-color: var(--accent); color: var(--accent); }
 .ai-ask-note { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }

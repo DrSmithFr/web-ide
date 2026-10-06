@@ -73,6 +73,8 @@ The usual path: a briefing makes the tickets, *Generate the plan* writes the pla
 
 Each question of `ask_user` has a type that picks its widget: `choice` (the default: options, with `pros` / `cons` if given), `idea` (one proposal answered No / Yes, but… / Yes / Exactly, or by a swipe on a touch screen), `compare` (exactly two approaches side by side), `rank` (2 to 8 items to order, `top` to keep only the first N) and `scenario` (a `situation`, then options). Any question also takes a free answer, "I don't know" (the model then offers examples), "Up to you" (it decides and says what) and a note. The pod checks the rules of each type: a call breaking one is refused with an error naming the question, so that the model asks again; a question without type works as before.
 
+One call may hold a small graph of questions: a question with an `id` is asked only when an option naming it in `next` is chosen (for an idea, `nextYes` / `nextNo`); the others are asked in order. The card walks the graph without the model and shows the answers that led to a question as a breadcrumb. A free answer, "Yes, but…" or "I don't know" on a question with branches leaves the anticipated path: the round is sent at once, and the model is told where the user left it and which questions were not asked. The pod refuses unknown ids and cycles.
+
 ## Claude Code
 
 The pod serves an MCP endpoint (`POST /mcp`, the token of the pod as a bearer) so that Claude Code can work on the kanban next to the local assistant: a planning or a debug that needs a stronger model, a task to go faster. Setup, once:

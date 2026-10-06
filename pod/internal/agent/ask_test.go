@@ -39,7 +39,7 @@ func TestNormalizeQuestions(t *testing.T) {
 
 func TestAnswersText(t *testing.T) {
 	qs := []Question{{Question: "Format?"}, {Question: "Order?", Type: "rank", Top: 2}, {Question: "Ship?", Type: "idea"}, {Question: "Name?"}}
-	got := AnswersText(qs, [][]string{{"CSV"}, {"1. b, 2. a"}, {DontKnow}, {UpToYou}}, []string{"", "", "not\nsure", ""})
+	got := AnswersText(qs, [][]string{{"CSV"}, {"1. b, 2. a"}, {DontKnow}, {UpToYou}}, []string{"", "", "not\nsure", ""}, nil, nil)
 	for _, want := range []string{
 		"1. [choice] Format?\n   → CSV",
 		"→ 1. b, 2. a (the top 2 only)",
@@ -50,7 +50,7 @@ func TestAnswersText(t *testing.T) {
 			t.Errorf("missing %q in:\n%s", want, got)
 		}
 	}
-	if !strings.Contains(AnswersText(qs[:1], nil, nil), "(no answer)") {
+	if !strings.Contains(AnswersText(qs[:1], nil, nil, nil, nil), "(no answer)") {
 		t.Error("no answer")
 	}
 }

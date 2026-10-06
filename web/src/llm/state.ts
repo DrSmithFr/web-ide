@@ -109,6 +109,9 @@ export interface ChatMessage {
   answers?: string[][]
   /** Optional note the user adds to each question (one per question, '' when absent). */
   notes?: string[]
+  /** A graph of questions: the questions asked, in order, and where the user left the path. */
+  path?: number[]
+  offPath?: number
   askState?: 'pending' | 'answered' | 'skipped'
 }
 
@@ -131,6 +134,8 @@ export interface QuestionOption {
   /** What goes for it / against it (choice and compare), shown as short ✓/✗ lines. */
   pros?: string[]
   cons?: string[]
+  /** id of the question asked when this option is chosen (a graph of questions). */
+  next?: string
 }
 
 export interface Question {
@@ -143,6 +148,10 @@ export interface Question {
   type?: QuestionType
   options: QuestionOption[]
   multiple?: boolean
+  /** Graph of questions: the id others lead to; for an idea, the question after Yes / No. */
+  id?: string
+  nextYes?: string
+  nextNo?: string
 }
 
 export interface DiffLine {
