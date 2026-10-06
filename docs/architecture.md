@@ -70,7 +70,7 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 | Folder | Role |
 |---|---|
 | `editor/` | `Doc` (buffer, revisions, undo, file format, indentation), `EditorView` (block rendering, Custom Highlight API, indentation guides, whitespace overlay, multiple carets, folding), `carets.ts` (words, occurrences), `folding.ts` (fold ranges), `indent.ts` (indentation detection), tokenizer and grammars, three-way merge, line diff, sub-word moves, find bar |
-| `state/` | Open project and session (tabs, split tree, tool zones), settings, git state, folder marks |
+| `state/` | Open project and session (tabs, split tree, tool zones), settings, git state, folder marks, the phone layout (`mobile.ts`: the view shown, the keyboard, no zoom) |
 | `keys/` | Binding table and QWERTY / AZERTY presets |
 | `lsp/` | Client, completion, edits, rename and formatting |
 | `popups/` | Search Everywhere, Recent Files and the switcher, paste from history (the history itself: `ui/clipboard.ts`) |
@@ -110,7 +110,7 @@ make shots          # pictures of docs/images, replaying e2e/shots/recording.jso
 make service        # this build as a systemd user service started at boot (scripts/install.sh)
 make test           # go vet + go test + tsc
 make e2e            # browser tests, all suites (a few minutes)
-./e2e/run.sh git    # one suite: editing editor features restore+ keyboard git projects explorer lsp llm agent chat plan doodle kanban kanbanai kanbangit docker tunnels preview i18n speech perf
+./e2e/run.sh git    # one suite: editing editor features restore+ keyboard git projects explorer lsp llm agent chat plan doodle kanban kanbanai kanbangit docker tunnels preview mobile i18n speech perf
 ```
 
 - Each e2e suite gets a fresh pod with temporary data and a workspace copied from `e2e/fixtures`; a suite ending with `+` reuses the previous pod. The assistant suites use a scripted fake OpenAI-compatible server. Chromium comes from the Playwright cache or `CHROME=…`; the `speech` suite downloads `whisper-tiny` once (kept in `~/.cache/web-ide-e2e/models`); the `lsp` suite needs `gopls`; the `docker` suite needs Docker with Compose and the `postgres:17-alpine` image (skipped otherwise); the `tunnels` suite builds `sshtestd` (Go) and opens an SSH project on it. `e2e/bin` (first in the `PATH` of the pod) holds fake `claude`, `gh` and `tailscale` commands: the `preview` suite keeps its previews on `127.0.0.1`.

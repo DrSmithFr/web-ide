@@ -87,6 +87,15 @@ To treat local and SSH projects the same way, the pod exposes one interface (`li
 - **Bottom strip**: the tools of the two bottom zones, under the side panels and the editor. One shared height; side by side, the border between them can be dragged; alone, a tool takes the whole width.
 - **Split view**: recursive pane tree (split right, split down). A file open in several panes shares one buffer, never two copies.
 
+### Phone layout
+
+On a screen 720 px wide or less (phones; tablets keep the layout above):
+- **One bar of three rows**: home, project, branch, pod state and settings; the menus (*File* … *Tools*), scrolled sideways when they do not fit; one row of icons, the **editor** first then every tool in the order of the rails, scrolled sideways, the view shown highlighted.
+- **One view at a time, full screen**: the editor or one tool, no rails nor resizers. A tool shown by any way (its icon, a shortcut, the *Tools* menu, the assistant) comes to the front; opening a file (explorer, where one tap opens it, search, go to definition, links) or touching the editor icon brings the editor back; closing the tool shown too.
+- **No zoom of the page**: the viewport is fixed (no pinch, no double tap, no zoom on focus); the doodles and the board keep their own pinch.
+- **Editing on a double tap**: the editor is locked (scrolling and selecting with a long press work, the keyboard stays closed); a tap shows *Double-tap to edit*, a double tap unlocks it with the caret under the finger and the keyboard open. A padlock floating at the top right of the file locks it again, as does showing another view or file.
+- **Keyboard**: no field takes the focus by itself (the search field, the message box of the assistant, a terminal): the keyboard opens when the user touches it; the icon of a tool focuses the tool itself. The page takes the height left by the on-screen keyboard and the line of the caret is scrolled back into view.
+
 ## 6. Editor
 
 ### 6.1 Syntax highlighting

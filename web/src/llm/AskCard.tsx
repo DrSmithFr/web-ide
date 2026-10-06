@@ -2,10 +2,10 @@
 // quick answers "I don't know" / "Up to you", the free answer, an optional note, then a
 // recap before sending. The answers go back with the tool result (type, answer, note);
 // the card stays (folded) in the thread and shows them.
-import { For, Show, createMemo, createSignal } from 'solid-js'
+import { For, Show, createMemo, createSignal, type Accessor } from 'solid-js'
 import { Icon } from '../ui/icons'
 import { t, tn } from '../i18n'
-import type { ChatMessage, Question } from './state'
+import { chat, type ChatMessage, type Question } from './state'
 import type { AnswerEntry } from './ask'
 import { answerLabel, DONT_KNOW, hasBranches, isGraph, leavesPath, pickedOf, UP_TO_YOU, walk, type Crumb } from './ask'
 import { AskBody } from './AskTypes'
@@ -34,6 +34,24 @@ function Crumbs(props: { qs: Question[]; crumbs: Crumb[] }) {
   )
 }
 
+// Progress of the cards waiting for answers, by conversation and message: a card recreated
+// (the window switching between the phone and the desktop layouts, another conversation
+// shown and back) goes on where it was.
+const progress = new Map<string, Record<string, unknown>>()
+
+function kept<T>(key: string, name: string, init: T): [Accessor<T>, (v: T | ((prev: T) => T)) => void] {
+  let store = progress.get(key)
+  if (!store) progress.set(key, (store = {}))
+  const [get, set] = createSignal<T>((name in store ? store[name] : init) as T)
+  return [
+    get,
+    (v) => {
+      set(v as any)
+      store![name] = get()
+    },
+  ]
+}
+
 export function AskCard(props: {
   msg: ChatMessage
   index: number
@@ -44,16 +62,17 @@ export function AskCard(props: {
   const questions: Question[] = props.msg.questions ?? []
   const n = questions.length
   const pending = () => msg().askState === 'pending'
-  const [step, setStep] = createSignal(0)
+  const key = `${chat.id}:${props.index}`
+  const [step, setStep] = kept(key, 'step', 0)
   // One state per question index: the widget answer, the special answer, the free answer
   // and the note. Kept here (not in the widgets) so a step change recreates the widget
   // without losing the answers.
-  const [ans, setAns] = createSignal<(AnswerEntry | null)[]>(questions.map(() => null))
-  const [special, setSpecial] = createSignal<(null | 'dontknow' | 'uptoyou')[]>(questions.map(() => null))
-  const [free, setFree] = createSignal<string[]>(questions.map(() => ''))
-  const [notes, setNotes] = createSignal<string[]>(questions.map(() => ''))
-  const [ideaText, setIdeaText] = createSignal<string[]>(questions.map(() => ''))
-  const [orders, setOrders] = createSignal<string[][]>(questions.map((q) => q.options.map((o) => o.label)))
+  const [ans, setAns] = kept<(AnswerEntry | null)[]>(key, 'ans', questions.map(() => null))
+  const [special, setSpecial] = kept<(null | 'dontknow' | 'uptoyou')[]>(key, 'special', questions.map(() => null))
+  const [free, setFree] = kept<string[]>(key, 'free', questions.map(() => ''))
+  const [notes, setNotes] = kept<string[]>(key, 'notes', questions.map(() => ''))
+  const [ideaText, setIdeaText] = kept<string[]>(key, 'ideaText', questions.map(() => ''))
+  const [orders, setOrders] = kept<string[][]>(key, 'orders', questions.map((q) => q.options.map((o) => o.label)))
   const [noteOpen, setNoteOpen] = createSignal(false)
 
   /** The answer of a question as sent back (the special one wins, then the widget, then

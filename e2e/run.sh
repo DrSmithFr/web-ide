@@ -6,7 +6,7 @@ set -u
 cd "$(dirname "$0")"
 ROOT=$(cd .. && pwd)
 SUITES=("$@")
-[ ${#SUITES[@]} -eq 0 ] && SUITES=(editing editor features restore+ keyboard popups git projects explorer lsp llm agent chat plan doodle kanban kanbanai kanbangit docker tunnels preview i18n speech perf)
+[ ${#SUITES[@]} -eq 0 ] && SUITES=(editing editor features restore+ keyboard popups git projects explorer lsp llm agent chat plan doodle kanban kanbanai kanbangit docker tunnels preview mobile i18n speech perf)
 [ -d node_modules/playwright-core ] || npm install --no-audit --no-fund >/dev/null
 PORT=${E2E_PORT:-4519}
 MODELS=${E2E_MODELS:-$HOME/.cache/web-ide-e2e/models}

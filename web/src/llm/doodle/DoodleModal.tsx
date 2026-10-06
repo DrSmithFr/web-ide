@@ -884,6 +884,7 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
                 onDblClick={onDblClick}
                 onContextMenu={(e) => e.preventDefault()}
                 data-testid="dd-canvas"
+                data-pinch
               >
                 <svg class="dd-svg" width={size().w} height={size().h}>
                   <Show when={tools().grid}>

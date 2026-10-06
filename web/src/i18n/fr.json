@@ -1559,5 +1559,8 @@
   "Previews": "Aperçus",
   "Apps the assistant offered to try, served on temporary URLs. A preview stops with its command, after 24 hours at most.": "Les apps que l'assistant a proposé d'essayer, servies sur des URL temporaires. Un aperçu s'arrête avec sa commande, au plus tard après 24 heures.",
   "No preview.": "Aucun aperçu.",
-  "{command} → port {port}": "{command} → port {port}"
+  "{command} → port {port}": "{command} → port {port}",
+  "Views": "Vues",
+  "Double-tap to edit": "Double-tap pour éditer",
+  "Lock the editing": "Verrouiller l'édition"
 }

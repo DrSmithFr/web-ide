@@ -126,6 +126,19 @@ export class EditorView {
   charWidth = 8
   private padTop = 6
 
+  /** The views of the page, and their lock: on a phone, the editors are locked (read only)
+   *  until a double tap (state/mobile.ts). */
+  static all = new Set<EditorView>()
+  private static lockedAll = false
+  static lockAll(locked: boolean) {
+    EditorView.lockedAll = locked
+    for (const v of EditorView.all) v.applyEditable()
+  }
+  static of(el: Element | null): EditorView | undefined {
+    for (const v of EditorView.all) if (el && v.content.contains(el)) return v
+  }
+  private ro = false
+
   constructor(public doc: Doc, private opts: ViewOptions) {
     this.root = document.createElement('div')
     this.root.className = 'ed'
@@ -166,6 +179,7 @@ export class EditorView {
     this.content.setAttribute('role', 'textbox')
     this.content.setAttribute('aria-multiline', 'true')
     this.setReadOnly(!!opts.readOnly || doc.readOnly)
+    EditorView.all.add(this)
     this.tooltip = document.createElement('div')
     this.tooltip.className = 'ed-tooltip'
     main.append(this.curLine, this.guides, this.boxes, this.content, this.ws, this.caretLayer, this.placeholders)
@@ -363,9 +377,15 @@ export class EditorView {
   }
 
   setReadOnly(ro: boolean) {
+    this.ro = ro
+    this.applyEditable()
+    this.root.classList.toggle('readonly', ro)
+  }
+
+  private applyEditable() {
+    const ro = this.ro || EditorView.lockedAll
     this.content.contentEditable = ro ? 'false' : 'plaintext-only'
     if (ro) this.content.tabIndex = 0
-    this.root.classList.toggle('readonly', ro)
   }
 
   get readOnly() {
@@ -379,6 +399,7 @@ export class EditorView {
   }
 
   destroy() {
+    EditorView.all.delete(this)
     cancelAnimationFrame(this.frame)
     this.clearOwn()
     for (const d of this.disposers) d()

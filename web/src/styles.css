@@ -99,7 +99,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .host-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 
 /* ---------- app layout ---------- */
-.app { display: flex; flex-direction: column; height: 100%; }
+.app { display: flex; flex-direction: column; height: var(--app-h, 100%); }
 .menubar { display: flex; align-items: center; gap: 4px; height: 34px; padding: 0 8px; background: var(--bg-2); border-bottom: 1px solid var(--line); flex: none; }
 .menus { display: flex; gap: 2px; margin-left: 4px; }
 .menu-btn { border: 0; background: transparent; padding: 3px 9px; border-radius: 4px; cursor: pointer; color: var(--fg); }
@@ -243,7 +243,12 @@ button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 .tab.dirty .tab-close .x { display: none; }
 .tab.dirty .tab-close:hover .dot { display: none; }
 .tab.dirty .tab-close:hover .x { display: block; visibility: visible; }
-.pane-body { flex: 1; display: flex; flex-direction: column; min-height: 0; background: var(--bg); }
+.pane-body { flex: 1; display: flex; flex-direction: column; min-height: 0; background: var(--bg); position: relative; }
+/* phone: the editor locked until a double tap (state/mobile.ts) */
+.ed-lock-hint { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; pointer-events: none; background: color-mix(in srgb, var(--bg) 35%, transparent); animation: ed-lock-hint 1.4s ease forwards; }
+.ed-lock-hint span { padding: 8px 14px; border-radius: 999px; background: var(--bg-3); border: 1px solid var(--line); font-weight: 600; box-shadow: 0 6px 20px rgb(0 0 0 / 0.3); }
+@keyframes ed-lock-hint { 0% { opacity: 0; } 15% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } }
+.ed-lock-btn { position: absolute; top: 10px; right: 10px; z-index: 20; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); background: var(--bg-3); color: var(--accent); box-shadow: 0 4px 14px rgb(0 0 0 / 0.35); }
 .empty-pane { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--fg-muted); padding: 20px; text-align: center; }
 .empty-grid { display: grid; grid-template-columns: auto auto; gap: 8px 16px; align-items: center; }
 .empty-grid kbd { justify-self: start; }
@@ -524,6 +529,23 @@ button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 .detached-body { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
 .tool-full { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .tool-full .detach { display: none; }
+
+/* phone: one bar of three rows (project and status, menus, views), one view full screen */
+.app.phone { touch-action: manipulation; padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); }
+.menubar.phone { flex-direction: column; align-items: stretch; height: auto; padding: 0; gap: 0; }
+.menubar-row { display: flex; align-items: center; gap: 4px; height: 36px; padding: 0 6px; min-width: 0; }
+.menubar.phone .menus { display: flex; height: 32px; padding: 0 4px; overflow-x: auto; scrollbar-width: none; border-top: 1px solid var(--line); }
+.menubar.phone .menu-btn { flex: none; }
+.menubar.phone .pod-status .rate { display: none; }
+.mobile-rail { display: flex; align-items: center; gap: 2px; padding: 2px 4px; overflow-x: auto; scrollbar-width: none; border-top: 1px solid var(--line); }
+.mobile-rail .rail-btn { flex: none; width: 42px; height: 38px; }
+.mobile-rail-sep { flex: none; width: 1px; height: 22px; margin: 0 4px; background: var(--line); }
+.phone-body { position: relative; }
+.phone-body > .center { flex: 1; min-width: 0; }
+.phone-body > .center.hidden { display: none; }
+.phone-body > .zone { flex: 1; min-width: 0; position: relative; box-shadow: none; }
+.phone .zone .detach { display: none; }
+.phone .zone:focus { outline: none; }
 
 @media (max-width: 720px) {
   .menus { display: none; }

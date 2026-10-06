@@ -8,6 +8,8 @@ import {
 import { showTool } from '../state/zones'
 import { revealInExplorer } from '../panels/Explorer'
 import { EditorView, type Diagnostic } from '../editor/view'
+import { hintAt, lockEditor, phone, unlocked } from '../state/mobile'
+import { Icon } from './icons'
 import { Doc } from '../editor/doc'
 import { FindBar } from '../editor/FindBar'
 import { grammarGeneration, languageName } from '../editor/languages'
@@ -232,6 +234,9 @@ function Pane(props: { id: string }) {
         </button>
       </div>
       <div class="pane-body">
+        <Show when={phone() && isActivePane() && active()?.kind === 'file'}>
+          <LockLayer />
+        </Show>
         <Show when={active()} keyed fallback={<EmptyPane />}>
           {(t) => (
             <Switch>
@@ -705,3 +710,34 @@ function TextViewer(props: { tab: TabState; paneId: string }) {
   )
 }
 
+
+/** Phone: "Double-tap to edit" a moment after a tap on the locked editor, or the padlock that
+ *  locks it again (state/mobile.ts). */
+function LockLayer() {
+  const [hint, setHint] = createSignal(false)
+  createEffect(
+    on(
+      hintAt,
+      () => {
+        setHint(true)
+        const id = setTimeout(() => setHint(false), 1400)
+        onCleanup(() => clearTimeout(id))
+      },
+      { defer: true },
+    ),
+  )
+  return (
+    <>
+      <Show when={hint() && !unlocked()}>
+        <div class="ed-lock-hint" data-testid="ed-lock-hint">
+          <span>{t('Double-tap to edit')}</span>
+        </div>
+      </Show>
+      <Show when={unlocked()}>
+        <button class="ed-lock-btn" title={t('Lock the editing')} onClick={lockEditor} data-testid="ed-lock">
+          <Icon name="lock" size={16} />
+        </button>
+      </Show>
+    </>
+  )
+}

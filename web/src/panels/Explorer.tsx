@@ -13,6 +13,7 @@ import { dirState, fileState } from '../state/git'
 import { folderMark, inExcluded, loadFolderMarks, markFolder, type FolderMark } from '../state/folders'
 import { t } from '../i18n'
 import { copyText } from '../ui/clipboard'
+import { phone } from '../state/mobile'
 
 interface Entry {
   name: string
@@ -265,7 +266,7 @@ function Row(props: { entry: Entry; depth: number; inherited: Inherited }) {
           setSelected(e.path)
           ;(ev.currentTarget as HTMLElement).focus()
           if (e.dir && (ev.target as Element).closest('.tree-twist')) toggle()
-          else if (session.explorer.singleClick) e.dir ? toggle() : openFile(e.path)
+          else if (session.explorer.singleClick || phone()) e.dir ? toggle() : openFile(e.path) // a phone has no double click
         }}
         onDblClick={(ev) => {
           if (session.explorer.singleClick || (ev.target as Element).closest('.tree-twist')) return

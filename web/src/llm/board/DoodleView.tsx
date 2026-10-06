@@ -54,6 +54,7 @@ export function DoodleView(props: { doc: DoodleDoc; ref?: (api: { fit: () => voi
       class="bd-view"
       viewBox={`${box().x} ${box().y} ${box().w} ${box().h}`}
       data-testid="bd-view"
+      data-pinch
       onWheel={(e) => {
         e.preventDefault()
         zoom(Math.exp(e.deltaY * 0.0015), e.clientX, e.clientY)
