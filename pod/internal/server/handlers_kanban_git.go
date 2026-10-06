@@ -50,8 +50,9 @@ func (s *Server) registerKanbanGit() {
 	}
 	exists := func(k gctx, p string) bool { return k.exists(p) }
 	type idArg struct {
-		ID   int64  `json:"id"`
-		Base string `json:"base"`
+		ID    int64  `json:"id"`
+		Base  string `json:"base"`
+		Force bool   `json:"force"`
 	}
 
 	s.handle("kanban.start", h(func(ctx context.Context, c *Client, k gctx, p json.RawMessage) (any, error) {
@@ -59,7 +60,7 @@ func (s *Server) registerKanbanGit() {
 		if err != nil {
 			return nil, err
 		}
-		t, child, err := s.startTicket(ctx, k, a.ID, a.Base, kanban.ByUser)
+		t, child, err := s.startTicket(ctx, k, a.ID, a.Base, kanban.ByUser, a.Force)
 		if err != nil {
 			return nil, err
 		}
@@ -78,6 +79,11 @@ func (s *Server) registerKanbanGit() {
 		}
 		if !exists(k, t.Worktree) {
 			return nil, i18n.New("this ticket has no worktree")
+		}
+		if t.Parent != 0 {
+			if t, err = s.Kanban.Get(k.loc, t.Parent); err != nil {
+				return nil, err
+			}
 		}
 		child, err := s.Projects.PutChild(k.root, t.ID, "#"+itoa(t.ID)+" "+t.Title, t.Worktree)
 		if err != nil {
@@ -101,6 +107,8 @@ func (s *Server) registerKanbanGit() {
 		}
 		// A closed ticket shows the change frozen at its closing (its branch may be merged).
 		switch {
+		case t.Parent != 0 && t.Snapshot != nil && (t.Status == kanban.Done || t.Status == kanban.Abandoned):
+			return &kanban.Diff{Base: base, From: t.Snapshot.Base, Head: t.Snapshot.Head, Files: t.Snapshot.Files, Source: "snapshot"}, nil
 		case exists(k, t.Worktree):
 			d, err := k.git.Changes(ctx, t.Worktree, t.Branch, base)
 			// Merged: nothing left against the base, the change is the one frozen by the merge
@@ -203,6 +211,9 @@ func (s *Server) registerKanbanGit() {
 		if t.Branch == "" {
 			return nil, i18n.New("this ticket has no branch")
 		}
+		if err := lineageOpen(t); err != nil {
+			return nil, err
+		}
 		gi := info(ctx, k, t)
 		msg := "Merge #" + itoa(t.ID) + " " + t.Title + " (" + t.Branch + ")"
 		if a.Squash {
@@ -241,6 +252,9 @@ func (s *Server) registerKanbanGit() {
 		if t.Branch == "" {
 			return nil, i18n.New("this ticket has no branch")
 		}
+		if err := lineageOpen(t); err != nil {
+			return nil, err
+		}
 		if !k.git.CanPR(ctx) {
 			return nil, i18n.New("a pull request needs a remote “origin” and the gh command")
 		}
@@ -265,6 +279,9 @@ func (s *Server) registerKanbanGit() {
 		}
 		if !exists(k, t.Worktree) {
 			return nil, i18n.New("this ticket has no worktree")
+		}
+		if t.Parent != 0 {
+			return nil, i18n.Errorf("a child ticket is rebased with its lineage: see #%d", t.Parent)
 		}
 		_ = k.git.Fetch(ctx)
 		base := firstOf(t.Base)
@@ -342,6 +359,8 @@ func (s *Server) registerKanbanGit() {
 			Status       string `json:"status"`
 			Comment      string `json:"comment"`
 			DeleteBranch bool   `json:"deleteBranch"`
+			// Lineage: abandoning a ticket abandons its open children too.
+			Lineage bool `json:"lineage"`
 		}](p)
 		if err != nil {
 			return nil, err
@@ -355,6 +374,20 @@ func (s *Server) registerKanbanGit() {
 		}
 		if !kanban.CanMove(t.Status, a.Status, kanban.ByUser) {
 			return nil, i18n.New("this ticket cannot move to this status")
+		}
+		if t.Parent != 0 {
+			return s.finishChild(ctx, k, t, a.Status, a.Comment)
+		}
+		if open := kanban.OpenChildren(t); len(open) > 0 {
+			if a.Status == kanban.Done || !a.Lineage {
+				return nil, lineageOpen(t)
+			}
+			for _, id := range open {
+				if err := s.Kanban.Move(k.loc, id, kanban.Abandoned, kanban.ByUser, a.Comment); err != nil {
+					return nil, err
+				}
+				s.emitKanban(k.root.ID, id, nil)
+			}
 		}
 		wt := ""
 		if exists(k, t.Worktree) {
@@ -417,7 +450,7 @@ func (s *Server) removeWorktree(ctx context.Context, loc kanban.Location, root *
 // startTicket starts the development of a ticket (Start development, or Claude Code
 // through the MCP endpoint): branch and worktree created from the base, setup command,
 // ticket In progress, worktree registered as a child project.
-func (s *Server) startTicket(ctx context.Context, k gctx, id int64, base0, by string) (*kanban.Ticket, string, error) {
+func (s *Server) startTicket(ctx context.Context, k gctx, id int64, base0, by string, force bool) (*kanban.Ticket, string, error) {
 	t, err := s.Kanban.Get(k.loc, id)
 	if err != nil {
 		return nil, "", err
@@ -425,7 +458,30 @@ func (s *Server) startTicket(ctx context.Context, k gctx, id int64, base0, by st
 	if t.Status == kanban.Done || t.Status == kanban.Abandoned || t.Status == kanban.New {
 		return nil, "", i18n.New("the ticket must be “To do”, “In progress” or “To test”")
 	}
-	if !k.exists(t.Worktree) {
+	// Only the user may go past the order of the lineages, and it stays in the history.
+	var forced []kanban.Blocker
+	if t.Status == kanban.Todo {
+		bl, err := s.ticketBlockers(ctx, k, t.ID)
+		if err != nil {
+			return nil, "", err
+		}
+		if len(bl) > 0 && (!force || by != kanban.ByUser) {
+			return nil, "", blockedError(bl)
+		}
+		forced = bl
+	}
+	// The worktree of a lineage is the one of its root.
+	owner := t
+	if t.Parent != 0 {
+		if !k.exists(t.Worktree) {
+			if err := s.startChild(ctx, k, t, by); err != nil {
+				return nil, "", err
+			}
+		}
+		if owner, err = s.Kanban.Get(k.loc, t.Parent); err != nil {
+			return nil, "", err
+		}
+	} else if !k.exists(t.Worktree) {
 		if !k.git.IsRepo(ctx) {
 			return nil, "", &codeError{"not_git", i18n.New("the project is not a git repository: cannot create the branch of the ticket")}
 		}
@@ -440,6 +496,10 @@ func (s *Server) startTicket(ctx context.Context, k gctx, id int64, base0, by st
 		base := firstOf(base0, t.Base, meta["base"])
 		if base == "" {
 			base = k.git.DefaultBase(ctx)
+		}
+		if local, dep := s.localBase(ctx, k, t, base); local != "" {
+			_ = s.Kanban.Event(k.loc, t.ID, by, "Started from {local}: it holds #{dep}, not in {base} yet", kanban.Params{"local": local, "dep": dep, "base": base})
+			base = local
 		}
 		branch, dir := k.git.Names(t.ID, t.Title)
 		if t.Branch != "" {
@@ -466,6 +526,9 @@ func (s *Server) startTicket(ctx context.Context, k gctx, id int64, base0, by st
 		}
 	}
 	if t.Status == kanban.Todo {
+		if len(forced) > 0 {
+			_ = s.Kanban.Event(k.loc, t.ID, by, "Started despite: {blockers}", kanban.Params{"blockers": kanban.BlockersText(forced)})
+		}
 		if err := s.Kanban.Move(k.loc, t.ID, kanban.InProgress, by, ""); err != nil {
 			return nil, "", err
 		}
@@ -474,7 +537,12 @@ func (s *Server) startTicket(ctx context.Context, k gctx, id int64, base0, by st
 	if err != nil {
 		return nil, "", err
 	}
-	child, err := s.Projects.PutChild(k.root, t.ID, "#"+itoa(t.ID)+" "+t.Title, t.Worktree)
+	if owner.ID == t.ID {
+		owner = t
+	} else if owner, err = s.Kanban.Get(k.loc, owner.ID); err != nil {
+		return nil, "", err
+	}
+	child, err := s.Projects.PutChild(k.root, owner.ID, "#"+itoa(owner.ID)+" "+owner.Title, owner.Worktree)
 	if err != nil {
 		return nil, "", err
 	}

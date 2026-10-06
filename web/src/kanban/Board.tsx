@@ -10,6 +10,7 @@ import {
   board, createTicket, ensureBoard, setMeta, newTicketOpen, openTicket, priorityLabels, setNewTicketOpen, statusLabels,
   MAX_DESCRIPTION, type Priority, type Status, type Summary,
 } from './state'
+import { blockerText } from './Lineage'
 import { t } from '../i18n'
 import './kanban.css'
 
@@ -92,6 +93,16 @@ export function Card(props: { tk: Summary; compact?: boolean }) {
       <div class="kb-card-top">
         <span class={`kb-prio p-${tk().priority}`} title={t('Priority: {priority}', { priority: priorityLabels[tk().priority] })} />
         <span class="kb-num">#{tk().id}</span>
+        <Show when={tk().parent}>
+          <span class="kb-badge" title={t('Step of #{id}', { id: tk().parent! })} data-testid="card-parent">
+            ↳ #{tk().parent}
+          </span>
+        </Show>
+        <Show when={tk().blockers?.length}>
+          <span class="kb-badge blocked" title={t('Cannot start yet: {blockers}', { blockers: tk().blockers!.map(blockerText).join(', ') })} data-testid="card-blocked">
+            <Icon name="lock" size={10} /> {tk().blockers!.map((b) => `#${b.id}`).join(' ')}
+          </span>
+        </Show>
         <Show when={props.compact}>
           <span class={`kb-status st-${tk().status}`}>{statusLabels[tk().status]}</span>
         </Show>

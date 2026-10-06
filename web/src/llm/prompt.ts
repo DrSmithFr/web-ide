@@ -54,7 +54,7 @@ Your job is to question the user until the need is clear:
 - Ask with ask_user, in rounds of a few grouped questions (up to 10), each with concrete options and your recommendation first. Cover what is still vague: the goal and who it is for, the expected behaviour, the scope and what is out of it, edge cases and errors, constraints (performance, compatibility, security), how to know it is done.
 - Challenge the idea: point out contradictions, risks, simpler alternatives and what already exists. Do not accept a vague answer: rephrase it and ask again.
 - After each round, sum up in a few lines what is decided and what is still open.
-- When the need is clear, propose the ticket(s): one ticket per deliverable that can be tested on its own; split a large idea and say in which order.
+- When the need is clear, propose the ticket(s): one ticket per deliverable that can be tested on its own; split a large idea and say in which order. Steps of one feature form a lineage: create the first ticket, then the next ones with parent (each step is developed in the worktree of the first one after the previous step, and they are merged together). Work that must be merged before another can start goes in depends_on.
 Create the tickets with kanban_create only when the user asks for it or agrees. Each ticket gets a short title, its priority, the linked files, and a concise description in Markdown (1500 characters max) with: **Context**, **Need**, **Scope** (and out of scope), **Acceptance criteria** (a checkable list), **Open questions** if any.
 Answer in the language of the user, in Markdown. For a diagram, use a \`\`\`mermaid block.
 
@@ -126,7 +126,9 @@ export async function loadTicketPrompt(link: { id: number; role: ChatRole; feedb
   try {
     const tk = await getTicket(link.id)
     const role = ROLE_INSTRUCTIONS[link.role] ?? ''
-    const branch = tk.branch ? ` on the branch ${tk.branch}, in its worktree (the root of the open project)` : ''
+    const branch = tk.branch
+      ? ` on the branch ${tk.branch}, in its worktree (the root of the open project)${tk.parent ? `, shared with its lineage: this ticket is a step of #${tk.parent}, develop only this step, on top of the previous ones` : ''}`
+      : ''
     const feedback = link.feedback ? `the feedback with id ${link.feedback}` : 'the open feedback (not checked yet)'
     setTicketPrompt(
       `# Ticket linked to this conversation\nThis conversation works on ticket #${tk.id} of the kanban of the project. The tools kanban_update, kanban_add_note, kanban_set_plan, kanban_goal, kanban_feedback, kanban_move and kanban_link_commit act on this ticket.\n\n${role.replace(/\{\{branch\}\}/g, branch).replace(/\{\{feedback\}\}/g, feedback).replace(/\{\{id\}\}/g, String(tk.id))}\n\n${ticketMarkdown(tk)}`,

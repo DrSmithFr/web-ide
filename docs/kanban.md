@@ -20,6 +20,19 @@ Number (#1, #2… per project), title, priority (low, normal, high, critical), l
 
 The ticket view shows every stage, always open, the current one marked.
 
+## Lineages and dependencies
+
+Work too big for one ticket is split into a **lineage**: a ticket (the root) and its children, the next steps, in order. A ticket has at most one parent and a child has no children (one level).
+
+- The children have no branch of their own: they are developed in the worktree and on the branch of the root, one after the other. A child starts once the previous step is validated: the root by **Validate the step** (it stays *To test*, its worktree kept), a child by being closed (*Done*, without merge; its worktree and branch stay). Its change is counted from the commit it started at, and frozen when it is closed.
+- The root is merged, gets its pull request and is closed once every child is *Done* or *Abandoned*; a child has no merge, rebase or pull request of its own. Abandoning the root with open children abandons them too; an abandoned child warns that its commits stay on the branch.
+- The parent and the order of a child change only before its development starts; a ticket with children cannot be deleted.
+- A ticket may also **depend on** tickets of other lineages (no loop, not inside its own lineage): it waits until their lineage is merged into its base or its root is *Done*. An abandoned dependency keeps blocking it.
+- Only the start of the development is blocked (briefing and plan stay open). *Start development*, `kanban.start` and the MCP `kanban_start` refuse with the blockers (`parent not started`, `previous step not validated`, `dependency not merged`, `dependency abandoned`); the user can start anyway (*Start anyway…*, written in the history), a model cannot.
+- A dependency merged in the local base branch only (`main`, never pushed by the IDE) and not in the base of the ticket (`origin/main`): the ticket starts from the local branch, and the history says so.
+- In the worktree of a lineage, the default ticket of Claude Code is the current step: the child in progress, else the last one to test, else the root.
+- Cards show `↳ #n` (step of) and a lock with the blocking tickets; the ticket view has a *Lineage* section (parent, steps with their order, dependencies with their state, blockers).
+
 ## Statuses and transitions
 
 Tickets move with buttons only (no drag and drop).
@@ -29,7 +42,7 @@ Tickets move with buttons only (no drag and drop).
 | New | Briefing, Generate the plan, Abandon | — (a plan moves the ticket to *To do* by itself, whoever writes it) |
 | To do | Back to New, Redo the plan, Start development (→ In progress), Abandon | — |
 | In progress | New session, Send to testing, Abandon | move to *To test* (with how to test) |
-| To test | Add feedback, Fix session (per open feedback), Create the pull request, Back to In progress, Close (→ Done), Abandon | mark feedback handled |
+| To test | Add feedback, Fix session (per open feedback), Create the pull request, Back to In progress, Validate the step (a ticket with children), Close (→ Done), Abandon | mark feedback handled |
 | Done / Abandoned | Reopen (Done → To test, Abandoned → New) | — |
 
 A feedback leaves the ticket in *To test*. Closing or abandoning removes the worktree; the branch is kept (abandoning offers to delete it). The change is frozen in the ticket when it is merged, or else when it is closed.
@@ -54,8 +67,8 @@ The usual path: a briefing makes the tickets, *Generate the plan* writes the pla
 
 ## Assistant tools
 
-- In every conversation: `kanban_list`, `kanban_get`, `kanban_create` (a new ticket in the backlog), `ask_user` (1 to 10 multiple-choice questions with a free answer, shown one at a time in the thread).
-- Only in a conversation linked to a ticket, and only on that ticket: `kanban_update` (title, description, priority, how to test, files), `kanban_add_note` (1000 characters max: notes are for decisions, not reports), `kanban_set_plan` (plan and goals with their description), `kanban_goal` (check, uncheck, add), `kanban_feedback` (mark a feedback handled or open again), `kanban_move` (*To test* only, with how to test), `kanban_link_commit`.
+- In every conversation: `kanban_list`, `kanban_get`, `kanban_create` (a new ticket in the backlog, `parent` and `depends_on` included), `ask_user` (1 to 10 multiple-choice questions with a free answer, shown one at a time in the thread).
+- Only in a conversation linked to a ticket, and only on that ticket: `kanban_update` (title, description, priority, how to test, files, parent, dependencies), `kanban_add_note` (1000 characters max: notes are for decisions, not reports), `kanban_set_plan` (plan and goals with their description), `kanban_goal` (check, uncheck, add), `kanban_feedback` (mark a feedback handled or open again), `kanban_move` (*To test* only, with how to test), `kanban_link_commit`.
 - A description over 1500 characters is refused with advice to shorten it.
 
 ## Claude Code

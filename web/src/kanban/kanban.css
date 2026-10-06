@@ -136,3 +136,18 @@ input.tk-title { padding: 2px 6px; }
 .tk-gitops { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
 .tk-conflicts { border: 1px solid color-mix(in srgb, var(--danger) 50%, var(--line)); background: color-mix(in srgb, var(--danger) 7%, transparent); border-radius: var(--radius); padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
 .tk-conflicts .icon { color: var(--danger); }
+
+/* Lineage: badges of the cards, section of the ticket. */
+.kb-badge { display: inline-flex; align-items: center; gap: 3px; font-family: var(--font-code); font-size: 12px; color: var(--fg-muted); white-space: nowrap; }
+.kb-badge.blocked { color: var(--warn); }
+.tk-lineage { display: flex; flex-direction: column; gap: 6px; }
+.tk-lineage .link { padding: 0; text-align: left; }
+.tk-blockers { display: flex; align-items: flex-start; gap: 6px; padding: 4px 8px; border-radius: 6px; background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.tk-blockers svg { flex: none; margin-top: 2px; }
+.tk-children { margin: 0; padding-left: 18px; display: flex; flex-direction: column; }
+.tk-deps { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.tk-dep { display: inline-flex; align-items: center; gap: 3px; padding: 0 4px; border-radius: 9px; font-size: 12px; background: var(--bg-3); }
+.tk-dep.ok { color: var(--ok); }
+.tk-dep.wait { color: var(--warn); }
+.tk-dep.abandoned { color: var(--danger); }
+.tk-dep .link { color: inherit; }

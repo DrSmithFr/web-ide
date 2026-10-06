@@ -27,7 +27,30 @@ export interface Summary {
   created: number
   updated: number
   closed?: number
+  /** Lineage: the parent (developed in its worktree after it), the place among its children. */
+  parent?: number
+  pos?: number
+  /** A parent's own work validated: its first child may start. */
+  stepDone?: boolean
+  /** Tickets of other lineages this one waits for. */
+  dependsOn: number[]
+  /** What keeps a ticket from starting (New or To do only). */
+  blockers?: Blocker[]
 }
+
+export type BlockerKind = 'parent' | 'previous' | 'depends' | 'abandoned'
+export interface Blocker {
+  id: number
+  kind: BlockerKind
+}
+/** English texts of the blockers (also what the model reads). */
+export const blockerNames: Record<BlockerKind, string> = {
+  parent: 'parent not started',
+  previous: 'previous step not validated',
+  depends: 'dependency not merged',
+  abandoned: 'dependency abandoned',
+}
+export const blockersText = (list: Blocker[] = []) => list.map((b) => `#${b.id} (${blockerNames[b.kind]})`).join(', ')
 
 export interface Goal {
   id: number
@@ -84,6 +107,8 @@ export interface Ticket extends Summary {
   chatList: { chatId: string; role: ChatRole; title: string; created: number }[]
   commits: { hash: string; subject: string }[]
   attachments: { id: number; name: string; mime: string; size: number; created: number }[]
+  /** Children of the lineage, in order. */
+  children: Summary[]
 }
 
 export const statusOrder: Status[] = ['new', 'todo', 'in_progress', 'review', 'done', 'abandoned']
@@ -203,11 +228,14 @@ export interface TicketPatch {
   files?: string[]
   addFiles?: string[]
   removeFiles?: string[]
+  /** 0 takes the ticket out of its lineage. */
+  parent?: number
+  dependsOn?: number[]
 }
 
 export const createTicket = (p: TicketPatch & { title: string }, by: By = 'user') => request<Ticket>('kanban.create', { ...p, by })
 export const updateTicket = (id: number, patch: TicketPatch, by: By = 'user') => request<Ticket>('kanban.update', { id, patch, by })
-export const moveTicket = (id: number, status: Status, by: By = 'user', comment = '') => request<Ticket>('kanban.move', { id, status, by, comment })
+export const moveTicket = (id: number, status: Status, by: By = 'user', comment = '', force = false) => request<Ticket>('kanban.move', { id, status, by, comment, force })
 export const deleteTicket = (id: number) => request('kanban.delete', { id })
 export const addNote = (id: number, text: string, by: By = 'user', chatId = '') => request<Ticket>('kanban.note', { id, text, by, chatId })
 export const deleteNote = (id: number, noteId: number) => request<Ticket>('kanban.note.delete', { id, noteId })
@@ -262,12 +290,15 @@ export interface Diff {
 }
 
 /** Creates the branch and the worktree of a ticket if needed; returns the project opened on it. */
-export const startWork = (id: number, base = '') => request<{ ticket: Ticket; project: string }>('kanban.start', { id, base })
+export const startWork = (id: number, base = '', force = false) => request<{ ticket: Ticket; project: string }>('kanban.start', { id, base, force })
 export const worktreeProject = (id: number) => request<{ project: string }>('kanban.open', { id })
 export const ticketDiff = (id: number, base = '') => request<Diff | null>('kanban.diff', { id, base })
 export const filePatch = (id: number, path: string, from: string, source: string) => request<string>('kanban.diff.file', { id, path, from, source })
-export const finishTicket = (id: number, status: 'done' | 'abandoned', comment = '', deleteBranch = false) =>
-  request<Ticket>('kanban.finish', { id, status, comment, deleteBranch })
+export const finishTicket = (id: number, status: 'done' | 'abandoned', comment = '', deleteBranch = false, lineage = false) =>
+  request<Ticket>('kanban.finish', { id, status, comment, deleteBranch, lineage })
+/** Validates the own work of a parent: its first child may start. */
+export const validateStep = (id: number) => request<Ticket>('kanban.step', { id })
+export const moveChild = (id: number, delta: number) => request<Ticket>('kanban.child.move', { id, delta })
 
 export interface GitOpState {
   rebase: boolean
@@ -289,6 +320,11 @@ export const openPR = (id: number) => request<Ticket>('kanban.pr', { id })
 export const rebaseTicket = (id: number) => request<GitInfo>('kanban.rebase', { id })
 export const continueGit = (id: number, where: 'worktree' | 'main') => request<GitInfo>('kanban.continue', { id, where })
 export const abortGit = (id: number, where: 'worktree' | 'main') => request<GitInfo>('kanban.abort', { id, where })
+
+/** The ticket whose worktree a ticket works in: its parent for a step of a lineage. */
+export const worktreeOwner = (tk: Summary) => (tk.parent ? tk.parent : tk.id)
+/** The window shows the worktree a ticket works in. */
+export const inWorktreeOf = (tk: Summary) => !!project()?.ticket && project()?.ticket === worktreeOwner(tk)
 
 /** Id of the project opened on the worktree of a ticket (see projects.ChildID). */
 export function childProject(ticket: number) {

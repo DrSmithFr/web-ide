@@ -157,6 +157,50 @@ run(async ({ page, ctx }) => {
   await page.waitForSelector('[data-testid=ticket-view] [data-testid=ticket-title]:has-text("Second ticket")')
   await page.screenshot({ path: OUT + '/kanban-ticket.png' })
 
+  // Lineage: a step waits for its parent, a ticket of another lineage waits for it to be
+  // merged or done; tickets made through the MCP endpoint.
+  const tool = (name, args) =>
+    fetch(process.env.E2E_URL + '/mcp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + process.env.E2E_TOKEN },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: { cwd: WS + '/demo', ...args } } }),
+    }).then((r) => r.json())
+  await tool('kanban_create', { title: 'Lineage root' })
+  await tool('kanban_create', { title: 'Lineage step', parent: 3 })
+  await tool('kanban_create', { title: 'Waits for the root', depends_on: [3] })
+  for (const id of [3, 4, 5]) await tool('kanban_set_plan', { id, plan: 'p', goals: [{ title: 'g' }] })
+  await page.click('.pane.active .tab:has-text("Kanban")')
+  await page.waitForSelector('[data-testid=ticket-card-4] [data-testid=card-parent]:has-text("#3")')
+  assert((await page.textContent('[data-testid=ticket-card-4] [data-testid=card-blocked]')).includes('#3'), 'card of a step: parent and blocker badges')
+  assert(await page.isVisible('[data-testid=ticket-card-5] [data-testid=card-blocked]'), 'card of a dependent ticket: blocker badge')
+  await page.click('[data-testid=ticket-card-4]')
+  await page.waitForSelector('[data-testid=ticket-view] [data-testid=ticket-parent]:has-text("#3")')
+  assert((await page.textContent('[data-testid=ticket-blockers]')).includes('#3: parent not started'), 'the blockers of a step are shown')
+  assert(await page.isDisabled('[data-testid=ticket-start]'), 'a blocked ticket cannot start')
+  assert(await page.isVisible('[data-testid=ticket-start-force]'), 'the user can start it anyway')
+  await page.click('[data-testid=ticket-parent] .link')
+  await page.waitForSelector('[data-testid=ticket-view] [data-testid=ticket-child]:has-text("Lineage step")')
+  assert(true, 'the parent lists its steps')
+  await page.click('[data-testid=ticket-start]')
+  await page.waitForSelector('[data-testid=ticket-status]:has-text("In progress")')
+  await page.click('[data-testid=ticket-to-review]')
+  await page.waitForSelector('[data-testid=ticket-step]')
+  assert(await page.isDisabled('[data-testid=ticket-close]'), 'a parent is closed after its steps')
+  await page.screenshot({ path: OUT + '/kanban-lineage.png' })
+  await page.click('[data-testid=ticket-step]')
+  await page.waitForSelector('[data-testid=ticket-step]', { state: 'detached' })
+  await page.click('[data-testid=ticket-child] .link')
+  await page.waitForSelector('[data-testid=ticket-view] [data-testid=ticket-title]:has-text("Lineage step")')
+  await page.waitForSelector('[data-testid=ticket-blockers]', { state: 'detached' })
+  assert(!(await page.isDisabled('[data-testid=ticket-start]')), 'the step may start once its parent step is validated')
+  await page.goto(page.url().replace(/[?#].*$/, '') + '?ticket=5')
+  await page.waitForSelector('[data-testid=ticket-view] [data-testid=ticket-title]:has-text("Waits for the root")')
+  assert(await page.isVisible('[data-testid=ticket-dep].wait'), 'a dependency not merged is waiting')
+  await page.click('[data-testid=ticket-start-force]')
+  await page.waitForSelector('[data-testid=ticket-status]:has-text("In progress")')
+  await page.click('.tk-section-toggle:has-text("History")')
+  assert((await page.textContent('.tk-events')).includes('Started despite: #3 (dependency not merged)'), 'a forced start stays in the history')
+
   // A ticket link of Claude Code: /project/<id>?ticket=<n> opens its tab.
   await page.goto(page.url().replace(/[?#].*$/, '') + '?ticket=1')
   await page.waitForSelector('[data-testid=ticket-view] [data-testid=ticket-title]:has-text("CSV export")')

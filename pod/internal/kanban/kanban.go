@@ -210,6 +210,16 @@ DELETE FROM goals WHERE source = 'feedback';
 DELETE FROM notes WHERE kind = 'feedback';`,
 	// 2: address of the pull request of a ticket.
 	`ALTER TABLE tickets ADD COLUMN pr TEXT NOT NULL DEFAULT '';`,
+	// 3: lineages (parent, position among the children, own step of a parent validated)
+	// and dependencies between tickets.
+	`ALTER TABLE tickets ADD COLUMN parent_id INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE tickets ADD COLUMN pos INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE tickets ADD COLUMN step_done INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE deps (
+  ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+  dep_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+  PRIMARY KEY (ticket_id, dep_id)
+);`,
 }
 
 func migrate(db *sql.DB) error {

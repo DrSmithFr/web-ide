@@ -102,6 +102,7 @@ func (s *Server) registerKanban() {
 		if err != nil {
 			return nil, err
 		}
+		s.fillBlockers(ctx, s.clientGit(c, k.root), list)
 		meta, err := s.Kanban.Meta(k.loc)
 		return map[string]any{"project": k.root.ID, "tickets": list, "meta": meta}, err
 	}))
@@ -110,7 +111,11 @@ func (s *Server) registerKanban() {
 		if err != nil {
 			return nil, err
 		}
-		return s.Kanban.Get(k.loc, a.ID)
+		t, err := s.Kanban.Get(k.loc, a.ID)
+		if err == nil && kanban.Startable(t.Status) && (t.Parent != 0 || len(t.DependsOn) > 0) {
+			t.Blockers, _ = s.ticketBlockers(ctx, s.clientGit(c, k.root), t.ID)
+		}
+		return t, err
 	}))
 	s.handle("kanban.create", h(func(ctx context.Context, c *Client, k kctx, p json.RawMessage) (any, error) {
 		a, err := bind[struct {
@@ -136,20 +141,65 @@ func (s *Server) registerKanban() {
 		}
 		return s.Kanban.Update(k.loc, a.ID, b.Patch, a.By)
 	}))
-	s.handle("kanban.move", change(func(k kctx, a idArg, p json.RawMessage) error {
-		b, err := bind[struct{ Status, Comment string }](p)
+	s.handle("kanban.move", h(func(ctx context.Context, c *Client, k kctx, p json.RawMessage) (any, error) {
+		a, err := bind[struct {
+			ID      int64  `json:"id"`
+			By      string `json:"by"`
+			Status  string `json:"status"`
+			Comment string `json:"comment"`
+			Force   bool   `json:"force"`
+		}](p)
+		if err != nil {
+			return nil, err
+		}
+		// Developing without a worktree (no git) keeps the order of the lineages too.
+		if a.Status == kanban.InProgress {
+			if t, err := s.Kanban.Get(k.loc, a.ID); err == nil && t.Status == kanban.Todo {
+				if bl, err := s.ticketBlockers(ctx, s.clientGit(c, k.root), t.ID); err == nil && len(bl) > 0 {
+					if !a.Force || by(a.By) != kanban.ByUser {
+						return nil, blockedError(bl)
+					}
+					_ = s.Kanban.Event(k.loc, t.ID, kanban.ByUser, "Started despite: {blockers}", kanban.Params{"blockers": kanban.BlockersText(bl)})
+				}
+			}
+		}
+		if err := s.Kanban.Move(k.loc, a.ID, a.Status, by(a.By), a.Comment); err != nil {
+			return nil, err
+		}
+		s.emitKanban(k.root.ID, a.ID, nil)
+		return s.Kanban.Get(k.loc, a.ID)
+	}))
+	// kanban.step validates the own work of a parent: its first child may start.
+	s.handle("kanban.step", change(func(k kctx, a idArg, p json.RawMessage) error {
+		if err := s.Kanban.ValidateStep(k.loc, a.ID, kanban.ByUser); err != nil {
+			return err
+		}
+		if t, err := s.Kanban.Get(k.loc, a.ID); err == nil {
+			for _, ch := range t.Children {
+				s.emitKanban(k.root.ID, ch.ID, nil)
+			}
+		}
+		return nil
+	}))
+	s.handle("kanban.child.move", change(func(k kctx, a idArg, p json.RawMessage) error {
+		b, err := bind[struct{ Delta int }](p)
 		if err != nil {
 			return err
 		}
-		return s.Kanban.Move(k.loc, a.ID, b.Status, a.By, b.Comment)
+		return s.Kanban.MoveChild(k.loc, a.ID, b.Delta, a.By)
 	}))
 	s.handle("kanban.delete", h(func(ctx context.Context, c *Client, k kctx, p json.RawMessage) (any, error) {
 		a, err := bind[idArg](p)
 		if err != nil {
 			return nil, err
 		}
-		// The worktree of the ticket goes with it (its branch stays).
-		if t, err := s.Kanban.Get(k.loc, a.ID); err == nil && t.Worktree != "" {
+		// The worktree of the ticket goes with it (its branch stays); a child shares the one
+		// of its lineage, and a parent keeps its children.
+		t, err := s.Kanban.Get(k.loc, a.ID)
+		if err == nil && len(t.Children) > 0 {
+			return nil, i18n.New("this ticket has children: take them out of its lineage first")
+		}
+		if err == nil && t.Worktree != "" && t.Parent == 0 {
 			if rt, err := c.runtime(); err == nil {
 				wt := t.Worktree
 				if _, err := rt.FS.Stat(wt); err != nil {
