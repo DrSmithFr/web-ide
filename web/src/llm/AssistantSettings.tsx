@@ -58,6 +58,23 @@ export function PromptSettings() {
   const source = () => templateOf(promptContext(), kind()).source
   return (
     <div class="form" data-testid="prompt-settings">
+      <label class="field">
+        <span>{t('Mode of a new conversation')}</span>
+        <select
+          value={prefs.defaultMode}
+          onChange={(e) => {
+            setPrefs('defaultMode', e.currentTarget.value as Mode)
+            savePrefs()
+          }}
+          name="defaultMode"
+          class="w-next"
+        >
+          <option value="orchestrator">{t('Orchestrator')}</option>
+          <option value="build">{t('Build')}</option>
+          <option value="plan">{t('Plan')}</option>
+          <option value="briefing">{t('Briefing')}</option>
+        </select>
+      </label>
       <p class="muted small">
         {t('The system prompt starts with this template, followed by the instruction files and the list of skills, loaded like Claude Code. The project prompt ({build}, {plan} for the Plan mode, {briefing} for the Briefing mode) replaces the global one. Currently:', { build: '.ide/system-prompt.md', plan: '.ide/plan-prompt.md', briefing: '.ide/briefing-prompt.md' })}{' '}
         <strong>{source() === 'project' ? t('project prompt') : source() === 'global' ? t('global prompt') : t('default prompt')}</strong>.

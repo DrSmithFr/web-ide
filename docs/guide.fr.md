@@ -87,11 +87,13 @@ Chaque projet a un kanban. Un ticket passe par quatre étapes, chacune avec sa c
 
 C'est vous qui faites passer le ticket d'une étape à l'autre ; le modèle travaille à l'intérieur d'une étape.
 
+Une nouvelle conversation démarre en mode **Orchestrateur**, votre page d'accueil : demandez-lui *sur quoi on travaille aujourd'hui ?* (les tickets qui peuvent démarrer, dans l'ordre, avec un bouton pour lancer le premier), *qu'est-ce qu'on a fait hier ?* (les tickets qui ont bougé), ou dites *j'ai une idée…* (il ouvre une conversation de Briefing avec votre idée). Il ne modifie aucun fichier et ne lance rien de lui-même : c'est vous qui cliquez ses boutons. Le mode par défaut se règle dans les réglages (*Prompt and instructions*).
+
 ### 1. Briefing : de l'idée au ticket
 
 ![Briefing : le modèle pose ses questions, puis écrit le ticket](images/briefing.gif)
 
-Ouvrez l'assistant et passez-le en mode **Briefing** (Maj+Tab alterne Build, Plan et Briefing). Décrivez le besoin en quelques mots. Dans ce mode le modèle ne modifie rien : il lit le code pour comprendre le contexte, puis pose ses questions une à une, avec des réponses suggérées :
+Ouvrez l'assistant et passez-le en mode **Briefing** (Maj+Tab alterne Orchestrateur, Build, Plan et Briefing). Décrivez le besoin en quelques mots. Dans ce mode le modèle ne modifie rien : il lit le code pour comprendre le contexte, puis pose ses questions une à une, avec des réponses suggérées :
 
 ![Une question du modèle, avec des réponses suggérées](images/briefing.png)
 

@@ -144,6 +144,20 @@ export interface ChatMessage {
   wait?: 'parent'
   /** Sub-agent started or addressed by this tool call of the parent. */
   child?: string
+  /** Action offered by action_card (Orchestrator), and the conversation open_conversation
+   *  moved the user into. */
+  card?: ActionCard
+  opened?: string
+}
+
+export interface ActionCard {
+  kind: 'start_dev' | 'open_ticket' | 'generate_plan' | 'open_conversation'
+  ticket?: number
+  chat?: string
+  label: string
+  reason?: string
+  state?: 'done' | 'failed'
+  result?: string
 }
 
 /** Status of a sub-agent (pod/internal/agent/subagents.go). */
@@ -252,11 +266,13 @@ export interface Chat {
   parent?: string
   agent?: SubAgent
   children?: string[]
+  /** First message prepared by the Orchestrator, for the message box. */
+  draft?: string
 }
 
 export type ChatRole = 'briefing' | 'plan' | 'dev' | 'correction' | 'resolve'
 
-export type Mode = 'build' | 'plan' | 'briefing'
+export type Mode = 'build' | 'plan' | 'briefing' | 'orchestrator'
 
 export interface QueuedMessage {
   id: string
@@ -276,6 +292,8 @@ export interface ChatInfo {
   status?: AgentStatus
   tokens?: number
   cost?: number
+  mode?: Mode
+  ticket?: number
 }
 
 export const [config, setConfig] = createStore<{ servers: ServerView[]; server: string; model: string; childServer?: string; childModel?: string }>({ servers: [], server: '', model: '' })
@@ -359,6 +377,8 @@ export const [prefs, setPrefs] = createStore({
   /** Model of the Plan mode ('' server: the model of the conversation). */
   planServer: '',
   planModel: '',
+  /** Mode of a new conversation. */
+  defaultMode: 'orchestrator' as Mode,
 })
 try {
   const p = JSON.parse(localStorage.getItem('webide.llm.prefs') ?? 'null')
@@ -366,6 +386,9 @@ try {
 } catch {
   /* private mode */
 }
+/** A message prepared for the message box (the draft of a conversation opened for the user). */
+export const [incomingDraft, setIncomingDraft] = createSignal('')
+
 export function savePrefs() {
   try {
     localStorage.setItem('webide.llm.prefs', JSON.stringify(prefs))

@@ -286,9 +286,27 @@ func names(lists ...[]Def) map[string]bool {
 // ToolsFor returns the tools offered in a mode: no file change in Plan and Briefing,
 // exit_plan_mode only in Plan (not for the briefing or the plan of a ticket, which end in
 // the ticket), the tools that change a ticket only with a linked ticket. A sub-agent (sub)
-// asks its parent instead of the user and reports instead of presenting a plan.
-func ToolsFor(mode string, ticket *TicketLink, sub bool) []json.RawMessage {
+// asks its parent instead of the user and reports instead of presenting a plan; spawn: it may
+// start sub-agents. The Orchestrator reads, proposes actions and opens conversations.
+func ToolsFor(mode string, ticket *TicketLink, sub, spawn bool) []json.RawMessage {
 	var out []json.RawMessage
+	if mode == Orchestrator && !sub {
+		for _, d := range projectDefs {
+			if !WriteTools[d.Name] {
+				out = append(out, d.JSON)
+			}
+		}
+		for _, d := range append(append(append([]Def{}, dockerDefs...), kanbanReadDefs...), orchestratorDefs...) {
+			if d.Name != "kanban_create" { // ideas go to a Briefing conversation
+				out = append(out, d.JSON)
+			}
+		}
+		out = append(out, askUserDef.JSON, boardDoodleDef.JSON, boardImageDef.JSON)
+		for _, d := range parentAgentDefs {
+			out = append(out, d.JSON)
+		}
+		return append(out, compactDef.JSON)
+	}
 	for _, d := range projectDefs {
 		if mode != Build && WriteTools[d.Name] {
 			continue
@@ -310,6 +328,11 @@ func ToolsFor(mode string, ticket *TicketLink, sub bool) []json.RawMessage {
 	if sub {
 		for _, d := range childAgentDefs {
 			out = append(out, d.JSON)
+		}
+		if spawn {
+			for _, d := range parentAgentDefs {
+				out = append(out, d.JSON)
+			}
 		}
 		return append(out, compactDef.JSON)
 	}

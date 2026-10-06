@@ -5,7 +5,7 @@ import { Icon } from '../ui/icons'
 import { errorToast, toast } from '../ui/toast'
 import { activeTab, openFile, project, relPath } from '../state/project'
 import { approval, chat, config, live, liveSpeed, savePrefs, setPrefs, type Attachment, type ChatMessage, type Part, type ToolCall } from './state'
-import { answerApproval, resume, retry, stepsSinceUser } from './agent'
+import { answerApproval, currentMode, resume, retry, stepsSinceUser } from './agent'
 import { AttachmentChip, callLabel, DiffBlock, formatDuration, formatTokens, Markdown, safeArgs, summaryText, toolIcons, toolVerbs } from './parts'
 import { absPath } from './uiTools'
 import { focusComposer, reuseDoodle, runCommand } from './Composer'
@@ -20,6 +20,7 @@ import { answerQuestions, dismissPlan, executePlan, send } from './agent'
 import { AskCard } from './AskCard'
 import { PreviewCard } from './PreviewCard'
 import { ChildCard, ChildHeader, EventCard, TaskCard } from './SubAgents'
+import { ActionCard, OpenedCard } from './Orchestrator'
 import { t, tn } from '../i18n'
 
 const textOf = (m: ChatMessage) =>
@@ -46,12 +47,20 @@ function useNow(active: () => boolean, ms = 250) {
 
 function Welcome(props: { onSuggest: (t: string) => void; onSettings: () => void }) {
   const active = () => (activeTab()?.kind === 'file' ? relPath(activeTab()!.path!) : '')
-  const suggestions = () => [
+  const orchestrator = () => currentMode() === 'orchestrator'
+  const suggestions = () =>
+    orchestrator()
+      ? [
+          { icon: 'play', text: t('What do we work on today?') },
+          { icon: 'history', text: t('What did we do yesterday?') },
+          { icon: 'sparkle', text: t('I have an idea: ') },
+        ]
+      : [
     { icon: 'outline', text: t('Explain the architecture of this project to me') },
     active() ? { icon: 'file', text: t('Review {file} and suggest improvements', { file: active() }) } : { icon: 'search', text: t('Where is the configuration of the project handled?') },
     { icon: 'conflict', text: t('Find and fix the errors reported by the language servers') },
     active() ? { icon: 'check', text: t('Write tests for {file}', { file: active() }) } : { icon: 'terminal', text: t('Run the tests and explain the failures') },
-  ]
+        ]
   return (
     <div class="ai-empty ai-welcome">
       <div class="ai-welcome-icon">
@@ -59,7 +68,9 @@ function Welcome(props: { onSuggest: (t: string) => void; onSettings: () => void
       </div>
       <h2>{project()?.name ? t('What shall we do on {project}?', { project: project()!.name }) : t('What shall we do on this project?')}</h2>
       <p class="muted">
-        {t('The assistant reads and changes the files, searches the code, asks the language servers and runs commands.')}
+        {orchestrator()
+          ? t('The Orchestrator tells what to work on next and what was done, proposes the actions and opens the right conversation. Shift+Tab changes the mode.')
+          : t('The assistant reads and changes the files, searches the code, asks the language servers and runs commands.')}
       </p>
       <Show
         when={config.servers.length}
@@ -493,6 +504,12 @@ function AssistantMessage(props: { msg: ChatMessage; index: number; lastOfTurn: 
     for (let i = props.index + 1; i < chat.messages.length && chat.messages[i].role === 'tool'; i++) if (chat.messages[i].capture === 'pending') out.push(i)
     return out
   }
+  // Actions offered by the Orchestrator, and the conversations it opened: in sight.
+  const orchestration = () => {
+    const out: number[] = []
+    for (let i = props.index + 1; i < chat.messages.length && chat.messages[i].role === 'tool'; i++) if (chat.messages[i].card || chat.messages[i].opened) out.push(i)
+    return out
+  }
   // Sub-agents started by this answer: their card stays in sight.
   const childCards = () => {
     const out: string[] = []
@@ -527,6 +544,7 @@ function AssistantMessage(props: { msg: ChatMessage; index: number; lastOfTurn: 
       </Show>
       <For each={plans()}>{(i) => <PlanCard msg={chat.messages[i]} index={i} />}</For>
       <For each={captures()}>{(i) => <CaptureCard msg={chat.messages[i]} call={props.msg.tool_calls?.find((c) => c.id === chat.messages[i].tool_call_id)} />}</For>
+      <For each={orchestration()}>{(i) => (chat.messages[i].card ? <ActionCard msg={chat.messages[i]} index={i} /> : <OpenedCard msg={chat.messages[i]} />)}</For>
       <For each={childCards()}>{(id) => <ChildCard id={id} />}</For>
       <For each={previewCards()}>{(i) => <PreviewCard spec={chat.messages[i].preview!} />}</For>
       <For each={asks()}>{(i) => <AskCard msg={chat.messages[i]} index={i} onSend={(idx, answers, notes, path, off) => answerQuestions(idx, answers, notes, path, off).catch(errorToast)} />}</For>

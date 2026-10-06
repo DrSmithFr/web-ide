@@ -6,7 +6,7 @@ import { produce, reconcile } from 'solid-js/store'
 import { createSignal } from 'solid-js'
 import { on, request } from '../pod/rpc'
 import { activeTab, project, relPath, session } from '../state/project'
-import { approval, chat, config, emptyChat, live, newId, prefs, refreshChats, setApproval, setChat, setLive, type Chat, type ChatMessage, type Mode, type Part } from './state'
+import { approval, chat, config, emptyChat, live, newId, prefs, refreshChats, setApproval, setChat, setIncomingDraft, setLive, type Chat, type ChatMessage, type Mode, type Part } from './state'
 import { runUiTool } from './uiTools'
 import { entryToString, type AnswerEntry } from './ask'
 import { toast } from '../ui/toast'
@@ -180,6 +180,11 @@ on('agent.attention', (e: { id: string; title: string; kind: string; sub?: boole
   if (document.hidden && 'Notification' in window && Notification.permission === 'granted') new Notification('Web IDE', { body: text, tag: e.id })
 })
 
+/** The Orchestrator moved the user into another conversation: the windows showing it follow. */
+on('agent.open', (e: { chat: string; from: string }) => {
+  if (e.from === chat.id) openChat(e.chat).catch(() => {})
+})
+
 on('agent.error', (e: { id: string; error: string }) => {
   if (e.id === chat.id) console.warn('agent', e.error)
 })
@@ -221,6 +226,11 @@ export async function openChat(id: string) {
   const r = await request<{ chat: Chat; state: RunState; ahead: number }>('agent.open', { id })
   setChat(reconcile({ ...r.chat, queue: r.chat.queue ?? [] }))
   setApproval(r.chat.approval ?? null)
+  // A first message prepared for the user goes to the message box, once.
+  if (r.chat.draft) {
+    setIncomingDraft(r.chat.draft)
+    request('agent.draft', { id }).catch(() => {})
+  }
   applyState(r.state, r.ahead)
   attach(r.state === 'idle' ? undefined : r.chat.running?.stream)
   rememberActive()
@@ -250,11 +260,12 @@ export async function restoreActive() {
 
 // ---------- what the user does ----------
 
+/** Mode of the conversation shown: a new one starts in the default mode of the settings. */
 export function currentMode(): Mode {
-  return chat.mode ?? 'build'
+  return chat.mode ?? (chat.messages.length ? 'build' : prefs.defaultMode)
 }
 
-const modeCycle: Mode[] = ['build', 'plan', 'briefing']
+const modeCycle: Mode[] = ['orchestrator', 'build', 'plan', 'briefing']
 
 /** Mode after the current one (Shift+Tab). */
 export const nextMode = (): Mode => modeCycle[(modeCycle.indexOf(currentMode()) + 1) % modeCycle.length]
@@ -307,7 +318,7 @@ export async function send(text: string, parts: Part[], attachments: ChatMessage
     display,
     server: config.server,
     model: config.model,
-    mode: chat.mode,
+    mode: currentMode(),
     options: agentOptions(),
     ticket: chat.ticket,
     title: chat.title,

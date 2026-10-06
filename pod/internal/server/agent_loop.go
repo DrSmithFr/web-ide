@@ -351,7 +351,8 @@ func (s *Server) systemPrompt(r *agentRun, ref *runtimeRef, c *agent.Chat, tools
 	text := agent.SystemPrompt(ctx, vars, tools, mode, ticket)
 	if tools && c.Parent != "" {
 		text += "\n\n" + agent.SubAgentText
-	} else if tools {
+	}
+	if tools && agent.CanSpawn(c) {
 		text += "\n\n" + agent.ParentText
 		if servers := s.childServers(); servers != "" {
 			text += "\n" + servers
@@ -432,7 +433,7 @@ func (s *Server) loop(r *agentRun) {
 		system := s.systemPrompt(r, ref, r.chat, tools)
 		req := llm.ChatRequest{Server: server, Model: model, Messages: apiMessages(system, r.chat.Messages, !info.found || info.caps.Vision)}
 		if tools {
-			req.Tools = agent.ToolsFor(mode, r.chat.Ticket, r.chat.Parent != "")
+			req.Tools = agent.ToolsFor(mode, r.chat.Ticket, r.chat.Parent != "", agent.CanSpawn(r.chat))
 		}
 		if info.caps.Thinking {
 			think := boolOr(o.Think, true)
@@ -644,6 +645,7 @@ func (s *Server) runCalls(r *agentRun, ref *runtimeRef, calls []agent.ToolCall, 
 		for i := len(r.chat.Messages) - 1; i >= 0; i-- {
 			if mm := r.chat.Messages[i]; mm.Role == "tool" && mm.ToolCallID == call.ID {
 				mm.Content, mm.Summary, mm.Status, mm.Diff, mm.Page, mm.Preview, mm.Child = agent.String(res.Content), res.Summary, res.Status, res.Diff, res.Page, res.Preview, res.Child
+				mm.Card, mm.Opened = res.Card, res.Opened
 				idx = i
 				break
 			}

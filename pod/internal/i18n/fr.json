@@ -193,5 +193,6 @@
   "%s refused the API key: %s": "%s a refusé la clé d'API : %s",
   "%s: no credit left: %s": "%s : plus de crédit : %s",
   "%s does not know the model %s: %s": "%s ne connaît pas le modèle %s : %s",
-  "%s: rate limit reached, try again later: %s": "%s : limite de requêtes atteinte, réessayez plus tard : %s"
+  "%s: rate limit reached, try again later: %s": "%s : limite de requêtes atteinte, réessayez plus tard : %s",
+  "no action card here": "pas de carte d'action ici"
 }

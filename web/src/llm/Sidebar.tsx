@@ -69,6 +69,9 @@ export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
         <Show when={runStates()[c.id]} fallback={<Show when={nested}>{<span class={`ai-agent-dot ${c.status ?? ''}`} title={t(agentLabels[c.status ?? ''] ?? '')} />}</Show>}>
           {(st) => <span class={`ai-run-dot ${st()}`} title={t(runLabels[st()])} data-testid="ai-run-dot" />}
         </Show>
+        <Show when={c.mode === 'orchestrator'}>
+          <Icon name="locate" size={12} class="ai-side-mode" />
+        </Show>
         <span class="ellipsis">{c.title || t('Untitled')}</span>
       </button>
       <button class="ai-chat-act" title={t('Rename')} onClick={() => rename(c)}>

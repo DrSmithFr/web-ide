@@ -22,6 +22,15 @@ exports.start = async (opts = {}) => {
   const browser = await chromium.launch({ executablePath: chrome(), headless: true, args: opts.args ?? [] })
   // English interface unless E2E_LOCALE says otherwise (the browser follows the system language).
   const ctx = await browser.newContext({ viewport: opts.viewport ?? { width: 1440, height: 900 }, isMobile: !!opts.mobile, hasTouch: !!opts.mobile, permissions: opts.permissions ?? [], locale: opts.locale ?? process.env.E2E_LOCALE ?? 'en-US' })
+  // The suites written for the Build mode start new conversations in it (the default of the
+  // page is the Orchestrator).
+  if (!opts.orchestrator)
+    await ctx.addInitScript(() => {
+      try {
+        const p = JSON.parse(localStorage.getItem('webide.llm.prefs') || '{}')
+        if (!('defaultMode' in p)) localStorage.setItem('webide.llm.prefs', JSON.stringify({ ...p, defaultMode: 'build' }))
+      } catch {}
+    })
   const page = await ctx.newPage()
   const errors = []
   page.on('console', (m) => m.type() === 'error' && errors.push('console: ' + m.text()))

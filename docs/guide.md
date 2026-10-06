@@ -87,11 +87,13 @@ Each project has a kanban. A ticket goes through four stages, each one with its 
 
 You decide every move between stages; the model works inside one.
 
+A new conversation starts in **Orchestrator** mode, your start page: ask it *what do we work on today?* (the tickets that can start, in order, with a button to start the first), *what did we do yesterday?* (the tickets that moved), or tell it *I have an idea…* (it opens a Briefing conversation with your idea). It changes no file and starts nothing by itself: you click its buttons. The default mode is set in the settings (*Prompt and instructions*).
+
 ### 1. Briefing: from an idea to a ticket
 
 ![Briefing: the model asks questions, then writes the ticket](images/briefing.gif)
 
-Open the assistant and switch it to **Briefing** mode (Shift+Tab cycles through Build, Plan and Briefing). Describe the need in a few words. In this mode the model changes nothing: it reads the code to understand the context, then asks its questions, one at a time, with suggested answers:
+Open the assistant and switch it to **Briefing** mode (Shift+Tab cycles through Orchestrator, Build, Plan and Briefing). Describe the need in a few words. In this mode the model changes nothing: it reads the code to understand the context, then asks its questions, one at a time, with suggested answers:
 
 ![A question of the model, with suggested answers](images/briefing.png)
 

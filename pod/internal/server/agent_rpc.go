@@ -403,6 +403,37 @@ func (s *Server) registerAgent() {
 			return a.Index, nil
 		})
 	}))
+	// agent.card: the result of an action card the user clicked (it stays disabled).
+	s.handle("agent.card", withChat(func(ctx context.Context, c *Client, cc chatCtx, p json.RawMessage) (any, error) {
+		a, err := bind[struct {
+			ID     string `json:"id"`
+			Index  int    `json:"index"`
+			State  string `json:"state"`
+			Result string `json:"result"`
+		}](p)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.change(cc, a.ID, func(chat *agent.Chat, _ *agentRun) (int, error) {
+			if a.Index < 0 || a.Index >= len(chat.Messages) || chat.Messages[a.Index].Card == nil {
+				return -1, i18n.New("no action card here")
+			}
+			card := chat.Messages[a.Index].Card
+			card.State, card.Result = a.State, a.Result
+			return a.Index, nil
+		})
+	}))
+	// agent.draft: the first message prepared for the user was put in the message box.
+	s.handle("agent.draft", withChat(func(ctx context.Context, c *Client, cc chatCtx, p json.RawMessage) (any, error) {
+		a, err := bind[idArg](p)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.change(cc, a.ID, func(chat *agent.Chat, _ *agentRun) (int, error) {
+			chat.Draft = ""
+			return -1, nil
+		})
+	}))
 	// agent.approve: the answer of the user to a file change or a command.
 	s.handle("agent.approve", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 		a, err := bind[struct {

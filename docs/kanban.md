@@ -59,9 +59,19 @@ A feedback leaves the ticket in *To test*. Closing or abandoning removes the wor
 
 The system prompt receives the ticket as it is now and the instructions of the role.
 
+## Steering the day: the Orchestrator mode
+
+A new conversation starts in Orchestrator mode (setting *Mode of a new conversation*). It reads the project and the kanban and changes nothing:
+- `kanban_next`: the tickets that can start now, in order (the next step of a lineage in progress, then priority, smaller size, age; blocked tickets listed apart with what they wait for), then those waiting for the user (to test, open feedback);
+- `kanban_history { from, to }`: the tickets whose history has events in a period (yesterday 00:00 to now by default, local time of the pod), closed ones first, with their moves;
+- `list_conversations`: the conversations of the project (mode, linked ticket, state, sub-agents);
+- `action_card { kind, ticket | chat, label, reason }`: a button in the thread, run only on the user's click: *start_dev* (as *Start development*, refused with the blockers of a blocked ticket), *generate_plan*, *open_ticket*, *open_conversation*; the card then shows what happened and stays disabled;
+- `open_conversation { chat | mode, title, ticket, message, send }`: opens an existing conversation, or creates one (Briefing or Plan, maybe linked to a ticket; Build without ticket) whose first message is sent at once or left in the message box; the windows showing the orchestrator conversation switch to it, and its thread keeps a link back.
+Its sub-agents may start sub-agents of their own (depth 2); a child of the Orchestrator works in Plan mode unless told otherwise.
+
 ## From an idea to tickets: the Briefing mode
 
-The assistant has three modes (Shift+Tab cycles through them): Build, Plan and Briefing. In Briefing mode the model changes nothing: its prompt (editable, `briefing-prompt.md` / `.ide/briefing-prompt.md`) makes it question the user in rounds of `ask_user` until the need is clear, then write it as one or several tickets with `kanban_create` when the user agrees. The first ticket created links the conversation to it (role `briefing`), so `kanban_update` and `kanban_add_note` refine it; the other tickets created list the conversation too. A ticket may have several briefing conversations.
+The assistant has four modes (Shift+Tab cycles through them): Orchestrator (the default of a new conversation, see below), Build, Plan and Briefing. In Briefing mode the model changes nothing: its prompt (editable, `briefing-prompt.md` / `.ide/briefing-prompt.md`) makes it question the user in rounds of `ask_user` until the need is clear, then write it as one or several tickets with `kanban_create` when the user agrees. The first ticket created links the conversation to it (role `briefing`), so `kanban_update` and `kanban_add_note` refine it; the other tickets created list the conversation too. A ticket may have several briefing conversations.
 
 The usual path: a briefing makes the tickets, *Generate the plan* writes the plan of each one, then development sessions build them.
 

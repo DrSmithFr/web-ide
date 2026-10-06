@@ -141,15 +141,22 @@ func (s *Server) spawnAgent(r *agentRun, a toolArgs) (toolResult, error) {
 		return toolResult{}, failf("title and task are required")
 	}
 	r.mu.Lock()
-	if r.chat.Parent != "" {
+	if !agent.CanSpawn(r.chat) {
 		r.mu.Unlock()
-		return toolResult{}, failf("a sub-agent cannot start sub-agents")
+		return toolResult{}, failf("a sub-agent at this depth cannot start sub-agents: do the task yourself, or ask your parent")
 	}
 	children := append([]string(nil), r.chat.Children...)
 	parent := r.chat
+	depth, orchestrated := 1, parent.Mode == agent.Orchestrator
+	if parent.Agent != nil {
+		depth, orchestrated = parent.Agent.Depth+1, parent.Agent.Orchestrated
+	}
 	mode := a.str("mode")
 	if mode != agent.Build && mode != agent.Plan && mode != agent.Briefing {
 		mode = parent.Mode
+	}
+	if mode == agent.Orchestrator {
+		mode = agent.Plan // a child explores; it does not steer
 	}
 	server, model := target(parent)
 	var opts *agent.Options
@@ -176,7 +183,7 @@ func (s *Server) spawnAgent(r *agentRun, a toolArgs) (toolResult, error) {
 	}
 	files := agent.ArgStrings(a["files"])
 	c := &agent.Chat{ID: newID(), Title: title, Server: server, Model: model, Mode: mode, Options: opts, Ticket: ticket, Parent: r.id,
-		Agent: &agent.SubAgent{Task: task, Files: files, Status: agent.AgentRunning, Depth: 1}}
+		Agent: &agent.SubAgent{Task: task, Files: files, Status: agent.AgentRunning, Depth: depth, Orchestrated: orchestrated}}
 	c.Messages = []*agent.Message{{Role: "user", Kind: "agent_task", Content: agent.String(agent.TaskText(task, files))}}
 	r.mu.Lock()
 	r.chat.Children = append(r.chat.Children, c.ID)

@@ -37,6 +37,20 @@ type Chat struct {
 	Parent   string    `json:"parent,omitempty"`
 	Agent    *SubAgent `json:"agent,omitempty"`
 	Children []string  `json:"children,omitempty"`
+	// Draft: a first message prepared for the user (open_conversation), put in the message
+	// box of the window that opens the conversation.
+	Draft string `json:"draft,omitempty"`
+}
+
+// ActionCard is an action the page runs when the user clicks it; State and Result once done.
+type ActionCard struct {
+	Kind   string `json:"kind"`
+	Ticket int64  `json:"ticket,omitempty"`
+	Chat   string `json:"chat,omitempty"`
+	Label  string `json:"label"`
+	Reason string `json:"reason,omitempty"`
+	State  string `json:"state,omitempty"` // done | failed
+	Result string `json:"result,omitempty"`
 }
 
 // Running is set while the agent runs, with the stream of the completion awaited.
@@ -121,6 +135,10 @@ type Message struct {
 	Wait  string      `json:"wait,omitempty"`
 	// Child: the sub-agent a tool call of the parent started or addressed.
 	Child string `json:"child,omitempty"`
+	// Card: an action offered by action_card (Orchestrator); Opened: the conversation
+	// open_conversation moved the user into.
+	Card   *ActionCard `json:"card,omitempty"`
+	Opened string      `json:"opened,omitempty"`
 	// Preview offered by share_preview (tool message): the card starts it on a click.
 	Preview *Preview `json:"preview,omitempty"`
 }

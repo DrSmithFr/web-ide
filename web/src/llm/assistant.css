@@ -430,6 +430,10 @@
 .ai-page-card { display: flex; align-items: center; gap: 8px; margin: 2px 0 4px 22px; }
 .ai-page-card img { height: 40px; width: auto; border: 1px solid var(--line); border-radius: 4px; background: #fff; }
 .ai-capture { display: flex; align-items: center; gap: 8px; margin: 4px 0 4px 22px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line)); border-radius: 10px; background: var(--bg-2); flex-wrap: wrap; }
+.ai-action { display: flex; align-items: center; gap: 10px; margin: 4px 0 4px 22px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line)); border-radius: 10px; background: var(--bg-2); }
+.ai-action.used { border-color: var(--line); }
+.ai-mode.orchestrator { color: var(--info); border-color: color-mix(in srgb, var(--info) 55%, var(--line)); background: color-mix(in srgb, var(--info) 12%, transparent); }
+.ai-composer.orchestrator { border-color: color-mix(in srgb, var(--info) 45%, var(--line)); }
 .ai-child { display: grid; gap: 4px; margin: 4px 0 4px 22px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-2); }
 .ai-model-conf { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .ai-model-conf input[name=modelId] { flex: 1 1 160px; min-width: 0; }

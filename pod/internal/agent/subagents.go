@@ -29,6 +29,15 @@ const (
 	AgentError         = "error"
 )
 
+// CanSpawn tells whether a conversation may start sub-agents: any top conversation, and a
+// child under an Orchestrator above the last level.
+func CanSpawn(c *Chat) bool {
+	if c.Parent == "" {
+		return true
+	}
+	return c.Agent != nil && c.Agent.Orchestrated && c.Agent.Depth < MaxOrchestratedDepth
+}
+
 // AgentEnded tells whether a child has finished (it no longer runs nor waits).
 func AgentEnded(status string) bool {
 	return status == AgentDone || status == AgentBlocked || status == AgentStopped || status == AgentError
@@ -47,6 +56,9 @@ type SubAgent struct {
 	Report   string     `json:"report,omitempty"`
 	Changed  []string   `json:"changed,omitempty"` // files changed, from the report
 	Error    string     `json:"error,omitempty"`
+	// Orchestrated: the root of its tree is an Orchestrator conversation (children allowed
+	// down to MaxOrchestratedDepth).
+	Orchestrated bool `json:"orchestrated,omitempty"`
 	// Tokens read and written, and cost (when the provider tells it), over all its requests.
 	Tokens int     `json:"tokens,omitempty"`
 	Cost   float64 `json:"cost,omitempty"`
@@ -121,7 +133,7 @@ func agentDefs() (parent, child []Def) {
 				"title": str("Short title of the task, e.g. \"Find the login code\""),
 				"task":  str("The task, complete and precise: the child does not see this conversation"),
 				"files": strList("Files the child should read first (paths relative to the root)"),
-				"mode":  enum("Mode of the child (default: yours); build changes files, plan only reads", Build, Plan, Briefing),
+				"mode":  enum("Mode of the child (default: yours, plan for an Orchestrator); build changes files, plan only reads", Build, Plan, Briefing),
 				"server": str("Server of the child, among the servers for sub-agents listed in your instructions (default: the default one, else yours)"),
 				"model":  str("Model of the child on that server (required with server, unless it is the default server)"),
 			}, "title", "task"),

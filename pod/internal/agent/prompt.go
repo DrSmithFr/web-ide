@@ -10,9 +10,9 @@ import (
 )
 
 // DefaultTemplates are the templates of the modes when the user wrote none.
-var DefaultTemplates = map[string]string{Build: defaultTemplate, Plan: defaultPlanTemplate, Briefing: defaultBriefingTemplate}
+var DefaultTemplates = map[string]string{Build: defaultTemplate, Plan: defaultPlanTemplate, Briefing: defaultBriefingTemplate, Orchestrator: defaultOrchestratorTemplate}
 
-var toolsTexts = map[string]string{Build: toolsText, Plan: planToolsText, Briefing: briefingToolsText}
+var toolsTexts = map[string]string{Build: toolsText, Plan: planToolsText, Briefing: briefingToolsText, Orchestrator: orchestratorToolsText}
 
 // Template returns the template of a mode: the one of the project, else the global one,
 // else the default.
