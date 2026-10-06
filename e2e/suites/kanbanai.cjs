@@ -32,7 +32,7 @@ const fake = http.createServer(async (req, res) => {
       return (
         sse(res, {
           tool_calls: calls([
-            ['s1', 'kanban_set_plan', { plan: '## Approach\n1. Add the route\n2. Test', goals: [{ title: 'The route answers', description: 'curl /export gives 200' }, 'The tests pass'] }],
+            ['s1', 'kanban_set_plan', { plan: '## Approach\n1. Add the route\n2. Test', goals: [{ title: 'The route answers', description: 'curl /export gives 200' }, 'The tests pass'], size: 'l' }],
           ]),
         }),
         end(res, 'tool_calls')
@@ -183,6 +183,7 @@ run(async ({ page }) => {
     const before = requests.length
     await page.click('[data-testid=ticket-plan-generate]')
     await page.waitForSelector('[data-testid=ticket-status]:has-text("To do")', { timeout: 15000 })
+    assert((await page.$eval('[data-testid=ticket-size]', (e) => e.value)) === 'l', 'the plan of the model sets the size of the ticket')
     const rp = requests[before]
     const sys = rp.messages[0].content
     assert(sys.includes('Ticket linked to this conversation') && sys.includes('implementation plan') && sys.includes('# Ticket #1 · Export JSON'), 'prompt of the Plan role with the ticket')

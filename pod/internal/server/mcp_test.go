@@ -110,10 +110,13 @@ func TestMCPKanban(t *testing.T) {
 	if text, failed := m.tool("kanban_move", map[string]any{"cwd": cwd, "id": 1, "status": "review", "test_summary": "t"}); !failed || !strings.Contains(text, "cannot move") {
 		t.Fatalf("move from New: %s", text)
 	}
-	m.ok("kanban_set_plan", map[string]any{"cwd": cwd, "id": 1, "plan": "# Plan", "goals": []any{map[string]any{"title": "exported"}}})
+	if text, failed := m.tool("kanban_set_plan", map[string]any{"cwd": cwd, "id": 1, "plan": "# Plan", "goals": []any{"g"}}); !failed || !strings.Contains(text, "size is required") {
+		t.Fatalf("plan without a size: %s", text)
+	}
+	m.ok("kanban_set_plan", map[string]any{"cwd": cwd, "id": 1, "plan": "# Plan", "goals": []any{map[string]any{"title": "exported"}}, "size": "m"})
 	m.ok("kanban_add_note", map[string]any{"cwd": cwd, "id": 1, "text": "comma separator"})
 	md := m.ok("kanban_get", map[string]any{"cwd": cwd, "id": 1})
-	if !strings.Contains(md, "Status: To do") || !strings.Contains(md, "(Claude, ") || !strings.Contains(md, "- [ ] (id 1) exported") {
+	if !strings.Contains(md, "Status: To do · priority: Normal · size: M") || !strings.Contains(md, "(Claude, ") || !strings.Contains(md, "- [ ] (id 1) exported") {
 		t.Fatalf("get: %s", md)
 	}
 	tk := a.call("kanban.get", map[string]any{"id": 1})["result"].(map[string]any)
@@ -142,8 +145,8 @@ func TestMCPKanban(t *testing.T) {
 	// Lineage: a child waits for the step of its parent, then works in its worktree, where
 	// it becomes the default ticket.
 	text = m.ok("kanban_create", map[string]any{"cwd": cwd, "title": "Export step 2", "parent": 1})
-	m.ok("kanban_set_plan", map[string]any{"cwd": cwd, "id": 2, "plan": "p", "goals": []any{"g"}})
-	if text := m.ok("kanban_list", map[string]any{"cwd": cwd}); !strings.Contains(text, "#2 [To do] (Normal) Export step 2 · goals 0/1 · child of #1 · blocked by #1 (previous step not validated)") {
+	m.ok("kanban_set_plan", map[string]any{"cwd": cwd, "id": 2, "plan": "p", "goals": []any{"g"}, "size": "s"})
+	if text := m.ok("kanban_list", map[string]any{"cwd": cwd}); !strings.Contains(text, "#2 [To do] (Normal) Export step 2 · size S · goals 0/1 · child of #1 · blocked by #1 (previous step not validated)") {
 		t.Fatalf("list with a lineage: %s", text)
 	}
 	if text, failed := m.tool("kanban_start", map[string]any{"cwd": cwd, "id": 2}); !failed || !strings.Contains(text, "#1 (previous step not validated)") || !strings.Contains(text, "Only the user") {

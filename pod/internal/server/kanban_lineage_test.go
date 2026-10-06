@@ -48,7 +48,9 @@ func TestKanbanLineage(t *testing.T) {
 		code, _ := e["code"].(string)
 		return code, e["message"].(string)
 	}
-	get := func(n int) map[string]any { return a.call("kanban.get", map[string]any{"id": n})["result"].(map[string]any) }
+	get := func(n int) map[string]any {
+		return a.call("kanban.get", map[string]any{"id": n})["result"].(map[string]any)
+	}
 	blockers := func(n int) string {
 		var out []string
 		list, _ := get(n)["blockers"].([]any)

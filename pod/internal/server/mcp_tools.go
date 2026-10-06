@@ -50,6 +50,7 @@ var ticketID = map[string]any{"type": "integer", "description": "Ticket number (
 
 var (
 	parentProp    = map[string]any{"type": "integer", "description": "Parent ticket: this one becomes the next step of its lineage, developed in the parent's worktree after it (0 takes it out). Only before its development starts"}
+	sizeProp      = enum("Estimated effort of the whole ticket: s (a few files, an hour of agent work), m, l, xl (many files across the pod and the page, several days)", kanban.Sizes...)
 	dependsOnProp = map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "Tickets of other lineages this one waits for: it starts once they are merged or done (replaces the list)"}
 )
 
@@ -187,6 +188,9 @@ var mcpTools = []mcpTool{
 				}
 				n++
 				fmt.Fprintf(&b, "#%d [%s] (%s) %s", t.ID, kanban.StatusNames[t.Status], kanban.PriorityNames[t.Priority], t.Title)
+				if t.Size != "" {
+					fmt.Fprintf(&b, " · size %s", kanban.SizeNames[t.Size])
+				}
 				if t.Goals > 0 {
 					fmt.Fprintf(&b, " · goals %d/%d", t.GoalsDone, t.Goals)
 				}
@@ -296,6 +300,7 @@ var mcpTools = []mcpTool{
 			"test_summary": str("How to test the ticket (Markdown): steps, commands, expected results"),
 			"add_files":    strList("Files to link"),
 			"remove_files": strList("Files to unlink"),
+			"size":         sizeProp,
 			"parent":       parentProp,
 			"depends_on":   dependsOnProp,
 		},
@@ -306,11 +311,12 @@ var mcpTools = []mcpTool{
 			RemoveFiles                  []string `json:"remove_files"`
 			Parent                       *int64
 			DependsOn                    *[]int64 `json:"depends_on"`
+			Size                         string
 		}) (string, error) {
 			if err := tooLong(a.Description, kanban.MaxDescription, descriptionAdvice); err != nil {
 				return "", err
 			}
-			p := kanban.Patch{Title: nonEmpty(a.Title), Description: nonEmpty(a.Description), Priority: nonEmpty(a.Priority), TestSummary: nonEmpty(a.TestSummary), AddFiles: a.AddFiles, RemoveFiles: a.RemoveFiles, Parent: a.Parent, DependsOn: a.DependsOn}
+			p := kanban.Patch{Title: nonEmpty(a.Title), Description: nonEmpty(a.Description), Priority: nonEmpty(a.Priority), TestSummary: nonEmpty(a.TestSummary), AddFiles: a.AddFiles, RemoveFiles: a.RemoveFiles, Parent: a.Parent, DependsOn: a.DependsOn, Size: nonEmpty(a.Size)}
 			if err := s.Kanban.Update(sc.loc, id, p, kanban.ByClaude); err != nil {
 				return "", err
 			}
@@ -345,14 +351,22 @@ var mcpTools = []mcpTool{
 					"title": str("Short title, one sentence"), "description": str("How to check it (optional, a few lines)"),
 				}},
 			},
+			"size": sizeProp,
 		},
-		required: []string{"plan", "goals"},
+		required: []string{"plan", "goals", "size"},
 		run: ticketTool(func(ctx context.Context, s *Server, sc mcpScope, id int64, a struct {
 			Plan  string
 			Goals []kanban.GoalInput
+			Size  string
 		}) (string, error) {
 			if strings.TrimSpace(a.Plan) == "" {
 				return "", fmt.Errorf("empty plan")
+			}
+			if a.Size == "" {
+				return "", fmt.Errorf("size is required: s, m, l or xl")
+			}
+			if err := s.Kanban.Update(sc.loc, id, kanban.Patch{Size: &a.Size}, kanban.ByClaude); err != nil {
+				return "", err
 			}
 			if err := s.Kanban.SetPlan(sc.loc, id, a.Plan, a.Goals, kanban.ByClaude); err != nil {
 				return "", err

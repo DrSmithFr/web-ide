@@ -6,7 +6,7 @@ import { request } from '../pod/rpc'
 import { t, tn } from '../i18n'
 import {
   addNote, createTicket, feedbackNames, feedbackOp, getTicket, goalOp, linkChat, linkCommit, moveTicket, priorityNames, refreshBoard, roleNames, setPlan, statusLabels, statusNames, updateTicket,
-  blockersText, board, MAX_DESCRIPTION, MAX_NOTE, type GoalInput, type Priority, type Status, type Ticket,
+  blockersText, board, sizeNames, MAX_DESCRIPTION, MAX_NOTE, type GoalInput, type Priority, type Size, type Status, type Ticket,
 } from '../kanban/state'
 import { chat, setChat, type Mode } from './state'
 import type { ToolResult } from './tools'
@@ -54,6 +54,11 @@ const lineageProps = {
   },
   depends_on: { type: 'array', items: { type: 'integer' }, description: 'Tickets of other lineages this one waits for: it starts once they are merged or done (replaces the list)' },
 }
+const sizeProp = {
+  type: 'string',
+  enum: Object.keys(sizeNames),
+  description: 'Estimated effort of the whole ticket: s (a few files, an hour of agent work), m, l, xl (many files across the pod and the page, several days)',
+}
 const linkPatch = (a: Record<string, any>) => ({
   parent: a.parent === undefined || a.parent === null ? undefined : Number(a.parent),
   dependsOn: Array.isArray(a.depends_on) ? a.depends_on.map(Number) : undefined,
@@ -91,6 +96,7 @@ export const kanbanWriteDefs = [
       test_summary: str('How to test the ticket (Markdown): steps, commands, expected results'),
       add_files: strList('Files to link'),
       remove_files: strList('Files to unlink'),
+      size: sizeProp,
       ...lineageProps,
     },
   ),
@@ -110,8 +116,9 @@ export const kanbanWriteDefs = [
         description: 'Goals, each one verifiable',
         items: { type: 'object', properties: { title: str('Short title, one sentence'), description: str('How to check it (optional, a few lines)') }, required: ['title'] },
       },
+      size: sizeProp,
     },
-    ['plan', 'goals'],
+    ['plan', 'goals', 'size'],
   ),
   fn(
     'kanban_goal',
@@ -165,7 +172,7 @@ const isoDate = (ms: number) => new Date(ms).toISOString().slice(0, 16).replace(
 /** A ticket as the model reads it. */
 export function ticketMarkdown(tk: Ticket): string {
   const out: string[] = [`# Ticket #${tk.id} · ${tk.title}`]
-  out.push(`Status: ${statusNames[tk.status]} · priority: ${priorityNames[tk.priority]}${tk.branch ? ` · branch: ${tk.branch}` : ''}${tk.base ? ` · base: ${tk.base}` : ''}`)
+  out.push(`Status: ${statusNames[tk.status]} · priority: ${priorityNames[tk.priority]}${tk.size ? ` · size: ${sizeNames[tk.size]}` : ''}${tk.branch ? ` · branch: ${tk.branch}` : ''}${tk.base ? ` · base: ${tk.base}` : ''}`)
   const lineage = lineageLines(tk)
   if (lineage.length) out.push(`\n## Lineage\n${lineage.join('\n')}`)
   out.push(`\n## Description\n${tk.description.trim() || '(empty)'}`)
@@ -208,7 +215,7 @@ export async function runKanbanTool(name: string, a: Record<string, any>, ticket
       if (!list.length) return ok('No ticket.', tn(0, '{n} ticket', '{n} tickets'))
       const lines = list.map(
         (tk) =>
-          `#${tk.id} [${statusNames[tk.status]}] (${priorityNames[tk.priority]}) ${tk.title}${tk.goals ? ` · goals ${tk.goalsDone}/${tk.goals}` : ''}${tk.feedbackOpen ? ` · open feedback ${tk.feedbackOpen}` : ''}${tk.parent ? ` · child of #${tk.parent}` : ''}${tk.blockers?.length ? ` · blocked by ${blockersText(tk.blockers)}` : ''}`,
+          `#${tk.id} [${statusNames[tk.status]}] (${priorityNames[tk.priority]}) ${tk.title}${tk.size ? ` · size ${sizeNames[tk.size]}` : ''}${tk.goals ? ` · goals ${tk.goalsDone}/${tk.goals}` : ''}${tk.feedbackOpen ? ` · open feedback ${tk.feedbackOpen}` : ''}${tk.parent ? ` · child of #${tk.parent}` : ''}${tk.blockers?.length ? ` · blocked by ${blockersText(tk.blockers)}` : ''}`,
       )
       return ok(lines.join('\n'), tn(list.length, '{n} ticket', '{n} tickets'))
     }
@@ -251,6 +258,7 @@ export async function runKanbanTool(name: string, a: Record<string, any>, ticket
           testSummary: a.test_summary,
           addFiles: Array.isArray(a.add_files) ? a.add_files.map(String) : undefined,
           removeFiles: Array.isArray(a.remove_files) ? a.remove_files.map(String) : undefined,
+          size: a.size ? (String(a.size) as Size) : undefined,
           ...linkPatch(a),
         },
         'model',
@@ -274,7 +282,8 @@ export async function runKanbanTool(name: string, a: Record<string, any>, ticket
         .map((g: any) => (typeof g === 'string' ? { title: g } : { title: String(g?.title ?? ''), description: g?.description ? String(g.description) : '' }))
         .filter((g: GoalInput) => g.title.trim())
       if (!String(a.plan ?? '').trim()) throw new Error('empty plan')
-      const tk = await setPlan(ticket, String(a.plan), goals, 'model')
+      if (!(String(a.size) in sizeNames)) throw new Error('size is required: s, m, l or xl')
+      const tk = await setPlan(ticket, String(a.plan), goals, 'model', String(a.size) as Size)
       const moved = tk.status === 'todo' ? ' The ticket is now "To do".' : ''
       return ok(`Plan saved with ${goals.length} goal(s):${moved}\n${tk.goalList.map((g) => `- (id ${g.id}) ${g.text}`).join('\n')}`, tn(goals.length, 'plan · {n} goal', 'plan · {n} goals'))
     }

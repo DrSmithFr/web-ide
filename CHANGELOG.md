@@ -12,6 +12,7 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 - `publicUrl` (config, `-public-url`): the address of the IDE in the links given to Claude Code (a Tailscale name…); `/project/<id>?ticket=<n>` opens a ticket.
 - File links (`/open?path=…&line=…`): a click on a file mentioned by Claude Code opens it in the IDE.
 - Lineages of tickets: the steps of a ticket are developed one after the other in its worktree and on its branch, each one once the previous one is validated, and the ticket is merged once they are finished; a ticket may wait for tickets of other lineages (merged or done). Blocked starts are refused to the models and can be forced by the user; badges on the cards, a *Lineage* section in the ticket, `parent` and `depends_on` in the kanban tools.
+- Roadmap view of the kanban: a row per lineage, blocks as wide as the estimated size of their ticket (S, M, L, XL, written with the plan), what can start, what is blocked, and the dependencies between lineages at a glance.
 
 ## [1.0.0] - 2026-10-05
 

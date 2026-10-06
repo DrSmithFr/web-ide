@@ -30,8 +30,10 @@ const (
 )
 
 var (
-	Statuses      = []string{New, Todo, InProgress, Review, Done, Abandoned}
-	Priorities    = []string{"low", "normal", "high", "critical"}
+	Statuses   = []string{New, Todo, InProgress, Review, Done, Abandoned}
+	Priorities = []string{"low", "normal", "high", "critical"}
+	// Sizes: the estimated effort of a whole ticket, written with its plan.
+	Sizes         = []string{"s", "m", "l", "xl"}
 	ChatRoles     = []string{"briefing", "plan", "dev", "correction", "resolve"}
 	FeedbackKinds = []string{"info", "bug", "feature"}
 )
@@ -220,6 +222,8 @@ CREATE TABLE deps (
   dep_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
   PRIMARY KEY (ticket_id, dep_id)
 );`,
+	// 4: estimated size of a ticket (S, M, L, XL).
+	`ALTER TABLE tickets ADD COLUMN size TEXT NOT NULL DEFAULT '';`,
 }
 
 func migrate(db *sql.DB) error {

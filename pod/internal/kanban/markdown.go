@@ -24,6 +24,9 @@ func Markdown(t *Ticket) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Ticket #%d · %s\n", t.ID, t.Title)
 	fmt.Fprintf(&b, "Status: %s · priority: %s", StatusNames[t.Status], PriorityNames[t.Priority])
+	if t.Size != "" {
+		fmt.Fprintf(&b, " · size: %s", SizeNames[t.Size])
+	}
 	if t.Branch != "" {
 		fmt.Fprintf(&b, " · branch: %s", t.Branch)
 	}

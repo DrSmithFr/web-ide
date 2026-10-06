@@ -92,6 +92,8 @@ type Summary struct {
 	Closed       int64 `json:"closed,omitempty"`
 	// Lineage: the parent (0: none), the place among its children, and for a parent its
 	// own step validated (its children may start).
+	// Size: estimated effort, s | m | l | xl ("" when not estimated yet).
+	Size      string  `json:"size,omitempty"`
 	Parent    int64   `json:"parent,omitempty"`
 	Pos       int     `json:"pos,omitempty"`
 	StepDone  bool    `json:"stepDone,omitempty"`
@@ -129,12 +131,12 @@ const summaryCols = `t.id, t.title, t.priority, t.status, t.branch, t.worktree, 
   (SELECT COUNT(*) FROM goals g WHERE g.ticket_id = t.id),
   (SELECT COUNT(*) FROM chats c WHERE c.ticket_id = t.id),
   (SELECT COUNT(*) FROM feedback f WHERE f.ticket_id = t.id AND f.done = 0),
-  t.parent_id, t.pos, t.step_done`
+  t.parent_id, t.pos, t.step_done, t.size`
 
 func scanSummary(row interface{ Scan(...any) error }, s *Summary) error {
 	s.DependsOn = []int64{}
 	return row.Scan(&s.ID, &s.Title, &s.Priority, &s.Status, &s.Branch, &s.Worktree, &s.Created, &s.Updated, &s.Closed, &s.GoalsDone, &s.Goals, &s.Chats, &s.FeedbackOpen,
-		&s.Parent, &s.Pos, &s.StepDone)
+		&s.Parent, &s.Pos, &s.StepDone, &s.Size)
 }
 
 // summaries reads tickets with their dependencies (where: an SQL condition on t).
@@ -200,7 +202,7 @@ func get(db *sql.DB, id int64) (*Ticket, error) {
 	var snap string
 	row := db.QueryRow(`SELECT `+summaryCols+`, t.description, t.plan, t.test_summary, t.pr, t.base, t.setup, t.setup_log, t.snapshot FROM tickets t WHERE t.id = ?`, id)
 	err := row.Scan(&t.ID, &t.Title, &t.Priority, &t.Status, &t.Branch, &t.Worktree, &t.Created, &t.Updated, &t.Closed, &t.GoalsDone, &t.Goals, &t.Chats, &t.FeedbackOpen,
-		&t.Parent, &t.Pos, &t.StepDone,
+		&t.Parent, &t.Pos, &t.StepDone, &t.Size,
 		&t.Description, &t.Plan, &t.TestSummary, &t.PR, &t.Base, &t.Setup, &t.SetupLog, &snap)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -301,6 +303,7 @@ func get(db *sql.DB, id int64) (*Ticket, error) {
 type Patch struct {
 	Title       *string   `json:"title"`
 	Priority    *string   `json:"priority"`
+	Size        *string   `json:"size"`
 	Description *string   `json:"description"`
 	Plan        *string   `json:"plan"`
 	TestSummary *string   `json:"testSummary"`
@@ -324,6 +327,9 @@ func (p *Patch) validate() error {
 	}
 	if p.Priority != nil && !contains(Priorities, *p.Priority) {
 		return i18n.Errorf("unknown priority: %s (%s)", *p.Priority, strings.Join(Priorities, ", "))
+	}
+	if p.Size != nil && *p.Size != "" && !contains(Sizes, *p.Size) {
+		return i18n.Errorf("unknown size: %s (%s)", *p.Size, strings.Join(Sizes, ", "))
 	}
 	return nil
 }
@@ -457,11 +463,32 @@ func (m *Manager) Update(loc Location, id int64, p Patch, by string) error {
 		if err := setLinks(tx, id, p, by, now); err != nil {
 			return err
 		}
+		if err := setSize(tx, id, p.Size, by, now); err != nil {
+			return err
+		}
 		if p.Plan != nil {
 			return planned(tx, id, *p.Plan, by, now)
 		}
 		return nil
 	})
+}
+
+// SizeNames are the names of the sizes, as shown and read by the models.
+var SizeNames = map[string]string{"s": "S", "m": "M", "l": "L", "xl": "XL"}
+
+// setSize changes the estimated size of a ticket, with a line in its history.
+func setSize(tx *sql.Tx, id int64, size *string, by string, now int64) error {
+	if size == nil {
+		return nil
+	}
+	var cur string
+	if err := tx.QueryRow(`SELECT size FROM tickets WHERE id = ?`, id).Scan(&cur); err != nil || cur == *size {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE tickets SET size = ? WHERE id = ?`, *size, id); err != nil {
+		return err
+	}
+	return event(tx, id, by, "Size: {size}", Params{"size": SizeNames[*size]}, now)
 }
 
 // StatusNames are the English names of the statuses (translated in messages).
