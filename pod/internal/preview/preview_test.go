@@ -118,7 +118,7 @@ func TestPrivatePreviewNeedsTheIDECookie(t *testing.T) {
 		t.Fatalf("without cookie: %d %s", code, body)
 	}
 	code, body := get(t, http.DefaultClient, base+"/", "webide_token="+ideToken+"; theme=dark")
-	if code != 200 || body != fmt.Sprintf("app host=localhost:%d cookie=theme=dark", port) {
+	if code != 200 || body != fmt.Sprintf("app host=localhost:%d cookie=webide_token=%s; theme=dark", port, ideToken) {
 		t.Fatalf("with cookie: %d %s", code, body)
 	}
 	// A second preview takes the next port; the same spec is found again.

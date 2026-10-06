@@ -87,7 +87,7 @@ run(async ({ page, ctx }) => {
     const url = tab.url()
     const shown = await tab.textContent('body')
     assert(url.startsWith('http://127.0.0.1:') && !url.includes(`:${appPort}/`), 'the app opens on the URL of the preview: ' + url)
-    assert(shown.startsWith(`preview app localhost:${appPort} -`), 'the app sees its own host and not the cookie of the IDE: ' + shown)
+    assert(shown.startsWith(`preview app localhost:${appPort} webide_token=`), 'the app sees its own host, and the cookie of the IDE (a Web IDE in development needs it): ' + shown)
     await page.waitForSelector('[data-testid=ai-preview-url]')
     assert((await consoles()) === 1, 'the command runs in a console')
     assert(await page.isVisible('[data-testid=ai-preview-local]'), 'the card says the preview is local without Tailscale')

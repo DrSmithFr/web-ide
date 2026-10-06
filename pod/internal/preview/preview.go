@@ -399,7 +399,8 @@ func appOrigins(port int) []string {
 	return []string{"http://localhost:" + ps, "http://127.0.0.1:" + ps}
 }
 
-// stripCookies keeps the cookies of the IDE and of the preview from the app.
+// stripCookies keeps the cookie of the preview from the app. The cookie of the IDE goes
+// through: the app may be a Web IDE in development, and it runs on the machine of the user.
 func stripCookies(r *http.Request, preview string) {
 	cs := r.Cookies()
 	if len(cs) == 0 {
@@ -407,7 +408,7 @@ func stripCookies(r *http.Request, preview string) {
 	}
 	var kept []string
 	for _, c := range cs {
-		if c.Name != "webide_token" && c.Name != preview {
+		if c.Name != preview {
 			kept = append(kept, c.Name+"="+c.Value)
 		}
 	}
