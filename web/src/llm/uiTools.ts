@@ -125,7 +125,7 @@ async function svgPicture(svg: string): Promise<Picture> {
  * on an image (an SVG of the model, a capture of the screen) or a copy of a page; its
  * description and images.
  */
-export async function drawPage(a: DrawArgs & { number: number; from?: number; svg?: string; src?: string; origin?: string }, picture?: Picture, origin?: string): Promise<UiResult> {
+export async function drawPage(a: DrawArgs & { number: number; clone?: number; svg?: string; src?: string; origin?: string }, picture?: Picture, origin?: string): Promise<UiResult> {
   const title = String(a.title ?? '').trim() || t('Page {n}', { n: a.number })
   if (a.svg) {
     picture = await svgPicture(a.svg)
@@ -138,7 +138,9 @@ export async function drawPage(a: DrawArgs & { number: number; from?: number; sv
   }
   const { doc, outside } = buildPage({ ...a, elements: a.elements ?? [], base: picture ? newDoc(picture) : undefined })
   let description = describe(doc, title, a.number, origin ? `${origin} (${picture!.w}×${picture!.h})` : undefined)
-  if (a.from) description += `\nA copy of page ${a.from}, with your elements on top.`
+  if (a.clone) description += `\nA clone of page ${a.clone}, with your elements on top.`
+  // Said for a blank page too: a model that meant to clone a page sees it did not.
+  else if (!picture) description += '\nA new blank page (not a clone: give clone to draw on a page).'
   if (outside.length) description += `\nWarning: partly outside the frame: ${outside.join(', ')}.`
   const page: ModelPage = { name: title, doc, description, png: await png(doc, MAX_SIDE), thumb: await png(doc, 96) }
   return { ...ok(description, t('Page {n} · {name}', { n: a.number, name: title })), page }

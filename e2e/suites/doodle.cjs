@@ -39,7 +39,7 @@ const fake = http.createServer(async (req, res) => {
       const call = (i, id, name, args) => ({ index: i, id, type: 'function', function: { name, arguments: JSON.stringify({ title: id, ...args }) } })
       sse(res, {
         tool_calls: [
-          call(0, 'b1', 'board_draw_doodle', { from: 1, elements: [{ type: 'ellipse', x: 1, y: 1, w: 2, h: 1, color: 'red' }] }),
+          call(0, 'b1', 'board_draw_doodle', { clone: 1, elements: [{ type: 'ellipse', x: 1, y: 1, w: 2, h: 1, color: 'red' }] }),
           call(1, 'b2', 'board_draw_image', { image: '<svg viewBox="0 0 300 200"><rect x="10" y="10" width="280" height="180" fill="#9cf"/><circle cx="150" cy="100" r="60" fill="#f80"/></svg>' }),
           call(2, 'b3', 'board_draw_image', { image: 'img/logo.png' }),
           call(3, 'b4', 'board_draw_image', { image: 'notes.txt' }),
@@ -78,7 +78,7 @@ const fake = http.createServer(async (req, res) => {
     if (tools === 1) {
       sse(res, {
         tool_calls: [
-          call('d2', { title: 'Login flow, fixed', from: 1, elements: [{ type: 'stroke', points: [[700, 80], [960, 80]], color: 'red' }] }),
+          call('d2', { title: 'Login flow, fixed', clone: 1, elements: [{ type: 'stroke', points: [[700, 80], [960, 80]], color: 'red' }] }),
           { ...call('d3', { title: 'Bad', elements: [{ type: 'arrow', from: [0, 0], to: 'nope' }] }), index: 1 },
         ],
       })
@@ -576,10 +576,11 @@ run(async ({ page }) => {
     await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Drawn.")', { timeout: 20000 })
     const msgs = requests[requests.length - 1].messages
     const d = (id) => text(msgs.find((m) => m.role === 'tool' && m.tool_call_id === id))
+    assert(d('d1').includes('A new blank page (not a clone'), 'a blank page says it is no clone')
     assert(d('d1').includes('Page 1 "Login flow" drawn by you') && d('d1').includes('"header"') && d('d1').includes('Sign in') && d('d1').includes('Happy path'), 'page described to the model: ' + d('d1'))
     const afterD1 = msgs[msgs.findIndex((m) => m.tool_call_id === 'd1') + 1]
     assert(afterD1.role === 'user' && afterD1.content.some((p) => p.type === 'image_url' && p.image_url.url.startsWith('data:image/png')), 'the image of the page follows the tool result')
-    assert(d('d2').includes('Page 2 "Login flow, fixed"') && d('d2').includes('A copy of page 1'), 'copy of page 1: ' + d('d2'))
+    assert(d('d2').includes('Page 2 "Login flow, fixed"') && d('d2').includes('A clone of page 1'), 'copy of page 1: ' + d('d2'))
     assert(d('d3').startsWith('Error:') && d('d3').includes('element 1 (arrow): to "nope" is no element id'), 'invalid arrow refused: ' + d('d3'))
     assert((await page.$$('[data-testid=ai-page-card]')).length === 2, 'a card per page in the thread')
     await page.waitForSelector('.toast:has-text("New page on the board")')
@@ -613,7 +614,7 @@ run(async ({ page }) => {
     await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Backgrounds done.")', { timeout: 20000 })
     const bm = requests[requests.length - 1].messages
     const b = (id) => text(bm.find((m) => m.role === 'tool' && m.tool_call_id === id))
-    assert(b('b1').includes('Page 2 "b1"') && b('b1').includes('Frame 4×3') && b('b1').includes('A copy of page 1'), 'the image sent, annotated on a copy: ' + b('b1'))
+    assert(b('b1').includes('Page 2 "b1"') && b('b1').includes('Frame 4×3') && b('b1').includes('A clone of page 1'), 'the image sent, annotated on a copy: ' + b('b1'))
     assert(b('b2').includes('Page 3 "b2"') && b('b2').includes('background image: an SVG written by you (300×200)'), 'an SVG of the model as a page: ' + b('b2'))
     assert(b('b3').includes('Page 4 "b3"') && b('b3').includes('background image: the image img/logo.png (4×3)'), 'an image of the project as a page: ' + b('b3'))
     assert(b('b4').startsWith('Error:') && b('b4').includes('"notes.txt" is none of them'), 'not an image: ' + b('b4'))

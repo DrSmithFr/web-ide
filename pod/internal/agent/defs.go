@@ -144,11 +144,11 @@ var (
 )
 
 var boardDoodleDef = fn("board_draw_doodle",
-	"Draws a new page on the board shared with the user (next to the conversation): a layout, a flow, a sketch, or annotations on a copy of a page (from: an image, a doodle of the user or one of your pages). Pages never change: to fix one, draw a copy. Returns the description of the page and its image.",
+	"Draws a new page on the board shared with the user (next to the conversation): a layout, a flow, a sketch, or annotations on a clone of a page (clone: the number of an image, a doodle of the user or one of your pages). Pages never change: to fix one, draw on a clone. Returns the description of the page and its image.",
 	obj{
 		"title": str("Short name of the page"),
-		"size":  str(`Frame: "16:9" (1280x720, default), "mobile" (390x844), "square" (800x800), or "WIDTHxHEIGHT" like "1000x600"`),
-		"from":  integer("Number of a page of the board to copy, drawing on top of it (keeps its size)"),
+		"size":  str(`Frame of a blank page: "16:9" (1280x720, default), "mobile" (390x844), "square" (800x800), or "WIDTHxHEIGHT" like "1000x600"`),
+		"clone": integer("Number of a page of the board to clone: the elements are drawn on top of it (it keeps its size). Without clone, the page is blank"),
 		"elements": obj{
 			"type":        "array",
 			"description": fmt.Sprintf("At most %d, in px from the top left corner of the frame. Colors: ink, red, blue, green (marker: yellow, lime, pink, cyan)", MaxPageElements),
@@ -178,7 +178,7 @@ var boardDoodleDef = fn("board_draw_doodle",
 	}, "title", "elements")
 
 var boardImageDef = fn("board_draw_image",
-	"Puts an image on the board as a new page, its size the size of the image: an SVG you write, an image file of the project, or a capture of the screen of the user (they choose it; the turn waits for them). To annotate it, copy that page with board_draw_doodle (from).",
+	"Puts an image on the board as a new page, its size the size of the image: an SVG you write, an image file of the project, or a capture of the screen of the user (they choose it; the turn waits for them). To annotate it, draw on a clone of that page with board_draw_doodle (clone).",
 	obj{
 		"title": str("Short name of the page"),
 		"image": str(`SVG markup ("<svg …>…</svg>", with a viewBox or a width and height; no script nor external reference), the path of an image of the project (png, jpg, webp, gif, svg), or "screen"`),

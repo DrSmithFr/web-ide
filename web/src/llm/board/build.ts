@@ -28,8 +28,8 @@ export interface DrawArgs {
   title: string
   /** "16:9" (default), "mobile", "square" or "WIDTHxHEIGHT". */
   size?: string
-  /** Document of the page copied (the pod sends it with its number). */
-  fromDoc?: DoodleDoc
+  /** Document of the page cloned (the pod sends it with its number). */
+  cloneDoc?: DoodleDoc
   /** A blank page on a background image (its frame). */
   base?: DoodleDoc
   elements: Record<string, any>[]
@@ -44,7 +44,7 @@ export interface Built {
 const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v)
 
 function frameOf(a: DrawArgs): DoodleDoc {
-  if (a.fromDoc) return cloneDoc(a.fromDoc)
+  if (a.cloneDoc) return cloneDoc(a.cloneDoc)
   if (a.base) return a.base
   const size = String(a.size ?? '').trim().toLowerCase() || '16:9'
   const m = /^(\d+)\s*[x×*]\s*(\d+)$/.exec(size)

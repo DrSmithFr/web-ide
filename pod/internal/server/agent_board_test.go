@@ -20,8 +20,8 @@ func TestBoardDrawChecks(t *testing.T) {
 		return a
 	}
 	for js, want := range map[string]string{
-		`{"title":"x","elements":[],"from":2}`:                 "the board has no page yet",
-		`{"title":"x","elements":[],"from":1,"size":"square"}`: "size and from cannot go together",
+		`{"title":"x","elements":[],"clone":2}`:                 "the board has no page yet",
+		`{"title":"x","elements":[],"clone":1,"size":"square"}`: "size and clone cannot go together",
 		`{"title":"x","elements":{}}`:                          "must be a list",
 		`{"title":"x"}`:                                        "must be a list",
 		`{"title":"x","elements":[{"type":"stroke","points":[` + strings.Repeat("[1,2],", 500) + `[1,2]]}]}`: "element 1: 501 points",
@@ -44,7 +44,7 @@ func TestBoardDrawChecks(t *testing.T) {
 	}
 	// A copy of an image whose data is not kept (an old attachment) is refused.
 	r.chat.Messages = []*agent.Message{{Role: "user", Attachments: json.RawMessage(`[{"name":"old.png","kind":"image","w":4,"h":3}]`)}}
-	if _, err := s.boardDoodle(r, args(`{"title":"x","elements":[],"from":1}`)); err == nil || !strings.Contains(err.Error(), "not kept") {
+	if _, err := s.boardDoodle(r, args(`{"title":"x","elements":[],"clone":1}`)); err == nil || !strings.Contains(err.Error(), "not kept") {
 		t.Errorf("copy of a lost image: %v", err)
 	}
 }

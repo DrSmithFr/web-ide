@@ -15,7 +15,7 @@ import (
 )
 
 // The model draws new pages on the board of the conversation: board_draw_doodle (a frame or
-// a copy of a page, with elements) and board_draw_image (an SVG it writes, or a capture of
+// a clone of a page, with elements) and board_draw_image (an SVG it writes, or a capture of
 // the screen of the user: agent_loop.go, agent.capture). Building a page needs the browser
 // (text measured on a canvas, the description and the PNG of the doodle code), so a window
 // of the project draws it (web/src/llm/board/build.ts) and the pod keeps it on the tool
@@ -35,15 +35,15 @@ func (s *Server) boardDoodle(r *agentRun, a toolArgs) (toolResult, error) {
 			return toolResult{}, fmt.Errorf("element %d: %d points, %d at most", i+1, len(pts), agent.MaxStrokePoints)
 		}
 	}
-	if a.has("from") && a.str("size") != "" {
-		return toolResult{}, fmt.Errorf("size and from cannot go together: a copy keeps the size of its page")
+	if a.has("clone") && a.str("size") != "" {
+		return toolResult{}, fmt.Errorf("size and clone cannot go together: a clone keeps the size of its page")
 	}
 	r.mu.Lock()
 	pages := agent.Pages(r.chat.Messages)
 	r.mu.Unlock()
 	args := map[string]any{"title": a.str("title"), "size": a.str("size"), "elements": elements, "number": len(pages) + 1}
-	if a.has("from") {
-		n := a.num("from")
+	if a.has("clone") {
+		n := a.num("clone")
 		if n < 1 || n > len(pages) {
 			if len(pages) == 0 {
 				return toolResult{}, fmt.Errorf("page %d does not exist: the board has no page yet", n)
@@ -54,7 +54,7 @@ func (s *Server) boardDoodle(r *agentRun, a toolArgs) (toolResult, error) {
 			return toolResult{}, fmt.Errorf("page %d cannot be copied: its image is not kept in the conversation", n)
 		}
 		// The document goes with the call: any window of the project can draw the copy.
-		args["from"], args["fromDoc"] = n, pages[n-1].Doc
+		args["clone"], args["cloneDoc"] = n, pages[n-1].Doc
 	}
 	return s.drawPage(r, args)
 }
