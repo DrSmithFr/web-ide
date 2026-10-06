@@ -54,6 +54,8 @@ type Usage struct {
 	DurationMs float64 `json:"durationMs,omitempty"`
 	// PromptPerSecond: speed of the prompt reading (tokens not in the cache).
 	PromptPerSecond float64 `json:"promptPerSecond,omitempty"`
+	// Cost of the request when the provider tells it (OpenRouter: credits, about dollars).
+	Cost float64 `json:"cost,omitempty"`
 }
 
 type ChatResult struct {
@@ -105,10 +107,58 @@ func (m *Manager) Chat(ctx context.Context, req ChatRequest, onDelta func(Delta)
 	}
 	b := newBatcher(onDelta)
 	defer b.flush()
-	if m.kind(ctx, s) == "ollama" {
+	switch m.kind(ctx, s) {
+	case "ollama":
 		return m.ollamaChat(ctx, s, req, b)
+	case "openai":
+		res, err := m.openaiChat(ctx, s, req, b, true)
+		return res, providerError(s, req.Model, err)
 	}
-	return m.openaiChat(ctx, s, req, b)
+	res, err := m.openaiChat(ctx, s, req, b, false)
+	return res, providerError(s, req.Model, err)
+}
+
+// RetryDelay is the first wait before asking a provider again after a rate limit.
+var RetryDelay = 2 * time.Second
+
+// providerError says what an HTTP error of a provider means.
+func providerError(s Server, model string, err error) error {
+	var he *HTTPError
+	if !errors.As(err, &he) {
+		return err
+	}
+	switch he.Status {
+	case 401, 403:
+		return i18n.Errorf("%s refused the API key: %s", s.Name, he.Message)
+	case 402:
+		return i18n.Errorf("%s: no credit left: %s", s.Name, he.Message)
+	case 404:
+		return i18n.Errorf("%s does not know the model %s: %s", s.Name, model, he.Message)
+	case 429:
+		return i18n.Errorf("%s: rate limit reached, try again later: %s", s.Name, he.Message)
+	}
+	return err
+}
+
+// post sends a completion request; a cloud provider is asked again after a rate limit or an
+// overload (Retry-After, or 2, 4, 8 s), 3 times at most.
+func (m *Manager) post(ctx context.Context, s Server, path string, body any, cloud bool) (*http.Response, error) {
+	for try := 0; ; try++ {
+		resp, err := m.do(ctx, s, http.MethodPost, path, body)
+		var he *HTTPError
+		if !cloud || try == 3 || !errors.As(err, &he) || he.Status != 429 && he.Status != 502 && he.Status != 503 {
+			return resp, err
+		}
+		wait := RetryDelay << try
+		if he.RetryAfter > 0 {
+			wait = min(time.Duration(he.RetryAfter)*time.Second, 60*time.Second)
+		}
+		select {
+		case <-time.After(wait):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 }
 
 // batcher groups the deltas so that a fast model does not send one message per token; a
@@ -158,7 +208,9 @@ func (b *batcher) flush() {
 
 // ---------- OpenAI compatible (llama.cpp) ----------
 
-func (m *Manager) openaiChat(ctx context.Context, s Server, req ChatRequest, b *batcher) (*ChatResult, error) {
+// openaiChat streams a completion; cloud: a provider (OpenAI, OpenRouter…) that may refuse
+// the fields of llama.cpp.
+func (m *Manager) openaiChat(ctx context.Context, s Server, req ChatRequest, b *batcher, cloud bool) (*ChatResult, error) {
 	body := map[string]any{
 		"model":          req.Model,
 		"messages":       req.Messages,
@@ -171,14 +223,16 @@ func (m *Manager) openaiChat(ctx context.Context, s Server, req ChatRequest, b *
 	if req.Temperature != nil {
 		body["temperature"] = *req.Temperature
 	}
-	if req.Think != nil {
-		body["chat_template_kwargs"] = map[string]bool{"enable_thinking": *req.Think}
+	if !cloud {
+		if req.Think != nil {
+			body["chat_template_kwargs"] = map[string]bool{"enable_thinking": *req.Think}
+		}
+		// llama.cpp: timings in every chunk and progress of the prompt reading (other servers
+		// ignore these fields; tokens are then counted from the chunks).
+		body["timings_per_token"] = true
+		body["return_progress"] = true
 	}
-	// llama.cpp: timings in every chunk and progress of the prompt reading (other servers
-	// ignore these fields; tokens are then counted from the chunks).
-	body["timings_per_token"] = true
-	body["return_progress"] = true
-	resp, err := m.do(ctx, s, http.MethodPost, "/v1/chat/completions", body)
+	resp, err := m.post(ctx, s, "/v1/chat/completions", body, cloud)
 	if err != nil {
 		return nil, err
 	}
@@ -205,6 +259,8 @@ func (m *Manager) openaiChat(ctx context.Context, s Server, req ChatRequest, b *
 				Delta        struct {
 					Content   string `json:"content"`
 					Reasoning string `json:"reasoning_content"`
+					// OpenRouter and others.
+					Reasoning2 string `json:"reasoning"`
 					ToolCalls []struct {
 						Index    int    `json:"index"`
 						ID       string `json:"id"`
@@ -222,6 +278,7 @@ func (m *Manager) openaiChat(ctx context.Context, s Server, req ChatRequest, b *
 				Details    *struct {
 					Cached int `json:"cached_tokens"`
 				} `json:"prompt_tokens_details"`
+				Cost float64 `json:"cost"`
 			} `json:"usage"`
 			Timings *struct {
 				CacheN             int     `json:"cache_n"`
@@ -266,6 +323,9 @@ func (m *Manager) openaiChat(ctx context.Context, s Server, req ChatRequest, b *
 		}
 		for _, c := range chunk.Choices {
 			d := c.Delta
+			if d.Reasoning == "" {
+				d.Reasoning = d.Reasoning2
+			}
 			content.WriteString(d.Content)
 			reasoning.WriteString(d.Reasoning)
 			delta := stats
@@ -299,7 +359,7 @@ func (m *Manager) openaiChat(ctx context.Context, s Server, req ChatRequest, b *
 			b.add(stats)
 		}
 		if chunk.Usage != nil {
-			u := &Usage{Prompt: chunk.Usage.Prompt, Completion: chunk.Usage.Completion}
+			u := &Usage{Prompt: chunk.Usage.Prompt, Completion: chunk.Usage.Completion, Cost: chunk.Usage.Cost}
 			if chunk.Usage.Details != nil {
 				u.Cached = chunk.Usage.Details.Cached
 			}

@@ -50,7 +50,7 @@ export async function loadPromptContext(): Promise<PromptContext> {
       projectBriefingPrompt: null,
       files: [],
       skills: [],
-      defaults: { build: '', plan: '', briefing: '' },
+      defaults: { build: '', plan: '', briefing: '', orchestrator: '' },
     }
     setPromptContext(empty)
     return empty
@@ -61,6 +61,8 @@ export async function loadPromptContext(): Promise<PromptContext> {
 export function storedTemplates(c: PromptContext | null, mode: Mode): { project: string | null; global: string | null } {
   if (mode === 'plan') return { project: c?.projectPlanPrompt ?? null, global: c?.globalPlanPrompt ?? null }
   if (mode === 'briefing') return { project: c?.projectBriefingPrompt ?? null, global: c?.globalBriefingPrompt ?? null }
+  // The Orchestrator keeps its default template.
+  if (mode === 'orchestrator') return { project: null, global: null }
   return { project: c?.projectPrompt ?? null, global: c?.globalPrompt ?? null }
 }
 

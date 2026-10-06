@@ -263,14 +263,20 @@ Definitions may point outside the project (`lib.es5.d.ts` in `node_modules/types
 
 ## 13. AI assistant
 
-Right-panel tool talking to a **llama.cpp** or **Ollama** server (address and optional API key, never sent back to the page).
+Right-panel tool talking to a **llama.cpp** or **Ollama** server, or an **OpenAI-compatible provider** (OpenAI, OpenRouter…: address and API key, never sent back to the page; models listed by `/models` or typed by hand with their context and capabilities; only standard fields sent; rate limits retried with `Retry-After`, then the errors explained: refused key, no credit, unknown model). Each server has a number of conversations at once, and may be offered to the sub-agents with a note for the model.
 
 - Markdown answers with highlighted code and Mermaid diagrams, collapsible reasoning, live token counters.
 - Agent loop with tools: files (read, search, edit with confirmation or automatically), language servers, shell commands, IDE (open a file, focus a panel), consoles, kanban, questions to the user (`ask_user`). It runs in the pod: a conversation goes on when its window closes, any window follows it, writes to it or stops it, and several conversations run at once (a limit per model server, the others queued).
-- Instructions and skills loaded the same way as Claude Code (`CLAUDE.md`, `AGENTS.md`, `.claude/skills`…), editable system prompt, Build / Plan / Briefing modes (the Briefing mode questions the user and writes kanban tickets), context compaction.
+- Instructions and skills loaded the same way as Claude Code (`CLAUDE.md`, `AGENTS.md`, `.claude/skills`…), editable system prompt, Orchestrator / Build / Plan / Briefing modes (the Orchestrator, default of a new conversation, steers the day from the kanban with action cards and opens the right conversation, see [kanban.md](kanban.md); the Briefing mode questions the user and writes kanban tickets), context compaction.
 - Conversations stored per project in SQLite; an answer survives a page reload and can be followed from another window.
 - Local speech recognition: dictation and audio files are transcribed in the browser by Whisper; audio never leaves the page.
 - Attachments from the paperclip menu: files (images, video, audio, PDF, text) and doodles, drawings sent as an image with a text description ([doodle.md](doodle.md), `Ctrl+Shift+D`).
+- **Sub-agents**: a conversation delegates a self-contained task with `spawn_agent` (title, task, files to read first, mode): a child conversation with a fresh context and the same rights (mode, ticket, options, model), running in the background; at most 5 running per conversation, and a child cannot start children (except under an Orchestrator: depth 2).
+  - The child reports progress with `agent_note`, asks its parent with `agent_ask` (its turn stops until the answer; 10 questions at most) and ends with `agent_report` (summary, files changed, done or blocked). A child answering without tools is reminded once to report; its next plain answer is taken as its report.
+  - The notes, questions and reports come to the parent as messages; a question or a report starts a turn of the parent (queued while it runs, kept while it waits for the user), a note is read at its next turn. The parent answers with `agent_reply` (or first asks the user with `ask_user`), writes with `agent_message`, stops a child with `agent_stop` and lists them with `agent_status`. A child stopped by the user or failing is reported to its parent.
+  - A child runs on the server and model its parent gives (`server`, `model` of `spawn_agent`, among the servers offered to sub-agents, listed with their notes in the parent prompt), else on the default of the settings (*Sub-agents* tab), else on the parent's. Its tokens and cost (when the provider tells it) are summed on its card. An error of the provider ends it in error, reported to its parent.
+  - What a child needs confirmed (a file change, a command) waits for the user, never for a model: a toast *Sub-agent “…” asks to change a file* with *Open*, and a system notification when the page is hidden.
+  - The parent thread shows a card per child (status, latest note, open question, *Stop*, *Open*) and the events as cards; a child thread starts with its task under a header *Sub-agent of “…”* linking to its parent. The side bar lists the children under their parent.
 
 ## 14. Docker
 

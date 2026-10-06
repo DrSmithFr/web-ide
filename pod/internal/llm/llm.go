@@ -1,4 +1,5 @@
-// Package llm talks to local model servers (llama.cpp server, Ollama) for the chat tool:
+// Package llm talks to model servers (llama.cpp server, Ollama, OpenAI-compatible cloud
+// providers) for the chat tool:
 // server registry, model list with capabilities, streamed chat completions with tool
 // calls, and the conversations saved per project.
 package llm
@@ -12,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,7 +26,8 @@ import (
 type Server struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
-	// Kind: "auto", "llamacpp" or "ollama" ("auto" asks the server).
+	// Kind: "auto", "llamacpp", "ollama" or "openai" (a cloud provider: OpenAI, OpenRouter…;
+	// "auto" asks the server).
 	Kind string `json:"kind"`
 	URL  string `json:"url"`
 	// APIKey is sent as a bearer token (llama-server --api-key). Never sent to the page.
@@ -33,6 +36,21 @@ type Server struct {
 	Context int `json:"context,omitempty"`
 	// Parallel is the number of conversations the server runs at once (0: 1, one GPU).
 	Parallel int `json:"parallel,omitempty"`
+	// Models typed by the user, for a provider without /models or to set capabilities.
+	Models []ModelConf `json:"models,omitempty"`
+	// Note: told to the model choosing a server for a sub-agent ("strong at code, paid").
+	Note string `json:"note,omitempty"`
+	// Children: offered to the sub-agents.
+	Children bool `json:"children,omitempty"`
+}
+
+// ModelConf is a model of a server as the user describes it.
+type ModelConf struct {
+	ID       string `json:"id"`
+	Context  int    `json:"context,omitempty"`
+	Tools    bool   `json:"tools"`
+	Vision   bool   `json:"vision"`
+	Thinking bool   `json:"thinking"`
 }
 
 // ServerView is what the page receives.
@@ -42,8 +60,11 @@ type ServerView struct {
 	Kind     string `json:"kind"`
 	URL      string `json:"url"`
 	HasKey   bool   `json:"hasKey"`
-	Context  int    `json:"context,omitempty"`
-	Parallel int    `json:"parallel,omitempty"`
+	Context  int         `json:"context,omitempty"`
+	Parallel int         `json:"parallel,omitempty"`
+	Models   []ModelConf `json:"models,omitempty"`
+	Note     string      `json:"note,omitempty"`
+	Children bool        `json:"children,omitempty"`
 }
 
 type Config struct {
@@ -51,6 +72,9 @@ type Config struct {
 	// Last choice of the user, restored when the tool opens.
 	Server string `json:"server,omitempty"`
 	Model  string `json:"model,omitempty"`
+	// Default server and model of the sub-agents ("": the ones of the parent).
+	ChildServer string `json:"childServer,omitempty"`
+	ChildModel  string `json:"childModel,omitempty"`
 }
 
 type Manager struct {
@@ -79,9 +103,52 @@ func (m *Manager) View() map[string]any {
 	defer m.mu.Unlock()
 	views := []ServerView{}
 	for _, s := range m.cfg.Servers {
-		views = append(views, ServerView{ID: s.ID, Name: s.Name, Kind: s.Kind, URL: s.URL, HasKey: s.APIKey != "", Context: s.Context, Parallel: s.Parallel})
+		views = append(views, ServerView{ID: s.ID, Name: s.Name, Kind: s.Kind, URL: s.URL, HasKey: s.APIKey != "", Context: s.Context, Parallel: s.Parallel,
+			Models: s.Models, Note: s.Note, Children: s.Children})
 	}
-	return map[string]any{"servers": views, "server": m.cfg.Server, "model": m.cfg.Model}
+	return map[string]any{"servers": views, "server": m.cfg.Server, "model": m.cfg.Model, "childServer": m.cfg.ChildServer, "childModel": m.cfg.ChildModel}
+}
+
+// SetChildDefault sets the default server and model of the sub-agents.
+func (m *Manager) SetChildDefault(server, model string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cfg.ChildServer, m.cfg.ChildModel = server, model
+	return m.st.WriteJSON(configFile, m.cfg)
+}
+
+// ChildDefault is the default server and model of the sub-agents ("" when unset).
+func (m *Manager) ChildDefault() (string, string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, s := range m.cfg.Servers {
+		if s.ID == m.cfg.ChildServer {
+			return m.cfg.ChildServer, m.cfg.ChildModel
+		}
+	}
+	return "", ""
+}
+
+// ForChildren lists the servers offered to the sub-agents.
+func (m *Manager) ForChildren() []ServerView {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []ServerView
+	for _, s := range m.cfg.Servers {
+		if s.Children {
+			out = append(out, ServerView{ID: s.ID, Name: s.Name, Kind: s.Kind, URL: s.URL, Parallel: s.Parallel, Models: s.Models, Note: s.Note, Children: true})
+		}
+	}
+	return out
+}
+
+// ServerName is the name of a server ("" when unknown).
+func (m *Manager) ServerName(id string) string {
+	s, err := m.server(id)
+	if err != nil {
+		return ""
+	}
+	return s.Name
 }
 
 // SaveServer adds or replaces a server. keepKey keeps the stored API key when the page
@@ -131,6 +198,9 @@ func (m *Manager) DeleteServer(id string) error {
 	m.cfg.Servers = out
 	if m.cfg.Server == id {
 		m.cfg.Server, m.cfg.Model = "", ""
+	}
+	if m.cfg.ChildServer == id {
+		m.cfg.ChildServer, m.cfg.ChildModel = "", ""
 	}
 	return m.st.WriteJSON(configFile, m.cfg)
 }
@@ -205,7 +275,9 @@ func (m *Manager) do(ctx context.Context, s Server, method, path string, body an
 	if resp.StatusCode >= 300 {
 		defer resp.Body.Close()
 		data, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, &HTTPError{Status: resp.StatusCode, Message: errorMessage(data)}
+		he := &HTTPError{Status: resp.StatusCode, Message: errorMessage(data)}
+		he.RetryAfter, _ = strconv.Atoi(resp.Header.Get("Retry-After"))
+		return nil, he
 	}
 	return resp, nil
 }
@@ -213,6 +285,8 @@ func (m *Manager) do(ctx context.Context, s Server, method, path string, body an
 type HTTPError struct {
 	Status  int
 	Message string
+	// RetryAfter: seconds to wait, told by a rate limit.
+	RetryAfter int
 }
 
 func (e *HTTPError) Error() string {
@@ -273,9 +347,10 @@ func (m *Manager) postJSON(ctx context.Context, s Server, path string, body, v a
 	return json.NewDecoder(resp.Body).Decode(v)
 }
 
-// kind returns "ollama" or "llamacpp" (any OpenAI compatible server).
+// kind returns "ollama", "openai" (a cloud provider) or "llamacpp" (any other OpenAI
+// compatible server).
 func (m *Manager) kind(ctx context.Context, s Server) string {
-	if s.Kind == "ollama" || s.Kind == "llamacpp" {
+	if s.Kind == "ollama" || s.Kind == "llamacpp" || s.Kind == "openai" {
 		return s.Kind
 	}
 	m.mu.Lock()

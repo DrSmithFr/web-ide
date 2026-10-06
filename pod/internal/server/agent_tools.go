@@ -35,6 +35,9 @@ type toolResult struct {
 	Diff    []agent.DiffLine
 	Page    *agent.Page
 	Preview *agent.Preview
+	Child   string
+	Card    *agent.ActionCard
+	Opened  string
 }
 
 func ok(content string, summary agent.Text) toolResult {
@@ -130,6 +133,9 @@ func (s *Server) agentTool(r *agentRun, ref *runtimeRef, call agent.ToolCall, mo
 			if mode == agent.Plan {
 				return fail(r, failf("Plan mode: files cannot be changed. Present the plan with exit_plan_mode; it will be carried out in Build mode."))
 			}
+			if mode == agent.Orchestrator {
+				return fail(r, failf("Orchestrator mode: files cannot be changed. Propose the work with action_card, or open a conversation for it with open_conversation."))
+			}
 			return fail(r, failf("Briefing mode: files cannot be changed. Clarify the need and write it in tickets (kanban_create)."))
 		}
 		// A command that may change something waits for the user.
@@ -139,10 +145,7 @@ func (s *Server) agentTool(r *agentRun, ref *runtimeRef, call agent.ToolCall, mo
 				cwd = absPath(root, a.str("cwd"))
 			}
 			if !agent.RunsFreely(a.str("command"), root, cwd) && !s.confirm(r, agent.Approval{Call: call, Kind: "command", Command: a.str("command")}) {
-				which := "Briefing"
-				if mode == agent.Plan {
-					which = "Plan"
-				}
+				which := map[string]string{agent.Plan: "Plan", agent.Briefing: "Briefing", agent.Orchestrator: "Orchestrator"}[mode]
 				return toolResult{Content: "The user refused this command (" + which + " mode: only reading commands, and the build and test commands of the project, run freely).", Summary: agent.T("command refused", nil).Raw(), Status: "denied"}
 			}
 		}
@@ -173,6 +176,20 @@ func (s *Server) agentTool(r *agentRun, ref *runtimeRef, call agent.ToolCall, mo
 		res, err = s.boardDoodle(r, a)
 	case "board_draw_image":
 		res, err = s.boardImage(r, ref.rt, a)
+	case "kanban_next", "kanban_history", "list_conversations", "action_card", "open_conversation":
+		res, err = s.orchestratorTool(r, ref, name, a)
+	case "spawn_agent":
+		res, err = s.spawnAgent(r, a)
+	case "agent_reply":
+		res, err = s.agentReply(r, a)
+	case "agent_message":
+		res, err = s.agentMessage(r, a)
+	case "agent_stop":
+		res, err = s.agentStop(r, a)
+	case "agent_status":
+		res, err = s.agentStatus(r)
+	case "agent_note":
+		res, err = s.agentNote(r, a)
 	case "share_preview":
 		res, err = sharePreview(r, ref.rt, a)
 	case "bash":
@@ -209,7 +226,7 @@ func (s *Server) confirm(r *agentRun, req agent.Approval) bool {
 	prev := r.state
 	r.state = "waiting_user"
 	s.publish(r, -1)
-	s.emitAgent(r.root, "agent.attention", map[string]any{"id": r.id, "title": r.chat.Title, "kind": req.Kind})
+	s.emitAgent(r.root, "agent.attention", map[string]any{"id": r.id, "title": r.chat.Title, "kind": req.Kind, "sub": r.chat.Parent != ""})
 	r.mu.Unlock()
 	var allowed bool
 	select {

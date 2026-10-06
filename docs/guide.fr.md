@@ -70,6 +70,8 @@ Un projet s'ouvre dans sa propre fenêtre et revient tel que vous l'avez laissé
 
 L'assistant parle à [llama.cpp](https://github.com/ggml-org/llama.cpp) (`llama-server`, aussi en mode routeur) ou [Ollama](https://ollama.com), sur votre machine ou votre réseau : ouvrez l'assistant (barre de droite), *Add a model server*, donnez son adresse. Choisissez le modèle dans la zone de saisie. Le modèle et son modèle de chat doivent gérer les appels d'outils (`llama-server --jinja`).
 
+Un fournisseur cloud (OpenAI, OpenRouter, toute API compatible OpenAI) est un serveur de type *Fournisseur compatible OpenAI*, avec sa clé d'API : la clé reste dans le pod. Saisissez ses modèles à la main s'il ne les liste pas. Coché *Disponible pour les sous-agents*, avec une note (« fort en code, payant »), il permet à votre modèle local de confier une tâche à un modèle plus fort : l'assistant le choisit pour un sous-agent, dont la carte montre les tokens et le coût. Le serveur par défaut des sous-agents se règle dans l'onglet *Sous-agents* des réglages.
+
 Les images de ce guide sont faites avec Qwen3.8 27B sur llama.cpp.
 
 ## Le cycle de développement
@@ -85,11 +87,13 @@ Chaque projet a un kanban. Un ticket passe par quatre étapes, chacune avec sa c
 
 C'est vous qui faites passer le ticket d'une étape à l'autre ; le modèle travaille à l'intérieur d'une étape.
 
+Une nouvelle conversation démarre en mode **Orchestrateur**, votre page d'accueil : demandez-lui *sur quoi on travaille aujourd'hui ?* (les tickets qui peuvent démarrer, dans l'ordre, avec un bouton pour lancer le premier), *qu'est-ce qu'on a fait hier ?* (les tickets qui ont bougé), ou dites *j'ai une idée…* (il ouvre une conversation de Briefing avec votre idée). Il ne modifie aucun fichier et ne lance rien de lui-même : c'est vous qui cliquez ses boutons. Le mode par défaut se règle dans les réglages (*Prompt and instructions*).
+
 ### 1. Briefing : de l'idée au ticket
 
 ![Briefing : le modèle pose ses questions, puis écrit le ticket](images/briefing.gif)
 
-Ouvrez l'assistant et passez-le en mode **Briefing** (Maj+Tab alterne Build, Plan et Briefing). Décrivez le besoin en quelques mots. Dans ce mode le modèle ne modifie rien : il lit le code pour comprendre le contexte, puis pose ses questions une à une, avec des réponses suggérées :
+Ouvrez l'assistant et passez-le en mode **Briefing** (Maj+Tab alterne Orchestrateur, Build, Plan et Briefing). Décrivez le besoin en quelques mots. Dans ce mode le modèle ne modifie rien : il lit le code pour comprendre le contexte, puis pose ses questions une à une, avec des réponses suggérées :
 
 ![Une question du modèle, avec des réponses suggérées](images/briefing.png)
 

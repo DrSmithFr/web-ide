@@ -4,6 +4,16 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+### Added
+
+- Sub-agents: the assistant delegates a task with `spawn_agent` to a child conversation (fresh context, same rights) running in the background; the child notes its progress, asks its parent and reports, its questions and report waking the parent, which replies (after asking the user if needed), writes to or stops it. What a child needs confirmed goes to the user. Cards in the parent thread, children nested under their parent in the history.
+- Cloud providers: a server kind *OpenAI-compatible provider* (OpenAI, OpenRouter…) with its API key kept on the pod, models listed or typed by hand, reasoning and cost read from the stream, rate limits retried and errors explained. Servers can be offered to sub-agents with a note; the assistant picks the server and model of a child (default in the new *Sub-agents* settings tab), whose card shows its tokens and cost.
+- Orchestrator mode, the default of a new conversation: it tells what to work on next (`kanban_next`) and what was done (`kanban_history`), offers actions as cards the user clicks (start the development, generate the plan, open a ticket or a conversation), and moves the user into the right conversation (`open_conversation`: an idea goes to a Briefing). It changes no file; its sub-agents may delegate once more.
+
+### Fixed
+
+- A message queued just as a conversation ended stayed in its queue: the conversation now starts again with it.
+
 ## [1.3.0] - 2026-10-07
 
 ### Added

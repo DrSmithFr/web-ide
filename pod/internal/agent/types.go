@@ -32,6 +32,25 @@ type Chat struct {
 	Options *Options `json:"options,omitempty"`
 	// Approval waiting for the user (a file change, a command).
 	Approval *Approval `json:"approval,omitempty"`
+	// Parent: the conversation that started this one as a sub-agent (subagents.go), and its
+	// task; Children: the sub-agents this one started.
+	Parent   string    `json:"parent,omitempty"`
+	Agent    *SubAgent `json:"agent,omitempty"`
+	Children []string  `json:"children,omitempty"`
+	// Draft: a first message prepared for the user (open_conversation), put in the message
+	// box of the window that opens the conversation.
+	Draft string `json:"draft,omitempty"`
+}
+
+// ActionCard is an action the page runs when the user clicks it; State and Result once done.
+type ActionCard struct {
+	Kind   string `json:"kind"`
+	Ticket int64  `json:"ticket,omitempty"`
+	Chat   string `json:"chat,omitempty"`
+	Label  string `json:"label"`
+	Reason string `json:"reason,omitempty"`
+	State  string `json:"state,omitempty"` // done | failed
+	Result string `json:"result,omitempty"`
 }
 
 // Running is set while the agent runs, with the stream of the completion awaited.
@@ -69,6 +88,8 @@ type QueuedMessage struct {
 	Parts       json.RawMessage `json:"parts,omitempty"`
 	Attachments json.RawMessage `json:"attachments,omitempty"`
 	Display     string          `json:"display,omitempty"`
+	// Event: a message of a sub-agent or of the parent, waiting for the next step.
+	Event *AgentEvent `json:"event,omitempty"`
 }
 
 // Message of the conversation: the API fields, then the fields of the page.
@@ -108,6 +129,16 @@ type Message struct {
 	// the screen it waits for (pending, done, refused, skipped).
 	Page    *Page  `json:"page,omitempty"`
 	Capture string `json:"capture,omitempty"`
+	// Event of a sub-agent in its parent, or of the parent in its child (user messages of
+	// kind agent_event); Wait is "parent" on the result of agent_ask until the parent answers.
+	Event *AgentEvent `json:"event,omitempty"`
+	Wait  string      `json:"wait,omitempty"`
+	// Child: the sub-agent a tool call of the parent started or addressed.
+	Child string `json:"child,omitempty"`
+	// Card: an action offered by action_card (Orchestrator); Opened: the conversation
+	// open_conversation moved the user into.
+	Card   *ActionCard `json:"card,omitempty"`
+	Opened string      `json:"opened,omitempty"`
 	// Preview offered by share_preview (tool message): the card starts it on a click.
 	Preview *Preview `json:"preview,omitempty"`
 }

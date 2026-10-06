@@ -109,6 +109,9 @@ func (s *Server) openChat(cc chatCtx, id string) (*agent.Chat, error) {
 	}
 	if c.Running != nil || c.Approval != nil {
 		c.Running, c.Approval = nil, nil
+		if c.Agent != nil && c.Agent.Status == agent.AgentRunning {
+			c.Agent.Status, c.Agent.Error = agent.AgentError, "Interrupted: the pod stopped."
+		}
 		closeToolCalls(c, "Interrupted: the pod stopped before this tool ended.")
 		c.Messages = append(c.Messages, &agent.Message{Role: "assistant", Error: "Interrupted: the pod stopped."})
 		_ = s.saveChat(cc.loc, c)
@@ -204,13 +207,16 @@ func (s *Server) registerAgent() {
 		}
 		if r := s.run(a.ID); r != nil {
 			r.mu.Lock()
-			defer r.mu.Unlock()
-			r.chat.Queue = append(r.chat.Queue, agent.QueuedMessage{ID: newID(), Text: a.Text, Parts: a.Parts, Attachments: a.Attachments, Display: a.Display})
-			if a.Options != nil {
-				r.chat.Options = a.Options
+			if !r.done {
+				r.chat.Queue = append(r.chat.Queue, agent.QueuedMessage{ID: newID(), Text: a.Text, Parts: a.Parts, Attachments: a.Attachments, Display: a.Display})
+				if a.Options != nil {
+					r.chat.Options = a.Options
+				}
+				s.publish(r, -1)
+				r.mu.Unlock()
+				return map[string]any{"queued": true}, nil
 			}
-			s.publish(r, -1)
-			return map[string]any{"queued": true}, nil
+			r.mu.Unlock()
 		}
 		if a.Server == "" || a.Model == "" {
 			return nil, i18n.New("Choose a server and a model")
@@ -395,6 +401,37 @@ func (s *Server) registerAgent() {
 				chat.Mode = agent.Build
 			}
 			return a.Index, nil
+		})
+	}))
+	// agent.card: the result of an action card the user clicked (it stays disabled).
+	s.handle("agent.card", withChat(func(ctx context.Context, c *Client, cc chatCtx, p json.RawMessage) (any, error) {
+		a, err := bind[struct {
+			ID     string `json:"id"`
+			Index  int    `json:"index"`
+			State  string `json:"state"`
+			Result string `json:"result"`
+		}](p)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.change(cc, a.ID, func(chat *agent.Chat, _ *agentRun) (int, error) {
+			if a.Index < 0 || a.Index >= len(chat.Messages) || chat.Messages[a.Index].Card == nil {
+				return -1, i18n.New("no action card here")
+			}
+			card := chat.Messages[a.Index].Card
+			card.State, card.Result = a.State, a.Result
+			return a.Index, nil
+		})
+	}))
+	// agent.draft: the first message prepared for the user was put in the message box.
+	s.handle("agent.draft", withChat(func(ctx context.Context, c *Client, cc chatCtx, p json.RawMessage) (any, error) {
+		a, err := bind[idArg](p)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.change(cc, a.ID, func(chat *agent.Chat, _ *agentRun) (int, error) {
+			chat.Draft = ""
+			return -1, nil
 		})
 	}))
 	// agent.approve: the answer of the user to a file change or a command.

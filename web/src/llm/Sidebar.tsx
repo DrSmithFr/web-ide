@@ -1,5 +1,5 @@
 // History side bar of the assistant: conversations of the project grouped by date, search,
-// rename and delete.
+// rename and delete; the sub-agents of a conversation under it.
 import { createMemo, createSignal, For, onMount, Show } from 'solid-js'
 import { Icon } from '../ui/icons'
 import { prompt } from '../ui/overlay'
@@ -7,6 +7,7 @@ import { errorToast } from '../ui/toast'
 import { openChat, runStates } from './agent'
 import { chat, chatList, deleteChat, refreshChats, renameChat, resetChat, type ChatInfo } from './state'
 import { t } from '../i18n'
+import { agentLabels } from './SubAgents'
 
 function groupOf(ms: number): string {
   const d = new Date()
@@ -33,8 +34,11 @@ export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
   const groups = createMemo(() => {
     const query = q().trim().toLowerCase()
     const out: { name: string; items: ChatInfo[] }[] = []
+    const ids = new Set(chatList().map((c) => c.id))
     for (const c of chatList()) {
       if (query && !(c.title || '').toLowerCase().includes(query)) continue
+      // A sub-agent is listed under its parent (unless searched for).
+      if (!query && c.parent && ids.has(c.parent)) continue
       const g = groupOf(c.updated)
       let last = out[out.length - 1]
       if (!last || last.name !== g) out.push((last = { name: g, items: [] }))
@@ -58,6 +62,26 @@ export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
     if (!confirm(t('Delete the conversation “{title}”?', { title: c.title || t('Untitled') }))) return
     await deleteChat(c.id).catch(errorToast)
   }
+  const children = (id: string) => chatList().filter((c) => c.parent === id)
+  const item = (c: ChatInfo, nested: boolean) => (
+    <div class="ai-chat-item" classList={{ active: c.id === chat.id, nested }} data-testid={nested ? 'ai-chat-child' : undefined}>
+      <button class="ai-chat-open" onClick={() => open(c.id)} title={c.model ? `${c.title} · ${c.model}` : c.title}>
+        <Show when={runStates()[c.id]} fallback={<Show when={nested}>{<span class={`ai-agent-dot ${c.status ?? ''}`} title={t(agentLabels[c.status ?? ''] ?? '')} />}</Show>}>
+          {(st) => <span class={`ai-run-dot ${st()}`} title={t(runLabels[st()])} data-testid="ai-run-dot" />}
+        </Show>
+        <Show when={c.mode === 'orchestrator'}>
+          <Icon name="locate" size={12} class="ai-side-mode" />
+        </Show>
+        <span class="ellipsis">{c.title || t('Untitled')}</span>
+      </button>
+      <button class="ai-chat-act" title={t('Rename')} onClick={() => rename(c)}>
+        <Icon name="edit" size={12} />
+      </button>
+      <button class="ai-chat-act" title={t('Delete')} onClick={() => remove(c)}>
+        <Icon name="close" size={12} />
+      </button>
+    </div>
+  )
   return (
     <aside class="ai-sidebar" data-testid="ai-sidebar">
       <div class="ai-side-search">
@@ -81,20 +105,12 @@ export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
                 <div class="ai-side-group-name">{g.name}</div>
                 <For each={g.items}>
                   {(c) => (
-                    <div class="ai-chat-item" classList={{ active: c.id === chat.id }}>
-                      <button class="ai-chat-open" onClick={() => open(c.id)} title={c.model ? `${c.title} · ${c.model}` : c.title}>
-                        <Show when={runStates()[c.id]}>
-                          {(st) => <span class={`ai-run-dot ${st()}`} title={t(runLabels[st()])} data-testid="ai-run-dot" />}
-                        </Show>
-                        <span class="ellipsis">{c.title || t('Untitled')}</span>
-                      </button>
-                      <button class="ai-chat-act" title={t('Rename')} onClick={() => rename(c)}>
-                        <Icon name="edit" size={12} />
-                      </button>
-                      <button class="ai-chat-act" title={t('Delete')} onClick={() => remove(c)}>
-                        <Icon name="close" size={12} />
-                      </button>
-                    </div>
+                    <>
+                      {item(c, false)}
+                      <Show when={!q().trim()}>
+                        <For each={children(c.id)}>{(k) => item(k, true)}</For>
+                      </Show>
+                    </>
                   )}
                 </For>
               </div>

@@ -13,6 +13,7 @@ import {
   contextSize,
   contextUsed,
   currentModel,
+  incomingDraft,
   live,
   loadModels,
   models,
@@ -22,6 +23,7 @@ import {
   select,
   serverKind,
   resetChat,
+  setIncomingDraft,
   setPrefs,
   type Attachment,
   type Model,
@@ -37,12 +39,13 @@ import { shortcutOf } from '../keys/bindings'
 import { cancelRecording, canRecord, modelById, speech, startRecording, stopRecording, transcribe } from './transcribe'
 import { AttachmentChip, formatSize, formatTokens, Popover, Switch } from './parts'
 
-const modeIcons = { build: 'edit', plan: 'outline', briefing: 'kanban' } as const
-const modeLabels = { build: () => t('Build'), plan: () => t('Plan'), briefing: () => t('Briefing') }
+const modeIcons = { build: 'edit', plan: 'outline', briefing: 'kanban', orchestrator: 'locate' } as const
+const modeLabels = { build: () => t('Build'), plan: () => t('Plan'), briefing: () => t('Briefing'), orchestrator: () => t('Orchestrator') }
 const modeTitles = {
+  orchestrator: () => t('Orchestrator mode: tells what to do next and what was done, proposes actions and opens the right conversation, without changing files (Shift+Tab for Build)'),
   build: () => t('Build mode: acts on the project (Shift+Tab for Plan)'),
   plan: () => t('Plan mode: explores and proposes a plan, without changing files (Shift+Tab for Briefing)'),
-  briefing: () => t('Briefing mode: questions you to clarify an idea and writes it in kanban tickets, without changing files (Shift+Tab for Build)'),
+  briefing: () => t('Briefing mode: questions you to clarify an idea and writes it in kanban tickets, without changing files (Shift+Tab for Orchestrator)'),
 }
 import { t, tn } from '../i18n'
 
@@ -466,6 +469,14 @@ export function Composer(props: {
     draft()
     queueMicrotask(grow)
   })
+  // A message prepared by the Orchestrator for the conversation it opened.
+  createEffect(() => {
+    const text = incomingDraft()
+    if (!text) return
+    setDraft(text)
+    setIncomingDraft('')
+    queueMicrotask(() => ta?.focus())
+  })
 
   const insertText = (t: string) => {
     if (!t) return
@@ -661,7 +672,7 @@ export function Composer(props: {
 
   return (
     <div class="ai-composer-wrap">
-      <div class="ai-composer" classList={{ plan: currentMode() === 'plan', briefing: currentMode() === 'briefing' }}>
+      <div class="ai-composer" classList={{ plan: currentMode() === 'plan', briefing: currentMode() === 'briefing', orchestrator: currentMode() === 'orchestrator' }}>
         <Show when={chat.queue?.length}>
           <div class="ai-queue" data-testid="ai-queue">
             <div class="ai-queue-title">
@@ -760,7 +771,7 @@ export function Composer(props: {
         <div class="ai-composer-bar">
           <button
             class="ai-mode"
-            classList={{ plan: currentMode() === 'plan', briefing: currentMode() === 'briefing' }}
+            classList={{ plan: currentMode() === 'plan', briefing: currentMode() === 'briefing', orchestrator: currentMode() === 'orchestrator' }}
             title={modeTitles[currentMode()]()}
             onClick={() => setMode(nextMode())}
             data-testid="ai-mode"

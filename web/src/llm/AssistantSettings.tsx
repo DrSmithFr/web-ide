@@ -4,8 +4,9 @@ import { createResource, createSignal, For, onMount, Show } from 'solid-js'
 import { request } from '../pod/rpc'
 import { openTextTab, relPath } from '../state/project'
 import { Modal } from '../ui/overlay'
+import { Icon } from '../ui/icons'
 import { errorToast, toast } from '../ui/toast'
-import { applyConfig, config, loadModels, prefs, savePrefs, select, setPrefs, type Mode, type Model, type ServerView } from './state'
+import { applyConfig, config, loadModels, prefs, savePrefs, select, setPrefs, type Mode, type Model, type ModelConf, type ServerView } from './state'
 import { languages, probeGpu, speech, whisperModels } from './transcribe'
 import { formatSize } from './parts'
 import { defaultTemplate, loadPromptContext, promptContext, storedTemplates, systemPrompt, templateOf } from './prompt'
@@ -57,6 +58,23 @@ export function PromptSettings() {
   const source = () => templateOf(promptContext(), kind()).source
   return (
     <div class="form" data-testid="prompt-settings">
+      <label class="field">
+        <span>{t('Mode of a new conversation')}</span>
+        <select
+          value={prefs.defaultMode}
+          onChange={(e) => {
+            setPrefs('defaultMode', e.currentTarget.value as Mode)
+            savePrefs()
+          }}
+          name="defaultMode"
+          class="w-next"
+        >
+          <option value="orchestrator">{t('Orchestrator')}</option>
+          <option value="build">{t('Build')}</option>
+          <option value="plan">{t('Plan')}</option>
+          <option value="briefing">{t('Briefing')}</option>
+        </select>
+      </label>
       <p class="muted small">
         {t('The system prompt starts with this template, followed by the instruction files and the list of skills, loaded like Claude Code. The project prompt ({build}, {plan} for the Plan mode, {briefing} for the Briefing mode) replaces the global one. Currently:', { build: '.ide/system-prompt.md', plan: '.ide/plan-prompt.md', briefing: '.ide/briefing-prompt.md' })}{' '}
         <strong>{source() === 'project' ? t('project prompt') : source() === 'global' ? t('global prompt') : t('default prompt')}</strong>.
@@ -165,6 +183,39 @@ export function PlanSettings() {
           <label class="field grow">
             <span>{t('Model')}</span>
             <select value={prefs.planModel} onChange={(e) => set('planModel', e.currentTarget.value)} name="planModel">
+              <option value="">{t('— choose —')}</option>
+              <For each={list() ?? []}>{(m) => <option value={m.id}>{m.id}</option>}</For>
+            </select>
+          </label>
+        </Show>
+      </div>
+    </div>
+  )
+}
+
+export function SubAgentSettings() {
+  const [list] = createResource(
+    () => config.childServer,
+    (server) => (server ? request<{ models: Model[] }>('llm.models', { server }).then((r) => r.models, () => []) : Promise.resolve([] as Model[])),
+  )
+  const set = (server: string, model: string) => request('llm.children', { server, model }).then(applyConfig, errorToast)
+  return (
+    <div class="form" data-testid="subagent-settings">
+      <p class="muted small">
+        {t('The assistant can delegate a task to a sub-agent: a conversation with a fresh context that runs in the background and reports to it. It may run on another server, a cloud provider for instance: mark the servers “Available to sub-agents” in the Servers tab, with a note that tells the assistant when to use them.')}
+      </p>
+      <div class="field-row">
+        <label class="field grow">
+          <span>{t('Default server of the sub-agents')}</span>
+          <select value={config.childServer ?? ''} onChange={(e) => set(e.currentTarget.value, '')} name="childServer">
+            <option value="">{t('The model of the conversation')}</option>
+            <For each={config.servers.filter((s) => s.children)}>{(s) => <option value={s.id}>{s.name}</option>}</For>
+          </select>
+        </label>
+        <Show when={config.childServer}>
+          <label class="field grow">
+            <span>{t('Model')}</span>
+            <select value={config.childModel ?? ''} onChange={(e) => set(config.childServer!, e.currentTarget.value)} name="childModel">
               <option value="">{t('— choose —')}</option>
               <For each={list() ?? []}>{(m) => <option value={m.id}>{m.id}</option>}</For>
             </select>
@@ -287,17 +338,30 @@ function SpeechSettings() {
 }
 
 export function SettingsModal(props: { onClose: () => void }) {
-  const blank = { id: '', name: '', kind: 'auto' as ServerView['kind'], url: '', apiKey: '', context: 0, parallel: 1, hasKey: false, clearKey: false }
+  const blank = { id: '', name: '', kind: 'auto' as ServerView['kind'], url: '', apiKey: '', context: 0, parallel: 1, hasKey: false, clearKey: false, note: '', children: false, models: [] as ModelConf[] }
   const [form, setForm] = createSignal({ ...blank })
   const [busy, setBusy] = createSignal(false)
-  const edit = (s: ServerView) => setForm({ ...blank, ...s, apiKey: '', context: s.context ?? 0, parallel: s.parallel || 1 })
+  const edit = (s: ServerView) => setForm({ ...blank, ...s, apiKey: '', context: s.context ?? 0, parallel: s.parallel || 1, note: s.note ?? '', children: !!s.children, models: (s.models ?? []).map((m) => ({ ...m })) })
   const field = (k: keyof ReturnType<typeof form>) => (e: Event) => setForm({ ...form(), [k]: (e.currentTarget as HTMLInputElement).value })
   const save = async (e: Event) => {
     e.preventDefault()
     setBusy(true)
     try {
       const f = form()
-      const view = await request('llm.server.save', { id: f.id, name: f.name.trim(), kind: f.kind, url: f.url, apiKey: f.apiKey, context: Number(f.context) || 0, parallel: Math.max(1, Number(f.parallel) || 1), clearKey: f.clearKey })
+      const models = f.models.filter((m) => m.id.trim()).map((m) => ({ ...m, id: m.id.trim(), context: Number(m.context) || 0 }))
+      const view = await request('llm.server.save', {
+        id: f.id,
+        name: f.name.trim(),
+        kind: f.kind,
+        url: f.url,
+        apiKey: f.apiKey,
+        context: Number(f.context) || 0,
+        parallel: Math.max(1, Number(f.parallel) || 1),
+        clearKey: f.clearKey,
+        note: f.note.trim(),
+        children: f.children,
+        models,
+      })
       applyConfig(view)
       const saved = f.id ? view.servers.find((s: ServerView) => s.id === f.id) : view.servers[view.servers.length - 1]
       setForm({ ...blank })
@@ -319,12 +383,14 @@ export function SettingsModal(props: { onClose: () => void }) {
       errorToast(err)
     }
   }
-  type Tab = 'servers' | 'prompt' | 'plan' | 'compaction' | 'speech'
+  const setModel = (i: number, patch: Partial<ModelConf>) => setForm({ ...form(), models: form().models.map((m, j) => (j === i ? { ...m, ...patch } : m)) })
+  type Tab = 'servers' | 'prompt' | 'plan' | 'subagents' | 'compaction' | 'speech'
   const [tab, setTab] = createSignal<Tab>('servers')
   const tabs: [Tab, string][] = [
     ['servers', 'Servers'],
     ['prompt', 'Prompt and instructions'],
     ['plan', 'Plan mode'],
+    ['subagents', 'Sub-agents'],
     ['compaction', 'Compaction'],
     ['speech', 'Transcription'],
   ]
@@ -345,6 +411,9 @@ export function SettingsModal(props: { onClose: () => void }) {
       <Show when={tab() === 'plan'}>
         <PlanSettings />
       </Show>
+      <Show when={tab() === 'subagents'}>
+        <SubAgentSettings />
+      </Show>
       <Show when={tab() === 'compaction'}>
         <CompactionSettings />
       </Show>
@@ -358,8 +427,9 @@ export function SettingsModal(props: { onClose: () => void }) {
               <div class="grow">
                 <strong>{s.name}</strong>
                 <div class="muted small mono">
-                  {s.url} · {s.kind === 'auto' ? t('auto-detect') : s.kind === 'ollama' ? 'Ollama' : 'llama.cpp / OpenAI'}
+                  {s.url} · {s.kind === 'auto' ? t('auto-detect') : s.kind === 'ollama' ? 'Ollama' : s.kind === 'openai' ? t('OpenAI-compatible provider') : 'llama.cpp / OpenAI'}
                   {s.hasKey ? ` · ${t('API key')}` : ''}
+                  {s.children ? ` · ${t('sub-agents')}` : ''}
                 </div>
               </div>
               <button class="btn small" onClick={() => edit(s)}>
@@ -384,6 +454,7 @@ export function SettingsModal(props: { onClose: () => void }) {
                 <option value="auto">{t('Auto-detect')}</option>
                 <option value="llamacpp">llama.cpp / OpenAI</option>
                 <option value="ollama">Ollama</option>
+                <option value="openai">{t('OpenAI-compatible provider (OpenAI, OpenRouter…)')}</option>
               </select>
             </label>
           </div>
@@ -397,7 +468,49 @@ export function SettingsModal(props: { onClose: () => void }) {
               <input type="password" value={form().apiKey} onInput={field('apiKey')} placeholder={form().hasKey ? t('unchanged') : ''} autocomplete="off" name="apiKey" />
             </label>
           </div>
-          <Show when={form().kind !== 'llamacpp'}>
+          <Show when={form().kind === 'openai'}>
+            <p class="muted small">{t('The key stays on the pod: the page never receives it. Requests to a paid provider cost money.')}</p>
+          </Show>
+          <div class="field">
+            <span>{t('Models typed by hand (when the server does not list them, or to set what they can do)')}</span>
+            <For each={form().models}>
+              {(m, i) => (
+                <div class="ai-model-conf" data-testid="model-conf">
+                  <input value={m.id} placeholder={t('model id')} onInput={(e) => setModel(i(), { id: e.currentTarget.value })} name="modelId" />
+                  <input type="number" min="0" step="1024" value={m.context ?? 0} title={t('Context size (0: unknown)')} onInput={(e) => setModel(i(), { context: Number(e.currentTarget.value) })} class="w-next" />
+                  <label class="check small">
+                    <input type="checkbox" checked={m.tools} onChange={(e) => setModel(i(), { tools: e.currentTarget.checked })} />
+                    {t('tools')}
+                  </label>
+                  <label class="check small">
+                    <input type="checkbox" checked={m.vision} onChange={(e) => setModel(i(), { vision: e.currentTarget.checked })} />
+                    {t('image')}
+                  </label>
+                  <label class="check small">
+                    <input type="checkbox" checked={m.thinking} onChange={(e) => setModel(i(), { thinking: e.currentTarget.checked })} />
+                    {t('reasoning')}
+                  </label>
+                  <button type="button" class="icon-btn small" title={t('Remove')} onClick={() => setForm({ ...form(), models: form().models.filter((_, j) => j !== i()) })}>
+                    <Icon name="close" size={12} />
+                  </button>
+                </div>
+              )}
+            </For>
+            <button type="button" class="btn small" onClick={() => setForm({ ...form(), models: [...form().models, { id: '', context: 0, tools: true, vision: false, thinking: false }] })} data-testid="model-conf-add">
+              <Icon name="plus" size={12} /> {t('Type a model')}
+            </button>
+          </div>
+          <label class="check">
+            <input type="checkbox" checked={form().children} onChange={(e) => setForm({ ...form(), children: e.currentTarget.checked })} name="children" />
+            {t('Available to sub-agents')}
+          </label>
+          <Show when={form().children}>
+            <label class="field">
+              <span>{t('Note for the assistant choosing it (strengths, cost…)')}</span>
+              <input value={form().note} onInput={field('note')} placeholder={t('e.g. strong at code, paid')} name="note" />
+            </label>
+          </Show>
+          <Show when={form().kind !== 'llamacpp' && form().kind !== 'openai'}>
             <label class="field">
               <span>{t('Context asked to Ollama (num_ctx, 0 = model default)')}</span>
               <input type="number" min="0" step="1024" value={form().context} onInput={field('context')} class="w-next" name="context" />

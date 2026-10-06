@@ -37,6 +37,8 @@ type agentRun struct {
 	state   string // queued | running | waiting_user | compacting
 	ahead   int    // conversations before this one for the model server (queued)
 	approve chan bool
+	// done: the run has ended; a message for it goes to the stored conversation.
+	done bool
 }
 
 // agents are the conversations running in the pod.
@@ -164,6 +166,9 @@ type agentUpdate struct {
 	ResetAt  int                   `json:"resetAt,omitempty"`
 	Server   string                `json:"server"`
 	Model    string                `json:"model"`
+	Parent   string                `json:"parent,omitempty"`
+	Agent    *agent.SubAgent       `json:"agent,omitempty"`
+	Children []string              `json:"children,omitempty"`
 	From     int                   `json:"from"`
 	Count    int                   `json:"count"`
 	Messages []*agent.Message      `json:"messages,omitempty"`
@@ -171,7 +176,7 @@ type agentUpdate struct {
 
 func updateOf(c *agent.Chat, state string, ahead, from int) agentUpdate {
 	u := agentUpdate{ID: c.ID, State: state, Ahead: ahead, Title: c.Title, Mode: c.Mode, Ticket: c.Ticket, Queue: c.Queue, Approval: c.Approval,
-		ResetAt: c.ResetAt, Server: c.Server, Model: c.Model, From: from, Count: len(c.Messages)}
+		ResetAt: c.ResetAt, Server: c.Server, Model: c.Model, Parent: c.Parent, Agent: c.Agent, Children: c.Children, From: from, Count: len(c.Messages)}
 	if u.Queue == nil {
 		u.Queue = []agent.QueuedMessage{}
 	}

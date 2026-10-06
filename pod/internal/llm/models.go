@@ -43,14 +43,21 @@ func (m *Manager) Models(ctx context.Context, serverID string) (*ModelList, erro
 	}
 	kind := m.kind(ctx, s)
 	var models []Model
-	if kind == "ollama" {
+	switch kind {
+	case "ollama":
 		models, err = m.ollamaModels(ctx, s)
-	} else {
+	case "openai":
+		models, err = m.openaiModels(ctx, s)
+		if err != nil && len(s.Models) > 0 {
+			models, err = nil, nil // no /models: the typed ones
+		}
+	default:
 		models, err = m.llamacppModels(ctx, s)
 	}
 	if err != nil {
 		return nil, err
 	}
+	models = withTyped(models, s.Models)
 	sort.SliceStable(models, func(i, j int) bool { return strings.ToLower(models[i].ID) < strings.ToLower(models[j].ID) })
 	return &ModelList{Kind: kind, Models: models}, nil
 }
@@ -165,6 +172,76 @@ func trimFloat(f float64) string {
 		prec = 0
 	}
 	return strings.TrimSuffix(strconv.FormatFloat(f, 'f', prec, 64), ".0")
+}
+
+// ---------- typed models ----------
+
+// withTyped adds the models typed by the user, whose capabilities win over the listed ones.
+func withTyped(models []Model, typed []ModelConf) []Model {
+	for _, t := range typed {
+		if strings.TrimSpace(t.ID) == "" {
+			continue
+		}
+		md := Model{ID: t.ID, Context: t.Context, Caps: Caps{Tools: t.Tools, Vision: t.Vision, Thinking: t.Thinking, Known: true}}
+		found := false
+		for i := range models {
+			if models[i].ID == t.ID {
+				if md.Context == 0 {
+					md.Context = models[i].Context
+				}
+				md.Size, md.Details, md.State = models[i].Size, models[i].Details, models[i].State
+				models[i], found = md, true
+			}
+		}
+		if !found {
+			models = append(models, md)
+		}
+	}
+	return models
+}
+
+// ---------- OpenAI-compatible providers ----------
+
+// DefaultContext of a model of a provider that does not tell it.
+const DefaultContext = 128000
+
+func (m *Manager) openaiModels(ctx context.Context, s Server) ([]Model, error) {
+	// OpenRouter adds the context size and the input modalities.
+	var list struct {
+		Data []struct {
+			ID           string `json:"id"`
+			Context      int    `json:"context_length"`
+			Architecture *struct {
+				Input []string `json:"input_modalities"`
+			} `json:"architecture"`
+			Params []string `json:"supported_parameters"`
+		} `json:"data"`
+	}
+	if err := m.getJSON(ctx, s, "/v1/models", &list); err != nil {
+		return nil, err
+	}
+	models := make([]Model, 0, len(list.Data))
+	for _, d := range list.Data {
+		md := Model{ID: d.ID, Context: d.Context, Caps: Caps{Tools: true}}
+		if md.Context == 0 {
+			md.Context = DefaultContext
+		}
+		if d.Architecture != nil {
+			md.Caps.Known = true
+			for _, in := range d.Architecture.Input {
+				md.Caps.Vision = md.Caps.Vision || in == "image"
+			}
+		}
+		if len(d.Params) > 0 {
+			md.Caps.Tools = false
+			for _, p := range d.Params {
+				md.Caps.Tools = md.Caps.Tools || p == "tools"
+				md.Caps.Thinking = md.Caps.Thinking || p == "reasoning"
+			}
+		}
+		models = append(models, md)
+	}
+	return models, nil
 }
 
 // ---------- Ollama ----------

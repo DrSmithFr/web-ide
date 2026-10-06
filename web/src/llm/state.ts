@@ -9,12 +9,26 @@ import type { PreviewSpec } from './previews'
 export interface ServerView {
   id: string
   name: string
-  kind: 'auto' | 'llamacpp' | 'ollama'
+  kind: 'auto' | 'llamacpp' | 'ollama' | 'openai'
   url: string
   hasKey: boolean
   context?: number
   /** Conversations the server runs at once (1 by default: one GPU). */
   parallel?: number
+  /** Models typed by the user (a provider without /models, or to set capabilities). */
+  models?: ModelConf[]
+  /** Told to the model choosing a server for a sub-agent. */
+  note?: string
+  /** Offered to the sub-agents. */
+  children?: boolean
+}
+
+export interface ModelConf {
+  id: string
+  context?: number
+  tools: boolean
+  vision: boolean
+  thinking: boolean
 }
 
 export interface Caps {
@@ -97,8 +111,9 @@ export interface ChatMessage {
   model?: string
   /** Replaced by a summary: kept for display, not sent anymore. */
   compacted?: boolean
-  /** Summary written by a compaction (role user), and the number of messages it replaces. */
-  kind?: 'summary'
+  /** Summary written by a compaction (role user), and the number of messages it replaces;
+   *  the task of a sub-agent, an event of a sub-agent or of its parent, a reminder to report. */
+  kind?: 'summary' | 'agent_task' | 'agent_event' | 'agent_nudge'
   summarized?: number
   /** Time spent thinking, and from the request to the end of the answer (ms). */
   thinkMs?: number
@@ -123,6 +138,53 @@ export interface ChatMessage {
   capture?: 'pending' | 'done' | 'refused' | 'skipped'
   /** App offered by share_preview (tool message): its card starts it. */
   preview?: PreviewSpec
+  /** Event of a sub-agent in its parent, or of the parent in the child (kind agent_event). */
+  event?: AgentEvent
+  /** 'parent' on the result of agent_ask until the parent answers. */
+  wait?: 'parent'
+  /** Sub-agent started or addressed by this tool call of the parent. */
+  child?: string
+  /** Action offered by action_card (Orchestrator), and the conversation open_conversation
+   *  moved the user into. */
+  card?: ActionCard
+  opened?: string
+}
+
+export interface ActionCard {
+  kind: 'start_dev' | 'open_ticket' | 'generate_plan' | 'open_conversation'
+  ticket?: number
+  chat?: string
+  label: string
+  reason?: string
+  state?: 'done' | 'failed'
+  result?: string
+}
+
+/** Status of a sub-agent (pod/internal/agent/subagents.go). */
+export type AgentStatus = 'running' | 'waiting_parent' | 'done' | 'blocked' | 'stopped' | 'error'
+
+export interface SubAgent {
+  task: string
+  files?: string[]
+  status: AgentStatus
+  depth: number
+  note?: { title: string; text: string }
+  question?: string
+  asked?: number
+  report?: string
+  changed?: string[]
+  error?: string
+}
+
+export interface AgentEvent {
+  child: string
+  title: string
+  type: 'note' | 'question' | 'report' | 'message'
+  head?: string
+  text: string
+  status?: AgentStatus
+  files?: string[]
+  from?: string
 }
 
 /** A page of the board drawn by the model: its document, the description it read, images. */
@@ -200,11 +262,17 @@ export interface Chat {
   ticket?: { id: number; role: ChatRole; feedback?: number }
   /** Change or command waiting for the user. */
   approval?: Approval
+  /** A sub-agent: the conversation that started it, and its task; the sub-agents started here. */
+  parent?: string
+  agent?: SubAgent
+  children?: string[]
+  /** First message prepared by the Orchestrator, for the message box. */
+  draft?: string
 }
 
 export type ChatRole = 'briefing' | 'plan' | 'dev' | 'correction' | 'resolve'
 
-export type Mode = 'build' | 'plan' | 'briefing'
+export type Mode = 'build' | 'plan' | 'briefing' | 'orchestrator'
 
 export interface QueuedMessage {
   id: string
@@ -219,9 +287,16 @@ export interface ChatInfo {
   title: string
   updated: number
   model?: string
+  /** A sub-agent: its parent and its status. */
+  parent?: string
+  status?: AgentStatus
+  tokens?: number
+  cost?: number
+  mode?: Mode
+  ticket?: number
 }
 
-export const [config, setConfig] = createStore<{ servers: ServerView[]; server: string; model: string }>({ servers: [], server: '', model: '' })
+export const [config, setConfig] = createStore<{ servers: ServerView[]; server: string; model: string; childServer?: string; childModel?: string }>({ servers: [], server: '', model: '' })
 export const [models, setModels] = createSignal<Model[]>([])
 export const [modelsError, setModelsError] = createSignal('')
 export const [modelsLoading, setModelsLoading] = createSignal(false)
@@ -302,6 +377,8 @@ export const [prefs, setPrefs] = createStore({
   /** Model of the Plan mode ('' server: the model of the conversation). */
   planServer: '',
   planModel: '',
+  /** Mode of a new conversation. */
+  defaultMode: 'orchestrator' as Mode,
 })
 try {
   const p = JSON.parse(localStorage.getItem('webide.llm.prefs') ?? 'null')
@@ -309,6 +386,9 @@ try {
 } catch {
   /* private mode */
 }
+/** A message prepared for the message box (the draft of a conversation opened for the user). */
+export const [incomingDraft, setIncomingDraft] = createSignal('')
+
 export function savePrefs() {
   try {
     localStorage.setItem('webide.llm.prefs', JSON.stringify(prefs))
