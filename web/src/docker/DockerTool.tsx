@@ -13,14 +13,15 @@ import {
 import { Detail } from './Detail'
 import { DiskTab } from './DiskTab'
 import { TunnelsTab } from './TunnelsTab'
+import { PreviewsTab } from './PreviewsTab'
 import './docker.css'
 
-type Tab = 'project' | 'host' | 'disk' | 'tunnels'
+type Tab = 'project' | 'host' | 'disk' | 'tunnels' | 'previews'
 
 export function DockerTool() {
   const tab = (): Tab => {
     const id = session.docker.tab
-    return id === 'host' || id === 'disk' || (id === 'tunnels' && !isLocal()) ? id : 'project'
+    return id === 'host' || id === 'disk' || id === 'previews' || (id === 'tunnels' && !isLocal()) ? id : 'project'
   }
   const setTab = (id: Tab) => mutate((s) => (s.docker.tab = id))
 
@@ -72,9 +73,18 @@ export function DockerTool() {
             <span class="tab-title">{t('Tunnels')}</span>
           </div>
         </Show>
+        <div class="tab" role="tab" data-testid="docker-tab-previews" aria-selected={tab() === 'previews'} classList={{ active: tab() === 'previews' }} onClick={() => switchTab('previews')}>
+          <span class="tab-title">{t('Previews')}</span>
+        </div>
       </div>
       <div class="tool-body">
-        <Show when={tab() !== 'tunnels'} fallback={<TunnelsTab />}>
+        <Show when={tab() === 'tunnels'}>
+          <TunnelsTab />
+        </Show>
+        <Show when={tab() === 'previews'}>
+          <PreviewsTab />
+        </Show>
+        <Show when={tab() !== 'tunnels' && tab() !== 'previews'}>
           <Show when={status()} fallback={<p class="muted pad">{t('Loading…')}</p>}>
             <Show when={status()!.available} fallback={<Unavailable />}>
               <Show when={tab() !== 'disk'} fallback={<DiskTab />}>

@@ -1543,5 +1543,21 @@
   "Interrupted: the pod stopped.": "Interrompu : le pod s'est arrêté.",
   "Conversations at once (the others wait their turn)": "Conversations en même temps (les autres attendent leur tour)",
   "“{title}” asks to run a command": "« {title} » demande à lancer une commande",
-  "“{title}” asks to change a file": "« {title} » demande à modifier un fichier"
+  "“{title}” asks to change a file": "« {title} » demande à modifier un fichier",
+  "Offers to try the app": "Propose d'essayer l'app",
+  "Starting…": "Démarrage…",
+  "Open the app": "Ouvrir l'app",
+  "Start and open the app": "Lancer et ouvrir l'app",
+  "Only your tailnet reaches it again": "Seul votre tailnet y accède de nouveau",
+  "Anyone with the link reaches it, through Tailscale Funnel": "Toute personne ayant le lien y accède, via Tailscale Funnel",
+  "Make private": "Rendre privé",
+  "Make public": "Rendre public",
+  "Stops the command and the preview": "Arrête la commande et l'aperçu",
+  "public": "public",
+  "Copy the link": "Copier le lien",
+  "Without Tailscale, the preview is only reachable from the machine of the IDE.": "Sans Tailscale, l'aperçu n'est joignable que depuis la machine de l'IDE.",
+  "Previews": "Aperçus",
+  "Apps the assistant offered to try, served on temporary URLs. A preview stops with its command, after 24 hours at most.": "Les apps que l'assistant a proposé d'essayer, servies sur des URL temporaires. Un aperçu s'arrête avec sa commande, au plus tard après 24 heures.",
+  "No preview.": "Aucun aperçu.",
+  "{command} → port {port}": "{command} → port {port}"
 }

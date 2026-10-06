@@ -27,6 +27,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
+	"github.com/DrSmithFr/web-ide/pod/internal/preview"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
 	"github.com/DrSmithFr/web-ide/pod/internal/sessions"
@@ -54,6 +55,9 @@ type Server struct {
 	Models *hfcache.Cache
 	// Tunnels are the port forwardings of the SSH projects.
 	Tunnels *tunnels.Manager
+	// Previews serve the apps of the projects on temporary URLs (Tailscale by default).
+	Previews  *preview.Manager
+	PreviewTS preview.Tailscale
 	Static  fs.FS
 	// AllowRemote accepts connections from other machines (the token is then the only protection).
 	AllowRemote bool
@@ -67,6 +71,8 @@ type Server struct {
 	handlers map[string]handler
 	// agents are the conversations of the assistant running in the pod.
 	agents agents
+	// previewMu serializes preview.open (one command per app).
+	previewMu sync.Mutex
 	// tunnelIdle closes the tunnels once no window is left (windowsChanged).
 	tunnelIdle *time.Timer
 }
@@ -92,6 +98,10 @@ func (s *Server) Init() {
 		s.Clipboard = clipboard.Load(s.Store)
 	}
 	s.Tunnels = tunnels.New(func() { s.broadcast("tunnels.changed", nil, nil) })
+	if s.PreviewTS == nil {
+		s.PreviewTS = &preview.CLI{}
+	}
+	s.Previews = preview.New(s.PreviewTS, s.authorized, func() { s.broadcast("preview.changed", s.Previews.List(), nil) })
 	s.registerGlobal()
 	s.registerProject()
 	s.registerDB()
@@ -105,6 +115,7 @@ func (s *Server) Init() {
 	s.registerDockerLogs()
 	s.registerDockerDisk()
 	s.registerTunnels()
+	s.registerPreviews()
 	s.registerKanban()
 	s.registerKanbanGit()
 }
@@ -566,6 +577,7 @@ func (s *Server) Shutdown() {
 	s.runtimes = map[string]*runtime.Runtime{}
 	s.mu.Unlock()
 	s.Tunnels.CloseAll()
+	s.Previews.Shutdown()
 	for _, rt := range rts {
 		rt.Close()
 	}

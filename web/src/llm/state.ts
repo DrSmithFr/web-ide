@@ -4,6 +4,7 @@ import { createSignal } from 'solid-js'
 import { createStore, reconcile } from 'solid-js/store'
 import { on, request } from '../pod/rpc'
 import type { DoodleDoc } from './doodle/model'
+import type { PreviewSpec } from './previews'
 
 export interface ServerView {
   id: string
@@ -120,6 +121,8 @@ export interface ChatMessage {
    *  it waits for. */
   page?: ModelPage
   capture?: 'pending' | 'done' | 'refused' | 'skipped'
+  /** App offered by share_preview (tool message): its card starts it. */
+  preview?: PreviewSpec
 }
 
 /** A page of the board drawn by the model: its document, the description it read, images. */

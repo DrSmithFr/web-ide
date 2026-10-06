@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/agent"
+	"github.com/DrSmithFr/web-ide/pod/internal/console"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
@@ -33,6 +34,7 @@ type toolResult struct {
 	Status  string
 	Diff    []agent.DiffLine
 	Page    *agent.Page
+	Preview *agent.Preview
 }
 
 func ok(content string, summary agent.Text) toolResult {
@@ -171,6 +173,8 @@ func (s *Server) agentTool(r *agentRun, ref *runtimeRef, call agent.ToolCall, mo
 		res, err = s.boardDoodle(r, a)
 	case "board_draw_image":
 		res, err = s.boardImage(r, ref.rt, a)
+	case "share_preview":
+		res, err = sharePreview(r, ref.rt, a)
 	case "bash":
 		res, err = bashTool(r.ctx, ref.rt, a.str("command"), a.str("cwd"), a.num("timeout"))
 	case "run_command":
@@ -612,18 +616,10 @@ func (s *Server) runCommand(r *agentRun, rt *runtime.Runtime, command, cwd strin
 		timeout = 20
 	}
 	limit := time.Duration(min(max(timeout, 1), 600)) * time.Second
-	title := command
-	if r := []rune(title); len(r) > 60 {
-		title = string(r[:57]) + "…"
-	}
-	if cwd != "" {
-		cwd = absPath(rt.Root, cwd)
-	}
-	info, err := rt.Consoles.Create("task", title, []string{"sh", "-c", command}, cwd, 160, 40)
+	info, err := s.startCommand(rt, r.project, command, cwd)
 	if err != nil {
 		return toolResult{}, err
 	}
-	s.emitter(r.project)("console.created", info, "")
 	// The console comes to the front in the windows of the project (if any).
 	go s.uiTool(r, "focus", toolArgs{"target": json.RawMessage(`"console"`), "console_id": jsonString(info.ID), "quiet": json.RawMessage("true")})
 	until := time.Now().Add(limit)
@@ -651,6 +647,23 @@ func (s *Server) runCommand(r *agentRun, rt *runtime.Runtime, command, cwd strin
 		tr.Status = "error"
 	}
 	return tr, nil
+}
+
+// startCommand runs a command in a new console of a project, shown in its windows.
+func (s *Server) startCommand(rt *runtime.Runtime, project, command, cwd string) (console.Info, error) {
+	title := command
+	if r := []rune(title); len(r) > 60 {
+		title = string(r[:57]) + "…"
+	}
+	if cwd != "" {
+		cwd = absPath(rt.Root, cwd)
+	}
+	info, err := rt.Consoles.Create("task", title, []string{"sh", "-c", command}, cwd, 160, 40)
+	if err != nil {
+		return info, err
+	}
+	s.emitter(project)("console.created", info, "")
+	return info, nil
 }
 
 func jsonString(s string) json.RawMessage {

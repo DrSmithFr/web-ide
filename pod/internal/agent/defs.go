@@ -184,6 +184,15 @@ var boardImageDef = fn("board_draw_image",
 		"image": str(`SVG markup ("<svg …>…</svg>", with a viewBox or a width and height; no script nor external reference), the path of an image of the project (png, jpg, webp, gif, svg), or "screen"`),
 	}, "title", "image")
 
+var sharePreviewDef = fn("share_preview",
+	"Offers the user to try the app: shows a card in the conversation that, on their click, starts the command in a console (unless it runs already), waits for the port, then opens the app on a temporary URL they can reach from any device (phone included). Nothing runs before the click. Use it for a development server rather than run_command when the user should see the app.",
+	obj{
+		"title":   str("Short name of what to try, e.g. \"Login page\""),
+		"command": str("Command that starts the app (development server), e.g. \"npm run dev\""),
+		"port":    integer("Port the app listens on, on the machine of the project"),
+		"cwd":     str("Folder to run it in, relative to the project root (default: the root)"),
+	}, "title", "command", "port")
+
 var (
 	statuses      = []string{"new", "todo", "in_progress", "review", "done", "abandoned"}
 	priorities    = []string{"low", "normal", "high", "critical"}
@@ -296,7 +305,7 @@ func ToolsFor(mode string, ticket *TicketLink) []json.RawMessage {
 			out = append(out, d.JSON)
 		}
 	}
-	out = append(out, askUserDef.JSON, boardDoodleDef.JSON, boardImageDef.JSON)
+	out = append(out, askUserDef.JSON, boardDoodleDef.JSON, boardImageDef.JSON, sharePreviewDef.JSON)
 	if mode == Plan && (ticket == nil || ticket.Role != "briefing" && ticket.Role != "plan") {
 		out = append(out, exitPlanDef.JSON)
 	}
