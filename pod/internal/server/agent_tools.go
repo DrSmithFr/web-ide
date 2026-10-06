@@ -170,7 +170,7 @@ func (s *Server) agentTool(r *agentRun, ref *runtimeRef, call agent.ToolCall, mo
 	case "board_draw_doodle":
 		res, err = s.boardDoodle(r, a)
 	case "board_draw_image":
-		res, err = s.boardImage(r, a)
+		res, err = s.boardImage(r, ref.rt, a)
 	case "bash":
 		res, err = bashTool(r.ctx, ref.rt, a.str("command"), a.str("cwd"), a.num("timeout"))
 	case "run_command":

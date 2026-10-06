@@ -1,13 +1,17 @@
 package server
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/agent"
+	"github.com/DrSmithFr/web-ide/pod/internal/fsx"
+	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
 )
 
 // The model draws new pages on the board of the conversation: board_draw_doodle (a frame or
@@ -57,12 +61,20 @@ func (s *Server) boardDoodle(r *agentRun, a toolArgs) (toolResult, error) {
 
 var unsafeSVG = regexp.MustCompile(`(?i)<script|<foreignobject|\bon[a-z]+\s*=|javascript:|(href|src)\s*=\s*["'](https?:|//)`)
 
-// boardImage draws an SVG written by the model as a page ("screen" stops the turn before:
-// the capture needs a click of the user).
-func (s *Server) boardImage(r *agentRun, a toolArgs) (toolResult, error) {
-	svg := strings.TrimSpace(a.str("image"))
+const maxImage = 10 << 20
+
+var imageTypes = map[string]string{".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif", ".svg": "image/svg+xml"}
+
+// boardImage puts an image as a page: an SVG written by the model or an image file of the
+// project ("screen" stops the turn before: the capture needs a click of the user).
+func (s *Server) boardImage(r *agentRun, rt *runtime.Runtime, a toolArgs) (toolResult, error) {
+	image := strings.TrimSpace(a.str("image"))
+	if !strings.HasPrefix(image, "<") {
+		return s.boardFile(r, rt, a.str("title"), image)
+	}
+	svg := image
 	if !strings.HasPrefix(svg, "<svg") && !strings.HasPrefix(svg, "<?xml") {
-		return toolResult{}, fmt.Errorf(`image is an SVG ("<svg …>…</svg>") or "screen" (a capture of the screen of the user)`)
+		return toolResult{}, fmt.Errorf(`image is an SVG ("<svg …>…</svg>"), the path of an image of the project, or "screen" (a capture of the screen of the user)`)
 	}
 	if len(svg) > 1<<20 {
 		return toolResult{}, fmt.Errorf("the SVG is too large (1 MB at most)")
@@ -74,6 +86,40 @@ func (s *Server) boardImage(r *agentRun, a toolArgs) (toolResult, error) {
 	n := len(agent.Pages(r.chat.Messages)) + 1
 	r.mu.Unlock()
 	return s.drawPage(r, map[string]any{"title": a.str("title"), "svg": svg, "number": n})
+}
+
+// boardFile puts an image file of the project as a page (an SVG file is checked like an SVG
+// of the model).
+func (s *Server) boardFile(r *agentRun, rt *runtime.Runtime, title, path string) (toolResult, error) {
+	abs := absPath(rt.Root, path)
+	mime := imageTypes[strings.ToLower(filepath.Ext(abs))]
+	switch {
+	case !fsx.Within(rt.Root, abs):
+		return toolResult{}, fmt.Errorf("%s is outside the project", path)
+	case mime == "":
+		return toolResult{}, fmt.Errorf(`image is an SVG ("<svg …>…</svg>"), the path of an image of the project (png, jpg, webp, gif, svg), or "screen": %q is none of them`, path)
+	}
+	st, err := rt.FS.Stat(abs)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("%s: %v", path, err)
+	}
+	if st.Size > maxImage {
+		return toolResult{}, fmt.Errorf("%s is too large (%d MB, 10 MB at most)", path, st.Size>>20)
+	}
+	data, err := rt.FS.Read(abs)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("%s: %v", path, err)
+	}
+	if mime == "image/svg+xml" {
+		if m := unsafeSVG.FindString(string(data)); m != "" {
+			return toolResult{}, fmt.Errorf("%s may not contain %q (no script, event handler, foreignObject or external reference)", path, m)
+		}
+	}
+	r.mu.Lock()
+	n := len(agent.Pages(r.chat.Messages)) + 1
+	r.mu.Unlock()
+	src := "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)
+	return s.drawPage(r, map[string]any{"title": title, "src": src, "origin": "the image " + relPath(rt.Root, abs), "number": n})
 }
 
 // drawPage asks a window to draw a page.

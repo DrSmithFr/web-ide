@@ -7,7 +7,7 @@ import { showTool, toolIds } from '../state/zones'
 import { t } from '../i18n'
 import { buildPage, type DrawArgs } from './board/build'
 import { describe, MAX_SIDE, png } from './doodle/export'
-import type { Picture } from './doodle/background'
+import { pictureOf, type Picture } from './doodle/background'
 import { newDoc } from './doodle/model'
 import type { ModelPage } from './state'
 
@@ -125,11 +125,16 @@ async function svgPicture(svg: string): Promise<Picture> {
  * on an image (an SVG of the model, a capture of the screen) or a copy of a page; its
  * description and images.
  */
-export async function drawPage(a: DrawArgs & { number: number; from?: number; svg?: string }, picture?: Picture, origin?: string): Promise<UiResult> {
+export async function drawPage(a: DrawArgs & { number: number; from?: number; svg?: string; src?: string; origin?: string }, picture?: Picture, origin?: string): Promise<UiResult> {
   const title = String(a.title ?? '').trim() || t('Page {n}', { n: a.number })
   if (a.svg) {
     picture = await svgPicture(a.svg)
     origin = 'an SVG written by you'
+  } else if (a.src) {
+    // An image file of the project (an SVG file is drawn like an SVG of the model).
+    const blob = await (await fetch(a.src)).blob()
+    picture = blob.type === 'image/svg+xml' ? await svgPicture(await blob.text()) : await pictureOf(blob)
+    origin = a.origin
   }
   const { doc, outside } = buildPage({ ...a, elements: a.elements ?? [], base: picture ? newDoc(picture) : undefined })
   let description = describe(doc, title, a.number, origin ? `${origin} (${picture!.w}×${picture!.h})` : undefined)

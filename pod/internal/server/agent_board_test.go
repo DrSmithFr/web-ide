@@ -32,13 +32,13 @@ func TestBoardDrawChecks(t *testing.T) {
 		}
 	}
 	for js, want := range map[string]string{
-		`{"title":"x","image":"a.png"}`:                                      `image is an SVG`,
+		`{"title":"x","image":"<p>hi</p>"}`:                                  `image is an SVG`,
 		`{"title":"x","image":"<svg><script>x</script></svg>"}`:              `may not contain "<script"`,
 		`{"title":"x","image":"<svg><image href='https://x/a.png'/></svg>"}`: "external reference",
 		`{"title":"x","image":"<svg onload=\"x()\"/>"}`:                      "event handler",
 		`{"title":"x","image":"<svg width='10' height='10'/>"}`:              "needs an IDE window open",
 	} {
-		if _, err := s.boardImage(r, args(js)); err == nil || !strings.Contains(err.Error(), want) {
+		if _, err := s.boardImage(r, nil, args(js)); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("image %.60s: %v", js, err)
 		}
 	}

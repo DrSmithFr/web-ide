@@ -178,10 +178,10 @@ var boardDoodleDef = fn("board_draw_doodle",
 	}, "title", "elements")
 
 var boardImageDef = fn("board_draw_image",
-	"Puts an image on the board as a new page, its size the size of the image: an SVG you write, or a capture of the screen of the user (they choose it; the turn waits for them). To annotate it, copy that page with board_draw_doodle (from).",
+	"Puts an image on the board as a new page, its size the size of the image: an SVG you write, an image file of the project, or a capture of the screen of the user (they choose it; the turn waits for them). To annotate it, copy that page with board_draw_doodle (from).",
 	obj{
 		"title": str("Short name of the page"),
-		"image": str(`SVG markup ("<svg …>…</svg>", with a viewBox or a width and height; no script nor external reference), or "screen"`),
+		"image": str(`SVG markup ("<svg …>…</svg>", with a viewBox or a width and height; no script nor external reference), the path of an image of the project (png, jpg, webp, gif, svg), or "screen"`),
 	}, "title", "image")
 
 var (

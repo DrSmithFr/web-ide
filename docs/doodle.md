@@ -74,7 +74,7 @@ Each conversation has a board: its pages are the doodles and the images sent in 
 The assistant draws pages too, in every mode, with two tools:
 
 - `board_draw_doodle(title, size, from, elements)`: a frame (`size`: `16:9` by default, `mobile`, `square` or `WIDTHxHEIGHT` like `1000x600`) or a copy of a page (`from`: its number, keeping its size), then elements in pixels from the top left corner of the frame: rectangles and ellipses (with a centred label), lines and arrows tied to elements by the ids the model gives, texts, layouts (a zone tree) and pen or marker strokes. Copying a page is how the model annotates an image, a capture or a doodle.
-- `board_draw_image(title, image)`: an SVG written by the model (no script, event handler, foreignObject or external reference; a viewBox or a width and height), or `"screen"`, a capture of the screen of the user. The page takes the size of the image (2048 px at most).
+- `board_draw_image(title, image)`: an SVG written by the model (no script, event handler, foreignObject or external reference; a viewBox or a width and height), the path of an image of the project (png, jpg, webp, gif or svg, inside the project, 10 MB at most), or `"screen"`, a capture of the screen of the user. The page takes the size of the image (2048 px at most).
 
 The browser asks a click for a capture of the screen, so `"screen"` stops the turn on a card *Share the screen* / *Refuse*, like questions: the window that shares it draws the page and the agent goes on (`agent.capture`); a message sent instead leaves it aside.
 

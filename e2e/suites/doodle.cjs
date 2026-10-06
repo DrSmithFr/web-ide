@@ -3,7 +3,8 @@
 // frame presets, attach (chip opened again), PNG and description sent to the model,
 // Ctrl+Shift+D and sending from the composer of the modal.
 const http = require('http')
-const { run, openProject, assert, OUT } = require('../common.cjs')
+const fs = require('fs')
+const { run, openProject, assert, OUT, WS } = require('../common.cjs')
 
 const requests = []
 const sse = (res, delta) => res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`)
@@ -40,8 +41,10 @@ const fake = http.createServer(async (req, res) => {
         tool_calls: [
           call(0, 'b1', 'board_draw_doodle', { from: 1, elements: [{ type: 'ellipse', x: 1, y: 1, w: 2, h: 1, color: 'red' }] }),
           call(1, 'b2', 'board_draw_image', { image: '<svg viewBox="0 0 300 200"><rect x="10" y="10" width="280" height="180" fill="#9cf"/><circle cx="150" cy="100" r="60" fill="#f80"/></svg>' }),
-          call(2, 'b3', 'board_draw_image', { image: 'shot.png' }),
-          call(3, 'b4', 'board_draw_image', { image: 'screen' }),
+          call(2, 'b3', 'board_draw_image', { image: 'img/logo.png' }),
+          call(3, 'b4', 'board_draw_image', { image: 'notes.txt' }),
+          call(4, 'b5', 'board_draw_image', { image: '../outside.png' }),
+          call(5, 'b6', 'board_draw_image', { image: 'screen' }),
         ],
       })
       return end(res, 'tool_calls')
@@ -597,6 +600,8 @@ run(async ({ page }) => {
 
     // Images: the image sent by the user is a page, annotated on a copy; an SVG of the model
     // as a page; an image that is neither an SVG nor "screen"; a capture of the screen refused.
+    fs.mkdirSync(WS + '/demo/img', { recursive: true })
+    fs.writeFileSync(WS + '/demo/img/logo.png', PNG)
     await page.click('.ai-panel button[title="New conversation"]')
     await page.setInputFiles('.ai-composer input[type=file]', { name: 'shot.png', mimeType: 'image/png', buffer: PNG })
     await page.waitForSelector('.ai-composer .ai-att[data-kind=image]')
@@ -610,12 +615,14 @@ run(async ({ page }) => {
     const b = (id) => text(bm.find((m) => m.role === 'tool' && m.tool_call_id === id))
     assert(b('b1').includes('Page 2 "b1"') && b('b1').includes('Frame 4×3') && b('b1').includes('A copy of page 1'), 'the image sent, annotated on a copy: ' + b('b1'))
     assert(b('b2').includes('Page 3 "b2"') && b('b2').includes('background image: an SVG written by you (300×200)'), 'an SVG of the model as a page: ' + b('b2'))
-    assert(b('b3').startsWith('Error:') && b('b3').includes('image is an SVG'), 'neither an SVG nor screen: ' + b('b3'))
-    assert(b('b4').includes('refused to share their screen'), 'capture refused: ' + b('b4'))
+    assert(b('b3').includes('Page 4 "b3"') && b('b3').includes('background image: the image img/logo.png (4×3)'), 'an image of the project as a page: ' + b('b3'))
+    assert(b('b4').startsWith('Error:') && b('b4').includes('"notes.txt" is none of them'), 'not an image: ' + b('b4'))
+    assert(b('b5').startsWith('Error:') && b('b5').includes('outside the project'), 'no image outside the project: ' + b('b5'))
+    assert(b('b6').includes('refused to share their screen'), 'capture refused: ' + b('b6'))
     assert(!(await page.$('[data-testid=ai-capture]')), 'the card goes once answered')
     await page.click('[data-testid=ai-board-toggle]')
-    await page.waitForSelector('[data-testid=bd-title]:has-text("Page 3")')
-    assert((await page.$$('[data-testid=bd-thumb]')).length === 3 && (await page.$$('[data-testid=bd-view] image')).length === 1, 'three pages: the image sent, its copy, the SVG')
+    await page.waitForSelector('[data-testid=bd-title]:has-text("Page 4")')
+    assert((await page.$$('[data-testid=bd-thumb]')).length === 4 && (await page.$$('[data-testid=bd-view] image')).length === 1, 'four pages: the image sent, its copy, the SVG, the image of the project')
     await page.click('[data-testid=bd-thumb] >> nth=0')
     assert((await page.textContent('[data-testid=bd-title]')) === 'Page 1 · shot.png', 'the image sent is page 1')
     await page.screenshot({ path: OUT + '/board-background.png' })
