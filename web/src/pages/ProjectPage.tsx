@@ -8,6 +8,7 @@ import {
 } from '../state/project'
 import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, toggleTool, toolsIn, zoneOf, zones, type Zone } from '../state/zones'
 import { focusEditor, focusPart, setFocusPart, trackFocus } from '../state/focus'
+import { mobileView, phone, revealCaret, setMobileView } from '../state/mobile'
 import { settings, updateSettings } from '../state/settings'
 import { navigate } from '../app/router'
 import { EditorArea } from '../ui/EditorArea'
@@ -234,12 +235,54 @@ export function PodStatus() {
 
 function MenuBar() {
   const conflicts = () => (docsVersion(), conflictedDocs().length)
-  return (
-    <header class="menubar">
+  // Phone: three rows, the project and the status, the menus, the icons of the views.
+  const head = () => (
+    <>
       <button class="icon-btn" title={t('Projects')} onClick={() => navigate('/')}>
         <Icon name="home" />
       </button>
       <ProjectBar />
+    </>
+  )
+  const tail = () => (
+    <>
+      <Show when={conflicts()}>
+        <button class="badge warn" onClick={() => mutate((s) => (s.right.panel = 'conflicts'))}>
+          {tn(conflicts(), '{n} conflict', '{n} conflicts')}
+        </button>
+      </Show>
+      <PodStatus />
+      <button class="icon-btn" title={`${t('Settings')} (${shortcutOf('settings.open')})`} onClick={() => openSettings()}>
+        <Icon name="gear" />
+      </button>
+    </>
+  )
+  const menuButtons = () => (
+    <For each={menus}>
+      {([label, ids]) => (
+        <button class="menu-btn" onMouseDown={(e) => e.preventDefault()} onClick={(e) => openMenu(e, ids)}>
+          {t(label)}
+        </button>
+      )}
+    </For>
+  )
+  return (
+    <Show
+      when={!phone()}
+      fallback={
+        <header class="menubar phone" data-testid="phone-bar">
+          <div class="menubar-row">
+            {head()}
+            <span class="grow" />
+            {tail()}
+          </div>
+          <nav class="menus">{menuButtons()}</nav>
+          <MobileRail />
+        </header>
+      }
+    >
+    <header class="menubar">
+      {head()}
       <nav class="menus">
         <For each={menus}>
           {([label, ids]) => (
@@ -250,17 +293,79 @@ function MenuBar() {
         </For>
       </nav>
       <span class="grow" />
-      <Show when={conflicts()}>
-        <button class="badge warn" onClick={() => mutate((s) => (s.right.panel = 'conflicts'))}>
-          {tn(conflicts(), '{n} conflict', '{n} conflicts')}
-        </button>
-      </Show>
-      <PodStatus />
-      <button class="icon-btn" title={`${t('Settings')} (${shortcutOf('settings.open')})`} onClick={() => openSettings()}>
-        <Icon name="gear" />
-      </button>
+      {tail()}
     </header>
+    </Show>
   )
+}
+
+/** Phone: the editor and every tool in one row of icons; the view shown is highlighted. */
+function MobileRail() {
+  let el!: HTMLDivElement
+  const tools = () => (['left', 'right', 'bottomLeft', 'bottomRight'] as Zone[]).flatMap((z) => toolsIn(session, z)).filter((id) => toolPanels[id])
+  const show = (id: string) => {
+    if (id !== 'editor') mutate((s) => showTool(s, id))
+    setMobileView(id)
+  }
+  createEffect(() => {
+    const id = mobileView()
+    queueMicrotask(() => el?.querySelector<HTMLElement>(`[data-id="${id}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' }))
+  })
+  return (
+    <div class="mobile-rail" ref={el} role="toolbar" aria-label={t('Views')} data-testid="mobile-rail">
+      <button class="rail-btn" classList={{ active: mobileView() === 'editor' }} data-id="editor" title={t('Editor')} aria-pressed={mobileView() === 'editor'} onClick={() => show('editor')}>
+        <Icon name="file" size={18} />
+      </button>
+      <span class="mobile-rail-sep" />
+      <For each={tools()}>
+        {(id) => (
+          <button class="rail-btn" classList={{ active: mobileView() === id }} data-id={id} title={t(toolPanels[id].label)} aria-pressed={mobileView() === id} onClick={() => show(id)}>
+            <Icon name={toolPanels[id].icon} size={18} />
+            <Show when={toolPanels[id].badge?.()}>
+              <span class="rail-badge" />
+            </Show>
+          </button>
+        )}
+      </For>
+    </div>
+  )
+}
+
+/**
+ * Phone: the view follows what the user opens. A tool shown by any way (shortcut, menu, the
+ * assistant) comes to the front, a file opened brings the editor back, a tool closed too.
+ */
+function MobileSync() {
+  // Becoming a phone (a narrower window), the part in use stays in front.
+  let wasPhone = phone()
+  createEffect(() => {
+    const now = phone()
+    if (now && !wasPhone) {
+      const part = focusPart()
+      setMobileView(part !== 'editor' ? (shownIn(session, part) ?? 'editor') : 'editor')
+    }
+    wasPhone = now
+  })
+  // The tools restored with the session stay behind the editor.
+  let prev: Record<string, string | null> | undefined
+  createEffect(() => {
+    const now = Object.fromEntries(zones.map((z) => [z, shownIn(session, z)]))
+    if (phone() && prev) {
+      for (const z of zones) if (now[z] && now[z] !== prev![z]) setMobileView(now[z]!)
+      if (mobileView() !== 'editor' && !Object.values(now).includes(mobileView())) setMobileView('editor')
+    }
+    prev = now
+  })
+  let lastTab: string | undefined
+  let started = false
+  createEffect(() => {
+    const tab = activeTab()
+    const key = tab ? `${tab.kind}:${tab.path ?? tab.title}` : undefined
+    if (phone() && started && key && key !== lastTab) setMobileView('editor')
+    lastTab = key
+    started = true
+  })
+  return null
 }
 
 // ---------- rails & side panels ----------
@@ -501,12 +606,23 @@ export function ProjectPage(props: { id: string }) {
         </div>
       }
     >
-      <div class="app" classList={{ 'visual-focus': settings.visualFocus, 'focus-outline': settings.focusOutline, 'focus-dim': settings.focusDim }}>
+      <div class="app" classList={{ 'visual-focus': settings.visualFocus, 'focus-outline': settings.focusOutline, 'focus-dim': settings.focusDim, phone: phone() }}>
         <MenuBar />
+        <MobileSync />
         <NewTicketHost />
         <SearchEverywhereHost />
         <RecentFilesHost tools={switcherTools} onTool={toggleToolFocus} />
         <ClipboardHistoryHost />
+        <Show when={phone()}>
+          {/* One view at a time, full screen: the editor stays mounted under the tools. */}
+          <div class="workbench phone-body" onPointerDown={trackFocus} onFocusIn={trackFocus}>
+            <main class="center" data-focus="editor" classList={{ hidden: mobileView() !== 'editor' }} onFocusIn={() => setTimeout(revealCaret, 300)}>
+              <EditorArea />
+            </main>
+            <Show when={mobileView() !== 'editor' && zoneOf(session, mobileView())}>{(z) => <ZonePanel zone={z()} />}</Show>
+          </div>
+        </Show>
+        <Show when={!phone()}>
         <div class="workbench" onPointerDown={trackFocus} onFocusIn={trackFocus}>
           <Rail side="left" />
           <div class="work">
@@ -529,6 +645,7 @@ export function ProjectPage(props: { id: string }) {
           </div>
           <Rail side="right" />
         </div>
+        </Show>
       </div>
     </Show>
   )

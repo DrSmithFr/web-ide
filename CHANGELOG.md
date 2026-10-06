@@ -4,6 +4,10 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+### Added
+
+- Phone layout (720 px wide or less): one bar of three rows with the menus and a single row of icons (the editor first, then the tools), one view at a time full screen, the editor brought back when a file is opened, the caret line kept above the keyboard, and no zoom of the page.
+
 ## [1.2.0] - 2026-10-06
 
 ### Added

@@ -441,8 +441,10 @@ run(async ({ page }) => {
     })
     await page.waitForSelector('[data-testid=ai-ask-compare]', { state: 'visible', timeout: 10000 })
     assert(true, 'swiping the idea card right answers "Yes" and moves on to the compare')
-    // Narrow viewport: the two cards stack (a single grid column).
+    // Narrow viewport (the phone layout, the assistant in use in front): the card goes on
+    // where it was, the two cards stack (a single grid column).
     await page.setViewportSize({ width: 390, height: 844 })
+    await page.waitForSelector('[data-testid=ai-ask-compare]', { state: 'visible', timeout: 10000 })
     const tracks = await page.$eval('[data-testid=ai-ask-compare]', (el) => getComputedStyle(el).gridTemplateColumns.split(' ').length)
     await page.screenshot({ path: OUT + '/ask-types-mobile.png' })
     assert(tracks === 1, 'compare stacked on a mobile viewport (tracks: ' + tracks + ')')
