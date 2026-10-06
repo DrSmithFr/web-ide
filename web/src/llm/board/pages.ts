@@ -1,7 +1,7 @@
 // The pages of the board of a conversation: a view over its messages, not a store. A page is
-// a doodle the user sent (an attachment with its document) or a page drawn by the model
-// (board_draw, a tool message with its page). Numbered from 1 in message order, then attachment order: the model refers to
-// pages by this number, so the pod counts them the same way.
+// a doodle or an image the user sent (an attachment), or a page drawn by the model (a tool
+// message with its page). Numbered from 1 in message order, then attachment order: the
+// model refers to pages by this number, so the pod counts them the same way (agent.Pages).
 import { createEffect, createMemo, createRoot, createSignal, on } from 'solid-js'
 import { chat, prefs, savePrefs, setPrefs, type ChatMessage } from '../state'
 import type { DoodleDoc } from '../doodle/model'
@@ -19,12 +19,40 @@ export interface Page {
   thumb?: string
 }
 
+/**
+ * The images of the image attachments of a message, in order: its image parts that are not
+ * the PNG of a doodle. None when video frames or PDF pages mix in (as the pod does).
+ */
+function imageSources(m: ChatMessage): string[] {
+  const atts = m.attachments ?? []
+  if (atts.some((a) => a.kind === 'video' || a.kind === 'pdf') || !Array.isArray(m.content)) return []
+  const doodles = new Set(atts.filter((a) => a.kind === 'doodle').map((a) => a.png))
+  return m.content.flatMap((p) => (p.type === 'image_url' && !doodles.has(p.image_url.url) ? [p.image_url.url] : []))
+}
+
+// The document of an image page is made once per image: the view keeps its zoom.
+const imageDocs = new Map<string, DoodleDoc>()
+function imageDoc(src: string | undefined, w: number, h: number): DoodleDoc {
+  const key = `${w}x${h}:${src ?? ''}`
+  let doc = imageDocs.get(key)
+  if (!doc) {
+    doc = { v: 1, frame: { x: 0, y: 0, w, h }, preset: 'image', elements: [], background: src ? { src, x: 0, y: 0, w, h } : undefined }
+    imageDocs.set(key, doc)
+  }
+  return doc
+}
+
 export function pagesOf(messages: ChatMessage[]): Page[] {
   const out: Page[] = []
   messages.forEach((m, i) => {
+    const images = imageSources(m)
+    let k = 0
     ;(m.attachments ?? []).forEach((a, n) => {
       if (a.kind === 'doodle' && a.doodle)
         out.push({ key: `${i}:${n}`, number: out.length + 1, name: a.name, doc: a.doodle, description: a.description, from: 'user', msgIndex: i, thumb: a.thumb })
+      // An image sent (with its size: older ones are not pages).
+      if (a.kind === 'image' && a.w && a.h) out.push({ key: `${i}:${n}`, number: out.length + 1, name: a.name, doc: imageDoc(images[k], a.w, a.h), from: 'user', msgIndex: i, thumb: a.thumb })
+      if (a.kind === 'image') k++
     })
     if (m.page) out.push({ key: `${i}:page`, number: out.length + 1, name: m.page.name, doc: m.page.doc, description: m.page.description, from: 'model', msgIndex: i, thumb: m.page.thumb })
   })

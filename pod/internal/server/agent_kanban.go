@@ -108,7 +108,7 @@ func (s *Server) attachDoodles(r *agentRun, id int64) int {
 			continue
 		}
 		name := p.Name
-		if p.From == "model" {
+		if p.Kind == "model" {
 			name = fmt.Sprintf("Page %d %s", p.Number, p.Name)
 		} else if seen[p.Name]++; seen[p.Name] > 1 {
 			// Doodle 1 of two messages: "Doodle 1.png", "Doodle 1 (2).png".

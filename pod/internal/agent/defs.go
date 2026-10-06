@@ -143,27 +143,12 @@ var (
 	zoneTree  = obj{"type": "object", "description": `Zone: {"name"?, "split"?: {"dir": "rows"|"cols", "sizes": [fractions], "children": [zones]}}`}
 )
 
-var boardDrawDef = fn("board_draw",
-	"Draws a new page on the board shared with the user (next to the conversation): a layout, a flow, a sketch, an SVG (svg), an image or a capture (background), or annotations on a copy of an earlier page. Pages never change: to fix one, draw a new page (from: its number). Returns the description of the page and its image.",
+var boardDoodleDef = fn("board_draw_doodle",
+	"Draws a new page on the board shared with the user (next to the conversation): a layout, a flow, a sketch, or annotations on a copy of a page (from: an image, a doodle of the user or one of your pages). Pages never change: to fix one, draw a copy. Returns the description of the page and its image.",
 	obj{
-		"title":  str("Short name of the page"),
-		"svg":    str("SVG markup you write, shown as the page (same as background.svg); elements are drawn on top"),
-		"preset": enum("Frame: 16:9 (1280×720, default), mobile (390×844), square (800×800)", "16:9", "mobile", "square"),
-		"size":   obj{"type": "object", "properties": obj{"w": integer("Width"), "h": integer("Height")}, "description": "Free frame size instead of a preset"},
-		"from":   integer("Number of a page of the board to copy, drawing on top of it"),
-		"background": obj{
-			"type":        "object",
-			"description": "An image under the page (one source; the frame takes its size, at most 2048 px; coordinates in its pixels)",
-			"properties": obj{
-				"file":       str("Image of the project (png, jpg, webp, gif, svg), path relative to the root"),
-				"attachment": str("Name of an image or a page of this conversation"),
-				"url":        str("http(s) page captured by a headless browser on the machine of the IDE (e.g. the app in development on localhost)"),
-				"width":      integer("url: width of the window (1280 by default)"),
-				"height":     integer("url: height of the window (800 by default)"),
-				"svg":        str("SVG markup you write (no script, no external reference)"),
-				"ide":        boolean("A capture of the screen of the user: they choose it, the turn waits for them"),
-			},
-		},
+		"title": str("Short name of the page"),
+		"size":  str(`Frame: "16:9" (1280x720, default), "mobile" (390x844), "square" (800x800), or "WIDTHxHEIGHT" like "1000x600"`),
+		"from":  integer("Number of a page of the board to copy, drawing on top of it (keeps its size)"),
 		"elements": obj{
 			"type":        "array",
 			"description": fmt.Sprintf("At most %d, in px from the top left corner of the frame. Colors: ink, red, blue, green (marker: yellow, lime, pink, cyan)", MaxPageElements),
@@ -190,7 +175,14 @@ var boardDrawDef = fn("board_draw",
 				"required": []string{"type"},
 			},
 		},
-	}, "title")
+	}, "title", "elements")
+
+var boardImageDef = fn("board_draw_image",
+	"Puts an image on the board as a new page, its size the size of the image: an SVG you write, or a capture of the screen of the user (they choose it; the turn waits for them). To annotate it, copy that page with board_draw_doodle (from).",
+	obj{
+		"title": str("Short name of the page"),
+		"image": str(`SVG markup ("<svg …>…</svg>", with a viewBox or a width and height; no script nor external reference), or "screen"`),
+	}, "title", "image")
 
 var (
 	statuses      = []string{"new", "todo", "in_progress", "review", "done", "abandoned"}
@@ -304,7 +296,7 @@ func ToolsFor(mode string, ticket *TicketLink) []json.RawMessage {
 			out = append(out, d.JSON)
 		}
 	}
-	out = append(out, askUserDef.JSON, boardDrawDef.JSON)
+	out = append(out, askUserDef.JSON, boardDoodleDef.JSON, boardImageDef.JSON)
 	if mode == Plan && (ticket == nil || ticket.Role != "briefing" && ticket.Role != "plan") {
 		out = append(out, exitPlanDef.JSON)
 	}

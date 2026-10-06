@@ -194,7 +194,7 @@ function CaptureCard(props: { msg: ChatMessage; call?: ToolCall }) {
     }
     setBusy(true)
     try {
-      const res = await drawPage({ ...(safeArgs(props.call) as any), background: undefined, number: pages().length + 1 }, pic, 'a capture of the screen of the user')
+      const res = await drawPage({ title: String(safeArgs(props.call).title ?? ''), elements: [], number: pages().length + 1 }, pic, 'a capture of the screen of the user')
       await send({ content: res.content, summary: res.summary, page: res.page })
     } catch (e) {
       await send({ error: (e as Error).message }).catch(errorToast)

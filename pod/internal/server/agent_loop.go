@@ -521,13 +521,11 @@ func (s *Server) runCalls(r *agentRun, ref *runtimeRef, calls []agent.ToolCall, 
 			s.publish(r, len(r.chat.Messages)-1)
 			r.mu.Unlock()
 			continue
-		case "board_draw":
+		case "board_draw_image":
 			// A capture of the screen of the user needs their click: the turn ends until they
 			// share it or refuse (agent.capture), like questions.
-			var bg struct {
-				IDE bool `json:"ide"`
-			}
-			if json.Unmarshal(args["background"], &bg) != nil || !bg.IDE {
+			var image string
+			if json.Unmarshal(args["image"], &image) != nil || strings.TrimSpace(image) != "screen" {
 				break
 			}
 			m := &agent.Message{Role: "tool", ToolCallID: call.ID, Name: name, Status: "ok", Capture: "pending",

@@ -3,8 +3,7 @@
 // frame presets, attach (chip opened again), PNG and description sent to the model,
 // Ctrl+Shift+D and sending from the composer of the modal.
 const http = require('http')
-const fs = require('fs')
-const { run, openProject, assert, OUT, WS } = require('../common.cjs')
+const { run, openProject, assert, OUT } = require('../common.cjs')
 
 const requests = []
 const sse = (res, delta) => res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`)
@@ -33,18 +32,16 @@ const fake = http.createServer(async (req, res) => {
   }
   const firstUser = r.messages.find((m) => m.role === 'user')
   if (text(firstUser).startsWith('Back:')) {
-    // board_draw on backgrounds: a project file, an SVG, a captured page, a file outside the
-    // project (refused) and a capture of the screen of the user (waits for them).
+    // The image sent by the user is page 1: annotated on a copy; an SVG of the model as a page;
+    // an image that is neither an SVG nor "screen" (refused); a capture of the screen (waits).
     if (!r.messages.some((m) => m.role === 'tool')) {
-      const call = (i, id, background, more) => ({ index: i, id, type: 'function', function: { name: 'board_draw', arguments: JSON.stringify({ title: id, background, elements: [{ type: 'stroke', points: [[2, 2], [40, 20]], color: 'red' }], ...more }) } })
+      const call = (i, id, name, args) => ({ index: i, id, type: 'function', function: { name, arguments: JSON.stringify({ title: id, ...args }) } })
       sse(res, {
         tool_calls: [
-          call(0, 'b1', { file: 'shot.png' }),
-          // The SVG at the first level, without elements.
-          { ...call(1, 'b2'), function: { name: 'board_draw', arguments: JSON.stringify({ title: 'b2', svg: '<svg viewBox="0 0 300 200"><rect x="10" y="10" width="280" height="180" fill="#9cf"/><circle cx="150" cy="100" r="60" fill="#f80"/></svg>' }) } },
-          call(2, 'b3', { url: `http://127.0.0.1:${site.address().port}/`, width: 640, height: 400 }),
-          call(3, 'b4', { file: '../outside.png' }),
-          call(4, 'b5', { ide: true }),
+          call(0, 'b1', 'board_draw_doodle', { from: 1, elements: [{ type: 'ellipse', x: 1, y: 1, w: 2, h: 1, color: 'red' }] }),
+          call(1, 'b2', 'board_draw_image', { image: '<svg viewBox="0 0 300 200"><rect x="10" y="10" width="280" height="180" fill="#9cf"/><circle cx="150" cy="100" r="60" fill="#f80"/></svg>' }),
+          call(2, 'b3', 'board_draw_image', { image: 'shot.png' }),
+          call(3, 'b4', 'board_draw_image', { image: 'screen' }),
         ],
       })
       return end(res, 'tool_calls')
@@ -55,13 +52,13 @@ const fake = http.createServer(async (req, res) => {
   if (text(firstUser).startsWith('Draw:')) {
     // board_draw: a page, then a copy of it with a red stroke and an invalid arrow, then the end.
     const tools = r.messages.filter((m) => m.role === 'tool').length
-    const call = (id, args) => ({ index: 0, id, type: 'function', function: { name: 'board_draw', arguments: JSON.stringify(args) } })
+    const call = (id, args) => ({ index: 0, id, type: 'function', function: { name: 'board_draw_doodle', arguments: JSON.stringify(args) } })
     if (tools === 0) {
       sse(res, {
         tool_calls: [
           call('d1', {
             title: 'Login flow',
-            preset: '16:9',
+            size: '16:9',
             elements: [
               { type: 'layout', x: 40, y: 40, w: 500, h: 600, root: { split: { dir: 'rows', sizes: [1, 4], children: [{ name: 'header' }, { name: 'form' }] } } },
               { type: 'rect', id: 'btn', x: 700, y: 100, w: 240, h: 90, label: 'Sign in', fill: true, color: 'blue' },
@@ -91,8 +88,6 @@ const fake = http.createServer(async (req, res) => {
   end(res)
 })
 
-// A page for the URL capture of board_draw.
-const site = http.createServer((req, res) => res.end('<body style="margin:0;background:#2a6"><h1 style="color:#fff">Local app</h1></body>'))
 // A 4×3 red PNG.
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAEElEQVR4nGP4z8AARww4OQD1MQv1NXv7ggAAAABJRU5ErkJggg==', 'base64')
 
@@ -126,7 +121,6 @@ function penStroke(page, x0, y0, x1, y1, opts) {
 
 run(async ({ page }) => {
   await new Promise((r) => fake.listen(0, '127.0.0.1', r))
-  await new Promise((r) => site.listen(0, '127.0.0.1', r))
   try {
     await openProject(page)
     await page.click('.rail-right .rail-btn[title="AI assistant"]')
@@ -579,7 +573,6 @@ run(async ({ page }) => {
     await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Drawn.")', { timeout: 20000 })
     const msgs = requests[requests.length - 1].messages
     const d = (id) => text(msgs.find((m) => m.role === 'tool' && m.tool_call_id === id))
-    assert(d('d1').includes('Background: none'), 'a page without background says so')
     assert(d('d1').includes('Page 1 "Login flow" drawn by you') && d('d1').includes('"header"') && d('d1').includes('Sign in') && d('d1').includes('Happy path'), 'page described to the model: ' + d('d1'))
     const afterD1 = msgs[msgs.findIndex((m) => m.tool_call_id === 'd1') + 1]
     assert(afterD1.role === 'user' && afterD1.content.some((p) => p.type === 'image_url' && p.image_url.url.startsWith('data:image/png')), 'the image of the page follows the tool result')
@@ -602,10 +595,11 @@ run(async ({ page }) => {
     const tk = text([...requests[requests.length - 1].messages].reverse().find((m) => m.role === 'tool'))
     assert(tk.includes('2 doodles of the conversation attached'), 'the pages of the model go to the ticket: ' + tk)
 
-    // Backgrounds: a project file, an SVG, a local page captured, a file outside the project,
-    // and a capture of the screen that the user refuses.
-    fs.writeFileSync(WS + '/demo/shot.png', PNG)
+    // Images: the image sent by the user is a page, annotated on a copy; an SVG of the model
+    // as a page; an image that is neither an SVG nor "screen"; a capture of the screen refused.
     await page.click('.ai-panel button[title="New conversation"]')
+    await page.setInputFiles('.ai-composer input[type=file]', { name: 'shot.png', mimeType: 'image/png', buffer: PNG })
+    await page.waitForSelector('.ai-composer .ai-att[data-kind=image]')
     await page.fill('.ai-composer textarea', 'Back: annotate')
     await page.keyboard.press('Enter')
     await page.waitForSelector('[data-testid=ai-capture]', { timeout: 30000 })
@@ -614,19 +608,19 @@ run(async ({ page }) => {
     await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Backgrounds done.")', { timeout: 20000 })
     const bm = requests[requests.length - 1].messages
     const b = (id) => text(bm.find((m) => m.role === 'tool' && m.tool_call_id === id))
-    assert(b('b1').includes('background image: file shot.png (4×3)'), 'page on a project image: ' + b('b1'))
-    assert(b('b2').includes('background image: SVG written by you (300×200)'), 'page on an SVG of the model: ' + b('b2'))
-    assert(b('b3').includes('background image: capture of http://127.0.0.1') && b('b3').includes('(640×400)'), 'page on a captured page: ' + b('b3'))
-    assert(b('b4').startsWith('Error:') && b('b4').includes('outside the project'), 'no file outside the project: ' + b('b4'))
-    assert(b('b5').includes('refused to share their screen'), 'capture refused: ' + b('b5'))
+    assert(b('b1').includes('Page 2 "b1"') && b('b1').includes('Frame 4×3') && b('b1').includes('A copy of page 1'), 'the image sent, annotated on a copy: ' + b('b1'))
+    assert(b('b2').includes('Page 3 "b2"') && b('b2').includes('background image: an SVG written by you (300×200)'), 'an SVG of the model as a page: ' + b('b2'))
+    assert(b('b3').startsWith('Error:') && b('b3').includes('image is an SVG'), 'neither an SVG nor screen: ' + b('b3'))
+    assert(b('b4').includes('refused to share their screen'), 'capture refused: ' + b('b4'))
     assert(!(await page.$('[data-testid=ai-capture]')), 'the card goes once answered')
     await page.click('[data-testid=ai-board-toggle]')
     await page.waitForSelector('[data-testid=bd-title]:has-text("Page 3")')
-    assert((await page.$$('[data-testid=bd-thumb]')).length === 3 && (await page.$$('[data-testid=bd-view] image')).length === 1, 'three pages, each on its image')
+    assert((await page.$$('[data-testid=bd-thumb]')).length === 3 && (await page.$$('[data-testid=bd-view] image')).length === 1, 'three pages: the image sent, its copy, the SVG')
+    await page.click('[data-testid=bd-thumb] >> nth=0')
+    assert((await page.textContent('[data-testid=bd-title]')) === 'Page 1 · shot.png', 'the image sent is page 1')
     await page.screenshot({ path: OUT + '/board-background.png' })
     await page.click('[data-testid=ai-board-toggle]')
   } finally {
-    site.close()
     fake.close()
   }
 })

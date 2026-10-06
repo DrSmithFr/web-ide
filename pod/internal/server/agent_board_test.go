@@ -20,23 +20,32 @@ func TestBoardDrawChecks(t *testing.T) {
 		return a
 	}
 	for js, want := range map[string]string{
-		`{"title":"x","elements":[],"from":2}`: "the board has no page yet",
-		`{"title":"x","elements":{}}`:          "must be a list",
+		`{"title":"x","elements":[],"from":2}`:                 "the board has no page yet",
+		`{"title":"x","elements":[],"from":1,"size":"square"}`: "size and from cannot go together",
+		`{"title":"x","elements":{}}`:                          "must be a list",
+		`{"title":"x"}`:                                        "must be a list",
 		`{"title":"x","elements":[{"type":"stroke","points":[` + strings.Repeat("[1,2],", 500) + `[1,2]]}]}`: "element 1: 501 points",
 		`{"title":"x","elements":[{"type":"rect","x":1,"y":1,"w":5,"h":5}]}`:                                 "needs an IDE window open",
-		`{"title":"x","background":{"svg":"<svg/>","url":"http://a"}}`:                                       "exactly one source",
-		`{"title":"x","background":{"svg":"<svg><script>x</script></svg>"}}`:                                 `may not contain "<script"`,
-		`{"title":"x","background":{"svg":"<svg><image href='https://x/a.png'/></svg>"}}`:                    "external reference",
-		`{"title":"x","background":{"svg":"<svg onload=\"x()\"/>"}}`:                                         "event handler",
-		`{"title":"x","background":{"attachment":"shot.png"}}`:                                               `no image or page named "shot.png"`,
-		`{"title":"x","background":{"svg":"<svg/>"},"from":1}`:                                               "background and from cannot go together",
-		`{"title":"x","svg":"<svg/>","background":{"file":"a.png"}}`:                                         "svg and background cannot go together",
-		`{"title":"x","svg":"<svg><script/></svg>"}`:                                                         `may not contain "<script"`,
-		`{"title":"x","svg":"<svg width='10' height='10'/>"}`:                                                "needs an IDE window open",
 	} {
-		if _, err := s.boardDraw(r, nil, args(js)); err == nil || !strings.Contains(err.Error(), want) {
-			t.Errorf("%.60s: %v", js, err)
+		if _, err := s.boardDoodle(r, args(js)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("doodle %.60s: %v", js, err)
 		}
+	}
+	for js, want := range map[string]string{
+		`{"title":"x","image":"a.png"}`:                                      `image is an SVG`,
+		`{"title":"x","image":"<svg><script>x</script></svg>"}`:              `may not contain "<script"`,
+		`{"title":"x","image":"<svg><image href='https://x/a.png'/></svg>"}`: "external reference",
+		`{"title":"x","image":"<svg onload=\"x()\"/>"}`:                      "event handler",
+		`{"title":"x","image":"<svg width='10' height='10'/>"}`:              "needs an IDE window open",
+	} {
+		if _, err := s.boardImage(r, args(js)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("image %.60s: %v", js, err)
+		}
+	}
+	// A copy of an image whose data is not kept (an old attachment) is refused.
+	r.chat.Messages = []*agent.Message{{Role: "user", Attachments: json.RawMessage(`[{"name":"old.png","kind":"image","w":4,"h":3}]`)}}
+	if _, err := s.boardDoodle(r, args(`{"title":"x","elements":[],"from":1}`)); err == nil || !strings.Contains(err.Error(), "not kept") {
+		t.Errorf("copy of a lost image: %v", err)
 	}
 }
 
@@ -55,22 +64,5 @@ func TestPageImages(t *testing.T) {
 	}
 	if len(apiMessages("sys", msgs, false)) != 6 {
 		t.Fatal("no image for a model without vision")
-	}
-}
-
-func TestAttachmentImage(t *testing.T) {
-	msgs := []*agent.Message{{
-		Role:        "user",
-		Content:     json.RawMessage(`[{"type":"image_url","image_url":{"url":"data:doodle"}},{"type":"image_url","image_url":{"url":"data:shot"}},{"type":"text","text":"look"}]`),
-		Attachments: json.RawMessage(`[{"name":"Doodle 1","kind":"doodle","png":"data:doodle"},{"name":"shot.png","kind":"image"}]`),
-	}}
-	if src, _ := attachmentImage(msgs, "shot.png"); src != "data:shot" {
-		t.Fatalf("image: %q", src)
-	}
-	if src, _ := attachmentImage(msgs, "Doodle 1"); src != "data:doodle" {
-		t.Fatalf("doodle: %q", src)
-	}
-	if src, names := attachmentImage(msgs, "nope"); src != "" || strings.Join(names, ",") != "Doodle 1,shot.png" {
-		t.Fatalf("unknown: %q %v", src, names)
 	}
 }

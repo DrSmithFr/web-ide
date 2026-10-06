@@ -58,6 +58,9 @@ export interface Attachment {
   description?: string
   /** PNG of a doodle (data URL): the pod joins it to the tickets the model writes. */
   png?: string
+  /** Size of an image as sent (its page on the board). */
+  w?: number
+  h?: number
 }
 
 export interface Usage {

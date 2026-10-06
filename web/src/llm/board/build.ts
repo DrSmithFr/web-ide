@@ -26,8 +26,8 @@ import {
 
 export interface DrawArgs {
   title: string
-  preset?: string
-  size?: { w?: number; h?: number }
+  /** "16:9" (default), "mobile", "square" or "WIDTHxHEIGHT". */
+  size?: string
   /** Document of the page copied (the pod sends it with its number). */
   fromDoc?: DoodleDoc
   /** A blank page on a background image (its frame). */
@@ -46,14 +46,16 @@ const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v)
 function frameOf(a: DrawArgs): DoodleDoc {
   if (a.fromDoc) return cloneDoc(a.fromDoc)
   if (a.base) return a.base
-  if (a.size && (a.size.w || a.size.h)) {
-    const w = Number(a.size.w)
-    const h = Number(a.size.h)
-    if (!(w >= 50 && h >= 50 && w <= 4000 && h <= 4000)) throw new Error('size: w and h between 50 and 4000')
+  const size = String(a.size ?? '').trim().toLowerCase() || '16:9'
+  const m = /^(\d+)\s*[x×*]\s*(\d+)$/.exec(size)
+  if (m) {
+    const w = Number(m[1])
+    const h = Number(m[2])
+    if (!(w >= 50 && h >= 50 && w <= 4000 && h <= 4000)) throw new Error(`size "${a.size}": width and height between 50 and 4000`)
     return { v: 1, frame: { x: 0, y: 0, w, h }, preset: 'free', elements: [] }
   }
-  const p = presets.find((x) => x.id === (a.preset || '16:9') && x.w > 0 && x.id !== 'free')
-  if (!p) throw new Error(`preset: 16:9, mobile or square (not "${a.preset}")`)
+  const p = presets.find((x) => x.id === size && x.w > 0 && x.id !== 'free')
+  if (!p) throw new Error(`size "${a.size}": "16:9", "mobile", "square" or "WIDTHxHEIGHT" like "1000x600"`)
   return { v: 1, frame: { x: 0, y: 0, w: p.w, h: p.h }, preset: p.id, elements: [] }
 }
 

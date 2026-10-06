@@ -7,8 +7,7 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 ### Added
 
 - Whiteboard of a conversation: its doodles as read-only pages, next to the conversation in a wide assistant or in its place in a narrow one, with zoom, pan, thumbnails and *Reuse*; *Show on the board* from a doodle of the thread.
-- The assistant draws on the board (`board_draw`): layouts, flows and sketches, or annotations on a copy of an earlier page; it reads back the description and the image of each page, and its pages go to the tickets like the doodles.
-- Pages of the assistant on a background: an image of the project or of the conversation, a local web page captured by a headless Chromium, an SVG written by the model, or a capture of the screen shared by the user.
+- The assistant draws on the board: `board_draw_doodle` (layouts, flows, sketches, or annotations on a copy of a page) and `board_draw_image` (an SVG it writes, or a capture of the screen shared by the user); it reads back the description and the image of each page, and its pages go to the tickets like the doodles. The images sent in a conversation are pages of its board too.
 
 ## [1.1.0] - 2026-10-06
 
