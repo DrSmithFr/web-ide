@@ -285,8 +285,9 @@ func names(lists ...[]Def) map[string]bool {
 
 // ToolsFor returns the tools offered in a mode: no file change in Plan and Briefing,
 // exit_plan_mode only in Plan (not for the briefing or the plan of a ticket, which end in
-// the ticket), the tools that change a ticket only with a linked ticket.
-func ToolsFor(mode string, ticket *TicketLink) []json.RawMessage {
+// the ticket), the tools that change a ticket only with a linked ticket. A sub-agent (sub)
+// asks its parent instead of the user and reports instead of presenting a plan.
+func ToolsFor(mode string, ticket *TicketLink, sub bool) []json.RawMessage {
 	var out []json.RawMessage
 	for _, d := range projectDefs {
 		if mode != Build && WriteTools[d.Name] {
@@ -305,7 +306,17 @@ func ToolsFor(mode string, ticket *TicketLink) []json.RawMessage {
 			out = append(out, d.JSON)
 		}
 	}
-	out = append(out, askUserDef.JSON, boardDoodleDef.JSON, boardImageDef.JSON, sharePreviewDef.JSON)
+	out = append(out, boardDoodleDef.JSON, boardImageDef.JSON, sharePreviewDef.JSON)
+	if sub {
+		for _, d := range childAgentDefs {
+			out = append(out, d.JSON)
+		}
+		return append(out, compactDef.JSON)
+	}
+	out = append(out, askUserDef.JSON)
+	for _, d := range parentAgentDefs {
+		out = append(out, d.JSON)
+	}
 	if mode == Plan && (ticket == nil || ticket.Role != "briefing" && ticket.Role != "plan") {
 		out = append(out, exitPlanDef.JSON)
 	}

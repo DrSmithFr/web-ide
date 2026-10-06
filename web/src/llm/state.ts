@@ -97,8 +97,9 @@ export interface ChatMessage {
   model?: string
   /** Replaced by a summary: kept for display, not sent anymore. */
   compacted?: boolean
-  /** Summary written by a compaction (role user), and the number of messages it replaces. */
-  kind?: 'summary'
+  /** Summary written by a compaction (role user), and the number of messages it replaces;
+   *  the task of a sub-agent, an event of a sub-agent or of its parent, a reminder to report. */
+  kind?: 'summary' | 'agent_task' | 'agent_event' | 'agent_nudge'
   summarized?: number
   /** Time spent thinking, and from the request to the end of the answer (ms). */
   thinkMs?: number
@@ -123,6 +124,39 @@ export interface ChatMessage {
   capture?: 'pending' | 'done' | 'refused' | 'skipped'
   /** App offered by share_preview (tool message): its card starts it. */
   preview?: PreviewSpec
+  /** Event of a sub-agent in its parent, or of the parent in the child (kind agent_event). */
+  event?: AgentEvent
+  /** 'parent' on the result of agent_ask until the parent answers. */
+  wait?: 'parent'
+  /** Sub-agent started or addressed by this tool call of the parent. */
+  child?: string
+}
+
+/** Status of a sub-agent (pod/internal/agent/subagents.go). */
+export type AgentStatus = 'running' | 'waiting_parent' | 'done' | 'blocked' | 'stopped' | 'error'
+
+export interface SubAgent {
+  task: string
+  files?: string[]
+  status: AgentStatus
+  depth: number
+  note?: { title: string; text: string }
+  question?: string
+  asked?: number
+  report?: string
+  changed?: string[]
+  error?: string
+}
+
+export interface AgentEvent {
+  child: string
+  title: string
+  type: 'note' | 'question' | 'report' | 'message'
+  head?: string
+  text: string
+  status?: AgentStatus
+  files?: string[]
+  from?: string
 }
 
 /** A page of the board drawn by the model: its document, the description it read, images. */
@@ -200,6 +234,10 @@ export interface Chat {
   ticket?: { id: number; role: ChatRole; feedback?: number }
   /** Change or command waiting for the user. */
   approval?: Approval
+  /** A sub-agent: the conversation that started it, and its task; the sub-agents started here. */
+  parent?: string
+  agent?: SubAgent
+  children?: string[]
 }
 
 export type ChatRole = 'briefing' | 'plan' | 'dev' | 'correction' | 'resolve'
@@ -219,6 +257,9 @@ export interface ChatInfo {
   title: string
   updated: number
   model?: string
+  /** A sub-agent: its parent and its status. */
+  parent?: string
+  status?: AgentStatus
 }
 
 export const [config, setConfig] = createStore<{ servers: ServerView[]; server: string; model: string }>({ servers: [], server: '', model: '' })

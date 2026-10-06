@@ -109,6 +109,9 @@ func (s *Server) openChat(cc chatCtx, id string) (*agent.Chat, error) {
 	}
 	if c.Running != nil || c.Approval != nil {
 		c.Running, c.Approval = nil, nil
+		if c.Agent != nil && c.Agent.Status == agent.AgentRunning {
+			c.Agent.Status, c.Agent.Error = agent.AgentError, "Interrupted: the pod stopped."
+		}
 		closeToolCalls(c, "Interrupted: the pod stopped before this tool ended.")
 		c.Messages = append(c.Messages, &agent.Message{Role: "assistant", Error: "Interrupted: the pod stopped."})
 		_ = s.saveChat(cc.loc, c)
@@ -204,13 +207,16 @@ func (s *Server) registerAgent() {
 		}
 		if r := s.run(a.ID); r != nil {
 			r.mu.Lock()
-			defer r.mu.Unlock()
-			r.chat.Queue = append(r.chat.Queue, agent.QueuedMessage{ID: newID(), Text: a.Text, Parts: a.Parts, Attachments: a.Attachments, Display: a.Display})
-			if a.Options != nil {
-				r.chat.Options = a.Options
+			if !r.done {
+				r.chat.Queue = append(r.chat.Queue, agent.QueuedMessage{ID: newID(), Text: a.Text, Parts: a.Parts, Attachments: a.Attachments, Display: a.Display})
+				if a.Options != nil {
+					r.chat.Options = a.Options
+				}
+				s.publish(r, -1)
+				r.mu.Unlock()
+				return map[string]any{"queued": true}, nil
 			}
-			s.publish(r, -1)
-			return map[string]any{"queued": true}, nil
+			r.mu.Unlock()
 		}
 		if a.Server == "" || a.Model == "" {
 			return nil, i18n.New("Choose a server and a model")

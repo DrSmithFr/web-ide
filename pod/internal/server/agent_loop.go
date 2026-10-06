@@ -213,6 +213,10 @@ func drainQueue(c *agent.Chat) bool {
 		return false
 	}
 	for _, q := range c.Queue {
+		if q.Event != nil {
+			c.Messages = append(c.Messages, &agent.Message{Role: "user", Kind: "agent_event", Content: agent.String(q.Text), Event: q.Event})
+			continue
+		}
 		c.Messages = append(c.Messages, &agent.Message{Role: "user", Content: userContent(q.Text, q.Parts), Display: displayOf(q.Text, q.Display, q.Parts), Attachments: q.Attachments})
 	}
 	c.Queue = nil
@@ -344,7 +348,13 @@ func (s *Server) systemPrompt(r *agentRun, ref *runtimeRef, c *agent.Chat, tools
 	if mode == "" {
 		mode = agent.Build
 	}
-	return agent.SystemPrompt(ctx, vars, tools, mode, ticket)
+	text := agent.SystemPrompt(ctx, vars, tools, mode, ticket)
+	if tools && c.Parent != "" {
+		text += "\n\n" + agent.SubAgentText
+	} else if tools {
+		text += "\n\n" + agent.ParentText
+	}
+	return text
 }
 
 // loop runs the turns of a conversation until it stops.
@@ -353,12 +363,29 @@ func (s *Server) loop(r *agentRun) {
 		r.mu.Lock()
 		r.chat.Running, r.chat.Approval = nil, nil
 		r.state = "idle"
-		s.publish(r, -1)
-		r.mu.Unlock()
+		ended := childEnded(r)
+		parent := r.chat.Parent
+		// Messages queued as the run ended start it again (unless stopped, or waiting for
+		// the user).
+		again := r.ctx.Err() == nil && len(r.chat.Queue) > 0 && !waitsForUser(r.chat)
+		from := -1
+		if again && r.chat.Agent != nil {
+			from = skipParentWait(r.chat)
+			r.chat.Agent.Status, r.chat.Agent.Question = agent.AgentRunning, ""
+		}
+		r.done = true
 		s.agents.mu.Lock()
 		delete(s.agents.runs, r.id)
 		s.agents.mu.Unlock()
+		s.publish(r, from)
+		r.mu.Unlock()
 		r.cancel()
+		if again {
+			s.startRun(r.loc, r.root, r.project, r.lang, r.chat, len(r.chat.Messages))
+		}
+		if ended != nil {
+			s.toParent(r, parent, *ended, true)
+		}
 	}()
 	ref, err := s.agentRuntime(r.project)
 	if err != nil {
@@ -402,7 +429,7 @@ func (s *Server) loop(r *agentRun) {
 		system := s.systemPrompt(r, ref, r.chat, tools)
 		req := llm.ChatRequest{Server: server, Model: model, Messages: apiMessages(system, r.chat.Messages, !info.found || info.caps.Vision)}
 		if tools {
-			req.Tools = agent.ToolsFor(mode, r.chat.Ticket)
+			req.Tools = agent.ToolsFor(mode, r.chat.Ticket, r.chat.Parent != "")
 		}
 		if info.caps.Thinking {
 			think := boolOr(o.Think, true)
@@ -472,7 +499,20 @@ func (s *Server) loop(r *agentRun) {
 		s.publish(r, len(r.chat.Messages)-1)
 		calls := msg.ToolCalls
 		more := len(r.chat.Queue) > 0
+		var report *agent.AgentEvent
+		if len(calls) == 0 && !more && msg.Error == "" {
+			// A sub-agent ends with a report.
+			var again bool
+			if again, report = childAnswered(r, msg); again {
+				s.publish(r, len(r.chat.Messages)-1)
+				more = true
+			}
+		}
+		parent := r.chat.Parent
 		r.mu.Unlock()
+		if report != nil {
+			s.toParent(r, parent, *report, true)
+		}
 		if len(calls) == 0 {
 			// Messages queued during the answer: the agent goes on with them.
 			if more {
@@ -535,6 +575,26 @@ func (s *Server) runCalls(r *agentRun, ref *runtimeRef, calls []agent.ToolCall, 
 			r.mu.Unlock()
 			stop = true
 			continue
+		case "agent_ask", "agent_report":
+			// A sub-agent asks its parent (its turn ends until the answer) or reports (it ends).
+			var m *agent.Message
+			var ev *agent.AgentEvent
+			if name == "agent_ask" {
+				var q string
+				_ = json.Unmarshal(args["question"], &q)
+				m, ev = childAsk(r, call, strings.TrimSpace(q))
+			} else {
+				m, ev = childReport(r, call, args)
+			}
+			r.chat.Messages = append(r.chat.Messages, m)
+			s.publish(r, len(r.chat.Messages)-1)
+			parent := r.chat.Parent
+			r.mu.Unlock()
+			if ev != nil {
+				stop = true
+				s.toParent(r, parent, *ev, true)
+			}
+			continue
 		case "ask_user":
 			// The questions go to the user; the turn ends until they answer.
 			qs, err := agent.NormalizeQuestions(args["questions"])
@@ -576,7 +636,7 @@ func (s *Server) runCalls(r *agentRun, ref *runtimeRef, calls []agent.ToolCall, 
 		// The compaction may have moved the message: it is the last tool result of this call.
 		for i := len(r.chat.Messages) - 1; i >= 0; i-- {
 			if mm := r.chat.Messages[i]; mm.Role == "tool" && mm.ToolCallID == call.ID {
-				mm.Content, mm.Summary, mm.Status, mm.Diff, mm.Page, mm.Preview = agent.String(res.Content), res.Summary, res.Status, res.Diff, res.Page, res.Preview
+				mm.Content, mm.Summary, mm.Status, mm.Diff, mm.Page, mm.Preview, mm.Child = agent.String(res.Content), res.Summary, res.Status, res.Diff, res.Page, res.Preview, res.Child
 				idx = i
 				break
 			}

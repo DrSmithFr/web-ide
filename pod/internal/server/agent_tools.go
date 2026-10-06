@@ -35,6 +35,7 @@ type toolResult struct {
 	Diff    []agent.DiffLine
 	Page    *agent.Page
 	Preview *agent.Preview
+	Child   string
 }
 
 func ok(content string, summary agent.Text) toolResult {
@@ -173,6 +174,18 @@ func (s *Server) agentTool(r *agentRun, ref *runtimeRef, call agent.ToolCall, mo
 		res, err = s.boardDoodle(r, a)
 	case "board_draw_image":
 		res, err = s.boardImage(r, ref.rt, a)
+	case "spawn_agent":
+		res, err = s.spawnAgent(r, a)
+	case "agent_reply":
+		res, err = s.agentReply(r, a)
+	case "agent_message":
+		res, err = s.agentMessage(r, a)
+	case "agent_stop":
+		res, err = s.agentStop(r, a)
+	case "agent_status":
+		res, err = s.agentStatus(r)
+	case "agent_note":
+		res, err = s.agentNote(r, a)
 	case "share_preview":
 		res, err = sharePreview(r, ref.rt, a)
 	case "bash":
@@ -209,7 +222,7 @@ func (s *Server) confirm(r *agentRun, req agent.Approval) bool {
 	prev := r.state
 	r.state = "waiting_user"
 	s.publish(r, -1)
-	s.emitAgent(r.root, "agent.attention", map[string]any{"id": r.id, "title": r.chat.Title, "kind": req.Kind})
+	s.emitAgent(r.root, "agent.attention", map[string]any{"id": r.id, "title": r.chat.Title, "kind": req.Kind, "sub": r.chat.Parent != ""})
 	r.mu.Unlock()
 	var allowed bool
 	select {

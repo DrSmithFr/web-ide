@@ -99,7 +99,7 @@ export function callLabel(call: ToolCall | undefined, name: string) {
   const target =
     a.path !== undefined
       ? abs === root() ? '.' : relPath(abs)
-      : a.query ?? a.pattern ?? a.command ?? a.name ?? a.panel ?? a.console_id ?? (name.startsWith('board_draw') ? a.title ?? '' : name.startsWith('kanban_') ? (a.id ? `#${a.id}` : a.title ?? a.status ?? a.hash ?? '') : '')
+      : a.query ?? a.pattern ?? a.command ?? a.name ?? a.panel ?? a.console_id ?? a.question ?? (name.startsWith('board_draw') || name === 'spawn_agent' || name === 'agent_note' ? a.title ?? '' : name.startsWith('kanban_') ? (a.id ? `#${a.id}` : a.title ?? a.status ?? a.hash ?? '') : '')
   const extra = a.symbol ? ` · ${a.symbol}${a.line ? ` (l. ${a.line})` : ''}` : a.start_line ? ` · l. ${a.start_line}${a.end_line ? `-${a.end_line}` : ''}` : a.line ? ` · l. ${a.line}${a.end_line ? `-${a.end_line}` : ''}` : ''
   return { name, target: String(target), extra }
 }
@@ -140,6 +140,14 @@ export const toolVerbs: Record<string, string> = {
   board_draw_doodle: 'Draws on the board',
   board_draw_image: 'Puts an image on the board',
   share_preview: 'Offers to try the app',
+  spawn_agent: 'Starts a sub-agent',
+  agent_reply: 'Answers a sub-agent',
+  agent_message: 'Writes to a sub-agent',
+  agent_stop: 'Stops a sub-agent',
+  agent_status: 'Checks the sub-agents',
+  agent_note: 'Notes for its parent',
+  agent_ask: 'Asks its parent',
+  agent_report: 'Reports to its parent',
 }
 
 export const toolIcons: Record<string, string> = {
@@ -149,6 +157,8 @@ export const toolIcons: Record<string, string> = {
   lsp_references: 'outline', lsp_hover: 'info', lsp_diagnostics: 'conflict',
   kanban_list: 'kanban', kanban_get: 'kanban', kanban_create: 'kanban', kanban_update: 'kanban', kanban_add_note: 'kanban', kanban_set_plan: 'kanban',
   kanban_goal: 'check', kanban_move: 'kanban', kanban_link_commit: 'branch', ask_user: 'info', board_draw_doodle: 'pen', board_draw_image: 'image', share_preview: 'play',
+  spawn_agent: 'sparkle', agent_reply: 'comment', agent_message: 'comment', agent_stop: 'stop', agent_status: 'sparkle',
+  agent_note: 'pen', agent_ask: 'info', agent_report: 'check',
 }
 
 /** Menu opened above (or below) its trigger, closed by a click outside or Escape. */

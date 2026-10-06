@@ -19,6 +19,7 @@ import { request } from '../pod/rpc'
 import { answerQuestions, dismissPlan, executePlan, send } from './agent'
 import { AskCard } from './AskCard'
 import { PreviewCard } from './PreviewCard'
+import { ChildCard, ChildHeader, EventCard, TaskCard } from './SubAgents'
 import { t, tn } from '../i18n'
 
 const textOf = (m: ChatMessage) =>
@@ -492,6 +493,15 @@ function AssistantMessage(props: { msg: ChatMessage; index: number; lastOfTurn: 
     for (let i = props.index + 1; i < chat.messages.length && chat.messages[i].role === 'tool'; i++) if (chat.messages[i].capture === 'pending') out.push(i)
     return out
   }
+  // Sub-agents started by this answer: their card stays in sight.
+  const childCards = () => {
+    const out: string[] = []
+    for (let i = props.index + 1; i < chat.messages.length && chat.messages[i].role === 'tool'; i++) {
+      const m = chat.messages[i]
+      if (m.name === 'spawn_agent' && m.child) out.push(m.child)
+    }
+    return out
+  }
   // Apps offered by share_preview: their card stays in sight.
   const previewCards = () => {
     const out: number[] = []
@@ -517,6 +527,7 @@ function AssistantMessage(props: { msg: ChatMessage; index: number; lastOfTurn: 
       </Show>
       <For each={plans()}>{(i) => <PlanCard msg={chat.messages[i]} index={i} />}</For>
       <For each={captures()}>{(i) => <CaptureCard msg={chat.messages[i]} call={props.msg.tool_calls?.find((c) => c.id === chat.messages[i].tool_call_id)} />}</For>
+      <For each={childCards()}>{(id) => <ChildCard id={id} />}</For>
       <For each={previewCards()}>{(i) => <PreviewCard spec={chat.messages[i].preview!} />}</For>
       <For each={asks()}>{(i) => <AskCard msg={chat.messages[i]} index={i} onSend={(idx, answers, notes, path, off) => answerQuestions(idx, answers, notes, path, off).catch(errorToast)} />}</For>
       <Show when={props.msg.error}>
@@ -712,11 +723,16 @@ export function Thread(props: { onSuggest: (t: string) => void; onSettings: () =
   const lastFailed = () => {
     const m = chat.messages[chat.messages.length - 1]
     if (live.busy || !m) return false
-    if (m.role === 'tool') return !m.plan && !m.questions && m.capture !== 'pending'
-    return m.role === 'user' || (m.role === 'assistant' && !!m.error && !m.tool_calls?.length)
+    // A sub-agent waiting for its parent, or ended, did not fail.
+    if (chat.agent && chat.agent.status !== 'running') return false
+    if (m.role === 'tool') return !m.plan && !m.questions && m.capture !== 'pending' && m.wait !== 'parent'
+    return (m.role === 'user' && m.kind !== 'agent_event') || (m.role === 'assistant' && !!m.error && !m.tool_calls?.length)
   }
   return (
     <div class="ai-thread">
+      <Show when={chat.parent}>
+        <ChildHeader />
+      </Show>
       <Show when={!chat.messages.length && !live.busy}>
         <Welcome onSuggest={props.onSuggest} onSettings={props.onSettings} />
       </Show>
@@ -730,7 +746,7 @@ export function Thread(props: { onSuggest: (t: string) => void; onSettings: () =
           <Show when={m.role !== 'tool' && (!m.compacted || showCompacted())}>
             <div class="ai-row" classList={{ 'ai-old': !!m.compacted }}>
               <Show
-                when={m.kind === 'summary'}
+                when={m.kind === 'summary' || m.kind?.startsWith('agent_')}
                 fallback={
                   <Show
                     when={m.role === 'user'}
@@ -740,7 +756,18 @@ export function Thread(props: { onSuggest: (t: string) => void; onSettings: () =
                   </Show>
                 }
               >
-                <SummaryCard msg={m} />
+                <Show when={m.kind === 'summary'}>
+                  <SummaryCard msg={m} />
+                </Show>
+                <Show when={m.kind === 'agent_event' && m.event}>
+                  <EventCard msg={m} />
+                </Show>
+                <Show when={m.kind === 'agent_task'}>
+                  <TaskCard msg={m} />
+                </Show>
+                <Show when={m.kind === 'agent_nudge'}>
+                  <div class="ai-nudge muted small">{t('Reminded to end with a report')}</div>
+                </Show>
               </Show>
             </div>
           </Show>

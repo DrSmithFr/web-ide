@@ -26,6 +26,9 @@ type ChatInfo struct {
 	Title   string `json:"title"`
 	Updated int64  `json:"updated"`
 	Model   string `json:"model,omitempty"`
+	// Parent and Status of a sub-agent (agent.SubAgent).
+	Parent string `json:"parent,omitempty"`
+	Status string `json:"status,omitempty"`
 }
 
 // ChatLocation says where the conversations of a project live.
@@ -137,7 +140,8 @@ func (m *Manager) ListChats(loc ChatLocation) ([]ChatInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.Query(`SELECT id, title, updated, model FROM chats ORDER BY updated DESC LIMIT 500`)
+	rows, err := db.Query(`SELECT id, title, updated, model, coalesce(json_extract(extra, '$.parent'), ''), coalesce(json_extract(extra, '$.agent.status'), '')
+		FROM chats ORDER BY updated DESC LIMIT 500`)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +149,7 @@ func (m *Manager) ListChats(loc ChatLocation) ([]ChatInfo, error) {
 	list := []ChatInfo{}
 	for rows.Next() {
 		var c ChatInfo
-		if err := rows.Scan(&c.ID, &c.Title, &c.Updated, &c.Model); err != nil {
+		if err := rows.Scan(&c.ID, &c.Title, &c.Updated, &c.Model, &c.Parent, &c.Status); err != nil {
 			return nil, err
 		}
 		list = append(list, c)
