@@ -104,6 +104,19 @@ type Message struct {
 	Path       []int           `json:"path,omitempty"`    // questions asked, in order (a graph)
 	OffPath    *int            `json:"offPath,omitempty"` // question where the user left the path
 	AskState   string          `json:"askState,omitempty"`
+	// Page drawn on the board by board_draw (tool message).
+	Page *Page `json:"page,omitempty"`
+}
+
+// Page drawn by the model on the board of the conversation: its document (a doodle, see
+// web/src/llm/doodle/model.ts), the description and the images made by the window that
+// drew it.
+type Page struct {
+	Name        string          `json:"name"`
+	Doc         json.RawMessage `json:"doc"`
+	Description string          `json:"description"`
+	Thumb       string          `json:"thumb,omitempty"`
+	PNG         string          `json:"png,omitempty"`
 }
 
 type ToolCall struct {

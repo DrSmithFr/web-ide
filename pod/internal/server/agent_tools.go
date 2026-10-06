@@ -32,6 +32,7 @@ type toolResult struct {
 	Summary json.RawMessage
 	Status  string
 	Diff    []agent.DiffLine
+	Page    *agent.Page
 }
 
 func ok(content string, summary agent.Text) toolResult {
@@ -166,6 +167,8 @@ func (s *Server) agentTool(r *agentRun, ref *runtimeRef, call agent.ToolCall, mo
 		res, err = s.readSkillFile(ref.rt, a.str("name"), a.str("file"))
 	case "open_file", "focus":
 		res, err = s.uiTool(r, name, a)
+	case "board_draw":
+		res, err = s.boardDraw(r, a)
 	case "bash":
 		res, err = bashTool(r.ctx, ref.rt, a.str("command"), a.str("cwd"), a.num("timeout"))
 	case "run_command":

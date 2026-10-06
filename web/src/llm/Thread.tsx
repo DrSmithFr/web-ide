@@ -315,6 +315,17 @@ function ToolRow(props: { msg: ChatMessage; call?: ToolCall }) {
       <Show when={props.msg.diff?.length && (open() || props.msg.status === 'ok')}>
         <DiffBlock lines={props.msg.diff!} />
       </Show>
+      <Show when={props.msg.page}>
+        {(pg) => (
+          <div class="ai-page-card" data-testid="ai-page-card">
+            <img src={pg().thumb} alt="" />
+            <span class="ellipsis">{pg().name}</span>
+            <button class="btn small" onClick={() => { const p = pages().find((x) => x.doc === pg().doc) ?? pages().find((x) => x.from === 'model' && x.name === pg().name); if (p) showPage(p.key) }} data-testid="ai-page-show">
+              <Icon name="layout" size={13} /> {t('Show on the board')}
+            </button>
+          </div>
+        )}
+      </Show>
       <Show when={open()}>
         <div class="ai-tool-detail">
           <Show when={path()}>

@@ -1,14 +1,19 @@
 // Tools of the agent that act on the interface, run by this window when the pod asks it
-// (agent.ui): show a file, bring a panel, a console or the problems to the front.
+// (agent.ui): show a file, bring a panel, a console or the problems to the front, draw a page
+// of the board (it needs the doodle code of the page: text measures, description, PNG).
 import { loadDoc, mutate, openFile, relPath, root } from '../state/project'
 import { consoles } from '../console/consoles'
 import { showTool, toolIds } from '../state/zones'
 import { t } from '../i18n'
+import { buildPage, type DrawArgs } from './board/build'
+import { describe, MAX_SIDE, png } from './doodle/export'
+import type { ModelPage } from './state'
 
 interface UiResult {
   content: string
   summary: string
   status: 'ok' | 'error'
+  page?: ModelPage
 }
 
 /** Absolute path in the project; "..", "." and duplicate slashes are resolved. */
@@ -76,6 +81,18 @@ async function focus(a: Record<string, any>): Promise<UiResult> {
   throw new Error('target must be file, panel, console or problems')
 }
 
+/** board_draw: the page built from the elements, its description and images. */
+async function drawPage(a: DrawArgs & { number: number; from?: number }): Promise<UiResult> {
+  const title = String(a.title ?? '').trim() || t('Page {n}', { n: a.number })
+  const { doc, outside } = buildPage(a)
+  let description = describe(doc, title, a.number)
+  if (a.from) description += `\nA copy of page ${a.from}, with your elements on top.`
+  if (outside.length) description += `\nWarning: partly outside the frame: ${outside.join(', ')}.`
+  const page: ModelPage = { name: title, doc, description, png: await png(doc, MAX_SIDE), thumb: await png(doc, 96) }
+  return { ...ok(description, t('Page {n} · {name}', { n: a.number, name: title })), page }
+}
+
 export function runUiTool(tool: string, args: Record<string, any>): Promise<UiResult> {
+  if (tool === 'board_draw') return drawPage(args as any)
   return tool === 'open_file' ? showFile(args.path, args.line, args.end_line) : focus(args)
 }

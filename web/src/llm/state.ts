@@ -113,6 +113,17 @@ export interface ChatMessage {
   path?: number[]
   offPath?: number
   askState?: 'pending' | 'answered' | 'skipped'
+  /** Page drawn on the board with board_draw (tool message). */
+  page?: ModelPage
+}
+
+/** A page of the board drawn by the model: its document, the description it read, images. */
+export interface ModelPage {
+  name: string
+  doc: DoodleDoc
+  description: string
+  thumb?: string
+  png?: string
 }
 
 /** A text written by the pod and translated here: t(key, params), or tn(n, key, other, params). */

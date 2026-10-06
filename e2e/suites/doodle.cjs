@@ -30,6 +30,42 @@ const fake = http.createServer(async (req, res) => {
     else sse(res, { tool_calls: [{ index: 0, id: 'k1', type: 'function', function: { name: 'kanban_create', arguments: JSON.stringify({ title: 'Login page', description: 'From the doodles.' }) } }] })
     return end(res, last.role === 'tool' ? 'stop' : 'tool_calls')
   }
+  const firstUser = r.messages.find((m) => m.role === 'user')
+  if (text(firstUser).startsWith('Draw:')) {
+    // board_draw: a page, then a copy of it with a red stroke and an invalid arrow, then the end.
+    const tools = r.messages.filter((m) => m.role === 'tool').length
+    const call = (id, args) => ({ index: 0, id, type: 'function', function: { name: 'board_draw', arguments: JSON.stringify(args) } })
+    if (tools === 0) {
+      sse(res, {
+        tool_calls: [
+          call('d1', {
+            title: 'Login flow',
+            preset: '16:9',
+            elements: [
+              { type: 'layout', x: 40, y: 40, w: 500, h: 600, root: { split: { dir: 'rows', sizes: [1, 4], children: [{ name: 'header' }, { name: 'form' }] } } },
+              { type: 'rect', id: 'btn', x: 700, y: 100, w: 240, h: 90, label: 'Sign in', fill: true, color: 'blue' },
+              { type: 'ellipse', id: 'ok', x: 760, y: 450, w: 200, h: 120, label: 'Home' },
+              { type: 'arrow', from: 'btn', to: 'ok' },
+              { type: 'text', x: 600, y: 650, text: 'Happy path', size: 's' },
+              { type: 'stroke', points: [[60, 700], [300, 690], [520, 700]], color: 'red' },
+            ],
+          }),
+        ],
+      })
+      return end(res, 'tool_calls')
+    }
+    if (tools === 1) {
+      sse(res, {
+        tool_calls: [
+          call('d2', { title: 'Login flow, fixed', from: 1, elements: [{ type: 'stroke', points: [[700, 80], [960, 80]], color: 'red' }] }),
+          { ...call('d3', { title: 'Bad', elements: [{ type: 'arrow', from: [0, 0], to: 'nope' }] }), index: 1 },
+        ],
+      })
+      return end(res, 'tool_calls')
+    }
+    sse(res, { content: 'Drawn.' })
+    return end(res)
+  }
   sse(res, { content: `Got ${text(lastUser).split('\n')[0].slice(0, 40)}` })
   end(res)
 })
@@ -507,6 +543,36 @@ run(async ({ page }) => {
     const toolMsg = requests[requests.length - 1].messages.find((m) => m.role === 'tool')
     assert(/Ticket #\d+ created in the backlog \(status New\)\. \d+ doodles of the conversation attached to it as PNG files\./.test(text(toolMsg)), `doodles attached to the ticket: ${text(toolMsg)}`)
     assert(text(requests[requests.length - 1].messages[0]).includes('attached to the tickets you create or update as PNG files'), 'the prompt says the doodles go to the tickets')
+
+    // The model draws on the board: a page, a copy of it, an invalid call; the image reaches
+    // the model; the board says so; the pages go to the tickets.
+    await page.click('.ai-panel button[title="New conversation"]')
+    await page.fill('.ai-composer textarea', 'Draw: the login flow')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Drawn.")', { timeout: 20000 })
+    const msgs = requests[requests.length - 1].messages
+    const d = (id) => text(msgs.find((m) => m.role === 'tool' && m.tool_call_id === id))
+    assert(d('d1').includes('Page 1 "Login flow" drawn by you') && d('d1').includes('"header"') && d('d1').includes('Sign in') && d('d1').includes('Happy path'), 'page described to the model: ' + d('d1'))
+    const afterD1 = msgs[msgs.findIndex((m) => m.tool_call_id === 'd1') + 1]
+    assert(afterD1.role === 'user' && afterD1.content.some((p) => p.type === 'image_url' && p.image_url.url.startsWith('data:image/png')), 'the image of the page follows the tool result')
+    assert(d('d2').includes('Page 2 "Login flow, fixed"') && d('d2').includes('A copy of page 1'), 'copy of page 1: ' + d('d2'))
+    assert(d('d3').startsWith('Error:') && d('d3').includes('element 1 (arrow): to "nope" is no element id'), 'invalid arrow refused: ' + d('d3'))
+    assert((await page.$$('[data-testid=ai-page-card]')).length === 2, 'a card per page in the thread')
+    await page.waitForSelector('.toast:has-text("New page on the board")')
+    await page.click('[data-testid=ai-board-toggle]')
+    await page.waitForSelector('[data-testid=bd-title]:has-text("Page 2")')
+    assert((await page.textContent('[data-testid=bd-board] .bd-by')).includes('drawn by the assistant'), 'drawn by the assistant')
+    const p2 = await page.$$eval('[data-testid=bd-view] path', (p) => p.length)
+    await page.click('[data-testid=bd-thumb] >> nth=0')
+    const p1 = await page.$$eval('[data-testid=bd-view] path', (p) => p.length)
+    assert(p2 === p1 + 1, `the copy has one stroke more, page 1 unchanged (${p1} → ${p2})`)
+    await page.screenshot({ path: OUT + '/board-model.png' })
+    await page.click('[data-testid=ai-board-toggle]')
+    await page.fill('.ai-composer textarea', 'Make a ticket of it')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Ticket made.") >> nth=-1', { timeout: 15000 })
+    const tk = text([...requests[requests.length - 1].messages].reverse().find((m) => m.role === 'tool'))
+    assert(tk.includes('2 doodles of the conversation attached'), 'the pages of the model go to the ticket: ' + tk)
   } finally {
     fake.close()
   }

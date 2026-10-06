@@ -1,10 +1,12 @@
 // The pages of the board of a conversation: a view over its messages, not a store. A page is
-// a doodle the user sent (an attachment with its document); the pages drawn by the model
-// come later. Numbered from 1 in message order, then attachment order: the model refers to
+// a doodle the user sent (an attachment with its document) or a page drawn by the model
+// (board_draw, a tool message with its page). Numbered from 1 in message order, then attachment order: the model refers to
 // pages by this number, so the pod counts them the same way.
 import { createEffect, createMemo, createRoot, createSignal, on } from 'solid-js'
 import { chat, prefs, savePrefs, setPrefs, type ChatMessage } from '../state'
 import type { DoodleDoc } from '../doodle/model'
+import { toast } from '../../ui/toast'
+import { t } from '../../i18n'
 
 export interface Page {
   key: string
@@ -19,14 +21,19 @@ export interface Page {
 
 export function pagesOf(messages: ChatMessage[]): Page[] {
   const out: Page[] = []
-  messages.forEach((m, i) =>
-    (m.attachments ?? []).forEach((a, n) => {
+  messages.forEach((m, i) => {
+    ;(m.attachments ?? []).forEach((a, n) => {
       if (a.kind === 'doodle' && a.doodle)
         out.push({ key: `${i}:${n}`, number: out.length + 1, name: a.name, doc: a.doodle, description: a.description, from: 'user', msgIndex: i, thumb: a.thumb })
-    }),
-  )
+    })
+    if (m.page) out.push({ key: `${i}:page`, number: out.length + 1, name: m.page.name, doc: m.page.doc, description: m.page.description, from: 'model', msgIndex: i, thumb: m.page.thumb })
+  })
   return out
 }
+
+// Where the board is: a column next to the conversation in a wide assistant (boardOpen), or
+// in its place in a narrow one (boardView). AssistantTool tells which.
+const [wideMode, setWideMode] = createSignal(true)
 
 const [selectedKey, setSelectedKey] = createSignal<string | null>(null)
 
@@ -36,8 +43,19 @@ export const pages = createRoot(() => {
   createEffect(on(() => chat.id, () => setSelectedKey(null)))
   createEffect(
     on(
-      () => list().length,
-      (n, prev) => n > (prev ?? n) && setSelectedKey(list()[n - 1].key),
+      () => [chat.id, list().length] as const,
+      ([id, n], prev) => {
+        if (!prev || n <= prev[1]) return
+        const last = list()[n - 1]
+        setSelectedKey(last.key)
+        // A page the model just drew in this conversation: the board opens beside it, or
+        // says so when it would hide the conversation.
+        if (id !== prev[0] || last.from !== 'model') return
+        if (wideMode()) {
+          setPrefs('boardOpen', true)
+          savePrefs()
+        } else if (!boardShown()) toast(t('New page on the board'), 'info', { label: t('Show'), run: () => showBoard(true) })
+      },
     ),
   )
   return list
@@ -50,9 +68,6 @@ export const selectedPage = () => {
 }
 export const selectPage = (key: string) => setSelectedKey(key)
 
-// Where the board is: a column next to the conversation in a wide assistant (boardOpen), or
-// in its place in a narrow one (boardView). AssistantTool tells which.
-const [wideMode, setWideMode] = createSignal(true)
 export const setBoardWide = setWideMode
 export const boardShown = () => (wideMode() ? prefs.boardOpen : prefs.boardView === 'board')
 

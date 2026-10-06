@@ -5,7 +5,7 @@ import type { Prepared } from '../attachments'
 import { bounds, cloneDoc, colorName, contains, isShape, presets, zoneAt, type DoodleDoc, type Element, type Frame, type Layout, type Zone } from './model'
 import { toSVG } from './render'
 
-const MAX_SIDE = 1600
+export const MAX_SIDE = 1600
 const MAX_LISTED = 30
 
 function svgImage(svg: string): Promise<HTMLImageElement> {
@@ -181,12 +181,12 @@ function hitBox(el: Element, x: number, y: number): boolean {
 }
 
 /** Text read by the model (always English, like the rest of what it reads). */
-export function describe(doc: DoodleDoc, name: string): string {
+export function describe(doc: DoodleDoc, name: string, page?: number): string {
   const fr = doc.frame
   const preset = doc.preset === 'free' ? 'free ratio' : doc.preset === 'image' ? 'cropped from the image' : presets.find((p) => p.id === doc.preset)?.label
   const seen = doc.elements.map((el) => ({ el, r: inFrame(bounds(el), fr) })).filter((x): x is { el: Element; r: Frame } => !!x.r)
   const lines = [
-    `Doodle "${name}" drawn by the user. Frame ${Math.round(fr.w)}×${Math.round(fr.h)} (${preset}); positions in % of the frame from its top left corner.`,
+    `${page ? `Page ${page} "${name}" drawn by you (board_draw)` : `Doodle "${name}" drawn by the user`}. Frame ${Math.round(fr.w)}×${Math.round(fr.h)} (${preset}); positions in % of the frame from its top left corner.`,
     ...(doc.background ? ['The drawing annotates an image given by the user (a screenshot or a picture), shown under it.'] : []),
     ...items(seen, fr),
     ...strokes(seen.filter((x) => x.el.type === 'pen'), 'Free pen strokes (hand drawn, shapes approximate)'),
