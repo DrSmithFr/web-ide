@@ -8,7 +8,7 @@ import {
 } from '../state/project'
 import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, toggleTool, toolsIn, zoneOf, zones, type Zone } from '../state/zones'
 import { focusEditor, focusPart, setFocusPart, trackFocus } from '../state/focus'
-import { mobileView, phone, revealCaret, setMobileView } from '../state/mobile'
+import { keyboard, mobileView, phone, revealCaret, setMobileView } from '../state/mobile'
 import { settings, updateSettings } from '../state/settings'
 import { navigate } from '../app/router'
 import { EditorArea } from '../ui/EditorArea'
@@ -606,7 +606,7 @@ export function ProjectPage(props: { id: string }) {
         </div>
       }
     >
-      <div class="app" classList={{ 'visual-focus': settings.visualFocus, 'focus-outline': settings.focusOutline, 'focus-dim': settings.focusDim, phone: phone() }}>
+      <div class="app" classList={{ 'visual-focus': settings.visualFocus, 'focus-outline': settings.focusOutline, 'focus-dim': settings.focusDim, phone: phone(), keyboard: phone() && keyboard() }}>
         <MenuBar />
         <MobileSync />
         <NewTicketHost />
