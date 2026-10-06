@@ -70,6 +70,8 @@ Un projet s'ouvre dans sa propre fenêtre et revient tel que vous l'avez laissé
 
 L'assistant parle à [llama.cpp](https://github.com/ggml-org/llama.cpp) (`llama-server`, aussi en mode routeur) ou [Ollama](https://ollama.com), sur votre machine ou votre réseau : ouvrez l'assistant (barre de droite), *Add a model server*, donnez son adresse. Choisissez le modèle dans la zone de saisie. Le modèle et son modèle de chat doivent gérer les appels d'outils (`llama-server --jinja`).
 
+Un fournisseur cloud (OpenAI, OpenRouter, toute API compatible OpenAI) est un serveur de type *Fournisseur compatible OpenAI*, avec sa clé d'API : la clé reste dans le pod. Saisissez ses modèles à la main s'il ne les liste pas. Coché *Disponible pour les sous-agents*, avec une note (« fort en code, payant »), il permet à votre modèle local de confier une tâche à un modèle plus fort : l'assistant le choisit pour un sous-agent, dont la carte montre les tokens et le coût. Le serveur par défaut des sous-agents se règle dans l'onglet *Sous-agents* des réglages.
+
 Les images de ce guide sont faites avec Qwen3.8 27B sur llama.cpp.
 
 ## Le cycle de développement

@@ -45,6 +45,19 @@ func (s *Server) registerLLM() {
 		s.broadcast("llm.config", view, c)
 		return view, nil
 	})
+	// llm.children: the default server and model of the sub-agents.
+	s.handle("llm.children", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		a, err := bind[struct{ Server, Model string }](p)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.LLM.SetChildDefault(a.Server, a.Model); err != nil {
+			return nil, err
+		}
+		view := s.LLM.View()
+		s.broadcast("llm.config", view, c)
+		return view, nil
+	})
 	s.handle("llm.select", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 		a, err := bind[struct{ Server, Model string }](p)
 		if err != nil {

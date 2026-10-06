@@ -9,12 +9,26 @@ import type { PreviewSpec } from './previews'
 export interface ServerView {
   id: string
   name: string
-  kind: 'auto' | 'llamacpp' | 'ollama'
+  kind: 'auto' | 'llamacpp' | 'ollama' | 'openai'
   url: string
   hasKey: boolean
   context?: number
   /** Conversations the server runs at once (1 by default: one GPU). */
   parallel?: number
+  /** Models typed by the user (a provider without /models, or to set capabilities). */
+  models?: ModelConf[]
+  /** Told to the model choosing a server for a sub-agent. */
+  note?: string
+  /** Offered to the sub-agents. */
+  children?: boolean
+}
+
+export interface ModelConf {
+  id: string
+  context?: number
+  tools: boolean
+  vision: boolean
+  thinking: boolean
 }
 
 export interface Caps {
@@ -260,9 +274,11 @@ export interface ChatInfo {
   /** A sub-agent: its parent and its status. */
   parent?: string
   status?: AgentStatus
+  tokens?: number
+  cost?: number
 }
 
-export const [config, setConfig] = createStore<{ servers: ServerView[]; server: string; model: string }>({ servers: [], server: '', model: '' })
+export const [config, setConfig] = createStore<{ servers: ServerView[]; server: string; model: string; childServer?: string; childModel?: string }>({ servers: [], server: '', model: '' })
 export const [models, setModels] = createSignal<Model[]>([])
 export const [modelsError, setModelsError] = createSignal('')
 export const [modelsLoading, setModelsLoading] = createSignal(false)

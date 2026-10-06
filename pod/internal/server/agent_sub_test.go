@@ -206,3 +206,81 @@ func TestSubAgents(t *testing.T) {
 		t.Fatalf("the stop of the parent was reported to it:\n%s", contents("p3"))
 	}
 }
+
+// A child on a cloud server chosen by its parent: the server listed in the parent prompt, its
+// usage summed, an unknown model refused, an error of the provider reported to the parent.
+func TestSubAgentServers(t *testing.T) {
+	s, ts := newServer(t)
+	local, cloud := &fakeModel{}, &fakeModel{}
+	lts, cts := local.serve(t), cloud.serve(t)
+	if err := s.LLM.SaveServer(llm.Server{ID: "s1", Kind: "llamacpp", URL: lts.URL, Parallel: 4}, false); err != nil {
+		t.Fatal(err)
+	}
+	// The fake answers /v1/models with 404: the typed models are the list.
+	if err := s.LLM.SaveServer(llm.Server{ID: "c1", Name: "Cloud", Kind: "openai", URL: cts.URL, APIKey: "sk", Parallel: 4, Children: true, Note: "strong at code, paid",
+		Models: []llm.ModelConf{{ID: "big", Tools: true}, {ID: "broke", Tools: true}}}, false); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := dial(t, ts, "secret-token-0123456789abcdef0123")
+	id := a.call("projects.create", map[string]any{"type": "local", "path": t.TempDir()})["result"].(map[string]any)["id"].(string)
+	a.call("project.open", map[string]any{"id": id})
+	contents := func(chat string) string {
+		var out []string
+		for _, m := range a.call("agent.open", map[string]any{"id": chat})["result"].(map[string]any)["chat"].(map[string]any)["messages"].([]any) {
+			mm := m.(map[string]any)
+			out = append(out, fmt.Sprintf("%v:%v", mm["role"], mm["content"]))
+		}
+		return strings.Join(out, "\n")
+	}
+	var system string
+	local.answer = func(req map[string]any) []string {
+		content := fmt.Sprint(lastMessage(req)["content"])
+		switch content {
+		case "Go":
+			system = req["messages"].([]any)[0].(map[string]any)["content"].(string)
+			return toolCalls([3]string{"x", "spawn_agent", `{"title":"Nope","task":"t","server":"Cloud","model":"missing"}`}, [3]string{"y", "spawn_agent", `{"title":"Cloudy","task":"t","server":"Cloud","model":"big"}`})
+		case "Again":
+			return toolCalls([3]string{"z", "spawn_agent", `{"title":"Poor","task":"t","server":"Cloud","model":"broke"}`})
+		}
+		return text("ok")
+	}
+	cloud.answer = func(req map[string]any) []string {
+		if req["model"] == "broke" {
+			return []string{`{"error":{"message":"Insufficient credits"}}`}
+		}
+		return append(toolCalls([3]string{"r", "agent_report", `{"summary":"Done in the cloud."}`})[:1],
+			`{"choices":[{"finish_reason":"tool_calls","delta":{}}],"usage":{"prompt_tokens":100,"completion_tokens":20,"cost":0.5}}`)
+	}
+	a.call("agent.send", map[string]any{"id": "p", "text": "Go", "server": "s1", "model": "m"})
+	deadline := time.Now().Add(15 * time.Second)
+	for !strings.Contains(contents("p"), "Done in the cloud.") {
+		if time.Now().After(deadline) {
+			t.Fatalf("no report:\n%s", contents("p"))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if !strings.Contains(system, "- Cloud, models: big, broke — strong at code, paid (4 at once)") {
+		t.Fatalf("servers not in the parent prompt:\n%s", system)
+	}
+	pc := contents("p")
+	if !strings.Contains(pc, `Cloud has no model "missing" (models: big, broke)`) || !strings.Contains(pc, "started on Cloud (big): Cloudy") {
+		t.Fatalf("parent:\n%s", pc)
+	}
+	kids := a.call("agent.open", map[string]any{"id": "p"})["result"].(map[string]any)["chat"].(map[string]any)["children"].([]any)
+	child := a.call("agent.open", map[string]any{"id": kids[0]})["result"].(map[string]any)["chat"].(map[string]any)
+	if sa := child["agent"].(map[string]any); child["server"] != "c1" || child["model"] != "big" || sa["tokens"] != float64(120) || sa["cost"] != 0.5 {
+		t.Fatalf("child: %v %v %+v", child["server"], child["model"], child["agent"])
+	}
+
+	// The provider fails: the child ends in error, its parent is told.
+	a.call("agent.send", map[string]any{"id": "p", "text": "Again", "server": "s1", "model": "m"})
+	for !strings.Contains(contents("p"), "report: error]") {
+		if time.Now().After(deadline.Add(10 * time.Second)) {
+			t.Fatalf("no error report:\n%s", contents("p"))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if pc := contents("p"); !strings.Contains(pc, "Insufficient credits") {
+		t.Fatalf("error report:\n%s", pc)
+	}
+}

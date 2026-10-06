@@ -431,6 +431,9 @@
 .ai-page-card img { height: 40px; width: auto; border: 1px solid var(--line); border-radius: 4px; background: #fff; }
 .ai-capture { display: flex; align-items: center; gap: 8px; margin: 4px 0 4px 22px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line)); border-radius: 10px; background: var(--bg-2); flex-wrap: wrap; }
 .ai-child { display: grid; gap: 4px; margin: 4px 0 4px 22px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-2); }
+.ai-model-conf { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.ai-model-conf input[name=modelId] { flex: 1 1 160px; min-width: 0; }
+.ai-child-usage { color: var(--fg-muted); }
 .ai-child-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .ai-child-line { display: flex; gap: 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ai-child-status.running, .ai-child-status.queued { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); }

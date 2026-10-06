@@ -2,7 +2,9 @@
 // and asks; the parent, woken by the question, asks the user first (ask_user), then replies;
 // the change of the child waits for the user (toast "Sub-agent … asks to change a file",
 // approved in the child thread, with its header and its task); its report wakes the parent;
-// the child is nested under its parent in the side bar.
+// the child is nested under its parent in the side bar. Then a cloud server (OpenAI-compatible,
+// with a key and a typed model) offered to sub-agents: the parent picks it for a child, whose
+// card shows its model, tokens and cost.
 const http = require('http')
 const fs = require('fs')
 const { run, openProject, assert, OUT, WS } = require('../common.cjs')
@@ -21,6 +23,18 @@ const call = (res, id, name, args) => {
 const say = (res, s) => (sse(res, { content: s }), end(res))
 
 let child = ''
+// The cloud provider: needs its key, has no /models (the model is typed in the settings).
+const cloudAuth = []
+const cloud = http.createServer(async (req, res) => {
+  cloudAuth.push(req.headers.authorization)
+  if (req.headers.authorization !== 'Bearer sk-e2e') return res.writeHead(401).end('{"error":{"message":"bad key"}}')
+  if (req.url !== '/v1/chat/completions') return res.writeHead(404).end()
+  for await (const _ of req);
+  res.writeHead(200, { 'Content-Type': 'text/event-stream' })
+  sse(res, { tool_calls: [{ index: 0, id: 'c1', type: 'function', function: { name: 'agent_report', arguments: JSON.stringify({ summary: 'Reviewed in the cloud.' }) } }] })
+  res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }], usage: { prompt_tokens: 100, completion_tokens: 20, cost: 0.5 } })}\n\n`)
+  res.end('data: [DONE]\n\n')
+})
 const requests = []
 const fake = http.createServer(async (req, res) => {
   if (req.url === '/api/version') return res.writeHead(404).end()
@@ -47,6 +61,8 @@ const fake = http.createServer(async (req, res) => {
     if (last.role === 'tool') return call(res, 'p1', 'agent_report', { summary: 'Bonjour is now Hello in src/main.go.', files_changed: ['src/main.go'], status: 'done' })
     return say(res, 'unexpected')
   }
+  if (content === 'Review in the cloud') return call(res, 'c1', 'spawn_agent', { title: 'Cloud review', task: 'Review main.go', server: 'Cloud', model: 'cloud-coder' })
+  if (content.includes('report: done]\nReviewed in the cloud.')) return say(res, 'The cloud reviewed it.')
   if (content === 'Delegate the greeting') return call(res, 's1', 'spawn_agent', { title: 'Change the greeting', task: 'Replace the greeting Bonjour', files: ['src/main.go'] })
   if (content.includes('asks] Which word')) {
     child = /Sub-agent (\w+) \(/.exec(content)[1]
@@ -59,6 +75,7 @@ const fake = http.createServer(async (req, res) => {
 
 run(async ({ page }) => {
   await new Promise((r) => fake.listen(0, '127.0.0.1', r))
+  await new Promise((r) => cloud.listen(0, '127.0.0.1', r))
   try {
     await openProject(page)
     await page.click('.rail-right .rail-btn[title="AI assistant"]')
@@ -112,7 +129,39 @@ run(async ({ page }) => {
     if (!(await page.isVisible('[data-testid=ai-sidebar]'))) await page.click('.ai-panel button[title="Conversations of the project"]')
     await page.waitForSelector('[data-testid=ai-chat-child]:has-text("Change the greeting")')
     assert(true, 'the child is listed under its parent')
+
+    // A cloud server for the sub-agents: kind, key, a typed model, a note.
+    await page.click('.ai-panel button[title^="Settings"]')
+    await page.fill('.ai-servers input[name=url]', `127.0.0.1:${cloud.address().port}/v1`)
+    await page.selectOption('.ai-servers select[name=kind]', 'openai')
+    await page.fill('.ai-servers input[name=name]', 'Cloud')
+    await page.fill('.ai-servers input[name=apiKey]', 'sk-e2e')
+    await page.click('[data-testid=model-conf-add]')
+    await page.fill('[data-testid=model-conf] input[name=modelId]', 'cloud-coder')
+    await page.check('.ai-servers input[name=children]')
+    await page.fill('.ai-servers input[name=note]', 'strong reviewer, paid')
+    await page.click('.ai-servers form button.primary')
+    await page.waitForSelector('.ai-server-row:has-text("Cloud")')
+    assert((await page.textContent('.ai-server-row:has-text("Cloud")')).includes('OpenAI-compatible provider'), 'the cloud server is listed with its kind')
+    await page.click('.ai-tab:has-text("Sub-agents")')
+    await page.selectOption('select[name=childServer]', { label: 'Cloud' })
+    await page.waitForFunction(() => [...document.querySelectorAll('select[name=childModel] option')].some((o) => o.value === 'cloud-coder'))
+    assert(true, 'the typed model is offered as default model of the sub-agents')
+    await page.screenshot({ path: OUT + '/subagent-settings.png' })
+    await page.click('.ai-servers .modal-head button')
+    assert(!JSON.stringify(await page.evaluate(() => document.body.innerHTML)).includes('sk-e2e'), 'the key never reaches the page')
+
+    await page.click('.ai-panel button[title="New conversation"]')
+    await page.fill('.ai-composer textarea', 'Review in the cloud')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('.ai-msg.assistant .md:has-text("The cloud reviewed it.")', { timeout: 20000 })
+    const usage = await page.textContent('[data-testid=ai-child]:has-text("Cloud review") [data-testid=ai-child-usage]')
+    assert(usage.includes('cloud-coder') && usage.includes('120') && usage.includes('0.50'), 'the card of the child shows its model, tokens and cost: ' + usage)
+    const parentReq = requests.find((r) => text(r.messages[r.messages.length - 1]) === 'Review in the cloud')
+    assert(text(parentReq.messages[0]).includes('- Cloud, models: cloud-coder — strong reviewer, paid'), 'the parent prompt lists the server for sub-agents with its note')
+    assert(cloudAuth.length > 0 && cloudAuth.every((a) => a === 'Bearer sk-e2e'), 'the child ran on the cloud server, with its key')
   } finally {
+    cloud.close()
     fake.close()
   }
 })

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -154,10 +155,16 @@ func (s *Server) spawnAgent(r *agentRun, a toolArgs) (toolResult, error) {
 	var opts *agent.Options
 	if parent.Options != nil {
 		o := *parent.Options
+		// The child keeps its server in Plan mode.
+		o.PlanServer, o.PlanModel = "", ""
 		opts = &o
 	}
 	ticket := parent.Ticket
 	r.mu.Unlock()
+	server, model, err := s.childTarget(r, a.str("server"), strings.TrimSpace(a.str("model")), server, model)
+	if err != nil {
+		return toolResult{}, err
+	}
 	running := 0
 	for _, id := range children {
 		if c, err := s.childOf(r, id); err == nil && c.Agent != nil && !agent.AgentEnded(c.Agent.Status) {
@@ -176,10 +183,98 @@ func (s *Server) spawnAgent(r *agentRun, a toolArgs) (toolResult, error) {
 	s.publish(r, -1)
 	r.mu.Unlock()
 	s.startRun(r.loc, r.root, r.project, r.lang, c, 0)
-	res := ok(fmt.Sprintf("Sub-agent %s started: %s. It runs in the background; its questions and its report will come as messages. Go on with other work, or end your turn to wait.", c.ID, title),
+	on := ""
+	if server != parent.Server || model != parent.Model {
+		on = fmt.Sprintf(" on %s (%s)", s.LLM.ServerName(server), model)
+	}
+	res := ok(fmt.Sprintf("Sub-agent %s started%s: %s. It runs in the background; its questions and its report will come as messages. Go on with other work, or end your turn to wait.", c.ID, on, title),
 		agent.T("sub-agent started", nil))
 	res.Child = c.ID
 	return res, nil
+}
+
+// childTarget is the server and model of a new child: the ones asked (a server for the
+// sub-agents), else the default of the settings, else the parent's.
+func (s *Server) childTarget(r *agentRun, server, model, parentServer, parentModel string) (string, string, error) {
+	if server == "" {
+		if ds, dm := s.LLM.ChildDefault(); ds != "" && (model == "" || model == dm) {
+			return ds, dm, nil
+		}
+		if model == "" || model == parentModel {
+			return parentServer, parentModel, nil
+		}
+		server = parentServer
+	}
+	var names []string
+	found := ""
+	for _, v := range s.LLM.ForChildren() {
+		names = append(names, v.Name)
+		if v.ID == server || strings.EqualFold(v.Name, server) {
+			found = v.ID
+		}
+	}
+	if found == "" && server == parentServer {
+		found = server
+	}
+	if found == "" {
+		return "", "", failf("unknown server for sub-agents: %q (servers: %s)", server, strings.Join(names, ", "))
+	}
+	if model == "" {
+		if ds, dm := s.LLM.ChildDefault(); ds == found {
+			return found, dm, nil
+		}
+		return "", "", failf("give the model of the child on %s", s.LLM.ServerName(found))
+	}
+	// The model must be one of the server (when it can list them).
+	ctx, cancel := context.WithTimeout(r.ctx, 15*time.Second)
+	defer cancel()
+	if list, err := s.LLM.Models(ctx, found); err == nil {
+		var ids []string
+		for _, m := range list.Models {
+			if m.ID == model {
+				return found, model, nil
+			}
+			ids = append(ids, m.ID)
+		}
+		if len(ids) > 30 {
+			ids = append(ids[:30], "…")
+		}
+		return "", "", failf("%s has no model %q (models: %s)", s.LLM.ServerName(found), model, strings.Join(ids, ", "))
+	}
+	return found, model, nil
+}
+
+// childServers tells the parent the servers it may give its sub-agents.
+func (s *Server) childServers() string {
+	list := s.LLM.ForChildren()
+	if len(list) == 0 {
+		return ""
+	}
+	ds, dm := s.LLM.ChildDefault()
+	var b strings.Builder
+	b.WriteString("Servers for sub-agents (spawn_agent server and model; without them, the child runs on")
+	if ds != "" {
+		fmt.Fprintf(&b, " %s (%s)):", s.LLM.ServerName(ds), dm)
+	} else {
+		b.WriteString(" your server and model):")
+	}
+	for _, v := range list {
+		fmt.Fprintf(&b, "\n- %s", v.Name)
+		var models []string
+		for _, m := range v.Models {
+			models = append(models, m.ID)
+		}
+		if len(models) > 0 {
+			fmt.Fprintf(&b, ", models: %s", strings.Join(models, ", "))
+		}
+		if v.Note != "" {
+			fmt.Fprintf(&b, " — %s", v.Note)
+		}
+		if v.Parallel > 1 {
+			fmt.Fprintf(&b, " (%d at once)", v.Parallel)
+		}
+	}
+	return b.String()
 }
 
 // waitIdle waits a little for a child whose run is ending (it just asked or reported).

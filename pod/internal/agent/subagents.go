@@ -47,6 +47,9 @@ type SubAgent struct {
 	Report   string     `json:"report,omitempty"`
 	Changed  []string   `json:"changed,omitempty"` // files changed, from the report
 	Error    string     `json:"error,omitempty"`
+	// Tokens read and written, and cost (when the provider tells it), over all its requests.
+	Tokens int     `json:"tokens,omitempty"`
+	Cost   float64 `json:"cost,omitempty"`
 	Nudged   bool       `json:"nudged,omitempty"` // told once to end with agent_report
 }
 
@@ -119,6 +122,8 @@ func agentDefs() (parent, child []Def) {
 				"task":  str("The task, complete and precise: the child does not see this conversation"),
 				"files": strList("Files the child should read first (paths relative to the root)"),
 				"mode":  enum("Mode of the child (default: yours); build changes files, plan only reads", Build, Plan, Briefing),
+				"server": str("Server of the child, among the servers for sub-agents listed in your instructions (default: the default one, else yours)"),
+				"model":  str("Model of the child on that server (required with server, unless it is the default server)"),
 			}, "title", "task"),
 		fn("agent_reply", "Answers the open question of a sub-agent; it goes on with the answer.",
 			obj{"child": str("Id of the sub-agent"), "answer": str("The answer")}, "child", "answer"),

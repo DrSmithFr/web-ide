@@ -189,5 +189,9 @@
   "the command ended before listening on port %d: %s": "la commande s'est arrêtée avant d'écouter sur le port %d : %s",
   "nothing listens on port %d after %d s (see the console)": "rien n'écoute sur le port %d après %d s (voir la console)",
   "The app does not answer yet on port {port}.": "L'app ne répond pas encore sur le port {port}.",
-  "This preview is private: open it from the IDE.": "Cet aperçu est privé : ouvrez-le depuis l'IDE."
+  "This preview is private: open it from the IDE.": "Cet aperçu est privé : ouvrez-le depuis l'IDE.",
+  "%s refused the API key: %s": "%s a refusé la clé d'API : %s",
+  "%s: no credit left: %s": "%s : plus de crédit : %s",
+  "%s does not know the model %s: %s": "%s ne connaît pas le modèle %s : %s",
+  "%s: rate limit reached, try again later: %s": "%s : limite de requêtes atteinte, réessayez plus tard : %s"
 }

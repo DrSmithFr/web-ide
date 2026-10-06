@@ -353,6 +353,9 @@ func (s *Server) systemPrompt(r *agentRun, ref *runtimeRef, c *agent.Chat, tools
 		text += "\n\n" + agent.SubAgentText
 	} else if tools {
 		text += "\n\n" + agent.ParentText
+		if servers := s.childServers(); servers != "" {
+			text += "\n" + servers
+		}
 	}
 	return text
 }
@@ -490,6 +493,10 @@ func (s *Server) loop(r *agentRun) {
 		}
 		if res.Usage != nil {
 			msg.Usage, _ = json.Marshal(res.Usage)
+			if sa := r.chat.Agent; sa != nil {
+				sa.Tokens += res.Usage.Prompt + res.Usage.Completion
+				sa.Cost += res.Usage.Cost
+			}
 		}
 		if res.Finish == "length" {
 			msg.Error = "Answer cut: length limit reached."

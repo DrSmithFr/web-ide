@@ -1596,5 +1596,21 @@
   "too many questions": "trop de questions",
   "waiting for the parent": "attend sa conversation parente",
   "invalid report": "rapport invalide",
-  "report sent": "rapport envoyé"
+  "report sent": "rapport envoyé",
+  "The assistant can delegate a task to a sub-agent: a conversation with a fresh context that runs in the background and reports to it. It may run on another server, a cloud provider for instance: mark the servers “Available to sub-agents” in the Servers tab, with a note that tells the assistant when to use them.": "L'assistant peut confier une tâche à un sous-agent : une conversation au contexte vierge qui tourne en arrière-plan et lui rend compte. Il peut tourner sur un autre serveur, un fournisseur cloud par exemple : cochez « Disponible pour les sous-agents » sur les serveurs de l'onglet Serveurs, avec une note qui dit à l'assistant quand s'en servir.",
+  "Default server of the sub-agents": "Serveur par défaut des sous-agents",
+  "OpenAI-compatible provider": "Fournisseur compatible OpenAI",
+  "sub-agents": "sous-agents",
+  "OpenAI-compatible provider (OpenAI, OpenRouter…)": "Fournisseur compatible OpenAI (OpenAI, OpenRouter…)",
+  "The key stays on the pod: the page never receives it. Requests to a paid provider cost money.": "La clé reste dans le pod : la page ne la reçoit jamais. Les requêtes vers un fournisseur payant coûtent de l'argent.",
+  "Models typed by hand (when the server does not list them, or to set what they can do)": "Modèles saisis à la main (quand le serveur ne les liste pas, ou pour préciser ce qu'ils savent faire)",
+  "model id": "identifiant du modèle",
+  "Context size (0: unknown)": "Taille du contexte (0 : inconnue)",
+  "reasoning": "raisonnement",
+  "Type a model": "Saisir un modèle",
+  "Available to sub-agents": "Disponible pour les sous-agents",
+  "Note for the assistant choosing it (strengths, cost…)": "Note pour l'assistant qui le choisit (points forts, coût…)",
+  "e.g. strong at code, paid": "ex. : fort en code, payant",
+  "cost {cost}": "coût {cost}",
+  "Sub-agents": "Sous-agents"
 }

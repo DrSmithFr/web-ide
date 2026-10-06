@@ -7,8 +7,8 @@ import { errorToast } from '../ui/toast'
 import { request } from '../pod/rpc'
 import { t } from '../i18n'
 import { openChat, runStates } from './agent'
-import { Markdown } from './parts'
-import { chat, chatList, type AgentEvent, type ChatMessage } from './state'
+import { formatTokens, Markdown } from './parts'
+import { chat, chatList, config, type AgentEvent, type ChatInfo, type ChatMessage } from './state'
 
 /** Status of a sub-agent shown to the user: its run first (waiting for you, queued). */
 export const agentLabels: Record<string, string> = {
@@ -27,6 +27,14 @@ export function agentStatus(id: string, stored?: string): string {
   const run = runStates()[id]
   if (run && run !== 'running') return run
   return stored ?? (run ? 'running' : '')
+}
+
+/** Model, tokens and cost of a child. */
+function usageText(c: ChatInfo): string {
+  const parts = [c.model ?? '']
+  if (c.tokens) parts.push(t('{n} tokens', { n: formatTokens(c.tokens) }))
+  if (c.cost) parts.push(t('cost {cost}', { cost: c.cost < 0.01 ? c.cost.toFixed(4) : c.cost.toFixed(2) }))
+  return parts.filter(Boolean).join(' · ')
 }
 
 const open = (id?: string) => id && openChat(id).catch(errorToast)
@@ -56,6 +64,11 @@ export function ChildCard(props: { id: string }) {
           <Icon name="external" size={12} /> {t('Open')}
         </button>
       </div>
+      <Show when={info()?.model}>
+        <div class="ai-child-line small ai-child-usage" data-testid="ai-child-usage">
+          {usageText(info()!)}
+        </div>
+      </Show>
       <Show when={note()}>
         {(n) => (
           <div class="ai-child-line small" data-testid="ai-child-note">
@@ -144,6 +157,9 @@ export function ChildHeader() {
         {parent()?.title ?? t('the parent conversation')}
       </button>
       <span class="grow" />
+      <span class="muted small ellipsis" data-testid="ai-child-model">
+        {config.servers.find((s) => s.id === chat.server)?.name ?? chat.server} · {chat.model}
+      </span>
       <span class={`badge ai-child-status ${status()}`}>{t(agentLabels[status()] ?? status())}</span>
     </div>
   )
