@@ -99,23 +99,31 @@ const (
 )
 
 var askUserDef = fn("ask_user",
-	fmt.Sprintf("Asks the user one or more questions (1 to %d) when information is missing or a choice is theirs. Each question offers 2 to 4 choices; the user can also answer freely. After this call the turn stops until the answers come back (as the tool result). Write the questions in the user's language.", MaxQuestions),
+	fmt.Sprintf("Asks the user one or more questions (1 to %d) when information is missing or a choice is theirs. Each question has a type that picks its look: choice (the default), idea, compare, rank or scenario. The user can also answer freely, say \"I don't know\" or \"Up to you\", and add a note to any question. After this call the turn stops until the answers come back (as the tool result). Write the questions in the user's language.", MaxQuestions),
 	obj{"questions": obj{
 		"type":        "array",
 		"description": "The questions, asked one at a time",
 		"items": obj{
 			"type": "object",
 			"properties": obj{
-				"question": str("The full question, ending with a question mark"),
-				"header":   str(`Very short label (12 characters max), e.g. "Format"`),
+				"question":  str("The full question, ending with a question mark (for idea: the proposal)"),
+				"header":    str(`Very short label (12 characters max), e.g. "Format"`),
+				"type":      enum("choice: 2 to 6 options; idea: one proposal to validate, no options; compare: two approaches, exactly 2 options; rank: 2 to 8 options to order; scenario: a situation, then 2 to 6 options", QuestionTypes...),
+				"situation": str("scenario: the concrete situation (a few sentences)"),
+				"top":       integer("rank: only the top N is picked (N below the number of options)"),
 				"options": obj{
 					"type":        "array",
-					"description": `2 to 4 choices; put the recommended option first with "(recommended)"`,
-					"items":       obj{"type": "object", "properties": obj{"label": str("Choice (1 to 5 words)"), "description": str("What this choice implies")}, "required": []string{"label"}},
+					"description": `The choices (none for idea); put the recommended option first with "(recommended)"`,
+					"items": obj{"type": "object", "properties": obj{
+						"label":       str("Choice (1 to 5 words)"),
+						"description": str("What this choice implies"),
+						"pros":        strList("What goes for it (short points)"),
+						"cons":        strList("What goes against it (short points)"),
+					}, "required": []string{"label"}},
 				},
-				"multiple": boolean("Several choices allowed"),
+				"multiple": boolean("choice: several choices allowed"),
 			},
-			"required": []string{"question", "options"},
+			"required": []string{"question"},
 		},
 	}}, "questions")
 

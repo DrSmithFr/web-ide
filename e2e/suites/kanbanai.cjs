@@ -83,6 +83,69 @@ const fake = http.createServer(async (req, res) => {
     sse(res, { content: 'Feedback handled.' })
     return end(res)
   }
+  if (firstUser.startsWith('Types:')) {
+    // One question of each type (choice, idea, compare, rank, scenario) plus a legacy one,
+    // then an invalid call (compare with three options) that must be refused.
+    if (last.role === 'user')
+      return (
+        sse(res, {
+          tool_calls: calls([
+            [
+              't1',
+              'ask_user',
+              {
+                questions: [
+                  { question: 'Which color?', type: 'choice', options: [{ label: 'Blue', pros: ['calm'] }, { label: 'Red', cons: ['loud'] }] },
+                  { question: 'Should the export include a header row?', type: 'idea' },
+                  { question: 'CSV or JSON as the default format?', type: 'compare', options: [{ label: 'CSV', pros: ['simple'] }, { label: 'JSON', pros: ['structured'] }] },
+                  { question: 'Rank the fields by importance.', type: 'rank', top: 2, options: [{ label: 'id' }, { label: 'total' }, { label: 'date' }, { label: 'email' }] },
+                  { question: 'When the file is empty, which file is written?', type: 'scenario', situation: 'The export runs at midnight and no rows are produced.', options: [{ label: 'None' }, { label: 'An empty file' }] },
+                  { question: 'Which priority?', options: [{ label: 'High' }, { label: 'Normal' }] },
+                  { question: 'Anything else to add?', options: [{ label: 'Yes' }, { label: 'No' }] },
+                ],
+              },
+            ],
+            [
+              't1bad',
+              'ask_user',
+              {
+                questions: [
+                  { question: 'How many formats?', type: 'compare', options: [{ label: 'CSV' }, { label: 'JSON' }, { label: 'XML' }] },
+                ],
+              },
+            ],
+          ]),
+        }),
+        end(res, 'tool_calls')
+      )
+    if (msgs.some((m) => m.role === 'tool' && m.tool_call_id === 't1')) return sse(res, { content: 'Types noted.' }), end(res)
+    sse(res, { content: 'Types done.' })
+    return end(res)
+  }
+  if (firstUser.startsWith('TypesM:')) {
+    // One idea (answered by swiping the card) and one compare (stacked on a mobile viewport).
+    if (last.role === 'user')
+      return (
+        sse(res, {
+          tool_calls: calls([
+            [
+              'mm',
+              'ask_user',
+              {
+                questions: [
+                  { question: 'Ship it right away?', type: 'idea' },
+                  { question: 'Drawer on the left or the right?', type: 'compare', options: [{ label: 'Left' }, { label: 'Right' }] },
+                ],
+              },
+            ],
+          ]),
+        }),
+        end(res, 'tool_calls')
+      )
+    if (msgs.some((m) => m.role === 'tool' && m.tool_call_id === 'mm')) return sse(res, { content: 'Mobile types noted.' }), end(res)
+    sse(res, { content: 'Mobile types noted.' })
+    return end(res)
+  }
   if (last.role === 'user')
     return (
       sse(res, {
@@ -235,6 +298,59 @@ run(async ({ page }) => {
     await page.waitForSelector('.ai-msg.assistant .md:has-text("Plan saved.")', { timeout: 5000 })
     assert(true, 'plan conversation reopened from the ticket')
 
+    // The question types: one of each (choice, idea, compare, rank, scenario), a legacy one,
+    // a note, "I don't know", and an invalid call (compare with three options) refused.
+    await page.click('.ai-panel button[title="New conversation"]')
+    await page.fill('.ai-composer textarea', 'Types: which widgets')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid=ai-ask-question]:has-text("Which color?")', { timeout: 10000 })
+    // Q1 choice: a note, then the pick (a single choice moves on by itself).
+    await page.click('[data-testid=ai-ask-note]')
+    await page.fill('[data-testid=ai-ask-note-input]', 'prefers it calm')
+    await page.click('.ai-ask-option:has-text("Blue")')
+    await page.waitForSelector('[data-testid=ai-ask-question]:has-text("header row")')
+    // Q2 idea: "Yes, but…" opens the text and keeps the user (no auto-advance).
+    await page.click('[data-testid=ai-ask-idea-but]')
+    await page.fill('[data-testid=ai-ask-idea-text]', 'and a footer too')
+    assert(await page.isVisible('[data-testid=ai-ask-question]:has-text("header row")'), 'the idea stays while the "Yes, but…" text is typed')
+    await page.click('[data-testid=ai-ask-next]')
+    // Q3 compare: a pick of the two.
+    await page.waitForSelector('[data-testid=ai-ask-compare]')
+    await page.click('.ai-ask-compare .ai-ask-option:has-text("JSON")')
+    await page.waitForSelector('[data-testid=ai-ask-rank]')
+    // Q4 rank: move "email" to the top, then next.
+    const email = page.locator('[data-testid=ai-ask-rank-item]').filter({ hasText: 'email' })
+    await email.locator('[data-testid=ai-ask-rank-up]').click()
+    await email.locator('[data-testid=ai-ask-rank-up]').click()
+    await email.locator('[data-testid=ai-ask-rank-up]').click()
+    await page.click('[data-testid=ai-ask-next]')
+    // Q5 scenario: the situation is shown, then a pick.
+    await page.waitForSelector('[data-testid=ai-ask-situation]')
+    assert((await page.textContent('[data-testid=ai-ask-situation]')).includes('at midnight'), 'the scenario situation is shown')
+    await page.click('.ai-ask-scenario .ai-ask-option:has-text("None")')
+    // Q6 legacy (no type): "I don't know".
+    await page.waitForSelector('[data-testid=ai-ask-question]:has-text("Which priority?")')
+    await page.click('[data-testid=ai-ask-dontknow]')
+    await page.click('[data-testid=ai-ask-next]')
+    // Q7: "Up to you" (the other special answer).
+    await page.waitForSelector('[data-testid=ai-ask-question]:has-text("Anything else")')
+    await page.click('[data-testid=ai-ask-uptoyou]')
+    await page.click('[data-testid=ai-ask-next]')
+    await page.waitForSelector('.ai-ask-recap')
+    const typesRecap = await page.textContent('.ai-ask-recap')
+    assert(typesRecap.includes('Blue') && typesRecap.includes('and a footer too') && typesRecap.includes('JSON') && typesRecap.includes('None') && typesRecap.includes('1. email, 2. id') && typesRecap.includes("I don't know") && typesRecap.includes('Up to you'), 'recap: ' + typesRecap)
+    await page.screenshot({ path: OUT + '/ask-types.png' })
+    await page.click('[data-testid=ai-ask-send]')
+    await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Types noted.")', { timeout: 15000 })
+    const t1res = requests[requests.length - 1].messages.filter((m) => m.role === 'tool')
+    const t1 = text(t1res.find((m) => m.tool_call_id === 't1'))
+    assert(t1.includes('[choice]') && t1.includes('Blue') && t1.includes('and a footer too') && t1.includes('[compare]') && t1.includes('JSON') && t1.includes('[rank]') && t1.includes('1. email, 2. id (the top 2 only)') && t1.includes('[scenario]') && t1.includes('None') && t1.includes('I don\'t know (the user does not know: offer concrete examples or options)') && t1.includes('Up to you (left to you: decide and say what you chose)') && t1.includes('note: prefers it calm'), 'answers by type sent back: ' + t1)
+    const t1bad = t1res.find((m) => m.tool_call_id === 't1bad')
+    assert(t1bad && text(t1bad).includes('compare') && text(t1bad).includes('exactly 2 options') && text(t1bad).includes('it has 3'), 'invalid compare refused, naming the rule: ' + (t1bad ? text(t1bad) : '(missing)'))
+    assert(await page.isVisible('[data-testid=ai-ask] .badge:has-text("answered")'), 'types card marked answered')
+    const folded = await page.textContent('[data-testid=ai-ask]:has(.badge:has-text("answered")):has-text("Which color?")')
+    assert(folded.includes('Blue') && folded.includes('prefers it calm') && folded.includes('1. email, 2. id'), 'the folded card shows the answers and the note: ' + folded)
+
     // Briefing mode: questions, then tickets created and linked to the conversation.
     await page.click('.ai-panel button[title="New conversation"]')
     await page.click('.ai-composer textarea')
@@ -269,6 +385,41 @@ run(async ({ page }) => {
     await page.click('[data-testid=ticket-card-2]')
     await page.waitForSelector('[data-testid=ticket-note]:has-text("accounting only")', { timeout: 5000 })
     assert(await page.isVisible('.tk-row:has(.kb-role.r-briefing) [data-testid=ticket-chat]:has-text("Brief:")'), 'the first ticket has the note and the conversation')
+
+    // Mobile: the idea is answered by swiping the card (right = Yes), and the compare stacks.
+    await page.click('.ai-panel button[title="New conversation"]')
+    await page.fill('.ai-composer textarea', 'TypesM: swipe')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid=ai-ask-idea]', { timeout: 10000 })
+    await page.$eval('[data-testid=ai-ask-idea]', (el) => {
+      const target = el.querySelector('.ai-ask-idea-proposal')
+      const r = target.getBoundingClientRect()
+      const x = r.x + r.width / 2
+      const y = r.y + r.height / 2
+      const fire = (type, cx, cy) =>
+        target.dispatchEvent(
+          new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'touch', isPrimary: true, clientX: cx, clientY: cy, button: 0 }),
+        )
+      fire('pointerdown', x, y)
+      fire('pointermove', x + 50, y)
+      fire('pointermove', x + 130, y)
+      fire('pointerup', x + 150, y)
+    })
+    await page.waitForSelector('[data-testid=ai-ask-compare]', { state: 'visible', timeout: 10000 })
+    assert(true, 'swiping the idea card right answers "Yes" and moves on to the compare')
+    // Narrow viewport: the two cards stack (a single grid column).
+    await page.setViewportSize({ width: 390, height: 844 })
+    const tracks = await page.$eval('[data-testid=ai-ask-compare]', (el) => getComputedStyle(el).gridTemplateColumns.split(' ').length)
+    await page.screenshot({ path: OUT + '/ask-types-mobile.png' })
+    assert(tracks === 1, 'compare stacked on a mobile viewport (tracks: ' + tracks + ')')
+    await page.click('.ai-ask-compare .ai-ask-option:has-text("Left")')
+    await page.click('[data-testid=ai-ask-next]')
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.click('[data-testid=ai-ask-send]')
+    await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Mobile types noted.")', { timeout: 15000 })
+    const mm = text(requests[requests.length - 1].messages.filter((m) => m.role === 'tool').find((m) => m.tool_call_id === 'mm'))
+    assert(mm.includes('[idea]') && mm.includes('→ Yes') && mm.includes('[compare]') && mm.includes('Left'), 'swipe (Yes) and compare (Left) sent back: ' + mm)
+    assert(true, 'mobile: swipe and compare answered')
   } finally {
     fake.close()
   }

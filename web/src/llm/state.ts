@@ -107,6 +107,8 @@ export interface ChatMessage {
   /** Questions asked with ask_user (tool message), the answers, and their state. */
   questions?: Question[]
   answers?: string[][]
+  /** Optional note the user adds to each question (one per question, '' when absent). */
+  notes?: string[]
   askState?: 'pending' | 'answered' | 'skipped'
 }
 
@@ -120,10 +122,26 @@ export interface SummaryText {
   suffix?: string
 }
 
+/** Kind of question: it picks the widget. Absent = "choice" (old calls). */
+export type QuestionType = 'choice' | 'idea' | 'compare' | 'rank' | 'scenario'
+
+export interface QuestionOption {
+  label: string
+  description?: string
+  /** What goes for it / against it (choice and compare), shown as short ✓/✗ lines. */
+  pros?: string[]
+  cons?: string[]
+}
+
 export interface Question {
   question: string
   header?: string
-  options: { label: string; description?: string }[]
+  /** For "scenario": the concrete situation. */
+  situation?: string
+  /** For "rank": pick only the top N (N < number of options). */
+  top?: number
+  type?: QuestionType
+  options: QuestionOption[]
   multiple?: boolean
 }
 
