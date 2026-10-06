@@ -643,6 +643,7 @@ run(async ({ page }) => {
     await page.click('[data-testid=ai-board-toggle]')
     await page.waitForSelector('[data-testid=bd-title]:has-text("Page 5")')
     assert((await page.$$('[data-testid=bd-thumb]')).length === 5 && (await page.$$('[data-testid=bd-view] image')).length === 1, 'five pages: the image sent, its clone, the SVG, the PNG and the GIF of the project')
+    assert((await page.getAttribute('[data-testid=bd-view] image', 'href')).startsWith('data:image/gif'), 'the GIF of the project stays a GIF on its page (animated)')
     await page.click('[data-testid=bd-thumb] >> nth=0')
     assert((await page.textContent('[data-testid=bd-title]')) === 'Page 1 · shot.png', 'the image sent is page 1')
     await page.screenshot({ path: OUT + '/board-background.png' })

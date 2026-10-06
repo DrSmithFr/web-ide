@@ -121,6 +121,21 @@ async function svgPicture(svg: string): Promise<Picture> {
 }
 
 /**
+ * A GIF kept as it is, so that it stays animated on the board (a canvas keeps its first image
+ * only): when it needs no reduction. The PNG of the page shows its first image.
+ */
+async function gifPicture(blob: Blob, src: string): Promise<Picture | null> {
+  if (blob.size > 4 << 20) return null
+  const img = new Image()
+  await new Promise((resolve, reject) => {
+    img.onload = resolve
+    img.onerror = () => reject(new Error('the GIF cannot be read'))
+    img.src = src
+  })
+  return Math.max(img.naturalWidth, img.naturalHeight) <= 2048 ? { src, w: img.naturalWidth, h: img.naturalHeight } : null
+}
+
+/**
  * A page drawn for the model (board_draw_doodle, board_draw_image): built from the elements,
  * on an image (an SVG of the model, a capture of the screen) or a copy of a page; its
  * description and images.
@@ -133,7 +148,7 @@ export async function drawPage(a: DrawArgs & { number: number; clone?: number; s
   } else if (a.src) {
     // An image file of the project (an SVG file is drawn like an SVG of the model).
     const blob = await (await fetch(a.src)).blob()
-    picture = blob.type === 'image/svg+xml' ? await svgPicture(await blob.text()) : await pictureOf(blob)
+    picture = blob.type === 'image/svg+xml' ? await svgPicture(await blob.text()) : ((blob.type === 'image/gif' && (await gifPicture(blob, a.src))) || (await pictureOf(blob)))
     origin = a.origin
   }
   const { doc, outside } = buildPage({ ...a, elements: a.elements ?? [], base: picture ? newDoc(picture) : undefined })
