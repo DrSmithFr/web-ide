@@ -205,7 +205,13 @@ function CaptureCard(props: { msg: ChatMessage; call?: ToolCall }) {
   return (
     <div class="ai-capture" data-testid="ai-capture">
       <Icon name="screen" size={14} />
-      <span class="grow">{canCapture() ? t('The assistant wants a capture of your screen to draw on it.') : t('The assistant wants a capture of your screen, which this browser cannot take.')}</span>
+      <span class="grow">
+        {canCapture()
+          ? t('The assistant wants a capture of your screen to draw on it.')
+          : window.isSecureContext
+            ? t('The assistant wants a capture of your screen, which this browser cannot take.')
+            : t('The assistant wants a capture of your screen: the browser allows it only on a secure address (https, or localhost).')}
+      </span>
       <button class="btn small" disabled={busy()} onClick={() => send({ refused: true }).catch(errorToast)} data-testid="ai-capture-refuse">
         {t('Refuse')}
       </button>
