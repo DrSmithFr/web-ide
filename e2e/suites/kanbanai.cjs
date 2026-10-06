@@ -122,6 +122,40 @@ const fake = http.createServer(async (req, res) => {
     sse(res, { content: 'Types done.' })
     return end(res)
   }
+  if (firstUser.startsWith('Graph:') || firstUser.startsWith('GraphOff:')) {
+    // A small graph: Mode (Solo → Difficulty → Hard → Permadeath; Coop → Players), then
+    // Platform; plus two invalid graphs (unknown next, a cycle) refused by the pod.
+    const graph = [
+      { question: 'Mode?', id: 'a', options: [{ label: 'Solo', next: 'c' }, { label: 'Coop', next: 'd' }] },
+      { question: 'Platform?', options: [{ label: 'PC' }, { label: 'Phone' }] },
+      { question: 'Difficulty?', id: 'c', options: [{ label: 'Hard', next: 'e' }, { label: 'Easy' }] },
+      { question: 'How many players?', id: 'd', options: [{ label: '2' }, { label: '4' }] },
+      { question: 'Permadeath?', id: 'e', type: 'idea' },
+    ]
+    if (last.role === 'user')
+      return (
+        sse(res, {
+          tool_calls: calls([
+            ['g1', 'ask_user', { questions: graph }],
+            ['g2', 'ask_user', { questions: [{ question: 'Lost?', options: [{ label: 'x', next: 'zz' }, { label: 'y' }] }] }],
+            [
+              'g3',
+              'ask_user',
+              {
+                questions: [
+                  { question: 'Start?', options: [{ label: 'x', next: 'p' }, { label: 'y' }] },
+                  { question: 'P?', id: 'p', options: [{ label: 'x', next: 'q' }, { label: 'y' }] },
+                  { question: 'Q?', id: 'q', options: [{ label: 'x', next: 'p' }, { label: 'y' }] },
+                ],
+              },
+            ],
+          ]),
+        }),
+        end(res, 'tool_calls')
+      )
+    sse(res, { content: 'Graph noted.' })
+    return end(res)
+  }
   if (firstUser.startsWith('TypesM:')) {
     // One idea (answered by swiping the card) and one compare (stacked on a mobile viewport).
     if (last.role === 'user')
@@ -420,6 +454,56 @@ run(async ({ page }) => {
     const mm = text(requests[requests.length - 1].messages.filter((m) => m.role === 'tool').find((m) => m.tool_call_id === 'mm'))
     assert(mm.includes('[idea]') && mm.includes('→ Yes') && mm.includes('[compare]') && mm.includes('Left'), 'swipe (Yes) and compare (Left) sent back: ' + mm)
     assert(true, 'mobile: swipe and compare answered')
+
+    // A graph of questions: the branch of the answer only, a breadcrumb, Previous + another
+    // answer changing the path, invalid graphs refused.
+    await page.click('.ai-panel button[title="New conversation"]')
+    await page.fill('.ai-composer textarea', 'Graph: a game')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid=ai-ask-question]:has-text("Mode?")', { timeout: 10000 })
+    await page.click('.ai-ask-option:has-text("Solo")')
+    await page.waitForSelector('[data-testid=ai-ask-question]:has-text("Difficulty?")')
+    await page.click('.ai-ask-option:has-text("Hard")')
+    await page.waitForSelector('[data-testid=ai-ask-question]:has-text("Permadeath?")')
+    assert((await page.textContent('[data-testid=ai-ask-question] [data-testid=ai-ask-crumbs]')) === 'Solo › Hard', 'breadcrumb of the branch')
+    await page.click('[data-testid=ai-ask-idea-yes]')
+    await page.waitForSelector('[data-testid=ai-ask-question]:has-text("Platform?")')
+    for (let i = 0; i < 3; i++) await page.click('.ai-ask .btn:has-text("Previous")')
+    await page.waitForSelector('[data-testid=ai-ask-question]:has-text("Mode?")')
+    await page.click('.ai-ask-option:has-text("Coop")')
+    await page.waitForSelector('[data-testid=ai-ask-question]:has-text("How many players?")')
+    await page.click('.ai-ask-option:has-text("4")')
+    await page.waitForSelector('[data-testid=ai-ask-question]:has-text("Platform?")')
+    await page.click('.ai-ask-option:has-text("PC")')
+    await page.click('[data-testid=ai-ask-next]')
+    await page.waitForSelector('.ai-ask-recap')
+    const graphRecap = await page.textContent('.ai-ask-recap')
+    assert(graphRecap.includes('How many players?') && !graphRecap.includes('Difficulty?') && graphRecap.includes('Coop'), 'recap follows the new branch: ' + graphRecap)
+    await page.click('[data-testid=ai-ask-send]')
+    await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Graph noted.")', { timeout: 15000 })
+    let gres = requests[requests.length - 1].messages.filter((m) => m.role === 'tool')
+    const g1 = text(gres.find((m) => m.tool_call_id === 'g1'))
+    assert(g1.includes('2. [choice] Coop › How many players?\n   → 4') && g1.includes('3. [choice] Platform?') && g1.includes('Not asked (branch not taken): "Difficulty?", "Permadeath?".'), 'path sent back: ' + g1)
+    assert(text(gres.find((m) => m.tool_call_id === 'g2')).includes('next "zz" names no question'), 'unknown next refused')
+    assert(text(gres.find((m) => m.tool_call_id === 'g3')).includes('p → q → p form a cycle'), 'cycle refused')
+
+    // Leaving the path: a free answer on a question with branches sends the round at once.
+    await page.click('.ai-panel button[title="New conversation"]')
+    await page.fill('.ai-composer textarea', 'GraphOff: a game')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid=ai-ask-question]:has-text("Mode?")', { timeout: 10000 })
+    await page.click('.ai-ask-option:has-text("Solo")')
+    await page.waitForSelector('[data-testid=ai-ask-question]:has-text("Difficulty?")')
+    await page.fill('[data-testid=ai-ask-free]', 'Medium')
+    assert((await page.textContent('[data-testid=ai-ask-next]')).includes('Send the answers'), 'Next becomes Send when leaving the path')
+    await page.click('[data-testid=ai-ask-next]')
+    await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Graph noted.")', { timeout: 15000 })
+    gres = requests[requests.length - 1].messages.filter((m) => m.role === 'tool')
+    const off = text(gres.find((m) => m.tool_call_id === 'g1'))
+    assert(off.includes('left the anticipated path at "Difficulty?" with: Medium') && off.includes('Not asked: "Platform?", "How many players?", "Permadeath?".'), 'off path sent back: ' + off)
+    await page.waitForSelector('[data-testid=ai-ask-offpath]')
+    const offCard = await page.textContent('[data-testid=ai-ask]:has([data-testid=ai-ask-offpath])')
+    assert(offCard.includes('Solo') && offCard.includes('Medium') && !offCard.includes('Platform?'), 'folded card: the path and the badge: ' + offCard)
   } finally {
     fake.close()
   }

@@ -311,6 +311,8 @@ func (s *Server) registerAgent() {
 			Index   int        `json:"index"`
 			Answers [][]string `json:"answers"`
 			Notes   []string   `json:"notes"`
+			Path    []int      `json:"path"`
+			OffPath *int       `json:"offPath"`
 		}](p)
 		if err != nil {
 			return nil, err
@@ -320,8 +322,13 @@ func (s *Server) registerAgent() {
 				return -1, i18n.New("these questions are not waiting for an answer")
 			}
 			m := chat.Messages[a.Index]
-			m.Answers, m.Notes, m.AskState = a.Answers, a.Notes, "answered"
-			m.Content = agent.String(agent.AnswersText(m.Questions, a.Answers, a.Notes))
+			for _, i := range append(a.Path, deref(a.OffPath)) {
+				if i < 0 || i >= len(m.Questions) {
+					return -1, i18n.New("these questions are not waiting for an answer")
+				}
+			}
+			m.Answers, m.Notes, m.Path, m.OffPath, m.AskState = a.Answers, a.Notes, a.Path, a.OffPath, "answered"
+			m.Content = agent.String(agent.AnswersText(m.Questions, a.Answers, a.Notes, a.Path, a.OffPath))
 			m.Summary = agent.T("answers received", nil).Raw()
 			return a.Index, nil
 		})
@@ -477,4 +484,12 @@ func (c *Client) watch(id string) { c.watching.Store(strings.TrimSpace(id)) }
 func (c *Client) chat() string {
 	id, _ := c.watching.Load().(string)
 	return id
+}
+
+// deref is the value of an optional index (0 when absent: always a valid question).
+func deref(i *int) int {
+	if i == nil {
+		return 0
+	}
+	return *i
 }

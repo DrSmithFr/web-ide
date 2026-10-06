@@ -309,9 +309,10 @@ export function unqueue(id: string) {
 }
 
 /** The user answers the questions of a tool message: the agent goes on with them. */
-export async function answerQuestions(index: number, answers: (AnswerEntry | null)[][], notes: string[] = []) {
-  const strings = answers.map((a) => a.map(entryToString).filter((s) => s.trim()))
-  await request('agent.answer', { id: chat.id, index, answers: strings, notes })
+export async function answerQuestions(index: number, answers: (AnswerEntry | null)[][], notes: string[] = [], path?: number[], offPath?: number) {
+  // One string per chosen option: the pod follows the branches by label.
+  const strings = answers.map((a) => a.flatMap((x) => (x?.kind === 'choices' ? x.value : [entryToString(x)])).filter((s) => s.trim()))
+  await request('agent.answer', { id: chat.id, index, answers: strings, notes, path, offPath })
 }
 
 /** The user accepts the plan of a tool message: Build mode, then its execution. */

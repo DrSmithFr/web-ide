@@ -101,6 +101,8 @@ type Message struct {
 	Questions  []Question      `json:"questions,omitempty"`
 	Answers    [][]string      `json:"answers,omitempty"`
 	Notes      []string        `json:"notes,omitempty"`
+	Path       []int           `json:"path,omitempty"`    // questions asked, in order (a graph)
+	OffPath    *int            `json:"offPath,omitempty"` // question where the user left the path
 	AskState   string          `json:"askState,omitempty"`
 }
 
@@ -168,15 +170,19 @@ type Approval struct {
 	Command string     `json:"command,omitempty"`
 }
 
-// Question asked with ask_user. Its type picks how the page shows it (ask.go).
+// Question asked with ask_user. Its type picks how the page shows it; an id and the next
+// of the options make a small graph of questions (ask.go).
 type Question struct {
 	Question  string   `json:"question"`
+	ID        string   `json:"id,omitempty"`
 	Header    string   `json:"header,omitempty"`
 	Type      string   `json:"type,omitempty"`      // choice (default) | idea | compare | rank | scenario
 	Situation string   `json:"situation,omitempty"` // scenario: the concrete case
 	Top       int      `json:"top,omitempty"`       // rank: only the top N is picked
 	Options   []Option `json:"options"`
 	Multiple  bool     `json:"multiple,omitempty"`
+	NextYes   string   `json:"nextYes,omitempty"` // idea: asked after Yes or Exactly
+	NextNo    string   `json:"nextNo,omitempty"`  // idea: asked after No
 }
 
 type Option struct {
@@ -184,6 +190,7 @@ type Option struct {
 	Description string   `json:"description,omitempty"`
 	Pros        []string `json:"pros,omitempty"`
 	Cons        []string `json:"cons,omitempty"`
+	Next        string   `json:"next,omitempty"` // id of the question asked when it is chosen
 }
 
 // ContentText is the text of a content: the string, or its text parts joined.
