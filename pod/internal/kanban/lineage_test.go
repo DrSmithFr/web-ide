@@ -2,6 +2,7 @@ package kanban
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -96,6 +97,12 @@ func TestLineageLinks(t *testing.T) {
 	}
 	if tk, _ = m.Get(loc, root); len(tk.Children) != 1 || len(OpenChildren(tk)) != 1 {
 		t.Fatalf("after removing c1: %+v", tk.Children)
+	}
+	if body := PRBody(tk, "en"); !strings.Contains(body, "## Steps\n- [ ] #3 child 2") {
+		t.Fatalf("pull request body: %s", body)
+	}
+	if md := Markdown(tk); !strings.Contains(md, "## Lineage\n- Children, in order") || !strings.Contains(md, "  - #3 [In progress] child 2") {
+		t.Fatalf("markdown: %s", md)
 	}
 }
 
