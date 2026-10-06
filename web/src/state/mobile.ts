@@ -95,3 +95,23 @@ export function focusEditorQuietly() {
   quiet(ed)
   ed.focus({ preventScroll: true })
 }
+
+// Fields that open the keyboard: on a phone they take the focus only when the user touches
+// them, never by themselves (a tool or a conversation shown, a search field focused on open):
+// the keyboard opens when the user means to type.
+const TYPING = 'textarea, input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=range]):not([type=color]):not([type=file])'
+export const isTyping = (el: Element | null) => !!el?.matches?.(TYPING)
+
+let down: { target: Node | null; at: number } = { target: null, at: 0 }
+document.addEventListener('pointerdown', (e) => (down = { target: e.target as Node, at: Date.now() }), true)
+document.addEventListener(
+  'focusin',
+  (e) => {
+    const el = e.target as HTMLElement
+    if (!phone() || !isTyping(el)) return
+    const t = down.target as HTMLElement | null
+    const touched = !!t && Date.now() - down.at < 1500 && (el === t || el.contains(t) || !!t.closest?.('label')?.contains(el) || !!el.closest('.xterm')?.contains(t))
+    if (!touched) el.blur()
+  },
+  true,
+)

@@ -540,6 +540,7 @@ button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 .phone-body > .center.hidden { display: none; }
 .phone-body > .zone { flex: 1; min-width: 0; position: relative; box-shadow: none; }
 .phone .zone .detach { display: none; }
+.phone .zone:focus { outline: none; }
 
 @media (max-width: 720px) {
   .menus { display: none; }

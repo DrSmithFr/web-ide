@@ -8,7 +8,7 @@ import {
 } from '../state/project'
 import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, toggleTool, toolsIn, zoneOf, zones, type Zone } from '../state/zones'
 import { focusEditor, focusPart, setFocusPart, trackFocus } from '../state/focus'
-import { focusEditorQuietly, mobileView, phone, revealCaret, setMobileView } from '../state/mobile'
+import { focusEditorQuietly, isTyping, mobileView, phone, revealCaret, setMobileView } from '../state/mobile'
 import { settings, updateSettings } from '../state/settings'
 import { navigate } from '../app/router'
 import { EditorArea } from '../ui/EditorArea'
@@ -139,10 +139,11 @@ const fallbackTarget = '.panel-body button:not(:disabled), .tool-body button:not
 function focusZone(zone: Zone, tries = 10) {
   const el = document.querySelector<HTMLElement>(`.zone-${zone}`)
   if (!el) return
-  const visible = (x: HTMLElement | null) => x && x.offsetParent !== null
+  // A phone does not focus a field: the keyboard would open (the user touches it to type).
+  const visible = (x: HTMLElement | null) => x && x.offsetParent !== null && !(phone() && isTyping(x))
   const target = focusTargets.map((s) => el.querySelector<HTMLElement>(s)).find(visible)
   if (!target && tries > 0) return void requestAnimationFrame(() => focusZone(zone, tries - 1))
-  ;(target ?? [...el.querySelectorAll<HTMLElement>(fallbackTarget)].find(visible) ?? el).focus()
+  ;(target ?? (phone() ? el : ([...el.querySelectorAll<HTMLElement>(fallbackTarget)].find(visible) ?? el))).focus()
   // The rows of a tool still loading can be rendered again: the focus is given back if it was lost.
   if (tries > 0) requestAnimationFrame(() => document.activeElement === document.body && focusPart() === zone && focusZone(zone, tries - 1))
 }
@@ -491,7 +492,7 @@ function ZonePanel(props: { zone: Zone; width?: number; style?: JSX.CSSPropertie
   const detach = () => window.open(`/project/${project()!.id}/tool/${id()}`, `tool-${id()}`, id() === 'assistant' ? 'popup,width=1100,height=820' : 'popup,width=420,height=760')
   const side = props.zone === 'left' || props.zone === 'right'
   return (
-    <aside class={`zone zone-${props.zone}`} classList={{ side, [`side-${props.zone}`]: side, focused: focusPart() === props.zone }} data-tool={id()} data-focus={props.zone} style={props.width ? { width: `${props.width}px` } : props.style}>
+    <aside class={`zone zone-${props.zone}`} classList={{ side, [`side-${props.zone}`]: side, focused: focusPart() === props.zone }} data-tool={id()} data-focus={props.zone} tabIndex={phone() ? -1 : undefined} style={props.width ? { width: `${props.width}px` } : props.style}>
       <button class="icon-btn detach" title={t('Open in a window')} onClick={detach}>
         <Icon name="external" size={13} />
       </button>
