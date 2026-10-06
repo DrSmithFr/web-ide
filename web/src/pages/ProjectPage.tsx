@@ -8,7 +8,7 @@ import {
 } from '../state/project'
 import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, toggleTool, toolsIn, zoneOf, zones, type Zone } from '../state/zones'
 import { focusEditor, focusPart, setFocusPart, trackFocus } from '../state/focus'
-import { mobileView, phone, revealCaret, setMobileView } from '../state/mobile'
+import { focusEditorQuietly, mobileView, phone, revealCaret, setMobileView } from '../state/mobile'
 import { settings, updateSettings } from '../state/settings'
 import { navigate } from '../app/router'
 import { EditorArea } from '../ui/EditorArea'
@@ -303,9 +303,20 @@ function MenuBar() {
 function MobileRail() {
   let el!: HTMLDivElement
   const tools = () => (['left', 'right', 'bottomLeft', 'bottomRight'] as Zone[]).flatMap((z) => toolsIn(session, z)).filter((id) => toolPanels[id])
+  // The view shown gets the focus: the editor without the keyboard (a double tap opens it).
   const show = (id: string) => {
-    if (id !== 'editor') mutate((s) => showTool(s, id))
     setMobileView(id)
+    if (id === 'editor') {
+      setFocusPart('editor')
+      requestAnimationFrame(focusEditorQuietly)
+      return
+    }
+    mutate((s) => showTool(s, id))
+    const z = zoneOf(session, id)
+    if (z) {
+      setFocusPart(z)
+      requestAnimationFrame(() => focusZone(z))
+    }
   }
   createEffect(() => {
     const id = mobileView()

@@ -51,3 +51,47 @@ document.addEventListener(
   { passive: false },
 )
 for (const name of ['gesturestart', 'gesturechange']) document.addEventListener(name, (e) => !(e.target as HTMLElement).closest?.('[data-pinch]') && e.preventDefault())
+
+// Editor on a phone: a touch moves the caret without opening the keyboard (inputmode none);
+// a double tap opens it, until the editor loses the focus.
+let editing = false
+const quiet = (ed: HTMLElement) => {
+  if (!editing) ed.inputMode = 'none'
+}
+document.addEventListener(
+  'pointerdown',
+  (e) => {
+    const ed = phone() && ((e.target as HTMLElement).closest?.('.ed-content') as HTMLElement | null)
+    if (ed) quiet(ed)
+  },
+  true,
+)
+let lastTap = 0
+document.addEventListener('touchend', (e) => {
+  const ed = phone() && ((e.target as HTMLElement).closest?.('.ed-content') as HTMLElement | null)
+  if (!ed) return
+  const now = Date.now()
+  if (now - lastTap < 350 && !editing) {
+    // The keyboard opens on a focus given during the gesture.
+    ed.blur()
+    editing = true
+    ed.inputMode = 'text'
+    ed.focus()
+    setTimeout(revealCaret, 400)
+  }
+  lastTap = now
+})
+document.addEventListener('focusout', (e) => {
+  const ed = (e.target as HTMLElement).closest?.('.ed-content') as HTMLElement | null
+  if (!ed || !phone()) return
+  editing = false
+  ed.inputMode = 'none'
+})
+
+/** Gives the focus to the editor without opening the keyboard. */
+export function focusEditorQuietly() {
+  const ed = document.querySelector<HTMLElement>('.pane.active .ed-content')
+  if (!ed) return
+  quiet(ed)
+  ed.focus({ preventScroll: true })
+}

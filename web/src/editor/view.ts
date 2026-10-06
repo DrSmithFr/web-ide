@@ -164,6 +164,8 @@ export class EditorView {
     this.content.setAttribute('autocapitalize', 'off')
     this.content.setAttribute('autocorrect', 'off')
     this.content.setAttribute('role', 'textbox')
+    // A phone opens its keyboard on a double tap only (state/mobile.ts).
+    if (matchMedia('(max-width: 720px)').matches) this.content.inputMode = 'none'
     this.content.setAttribute('aria-multiline', 'true')
     this.setReadOnly(!!opts.readOnly || doc.readOnly)
     this.tooltip = document.createElement('div')

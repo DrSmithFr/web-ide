@@ -55,9 +55,23 @@ run(
     assert((await view(page)) === 'assistant', 'the assistant full screen')
     await page.screenshot({ path: OUT + '/mobile-assistant.png' })
 
+    // The icon of a view gives it the focus; the editor without the keyboard.
+    await page.tap('[data-testid=mobile-rail] [data-id=explorer]')
+    await page.waitForFunction(() => document.activeElement?.closest('.zone[data-tool=explorer]'))
+    assert(true, 'the icon of a tool gives it the focus')
+    await page.tap('[data-testid=mobile-rail] [data-id=editor]')
+    await page.waitForFunction(() => document.activeElement?.classList.contains('ed-content'))
+    assert((await page.$eval('.pane.active .ed-content', (e) => e.inputMode)) === 'none', 'the editor icon gives the focus to the editor, keyboard closed')
+    // A touch moves the caret without the keyboard; a double tap opens it.
+    await page.tap('.pane.active .ed-content')
+    assert((await page.$eval('.pane.active .ed-content', (e) => e.inputMode)) === 'none', 'one touch: no keyboard')
+    await page.waitForTimeout(500)
+    await page.tap('.pane.active .ed-content')
+    await page.tap('.pane.active .ed-content')
+    const mode = await page.$eval('.pane.active .ed-content', (e) => [e.inputMode, document.activeElement === e])
+    assert(mode[0] === 'text' && mode[1], 'a double tap opens the keyboard: ' + mode)
+
     // The keyboard shrinks the visible area: the line of the caret stays in sight.
-    await page.click('[data-testid=mobile-rail] [data-id=editor]')
-    await page.click('.pane.active .ed-content')
     await page.keyboard.press('Control+End')
     await page.setViewportSize({ width: 375, height: 420 })
     await page.waitForTimeout(400)
