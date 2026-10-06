@@ -23,7 +23,9 @@ import (
 
 func (s *Server) boardDraw(r *agentRun, rt *runtime.Runtime, a toolArgs) (toolResult, error) {
 	var elements []map[string]json.RawMessage
-	if err := json.Unmarshal(a["elements"], &elements); err != nil {
+	if !a.has("elements") {
+		elements = []map[string]json.RawMessage{}
+	} else if err := json.Unmarshal(a["elements"], &elements); err != nil {
 		return toolResult{}, fmt.Errorf("elements must be a list of elements")
 	}
 	if len(elements) > agent.MaxPageElements {
@@ -34,6 +36,9 @@ func (s *Server) boardDraw(r *agentRun, rt *runtime.Runtime, a toolArgs) (toolRe
 		if json.Unmarshal(el["points"], &pts) == nil && len(pts) > agent.MaxStrokePoints {
 			return toolResult{}, fmt.Errorf("element %d: %d points, %d at most", i+1, len(pts), agent.MaxStrokePoints)
 		}
+	}
+	if a.has("from") && (a.has("background") || a.has("svg")) {
+		return toolResult{}, fmt.Errorf("background and from cannot go together: a copy keeps the background of its page")
 	}
 	r.mu.Lock()
 	pages := agent.Pages(r.chat.Messages)
@@ -50,10 +55,14 @@ func (s *Server) boardDraw(r *agentRun, rt *runtime.Runtime, a toolArgs) (toolRe
 		// The document goes with the call: any window of the project can draw the copy.
 		args["from"], args["fromDoc"] = n, pages[n-1].Doc
 	}
-	if a.has("background") {
-		if a.has("from") {
-			return toolResult{}, fmt.Errorf("background and from cannot go together: a copy keeps the background of its page")
+	// svg at the first level: the simplest way to send an SVG (models forget a nested field).
+	if a.has("svg") {
+		if a.has("background") {
+			return toolResult{}, fmt.Errorf("svg and background cannot go together: svg is the background")
 		}
+		a["background"], _ = json.Marshal(map[string]json.RawMessage{"svg": a["svg"]})
+	}
+	if a.has("background") {
 		bg, err := s.background(r, rt, a["background"], pages)
 		if err != nil {
 			return toolResult{}, err

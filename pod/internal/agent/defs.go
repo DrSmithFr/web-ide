@@ -144,9 +144,10 @@ var (
 )
 
 var boardDrawDef = fn("board_draw",
-	"Draws a new page on the board shared with the user (next to the conversation): a layout, a flow, a sketch, or annotations on a copy of an earlier page. Pages never change: to fix one, draw a new page (from: its number). Returns the description of the page and its image.",
+	"Draws a new page on the board shared with the user (next to the conversation): a layout, a flow, a sketch, an SVG (svg), an image or a capture (background), or annotations on a copy of an earlier page. Pages never change: to fix one, draw a new page (from: its number). Returns the description of the page and its image.",
 	obj{
 		"title":  str("Short name of the page"),
+		"svg":    str("SVG markup you write, shown as the page (same as background.svg); elements are drawn on top"),
 		"preset": enum("Frame: 16:9 (1280×720, default), mobile (390×844), square (800×800)", "16:9", "mobile", "square"),
 		"size":   obj{"type": "object", "properties": obj{"w": integer("Width"), "h": integer("Height")}, "description": "Free frame size instead of a preset"},
 		"from":   integer("Number of a page of the board to copy, drawing on top of it"),
@@ -189,7 +190,7 @@ var boardDrawDef = fn("board_draw",
 				"required": []string{"type"},
 			},
 		},
-	}, "title", "elements")
+	}, "title")
 
 var (
 	statuses      = []string{"new", "todo", "in_progress", "review", "done", "abandoned"}

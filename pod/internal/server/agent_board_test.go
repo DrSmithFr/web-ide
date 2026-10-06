@@ -24,6 +24,15 @@ func TestBoardDrawChecks(t *testing.T) {
 		`{"title":"x","elements":{}}`:          "must be a list",
 		`{"title":"x","elements":[{"type":"stroke","points":[` + strings.Repeat("[1,2],", 500) + `[1,2]]}]}`: "element 1: 501 points",
 		`{"title":"x","elements":[{"type":"rect","x":1,"y":1,"w":5,"h":5}]}`:                                 "needs an IDE window open",
+		`{"title":"x","background":{"svg":"<svg/>","url":"http://a"}}`:                                       "exactly one source",
+		`{"title":"x","background":{"svg":"<svg><script>x</script></svg>"}}`:                                 `may not contain "<script"`,
+		`{"title":"x","background":{"svg":"<svg><image href='https://x/a.png'/></svg>"}}`:                    "external reference",
+		`{"title":"x","background":{"svg":"<svg onload=\"x()\"/>"}}`:                                         "event handler",
+		`{"title":"x","background":{"attachment":"shot.png"}}`:                                               `no image or page named "shot.png"`,
+		`{"title":"x","background":{"svg":"<svg/>"},"from":1}`:                                               "background and from cannot go together",
+		`{"title":"x","svg":"<svg/>","background":{"file":"a.png"}}`:                                         "svg and background cannot go together",
+		`{"title":"x","svg":"<svg><script/></svg>"}`:                                                         `may not contain "<script"`,
+		`{"title":"x","svg":"<svg width='10' height='10'/>"}`:                                                "needs an IDE window open",
 	} {
 		if _, err := s.boardDraw(r, nil, args(js)); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%.60s: %v", js, err)

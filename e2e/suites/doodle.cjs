@@ -36,11 +36,12 @@ const fake = http.createServer(async (req, res) => {
     // board_draw on backgrounds: a project file, an SVG, a captured page, a file outside the
     // project (refused) and a capture of the screen of the user (waits for them).
     if (!r.messages.some((m) => m.role === 'tool')) {
-      const call = (i, id, background) => ({ index: i, id, type: 'function', function: { name: 'board_draw', arguments: JSON.stringify({ title: id, background, elements: [{ type: 'stroke', points: [[2, 2], [40, 20]], color: 'red' }] }) } })
+      const call = (i, id, background, more) => ({ index: i, id, type: 'function', function: { name: 'board_draw', arguments: JSON.stringify({ title: id, background, elements: [{ type: 'stroke', points: [[2, 2], [40, 20]], color: 'red' }], ...more }) } })
       sse(res, {
         tool_calls: [
           call(0, 'b1', { file: 'shot.png' }),
-          call(1, 'b2', { svg: '<svg viewBox="0 0 300 200"><rect x="10" y="10" width="280" height="180" fill="#9cf"/><circle cx="150" cy="100" r="60" fill="#f80"/></svg>' }),
+          // The SVG at the first level, without elements.
+          { ...call(1, 'b2'), function: { name: 'board_draw', arguments: JSON.stringify({ title: 'b2', svg: '<svg viewBox="0 0 300 200"><rect x="10" y="10" width="280" height="180" fill="#9cf"/><circle cx="150" cy="100" r="60" fill="#f80"/></svg>' }) } },
           call(2, 'b3', { url: `http://127.0.0.1:${site.address().port}/`, width: 640, height: 400 }),
           call(3, 'b4', { file: '../outside.png' }),
           call(4, 'b5', { ide: true }),
@@ -578,6 +579,7 @@ run(async ({ page }) => {
     await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Drawn.")', { timeout: 20000 })
     const msgs = requests[requests.length - 1].messages
     const d = (id) => text(msgs.find((m) => m.role === 'tool' && m.tool_call_id === id))
+    assert(d('d1').includes('Background: none'), 'a page without background says so')
     assert(d('d1').includes('Page 1 "Login flow" drawn by you') && d('d1').includes('"header"') && d('d1').includes('Sign in') && d('d1').includes('Happy path'), 'page described to the model: ' + d('d1'))
     const afterD1 = msgs[msgs.findIndex((m) => m.tool_call_id === 'd1') + 1]
     assert(afterD1.role === 'user' && afterD1.content.some((p) => p.type === 'image_url' && p.image_url.url.startsWith('data:image/png')), 'the image of the page follows the tool result')

@@ -135,6 +135,8 @@ export async function drawPage(a: DrawArgs & { number: number; from?: number; ba
   }
   const { doc, outside } = buildPage({ ...a, base: picture ? newDoc(picture) : undefined })
   let description = describe(doc, title, a.number, origin ? `${origin} (${picture!.w}×${picture!.h})` : undefined)
+  // Said even when absent: a model that meant to send one sees it did not.
+  if (!picture && !a.from) description += '\nBackground: none (no svg nor background was given).'
   if (a.from) description += `\nA copy of page ${a.from}, with your elements on top.`
   if (outside.length) description += `\nWarning: partly outside the frame: ${outside.join(', ')}.`
   const page: ModelPage = { name: title, doc, description, png: await png(doc, MAX_SIDE), thumb: await png(doc, 96) }
