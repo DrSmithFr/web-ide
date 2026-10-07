@@ -148,6 +148,11 @@ export const toolVerbs: Record<string, string> = {
   agent_note: 'Notes for its parent',
   agent_ask: 'Asks its parent',
   agent_report: 'Reports to its parent',
+  kanban_next: 'Looks at what can start',
+  kanban_history: 'Reads the history of the kanban',
+  list_conversations: 'Lists the conversations',
+  action_card: 'Offers an action',
+  open_conversation: 'Opens a conversation',
 }
 
 export const toolIcons: Record<string, string> = {
@@ -159,6 +164,7 @@ export const toolIcons: Record<string, string> = {
   kanban_goal: 'check', kanban_move: 'kanban', kanban_link_commit: 'branch', ask_user: 'info', board_draw_doodle: 'pen', board_draw_image: 'image', share_preview: 'play',
   spawn_agent: 'sparkle', agent_reply: 'comment', agent_message: 'comment', agent_stop: 'stop', agent_status: 'sparkle',
   agent_note: 'pen', agent_ask: 'info', agent_report: 'check',
+  kanban_next: 'kanban', kanban_history: 'history', list_conversations: 'comment', action_card: 'play', open_conversation: 'comment',
 }
 
 /** Menu opened above (or below) its trigger, closed by a click outside or Escape. */

@@ -21,7 +21,7 @@ exports.OUT = process.env.E2E_OUT
 exports.start = async (opts = {}) => {
   const browser = await chromium.launch({ executablePath: chrome(), headless: true, args: opts.args ?? [] })
   // English interface unless E2E_LOCALE says otherwise (the browser follows the system language).
-  const ctx = await browser.newContext({ viewport: opts.viewport ?? { width: 1440, height: 900 }, isMobile: !!opts.mobile, hasTouch: !!opts.mobile, permissions: opts.permissions ?? [], locale: opts.locale ?? process.env.E2E_LOCALE ?? 'en-US' })
+  const ctx = await browser.newContext({ viewport: opts.viewport ?? { width: 1440, height: 900 }, isMobile: !!opts.mobile, hasTouch: !!opts.mobile, deviceScaleFactor: opts.scale ?? 1, permissions: opts.permissions ?? [], locale: opts.locale ?? process.env.E2E_LOCALE ?? 'en-US' })
   // The suites written for the Build mode start new conversations in it (the default of the
   // page is the Orchestrator).
   if (!opts.orchestrator)

@@ -1630,5 +1630,10 @@
   "{n} tickets can start": "{n} tickets peuvent démarrer",
   "opened: {title}": "ouverte : {title}",
   "{n} conversation": "{n} conversation",
-  "{n} conversations": "{n} conversations"
+  "{n} conversations": "{n} conversations",
+  "Looks at what can start": "Regarde ce qui peut démarrer",
+  "Reads the history of the kanban": "Lit l'historique du kanban",
+  "Lists the conversations": "Liste les conversations",
+  "Offers an action": "Propose une action",
+  "Opens a conversation": "Ouvre une conversation"
 }

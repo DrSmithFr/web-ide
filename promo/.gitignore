@@ -1,0 +1,5 @@
+# The track is not ours to share: it is added on TikTok from its library.
+*.mp3
+*.wav
+*.m4a
+out/

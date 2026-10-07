@@ -3,7 +3,7 @@ GO ?= $(shell command -v go || echo $(HOME)/sdk/go/bin/go)
 BIN := bin/web-ide-pod
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: build web pod run dev test e2e shots check clean install service
+.PHONY: build web pod run dev test e2e shots promo check clean install service
 
 build: web pod
 
@@ -47,6 +47,14 @@ e2e: build
 shots: build
 	cd e2e && { [ -d node_modules/playwright-core ] || npm install --no-audit --no-fund >/dev/null; }
 	node e2e/shots/shots.cjs
+
+# Promo video (promo/README.md): shots of the UI, beats of the track (promo/*.mp3, never
+# committed), frames rendered and encoded in promo/out.
+promo: build
+	cd e2e && { [ -d node_modules/playwright-core ] || npm install --no-audit --no-fund >/dev/null; }
+	cd e2e && ./run.sh ../../promo/capture
+	uv run --quiet --with librosa --with numpy python promo/analyze.py $(PROMO_TRACK)
+	NODE_PATH=e2e/node_modules node promo/render.cjs $(PROMO_TRACK)
 
 # Installs the binary in ~/.local/bin.
 install: build

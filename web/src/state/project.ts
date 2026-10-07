@@ -11,6 +11,7 @@ import { merge3 } from '../editor/merge'
 import { toast } from '../ui/toast'
 import { t, tn } from '../i18n'
 import { normalizePlacement, type Zone } from './zones'
+import { phone, setMobileView } from './mobile'
 
 export type TabKind = 'file' | 'sql' | 'table' | 'text' | 'diff' | 'kanban' | 'ticket'
 
@@ -712,6 +713,8 @@ export function currentPosition(): NavTarget | null {
 /** Opens a file and moves to a position, recording the jump in the history. */
 export async function openFile(target: NavTarget | string, opts: { pane?: string; record?: boolean } = {}) {
   const t: NavTarget = typeof target === 'string' ? { path: target } : target
+  // A phone shows one view: the editor comes to the front, even for the file already shown.
+  if (phone()) setMobileView('editor')
   if (opts.record !== false) {
     const cur = currentPosition()
     if (cur && (cur.path !== t.path || t.offset !== undefined || t.line !== undefined)) {

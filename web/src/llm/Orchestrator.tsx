@@ -58,7 +58,7 @@ export function ActionCard(props: { msg: ChatMessage; index: number }) {
   return (
     <div class="ai-action" classList={{ used: !!card().state }} data-testid="ai-action">
       <Icon name={kindIcons[card().kind] ?? 'play'} size={14} />
-      <div class="grow">
+      <div class="grow" style={{ 'min-width': '160px' }}>
         <Show when={card().reason}>
           <div class="muted small">{card().reason}</div>
         </Show>
