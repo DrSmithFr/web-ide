@@ -286,6 +286,11 @@ function UserMessage(props: { msg: ChatMessage; index: number }) {
         when={editing() === props.index}
         fallback={
           <>
+            <Show when={props.msg.author === 'claude'}>
+              <span class="badge ai-author" title={t('Written by Claude Code through the kanban tools')} data-testid="ai-author-claude">
+                {t('Claude Code')}
+              </span>
+            </Show>
             <div class="ai-user-bubble">
               <Show when={props.msg.attachments?.length}>
                 <div class="ai-atts">

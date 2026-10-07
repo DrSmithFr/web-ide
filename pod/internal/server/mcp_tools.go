@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/DrSmithFr/web-ide/pod/internal/agent"
 	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
@@ -249,7 +250,49 @@ var mcpTools = []mcpTool{
 			if err != nil {
 				return "", err
 			}
-			return conversationText(raw), nil
+			text := conversationText(raw)
+			if s.run(a.Chat) != nil {
+				return text + "\n\n(The assistant is answering now: read the conversation again later.)", nil
+			}
+			var chat agent.Chat
+			_ = json.Unmarshal(raw, &chat)
+			return text + pendingQuestions(&chat), nil
+		}),
+	},
+	{
+		name:        "kanban_reply",
+		description: "Writes a message in a conversation of the local assistant linked to the ticket, as Claude Code: the assistant reads it and answers (its questions still waiting are left aside; use kanban_answer to answer them). Queued if the conversation is running. Use it to answer a question the assistant asked in its text, or to guide it.",
+		props:       map[string]any{"id": ticketID, "chat": str("Conversation id (chat … in kanban_get)"), "message": str("Your message, in Markdown")},
+		required:    []string{"chat", "message"},
+		run: ticketTool(func(ctx context.Context, s *Server, sc mcpScope, id int64, a struct{ Chat, Message string }) (string, error) {
+			lc, err := s.linkedChat(sc, id, a.Chat)
+			if err != nil {
+				return "", err
+			}
+			return s.mcpReply(lc, a.Chat, a.Message)
+		}),
+	},
+	{
+		name:        "kanban_answer",
+		description: "Answers the questions of ask_user waiting in a conversation of the local assistant linked to the ticket, for the user (kanban_conversation lists them with their options); the assistant then goes on. Answer only what the plan, the ticket or the user already decided; otherwise leave the questions to the user.",
+		props: map[string]any{
+			"id":   ticketID,
+			"chat": str("Conversation id (chat … in kanban_get)"),
+			"answers": map[string]any{"type": "array", "description": "One list per question, in order: an option label, several for a multiple choice, the order for a rank, or a free text",
+				"items": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}},
+			"notes": strList("A note per question (optional, same order)"),
+		},
+		required: []string{"chat", "answers"},
+		run: ticketTool(func(ctx context.Context, s *Server, sc mcpScope, id int64, a struct {
+			Chat    string
+			Answers [][]string
+			Notes   []string
+		}) (string, error) {
+			lc, err := s.linkedChat(sc, id, a.Chat)
+			if err != nil {
+				return "", err
+			}
+			return s.mcpAnswer(lc, a.Chat, a.Answers, a.Notes)
 		}),
 	},
 	{
@@ -548,6 +591,7 @@ func conversationText(raw json.RawMessage) string {
 			Content   json.RawMessage `json:"content"`
 			Display   string          `json:"display"`
 			Kind      string          `json:"kind"`
+			Author    string          `json:"author"`
 			ToolCalls []struct {
 				ID       string `json:"id"`
 				Function struct {
@@ -556,6 +600,7 @@ func conversationText(raw json.RawMessage) string {
 				} `json:"function"`
 			} `json:"tool_calls"`
 			ToolCallID string `json:"tool_call_id"`
+			AskState   string `json:"askState"`
 		} `json:"messages"`
 	}
 	_ = json.Unmarshal(raw, &chat)
@@ -585,6 +630,9 @@ func conversationText(raw json.RawMessage) string {
 				t = text(m.Content)
 			}
 			label := "User"
+			if m.Author == AuthorClaude {
+				label = "Claude Code (you)"
+			}
 			if m.Kind == "summary" {
 				label = "Summary of the earlier messages"
 			}
@@ -600,7 +648,7 @@ func conversationText(raw json.RawMessage) string {
 				}
 			}
 		case "tool":
-			if asks[m.ToolCallID] {
+			if asks[m.ToolCallID] && m.AskState != "pending" {
 				fmt.Fprintf(&b, "\n## Answers of the user\n%s\n", strings.TrimSpace(text(m.Content)))
 			}
 		}

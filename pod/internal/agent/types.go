@@ -90,6 +90,8 @@ type QueuedMessage struct {
 	Display     string          `json:"display,omitempty"`
 	// Event: a message of a sub-agent or of the parent, waiting for the next step.
 	Event *AgentEvent `json:"event,omitempty"`
+	// Author: "claude" for a message of Claude Code (MCP kanban_reply), else the user.
+	Author string `json:"author,omitempty"`
 }
 
 // Message of the conversation: the API fields, then the fields of the page.
@@ -141,6 +143,8 @@ type Message struct {
 	Opened string      `json:"opened,omitempty"`
 	// Preview offered by share_preview (tool message): the card starts it on a click.
 	Preview *Preview `json:"preview,omitempty"`
+	// Author: "claude" for a message or the answers of Claude Code (MCP), else the user.
+	Author string `json:"author,omitempty"`
 }
 
 // Preview is an app the user can start and open from the conversation (see the preview

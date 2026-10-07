@@ -186,7 +186,9 @@ export function AskCard(props: {
           </span>
         </Show>
         <Show when={msg().askState === 'answered'}>
-          <span class="badge ok">{t('answered')}</span>
+          <span class="badge ok" data-testid={msg().author === 'claude' ? 'ai-ask-by-claude' : undefined}>
+            {msg().author === 'claude' ? t('answered by Claude Code') : t('answered')}
+          </span>
         </Show>
         <Show when={msg().askState === 'skipped'}>
           <span class="badge">{t('not answered')}</span>

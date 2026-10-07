@@ -2,7 +2,7 @@
 // kanban_create / kanban_list from any conversation, writing tools only when linked,
 // Briefing mode (tickets created and linked to the conversation).
 const http = require('http')
-const { run, openProject, assert, OUT } = require('../common.cjs')
+const { run, openProject, assert, OUT, WS } = require('../common.cjs')
 
 const requests = []
 const sse = (res, delta) => res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`)
@@ -41,6 +41,13 @@ const fake = http.createServer(async (req, res) => {
     return end(res)
   }
   if (firstUser.startsWith('Brief:')) {
+    // Claude Code writes in the conversation (MCP kanban_reply), then answers its question.
+    if (last.role === 'user' && String(last.content).includes('Claude Code here'))
+      return sse(res, { tool_calls: calls([['c0', 'ask_user', { questions: [{ question: 'CSV or JSON?', options: [{ label: 'CSV' }, { label: 'JSON' }] }] }]]) }), end(res, 'tool_calls')
+    if (last.tool_call_id === 'c0') {
+      sse(res, { content: 'Thanks, Claude: ' + text(last) })
+      return end(res)
+    }
     if (last.role === 'user')
       return sse(res, { tool_calls: calls([['b0', 'ask_user', { questions: [{ question: 'Who uses the export?', options: [{ label: 'Accounting' }, { label: 'Everyone' }] }] }]]) }), end(res, 'tool_calls')
     if (last.tool_call_id === 'b0')
@@ -419,6 +426,29 @@ run(async ({ page }) => {
     await page.click('[data-testid=ticket-card-2]')
     await page.waitForSelector('[data-testid=ticket-note]:has-text("accounting only")', { timeout: 5000 })
     assert(await page.isVisible('.tk-row:has(.kb-role.r-briefing) [data-testid=ticket-chat]:has-text("Brief:")'), 'the first ticket has the note and the conversation')
+
+    // Claude Code replies in the briefing conversation, then answers the question of the assistant.
+    const mcpTool = (name, args) =>
+      fetch(process.env.E2E_URL + '/mcp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + process.env.E2E_TOKEN },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: { cwd: WS + '/demo', id: 2, ...args } } }),
+      })
+        .then((r) => r.json())
+        .then((r) => ({ text: r.result.content[0].text, failed: !!r.result.isError }))
+    const chatId = (await mcpTool('kanban_get', {})).text.match(/\(chat ([a-z0-9]+)\)/)[1]
+    const sent = await mcpTool('kanban_reply', { chat: chatId, message: 'Claude Code here: which format?' })
+    assert(!sent.failed && sent.text.includes('Message sent'), 'kanban_reply: ' + sent.text)
+    await page.waitForSelector('[data-testid=ai-author-claude]', { timeout: 10000 })
+    await page.waitForSelector('[data-testid=ai-ask-question]:has-text("CSV or JSON?")', { timeout: 10000 })
+    assert((await page.textContent('.ai-msg.user:has([data-testid=ai-author-claude])')).includes('which format?'), 'the message of Claude is shown with its badge')
+    const pendingText = (await mcpTool('kanban_conversation', { chat: chatId })).text
+    assert(pendingText.includes('Waiting for the answers') && pendingText.includes('[options: CSV | JSON]'), 'kanban_conversation lists the waiting questions: ' + pendingText)
+    const answered = await mcpTool('kanban_answer', { chat: chatId, answers: [['JSON']] })
+    assert(!answered.failed, 'kanban_answer: ' + answered.text)
+    await page.waitForSelector('[data-testid=ai-ask-by-claude]', { timeout: 10000 })
+    await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Thanks, Claude")', { timeout: 10000 })
+    assert((await page.textContent('.ai-msg.assistant:not(.live) .md:has-text("Thanks, Claude")')).includes('JSON'), 'the assistant gets the answers of Claude')
 
     // Mobile: the idea is answered by swiping the card (right = Yes), and the compare stacks.
     await page.click('.ai-panel button[title="New conversation"]')

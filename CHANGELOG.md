@@ -4,6 +4,10 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+### Added
+
+- Claude Code answers the local assistant: the MCP tools `kanban_reply` (a message in a conversation linked to a ticket) and `kanban_answer` (the `ask_user` questions waiting); `kanban_conversation` lists the questions waiting. The thread marks what Claude wrote or answered.
+
 ## [1.4.0] - 2026-10-07
 
 ### Added

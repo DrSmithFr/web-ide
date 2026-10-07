@@ -98,6 +98,8 @@ export interface ChatMessage {
   // Fields of the page only (removed before sending).
   /** What the user typed (content also holds the text of the attachments). */
   display?: string
+  /** 'claude': written or answered by Claude Code (MCP), else by the user. */
+  author?: string
   attachments?: Attachment[]
   usage?: Usage
   error?: string

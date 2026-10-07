@@ -1630,5 +1630,8 @@
   "{n} tickets can start": "{n} tickets peuvent démarrer",
   "opened: {title}": "ouverte : {title}",
   "{n} conversation": "{n} conversation",
-  "{n} conversations": "{n} conversations"
+  "{n} conversations": "{n} conversations",
+  "Claude Code": "Claude Code",
+  "Written by Claude Code through the kanban tools": "Écrit par Claude Code avec les outils du kanban",
+  "answered by Claude Code": "répondu par Claude Code"
 }

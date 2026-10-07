@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 )
 
 type mcpClient struct {
@@ -248,5 +250,72 @@ func TestMCPSymlinkedProject(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)
 		}
+	}
+}
+
+// Claude Code answers the questions of a linked conversation, then writes in it.
+func TestMCPReplyAndAnswer(t *testing.T) {
+	s, ts := newServer(t)
+	model := &fakeModel{}
+	mts := model.serve(t)
+	if err := s.LLM.SaveServer(llm.Server{ID: "s1", Kind: "llamacpp", URL: mts.URL}, false); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := dial(t, ts, "secret-token-0123456789abcdef0123")
+	dir := t.TempDir()
+	id := a.call("projects.create", map[string]any{"type": "local", "path": dir})["result"].(map[string]any)["id"].(string)
+	a.call("project.open", map[string]any{"id": id})
+	a.call("kanban.create", map[string]any{"title": "Export"})
+	model.answer = func(req map[string]any) []string {
+		last := lastMessage(req)
+		if last["role"] == "user" && strings.Contains(last["content"].(string), "Export") {
+			return toolCalls([3]string{"q1", "ask_user", `{"questions":[{"question":"Which format?","options":["CSV","JSON"]}]}`})
+		}
+		return text("OK: " + last["content"].(string))
+	}
+	a.call("agent.send", map[string]any{"id": "c1", "text": "Export", "server": "s1", "model": "m", "ticket": map[string]any{"id": 1, "role": "briefing"}})
+	a.waitUpdate("c1", idle)
+
+	m := &mcpClient{t: t, url: ts.URL, token: "secret-token-0123456789abcdef0123"}
+	args := func(more map[string]any) map[string]any {
+		out := map[string]any{"cwd": dir, "id": 1, "chat": "c1"}
+		for k, v := range more {
+			out[k] = v
+		}
+		return out
+	}
+	if text := m.ok("kanban_conversation", args(nil)); !strings.Contains(text, "Waiting for the answers") || !strings.Contains(text, "[options: CSV | JSON]") {
+		t.Fatalf("pending questions: %s", text)
+	}
+	if text, failed := m.tool("kanban_answer", args(map[string]any{"answers": [][]string{{"CSV"}, {"x"}}})); !failed || !strings.Contains(text, "one answer per question") {
+		t.Fatalf("wrong count: %s", text)
+	}
+	if text, failed := m.tool("kanban_reply", args(map[string]any{"chat": "nope", "message": "hi"})); !failed || !strings.Contains(text, "not linked") {
+		t.Fatalf("unlinked: %s", text)
+	}
+	m.ok("kanban_answer", args(map[string]any{"answers": [][]string{{"JSON"}}}))
+	a.waitUpdate("c1", idle)
+	m.ok("kanban_reply", args(map[string]any{"message": "Keep the dates in ISO 8601."}))
+	a.waitUpdate("c1", idle)
+
+	chat := a.call("agent.open", map[string]any{"id": "c1"})["result"].(map[string]any)["chat"].(map[string]any)
+	var ask, reply map[string]any
+	for _, x := range chat["messages"].([]any) {
+		msg := x.(map[string]any)
+		if msg["askState"] == "answered" {
+			ask = msg
+		}
+		if msg["role"] == "user" && msg["author"] == "claude" {
+			reply = msg
+		}
+	}
+	if ask == nil || ask["author"] != "claude" || !strings.Contains(ask["content"].(string), "→ JSON") {
+		t.Fatalf("answers: %+v", ask)
+	}
+	if reply == nil || reply["display"] != "Keep the dates in ISO 8601." {
+		t.Fatalf("reply: %+v", chat["messages"])
+	}
+	if text := m.ok("kanban_conversation", args(nil)); !strings.Contains(text, "## Claude Code (you)\nKeep the dates") || !strings.Contains(text, "OK: Keep the dates") {
+		t.Fatalf("conversation: %s", text)
 	}
 }

@@ -217,7 +217,7 @@ func drainQueue(c *agent.Chat) bool {
 			c.Messages = append(c.Messages, &agent.Message{Role: "user", Kind: "agent_event", Content: agent.String(q.Text), Event: q.Event})
 			continue
 		}
-		c.Messages = append(c.Messages, &agent.Message{Role: "user", Content: userContent(q.Text, q.Parts), Display: displayOf(q.Text, q.Display, q.Parts), Attachments: q.Attachments})
+		c.Messages = append(c.Messages, &agent.Message{Role: "user", Content: userContent(q.Text, q.Parts), Display: displayOf(q.Text, q.Display, q.Parts), Attachments: q.Attachments, Author: q.Author})
 	}
 	c.Queue = nil
 	return true
