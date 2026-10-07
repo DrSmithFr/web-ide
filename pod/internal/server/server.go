@@ -35,6 +35,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/settings"
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
 	"github.com/DrSmithFr/web-ide/pod/internal/store"
+	"github.com/DrSmithFr/web-ide/pod/internal/tunnel"
 	"github.com/DrSmithFr/web-ide/pod/internal/tunnels"
 )
 
@@ -282,10 +283,12 @@ type Client struct {
 	project string
 }
 
+// A window reads and writes whole messages: a WebSocket frame, or one message of a tunnel
+// channel (a DataChannel of the relay). The JSON protocol is the same on both.
 type window struct {
 	id   string
 	srv  *Server
-	conn *websocket.Conn
+	conn tunnel.MsgConn
 	send chan []byte
 	ctx  context.Context
 	// attached are the worktree projects of the window besides its own (under srv.mu).
@@ -344,6 +347,22 @@ func nextClientID() string {
 	return "c" + time.Now().Format("150405") + "-" + strconv.Itoa(clientSeq.n)
 }
 
+// wsConn adapts a WebSocket connection to a tunnel.MsgConn: a frame is already a whole
+// message, so no framing is needed.
+type wsConn struct{ c *websocket.Conn }
+
+func (w *wsConn) Read() ([]byte, error) {
+	_, data, err := w.c.Read(context.Background())
+	return data, err
+}
+
+func (w *wsConn) Write(b []byte) error { return w.c.Write(context.Background(), websocket.MessageText, b) }
+
+func (w *wsConn) Close() error {
+	w.c.Close(websocket.StatusNormalClosure, "")
+	return nil
+}
+
 func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 	// Same origin only: another site open in the browser must not reach the pod.
 	conn, err := websocket.Accept(w, r, nil)
@@ -353,14 +372,14 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 	conn.SetReadLimit(64 << 20)
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
-	c := &Client{window: &window{id: nextClientID(), srv: s, conn: conn, send: make(chan []byte, 1024), ctx: ctx, attached: map[string]bool{}}}
+	c := &Client{window: &window{id: nextClientID(), srv: s, conn: &wsConn{c: conn}, send: make(chan []byte, 1024), ctx: ctx, attached: map[string]bool{}}}
 	s.mu.Lock()
 	s.clients[c] = struct{}{}
 	s.windowsChanged()
 	s.mu.Unlock()
 	go c.writeLoop(ctx)
 	c.push("hello", map[string]string{"clientId": c.id})
-	c.readLoop(ctx)
+	c.handleLoop(ctx)
 	s.mu.Lock()
 	delete(s.clients, c)
 	s.windowsChanged()
@@ -375,10 +394,48 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 			rt.Detach()
 		}
 	}
-	conn.Close(websocket.StatusNormalClosure, "")
+	c.conn.Close()
+}
+
+// ServeTunnel runs the WebSocket protocol on a whole-message transport that is not a
+// WebSocket (a WebRTC DataChannel over the relay). The JSON protocol is unchanged: the
+// same handler set, the same per-client queues and events. The tunnel owns the read side
+// (conn.Read); the pod owns the write side through the send channel and writeLoop.
+func (s *Server) ServeTunnel(ctx context.Context, conn tunnel.MsgConn) {
+	c := &Client{window: &window{id: nextClientID(), srv: s, conn: conn, send: make(chan []byte, 1024), ctx: ctx, attached: map[string]bool{}}}
+	s.mu.Lock()
+	s.clients[c] = struct{}{}
+	s.windowsChanged()
+	s.mu.Unlock()
+	go c.writeLoop(ctx)
+	c.push("hello", map[string]string{"clientId": c.id})
+	c.handleLoop(ctx)
+	s.mu.Lock()
+	delete(s.clients, c)
+	s.windowsChanged()
+	var rts []*runtime.Runtime
+	for id := range c.attached {
+		rts = append(rts, s.runtimes[id])
+	}
+	rts = append(rts, s.runtimes[c.project])
+	s.mu.Unlock()
+	for _, rt := range rts {
+		if rt != nil {
+			rt.Detach()
+		}
+	}
+	s.windowsChanged()
+	project := c.project
+	rt := s.runtimes[project]
+	s.mu.Unlock()
+	if rt != nil {
+		rt.Detach()
+	}
+	_ = conn.Close()
 }
 
 func (c *Client) writeLoop(ctx context.Context) {
+	wsc, isWS := c.conn.(*wsConn)
 	ping := time.NewTicker(20 * time.Second)
 	defer ping.Stop()
 	for {
@@ -387,18 +444,30 @@ func (c *Client) writeLoop(ctx context.Context) {
 			return
 		case msg := <-c.send:
 			wctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-			err := c.conn.Write(wctx, websocket.MessageText, msg)
+			err := c.writeMsg(wctx, msg)
 			cancel()
 			if err != nil {
-				c.conn.Close(websocket.StatusGoingAway, "write failed")
+				c.conn.Close()
 				return
 			}
 		case <-ping.C:
+			// Only a WebSocket can be pinged; a DataChannel has no keepalive of its own.
+			if !isWS {
+				continue
+			}
 			pctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-			_ = c.conn.Ping(pctx)
+			_ = wsc.c.Ping(pctx)
 			cancel()
 		}
 	}
+}
+
+// writeMsg sends one whole message through the transport of the window.
+func (c *Client) writeMsg(ctx context.Context, msg []byte) error {
+	if wsc, ok := c.conn.(*wsConn); ok {
+		return wsc.c.Write(ctx, websocket.MessageText, msg)
+	}
+	return c.conn.Write(msg)
 }
 
 func (c *Client) enqueue(v any) {
@@ -412,7 +481,7 @@ func (c *Client) enqueue(v any) {
 	case <-c.ctx.Done():
 	case <-time.After(5 * time.Second):
 		// A client that does not read anymore is dropped rather than blocking the pod.
-		c.conn.Close(websocket.StatusPolicyViolation, "client trop lent")
+		c.conn.Close()
 	}
 }
 
@@ -452,7 +521,28 @@ type queue struct {
 // have reached the server, else a completion could be computed on an old text.
 var barrier = map[string]string{"lsp.request": "lsp"}
 
-func (c *Client) readLoop(ctx context.Context) {
+// read returns the next whole message, or an error once ctx ends or the transport
+// closes. The WebSocket transport already bounds its reads to the connection context;
+// a DataChannel blocks, so it is copied out on a goroutine that cancels with ctx.
+func (c *Client) read(ctx context.Context) ([]byte, error) {
+	type rmsg struct {
+		b   []byte
+		err error
+	}
+	ch := make(chan rmsg, 1)
+	go func() {
+		b, err := c.conn.Read()
+		ch <- rmsg{b, err}
+	}()
+	select {
+	case m := <-ch:
+		return m.b, m.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (c *Client) handleLoop(ctx context.Context) {
 	queues := map[string]*queue{}
 	defer func() {
 		for _, q := range queues {
@@ -464,7 +554,7 @@ func (c *Client) readLoop(ctx context.Context) {
 		}
 	}()
 	for {
-		_, data, err := c.conn.Read(ctx)
+		data, err := c.read(ctx)
 		if err != nil {
 			return
 		}
