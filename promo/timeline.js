@@ -1,7 +1,11 @@
 // The edit of the promo: renderAt(t) draws the frame at t seconds, the same every time (the
 // noise is seeded by the frame). The times come from out/beats.json (analyze.py): the beat
-// grid, the kicks of the low band and the sections of the track. Black and white only:
-// shots in grayscale with contrast, inversions and flashes on the hits, giant type (Anton).
+// grid, the kicks of the low band and the sections of the track.
+//
+// Whole screens of the IDE, never cropped: each view exists in two themes (High contrast and
+// Day) and the flash is the switch between them on the eighths. The frame follows the theme:
+// black with white type on High contrast, white with black type on Day. Black and white only
+// (the shots in grayscale), punches, shakes, slices and ghosts on the hits.
 const W = 1080
 const H = 1920
 const canvas = document.getElementById('stage')
@@ -13,12 +17,13 @@ const offCtx = off.getContext('2d')
 
 let BEATS = null
 const img = {}
-const SHOTS = ['editor', 'kanban', 'orchestrator-panel', 'ask-panel', 'subagents-panel', 'preview-panel', 'app', 'home', 'phone-explorer', 'phone-editor', 'phone-hint', 'phone-kanban']
+const VIEWS = ['editor', 'plan-chat', 'cloud', 'orchestrator', 'ask', 'kanban', 'roadmap', 'worktree', 'buffer', 'subagents', 'preview', 'phone-editor', 'phone-assistant', 'phone-kanban']
 
 window.load = async (beats) => {
   BEATS = beats
+  const files = VIEWS.flatMap((v) => [`${v}-hc`, `${v}-day`]).concat(['app'])
   await Promise.all(
-    SHOTS.map(
+    files.map(
       (name) =>
         new Promise((ok, ko) => {
           const i = new Image()
@@ -49,43 +54,80 @@ function rng(seed) {
 const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x))
 const ease = (x) => 1 - Math.pow(1 - clamp(x), 3)
 const beat = (i) => BEATS.beats[0] + i * BEATS.period
+const ink = (dark) => (dark ? '#fff' : '#000')
+const paper = (dark) => (dark ? '#000' : '#fff')
 
-/**
- * A shot, cropped to the frame: src is the region of the image shown (x, y, w and the
- * height of the frame ratio), zoomed from z0 to z1 and panned by dy (fraction of the height)
- * over p in [0, 1].
- */
-function shot(c, name, src, p, { z0 = 1, z1 = 1.1, dy = 0, contrast = 1.45, bright = 1 } = {}) {
-  const i = img[name]
-  const sw = src.w / (z0 + (z1 - z0) * ease(p))
-  const sh = sw * (H / W)
-  const cx = src.x + src.w / 2
-  const cy = src.y + (src.w * H) / W / 2 + dy * p * i.height
-  c.save()
-  c.filter = `grayscale(1) contrast(${contrast}) brightness(${bright})`
-  c.drawImage(i, cx - sw / 2, cy - sh / 2, sw, sh, 0, 0, W, H)
-  c.restore()
-}
-
-/** Giant text centred on y, fitted to the width (max size px), white or black. */
-function word(c, text, y, { size = 300, color = '#fff', stroke = 0, font = 'Anton', track = 0.02, scale = 1, alpha = 1 } = {}) {
+/** Giant text centred on y, fitted to the width. */
+function word(c, text, y, { size = 300, color = '#fff', font = 'Anton', scale = 1, alpha = 1, width = 0.9 } = {}) {
   c.save()
   c.globalAlpha = alpha
   c.font = `${size}px ${font}`
   c.textAlign = 'center'
   c.textBaseline = 'middle'
-  const wdt = c.measureText(text).width
-  const fit = Math.min(1, (W * 0.9) / wdt) * scale
+  const fit = Math.min(1, (W * width) / c.measureText(text).width) * scale
   c.translate(W / 2, y)
   c.scale(fit, fit)
-  if (stroke) {
-    c.lineWidth = stroke / fit
-    c.strokeStyle = color === '#fff' ? '#000' : '#fff'
-    c.strokeText(text, 0, 0)
-  }
   c.fillStyle = color
   c.fillText(text, 0, 0)
   c.restore()
+}
+
+/** Lines of giant text stacked around y. */
+function lines(c, list, y, opts = {}) {
+  const gap = (opts.size ?? 300) * 0.92 * Math.min(1, opts.scale ?? 1)
+  list.forEach((l, i) => word(c, l, y + (i - (list.length - 1) / 2) * gap, opts))
+}
+
+// Where to zoom in each desktop screen (fraction of the image) and how much.
+const FOCUS = {
+  editor: [0.36, 0.48, 2.3],
+  'plan-chat': [0.87, 0.16, 2.6],
+  cloud: [0.5, 0.25, 1.9],
+  orchestrator: [0.87, 0.38, 2.5],
+  ask: [0.87, 0.42, 2.3],
+  kanban: [0.22, 0.32, 2.1],
+  roadmap: [0.3, 0.26, 2.1],
+  worktree: [0.82, 0.16, 2.4],
+  buffer: [0.45, 0.3, 2.0],
+  subagents: [0.87, 0.4, 2.4],
+  preview: [0.87, 0.34, 2.4],
+}
+
+/**
+ * A whole screen of the IDE in a theme, grayscale: a desktop one across the width (the type
+ * goes above and below it), then zoomed in on its subject (z from 0, the whole screen, to 1);
+ * a phone one over the whole frame. punch: zoom of the cut.
+ */
+function screen(c, view, dark, punch = 1, dx = 0, dy = 0, z = 0) {
+  const i = img[`${view}-${dark ? 'hc' : 'day'}`] ?? img[view]
+  const phone = view.startsWith('phone') || view === 'app'
+  const w0 = phone ? W : W * 0.96
+  const h0 = (i.height / i.width) * w0
+  const [fx, fy, target] = phone ? [0.5, 0.5, 1] : FOCUS[view] ?? [0.5, 0.5, 1]
+  const k = ease(z)
+  const w = w0 * (1 + (target - 1) * k) * punch
+  const h = (i.height / i.width) * w
+  // The subject moves from where it is in the whole screen to the centre of the frame.
+  const sx = (W - w0) / 2 + fx * w0 + (W / 2 - ((W - w0) / 2 + fx * w0)) * k
+  const sy = (H - h0) / 2 + fy * h0 + (H / 2 - ((H - h0) / 2 + fy * h0)) * k
+  let x = sx - fx * w
+  let y = sy - fy * h
+  if (w > W) x = clamp(x, W - w, 0)
+  if (h > H) y = clamp(y, H - h, 0)
+  c.save()
+  c.filter = 'grayscale(1) contrast(1.3)'
+  c.drawImage(i, x + dx, y + dy, w, h)
+  c.restore()
+  if (!phone && k < 0.98) {
+    // A thin frame around the window.
+    c.save()
+    c.strokeStyle = ink(dark)
+    c.globalAlpha = 0.5 * (1 - k)
+    c.lineWidth = 3
+    c.strokeRect(x + dx, y + dy, w, h)
+    c.restore()
+  }
+  return { phone, zoomed: k > 0.3, top: (H - h0) / 2, bottom: (H + h0) / 2 }
 }
 
 function invert(c) {
@@ -96,41 +138,45 @@ function invert(c) {
   c.restore()
 }
 
-/** Slices of the frame shifted sideways (amount 0..1). */
+/** Slices of the frame shifted sideways and a ghost of its edges (amount 0..1). */
 function glitch(c, amount, seed) {
   if (amount <= 0) return
   offCtx.clearRect(0, 0, W, H)
   offCtx.drawImage(canvas, 0, 0)
   const r = rng(seed)
-  const n = 6 + Math.floor(r() * 8)
+  const n = 6 + Math.floor(r() * 10)
   for (let k = 0; k < n; k++) {
     const y = Math.floor(r() * H)
-    const h = 20 + Math.floor(r() * 160)
-    const dx = (r() - 0.5) * 260 * amount
-    c.drawImage(off, 0, y, W, h, dx, y, W, h)
+    const h = 10 + Math.floor(r() * 140)
+    c.drawImage(off, 0, y, W, h, (r() - 0.5) * 300 * amount, y, W, h)
   }
-  // A white ghost of the edges (the colour split, in black and white).
   c.save()
-  c.globalAlpha = 0.35 * amount
+  c.globalAlpha = 0.45 * amount
   c.globalCompositeOperation = 'difference'
-  c.drawImage(off, 14 * amount, 0)
+  c.drawImage(off, 22 * amount, -8 * amount)
   c.restore()
 }
 
-// Grain: a few noise tiles, one per frame.
+// Grain and scan lines.
 const grain = Array.from({ length: 6 }, (_, k) => {
   const g = Object.assign(document.createElement('canvas'), { width: 540, height: 960 })
   const gc = g.getContext('2d')
   const d = gc.createImageData(540, 960)
   const r = rng(1000 + k)
   for (let i = 0; i < d.data.length; i += 4) {
-    const v = r() * 255
-    d.data[i] = d.data[i + 1] = d.data[i + 2] = v
+    d.data[i] = d.data[i + 1] = d.data[i + 2] = r() * 255
     d.data[i + 3] = 255
   }
   gc.putImageData(d, 0, 0)
   return g
 })
+const scan = (() => {
+  const g = Object.assign(document.createElement('canvas'), { width: W, height: H })
+  const gc = g.getContext('2d')
+  gc.fillStyle = '#000'
+  for (let y = 0; y < H; y += 4) gc.fillRect(0, y, W, 1)
+  return g
+})()
 
 // ---------- the edit ----------
 
@@ -138,24 +184,42 @@ let SCENES = []
 let FLASHES = []
 let GLITCHES = []
 
-/** A word slammed on a black frame: punch in, a little shake. */
-const slam = (text, opts = {}) => (c, p, f) => {
-  c.fillStyle = '#000'
+/**
+ * A view with its words: the theme switches on every eighth (or sixteenth with fast), the
+ * cut punches in, the type sits in the band above or below the screen (over a phone one).
+ */
+const view = (name, words, { fast = false, start = 0, sub = '', at = 'below', zoom = [0.15, 0.55] } = {}) => (c, p, f, t, t0) => {
+  const step = BEATS.period / (fast ? 4 : 2)
+  const dark = Math.floor((t - t0) / step + start) % 2 === 0
+  c.fillStyle = paper(dark)
+  c.fillRect(0, 0, W, H)
+  const r = rng(f * 13)
+  const kick = Math.max(0, 1 - (t - t0) / 0.18)
+  const shake = 10 * kick
+  const z = clamp((p - zoom[0]) / (zoom[1] - zoom[0]))
+  const box = screen(c, name, dark, 1 + 0.07 * kick, (r() - 0.5) * shake, (r() - 0.5) * shake, z)
+  const color = ink(dark)
+  const scale = 1.1 - 0.1 * ease(p * 3)
+  if (box.phone || box.zoomed) {
+    c.save()
+    c.globalCompositeOperation = 'difference'
+    lines(c, words, H * 0.5, { size: 250, scale, color: '#fff' })
+    c.restore()
+  } else {
+    const y = at === 'above' ? box.top / 2 : (box.bottom + H) / 2
+    lines(c, words, y, { size: 230, scale, color })
+    if (sub) word(c, sub, at === 'above' ? (box.bottom + H) / 2 : box.top / 2, { size: 58, font: 'JBMono', color })
+  }
+}
+
+/** A word slammed on the frame, black or white. */
+const slam = (words, dark, opts = {}) => (c, p, f) => {
+  c.fillStyle = paper(dark)
   c.fillRect(0, 0, W, H)
   const r = rng(f * 7)
   c.save()
-  c.translate((r() - 0.5) * 10, (r() - 0.5) * 10)
-  word(c, text, H / 2, { size: 330, scale: 1.18 - 0.18 * ease(p * 3), ...opts })
-  c.restore()
-}
-
-/** A UI shot with its giant word. */
-const ui = (name, src, label, opts = {}) => (c, p) => {
-  shot(c, name, src, p, opts)
-  // The word in difference: white on dark, black on light.
-  c.save()
-  c.globalCompositeOperation = 'difference'
-  word(c, label, opts.labelY ?? H * 0.8, { size: 260, scale: 1.08 - 0.08 * ease(p * 2) })
+  c.translate((r() - 0.5) * 12, (r() - 0.5) * 12)
+  lines(c, words, H / 2, { size: 330, scale: 1.2 - 0.2 * ease(p * 3), color: ink(dark), ...opts })
   c.restore()
 }
 
@@ -167,168 +231,143 @@ function build() {
   const brk = at(false, 1)
   const drop = at(true, 2)
   const P = BEATS.period
-  const nearest = (t) => beat(Math.round((t - BEATS.beats[0]) / P))
-  const vStart = nearest(verse.start)
-  const kicks = BEATS.kicks
-
-  // Crops of the shots (source pixels: the desktop shots are 4320×2700, the panels 900 wide,
-  // the phone 1170×2532).
-  const DESK = { x: 930, y: 40, w: 1480 }
-  const PANEL = { x: 0, y: 80, w: 900 }
-  const PHONE = { x: 0, y: 200, w: 1170 }
+  const index = (t) => Math.round((t - BEATS.beats[0]) / P)
   const S = []
   const add = (from, to, draw) => S.push({ from, to, draw })
+  const end = BEATS.end
 
-  // 1. Intro: a word per beat, black on white every other one; the logo on the big hit.
-  const intro = ['YOUR', 'IDE.', 'YOUR', 'MODEL.', 'YOUR', 'MACHINE.', 'NO CLOUD.']
-  for (let k = 0; k < intro.length; k++) {
-    const inv = k % 2 === 1
-    add(Math.max(0, beat(k)), beat(k + 1), (c, p, f) => {
-      slam(intro[k])(c, p, f)
-      if (inv) invert(c)
-    })
-  }
-  add(beat(intro.length), vStart, (c, p, f) => {
-    c.fillStyle = '#fff'
-    c.fillRect(0, 0, W, H)
-    word(c, 'WEB IDE', H / 2, { size: 380, color: '#000', scale: 1.25 - 0.25 * ease(p * 2) })
+  // 1. Intro: what it is, a phrase per two beats on the hits; the logo on the big one.
+  const vStart = beat(index(verse.start))
+  const intro = [
+    [['OPENS', 'LIKE VIM.'], 'editor'],
+    [['THINKS', 'LIKE', 'INTELLIJ.'], 'editor'],
+    [['YOUR', 'MACHINE.'], 'worktree'],
+  ]
+  intro.forEach(([words, name], k) => {
+    add(Math.max(0, beat(k * 2)), beat(k * 2 + 1), slam(words, k % 2 === 0))
+    add(beat(k * 2 + 1), beat(k * 2 + 2), view(name, [], { fast: true, start: k }))
+    GLITCHES.push({ t: beat(k * 2 + 1), dur: 0.1, amount: 0.7 })
   })
-  GLITCHES.push({ t: beat(intro.length), dur: 0.3, amount: 1 })
+  add(beat(6), vStart, (c, p, f) => {
+    slam(['WEB IDE'], false, { size: 380 })(c, p, f)
+  })
+  GLITCHES.push({ t: beat(6), dur: 0.35, amount: 1 })
+  FLASHES.push({ t: beat(6), dur: 0.08, kind: 'invert' })
 
-  // 2. Verse (no bass): one shot per beat, its word.
-  const verseShots = [
-    ['editor', DESK, 'CODE.', { z1: 1.18 }],
-    ['kanban', { x: 960, y: 140, w: 1150 }, 'PLAN.'],
-    ['orchestrator-panel', PANEL, 'STEER.', { labelY: H * 0.86 }],
-    ['ask-panel', { x: 0, y: 400, w: 900 }, 'DECIDE.', { labelY: H * 0.86 }],
-    ['subagents-panel', { x: 0, y: 250, w: 900 }, 'DELEGATE.', { labelY: H * 0.88 }],
-    ['preview-panel', { x: 0, y: 300, w: 900 }, 'PREVIEW.'],
-    ['app', PHONE, 'SHIP.', { labelY: H * 0.18 }],
-    ['home', { x: 1500, y: 20, w: 1480 }, 'ANY PROJECT.'],
-    ['phone-explorer', PHONE, 'ANYWHERE.'],
-    ['phone-editor', PHONE, 'ON YOUR PHONE.', { labelY: H * 0.84 }],
+  // 2. Verse: one point per beat, its screens switching theme on the eighths.
+  const points = [
+    ['phone-editor', ['ACCESS', 'EVERYWHERE.'], { sub: 'over Tailscale' }],
+    ['plan-chat', ['LOCAL AI.', 'EVERY DAY.'], { sub: 'your model, your machine' }],
+    ['cloud', ['CLOUD AI', 'TO PLAN.'], { sub: 'when it is worth it' }],
+    ['orchestrator', ['AI PLANS.'], { at: 'above' }],
+    ['orchestrator', ['YOU', 'COMMAND.'], { start: 1 }],
+    ['ask', ['IT', 'INTERROGATES', 'YOU.'], { at: 'above' }],
+    ['kanban', ['AGILE.'], {}],
+    ['roadmap', ['SIMPLIFIED.'], { at: 'above' }],
+    ['worktree', ['GIT', 'WORKTREES.'], { sub: 'one per ticket' }],
+    ['buffer', ['CODE WITH IT.', 'NOT AFTER IT.'], { at: 'above', sub: 'its edits merge with yours' }],
   ]
   let t = vStart
-  for (const [name, src, label, opts] of verseShots) {
-    const next = t + P
-    if (t >= rise.start) break
-    add(t, Math.min(next, rise.start), ui(name, src, label, opts))
-    FLASHES.push({ t, dur: 0.07, kind: 'white' })
-    GLITCHES.push({ t, dur: 0.08, amount: 0.6 })
-    t = next
+  for (const [name, words, opts] of points) {
+    if (t >= rise.start - 0.05) break
+    const to = Math.min(t + P, rise.start)
+    // The last point holds until the build.
+    add(t, name === 'buffer' ? rise.start : to, view(name, words, opts))
+    GLITCHES.push({ t, dur: 0.09, amount: 0.7 })
+    t = to
   }
-  // The clap of the verse: an inversion.
   const clap = BEATS.onsets.filter(([o]) => o > verse.start && o < verse.end).sort((a, b) => b[1] - a[1])[0]
-  if (clap) FLASHES.push({ t: clap[0], dur: P * 0.9, kind: 'invert' })
+  if (clap) GLITCHES.push({ t: clap[0], dur: 0.2, amount: 1 })
 
-  // 3. Build: the sub-agents multiply, FASTER on every eighth at the end.
-  const cards = [80, 590, 945, 1300].map((y) => ({ x: 100, y, w: 790, h: 300 }))
-  const bStart = rise.start
-  const bEnd = brk.start
-  const gridAt = (n) => (c, p, f) => {
-    c.fillStyle = '#000'
+  // 3. Build: the sub-agents multiply, then WALLET IS THE LIMIT. on the eighths.
+  const card = (k) => ({ x: 2276, y: [470, 706, 942][k % 3], w: 492, h: 200 })
+  const grid = (n) => (c, p, f, tt, t0) => {
+    const dark = Math.floor((tt - t0) / (P / 2)) % 2 === 0
+    c.fillStyle = paper(dark)
     c.fillRect(0, 0, W, H)
-    const cols = Math.ceil(Math.sqrt(n * 0.6))
+    const cols = Math.max(1, Math.round(Math.sqrt(n / 2.5)))
     const rows = Math.ceil(n / cols)
     const cw = W / cols
-    const ch = H / rows
+    const ch = (H * 0.78) / rows
     c.save()
-    c.filter = 'grayscale(1) contrast(1.6)'
+    c.filter = 'grayscale(1) contrast(1.4)'
     for (let k = 0; k < n; k++) {
-      const s = cards[k % 3 === 0 ? 0 : k % 3 === 1 ? 1 : 2]
-      const x = (k % cols) * cw
-      const y = Math.floor(k / cols) * ch
-      const scale = Math.min(cw / s.w, ch / s.h) * 0.92
-      c.drawImage(img['subagents-panel'], s.x, s.y + 60 + 250, s.w, s.h, x + (cw - s.w * scale) / 2, y + (ch - s.h * scale) / 2, s.w * scale, s.h * scale)
+      const s = card(k)
+      const scale = Math.min(cw / s.w, ch / s.h) * 0.9
+      const x = (k % cols) * cw + (cw - s.w * scale) / 2
+      const y = H * 0.17 + Math.floor(k / cols) * ch + (ch - s.h * scale) / 2
+      c.drawImage(img[`subagents-${dark ? 'hc' : 'day'}`], s.x, s.y, s.w, s.h, x, y, s.w * scale, s.h * scale)
     }
     c.restore()
-    c.save()
-    c.globalCompositeOperation = 'difference'
-    word(c, n === 1 ? '1 AGENT' : `${n} AGENTS`, H / 2, { size: 300, scale: 1.1 - 0.1 * ease(p * 3) })
-    c.restore()
+    word(c, `×${n} AGENTS`, H * 0.08, { size: 170, color: ink(dark), scale: 1.08 - 0.08 * ease(p * 3) })
   }
   const counts = [1, 2, 4, 8, 16, 32]
+  const wallet = brk.start - 2 * P
   let k = 0
-  for (t = bStart; t < bEnd - 2 * P && k < counts.length; t += P, k++) {
-    add(t, Math.min(t + P, bEnd - 2 * P), gridAt(counts[k]))
-    FLASHES.push({ t, dur: 0.06, kind: 'white' })
+  for (t = rise.start; t < wallet - 0.05 && k < counts.length; k++) {
+    const to = Math.min(t + P, wallet)
+    add(t, to, grid(counts[k]))
+    GLITCHES.push({ t, dur: 0.08, amount: 0.6 })
+    t = to
   }
-  // FASTER: every eighth, then every sixteenth, inverting each time.
-  for (let q = 0, tt = t; tt < bEnd; q++) {
-    const step = tt < bEnd - P ? P / 2 : P / 4
-    const label = ['SHIP', 'FASTER.', 'FASTER.', 'FASTER.'][q % 4]
-    const inv = q % 2 === 1
-    add(tt, Math.min(tt + step, bEnd), (c, p) => {
-      c.fillStyle = inv ? '#fff' : '#000'
-      c.fillRect(0, 0, W, H)
-      word(c, label, H / 2, { size: 360, color: inv ? '#000' : '#fff', scale: 1.15 - 0.15 * ease(p) })
-    })
+  const walletWords = [['WALLET'], ['IS THE'], ['LIMIT.']]
+  for (let q = 0, tt = t; tt < brk.start - 0.01; q++) {
+    const step = tt < brk.start - P ? P / 2 : P / 4
+    add(tt, Math.min(tt + step, brk.start), slam(walletWords[q % 3], q % 2 === 1, { size: 380 }))
     tt += step
   }
-  GLITCHES.push({ t: bEnd - P, dur: P, amount: 0.7 })
+  GLITCHES.push({ t: brk.start - P, dur: P, amount: 0.8 })
 
-  // 4. Break: the Orchestrator asks, typed in mono; the riser shakes the frame.
-  const q = '> what do we work on today?'
-  add(bEnd, drop.start, (c, p, f) => {
+  // 4. Break: everything is done; it waits for you.
+  const q = '> 5 agents done. waiting for you'
+  add(brk.start, drop.start, (c, p, f) => {
     c.fillStyle = '#000'
     c.fillRect(0, 0, W, H)
-    const n = Math.floor(q.length * clamp(p * 1.6))
+    const n = Math.floor(q.length * clamp(p * 1.5))
     const r = rng(f)
-    const shake = Math.pow(clamp((p - 0.45) / 0.55), 2) * 30
+    const shake = Math.pow(clamp((p - 0.5) / 0.5), 2) * 34
     c.save()
     c.translate((r() - 0.5) * shake, (r() - 0.5) * shake)
-    c.font = '64px JBMono'
-    c.textAlign = 'left'
+    c.font = '52px JBMono'
     c.textBaseline = 'middle'
     c.fillStyle = '#fff'
-    const shown = q.slice(0, n) + (f % 8 < 4 ? '_' : ' ')
     const wdt = c.measureText(q + '_').width
-    c.fillText(shown, (W - wdt) / 2, H / 2)
+    c.fillText(q.slice(0, n) + (f % 8 < 4 ? '_' : ' '), (W - wdt) / 2, H / 2)
     c.restore()
   })
-  FLASHES.push({ t: drop.start - 0.04, dur: 0.18, kind: 'white' })
+  FLASHES.push({ t: drop.start - 0.04, dur: 0.2, kind: 'white' })
 
-  // 5. Drop: a cut on every eighth, an inversion on every beat, the words of the end.
-  const dropShots = [
-    ['phone-kanban', PHONE],
-    ['orchestrator-panel', PANEL],
-    ['app', PHONE],
-    ['phone-hint', PHONE],
-    ['editor', DESK],
-    ['subagents-panel', { x: 0, y: 250, w: 900 }],
-    ['phone-editor', PHONE],
-    ['preview-panel', { x: 0, y: 300, w: 900 }],
-  ]
-  const dropWords = ['LOCAL AI.', 'YOUR MODEL.', 'ON YOUR PHONE.', 'OPEN SOURCE.']
-  const end = BEATS.end
-  const outro = nearest(end) - 2 * P
+  // 5. Drop: a screen per eighth, the theme per sixteenth; a word per beat: you are the
+  // bottleneck now.
+  const dropViews = ['orchestrator', 'phone-kanban', 'kanban', 'phone-assistant', 'buffer', 'roadmap', 'subagents', 'phone-editor', 'worktree', 'preview', 'ask', 'editor']
+  const dropWords = [['YOU'], ['ARE'], ['THE'], ['BOTTLE-'], ['NECK.'], ['NOW.']]
+  const outro = beat(index(end)) - 2 * P
   let i = 0
-  for (t = drop.start; t < outro - 0.01; t += P / 2, i++) {
-    const [name, src] = dropShots[i % dropShots.length]
-    const label = dropWords[Math.floor(i / 2) % dropWords.length]
-    add(t, Math.min(t + P / 2, outro), ui(name, src, label, name.startsWith('phone') || name === 'app' ? { z0: 1, z1: 1.06 } : { z0: 1.05, z1: 1.2 }))
-    if (i % 2 === 0) FLASHES.push({ t, dur: 0.1, kind: 'invert' })
-    else GLITCHES.push({ t, dur: 0.07, amount: 0.8 })
+  for (t = beat(index(drop.start)); t < outro - 0.01; t += P / 2, i++) {
+    const words = dropWords[Math.min(Math.floor(i / 2), dropWords.length - 1)]
+    add(Math.max(t, drop.start), Math.min(t + P / 2, outro), view(dropViews[i % dropViews.length], words, { fast: true, start: i, at: i % 2 ? 'above' : 'below', zoom: [-0.6, 0.6] }))
+    if (i % 2 === 0) FLASHES.push({ t, dur: 0.06, kind: 'invert' })
+    GLITCHES.push({ t, dur: 0.07, amount: i % 2 ? 0.9 : 0.5 })
   }
-  // Outro: the name and the address, then black (the loop starts on black).
-  add(outro, end, (c, p) => {
+  // Outro: the name and the line, then black (the loop starts there).
+  add(outro, end, (c, p, f) => {
     c.fillStyle = '#000'
     c.fillRect(0, 0, W, H)
-    word(c, 'WEB IDE', H * 0.44, { size: 380, scale: 1.12 - 0.12 * ease(p * 2) })
-    word(c, 'SELF-HOSTED · LOCAL AI · OPEN SOURCE', H * 0.56, { size: 64, font: 'JBMono', alpha: clamp(p * 4) })
-    word(c, 'github.com/DrSmithFr/web-ide', H * 0.62, { size: 54, font: 'JBMono', alpha: clamp(p * 4 - 0.5) })
+    const r = rng(f)
+    word(c, 'WEB IDE', H * 0.4 + (r() - 0.5) * 4, { size: 400, scale: 1.12 - 0.12 * ease(p * 2) })
+    lines(c, ['YOU ARE THE', 'BOTTLENECK NOW.'], H * 0.57, { size: 110, alpha: clamp(p * 5) })
+    word(c, 'self-hosted · local AI · open source', H * 0.7, { size: 46, font: 'JBMono', alpha: clamp(p * 4 - 0.6) })
+    word(c, 'github.com/DrSmithFr/web-ide', H * 0.74, { size: 46, font: 'JBMono', alpha: clamp(p * 4 - 0.8) })
   })
   FLASHES.push({ t: outro, dur: 0.12, kind: 'white' })
-  GLITCHES.push({ t: outro, dur: 0.2, amount: 1 })
+  GLITCHES.push({ t: outro, dur: 0.25, amount: 1 })
   add(end, 1e9, (c) => {
     c.fillStyle = '#000'
     c.fillRect(0, 0, W, H)
   })
 
-  // The kicks of the intro and of the drop: short inversions.
-  for (const [kt, s] of kicks) {
-    if (s > 0.35 && kt < verse.start) FLASHES.push({ t: kt, dur: 0.05, kind: 'invert' })
-  }
+  // The kicks of the intro: short inversions.
+  for (const [kt, s] of BEATS.kicks) if (s > 0.35 && kt < verse.start) FLASHES.push({ t: kt, dur: 0.05, kind: 'invert' })
   SCENES = S
 }
 
@@ -337,7 +376,7 @@ function build() {
 window.renderAt = (t, fps = 30) => {
   const f = Math.round(t * fps)
   const s = SCENES.find((x) => t >= x.from && t < x.to) ?? SCENES[SCENES.length - 1]
-  s.draw(ctx, (t - s.from) / Math.max(0.001, Math.min(s.to, 1e3) - s.from), f)
+  s.draw(ctx, (t - s.from) / Math.max(0.001, Math.min(s.to, 1e3) - s.from), f, t, s.from)
   for (const g of GLITCHES) if (t >= g.t && t < g.t + g.dur) glitch(ctx, g.amount * (1 - (t - g.t) / g.dur), f)
   for (const fl of FLASHES) {
     if (t < fl.t || t >= fl.t + fl.dur) continue
@@ -354,5 +393,8 @@ window.renderAt = (t, fps = 30) => {
   ctx.globalAlpha = 0.07
   ctx.globalCompositeOperation = 'overlay'
   ctx.drawImage(grain[f % grain.length], 0, 0, W, H)
+  ctx.globalAlpha = 0.12
+  ctx.globalCompositeOperation = 'source-over'
+  ctx.drawImage(scan, 0, 0)
   ctx.restore()
 }
