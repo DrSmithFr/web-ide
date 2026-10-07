@@ -172,8 +172,47 @@ func TestRateLimiter(t *testing.T) {
 	if r.Allow() {
 		t.Fatal("the third hit within the limit must be refused")
 	}
+	if !r.Locked() {
+		t.Fatal("after the limit the rate limiter must report locked")
+	}
 	r.now = func() time.Time { return time.Now().Add(time.Hour + time.Second) }
 	if !r.Allow() {
 		t.Fatal("after the window the limit must reset")
+	}
+}
+
+// TestHandshakeDeadline: a browser that never answers $hello is dropped with ErrDeadline.
+func TestHandshakeDeadline(t *testing.T) {
+	p := newPipe()
+	h := &Handshake{Token: "tok", FPBrowser: "AABB", FPPod: "CCDD", Deadline: 100 * time.Millisecond}
+	errCh := make(chan error, 1)
+	go func() { errCh <- h.Run(p.a) }()
+	// The browser sends nothing: the deadline must fire.
+	select {
+	case err := <-errCh:
+		if !errors.Is(err, ErrDeadline) {
+			t.Fatalf("a stalled handshake must give ErrDeadline, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the deadline did not fire")
+	}
+}
+
+// TestHandshakeLockedRefusesBefore: once the limit is reached, Run refuses before any
+// proof is verified (ErrLimit, even though no $hello/$auth is exchanged).
+func TestHandshakeLockedRefusesBefore(t *testing.T) {
+	r := NewRateLimiter(1, time.Hour)
+	_ = r.Allow() // exhaust the limit
+	p := newPipe()
+	h := &Handshake{Token: "tok", FPBrowser: "A", FPPod: "B", Limits: r, Deadline: 2 * time.Second}
+	errCh := make(chan error, 1)
+	go func() { errCh <- h.Run(p.a) }()
+	select {
+	case err := <-errCh:
+		if !errors.Is(err, ErrLimit) {
+			t.Fatalf("a locked pod must refuse before any proof, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run must return ErrLimit at once, not block")
 	}
 }

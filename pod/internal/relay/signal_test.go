@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/coder/websocket"
 )
@@ -73,9 +74,10 @@ func connectPod(t *testing.T, ts *httptest.Server, id, secret, name string) *wsC
 	return pc
 }
 
-func connectBrowser(t *testing.T, ts *httptest.Server, podID string) *wsClient {
+// connectBrowser opens a browser signaling link in one session of a pod.
+func connectBrowser(t *testing.T, ts *httptest.Server, podID, session string) *wsClient {
 	t.Helper()
-	c, _, err := websocket.Dial(context.Background(), wsURL(ts, "/_relay/signal?pod="+podID), nil)
+	c, _, err := websocket.Dial(context.Background(), wsURL(ts, "/_relay/signal?pod="+podID+"&session="+session), nil)
 	if err != nil {
 		t.Fatal("dialing the browser link:", err)
 	}
@@ -86,30 +88,49 @@ func connectBrowser(t *testing.T, ts *httptest.Server, podID string) *wsClient {
 	return bc
 }
 
-func TestSignalingRouting(t *testing.T) {
+// TestSignalingSessions: two browsers on one pod, each in its own session; the relay
+// routes the pod's answer and candidates to the right browser only.
+func TestSignalingSessions(t *testing.T) {
 	ts := newRelay(t)
 	pod := connectPod(t, ts, "pod-a", "secret-1", "laptop")
 	defer pod.close()
-	browser := connectBrowser(t, ts, "pod-a")
-	defer browser.close()
 
-	// The browser's offer must reach the pod, with fresh credentials before it.
-	browser.send(t, sigMsg{Type: "offer", SDP: "OFFER-SDP"})
+	a := connectBrowser(t, ts, "pod-a", "sA")
+	defer a.close()
+	b := connectBrowser(t, ts, "pod-a", "sB")
+	defer b.close()
+
+	// The browser's offer must reach the pod, tagged with the session.
+	a.send(t, sigMsg{Type: "offer", Session: "sA", SDP: "OFFER-A"})
 	if m := pod.next(t); m.Type != "ice" {
 		t.Fatalf("expected the pod to get fresh ice, got %q", m.Type)
 	}
-	if m := pod.next(t); m.Type != "offer" || m.SDP != "OFFER-SDP" {
-		t.Fatalf("expected the pod to get the offer, got %q %q", m.Type, m.SDP)
+	if m := pod.next(t); m.Type != "offer" || m.Session != "sA" || m.SDP != "OFFER-A" {
+		t.Fatalf("expected the pod to get the A offer, got %q %q %q", m.Type, m.Session, m.SDP)
 	}
 
-	// The pod's answer and candidates must reach the browser.
-	pod.send(t, sigMsg{Type: "answer", SDP: "ANSWER-SDP"})
-	if m := browser.next(t); m.Type != "answer" || m.SDP != "ANSWER-SDP" {
-		t.Fatalf("expected the browser to get the answer, got %q %q", m.Type, m.SDP)
+	// A candidate from session B must not be confused with A.
+	b.send(t, sigMsg{Type: "candidate", Session: "sB", Candidate: json.RawMessage(`{"candidate":"cB"}`)})
+	if m := pod.next(t); m.Type != "candidate" || m.Session != "sB" {
+		t.Fatalf("expected the pod to get the B candidate, got %q %q", m.Type, m.Session)
 	}
-	pod.send(t, sigMsg{Type: "candidate", Candidate: json.RawMessage(`{"candidate":"c1"}`)})
-	if m := browser.next(t); m.Type != "candidate" {
-		t.Fatalf("expected the browser to get a candidate, got %q", m.Type)
+
+	// The pod's answer to A goes only to A (B gets nothing).
+	pod.send(t, sigMsg{Type: "answer", Session: "sA", SDP: "ANSWER-A"})
+	if m := a.next(t); m.Type != "answer" || m.Session != "sA" || m.SDP != "ANSWER-A" {
+		t.Fatalf("expected A to get the answer, got %q %q %q", m.Type, m.Session, m.SDP)
+	}
+	// B must not have received A's answer.
+	got := make(chan struct{}, 1)
+	go func() {
+		if _, _, err := b.c.Read(context.Background()); err == nil {
+			got <- struct{}{}
+		}
+	}()
+	select {
+	case <-got:
+		t.Fatal("B must not have received A's answer")
+	case <-time.After(50 * time.Millisecond):
 	}
 }
 
@@ -117,32 +138,21 @@ func TestSignalingWrongSecret(t *testing.T) {
 	ts := newRelay(t)
 	pod := connectPod(t, ts, "pod-a", "secret-1", "")
 	defer pod.close()
-	// A second pod link with a different secret must be refused (the id is already registered).
+	// A second pod link with a different secret must be refused (the id is registered).
 	c, _, err := websocket.Dial(context.Background(), wsURL(ts, "/_relay/pod"), nil)
 	if err != nil {
 		t.Fatal("dialing the second pod link:", err)
 	}
 	defer c.CloseNow()
-	_ = c.Write(context.Background(), websocket.MessageText, mustJSON(sigMsg{Type: "register", ID: "pod-a", Secret: "WRONG"}))
-	if m := readMsg(t, c); m.Type != "error" {
-		t.Fatalf("a wrong secret must give an error, got %q", m.Type)
-	}
-}
-
-func mustJSON(m sigMsg) []byte {
-	b, _ := json.Marshal(m)
-	return b
-}
-
-func readMsg(t *testing.T, c *websocket.Conn) sigMsg {
-	t.Helper()
-	_, b, err := c.Read(context.Background())
+	b, _ := json.Marshal(sigMsg{Type: "register", ID: "pod-a", Secret: "WRONG"})
+	_ = c.Write(context.Background(), websocket.MessageText, b)
+	_, rb, err := c.Read(context.Background())
 	if err != nil {
-		t.Fatalf("reading signaling: %v", err)
+		t.Fatal("expected an error back, got none:", err)
 	}
 	var m sigMsg
-	if err := json.Unmarshal(b, &m); err != nil {
-		t.Fatalf("unmarshal signaling: %v", err)
+	_ = json.Unmarshal(rb, &m)
+	if m.Type != "error" {
+		t.Fatalf("a wrong secret must give an error, got %q", m.Type)
 	}
-	return m
 }

@@ -94,15 +94,30 @@ type Handshake struct {
 	FPBrowser string
 	FPPod     string
 	Limits    *RateLimiter
+	// Deadline bounds the $hello/$auth reads; 0 = 10 s.
+	Deadline time.Duration
+}
+
+// deadline returns the bounded window for the handshake reads.
+func (h *Handshake) deadline() time.Duration {
+	if h.Deadline > 0 {
+		return h.Deadline
+	}
+	return 10 * time.Second
 }
 
 // Run performs: read the browser $hello, answer with the pod proof, read the browser
-// $auth, verify it, answer $ready. On a bad proof it rate-limits and returns ErrProof
-// (or ErrLimit once the limit is reached).
+// $auth, verify it, answer $ready. The whole exchange has a 10 s deadline: a browser
+// that stalls it is dropped. On a bad proof it rate-limits and returns ErrProof (or
+// ErrLimit once the limit is reached); once the limit is reached it refuses before
+// verifying any proof at all.
 func (h *Handshake) Run(conn MsgConn) error {
+	if h.Limits != nil && h.Limits.Locked() {
+		return ErrLimit
+	}
 	// 1. browser -> $hello{protocol, version, nonce}
 	var e envelope
-	b, err := conn.Read()
+	b, err := h.read(conn)
 	if err != nil {
 		return err
 	}
@@ -122,7 +137,7 @@ func (h *Handshake) Run(conn MsgConn) error {
 
 	// 3. browser -> $auth{proof}
 	var a envelope
-	b, err = conn.Read()
+	b, err = h.read(conn)
 	if err != nil {
 		return err
 	}
@@ -140,6 +155,27 @@ func (h *Handshake) Run(conn MsgConn) error {
 	}
 	// 4. pod -> $ready
 	return h.send(conn, "$ready", map[string]any{"ok": true})
+}
+
+// ErrDeadline is returned when the browser does not answer within the handshake window.
+var ErrDeadline = errors.New("tunnel: the handshake timed out")
+
+// read returns the next message, or ErrDeadline if it takes longer than the handshake
+// window. It runs the (blocking) Read in a goroutine so the deadline can cut it.
+func (h *Handshake) read(conn MsgConn) ([]byte, error) {
+	type r struct{ b []byte; err error }
+	ch := make(chan r, 1)
+	go func() {
+		b, err := conn.Read()
+		ch <- r{b, err}
+	}()
+	select {
+	case res := <-ch:
+		return res.b, res.err
+	case <-time.After(h.deadline()):
+		_ = conn.Close() // unblock the reader goroutine
+		return nil, ErrDeadline
+	}
 }
 
 func (h *Handshake) send(conn MsgConn, method string, params any) error {
@@ -174,7 +210,8 @@ func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
 	return &RateLimiter{limit: limit, window: window, now: time.Now}
 }
 
-// Allow records a hit and reports whether it is within the limit.
+// Allow records a hit and reports whether it is within the limit. A hit over the limit
+// is not recorded, so the window does not grow while the limit is reached.
 func (r *RateLimiter) Allow() bool {
 	if r == nil {
 		return true
@@ -195,4 +232,23 @@ func (r *RateLimiter) Allow() bool {
 	}
 	r.hits = append(r.hits, now)
 	return true
+}
+
+// Locked reports whether the limit is already reached: the handshake refuses new
+// browsers before verifying any proof, to make a lockout cheap.
+func (r *RateLimiter) Locked() bool {
+	if r == nil {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := r.now()
+	cut := now.Add(-r.window)
+	n := 0
+	for _, t := range r.hits {
+		if t.After(cut) {
+			n++
+		}
+	}
+	return n >= r.limit
 }

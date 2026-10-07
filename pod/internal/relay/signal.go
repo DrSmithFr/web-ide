@@ -10,9 +10,17 @@ import (
 	"github.com/coder/websocket"
 )
 
+// turnTTL is the validity of a short-lived TURN credential: long enough for a whole
+// session (Pion re-checks the expiry on every Refresh, a short one would kill a
+// relayed tunnel mid-way), short enough that a leaked one dies soon.
+const turnTTL = 12 * time.Hour
+
 // sigMsg is one signaling message between the relay and a client (pod or browser).
+// Every message carries the session id: a pod may serve several browsers at once, each
+// in its own session.
 type sigMsg struct {
 	Type       string          `json:"type"`
+	Session    string          `json:"session,omitempty"`
 	URLs       []string        `json:"urls,omitempty"`
 	Username   string          `json:"username,omitempty"`
 	Credential string          `json:"credential,omitempty"`
@@ -24,19 +32,21 @@ type sigMsg struct {
 	Message    string          `json:"message,omitempty"`
 }
 
-// Server routes signaling between the pod (one persistent link) and the browsers that
-// open a link to it, and serves the bootstrap page, the Service Worker and the
-// embedded TURN/STUN. The pod token never crosses it: the token is proved inside the
-// DataChannel, bound to both DTLS fingerprints, so the relay cannot MITM.
+// Server routes signaling between the pods (one persistent link each) and the browsers
+// that open links to them, by session id, and serves the bootstrap page, the Service
+// Worker and the embedded TURN/STUN. The pod token never crosses it: the token is
+// proved inside the DataChannel, bound to both DTLS fingerprints, so the relay cannot
+// MITM.
 type Server struct {
 	store  *Store
 	turn   *Turn
 	mu     sync.Mutex
-	pods   map[string]*podConn
-	browsers map[string]*browserConn
+	pods   map[string]*podConn       // online pods, by pod id
+	browsers map[string]*browserConn // active browsers, by session id
 }
 
-// podConn is the pod's persistent link.
+// podConn is the pod's persistent link: register (pod id + secret), then carry the
+// WebRTC signaling of all its sessions (answer, candidates, bye), tagged by session.
 type podConn struct {
 	id, name string
 	ws       *websocket.Conn
@@ -50,11 +60,12 @@ func (pc *podConn) send(m sigMsg) error {
 	return pc.ws.Write(context.Background(), websocket.MessageText, b)
 }
 
-// browserConn is one active browser signaling to a pod.
+// browserConn is one active browser signaling to a pod, in one session.
 type browserConn struct {
-	podID string
-	ws    *websocket.Conn
-	mu    sync.Mutex
+	podID  string
+	session string
+	ws     *websocket.Conn
+	mu     sync.Mutex
 }
 
 func (bc *browserConn) send(m sigMsg) error {
@@ -75,12 +86,12 @@ func New(st *Store, turn *Turn) *Server {
 }
 
 func (s *Server) iceMessage(podID string) sigMsg {
-	user, pass, _ := s.turn.Creds(podID, 5*time.Minute)
+	user, pass, _ := s.turn.Creds(podID, turnTTL)
 	return sigMsg{Type: "ice", URLs: s.turn.ICE(), Username: user, Credential: pass}
 }
 
-// servePod is the pod's persistent link: register (id + secret), then carry its
-// WebRTC signaling (answer, candidates, bye).
+// servePod is the pod's persistent link: register (pod id + secret), then carry its
+// WebRTC signaling, routed by session id.
 func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 	if err != nil {
@@ -92,7 +103,11 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 		if s.pods[pc.id] == pc {
 			delete(s.pods, pc.id)
 		}
-		delete(s.browsers, pc.id)
+		for sid, bc := range s.browsers {
+			if bc.podID == pc.id {
+				delete(s.browsers, sid)
+			}
+		}
 		s.mu.Unlock()
 		s.store.Offline(pc.id)
 		_ = ws.CloseNow()
@@ -119,50 +134,57 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 			s.store.Online(m.ID)
 			pc.send(sigMsg{Type: "ready"})
 		case "answer":
-			if bc := s.browserOf(pc.id); bc != nil {
-				bc.send(sigMsg{Type: "answer", SDP: m.SDP})
+			if bc := s.browserOf(m.Session); bc != nil {
+				bc.send(sigMsg{Type: "answer", Session: m.Session, SDP: m.SDP})
 			}
 		case "candidate":
-			if bc := s.browserOf(pc.id); bc != nil {
-				bc.send(sigMsg{Type: "candidate", Candidate: m.Candidate})
+			if bc := s.browserOf(m.Session); bc != nil {
+				bc.send(sigMsg{Type: "candidate", Session: m.Session, Candidate: m.Candidate})
 			}
 		case "bye":
-			if bc := s.browserOf(pc.id); bc != nil {
-				bc.send(sigMsg{Type: "bye"})
+			if bc := s.browserOf(m.Session); bc != nil {
+				bc.send(sigMsg{Type: "bye", Session: m.Session})
 			}
 			s.mu.Lock()
-			delete(s.browsers, pc.id)
+			delete(s.browsers, m.Session)
 			s.mu.Unlock()
 		}
 	}
 }
 
-// serveSignal is a browser's signaling link to a pod (query "pod" = the pod id).
+// serveSignal is a browser's signaling link to a pod (query "pod" = the pod id), in one
+// session: it carries the offer, candidates and bye, and receives the answer,
+// candidates, ice and bye from the pod, all tagged with the session.
 func (s *Server) serveSignal(w http.ResponseWriter, r *http.Request) {
 	podID := r.URL.Query().Get("pod")
-	if !s.store.OnlinePod(podID) {
+	session := r.URL.Query().Get("session")
+	if !s.store.OnlinePod(podID) || session == "" {
 		w.WriteHeader(http.StatusNotFound)
-		_, _ = w.Write([]byte(`{"error":"this pod is not online"}`))
+		_, _ = w.Write([]byte(`{"error":"no such session"}`))
 		return
 	}
 	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 	if err != nil {
 		return
 	}
-	bc := &browserConn{podID: podID, ws: ws}
+	bc := &browserConn{podID: podID, session: session, ws: ws}
 	defer func() {
 		s.mu.Lock()
-		if s.browsers[podID] == bc {
-			delete(s.browsers, podID)
+		if cur := s.browsers[session]; cur == bc {
+			delete(s.browsers, session)
 		}
 		s.mu.Unlock()
 		_ = ws.CloseNow()
 	}()
+	// A fresh session replaces the previous one on this socket: close it.
+	s.mu.Lock()
+	if prev := s.browsers[session]; prev != nil && prev != bc {
+		_ = prev.ws.CloseNow()
+	}
+	s.browsers[session] = bc
+	s.mu.Unlock()
 	// Fresh credentials, then the offer to the pod.
 	bc.send(s.iceMessage(podID))
-	s.mu.Lock()
-	s.browsers[podID] = bc
-	s.mu.Unlock()
 	for {
 		_, b, err := ws.Read(context.Background())
 		if err != nil {
@@ -176,17 +198,17 @@ func (s *Server) serveSignal(w http.ResponseWriter, r *http.Request) {
 		case "offer":
 			s.podOf(podID, func(pc *podConn) {
 				pc.send(s.iceMessage(podID))
-				pc.send(sigMsg{Type: "offer", SDP: m.SDP})
+				pc.send(sigMsg{Type: "offer", Session: session, SDP: m.SDP})
 			})
 		case "candidate":
 			s.podOf(podID, func(pc *podConn) {
-				pc.send(sigMsg{Type: "candidate", Candidate: m.Candidate})
+				pc.send(sigMsg{Type: "candidate", Session: session, Candidate: m.Candidate})
 			})
 		case "bye":
-			s.podOf(podID, func(pc *podConn) { pc.send(sigMsg{Type: "bye"}) })
+			s.podOf(podID, func(pc *podConn) { pc.send(sigMsg{Type: "bye", Session: session}) })
 			s.mu.Lock()
-			if s.browsers[podID] == bc {
-				delete(s.browsers, podID)
+			if cur := s.browsers[session]; cur == bc {
+				delete(s.browsers, session)
 			}
 			s.mu.Unlock()
 		}
@@ -202,8 +224,8 @@ func (s *Server) podOf(podID string, fn func(*podConn)) {
 	}
 }
 
-func (s *Server) browserOf(podID string) *browserConn {
+func (s *Server) browserOf(session string) *browserConn {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.browsers[podID]
+	return s.browsers[session]
 }
