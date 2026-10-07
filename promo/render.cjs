@@ -1,8 +1,9 @@
 // Renders the promo: stage.html draws each frame (timeline.js), Playwright takes it, ffmpeg
 // encodes the video. Writes out/webide-promo.mp4 (muted, for TikTok: the sound is added
 // there) and out/webide-promo-preview.mp4 (with the track, to check the sync; private).
+// With --site: the site video (site/stage.html, 1920×1080, silent) in out/webide-site.mp4.
 //
-//   node promo/render.cjs [track.mp3] [--from s --to s] [--sheet]
+//   node promo/render.cjs [track.mp3] [--site] [--from s --to s] [--sheet]
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
@@ -14,7 +15,8 @@ const OUT = path.join(HERE, 'out')
 const FPS = 30
 const args = process.argv.slice(2)
 const opt = (name) => (args.includes(name) ? Number(args[args.indexOf(name) + 1]) : undefined)
-const track = args.find((a) => a.endsWith('.mp3')) ?? fs.readdirSync(HERE).filter((f) => f.endsWith('.mp3')).map((f) => path.join(HERE, f))[0]
+const site = args.includes('--site')
+const track = site ? undefined : args.find((a) => a.endsWith('.mp3')) ?? fs.readdirSync(HERE).filter((f) => f.endsWith('.mp3')).map((f) => path.join(HERE, f))[0]
 
 function chrome() {
   if (process.env.CHROME) return process.env.CHROME
@@ -25,16 +27,18 @@ function chrome() {
 }
 
 ;(async () => {
-  const beats = JSON.parse(fs.readFileSync(path.join(OUT, 'beats.json'), 'utf8'))
+  const data = JSON.parse(fs.readFileSync(path.join(OUT, site ? 'site/manifest.json' : 'beats.json'), 'utf8'))
+  const [width, height] = site ? [1920, 1080] : [1080, 1920]
   const browser = await chromium.launch({ executablePath: chrome(), headless: true, args: ['--allow-file-access-from-files'] })
-  const page = await browser.newPage({ viewport: { width: 1080, height: 1920 } })
+  const page = await browser.newPage({ viewport: { width, height } })
   const errors = []
   page.on('pageerror', (e) => errors.push(e.message))
-  await page.goto('file://' + path.join(HERE, 'stage.html'))
-  await page.evaluate((b) => window.load(b), beats)
-  const length = Math.ceil(beats.duration * FPS)
+  await page.goto('file://' + path.join(HERE, site ? 'site/stage.html' : 'stage.html'))
+  await page.evaluate((b) => window.load(b), data)
+  const duration = site ? await page.evaluate(() => window.DURATION) : data.duration
+  const length = Math.ceil(duration * FPS)
   const from = Math.round((opt('--from') ?? 0) * FPS)
-  const to = Math.min(length, Math.round((opt('--to') ?? beats.duration) * FPS))
+  const to = Math.min(length, Math.round((opt('--to') ?? duration) * FPS))
 
   if (args.includes('--sheet')) {
     // A contact sheet of frames, to look at the edit without the video.
@@ -46,11 +50,11 @@ function chrome() {
       await page.screenshot({ path: path.join(dir, `${String(n).padStart(4, '0')}.jpg`), type: 'jpeg', quality: 70 })
     }
     const sheet = path.join(OUT, `sheet-${from}-${to}.jpg`)
-    execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', '1', '-i', path.join(dir, '%04d.jpg'), '-vf', `scale=216:384,tile=10x${Math.ceil(n / 10)}`, '-frames:v', '1', sheet])
+    execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', '1', '-i', path.join(dir, '%04d.jpg'), '-vf', `scale=${site ? '384:216' : '216:384'},tile=${site ? 6 : 10}x${Math.ceil(n / (site ? 6 : 10))}`, '-frames:v', '1', sheet])
     fs.rmSync(dir, { recursive: true, force: true })
     console.log('sheet: ' + sheet)
   } else {
-    const video = path.join(OUT, 'webide-promo.mp4')
+    const video = path.join(OUT, site ? 'webide-site.mp4' : 'webide-promo.mp4')
     const ff = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(FPS), '-i', '-', '-c:v', 'libx264', '-preset', 'slow', '-crf', '16', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', video], { stdio: ['pipe', 'inherit', 'inherit'] })
     for (let f = from; f < to; f++) {
       await page.evaluate(([t]) => window.renderAt(t), [f / FPS])
