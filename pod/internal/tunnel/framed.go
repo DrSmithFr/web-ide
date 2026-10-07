@@ -47,17 +47,20 @@ func (f *Framed) Read() ([]byte, error) {
 	}
 }
 
-// Write sends one whole message, split into fragments of at most fragSize bytes.
+// Write sends one whole message, split into fragments of at most fragSize bytes. It
+// back-pressures on the fragment it is about to send, not on the whole message, so a
+// 2 MB transfer does not deadlock while the transport still has room for the next
+// 16 KB fragment.
 func (f *Framed) Write(b []byte) error {
-	if f.hiW > 0 {
-		for f.c.Buffered()+len(b) >= f.hiW {
-			time.Sleep(5 * time.Millisecond)
-		}
-	}
 	for off := 0; ; off += fragSize {
 		end := off + fragSize
 		if end > len(b) {
 			end = len(b)
+		}
+		if f.hiW > 0 {
+			for f.c.Buffered()+(end-off) >= f.hiW {
+				time.Sleep(5 * time.Millisecond)
+			}
 		}
 		frag := make([]byte, 1+end-off)
 		if end < len(b) {

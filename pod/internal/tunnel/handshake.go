@@ -163,7 +163,10 @@ var ErrDeadline = errors.New("tunnel: the handshake timed out")
 // read returns the next message, or ErrDeadline if it takes longer than the handshake
 // window. It runs the (blocking) Read in a goroutine so the deadline can cut it.
 func (h *Handshake) read(conn MsgConn) ([]byte, error) {
-	type r struct{ b []byte; err error }
+	type r struct {
+		b   []byte
+		err error
+	}
 	ch := make(chan r, 1)
 	go func() {
 		b, err := conn.Read()
@@ -179,10 +182,14 @@ func (h *Handshake) read(conn MsgConn) ([]byte, error) {
 }
 
 func (h *Handshake) send(conn MsgConn, method string, params any) error {
+	return sendMsg(conn, method, params)
+}
+
+// sendMsg writes one envelope to the transport (shared by both sides).
+func sendMsg(conn MsgConn, method string, params any) error {
 	data, _ := json.Marshal(envelope{Method: method, Params: mustMarshal(params)})
 	return conn.Write(data)
 }
-
 func mustMarshal(v any) json.RawMessage {
 	b, _ := json.Marshal(v)
 	return b
@@ -251,4 +258,43 @@ func (r *RateLimiter) Locked() bool {
 		}
 	}
 	return n >= r.limit
+}
+
+// RunBrowser is the browser side of the handshake: it sends $hello{protocol, version,
+// nonce}, reads the pod's $hello (verifying its proof and the protocol), sends
+// $auth{proof}, and waits for $ready. It returns ErrProof on a bad pod proof.
+func RunBrowser(conn MsgConn, token, fpBrowser, fPPod, nonceB string) error {
+	if err := sendMsg(conn, "$hello", helloParams{Protocol: Protocol, Version: Version, Nonce: nonceB}); err != nil {
+		return err
+	}
+	// pod -> $hello{protocol, version, nonce, proof}
+	var e envelope
+	b, err := conn.Read()
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(b, &e); err != nil || e.Method != "$hello" {
+		return ErrProof
+	}
+	var hi helloParams
+	_ = json.Unmarshal(e.Params, &hi)
+	if hi.Protocol != Protocol || hi.Version != Version {
+		return ErrVersion
+	}
+	if !equalMac(hi.Proof, MAC(RolePod, token, fpBrowser, fPPod, nonceB, hi.Nonce)) {
+		return ErrProof
+	}
+	if err := sendMsg(conn, "$auth", authParams{Proof: MAC(RoleBrowser, token, fpBrowser, fPPod, nonceB, hi.Nonce)}); err != nil {
+		return err
+	}
+	// pod -> $ready
+	var r envelope
+	b, err = conn.Read()
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(b, &r); err != nil || r.Method != "$ready" {
+		return ErrProof
+	}
+	return nil
 }

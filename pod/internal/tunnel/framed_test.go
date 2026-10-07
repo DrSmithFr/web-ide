@@ -29,6 +29,7 @@ func (c *chunk) ReadMsg() ([]byte, error) {
 		if !ok {
 			return nil, io.EOF
 		}
+		c.drain(len(b)) // consumed off the wire: no longer in flight
 		return b, nil
 	case <-c.closed:
 		return nil, io.EOF
@@ -65,41 +66,27 @@ func (c *chunk) drain(n int) {
 func (c *chunk) Close() error { c.oc.Do(func() { close(c.closed) }); return nil }
 
 // TestFramedSplitsAndReassembles: a 2 MB message is split into 16 KB fragments below
-// Chrome's ~256 KB cap, and reassembled back to the exact bytes on the other side.
+// Chrome's ~256 KB cap, and reassembled back to the exact bytes on the other side,
+// with back-pressure on (the transport drains as the reader reads it).
 func TestFramedSplitsAndReassembles(t *testing.T) {
-	src, dst := newChunk(64), newChunk(64)
-	go pump(src, dst) // forward whole fragments src -> dst, one direction
-
-	f := NewFramed(src, 0)
-	// 2 MB, with a pattern so a reorder or drop is caught.
+	c := newChunk(64) // one wire: whole fragments, bounded
+	f := NewFramed(c, 256*1024)
+	back := NewFramed(c, 256*1024)
 	msg := make([]byte, 2*1024*1024)
 	for i := range msg {
 		msg[i] = byte(i % 251)
 	}
-	if err := f.Write(msg); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	// The other side reads it back whole, reassembling the fragments.
-	back := NewFramed(dst, 0)
-	got, err := back.Read()
+	done := make(chan error, 1)
+	go func() { done <- f.Write(msg) }()
+	got, err := back.Read() // reassemble, draining the transport as it goes
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
 	if !bytes.Equal(got, msg) {
 		t.Fatalf("2 MB message not reassembled: got %d bytes, want %d", len(got), len(msg))
 	}
-}
-
-// pump forwards whole messages from a to b (one transport direction).
-func pump(a, b *chunk) {
-	for {
-		msg, err := a.ReadMsg()
-		if err != nil {
-			return
-		}
-		if err := b.WriteMsg(msg); err != nil {
-			return
-		}
+	if err := <-done; err != nil {
+		t.Fatalf("write: %v", err)
 	}
 }
 
@@ -108,7 +95,6 @@ func TestFramedFragmentCap(t *testing.T) {
 	c := newChunk(64)
 	f := NewFramed(c, 0)
 	_ = f.Write(make([]byte, 4096))
-	// Each message the transport held is one fragment: 1 header + up to 16 KB.
 	select {
 	case frag := <-c.in:
 		if len(frag) > 1+16*1024 {
@@ -141,4 +127,34 @@ func TestFramedBackPressure(t *testing.T) {
 	// Drain enough, the write must then go through.
 	c.drain(2000)
 	<-done
+}
+
+// TestFramedNoDeadlockLarge: a write far above the high-water mark (2 MB) must not
+// deadlock: it back-pressures per 16 KB fragment, not on the whole message. A reader
+// drains the transport (keeps Buffered low) while the write runs.
+func TestFramedNoDeadlockLarge(t *testing.T) {
+	c := newChunk(64)
+	f := NewFramed(c, 64*1024)
+	// The reader drains the transport so back-pressure can flow; it exits on Close.
+	ran := make(chan struct{})
+	go func() {
+		for {
+			if _, err := c.ReadMsg(); err != nil {
+				close(ran)
+				return
+			}
+		}
+	}()
+	werr := make(chan error, 1)
+	go func() { werr <- f.Write(make([]byte, 2*1024*1024)) }()
+	select {
+	case err := <-werr:
+		if err != nil {
+			t.Fatalf("write: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("a 2 MB write with back-pressure must not deadlock")
+	}
+	c.Close() // let the reader exit
+	<-ran
 }

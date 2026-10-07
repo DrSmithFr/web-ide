@@ -181,6 +181,19 @@ func TestRateLimiter(t *testing.T) {
 	}
 }
 
+// TestHandshakeBothSides: the pod (Run) and the browser (RunBrowser) complete the
+// exchange together, bound to both fingerprints and the token.
+func TestHandshakeBothSides(t *testing.T) {
+	p := newPipe()
+	go func() {
+		_ = RunBrowser(p.b, "tok", "BROWSER-FP", "POD-FP", "NONCE-B")
+	}()
+	h := &Handshake{Token: "tok", FPBrowser: "BROWSER-FP", FPPod: "POD-FP"}
+	if err := h.Run(p.a); err != nil {
+		t.Fatal("the handshake must complete with the right token and fingerprints:", err)
+	}
+}
+
 // TestHandshakeDeadline: a browser that never answers $hello is dropped with ErrDeadline.
 func TestHandshakeDeadline(t *testing.T) {
 	p := newPipe()

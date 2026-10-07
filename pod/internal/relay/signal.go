@@ -85,9 +85,9 @@ func New(st *Store, turn *Turn) *Server {
 	}
 }
 
-func (s *Server) iceMessage(podID string) sigMsg {
+func (s *Server) iceMessage(podID, session string) sigMsg {
 	user, pass, _ := s.turn.Creds(podID, turnTTL)
-	return sigMsg{Type: "ice", URLs: s.turn.ICE(), Username: user, Credential: pass}
+	return sigMsg{Type: "ice", Session: session, URLs: s.turn.ICE(), Username: user, Credential: pass}
 }
 
 // servePod is the pod's persistent link: register (pod id + secret), then carry its
@@ -184,7 +184,7 @@ func (s *Server) serveSignal(w http.ResponseWriter, r *http.Request) {
 	s.browsers[session] = bc
 	s.mu.Unlock()
 	// Fresh credentials, then the offer to the pod.
-	bc.send(s.iceMessage(podID))
+	bc.send(s.iceMessage(podID, session))
 	for {
 		_, b, err := ws.Read(context.Background())
 		if err != nil {
@@ -197,7 +197,7 @@ func (s *Server) serveSignal(w http.ResponseWriter, r *http.Request) {
 		switch m.Type {
 		case "offer":
 			s.podOf(podID, func(pc *podConn) {
-				pc.send(s.iceMessage(podID))
+				pc.send(s.iceMessage(podID, session))
 				pc.send(sigMsg{Type: "offer", Session: session, SDP: m.SDP})
 			})
 		case "candidate":
