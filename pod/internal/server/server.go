@@ -68,6 +68,10 @@ type Server struct {
 	AllowRemote bool
 	// Version of the pod, shown by the page.
 	Version string
+	// RelayURL is the relay the pod registers with (empty: no relay, the pod is local only).
+	RelayURL string
+	// ForceTurn tells the bootstrap page to run the tunnel through TURN (no direct path).
+	ForceTurn bool
 
 	// stopped: the pod stops (Shutdown); the runs are left as they are, to be taken back.
 	stopped atomic.Bool

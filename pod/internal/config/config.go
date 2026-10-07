@@ -19,6 +19,8 @@ type Config struct {
 	// PublicURL is the address the user opens the IDE at (a Tailscale name…), for the
 	// links given to Claude Code; empty: http://<addr>.
 	PublicURL string `json:"publicUrl,omitempty"`
+	// RelayURL is the relay the pod registers with (a ws:// or wss:// URL); empty: no relay.
+	RelayURL string `json:"relayUrl,omitempty"`
 }
 
 func Load(st *store.Store) (*Config, error) {
