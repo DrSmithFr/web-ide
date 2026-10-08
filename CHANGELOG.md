@@ -19,6 +19,10 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 - The steps of an answer are blocks: the reasoning like the tool calls, each with its duration, counted while it runs. The running block is open and follows its stream (the reasoning, the output of a command as it comes); it folds once done, unless the user toggled it.
 - The system prompt asks the model to put the tool calls that do not depend on each other in one answer: fewer round trips, and less thinking between them.
 
+### Fixed
+
+- git run by the assistant takes `auto` as its comment character: a `git rebase --continue` no longer strips the `#<n>` subject of the ticket commits.
+
 ## [1.4.0] - 2026-10-07
 
 ### Added

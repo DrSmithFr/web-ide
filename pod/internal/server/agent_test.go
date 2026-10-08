@@ -192,6 +192,19 @@ func TestAgentLoop(t *testing.T) {
 		t.Fatal("the refused command ran")
 	}
 
+	// Ticket commits start with "#<n>": git run by the model does not take "#" for a comment.
+	model.answer = func(req map[string]any) []string {
+		if lastMessage(req)["role"] == "user" {
+			return toolCalls([3]string{"g1", "bash", `{"command":"git config core.commentChar"}`})
+		}
+		return text("Fine.")
+	}
+	a.call("agent.send", map[string]any{"id": "c3g", "text": "Git", "server": "s1", "model": "m"})
+	a.waitUpdate("c3g", idle)
+	if ms = messages("c3g"); !strings.Contains(ms[2]["content"].(string), "auto") {
+		t.Fatalf("comment character of git: %+v", ms[2])
+	}
+
 	// One conversation at a time on the server (Parallel 1): the second one is queued.
 	release := make(chan struct{})
 	model.answer = func(req map[string]any) []string {

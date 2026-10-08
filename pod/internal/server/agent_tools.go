@@ -590,6 +590,10 @@ func (s *Server) readSkillFile(rt *runtime.Runtime, name, file string) (toolResu
 
 // ---------- shell and consoles ----------
 
+// gitDefaults runs before a command of the model: ticket commits start with "#<n>", so git
+// must not take "#" for the comment character (a rebase --continue would strip the subject).
+const gitDefaults = "export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.commentChar GIT_CONFIG_VALUE_0=auto\n"
+
 func bashTool(ctx context.Context, rt *runtime.Runtime, command, cwd string, timeout int, progress func(string)) (toolResult, error) {
 	if strings.TrimSpace(command) == "" {
 		return toolResult{}, failf("command is missing")
@@ -600,7 +604,7 @@ func bashTool(ctx context.Context, rt *runtime.Runtime, command, cwd string, tim
 	if timeout <= 0 {
 		timeout = 120
 	}
-	res, err := runShell(ctx, rt, command, cwd, timeout, progress)
+	res, err := runShell(ctx, rt, gitDefaults+command, cwd, timeout, progress)
 	if err != nil {
 		return toolResult{}, err
 	}
