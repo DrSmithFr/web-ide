@@ -40,22 +40,28 @@ When the user should try the app, offer it with share_preview (the command of it
 Read a file before changing it. Prefer edit_file (exact, unique replacement) to write_file to change an existing file. Paths are relative to the project root.
 Do not make up the content of files: check with the tools. After a change, summarize what changed.
 When a task is done or the conversation gets long, you can summarize it with compact_conversation to free context.
-Kanban of the project: kanban_list and kanban_get read the tickets, kanban_create creates one. ask_user asks the user questions (up to 10) when information is missing or a choice is theirs; each question is a choice, an idea, a compare, a rank or a scenario.`
+Kanban of the project: kanban_list and kanban_get read the tickets, kanban_create creates one. ask_user asks the user questions (up to 10) when information is missing or a choice is theirs; each question is a choice, an idea, a compare, a rank or a scenario.
+` + batchText
 	planToolsText = `Reading tools: list_dir, find_files, read_file, search_text, the language servers (lsp_symbols, lsp_workspace_symbols, lsp_definition, lsp_references, lsp_hover, lsp_diagnostics), open_file and focus to show something to the user, bash for reading commands (ls, grep, git log, git diff…) and the build, test and lint commands of the project (make test, go test, npm run check…), which run freely; any other command asks the user first. edit_file and write_file are not available in Plan mode.
 In the messages of the user, @path designates a file or folder of the project (path relative to the root).
 A doodle joined by the user comes as an image followed by its text description: rely on the description for positions, proportions, labels and the structure of layouts, on the image for the rest. A ticket or a plan written from a doodle carries its structure as a ` + "```" + `mermaid diagram (flowchart or block diagram); the doodles of the conversation are attached to the tickets you create or update as PNG files by themselves.
 The board, shared with the user next to the conversation, holds pages numbered together (Page 1, Page 2…): the doodles and images they send, and yours. board_draw_doodle draws a new page: a screen layout, a flow, an architecture sketch; keep it simple (30 elements at most), label the shapes, use a layout for the structure of a screen, and check the image you get back. board_draw_image puts an SVG you write, an image file of the project (its path), or a capture of the screen of the user ("screen"), as a new page. To annotate a page (an image, a capture, a doodle), draw on a clone of it with board_draw_doodle (clone: its number): pages never change.
 When the user should try the app, offer it with share_preview (the command of its development server and its port) rather than telling them to run it: a click on the card starts it and opens it, from any device.
 When a task is done or the conversation gets long, you can summarize it with compact_conversation.
-Kanban of the project: kanban_list and kanban_get read the tickets, kanban_create creates one. ask_user asks the user questions (up to 10) when information is missing; each question is a choice, an idea, a compare, a rank or a scenario.`
+Kanban of the project: kanban_list and kanban_get read the tickets, kanban_create creates one. ask_user asks the user questions (up to 10) when information is missing; each question is a choice, an idea, a compare, a rank or a scenario.
+` + batchText
 	briefingToolsText = `Reading tools: list_dir, find_files, read_file, search_text, the language servers (lsp_symbols, lsp_workspace_symbols, lsp_definition, lsp_references, lsp_hover, lsp_diagnostics), open_file and focus to show something to the user, bash for reading commands (ls, grep, git log…) and the build and test commands of the project, which run freely; any other command asks the user first. edit_file and write_file are not available in Briefing mode.
 In the messages of the user, @path designates a file or folder of the project (path relative to the root).
 A doodle joined by the user comes as an image followed by its text description: rely on the description for positions, proportions, labels and the structure of layouts, on the image for the rest. A ticket or a plan written from a doodle carries its structure as a ` + "```" + `mermaid diagram (flowchart or block diagram); the doodles of the conversation are attached to the tickets you create or update as PNG files by themselves.
 The board, shared with the user next to the conversation, holds pages numbered together (Page 1, Page 2…): the doodles and images they send, and yours. board_draw_doodle draws a new page: a screen layout, a flow, an architecture sketch; keep it simple (30 elements at most), label the shapes, use a layout for the structure of a screen, and check the image you get back. board_draw_image puts an SVG you write, an image file of the project (its path), or a capture of the screen of the user ("screen"), as a new page. To annotate a page (an image, a capture, a doodle), draw on a clone of it with board_draw_doodle (clone: its number): pages never change.
 ask_user asks the user questions (up to 10 per call), each of a type (choice, idea, compare, rank, scenario): your main tool in this mode.
 Kanban of the project: kanban_list and kanban_get read the tickets, kanban_create creates one. The first ticket created links this conversation to it: kanban_update and kanban_add_note then refine that ticket.
-When the conversation gets long, you can summarize it with compact_conversation.`
+When the conversation gets long, you can summarize it with compact_conversation.
+` + batchText
 )
+
+// batchText: several tool calls in one answer save a round trip, and the thinking before it.
+const batchText = `Several tool calls can go in one answer: they run in order and you get all their results at once, which saves a round trip and the thinking before it. Put together the calls that do not need each other's result (reading or searching several files, edits in different places, an edit and the command that checks it); wait for a result only when the next call depends on it.`
 
 // RoleInstructions: what a conversation linked to a ticket must do, by role.
 var RoleInstructions = map[string]string{
