@@ -72,6 +72,9 @@ type Server struct {
 	RelayURL string
 	// ForceTurn tells the bootstrap page to run the tunnel through TURN (no direct path).
 	ForceTurn bool
+	// RelayStatus reports the state of the remote access (nil: no relay). The page shows it
+	// in Settings > Remote access.
+	RelayStatus func() RelayInfo
 
 	// stopped: the pod stops (Shutdown); the runs are left as they are, to be taken back.
 	stopped atomic.Bool
@@ -132,6 +135,7 @@ func (s *Server) Init() {
 	s.registerPreviews()
 	s.registerKanban()
 	s.registerKanbanGit()
+	s.registerRelay()
 }
 
 func (s *Server) handle(name string, h handler) { s.handlers[name] = h }
@@ -428,22 +432,33 @@ func mustJSON(v any) []byte {
 	return b
 }
 
-// channelWriter writes an HTTP answer on a tunnel channel: the head as JSON, then the body
-// in chunks of at most 64 KB (one message each), so the Service Worker can stream it.
+// channelWriter writes an HTTP answer on a tunnel channel: the head as JSON (status and
+// headers), then the body in chunks of at most 64 KB (one message each), so the Service
+// Worker can stream it.
 type channelWriter struct {
 	c    *Client
 	tr   *transport
+	h    http.Header
 	head bool
 }
 
-func (w *channelWriter) Header() http.Header { return http.Header{} }
+func (w *channelWriter) Header() http.Header {
+	if w.h == nil {
+		w.h = http.Header{}
+	}
+	return w.h
+}
 
 func (w *channelWriter) WriteHeader(code int) {
 	if w.head {
 		return
 	}
 	w.head = true
-	w.c.sendRaw(w.tr, mustJSON(httpHead{Status: code, Headers: map[string]string{}}))
+	headers := map[string]string{}
+	for k, v := range w.h {
+		headers[k] = strings.Join(v, ", ")
+	}
+	w.c.sendRaw(w.tr, mustJSON(httpHead{Status: code, Headers: headers}))
 }
 
 func (w *channelWriter) Write(b []byte) (int, error) {
@@ -899,9 +914,12 @@ func (s *Server) emitter(projectID string) runtime.Emit {
 	}
 }
 
+// Broadcast sends an event to every window (used outside a request, e.g. the state of the
+// relay link).
+func (s *Server) Broadcast(name string, data any) { s.broadcast(name, data, nil) }
+
 // broadcast sends an event to every client (project list, settings).
-func (s *Server) broadcast(name string, data any, except *Client) {
-	s.mu.Lock()
+func (s *Server) broadcast(name string, data any, except *Client) {	s.mu.Lock()
 	var targets []*Client
 	for c := range s.clients {
 		if c != except {

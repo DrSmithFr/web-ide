@@ -9,8 +9,9 @@ import {
 } from '../keys/bindings'
 import { builtinGrammar, grammarDefs } from '../editor/languages'
 import { Grammar, type GrammarDef, type RuleDef } from '../editor/tokenizer'
-import { request } from '../pod/rpc'
+import { on as onPod, request } from '../pod/rpc'
 import { errorToast, toast } from '../ui/toast'
+import { copyText } from '../ui/clipboard'
 import { Doc } from '../editor/doc'
 import { EditorView } from '../editor/view'
 import { samples } from './samples'
@@ -24,6 +25,7 @@ const sections = [
   ['keys', 'Keyboard shortcuts'],
   ['syntax', 'Syntax highlighting'],
   ['workspace', 'Workspace and pod'],
+  ['remote', 'Remote access'],
   ['history', 'Settings history'],
 ] as const
 
@@ -67,6 +69,9 @@ export function SettingsHost() {
             </Show>
             <Show when={open() === 'workspace'}>
               <Workspace />
+            </Show>
+            <Show when={open() === 'remote'}>
+              <RemoteAccess />
             </Show>
             <Show when={open() === 'history'}>
               <History />
@@ -565,6 +570,50 @@ function Workspace() {
         <dt>{t('Pairing')}</dt>
         <dd class="small">{t('Token in {path}; delete this file and restart the pod to get a new one.', { path: `${info()?.dataDir ?? ''}/token` })}</dd>
       </dl>
+    </section>
+  )
+}
+
+interface RelayInfo {
+  url: string
+  podId: string
+  link: string
+  state: string
+}
+
+/** Remote access: the relay the pod registers with, the state of its link, and the link the
+ * user opens from another network. The token never crosses the relay: it is proved inside
+ * the tunnel. */
+function RemoteAccess() {
+  const [info, setInfo] = createSignal<RelayInfo | null>(null)
+  const [error, setError] = createSignal('')
+  onMount(() => {
+    request<RelayInfo>('relay.status').then(setInfo, setError)
+    onPod('relay.changed', (d: RelayInfo) => setInfo(d))
+  })
+  return (
+    <section class="form">
+      <Show when={error()}>
+        <p class="err">{t(error())}</p>
+      </Show>
+      <Show when={info()}>
+        <dl class="props">
+          <dt>{t('Relay')}</dt>
+          <dd class="mono">{info()?.url}</dd>
+          <dt>{t('Pod id')}</dt>
+          <dd class="mono">{info()?.podId}</dd>
+          <dt>{t('Link to the relay')}</dt>
+          <dd>
+            <span class={`dot dot-${info()?.state === 'connected' ? 'connected' : 'disconnected'}`} /> {t(info()?.state ?? 'off')}
+          </dd>
+          <dt>{t('Open from another device')}</dt>
+          <dd class="mono small">{info()?.link}</dd>
+        </dl>
+        <div class="field-row">
+          <button class="btn" onClick={() => void copyText(info()?.link ?? '')}>{t('Copy the link')}</button>
+        </div>
+        <p class="muted small">{t('The relay only introduces the browser and the pod; the traffic between them is encrypted and the token is proved inside the tunnel.')}</p>
+      </Show>
     </section>
   )
 }

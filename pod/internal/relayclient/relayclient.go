@@ -51,6 +51,9 @@ type Config struct {
 	Limits    *tunnel.RateLimiter
 	// ForceTurn only advertises relay (TURN) candidates (e2e).
 	ForceTurn bool
+	// OnState is called with the state of the link to the relay (connecting, connected,
+	// disconnected); the page shows it in Settings > Remote access.
+	OnState func(state string)
 }
 
 // Client is one pod's relay client: one outbound link to the relay and one
@@ -77,10 +80,12 @@ func New(cfg Config) *Client {
 func (c *Client) Run(ctx context.Context) error {
 	backoff := time.Second
 	for {
+		c.tell("connecting")
 		if err := c.runOnce(ctx); err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
+			c.tell("disconnected")
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -92,6 +97,12 @@ func (c *Client) Run(ctx context.Context) error {
 		} else {
 			backoff = time.Second
 		}
+	}
+}
+
+func (c *Client) tell(state string) {
+	if c.cfg.OnState != nil {
+		c.cfg.OnState(state)
 	}
 }
 
