@@ -188,6 +188,8 @@ func (s *Server) agentTool(r *agentRun, ref *runtimeRef, call agent.ToolCall, mo
 		res, err = s.agentStop(r, a)
 	case "agent_status":
 		res, err = s.agentStatus(r)
+	case "agent_adopt":
+		res, err = s.agentAdopt(r, a)
 	case "agent_note":
 		res, err = s.agentNote(r, a)
 	case "share_preview":

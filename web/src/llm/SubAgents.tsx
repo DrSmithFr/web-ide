@@ -152,7 +152,7 @@ export function ChildHeader() {
   return (
     <div class="ai-child-header" data-testid="ai-child-header">
       <Icon name="sparkle" size={13} />
-      <span>{t('Sub-agent of')}</span>
+      <span>{chat.agent?.adopted ? t('Followed by') : t('Sub-agent of')}</span>
       <button class="link ellipsis" onClick={() => open(chat.parent)} data-testid="ai-child-parent">
         {parent()?.title ?? t('the parent conversation')}
       </button>

@@ -8,6 +8,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/agent"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
+	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 )
 
 // What the pages ask the agent: open a conversation (and follow it), send a message,
@@ -27,12 +28,36 @@ func (s *Server) chatOf(c *Client) (chatCtx, error) {
 // runProject is where the tools of a conversation work: a ticket conversation stays in the
 // project it started in, the others work in the worktree the window names.
 func (s *Server) runProject(chat *agent.Chat, root, project string) string {
-	if chat.Ticket != nil && chat.Ticket.Project != "" {
+	if chat.Ticket == nil {
+		return project
+	}
+	if chat.Ticket.Project != "" {
 		if _, r, err := s.chatLoc(chat.Ticket.Project); err == nil && r == root {
 			return chat.Ticket.Project
 		}
 	}
+	// A development or a correction from before the project was recorded: the worktree of
+	// its ticket (of the root of its lineage).
+	if chat.Ticket.Project == "" && (chat.Ticket.Role == "dev" || chat.Ticket.Role == "correction") {
+		if p, ok := s.Projects.Get(root); ok {
+			owner := chat.Ticket.ID
+			if t, err := s.Kanban.Get(kanbanLoc(p), owner); err == nil && t.Parent != 0 {
+				owner = t.Parent
+			}
+			if _, ok := s.Projects.Get(projects.ChildID(root, owner)); ok {
+				return projects.ChildID(root, owner)
+			}
+		}
+	}
 	return project
+}
+
+// revive: an adopted conversation the user goes on with works again for its parent (its
+// end, a stop or an error, is reported again).
+func revive(chat *agent.Chat) {
+	if chat.Agent != nil && chat.Agent.Adopted && agent.AgentEnded(chat.Agent.Status) {
+		chat.Agent.Status, chat.Agent.Error = agent.AgentRunning, ""
+	}
 }
 
 // change applies f to a conversation: under the lock of its run when it runs (then the run
@@ -245,6 +270,7 @@ func (s *Server) registerAgent() {
 		if a.Options != nil {
 			chat.Options = a.Options
 		}
+		revive(chat)
 		if a.Mode != "" {
 			chat.Mode = a.Mode
 		}
@@ -310,6 +336,7 @@ func (s *Server) registerAgent() {
 		if err != nil {
 			return err
 		}
+		revive(chat)
 		s.startRun(cc.loc, cc.root, s.runProject(chat, cc.root, c.project), c.language(), chat, from)
 		return nil
 	}

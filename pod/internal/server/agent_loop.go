@@ -349,7 +349,9 @@ func (s *Server) systemPrompt(r *agentRun, ref *runtimeRef, c *agent.Chat, tools
 		mode = agent.Build
 	}
 	text := agent.SystemPrompt(ctx, vars, tools, mode, ticket)
-	if tools && c.Parent != "" {
+	if tools && c.Agent != nil && c.Agent.Adopted {
+		text += "\n\n" + agent.AdoptedText
+	} else if tools && c.Parent != "" {
 		text += "\n\n" + agent.SubAgentText
 	}
 	if tools && agent.CanSpawn(c) {
@@ -433,7 +435,8 @@ func (s *Server) loop(r *agentRun) {
 		system := s.systemPrompt(r, ref, r.chat, tools)
 		req := llm.ChatRequest{Server: server, Model: model, Messages: apiMessages(system, r.chat.Messages, !info.found || info.caps.Vision)}
 		if tools {
-			req.Tools = agent.ToolsFor(mode, r.chat.Ticket, r.chat.Parent != "", agent.CanSpawn(r.chat))
+			adopted := r.chat.Agent != nil && r.chat.Agent.Adopted
+			req.Tools = agent.ToolsFor(mode, r.chat.Ticket, r.chat.Parent != "" && !adopted, agent.CanSpawn(r.chat), adopted)
 		}
 		if info.caps.Thinking {
 			think := boolOr(o.Think, true)

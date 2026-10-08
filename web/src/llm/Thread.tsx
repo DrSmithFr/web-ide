@@ -520,7 +520,7 @@ function AssistantMessage(props: { msg: ChatMessage; index: number; lastOfTurn: 
     const out: string[] = []
     for (let i = props.index + 1; i < chat.messages.length && chat.messages[i].role === 'tool'; i++) {
       const m = chat.messages[i]
-      if (m.name === 'spawn_agent' && m.child) out.push(m.child)
+      if ((m.name === 'spawn_agent' || m.name === 'agent_adopt') && m.child) out.push(m.child)
     }
     return out
   }

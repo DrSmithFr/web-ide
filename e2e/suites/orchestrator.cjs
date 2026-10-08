@@ -2,7 +2,9 @@
 // tickets that can start and offers a card (nothing runs before the click; the click starts
 // the development); "what did we do yesterday?" reads the history of the kanban; "I have an
 // idea" moves the user into a new Briefing conversation where the idea is sent, with a link
-// back in the orchestrator thread; Shift+Tab cycles through the four modes.
+// back in the orchestrator thread; Shift+Tab cycles through the four modes. Then the
+// orchestrator adopts the development started from its card: the development announces
+// itself with a note, says who follows it and is nested under the orchestrator.
 const http = require('http')
 const { run, openProject, assert, OUT } = require('../common.cjs')
 
@@ -33,7 +35,11 @@ const fake = http.createServer(async (req, res) => {
   const last = r.messages[r.messages.length - 1]
   const content = text(last)
   if (sys.includes('**Briefing mode**')) return say(res, "Let's clarify the dark mode.")
-  if (!sys.includes('**Orchestrator mode**')) return say(res, 'Developing.')
+  if (!sys.includes('**Orchestrator mode**')) {
+    outputs.devSystem = sys
+    if (content.includes('You are now followed')) return call(res, 'an', 'agent_note', { title: 'Login page under way', text: 'The form is done.' })
+    return say(res, 'Developing.')
+  }
   outputs.tools = r.tools.map((t) => t.function.name)
   if (content === 'What do we work on today?') return call(res, 'n', 'kanban_next', {})
   if (content.startsWith('Can start now')) {
@@ -45,6 +51,9 @@ const fake = http.createServer(async (req, res) => {
     outputs.history = content
     return say(res, 'Two tickets were planned.')
   }
+  if (content === 'Follow the development') return call(res, 'l', 'list_conversations', { query: '#1' })
+  if (last.role === 'tool' && last.tool_call_id === 'l') return call(res, 'ad', 'agent_adopt', { chat: /^- (\w+) "#1/m.exec(content)[1] })
+  if (last.role === 'tool' && last.tool_call_id === 'ad') return say(res, 'I follow #1 now.')
   if (content.startsWith('I have an idea')) return call(res, 'o', 'open_conversation', { mode: 'briefing', message: 'Idea: a dark mode', send: true })
   if (last.role === 'tool' && last.tool_call_id === 'c') return say(res, 'Click the card to start it.')
   return say(res, 'Done.')
@@ -120,6 +129,23 @@ run(
       await page.click('.ai-chat-open:has-text("I have an idea")')
       await page.waitForSelector('[data-testid=ai-opened]')
       assert(true, 'the orchestrator thread keeps a link to the conversation it opened')
+
+      // 4. Adoption: the development started from the card becomes a sub-agent of the
+      // orchestrator; it announces itself and keeps its own tools.
+      await page.click('.ai-panel button[title="New conversation"]')
+      await page.fill('.ai-composer textarea', 'Follow the development')
+      await page.keyboard.press('Enter')
+      await page.waitForSelector('.ai-msg.assistant .md:has-text("I follow #1 now.")', { timeout: 20000 })
+      await page.waitForSelector('[data-testid=ai-child]:has-text("#1")', { timeout: 10000 })
+      assert(true, 'the adopted conversation shows as a sub-agent card')
+      await page.waitForSelector('.ai-row:has-text("Login page under way")', { timeout: 20000 })
+      assert(outputs.devSystem.includes('# You are followed by an Orchestrator'), 'the adopted conversation is told to note and report')
+      if (!(await page.isVisible('[data-testid=ai-sidebar]'))) await page.click('.ai-panel button[title="Conversations of the project"]')
+      await page.waitForSelector('[data-testid=ai-chat-child]:has-text("#1")', { timeout: 5000 })
+      assert(true, 'the adopted conversation is nested under the orchestrator')
+      await page.click('[data-testid=ai-chat-child]:has-text("#1")')
+      await page.waitForSelector('[data-testid=ai-child-header]:has-text("Followed by")', { timeout: 5000 })
+      assert(true, 'the adopted conversation says who follows it')
     } finally {
       fake.close()
     }

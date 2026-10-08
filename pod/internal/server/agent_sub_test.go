@@ -284,3 +284,87 @@ func TestSubAgentServers(t *testing.T) {
 		t.Fatalf("error report:\n%s", pc)
 	}
 }
+
+// An Orchestrator adopts a conversation that runs on its own: the conversation keeps its
+// tools and its user, announces itself with a note and reports when it is over.
+func TestAgentAdopt(t *testing.T) {
+	s, ts := newServer(t)
+	model := &fakeModel{}
+	mts := model.serve(t)
+	if err := s.LLM.SaveServer(llm.Server{ID: "s1", Kind: "llamacpp", URL: mts.URL, Parallel: 4}, false); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := dial(t, ts, "secret-token-0123456789abcdef0123")
+	id := a.call("projects.create", map[string]any{"type": "local", "path": t.TempDir()})["result"].(map[string]any)["id"].(string)
+	a.call("project.open", map[string]any{"id": id})
+	open := func(chat string) map[string]any {
+		return a.call("agent.open", map[string]any{"id": chat})["result"].(map[string]any)["chat"].(map[string]any)
+	}
+	contents := func(chat string) string {
+		var out []string
+		for _, m := range open(chat)["messages"].([]any) {
+			mm := m.(map[string]any)
+			out = append(out, fmt.Sprintf("%v:%v", mm["role"], mm["content"]))
+		}
+		return strings.Join(out, "\n")
+	}
+	waitFor := func(chat, want string) {
+		deadline := time.Now().Add(15 * time.Second)
+		for !strings.Contains(contents(chat), want) {
+			if time.Now().After(deadline) {
+				t.Fatalf("%s lacks %q:\n%s", chat, want, contents(chat))
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	var mu sync.Mutex
+	var devTools map[string]bool
+	var devSystem string
+	model.answer = func(req map[string]any) []string {
+		content := fmt.Sprint(lastMessage(req)["content"])
+		sys := req["messages"].([]any)[0].(map[string]any)["content"].(string)
+		if strings.Contains(sys, "Orchestrator mode") {
+			switch {
+			case content == "Adopt":
+				return toolCalls([3]string{"a1", "agent_adopt", `{"chat":"dev"}`}, [3]string{"a2", "agent_adopt", `{"chat":"dev"}`}, [3]string{"a3", "agent_adopt", `{"chat":"orc"}`})
+			case strings.Contains(content, "report: done]"):
+				return text("Noted.")
+			}
+			return text("Following.")
+		}
+		mu.Lock()
+		devTools, devSystem = toolNames(req), sys
+		mu.Unlock()
+		switch {
+		case strings.Contains(content, "[Message of the parent conversation] You are now followed"):
+			return toolCalls([3]string{"n1", "agent_note", `{"title":"Ticket 1","text":"Half done"}`})
+		case content == "Finish":
+			return toolCalls([3]string{"r1", "agent_report", `{"summary":"All done.","status":"done"}`})
+		}
+		return text("Still working.")
+	}
+	a.call("agent.send", map[string]any{"id": "dev", "text": "Work", "server": "s1", "model": "m", "mode": "build"})
+	a.waitUpdate("dev", idle)
+	a.call("agent.send", map[string]any{"id": "orc", "text": "Adopt", "server": "s1", "model": "m", "mode": "orchestrator"})
+	waitFor("orc", "already one of your sub-agents")
+	waitFor("orc", "cannot adopt itself")
+	// The announcement reaches the Orchestrator; the conversation then answers its user
+	// without being told to report.
+	waitFor("orc", "note] Ticket 1\nHalf done")
+	waitFor("dev", "Still working.\nuser")
+	a.waitUpdate("dev", idle)
+	dev := open("dev")
+	sa := dev["agent"].(map[string]any)
+	if dev["parent"] != "orc" || sa["adopted"] != true || sa["status"] != "running" || strings.Contains(contents("dev"), "end with agent_report (your parent") {
+		t.Fatalf("adopted: parent %v, agent %+v\n%s", dev["parent"], sa, contents("dev"))
+	}
+	mu.Lock()
+	if !devTools["agent_note"] || !devTools["agent_report"] || devTools["agent_ask"] || !devTools["ask_user"] || !devTools["edit_file"] || !strings.Contains(devSystem, "# You are followed by an Orchestrator") || strings.Contains(devSystem, "# You are a sub-agent") {
+		t.Fatalf("tools of the adopted conversation: %v", devTools)
+	}
+	mu.Unlock()
+	// The user ends the task: the report wakes the Orchestrator.
+	a.call("agent.send", map[string]any{"id": "dev", "text": "Finish", "server": "s1", "model": "m", "mode": "build"})
+	waitFor("orc", "report: done]\nAll done.")
+	waitFor("orc", "Noted.")
+}

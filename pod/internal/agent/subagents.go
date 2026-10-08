@@ -63,6 +63,10 @@ type SubAgent struct {
 	Tokens int     `json:"tokens,omitempty"`
 	Cost   float64 `json:"cost,omitempty"`
 	Nudged   bool       `json:"nudged,omitempty"` // told once to end with agent_report
+	// Adopted: a conversation of its own (a development…) an Orchestrator took under its
+	// wing (agent_adopt). It keeps its tools and talks with the user; it tells its parent
+	// where it is (agent_note) and reports when its task is over (agent_report).
+	Adopted bool `json:"adopted,omitempty"`
 }
 
 type AgentNote struct {
@@ -122,6 +126,15 @@ Another conversation (your parent) gave you the task of the first message, with 
 - Report progress with agent_note at milestones (a short title, what you did or found); it does not stop you.
 - When you are blocked or a choice is not yours, ask your parent with agent_ask: you then wait for its answer. Do not ask the user directly.
 - When the task is done (or cannot be done), end with agent_report: a summary of the result, the files you changed, and done or blocked. Your parent reads only this report, so make it complete.`
+
+// AdoptedText ends the system prompt of an adopted conversation.
+const AdoptedText = `# You are followed by an Orchestrator
+An Orchestrator conversation (your parent) adopted this conversation to follow the work of the day: it does not see this conversation. Go on with your task and with the user as before.
+- Tell your parent where you are with agent_note: right away when you are adopted (what you are working on, where you are), then at milestones. It does not stop you.
+- When your task is over (or cannot be done), send agent_report: the result, the files you changed, and done or blocked. Your parent reads only your notes and this report, so make it complete.`
+
+// AdoptText is the message of the parent to a conversation it adopts.
+const AdoptText = "You are now followed by this Orchestrator conversation. Announce yourself with agent_note: what you are working on and where you are. Then go on with your task; when it is over, end with agent_report."
 
 // ParentText tells a conversation how to delegate.
 const ParentText = `Sub-agents: delegate a well-defined, self-contained task (an exploration, a change in a few files, a review) with spawn_agent: a child conversation with a fresh context and your rights runs it in the background while you go on. Give it a precise task and the files to read. Its questions and its report come back to you as messages; answer a question with agent_reply, or ask the user first with ask_user when the answer is theirs. agent_message writes to a running child, agent_stop stops it, agent_status lists them. Relay the reports to the user.`

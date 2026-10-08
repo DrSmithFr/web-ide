@@ -48,7 +48,7 @@ func (s *Server) deliver(r *agentRun, target string, ev agent.AgentEvent, wake b
 	if !wake {
 		return s.publishIdle(r.loc, r.root, c, from)
 	}
-	if !s.startRun(r.loc, r.root, r.project, r.lang, c, from) {
+	if !s.startRun(r.loc, r.root, s.runProject(c, r.root, r.project), r.lang, c, from) {
 		// Started meanwhile: queued instead.
 		return s.deliver(r, target, ev, false)
 	}
@@ -422,6 +422,63 @@ func (s *Server) agentStatus(r *agentRun) (toolResult, error) {
 	return ok(b.String(), agent.Tn(len(ids), "{n} sub-agent", "{n} sub-agents", nil)), nil
 }
 
+// agentAdopt: an Orchestrator takes a conversation that runs on its own under its wing; it
+// is asked to announce itself.
+func (s *Server) agentAdopt(r *agentRun, a toolArgs) (toolResult, error) {
+	id := strings.TrimSpace(a.str("chat"))
+	if id == r.id {
+		return toolResult{}, failf("a conversation cannot adopt itself")
+	}
+	var title string
+	adopt := func(c *agent.Chat) error {
+		switch {
+		case c.Parent == r.id:
+			return failf("%s is already one of your sub-agents", id)
+		case c.Parent != "":
+			return failf("%s is a sub-agent of %s: it reports there", id, c.Parent)
+		case c.Mode == agent.Orchestrator:
+			return failf("an Orchestrator conversation cannot be adopted")
+		}
+		c.Parent, title = r.id, c.Title
+		c.Agent = &agent.SubAgent{Task: c.Title, Status: agent.AgentRunning, Depth: 1, Orchestrated: true, Adopted: true}
+		return nil
+	}
+	if t := s.run(id); t != nil {
+		t.mu.Lock()
+		err := adopt(t.chat)
+		if err == nil {
+			s.publish(t, -1)
+		}
+		t.mu.Unlock()
+		if err != nil {
+			return toolResult{}, err
+		}
+	} else {
+		c, err := s.loadChat(r.loc, id)
+		if err != nil {
+			return toolResult{}, failf("unknown conversation %q (see list_conversations)", id)
+		}
+		if err := adopt(c); err != nil {
+			return toolResult{}, err
+		}
+		if err := s.publishIdle(r.loc, r.root, c, -1); err != nil {
+			return toolResult{}, err
+		}
+	}
+	r.mu.Lock()
+	r.chat.Children = append(r.chat.Children, id)
+	parentTitle := r.chat.Title
+	s.publish(r, -1)
+	r.mu.Unlock()
+	// Its announcement comes back as a note (a running conversation reads it after its step).
+	if err := s.deliver(r, id, agent.AgentEvent{Child: id, Title: parentTitle, Type: "message", Text: agent.AdoptText}, true); err != nil {
+		return toolResult{}, err
+	}
+	res := ok(fmt.Sprintf("Conversation %s %q adopted: it goes on with the user, announces itself with a note and will send its report when its task is over.", id, title), agent.T("adopted: {title}", map[string]any{"title": title}))
+	res.Child = id
+	return res, nil
+}
+
 // ---------- child side ----------
 
 func (s *Server) agentNote(r *agentRun, a toolArgs) (toolResult, error) {
@@ -495,8 +552,8 @@ func childReport(r *agentRun, call agent.ToolCall, args map[string]json.RawMessa
 // answer is its report. Returns whether the loop goes on, and the event to send (r.mu held).
 func childAnswered(r *agentRun, msg *agent.Message) (bool, *agent.AgentEvent) {
 	sa := r.chat.Agent
-	if sa == nil || sa.Status != agent.AgentRunning {
-		return false, nil
+	if sa == nil || sa.Status != agent.AgentRunning || sa.Adopted {
+		return false, nil // an adopted conversation answers the user
 	}
 	if !sa.Nudged {
 		sa.Nudged = true

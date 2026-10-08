@@ -287,8 +287,10 @@ func names(lists ...[]Def) map[string]bool {
 // exit_plan_mode only in Plan (not for the briefing or the plan of a ticket, which end in
 // the ticket), the tools that change a ticket only with a linked ticket. A sub-agent (sub)
 // asks its parent instead of the user and reports instead of presenting a plan; spawn: it may
-// start sub-agents. The Orchestrator reads, proposes actions and opens conversations.
-func ToolsFor(mode string, ticket *TicketLink, sub, spawn bool) []json.RawMessage {
+// start sub-agents; adopted: a conversation of its own followed by an Orchestrator, which
+// keeps its tools and adds agent_note and agent_report. The Orchestrator reads, proposes
+// actions and opens conversations.
+func ToolsFor(mode string, ticket *TicketLink, sub, spawn, adopted bool) []json.RawMessage {
 	var out []json.RawMessage
 	if mode == Orchestrator && !sub {
 		for _, d := range projectDefs {
@@ -339,6 +341,13 @@ func ToolsFor(mode string, ticket *TicketLink, sub, spawn bool) []json.RawMessag
 	out = append(out, askUserDef.JSON)
 	for _, d := range parentAgentDefs {
 		out = append(out, d.JSON)
+	}
+	if adopted {
+		for _, d := range childAgentDefs {
+			if d.Name != "agent_ask" { // it asks the user
+				out = append(out, d.JSON)
+			}
+		}
 	}
 	if mode == Plan && (ticket == nil || ticket.Role != "briefing" && ticket.Role != "plan") {
 		out = append(out, exitPlanDef.JSON)

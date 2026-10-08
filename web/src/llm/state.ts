@@ -176,6 +176,8 @@ export interface SubAgent {
   report?: string
   changed?: string[]
   error?: string
+  /** A conversation of its own followed by an Orchestrator (agent_adopt). */
+  adopted?: boolean
 }
 
 export interface AgentEvent {

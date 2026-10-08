@@ -145,6 +145,7 @@ export const toolVerbs: Record<string, string> = {
   agent_message: 'Writes to a sub-agent',
   agent_stop: 'Stops a sub-agent',
   agent_status: 'Checks the sub-agents',
+  agent_adopt: 'Adopts a conversation',
   agent_note: 'Notes for its parent',
   agent_ask: 'Asks its parent',
   agent_report: 'Reports to its parent',
@@ -157,7 +158,7 @@ export const toolIcons: Record<string, string> = {
   lsp_references: 'outline', lsp_hover: 'info', lsp_diagnostics: 'conflict',
   kanban_list: 'kanban', kanban_get: 'kanban', kanban_create: 'kanban', kanban_update: 'kanban', kanban_add_note: 'kanban', kanban_set_plan: 'kanban',
   kanban_goal: 'check', kanban_move: 'kanban', kanban_link_commit: 'branch', ask_user: 'info', board_draw_doodle: 'pen', board_draw_image: 'image', share_preview: 'play',
-  spawn_agent: 'sparkle', agent_reply: 'comment', agent_message: 'comment', agent_stop: 'stop', agent_status: 'sparkle',
+  spawn_agent: 'sparkle', agent_reply: 'comment', agent_message: 'comment', agent_stop: 'stop', agent_status: 'sparkle', agent_adopt: 'sparkle',
   agent_note: 'pen', agent_ask: 'info', agent_report: 'check',
 }
 

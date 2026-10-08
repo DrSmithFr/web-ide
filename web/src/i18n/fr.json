@@ -1636,5 +1636,8 @@
   "Ticket #{id}": "Ticket #{id}",
   "shown": "affiché",
   "Open in a new window…": "Ouvrir dans une nouvelle fenêtre…",
-  "a worktree in its own window": "un worktree dans sa propre fenêtre"
+  "a worktree in its own window": "un worktree dans sa propre fenêtre",
+  "Adopts a conversation": "Adopte une conversation",
+  "adopted: {title}": "adoptée : {title}",
+  "Followed by": "Suivie par"
 }
