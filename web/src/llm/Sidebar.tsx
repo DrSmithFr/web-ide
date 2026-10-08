@@ -1,6 +1,7 @@
-// History side bar of the assistant: the active conversations first, then the others grouped
-// by date; search, rename and delete. A sub-agent is listed under its parent while it works;
-// once ended, it goes to the history of the day it ended.
+// History side bar of the assistant: the last Orchestrator conversation with its active
+// children, then the other active conversations as trees, then the rest by day; search,
+// rename and delete. A child is active until it reports or is stopped by hand; an ended child
+// goes to the history of the day it ended.
 import { createMemo, createSignal, For, onMount, Show } from 'solid-js'
 import { Icon } from '../ui/icons'
 import { prompt } from '../ui/overlay'
@@ -29,36 +30,52 @@ const runLabels: Record<string, string> = {
   compacting: 'Compacting',
 }
 
-const endedStatus = new Set(['done', 'blocked', 'stopped', 'error'])
+// A child has ended once it reported (done, blocked) or was stopped; an error leaves it active.
+const endedStatus = new Set(['done', 'blocked', 'stopped'])
+
+interface Group {
+  name: string
+  testid?: string
+  /** Each item with the active children shown under it. */
+  items: { c: ChatInfo; kids: { c: ChatInfo; depth: number }[] }[]
+}
 
 export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
   const [q, setQ] = createSignal('')
   onMount(refreshChats)
-  const ids = createMemo(() => new Set(chatList().map((c) => c.id)))
-  // A sub-agent still working is listed under its parent.
-  const underParent = (c: ChatInfo) => !!c.parent && ids().has(c.parent) && !endedStatus.has(c.status ?? '')
-  const children = (id: string) => chatList().filter((c) => c.parent === id && underParent(c))
-  // Running, waiting for the model server, for the user or for its parent, or with a sub-agent at work.
-  const busy = (c: ChatInfo) => !!runStates()[c.id] || c.status === 'waiting_parent'
-  const active = (c: ChatInfo) => busy(c) || children(c.id).some(busy)
-  const groups = createMemo(() => {
+  const groups = createMemo((): Group[] => {
+    const list = chatList()
     const query = q().trim().toLowerCase()
-    const out: { name: string; items: ChatInfo[] }[] = []
-    const add = (name: string, c: ChatInfo) => {
-      let g = out.find((x) => x.name === name)
-      if (!g) out.push((g = { name, items: [] }))
-      g.items.push(c)
-    }
-    for (const c of chatList()) {
-      if (query) {
-        if ((c.title || '').toLowerCase().includes(query)) add(groupOf(c.updated), c)
-        continue
+    const byDay = (items: ChatInfo[]) => {
+      const out: Group[] = []
+      for (const c of items) {
+        const name = groupOf(c.updated)
+        let g = out[out.length - 1]
+        if (!g || g.name !== name) out.push((g = { name, items: [] }))
+        g.items.push({ c, kids: [] })
       }
-      if (underParent(c)) continue
-      add(active(c) ? t('Active') : groupOf(c.updated), c)
+      return out
     }
-    // The active ones first, the others by date (the list comes most recent first).
-    return out.sort((a, b) => (b.name === t('Active') ? 1 : 0) - (a.name === t('Active') ? 1 : 0))
+    if (query) return byDay(list.filter((c) => (c.title || '').toLowerCase().includes(query)))
+    const ids = new Set(list.map((c) => c.id))
+    // A working child is shown under its parent; an orphan stands on its own.
+    const working = (c: ChatInfo) => !!c.parent && ids.has(c.parent) && !endedStatus.has(c.status ?? '')
+    const kidsOf = (id: string) => list.filter((c) => c.parent === id && working(c))
+    const tree = (id: string, depth = 1): { c: ChatInfo; depth: number }[] => kidsOf(id).flatMap((k) => [{ c: k, depth }, ...tree(k.id, depth + 1)])
+    const running = (c: ChatInfo) => !!runStates()[c.id] || (!!c.parent && !ids.has(c.parent) && !endedStatus.has(c.status ?? '') && !!c.status)
+    const tops = list.filter((c) => !working(c))
+    const shown = new Set<string>()
+    const take = (c: ChatInfo) => {
+      const kids = tree(c.id)
+      for (const x of [c, ...kids.map((k) => k.c)]) shown.add(x.id)
+      return { c, kids }
+    }
+    const out: Group[] = []
+    const orchestrator = tops.find((c) => c.mode === 'orchestrator')
+    if (orchestrator) out.push({ name: t('Orchestrator'), testid: 'ai-side-orchestrator', items: [take(orchestrator)] })
+    const active = tops.filter((c) => !shown.has(c.id) && (running(c) || kidsOf(c.id).length > 0))
+    if (active.length) out.push({ name: t('Active'), testid: 'ai-side-active', items: active.map(take) })
+    return [...out, ...byDay(tops.filter((c) => !shown.has(c.id)))]
   })
   const open = async (id: string) => {
     try {
@@ -76,8 +93,8 @@ export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
     if (!confirm(t('Delete the conversation “{title}”?', { title: c.title || t('Untitled') }))) return
     await deleteChat(c.id).catch(errorToast)
   }
-  const item = (c: ChatInfo, nested: boolean) => (
-    <div class="ai-chat-item" classList={{ active: c.id === chat.id, nested }} data-testid={nested ? 'ai-chat-child' : undefined}>
+  const item = (c: ChatInfo, depth = 0) => (
+    <div class="ai-chat-item" classList={{ active: c.id === chat.id, nested: depth > 0 }} style={depth > 1 ? { 'padding-left': `${depth * 14}px` } : undefined} data-testid={depth ? 'ai-chat-child' : undefined}>
       <button class="ai-chat-open" onClick={() => open(c.id)} title={c.model ? `${c.title} · ${c.model}` : c.title}>
         <Show when={runStates()[c.id]} fallback={<Show when={c.parent}>{<span class={`ai-agent-dot ${c.status ?? ''}`} title={t(agentLabels[c.status ?? ''] ?? '')} />}</Show>}>
           {(st) => <span class={`ai-run-dot ${st()}`} title={t(runLabels[st()])} data-testid="ai-run-dot" />}
@@ -114,15 +131,13 @@ export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
         <Show when={groups().length} fallback={<p class="muted small ai-side-empty">{q() ? t('No conversation found.') : t('No conversation for this project.')}</p>}>
           <For each={groups()}>
             {(g) => (
-              <div class="ai-side-group" data-testid={g.name === t('Active') ? 'ai-side-active' : undefined}>
+              <div class="ai-side-group" data-testid={g.testid}>
                 <div class="ai-side-group-name">{g.name}</div>
                 <For each={g.items}>
-                  {(c) => (
+                  {(it) => (
                     <>
-                      {item(c, false)}
-                      <Show when={!q().trim()}>
-                        <For each={children(c.id)}>{(k) => item(k, true)}</For>
-                      </Show>
+                      {item(it.c)}
+                      <For each={it.kids}>{(k) => item(k.c, k.depth)}</For>
                     </>
                   )}
                 </For>
