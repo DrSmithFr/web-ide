@@ -30,6 +30,7 @@ type Turn struct {
 
 	mu     sync.Mutex
 	active map[string]bool // in-flight short-lived credential usernames
+	tlsURL string
 }
 
 // TurnConfig picks the ports and addresses the TURN server uses.
@@ -37,6 +38,11 @@ type TurnConfig struct {
 	BindHost    string // where to bind the control listeners ("" = the advertised IP)
 	AdvertiseIP string // IP given to clients (the machine IP, or 127.0.0.1 in e2e)
 	Port        int    // STUN/TURN control port (0 = 3478)
+	// TLSListener serves TURN over TLS (RFC 8489) on the connections the demuxer routes to
+	// it, usually on the HTTPS port.
+	TLSListener net.Listener
+	// TLSURL is the TURN-over-TLS URL advertised to clients ("" when there is no TLS side).
+	TLSURL string
 }
 
 // NewTurn starts the embedded TURN/STUN server. It binds the control listeners and
@@ -68,11 +74,15 @@ func NewTurn(st *Store, cfg TurnConfig) (*Turn, error) {
 		logger: logging.NewDefaultLoggerFactory(),
 		gen:    gen,
 		active: map[string]bool{},
+		tlsURL: cfg.TLSURL,
 		ice: []string{
 			"stun:" + net.JoinHostPort(addr, strconv.Itoa(cfg.Port)),
 			"turn:" + net.JoinHostPort(addr, strconv.Itoa(cfg.Port)) + "?transport=udp",
 			"turn:" + net.JoinHostPort(addr, strconv.Itoa(cfg.Port)) + "?transport=tcp",
 		},
+	}
+	if cfg.TLSURL != "" {
+		t.ice = append(t.ice, cfg.TLSURL)
 	}
 	udp, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP(bind), Port: cfg.Port})
 	if err != nil {
@@ -85,15 +95,21 @@ func NewTurn(st *Store, cfg TurnConfig) (*Turn, error) {
 	}
 	t.udp = udp
 	t.tcp = tcp
+	listeners := []turnserver.ListenerConfig{
+		{Listener: tcp, RelayAddressGenerator: gen, PermissionHandler: turnserver.DefaultPermissionHandler},
+	}
+	if cfg.TLSListener != nil {
+		listeners = append(listeners, turnserver.ListenerConfig{
+			Listener: cfg.TLSListener, RelayAddressGenerator: gen, PermissionHandler: turnserver.DefaultPermissionHandler,
+		})
+	}
 	srv, err := turnserver.NewServer(turnserver.ServerConfig{
 		Realm:         t.cred,
 		LoggerFactory: t.logger,
 		PacketConnConfigs: []turnserver.PacketConnConfig{
 			{PacketConn: udp, RelayAddressGenerator: gen, PermissionHandler: turnserver.DefaultPermissionHandler},
 		},
-		ListenerConfigs: []turnserver.ListenerConfig{
-			{Listener: tcp, RelayAddressGenerator: gen, PermissionHandler: turnserver.DefaultPermissionHandler},
-		},
+		ListenerConfigs: listeners,
 		AuthHandler: turnserver.LongTermTURNRESTAuthHandler(string(secret), nil),
 		EventHandler: turnserver.EventHandler{
 			OnAllocationCreated: t.onAllocation,

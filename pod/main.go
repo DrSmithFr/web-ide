@@ -9,10 +9,12 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -22,6 +24,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 	"github.com/DrSmithFr/web-ide/pod/internal/relay"
+	"github.com/DrSmithFr/web-ide/pod/internal/relayclient"
 	"github.com/DrSmithFr/web-ide/pod/internal/server"
 	"github.com/DrSmithFr/web-ide/pod/internal/sessions"
 	"github.com/DrSmithFr/web-ide/pod/internal/settings"
@@ -49,6 +52,7 @@ func main() {
 	relay := flag.String("relay", "", "relay URL the pod registers with (wss:// or ws://), or the word relay to enable")
 	forceTurn := flag.Bool("force-turn", false, "force the browser through TURN (no direct or STUN path)")
 	turnPort := flag.Int("turn-port", 0, "relay: the STUN/TURN control port (default 3478)")
+	turnIP := flag.String("turn-ip", "", "relay: the STUN/TURN IP given to clients (default: the machine IP)")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 	if *showVersion {
@@ -56,7 +60,7 @@ func main() {
 		return
 	}
 	if len(flag.Args()) > 0 && flag.Arg(0) == "relay" {
-		runRelayCmd(*dataDir, *turnPort)
+		runRelayCmd(*dataDir, *turnPort, *turnIP)
 		return
 	}
 
@@ -110,6 +114,37 @@ func main() {
 	srv.Init()
 	srv.ResumeRuns()
 
+	// Remote access: one outbound link to the relay (no port to open). The pod id and its
+	// secret live in relay.json (0600); the token is proved inside the tunnel, never to the
+	// relay.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	remote := ""
+	if cfg.RelayURL != "" {
+		ids, err := config.Relay(st)
+		check(err)
+		var state atomic.Value
+		state.Store("connecting")
+		srv.RelayStatus = func() server.RelayInfo {
+			return server.RelayInfo{URL: cfg.RelayURL, PodID: ids.PodID, Link: relayLink(cfg.RelayURL, ids.PodID, token), State: state.Load().(string)}
+		}
+		cli := relayclient.New(relayclient.Config{
+			RelayURL:  cfg.RelayURL,
+			PodID:     ids.PodID,
+			Secret:    ids.Secret,
+			Name:      hostname(),
+			Server:    srv,
+			Token:     token,
+			ForceTurn: *forceTurn,
+			OnState: func(s string) {
+				state.Store(s)
+				srv.Broadcast("relay.changed", srv.RelayStatus())
+			},
+		})
+		go func() { _ = cli.Run(ctx) }()
+		remote = relayLink(cfg.RelayURL, ids.PodID, token)
+	}
+
 	httpSrv := &http.Server{Addr: cfg.Addr, Handler: srv, ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		sig := make(chan os.Signal, 1)
@@ -117,15 +152,37 @@ func main() {
 		<-sig
 		log.Print("stopping the pod…")
 		srv.Shutdown()
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		cctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		_ = httpSrv.Shutdown(ctx)
+		_ = httpSrv.Shutdown(cctx)
 	}()
 
 	fmt.Printf("Web IDE pod %s\n  data      : %s\n  workspace : %s\n  open      : http://%s/?token=%s\n", version, st.Dir(), cfg.Workspace, cfg.Addr, token)
+	if remote != "" {
+		fmt.Printf("  remote    : %s\n", remote)
+	}
 	if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
+}
+
+// relayLink is the address the user opens from another network: the relay, the pod, the
+// token. The token is in the hash so it is not sent to the relay.
+func relayLink(relayURL, podID, token string) string {
+	u, err := url.Parse(relayURL)
+	if err != nil {
+		return relayURL + "/?pod=" + podID + "&t=" + token
+	}
+	u.Path = "/"
+	return u.String() + "#pod=" + podID + "&t=" + token
+}
+
+func hostname() string {
+	h, err := os.Hostname()
+	if err != nil {
+		return ""
+	}
+	return h
 }
 
 // dialKeeper connects to the keeper, or returns nil: the pod then runs the terminals itself.
@@ -247,8 +304,8 @@ func check(err error) {
 }
 
 // runRelayCmd runs the relay server subcommand until interrupted.
-func runRelayCmd(dataDir string, turnPort int) {
+func runRelayCmd(dataDir string, turnPort int, turnIP string) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	check(relay.Run(ctx, relay.RelayConfig{DataDir: dataDir, TurnPort: turnPort}))
+	check(relay.Run(ctx, relay.RelayConfig{DataDir: dataDir, TurnPort: turnPort, AdvertiseIP: turnIP}))
 }
