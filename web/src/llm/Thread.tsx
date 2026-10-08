@@ -5,7 +5,7 @@ import { Icon } from '../ui/icons'
 import { errorToast, toast } from '../ui/toast'
 import { activeTab, openFile, project, relPath } from '../state/project'
 import { approval, chat, config, live, liveSpeed, savePrefs, setPrefs, type Attachment, type ChatMessage, type Part, type ToolCall } from './state'
-import { answerApproval, currentMode, resume, retry, stepsSinceUser } from './agent'
+import { answerApproval, currentMode, otherModel, resume, retry, stepsSinceUser } from './agent'
 import { AttachmentChip, callLabel, DiffBlock, formatDuration, formatTokens, Markdown, safeArgs, summaryText, toolIcons, toolVerbs } from './parts'
 import { absPath } from './uiTools'
 import { focusComposer, reuseDoodle, runCommand } from './Composer'
@@ -820,6 +820,18 @@ export function Thread(props: { onSuggest: (t: string) => void; onSettings: () =
           <button class="btn small" title={t('Start the answer again from your message')} onClick={() => retry().catch(errorToast)}>
             <Icon name="refresh" size={12} /> {t('Retry')}
           </button>
+          <Show when={otherModel()}>
+            <div class="ai-retry-other">
+              <button
+                class="btn small"
+                data-testid="ai-resume-other"
+                title={stepsSinceUser() ? t('Go on from the last completed step with the model chosen') : t('Start the answer again from your message with the model chosen')}
+                onClick={() => (stepsSinceUser() ? resume(true) : retry(true)).catch(errorToast)}
+              >
+                <Icon name="play" size={12} /> {t('Resume with {model}', { model: config.model })}
+              </button>
+            </div>
+          </Show>
         </div>
       </Show>
     </div>

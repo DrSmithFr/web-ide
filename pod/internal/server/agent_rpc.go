@@ -271,14 +271,23 @@ func (s *Server) registerAgent() {
 		}
 		return nil, nil
 	})
+	// restartArg: the conversation, and the model to go on with when it changes (both set).
+	type restartArg struct {
+		ID     string `json:"id"`
+		Server string `json:"server"`
+		Model  string `json:"model"`
+	}
 	// restart runs a conversation that does not run, after f changed it.
-	restart := func(c *Client, cc chatCtx, id string, f func(chat *agent.Chat) (int, error)) error {
-		if s.run(id) != nil {
+	restart := func(c *Client, cc chatCtx, a restartArg, f func(chat *agent.Chat) (int, error)) error {
+		if s.run(a.ID) != nil {
 			return nil
 		}
-		chat, err := s.openChat(cc, id)
+		chat, err := s.openChat(cc, a.ID)
 		if err != nil {
 			return err
+		}
+		if a.Server != "" && a.Model != "" {
+			chat.Server, chat.Model = a.Server, a.Model
 		}
 		from, err := f(chat)
 		if err != nil {
@@ -287,13 +296,14 @@ func (s *Server) registerAgent() {
 		s.startRun(cc.loc, cc.root, c.project, c.language(), chat, from)
 		return nil
 	}
-	// agent.resume goes on from the last completed step (after an error or a stop).
+	// agent.resume goes on from the last completed step (after an error or a stop), with
+	// another model when given.
 	s.handle("agent.resume", withChat(func(ctx context.Context, c *Client, cc chatCtx, p json.RawMessage) (any, error) {
-		a, err := bind[idArg](p)
+		a, err := bind[restartArg](p)
 		if err != nil {
 			return nil, err
 		}
-		return nil, restart(c, cc, a.ID, func(chat *agent.Chat) (int, error) {
+		return nil, restart(c, cc, a, func(chat *agent.Chat) (int, error) {
 			n := len(chat.Messages)
 			if n > 0 {
 				if last := chat.Messages[n-1]; last.Role == "assistant" && last.Error != "" && len(last.ToolCalls) == 0 {
@@ -304,13 +314,13 @@ func (s *Server) registerAgent() {
 			return max(0, n-1), nil
 		})
 	}))
-	// agent.retry asks again from the last message of the user.
+	// agent.retry asks again from the last message of the user, with another model when given.
 	s.handle("agent.retry", withChat(func(ctx context.Context, c *Client, cc chatCtx, p json.RawMessage) (any, error) {
-		a, err := bind[idArg](p)
+		a, err := bind[restartArg](p)
 		if err != nil {
 			return nil, err
 		}
-		return nil, restart(c, cc, a.ID, func(chat *agent.Chat) (int, error) {
+		return nil, restart(c, cc, a, func(chat *agent.Chat) (int, error) {
 			last := lastUserIndex(chat)
 			if last < 0 {
 				return -1, i18n.New("nothing to retry")
@@ -332,7 +342,7 @@ func (s *Server) registerAgent() {
 		if err != nil {
 			return nil, err
 		}
-		return nil, restart(c, cc, a.ID, func(chat *agent.Chat) (int, error) {
+		return nil, restart(c, cc, restartArg{ID: a.ID}, func(chat *agent.Chat) (int, error) {
 			if a.Index < 0 || a.Index >= len(chat.Messages) || chat.Messages[a.Index].AskState != "pending" {
 				return -1, i18n.New("these questions are not waiting for an answer")
 			}
@@ -363,7 +373,7 @@ func (s *Server) registerAgent() {
 		if err != nil {
 			return nil, err
 		}
-		return nil, restart(c, cc, a.ID, func(chat *agent.Chat) (int, error) {
+		return nil, restart(c, cc, restartArg{ID: a.ID}, func(chat *agent.Chat) (int, error) {
 			if a.Index < 0 || a.Index >= len(chat.Messages) || chat.Messages[a.Index].Capture != "pending" {
 				return -1, i18n.New("no capture of the screen is waiting here")
 			}

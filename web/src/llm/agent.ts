@@ -369,16 +369,24 @@ export function stepsSinceUser(): number {
   return chat.messages.slice(lastUserIndex() + 1).filter((m) => m.role === 'assistant' && m.tool_calls?.length).length
 }
 
-/** Goes on from the last completed step (after an error or a stop). */
-export async function resume() {
-  if (live.busy) return
-  await request('agent.resume', { id: chat.id })
+/** The model chosen differs from the one of the conversation: offered to go on with it. */
+export function otherModel(): boolean {
+  return !!config.server && !!config.model && !!chat.model && (config.server !== chat.server || config.model !== chat.model)
 }
 
-/** Asks again from the last user message (after an error or a stop). */
-export async function retry() {
+/** The model chosen, sent when the conversation goes on with it. */
+const chosen = (switchModel: boolean) => (switchModel ? { server: config.server, model: config.model } : {})
+
+/** Goes on from the last completed step (after an error or a stop), with the model chosen when switchModel. */
+export async function resume(switchModel = false) {
   if (live.busy) return
-  await request('agent.retry', { id: chat.id })
+  await request('agent.resume', { id: chat.id, ...chosen(switchModel) })
+}
+
+/** Asks again from the last user message (after an error or a stop), with the model chosen when switchModel. */
+export async function retry(switchModel = false) {
+  if (live.busy) return
+  await request('agent.retry', { id: chat.id, ...chosen(switchModel) })
 }
 
 export function stop() {

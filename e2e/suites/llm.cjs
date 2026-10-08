@@ -1,6 +1,6 @@
 // AI assistant: server setup, model list, streamed answer with tool calls (read, language
 // server, confirmed edit), Markdown + Mermaid rendering, saved conversations, image
-// attachment, stop, and resume after a crash. The model is a scripted fake OpenAI server.
+// attachment, stop, and resume after a crash (with the same or another model). The model is a scripted fake OpenAI server.
 const fs = require('fs')
 const http = require('http')
 const { run, openProject, open, assert, text, WS, OUT } = require('../common.cjs')
@@ -8,6 +8,7 @@ const { run, openProject, open, assert, text, WS, OUT } = require('../common.cjs
 const requests = []
 let slowClosed = false
 let crashed = false
+let crashedOther = false
 
 function chunk(res, delta, extra = {}) {
   res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: null }], ...extra })}\n\n`)
@@ -51,7 +52,7 @@ const answer = [
 
 const fake = http.createServer(async (req, res) => {
   if (req.url === '/api/version') return res.writeHead(404).end()
-  if (req.url === '/v1/models') return res.end(JSON.stringify({ data: [{ id: 'fake-model', status: { value: 'loaded' } }] }))
+  if (req.url === '/v1/models') return res.end(JSON.stringify({ data: [{ id: 'fake-model', status: { value: 'loaded' } }, { id: 'other-model', status: { value: 'loaded' } }] }))
   if (req.url.startsWith('/props')) {
     if (req.url === '/props') return res.end(JSON.stringify({ role: 'router' }))
     return res.end(JSON.stringify({ modalities: { vision: true }, chat_template_caps: { supports_tools: true }, default_generation_settings: { n_ctx: 8192 } }))
@@ -90,6 +91,19 @@ const fake = http.createServer(async (req, res) => {
       return res.end()
     }
     chunk(res, { content: 'Resumed after the step.' })
+    return finish(res, 'stop')
+  }
+  if (userText(lastUser).includes('crash until another model')) {
+    if (last.role === 'user') {
+      chunk(res, { tool_calls: [call('k2', 'read_file', { path: 'src/main.go' })] })
+      return finish(res, 'tool_calls')
+    }
+    if (r.model !== 'other-model') {
+      crashedOther = true
+      res.write(`data: ${JSON.stringify({ error: { message: 'model server crashed' } })}\n\n`)
+      return res.end()
+    }
+    chunk(res, { content: 'Resumed by the other model.' })
     return finish(res, 'stop')
   }
   if (userText(lastUser).includes('think long')) {
@@ -285,6 +299,23 @@ run(async ({ page, ctx }) => {
     const resumed = sent[2]?.messages ?? []
     assert(sent.length === 3 && resumed.filter((m) => m.role === 'tool' && m.tool_call_id === 'k1').length === 1 && resumed[resumed.length - 1].role === 'tool', 'resume sends the step already done, without running it again: ' + sent.length + ' requests')
     assert(!(await page.isVisible('[data-testid=ai-resume]')), 'no resume button once the answer is complete')
+
+    // A crash, then another model chosen: offered to resume with it, under the two buttons.
+    const beforeOther = requests.length
+    await page.fill('.ai-composer textarea', 'crash until another model')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid=ai-resume]', { timeout: 10000 })
+    assert(crashedOther && !(await page.isVisible('[data-testid=ai-resume-other]')), 'no resume with another model while the model chosen is the one of the conversation')
+    await page.click('[data-testid=model-pill]')
+    await page.click('.ai-model-item:has-text("other-model")')
+    await page.waitForSelector('[data-testid=ai-resume-other]:has-text("Resume with other-model")', { timeout: 5000 })
+    const below = await page.evaluate(() => document.querySelector('[data-testid=ai-resume-other]').getBoundingClientRect().top > document.querySelector('[data-testid=ai-resume]').getBoundingClientRect().bottom)
+    assert(below, 'resume with the model chosen shown under Resume and Retry')
+    await page.click('[data-testid=ai-resume-other]')
+    await page.waitForSelector('.ai-msg.assistant .md:has-text("Resumed by the other model.")', { timeout: 10000 })
+    const otherSent = requests.slice(beforeOther)
+    const last = otherSent[otherSent.length - 1]
+    assert(last.model === 'other-model' && last.messages.filter((m) => m.role === 'tool' && m.tool_call_id === 'k2').length === 1, 'the other model goes on from the step already done: ' + otherSent.map((q) => q.model).join(', '))
   } finally {
     fake.close()
   }

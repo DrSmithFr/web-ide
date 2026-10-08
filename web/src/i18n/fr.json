@@ -1490,8 +1490,6 @@
   "Step of": "Étape de",
   "Take it out of the lineage": "Le sortir de la lignée",
   "Next steps, developed in this worktree in this order; the ticket is merged once they are finished.": "Étapes suivantes, développées dans ce worktree dans cet ordre ; le ticket est fusionné une fois qu'elles sont terminées.",
-  "Move up": "Monter",
-  "Move down": "Descendre",
   "Add a step": "Ajouter une étape",
   "Waits for": "Attend",
   "Merged or done": "Fusionné ou terminé",
@@ -1633,5 +1631,8 @@
   "{n} conversations": "{n} conversations",
   "Claude Code": "Claude Code",
   "Written by Claude Code through the kanban tools": "Écrit par Claude Code avec les outils du kanban",
-  "answered by Claude Code": "répondu par Claude Code"
+  "answered by Claude Code": "répondu par Claude Code",
+  "Resume with {model}": "Reprendre avec {model}",
+  "Go on from the last completed step with the model chosen": "Continuer depuis la dernière étape terminée avec le modèle choisi",
+  "Start the answer again from your message with the model chosen": "Relancer la réponse depuis votre message avec le modèle choisi"
 }
