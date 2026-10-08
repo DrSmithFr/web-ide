@@ -8,7 +8,7 @@ import { t } from '../i18n'
 import { mutate, project } from '../state/project'
 import { consoles } from '../console/consoles'
 import { showTool } from '../state/zones'
-import { closePreview, openPreview, previews, sameSpec, setPublic, type PreviewSpec } from './previews'
+import { closePreview, openPreview, previewUrl, previews, sameSpec, setPublic, type PreviewSpec } from './previews'
 
 /** Brings the console of the command to the front, in a window of its project. */
 async function showConsole(projectId: string, id: string) {
@@ -28,7 +28,7 @@ export function PreviewCard(props: { spec: PreviewSpec }) {
   const open = async () => {
     const p = running()
     if (p) {
-      window.open(p.url, '_blank', 'noopener')
+      window.open(previewUrl(p), '_blank', 'noopener')
       return
     }
     setBusy(true)
@@ -66,8 +66,8 @@ export function PreviewCard(props: { spec: PreviewSpec }) {
         <Show when={running()}>
           {(p) => (
             <>
-              <a class="mono small ellipsis" href={p().url} target="_blank" rel="noopener" data-testid="ai-preview-url">
-                {p().url}
+              <a class="mono small ellipsis" href={previewUrl(p())} target="_blank" rel="noopener" data-testid="ai-preview-url">
+                {previewUrl(p())}
               </a>
               <Show when={p().tailscale}>
                 <button

@@ -3,6 +3,7 @@
 // every window.
 import { createRoot, createSignal } from 'solid-js'
 import { on as onPod, request } from '../pod/rpc'
+import { inTunnel } from '../pod/transport'
 
 export interface PreviewSpec {
   project: string
@@ -44,6 +45,16 @@ export function previews(): Preview[] {
 export const sameSpec = (p: PreviewSpec, s: PreviewSpec) => p.project === s.project && p.command === s.command && (p.cwd ?? '') === (s.cwd ?? '') && p.port === s.port
 
 /**
+ * URL of a preview. On 127.0.0.1 the URL of the pod; in the tunnel of the relay, the page
+ * is served by the Service Worker under /__preview/<id>/, so the app of the pod is reached
+ * through the DataChannel.
+ */
+export function previewUrl(p: Preview): string {
+  if (!inTunnel()) return p.url
+  return `${location.origin}/__preview/${p.id}/`
+}
+
+/**
  * Starts (or finds) the preview of a spec and opens it in a new tab. The tab opens during
  * the click, before the pod answers, or pop-up blockers would refuse it.
  */
@@ -52,8 +63,9 @@ export async function openPreview(spec: PreviewSpec): Promise<Preview> {
   if (tab) tab.opener = null
   try {
     const p = await request<Preview>('preview.open', spec)
-    if (tab) tab.location.href = p.url
-    else window.open(p.url, '_blank')
+    const url = previewUrl(p)
+    if (tab) tab.location.href = url
+    else window.open(url, '_blank')
     return p
   } catch (e) {
     tab?.close()

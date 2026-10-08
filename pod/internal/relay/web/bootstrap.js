@@ -1,90 +1,199 @@
-// Bootstrap for the relay. It opens the WebRTC tunnel to the pod (chosen by #pod=),
-// proves the token INSIDE the tunnel (channel-binding handshake, the token never goes
-// to the relay) and then hands the app to the pod, which serves it through the tunnel.
-// The Service Worker (sw.js) forwards the app's fetches to the pod as "http:<n>"
-// channels; the rpc transport is passed to the app through a MessagePort.
-const params = new URLSearchParams();
-{ const h = location.hash.slice(1); if (h) new URLSearchParams(h).forEach((v, k) => params.set(k, v)); }
-const pod = params.get("pod");
-const token = params.get("t") || params.get("token") || "";
+// Bootstrap page of the relay. It opens the WebRTC tunnel to the pod (chosen by #pod=),
+// proves the token INSIDE the tunnel (the channel-binding handshake: the token is bound to
+// both DTLS fingerprints, so the relay never sees it and cannot swap the SDP), then hands
+// the app to the pod: the Service Worker answers the page's fetches through the tunnel, and
+// the JSON protocol goes through a MessagePort.
+const params = new URLSearchParams(location.hash.slice(1) || location.search.slice(1))
+const pod = params.get('pod')
+const token = params.get('t') || params.get('token') || ''
+const session = rand()
 
-const status = (html) => { const el = document.getElementById("msg"); if (el) el.innerHTML = html; };
-const fail = (m) => { status('<div class="err">' + m + "</div>"); };
+const fr = (navigator.languages?.[0] ?? navigator.language ?? 'en').startsWith('fr')
+const words = {
+  connecting: fr ? 'Connexion…' : 'Connecting…',
+  nopod: fr ? 'Aucun pod indiqué. Ouvrez <relay>/?pod=<id>&t=<token>.' : 'No pod given. Open <relay>/?pod=<id>&t=<token>.',
+  offline: fr ? 'Ce pod n’est pas en ligne sur le relay.' : 'This pod is not online at the relay.',
+  connected: fr ? 'Connecté.' : 'Connected.',
+  loading: fr ? 'Chargement de l’IDE…' : 'Loading the IDE…',
+  update: fr ? 'Mettez ce pod à jour : les versions ne correspondent pas.' : 'Update this pod: the versions do not match.',
+  failed: fr ? 'La connexion n’a pas pu être établie.' : 'The connection could not be established.',
+  closed: fr ? 'Ce pod a fermé la connexion.' : 'This pod closed the connection.',
+  sw: fr ? 'Service Worker : ' : 'Service Worker: ',
+}
+const status = (html) => { const el = document.getElementById('msg'); if (el) el.innerHTML = html }
+const fail = (m) => status('<div class="err">' + m + '</div>')
 
-function rand() { const b = new Uint8Array(16); crypto.getRandomValues(b); return [...b].map((x) => x.toString(16).padStart(2, "0")).join(""); }
-
-// MAC(role, token, fpBrowser, fpPod, nonceBrowser, noncePod) -> hex HMAC-SHA1, same as the pod.
-async function mac(role, fpB, fpP) {
-  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(token), { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(role + "|" + fpB + "|" + fpP + "|" + nonceB + "|" + nonceP));
-  return [...new Uint8Array(sig)].map((x) => x.toString(16).padStart(2, "0")).join("");
+function rand() {
+  const b = new Uint8Array(16)
+  crypto.getRandomValues(b)
+  return [...b].map((x) => x.toString(16).padStart(2, '0')).join('')
 }
 
-let nonceB = rand(), nonceP = "", pc;
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+// The pod frames every message into 16 KB fragments with a 1-byte header (1 = more, 0 =
+// last), so a 2 MB transfer stays under the DataChannel cap. Both sides must frame.
+const FRAG = 16384
+function frame(dc, bytes) {
+  for (let i = 0; i < bytes.length; i += FRAG) {
+    const part = bytes.subarray(i, i + FRAG)
+    const frag = new Uint8Array(1 + part.length)
+    frag[0] = i + FRAG < bytes.length ? 1 : 0
+    frag.set(part, 1)
+    dc.send(frag)
+  }
+}
+function bytes(d) {
+  if (d instanceof Uint8Array) return d
+  if (d instanceof ArrayBuffer) return new Uint8Array(d)
+  return new TextEncoder().encode(String(d))
+}
+function unframe(data, buf) {
+  const b = bytes(data)
+  if (!b.length) return { msg: null, buf }
+  buf = (buf ?? []).concat([...b.subarray(1)])
+  if (b[0] & 1) return { msg: null, buf }
+  return { msg: new Uint8Array(buf), buf: null }
+}
+
+// HMAC-SHA256, the same binding as the pod: role|fpBrowser|fpPod|nonceBrowser|noncePod.
+async function mac(role, fpB, fpP, nonceB, nonceP) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(token), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(role + '|' + fpB + '|' + fpP + '|' + nonceB + '|' + nonceP))
+  return [...new Uint8Array(sig)].map((x) => x.toString(16).padStart(2, '0')).join('')
+}
+const fingerprint = (desc) => {
+  const m = desc?.sdp?.match(/a=fingerprint:sha-256 ([0-9a-fA-F:]+)/)
+  return m ? m[1].replace(/:/g, '').toUpperCase() : ''
+}
+
+let pc, rpc
+let handshakeDone = false
+const buffers = new Map()
+const appPort = null
+
+function read(dc, e) {
+  const r = unframe(e.data, buffers.get(dc))
+  buffers.set(dc, r.buf)
+  return r.msg
+}
 
 async function main() {
-  if (!pod) return fail("No pod given. Open <relay>/?pod=<id>&t=<token>.");
-  status("Connecting to <b>" + pod + "</b>…");
-  // The Service Worker intercepts the app's fetches; register it first.
-  try { await navigator.serviceWorker.register("/sw.js", { scope: "/" }); } catch (e) { fail("Service Worker: " + e.message); }
+  if (!pod) return fail(words.nopod)
+  status('<div class="spin"></div>' + words.connecting + ' <b>' + pod + '</b>')
+  try {
+    await navigator.serviceWorker.register('/sw.js', { scope: '/' })
+  } catch (e) {
+    fail(words.sw + e.message)
+  }
 
-  // The pod's TURN/STUN ICE servers arrive with the signaling "ice" message, so connect
-  // after we read it: open the signaling socket, get the ice, then build the PC.
-  const sig = new WebSocket(wsURL("/_relay/signal?pod=" + encodeURIComponent(pod)));
-  await openSig(sig);
-  let ice = null;
-  const sigWait = new Promise((res) => { sig.onmessage = (e) => { const m = JSON.parse(e.data); if (m.type === "ice") { ice = m; res(); } }; });
-  await Promise.race([sigWait, wait(5000).then(() => { if (!ice) fail("This pod is not online at the relay."); })]);
-  if (!ice) return;
-
-  pc = new RTCPeerConnection({ iceServers: [{ urls: ice.urls, username: ice.username, credential: ice.credential }] });
-  const rpc = pc.createDataChannel("rpc", { ordered: true, maxRetransmits: 0 });
-  const chan = new MessageChannel();
-  navigator.serviceWorker.controller && navigator.serviceWorker.controller.postMessage({ kind: "rpc-port", port: chan.port1 });
-
-  rpc.onopen = () => {
-    send(rpc, { protocol: "web-ide-rpc", version: "1", nonce: nonceB, method: "$hello" });
-  };
-  rpc.onmessage = async (e) => {
-    const m = JSON.parse(e.data);
-    if (m.nonce !== undefined && !nonceP) {
-      nonceP = m.nonce;
-      // The pod gave its nonce and proof; bind its fingerprint from the SDP and answer.
-      const fpP = fingerprint(pc.remoteDescription);
-      if (fpP) { /* binded into mac() */ }
-      send(rpc, { method: "$auth", proof: await mac("browser", fingerprint(pc.localDescription), fpP) });
-    } else if (m.method === "$ready") {
-      status("Connected.");
-      status('Loading the IDE…');
-      location.replace("/app");
-    } else if (m.error === "version") {
-      fail("Update this pod: the versions do not match.");
-    } else if (m.method === "$hello") {
-      // versioned hello we did not expect
-    }
-  };
-  pc.oniceconnectionstatechange = () => { if (pc.iceConnectionState === "failed") fail("The connection could not be established."); };
-  // Create the offer toward the pod (the pod answers with its own SDP).
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  sig.send(JSON.stringify({ type: "offer", sdp: pc.localDescription.sdp }));
-  pc.ondatachannel = (dc) => { /* term:<id>, xfer, http channels are routed by the SW/app */ };
-  // Route pod-side signaling (answer, candidates) back into the PC.
+  const sig = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/_relay/signal?pod=' + encodeURIComponent(pod) + '&session=' + session)
   sig.onmessage = (e) => {
-    const m = JSON.parse(e.data);
-    if (m.type === "answer") { pc.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: m.sdp })); }
-    else if (m.type === "candidate") { try { pc.addIceCandidate(JSON.parse(m.candidate)); } catch (_) {} }
-    else if (m.type === "bye") { fail("This pod closed the connection."); }
-  };
+    const m = JSON.parse(e.data)
+    if (m.type === 'ice') start(m)
+    else if (m.type === 'answer') pc.setRemoteDescription({ type: 'answer', sdp: m.sdp })
+    else if (m.type === 'candidate') { try { pc.addIceCandidate(JSON.parse(m.candidate)) } catch {} }
+    else if (m.type === 'bye') fail(words.closed)
+  }
+  sig.onerror = () => fail(words.offline)
+
+  // Trickle ICE: the browser's candidates go to the relay, tagged with the session.
+  const sendCandidate = (c) => {
+    if (!c || !sig || sig.readyState !== WebSocket.OPEN) return
+    sig.send(JSON.stringify({ type: 'candidate', session, candidate: c }))
+  }
+
+  async function start(ice) {
+    pc = new RTCPeerConnection({ iceServers: [{ urls: ice.urls, username: ice.username, credential: ice.credential }] })
+    window.tunnel = { pc, session, pod } // read by the e2e suite (getStats)
+    rpc = pc.createDataChannel('rpc', { ordered: true, maxRetransmits: 0 })
+    rpc.onmessage = async (e) => {
+      const m = read(rpc, e)
+      if (!m) return
+      if (handshakeDone) {
+        if (appPort) appPort.postMessage(new TextDecoder().decode(m))
+        return
+      }
+      const hello = JSON.parse(new TextDecoder().decode(m))
+      if (hello.error === 'version') return fail(words.update)
+      if (hello.method !== '$hello') return
+      const nonceP = hello.nonce
+      const fpB = fingerprint(pc.localDescription)
+      const fpP = fingerprint(pc.remoteDescription)
+      if ((await mac('pod', fpB, fpP, nonceB, nonceP)) !== hello.proof) return fail(words.failed)
+      send(rpc, { id: 0, method: '$auth', params: { proof: await mac('browser', fpB, fpP, nonceB, nonceP) } })
+    }
+    const nonceB = rand()
+    rpc.onopen = () => send(rpc, { id: 0, method: '$hello', params: { protocol: 'web-ide-rpc', version: '1', nonce: nonceB } })
+    pc.oniceconnectionstatechange = () => { if (pc.iceConnectionState === 'failed') fail(words.failed) }
+    pc.onicecandidate = (e) => sendCandidate(e.candidate)
+    const offer = await pc.createOffer()
+    await pc.setLocalDescription(offer)
+    sig.send(JSON.stringify({ type: 'offer', session, sdp: offer.sdp }))
+  }
+
+  // The app runs in an iframe of the same origin: its fetches are answered by the Service
+  // Worker, and its rpc channel is the one the handshake ran on.
+  function openApp() {
+    handshakeDone = true
+    status(words.loading)
+    const f = document.getElementById('frame')
+    f.style.display = 'block'
+    f.src = '/app'
+    document.getElementById('status').style.display = 'none'
+  }
 }
 
-function send(dc, obj) { dc.send(JSON.stringify(obj)); }
-function wsURL(p) { return (location.protocol === "https:" ? "wss:" : "ws:") + "//" + location.host + p; }
-function fingerprint(desc) {
-  if (!desc) return "";
-  const m = desc.sdp.match(/a=fingerprint:(?:sha-256:)?([0-9a-fA-F]+)/);
-  return m ? m[1].toUpperCase() : "";
+function send(dc, obj) { frame(dc, new TextEncoder().encode(JSON.stringify(obj))) }
+
+// The app (in its iframe) and the Service Worker ask the bootstrap for channels: the
+// bootstrap owns the PeerConnection.
+window.addEventListener('message', (e) => {
+  const d = e.data
+  if (!d || !pc) return
+  if (d.kind === 'port') bridge(d.label, d.port)
+  else if (d.kind === 'http') httpFetch(d)
+})
+
+function bridge(label, port) {
+  const dc = label === 'rpc' ? rpc : pc.createDataChannel(label, { ordered: true, maxRetransmits: 0 })
+  if (label === 'rpc') appPort = port
+  port.onmessage = (e) => {
+    if (dc.readyState === 'open') frame(dc, new TextEncoder().encode(typeof e.data === 'string' ? e.data : JSON.stringify(e.data)))
+  }
+  dc.onmessage = (e) => {
+    const m = read(dc, e)
+    if (m) port.postMessage(new TextDecoder().decode(m))
+  }
+  dc.onclose = () => port.close()
+  port.onclose = () => dc.close()
 }
 
-main();
+// One fetch of the page, answered by the pod on an http:<n> channel: the head as JSON,
+// then the body as raw chunks, closed by an empty one.
+function httpFetch(d) {
+  const dc = pc.createDataChannel(d.id, { ordered: true, maxRetransmits: 0 })
+  const sendReq = () => {
+    if (dc.readyState !== 'open') return setTimeout(sendReq, 200)
+    dc.send(new TextEncoder().encode(JSON.stringify({
+      path: d.url, preview: d.preview, method: d.method, headers: d.headers, body: d.body,
+    })))
+  }
+  dc.onopen = sendReq
+  dc.onmessage = (e) => {
+    const m = read(dc, e)
+    if (!m) return
+    if (!d.head) {
+      d.head = JSON.parse(new TextDecoder().decode(m))
+      d.port.postMessage({ head: d.head })
+      return
+    }
+    if (!m.length) {
+      d.port.postMessage(null)
+      dc.close()
+      return
+    }
+    d.port.postMessage(m)
+  }
+  dc.onclose = () => d.port.postMessage(null)
+}
+
+main()
