@@ -380,4 +380,8 @@ func TestAgentAdopt(t *testing.T) {
 	if r := a.callRaw("agent.send", map[string]any{"id": "dev3", "text": "Work", "server": "s1", "model": "m", "adoptedBy": "dev"}); r["error"] == nil {
 		t.Fatal("adopted by a conversation that is not an Orchestrator")
 	}
+	// Runs still writing would outlive the temporary folder.
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline) && (s.run("dev2") != nil || s.run("orc") != nil || s.run("dev") != nil); {
+		time.Sleep(50 * time.Millisecond)
+	}
 }
