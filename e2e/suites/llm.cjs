@@ -9,6 +9,7 @@ const requests = []
 let slowClosed = false
 let crashed = false
 let crashedOther = false
+let cut = false
 
 function chunk(res, delta, extra = {}) {
   res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: null }], ...extra })}\n\n`)
@@ -91,6 +92,20 @@ const fake = http.createServer(async (req, res) => {
       return res.end()
     }
     chunk(res, { content: 'Resumed after the step.' })
+    return finish(res, 'stop')
+  }
+  if (userText(lastUser).includes('cut after a step')) {
+    if (last.role === 'user') {
+      chunk(res, { tool_calls: [call('k3', 'read_file', { path: 'src/main.go' })] })
+      return finish(res, 'tool_calls')
+    }
+    if (!cut) {
+      // the model server stopped in the middle (llama-swap unloading it): no error, no [DONE]
+      cut = true
+      chunk(res, { reasoning_content: 'Let me plan the' })
+      return res.end()
+    }
+    chunk(res, { content: 'Resumed after the cut.' })
     return finish(res, 'stop')
   }
   if (userText(lastUser).includes('crash until another model')) {
@@ -299,6 +314,14 @@ run(async ({ page, ctx }) => {
     const resumed = sent[2]?.messages ?? []
     assert(sent.length === 3 && resumed.filter((m) => m.role === 'tool' && m.tool_call_id === 'k1').length === 1 && resumed[resumed.length - 1].role === 'tool', 'resume sends the step already done, without running it again: ' + sent.length + ' requests')
     assert(!(await page.isVisible('[data-testid=ai-resume]')), 'no resume button once the answer is complete')
+
+    // A stream closed without its end (the model server stopped): an error, with Resume.
+    await page.fill('.ai-composer textarea', 'cut after a step')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid=ai-resume]', { timeout: 10000 })
+    assert(cut && (await page.isVisible('.ai-error:has-text("closed the answer before its end")')), 'a cut stream shown as an error')
+    await page.click('[data-testid=ai-resume]')
+    await page.waitForSelector('.ai-msg.assistant .md:has-text("Resumed after the cut.")', { timeout: 10000 })
 
     // A crash, then another model chosen: offered to resume with it, under the two buttons.
     const beforeOther = requests.length

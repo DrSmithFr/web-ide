@@ -147,6 +147,28 @@ func TestOpenAIChatError(t *testing.T) {
 	}
 }
 
+// A stream closed without [DONE] nor a finish reason (the server stopped) is an error, not a
+// finished answer with what came so far.
+func TestChatCut(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/chat/completions":
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"Let me plan\"}}]}\n\n")
+		case "/api/chat":
+			io.WriteString(w, `{"message":{"role":"assistant","content":"","thinking":"hmm"},"done":false}`+"\n")
+		}
+	}))
+	defer ts.Close()
+	for _, kind := range []string{"llamacpp", "ollama"} {
+		m, id := newManager(t, ts.URL, kind)
+		_, err := m.Chat(context.Background(), ChatRequest{Server: id, Model: "m"}, nil)
+		if err == nil || !strings.Contains(err.Error(), "closed the answer") {
+			t.Fatalf("%s: err %v", kind, err)
+		}
+	}
+}
+
 func TestOllamaChat(t *testing.T) {
 	var got struct {
 		Messages []ollamaMessage `json:"messages"`

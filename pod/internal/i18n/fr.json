@@ -194,5 +194,6 @@
   "%s: no credit left: %s": "%s : plus de crédit : %s",
   "%s does not know the model %s: %s": "%s ne connaît pas le modèle %s : %s",
   "%s: rate limit reached, try again later: %s": "%s : limite de requêtes atteinte, réessayez plus tard : %s",
-  "no action card here": "pas de carte d'action ici"
+  "no action card here": "pas de carte d'action ici",
+  "the server closed the answer before its end": "le serveur a coupé la réponse avant sa fin"
 }

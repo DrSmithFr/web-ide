@@ -241,7 +241,7 @@ func (m *Manager) openaiChat(ctx context.Context, s Server, req ChatRequest, b *
 	var content, reasoning strings.Builder
 	var calls []ToolCall
 	res := &ChatResult{}
-	chunks, serverTokens := 0, 0
+	chunks, serverTokens, done := 0, 0, false
 	sc := bufio.NewScanner(resp.Body)
 	sc.Buffer(make([]byte, 64*1024), 16<<20)
 	for sc.Scan() {
@@ -251,6 +251,7 @@ func (m *Manager) openaiChat(ctx context.Context, s Server, req ChatRequest, b *
 		}
 		data := bytes.TrimSpace(line[5:])
 		if string(data) == "[DONE]" {
+			done = true
 			break
 		}
 		var chunk struct {
@@ -380,8 +381,21 @@ func (m *Manager) openaiChat(ctx context.Context, s Server, req ChatRequest, b *
 		}
 		return nil, err
 	}
+	// A server stopped or restarted in the middle (llama-swap unloading the model) closes the
+	// stream cleanly: without [DONE] nor a finish reason, the answer is cut, not finished.
+	if !done && res.Finish == "" {
+		return nil, errCut(ctx)
+	}
 	res.Message = assistantMessage(content.String(), reasoning.String(), calls)
 	return res, nil
+}
+
+// errCut is the error of a stream that ended before the end of the answer.
+func errCut(ctx context.Context) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return i18n.New("the server closed the answer before its end")
 }
 
 func assistantMessage(content, reasoning string, calls []ToolCall) Message {
@@ -520,6 +534,9 @@ func (m *Manager) ollamaChat(ctx context.Context, s Server, req ChatRequest, b *
 		}
 		if err := dec.Decode(&chunk); err != nil {
 			if err == io.EOF {
+				if res.Finish == "" {
+					return nil, errCut(ctx) // no "done": cut, as above
+				}
 				break
 			}
 			if ctx.Err() != nil {
