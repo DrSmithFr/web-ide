@@ -1,7 +1,7 @@
 ---
 name: review-dev
 description: Reviews the developments in progress on the kanban of the Web IDE - each ticket In progress, its worktree and branch, its goals and its development conversation of the local assistant - then reports where each one is, what goes wrong, and comments in the conversations. Use when the user asks to check, follow or review the developments, the dev conversations or the tickets in progress.
-argument-hint: "[ticket numbers…] [--comment]"
+argument-hint: "[ticket numbers…] [--dry]"
 ---
 
 # Review of the developments in progress
@@ -56,13 +56,18 @@ In the language of the user, one section per ticket:
 - **State**: running, idle, waiting for you, failed.
 - **Progress**: commits, goals done / total, current step, what is left.
 - **Problems**: if any, with the evidence (a message step, a command).
-- **Comments**: what you will tell it, or told it.
+- **Comments**: what you told it.
 
-End with what waits for the user: questions to answer, failed conversations to resume (their *Resume* button, or `agent_resume` of the Orchestrator).
+End with what waits for the user:
+- questions to answer;
+- failed conversations to resume (their *Resume* button, or `agent_resume` of the Orchestrator);
+- the points you kept for them (see below).
 
 ## 6. The comments
 
-When the arguments contain `--comment`, or the user asked for it, send the comments with `kanban_reply`. Otherwise propose them and ask.
+Send them with `kanban_reply` without asking the user first: they want you to talk to the conversations directly. With `--dry` in the arguments, only propose them.
+
+Keep for the user, without sending, what is theirs to decide: a change of scope or of the plan, a product or design choice, dropping a goal, anything risky to undo. Ask them in the report.
 
 - In English.
 - Start with "Review from Claude Code".
