@@ -231,10 +231,16 @@ var mcpTools = []mcpTool{
 	},
 	{
 		name:        "kanban_conversation",
-		description: "Reads a conversation of the local assistant linked to the ticket (see Linked conversations in kanban_get): the messages of the user and of the assistant, with the questions asked and their answers. Use it to take over a briefing.",
-		props:       map[string]any{"id": ticketID, "chat": str("Conversation id (chat … in kanban_get)")},
-		required:    []string{"chat"},
-		run: ticketTool(func(ctx context.Context, s *Server, sc mcpScope, id int64, a struct{ Chat string }) (string, error) {
+		description: "Reads a conversation of the local assistant linked to the ticket (see Linked conversations in kanban_get): the messages of the user and of the assistant, with the questions asked and their answers. Use it to take over a briefing; with last and tools, to review a development (its commands, errors and notes).",
+		props: map[string]any{"id": ticketID, "chat": str("Conversation id (chat … in kanban_get)"),
+			"last":  map[string]any{"type": "integer", "description": "Only the last messages, this many (default: all)"},
+			"tools": map[string]any{"type": "boolean", "description": "Also the tool calls (name and arguments, cut), their errors, the answers that failed and the notes and reports of sub-agents"}},
+		required: []string{"chat"},
+		run: ticketTool(func(ctx context.Context, s *Server, sc mcpScope, id int64, a struct {
+			Chat  string
+			Last  int
+			Tools bool
+		}) (string, error) {
 			t, err := s.Kanban.Get(sc.loc, id)
 			if err != nil {
 				return "", err
@@ -250,7 +256,7 @@ var mcpTools = []mcpTool{
 			if err != nil {
 				return "", err
 			}
-			text := conversationText(raw)
+			text := conversationText(raw, a.Last, a.Tools)
 			if s.run(a.Chat) != nil {
 				return text + "\n\n(The assistant is answering now: read the conversation again later.)", nil
 			}
@@ -583,7 +589,9 @@ func findMCPTool(name string) *mcpTool {
 
 // conversationText is a conversation of the assistant as Claude reads it: what the user
 // and the assistant wrote, and the questions of ask_user with their answers.
-func conversationText(raw json.RawMessage) string {
+// conversationText is what Claude Code reads of a conversation: the last messages only when
+// last > 0, and the tool calls, their errors and the failed answers with tools.
+func conversationText(raw json.RawMessage, last int, tools bool) string {
 	var chat struct {
 		Title    string `json:"title"`
 		Messages []struct {
@@ -601,6 +609,9 @@ func conversationText(raw json.RawMessage) string {
 			} `json:"tool_calls"`
 			ToolCallID string `json:"tool_call_id"`
 			AskState   string `json:"askState"`
+			Name       string `json:"name"`
+			Status     string `json:"status"`
+			Error      string `json:"error"`
 		} `json:"messages"`
 	}
 	_ = json.Unmarshal(raw, &chat)
@@ -622,7 +633,12 @@ func conversationText(raw json.RawMessage) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Conversation: %s\n", chat.Title)
 	asks := map[string]bool{}
-	for _, m := range chat.Messages {
+	msgs := chat.Messages
+	if last > 0 && last < len(msgs) {
+		fmt.Fprintf(&b, "\n(%d earlier messages left out)\n", len(msgs)-last)
+		msgs = msgs[len(msgs)-last:]
+	}
+	for _, m := range msgs {
 		switch m.Role {
 		case "user":
 			t := m.Display
@@ -645,11 +661,21 @@ func conversationText(raw json.RawMessage) string {
 				if c.Function.Name == "ask_user" {
 					asks[c.ID] = true
 					fmt.Fprintf(&b, "\n## Assistant asks (ask_user)\n%s\n", c.Function.Arguments)
+				} else if tools {
+					fmt.Fprintf(&b, "- call %s %s\n", c.Function.Name, cut(c.Function.Arguments, 300))
 				}
 			}
+			if tools && m.Error != "" {
+				fmt.Fprintf(&b, "\n## The answer failed\n%s\n", m.Error)
+			}
 		case "tool":
-			if asks[m.ToolCallID] && m.AskState != "pending" {
+			switch {
+			case asks[m.ToolCallID] && m.AskState != "pending":
 				fmt.Fprintf(&b, "\n## Answers of the user\n%s\n", strings.TrimSpace(text(m.Content)))
+			case tools && (m.Name == "agent_note" || m.Name == "agent_report"):
+				// The note itself is in the call; its result says nothing more.
+			case tools && (m.Status == "error" || m.Status == "denied" || strings.HasPrefix(text(m.Content), "Interrupted")):
+				fmt.Fprintf(&b, "  → %s: %s\n", m.Status, cut(strings.TrimSpace(text(m.Content)), 300))
 			}
 		}
 	}

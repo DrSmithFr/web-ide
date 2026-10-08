@@ -10,6 +10,8 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 - The Orchestrator adopts a conversation that runs on its own (`agent_adopt`), and follows from their start the developments its cards start: such a conversation becomes its sub-agent, announces itself with a note, keeps working with the user and reports when its task is over.
 - The Orchestrator resumes a conversation whose last answer failed (`agent_resume`), from its last completed step, and adopts it on the way.
 
+- `kanban_conversation` (MCP) reads the last messages only (`last`) with the tool calls, errors and notes (`tools`); the skill `/review-dev` of this repository reviews the developments in progress with it.
+
 ### Changed
 
 - The conversations of the assistant: the last Orchestrator conversation first with its working children, then the other active conversations as trees, then the history by day; an ended sub-agent leaves its parent for the history of the day it ended.
