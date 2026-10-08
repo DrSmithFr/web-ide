@@ -80,7 +80,12 @@ async function main() {
   if (!pod) return fail(words.nopod)
   status('<div class="spin"></div>' + words.connecting + ' <b>' + pod + '</b>')
   try {
-    await navigator.serviceWorker.register('/sw.js', { scope: '/' })
+    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' })
+    // The app is loaded through the Service Worker: wait until it controls the page, else
+    // the first fetch goes to the relay and answers 404.
+    await reg.ready
+    if (!reg.active) await reg.update()
+    await reg.ready
   } catch (e) {
     fail(words.sw + e.message)
   }
@@ -113,13 +118,18 @@ async function main() {
         return
       }
       const hello = JSON.parse(new TextDecoder().decode(m))
-      if (hello.error === 'version') return fail(words.update)
+      const hp = hello.params || {}
+      if (hp.error === 'version') return fail(words.update)
+      if (hello.method === '$ready') {
+        handshakeDone = true
+        openApp()
+        return
+      }
       if (hello.method !== '$hello') return
-      const nonceP = hello.nonce
       const fpB = fingerprint(pc.localDescription)
       const fpP = fingerprint(pc.remoteDescription)
-      if ((await mac('pod', fpB, fpP, nonceB, nonceP)) !== hello.proof) return fail(words.failed)
-      send(rpc, { id: 0, method: '$auth', params: { proof: await mac('browser', fpB, fpP, nonceB, nonceP) } })
+      if ((await mac('pod', fpB, fpP, nonceB, hp.nonce)) !== hp.proof) return fail(words.failed)
+      send(rpc, { id: 0, method: '$auth', params: { proof: await mac('browser', fpB, fpP, nonceB, hp.nonce) } })
     }
     const nonceB = rand()
     rpc.onopen = () => send(rpc, { id: 0, method: '$hello', params: { protocol: 'web-ide-rpc', version: '1', nonce: nonceB } })
@@ -173,7 +183,7 @@ function httpFetch(d) {
   const dc = pc.createDataChannel(d.id, { ordered: true, maxRetransmits: 0 })
   const sendReq = () => {
     if (dc.readyState !== 'open') return setTimeout(sendReq, 200)
-    dc.send(new TextEncoder().encode(JSON.stringify({
+    frame(dc, new TextEncoder().encode(JSON.stringify({
       path: d.url, preview: d.preview, method: d.method, headers: d.headers, body: d.body,
     })))
   }

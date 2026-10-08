@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -339,6 +340,7 @@ func (s *session) serveRPC() {
 		Limits:    s.client.limits,
 	}
 	if err := hs.Run(conn); err != nil {
+		log.Printf("relayclient: handshake: %v (fpB=%s fpP=%s)", err, hs.FPBrowser, hs.FPPod)
 		_ = conn.Close()
 		s.close()
 		return

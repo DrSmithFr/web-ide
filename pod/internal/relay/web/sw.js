@@ -43,19 +43,36 @@ async function handle(req, url, clientId) {
   const headers = {}
   req.headers.forEach((v, k) => (headers[k] = v))
   pending.set(id, chan)
+
+  // The answer of the pod: the head as JSON, then the body as raw chunks, closed by an
+  // empty one. The handler must be installed before the first message can arrive, so the
+  // head and the chunks already received are buffered here.
+  const got = []
+  const head = new Promise((resolve) => {
+    chan.port1.onmessage = (e) => {
+      if (!e.data) {
+        resolve(null)
+        return
+      }
+      got.push(e.data)
+      if (got.length === 1) resolve(e.data.head)
+    }
+  })
   win.postMessage({ kind: 'http', id, url: path, preview, method: req.method, headers, body, port: chan.port2 }, [chan.port2])
 
-  const head = await once(chan, 60000)
-  if (!head) return new Response('The pod did not answer.', { status: 504 })
+  const h = await Promise.race([head, new Promise((r) => setTimeout(() => r(null), 60000))])
+  if (!h) return new Response('The pod did not answer.', { status: 504 })
+
   const stream = new ReadableStream({
     start(controller) {
+      for (const m of got.slice(1)) controller.enqueue(bytes(m))
       chan.port1.onmessage = (e) => {
         if (!e.data) {
           controller.close()
           pending.delete(id)
           return
         }
-        controller.enqueue(e.data instanceof Uint8Array ? e.data : new TextEncoder().encode(String(e.data)))
+        controller.enqueue(bytes(e.data))
       }
     },
     cancel() {
@@ -63,17 +80,11 @@ async function handle(req, url, clientId) {
       chan.port1.close()
     },
   })
-  const h = new Headers(head.headers || {})
-  h.set('access-control-allow-origin', '*')
-  return new Response(stream, { status: head.status || 200, headers: h })
+  const out = new Headers(h.headers || {})
+  out.set('access-control-allow-origin', '*')
+  return new Response(stream, { status: h.status || 200, headers: out })
 }
 
-function once(chan, ms) {
-  return new Promise((resolve) => {
-    const t = setTimeout(() => resolve(null), ms)
-    chan.port1.onmessage = (e) => {
-      clearTimeout(t)
-      resolve(e.data?.head ?? e.data)
-    }
-  })
+function bytes(d) {
+  return d instanceof Uint8Array ? d : new TextEncoder().encode(String(d))
 }
