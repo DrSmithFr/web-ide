@@ -22,7 +22,7 @@ func (s *Server) pushOpen(projectID, path string, line int) int {
 	s.mu.Lock()
 	var targets []*Client
 	for c := range s.clients {
-		if c.project == projectID {
+		if c.sees(projectID) {
 			targets = append(targets, c)
 		}
 	}

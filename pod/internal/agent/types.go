@@ -62,6 +62,9 @@ type TicketLink struct {
 	ID       int64  `json:"id"`
 	Role     string `json:"role"`
 	Feedback int64  `json:"feedback,omitempty"`
+	// Project the conversation works in (the worktree of the ticket for a development):
+	// it stays there whatever worktree the window shows.
+	Project string `json:"project,omitempty"`
 }
 
 // Options are the preferences of the page that change how the agent runs.

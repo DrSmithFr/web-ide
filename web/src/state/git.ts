@@ -1,5 +1,5 @@
 // Git state of the open project, refreshed after file changes and Git actions.
-import { createMemo, createRoot, createSignal } from 'solid-js'
+import { createEffect, createMemo, createRoot, createSignal, on as track } from 'solid-js'
 import { on, request } from '../pod/rpc'
 import { project } from './project'
 
@@ -61,16 +61,33 @@ async function load() {
   }
 }
 
-on('git.changed', () => {
+// Events of another worktree attached to the window do not change the one shown.
+const shown = (from?: string) => !from || from === project()?.id
+on('git.changed', (_, from) => {
+  if (!shown(from)) return
   setRevision((r) => r + 1)
   refreshGit(50)
 })
 // A file written, created or removed anywhere in the project.
-on('fs.dir', (e: { path: string }) => {
+on('fs.dir', (e: { path: string }, from) => {
+  if (!shown(from)) return
   if (e.path.includes('/.git')) setRevision((r) => r + 1)
   refreshGit()
 })
-on('fs.changed', () => refreshGit())
+on('fs.changed', (_, from) => shown(from) && refreshGit())
+// Another worktree shown in the window.
+createRoot(() =>
+  createEffect(
+    track(
+      () => project()?.id,
+      (id, prev) => {
+        if (!id || !prev) return
+        setRevision((r) => r + 1)
+        refreshGit(0)
+      },
+    ),
+  ),
+)
 window.addEventListener('focus', () => {
   setRevision((r) => r + 1)
   refreshGit(100)

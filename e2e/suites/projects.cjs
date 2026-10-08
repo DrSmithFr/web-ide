@@ -67,45 +67,87 @@ run(async ({ page, ctx }) => {
   await page.fill('[data-testid=kanban-setup]', 'echo installed > setup.log')
   await page.click('[data-testid=kanban-settings-save]')
 
-  // Open the branch "feature": a worktree in its own window, the main folder untouched.
+  // Open the branch "feature": a worktree shown in the same window, the main folder untouched.
+  fs.writeFileSync(WS + '/demo/main.txt', 'main\n')
   await page.click('[data-testid=branch-selector]')
   await page.waitForSelector('.pick-item:has-text("main folder")')
-  assert(await page.isVisible('.pick-item:has-text("this window")'), 'selector: main folder, this window')
+  assert(await page.isVisible('.pick-item:has-text("main folder"):has-text("shown")'), 'selector: main folder, shown')
   await page.click('.pick-item:has-text("Open a branch")')
+  await page.waitForSelector('.pick-item:has-text("feature")')
+  const pages = ctx.pages().length
+  await page.click('.pick-item:has-text("feature")')
+  await page.waitForFunction(() => document.querySelector('[data-testid=branch-selector]')?.textContent.includes('feature'), null, { timeout: 8000 }).catch(() => {})
+  assert((await page.textContent('[data-testid=branch-selector]')).includes('feature') && (await page.textContent('.mb-title')).includes('demo'), 'worktree shown: project title and its branch')
+  assert(ctx.pages().length === pages && !page.url().includes('-w'), 'same window, no reload')
+  assert(git('branch --show-current', WS + '/demo/.ide/worktrees/b-feature') === 'feature' && git('branch --show-current') === 'main', 'branch checked out in a worktree, main folder on main')
+  assert(fs.readFileSync(WS + '/demo/wip.txt', 'utf8') === 'not committed\n', 'uncommitted change kept')
+  await page.waitForFunction(() => decodeURIComponent(document.querySelector('link[rel="icon"]').href).includes('r="12"'), null, { timeout: 5000 }).catch(() => {})
+  assert((await favicon(page)).includes('linearGradient') && (await favicon(page)).includes('r="12"'), 'worktree favicon: icon of the project with a dot')
+  const wt = WS + '/demo/.ide/worktrees/b-feature'
+  const deadline2 = Date.now() + 8000
+  while (!fs.existsSync(wt + '/setup.log') && Date.now() < deadline2) await page.waitForTimeout(100)
+  assert(fs.existsSync(wt + '/setup.log'), 'setup command run in the new worktree')
+  await page.waitForSelector('.console-tabs .tab:has-text("Worktree setup") [data-testid=worktree-chip]:has-text("feature")', { timeout: 5000 })
+  assert(true, 'the setup console carries the chip of the worktree')
+
+  // The explorer shows the worktree; its files open with a chip, and stay open in the main folder.
+  fs.writeFileSync(wt + '/feature.txt', 'feature\n')
+  await page.click('.rail-left .rail-btn[title="Explorer"]')
+  await page.waitForSelector(`.explorer .tree-row[data-path="${wt}/feature.txt"]`, { timeout: 5000 })
+  await page.dblclick(`.explorer .tree-row[data-path="${wt}/feature.txt"]`)
+  await page.waitForSelector('.tab:has-text("feature.txt") [data-testid=worktree-chip]:has-text("feature")')
+  assert(true, 'file of the worktree: chip with its branch')
+  await page.screenshot({ path: OUT + '/worktree-window.png' })
+  await page.click('[data-testid=branch-selector]')
+  await page.waitForSelector('.pick-item:has-text("feature"):has-text("shown")')
+  await page.screenshot({ path: OUT + '/branch-selector.png' })
+  await page.click('.pick-item:has-text("main folder")')
+  await page.waitForSelector(`.explorer .tree-row[data-path="${WS}/demo/main.txt"]`, { timeout: 5000 })
+  await page.dblclick(`.explorer .tree-row[data-path="${WS}/demo/main.txt"]`)
+  await page.waitForSelector('.tab.active:has-text("main.txt")')
+  assert(!(await page.isVisible('.tab:has-text("main.txt") [data-testid=worktree-chip]')) && (await page.isVisible('.tab:has-text("feature.txt") [data-testid=worktree-chip]')), 'both files open, chip only on the worktree one')
+  assert((await page.textContent('[data-testid=branch-selector]')).includes('main') && ctx.pages().length === pages, 'back on the main folder in the same window')
+  // An edit saved in the worktree file goes to the worktree.
+  await page.click('.tab:has-text("feature.txt")')
+  await page.click('.pane.active .ed-content')
+  await page.keyboard.press('Control+End')
+  await page.keyboard.type('edited')
+  await page.keyboard.press('Control+s')
+  const deadline3 = Date.now() + 5000
+  while (!fs.readFileSync(wt + '/feature.txt', 'utf8').includes('edited') && Date.now() < deadline3) await page.waitForTimeout(100)
+  assert(fs.readFileSync(wt + '/feature.txt', 'utf8').includes('edited'), 'file of the worktree saved in the worktree')
+
+  // A reload keeps the worktree shown and its tabs.
+  await page.click('[data-testid=branch-selector]')
+  await page.click('.pick-item:has-text("feature")')
+  await page.waitForFunction(() => document.querySelector('[data-testid=branch-selector]')?.textContent.includes('feature'), null, { timeout: 5000 })
+  await page.waitForTimeout(600) // the session is saved after 400 ms
+  await page.reload()
+  await page.waitForFunction(() => document.querySelector('[data-testid=branch-selector]')?.textContent.includes('feature'), null, { timeout: 8000 }).catch(() => {})
+  assert((await page.textContent('[data-testid=branch-selector]')).includes('feature'), 'worktree shown again after a reload')
+  await page.waitForSelector('.tab:has-text("feature.txt") [data-testid=worktree-chip]', { timeout: 5000 })
+  assert(await page.isVisible('.tab:has-text("main.txt")'), 'tabs of both worktrees restored')
+
+  // A worktree may still open in its own window.
+  await page.click('[data-testid=branch-selector]')
+  await page.click('.pick-item:has-text("Open in a new window")')
   await page.waitForSelector('.pick-item:has-text("feature")')
   const [win] = await Promise.all([ctx.waitForEvent('page'), page.click('.pick-item:has-text("feature")')])
   await win.waitForSelector('.menubar')
   await win.waitForFunction(() => document.querySelector('[data-testid=branch-selector]')?.textContent.includes('feature'), null, { timeout: 8000 }).catch(() => {})
-  assert((await win.textContent('[data-testid=branch-selector]')).includes('feature') && (await win.textContent('.mb-title')).includes('demo'), 'worktree window: project title and its branch')
-  assert(git('branch --show-current', WS + '/demo/.ide/worktrees/b-feature') === 'feature' && git('branch --show-current') === 'main', 'branch checked out in a worktree, main folder on main')
-  assert(fs.readFileSync(WS + '/demo/wip.txt', 'utf8') === 'not committed\n', 'uncommitted change kept')
-  await win.waitForFunction(() => decodeURIComponent(document.querySelector('link[rel="icon"]').href).includes('r="12"'), null, { timeout: 5000 }).catch(() => {})
-  assert((await favicon(win)).includes('linearGradient') && (await favicon(win)).includes('r="12"'), 'worktree favicon: icon of the project with a dot')
-  await win.screenshot({ path: OUT + '/worktree-window.png' })
-  const wt = WS + '/demo/.ide/worktrees/b-feature'
-  const deadline2 = Date.now() + 8000
-  while (!fs.existsSync(wt + '/setup.log') && Date.now() < deadline2) await win.waitForTimeout(100)
-  assert(fs.existsSync(wt + '/setup.log'), 'setup command run in the new worktree')
+  assert((await win.textContent('[data-testid=branch-selector]')).includes('feature') && win.url().includes('-w'), 'worktree in its own window')
+  await win.close()
 
-  // From the worktree window, the list shows both; the main folder brings back its window.
-  await win.click('[data-testid=branch-selector]')
-  await win.waitForSelector('.pick-item:has-text("feature"):has-text("this window")')
-  assert(await win.isVisible('.pick-item:has-text("main folder")'), 'selector of the worktree window')
-  await win.screenshot({ path: OUT + '/branch-selector.png' })
-  const pages = ctx.pages().length
-  await win.click('.pick-item:has-text("main folder")')
-  await win.waitForTimeout(500)
-  assert(ctx.pages().length === pages, 'the window of the main folder is reused')
-
-  // Remove the worktree from its own window (uncommitted changes: confirmed): back to the
-  // main folder, the branch kept.
-  win.on('dialog', (d) => d.accept())
-  await win.click('[data-testid=branch-selector]')
-  await win.click('.pick-item:has-text("Remove a worktree")')
-  await win.waitForSelector('.pick-item:has-text("feature")')
-  await Promise.all([win.waitForURL((u) => !u.pathname.includes('-w'), { timeout: 8000 }), win.click('.pick-item:has-text("feature")')])
-  await win.waitForSelector('.menubar')
+  // Remove the worktree shown (uncommitted changes: confirmed): the window goes back to the
+  // main folder and closes its tabs, the branch is kept.
+  page.on('dialog', (d) => d.accept())
+  await page.click('[data-testid=branch-selector]')
+  await page.click('.pick-item:has-text("Remove a worktree")')
+  await page.waitForSelector('.pick-item:has-text("feature")')
+  await page.click('.pick-item:has-text("feature")')
+  await page.waitForFunction(() => document.querySelector('[data-testid=branch-selector]')?.textContent.includes('main'), null, { timeout: 8000 }).catch(() => {})
   assert(!fs.existsSync(wt) && git('branch --list feature') !== '', 'worktree removed, branch kept')
-  await win.waitForFunction(() => document.querySelector('[data-testid=branch-selector]')?.textContent.includes('main'), null, { timeout: 5000 }).catch(() => {})
-  assert((await win.textContent('[data-testid=branch-selector]')).includes('main'), 'the window is back on the main folder')
+  assert((await page.textContent('[data-testid=branch-selector]')).includes('main') && ctx.pages().length === pages, 'the window is back on the main folder')
+  await page.waitForSelector('.tab:has-text("feature.txt")', { state: 'detached', timeout: 5000 })
+  assert(await page.isVisible('.tab:has-text("main.txt")'), 'tabs of the worktree closed, the others kept')
 })

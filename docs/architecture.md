@@ -92,7 +92,9 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 
 ### Kanban
 
-See [kanban.md](kanban.md). A ticket worktree is registered as a hidden child project `<parent>-t<n>` (`projects.PutChild`); its kanban and conversations are those of the parent. Another worktree opened from the menu bar is a child project `<parent>-w<hash of its path>` (`projects.PutWorktree`, `server/handlers_worktrees.go`). Project windows are named `project-<id>` so that opening a project again brings back its window. A development session started from the main window saves the conversation with `running: {}` and opens the worktree window with `?assistant=1`, which resumes it.
+See [kanban.md](kanban.md). A ticket worktree is registered as a hidden child project `<parent>-t<n>` (`projects.PutChild`); its kanban and conversations are those of the parent. Another worktree opened from the menu bar is a child project `<parent>-w<hash of its path>` (`projects.PutWorktree`, `server/handlers_worktrees.go`). Project windows are named `project-<id>` so that opening a project again brings back its window.
+
+A window opens one project (`project.open`: its session) and attaches the other worktrees of the repository it shows (`project.attach`, `state/project.ts`): the runtime of each stays open while the window lives. A request names the worktree it runs in (`project` beside `method`; the server hands the handler a `Client` view with that project), and the events of an attached runtime reach the window tagged with their `project`. The page picks the worktree of a request in one place (`setScope`): the worktree of the file for `fs.*`, `git.*`, `lsp.*`, `buffer.*` and `folders.*` with a path (the deepest attached root holding it), none for the session, the database connections and the worktree list, else the worktree shown; consoles remember theirs (`requestIn`). `project()` and `root()` are those of the worktree shown, `home()` the project of the window. A ticket conversation records the project it works in (`ticket.project`) and keeps it (`runProject`).
 
 ## Languages
 

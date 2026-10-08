@@ -80,11 +80,16 @@ func dial(t *testing.T, ts *httptest.Server, token string) (*wsClient, error) {
 
 // callRaw returns the response, error included.
 func (w *wsClient) callRaw(method string, params any) map[string]any {
+	return w.callRawIn("", method, params)
+}
+
+// callRawIn runs a request in an attached worktree of the window (its own project when empty).
+func (w *wsClient) callRawIn(project, method string, params any) map[string]any {
 	w.nextID++
 	id := w.nextID
 	ch := make(chan map[string]any, 1)
 	w.resps[id] = ch
-	data, _ := json.Marshal(map[string]any{"id": id, "method": method, "params": params})
+	data, _ := json.Marshal(map[string]any{"id": id, "method": method, "params": params, "project": project})
 	if err := w.c.Write(context.Background(), websocket.MessageText, data); err != nil {
 		w.t.Fatal(err)
 	}
@@ -98,24 +103,15 @@ func (w *wsClient) callRaw(method string, params any) map[string]any {
 }
 
 func (w *wsClient) call(method string, params any) map[string]any {
-	w.nextID++
-	id := w.nextID
-	ch := make(chan map[string]any, 1)
-	w.resps[id] = ch
-	data, _ := json.Marshal(map[string]any{"id": id, "method": method, "params": params})
-	if err := w.c.Write(context.Background(), websocket.MessageText, data); err != nil {
-		w.t.Fatal(err)
+	return w.callIn("", method, params)
+}
+
+func (w *wsClient) callIn(project, method string, params any) map[string]any {
+	m := w.callRawIn(project, method, params)
+	if e, ok := m["error"]; ok {
+		w.t.Fatalf("%s: %v", method, e)
 	}
-	select {
-	case m := <-ch:
-		if e, ok := m["error"]; ok {
-			w.t.Fatalf("%s: %v", method, e)
-		}
-		return m
-	case <-time.After(5 * time.Second):
-		w.t.Fatalf("%s: timeout", method)
-	}
-	return nil
+	return m
 }
 
 func (w *wsClient) waitEvent(name string, match func(map[string]any) bool) map[string]any {

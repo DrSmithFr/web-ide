@@ -2,6 +2,7 @@
 // secrets kept by the pod) and helpers asking for passwords when the pod needs them.
 import { createSignal } from 'solid-js'
 import { on, request, RpcError } from '../pod/rpc'
+import { home } from '../state/project'
 import { prompt } from '../ui/overlay'
 import { t } from '../i18n'
 
@@ -82,7 +83,7 @@ export async function refreshConnections() {
     /* no project */
   }
 }
-on('db.changed', (list: ConnView[]) => setConnections(list))
+on('db.changed', (list: ConnView[], from) => (!from || from === home()?.id) && setConnections(list))
 
 export function connById(id?: string) {
   return connections().find((c) => c.id === id)

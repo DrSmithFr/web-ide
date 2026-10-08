@@ -5,9 +5,9 @@ import { Icon } from '../ui/icons'
 import { prompt } from '../ui/overlay'
 import { errorToast } from '../ui/toast'
 import { request } from '../pod/rpc'
-import { openFile, project, root } from '../state/project'
+import { openFile, project, root, showWorktree } from '../state/project'
 import {
-  abortGit, continueGit, filePatch, finishTicket, gitInfo, inWorktreeOf, mergeTicket, openPR, openWorktreeWindow, rebaseTicket, roleLabels, ticketDiff, ticketVersion, unlinkChat, updateTicket,
+  abortGit, continueGit, filePatch, finishTicket, gitInfo, inWorktreeOf, mergeTicket, openPR, rebaseTicket, roleLabels, ticketDiff, ticketVersion, unlinkChat, updateTicket,
   validateStep, worktreeProject, type ChatRole, type Diff, type GitInfo, type GitOpState, type Status, type Ticket,
 } from './state'
 import { openTicketChat, openWorktree, startTicketChat, startWorkSession } from './sessions'
@@ -135,18 +135,16 @@ export async function abandonTicket(tk: Ticket, apply: Apply) {
   await apply(finishTicket(tk.id, 'abandoned', why, deleteBranch, open.length > 0))
 }
 
-/** Opens a conversation of a ticket: development ones in the window of the worktree. */
+/** Opens a conversation of a ticket: development ones with the worktree of the ticket shown. */
 async function openChatOf(tk: Ticket, chatId: string, role: ChatRole) {
   const inWorktree = role === 'dev' || role === 'correction' || role === 'resolve'
   if (inWorktree && tk.worktree && !inWorktreeOf(tk)) {
     try {
-      const target = (await worktreeProject(tk.id)).project
-      localStorage.setItem(`webide.llm.active.${target}`, chatId)
-      openWorktreeWindow(target, true)
+      await showWorktree((await worktreeProject(tk.id)).project)
     } catch (e) {
       errorToast(e)
+      return
     }
-    return
   }
   await openTicketChat(chatId)
 }

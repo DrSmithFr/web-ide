@@ -2,7 +2,7 @@
 // .ide/folders.json. Excluded folders are left out of the search and "go to file".
 import { createSignal } from 'solid-js'
 import { on, request } from '../pod/rpc'
-import { root } from './project'
+import { project, root } from './project'
 import { errorToast } from '../ui/toast'
 
 export type FolderMark = 'source' | 'tests' | 'excluded'
@@ -10,7 +10,7 @@ export type FolderMark = 'source' | 'tests' | 'excluded'
 const [marks, setMarks] = createSignal<Record<string, FolderMark>>({})
 let loadedFor = ''
 
-on('folders.changed', (m: Record<string, FolderMark>) => setMarks(m ?? {}))
+on('folders.changed', (m: Record<string, FolderMark>, from) => (!from || from === project()?.id) && setMarks(m ?? {}))
 
 /** Loads the marks once per project root. */
 export async function loadFolderMarks() {

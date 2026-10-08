@@ -12,7 +12,21 @@ export class RpcError extends Error {
 }
 
 type Pending = { resolve: (v: any) => void; reject: (e: any) => void; method: string }
-type Handler = (data: any) => void
+/** project: the project whose runtime sent the event (a worktree attached to the window, or its own). */
+type Handler = (data: any, project?: string) => void
+
+/**
+ * Worktree a request runs in, among those attached to the window (state/project): undefined
+ * for the project of the window. Set by the open project.
+ */
+type Scope = (method: string, params: any) => string | undefined
+let scope: Scope = () => undefined
+export function setScope(f: Scope) {
+  scope = f
+}
+
+const envelope = (id: number, method: string, params: any, project: string | undefined) =>
+  JSON.stringify(project ? { id, method, params, project } : { id, method, params })
 
 const [state, setState] = createSignal<PodState>('connecting')
 const [rates, setRates] = createSignal({ down: 0, up: 0 })
@@ -80,7 +94,7 @@ function connect() {
         emit(reconnect ? 'pod.reconnected' : 'pod.connected', msg.data)
         return
       }
-      emit(msg.event, msg.data)
+      emit(msg.event, msg.data, msg.project)
       return
     }
     const p = pending.get(msg.id)
@@ -112,10 +126,10 @@ function send(text: string) {
   }
 }
 
-function emit(event: string, data: any) {
+function emit(event: string, data: any, project?: string) {
   for (const h of handlers.get(event) ?? []) {
     try {
-      h(data)
+      h(data, project)
     } catch (e) {
       console.error(event, e)
     }
@@ -123,10 +137,15 @@ function emit(event: string, data: any) {
 }
 
 export function request<T = any>(method: string, params?: any, signal?: AbortSignal): Promise<T> {
+  return requestIn(scope(method, params), method, params, signal)
+}
+
+/** A request run in a given worktree of the window (its own project when undefined). */
+export function requestIn<T = any>(project: string | undefined, method: string, params?: any, signal?: AbortSignal): Promise<T> {
   const id = nextId++
   return new Promise<T>((resolve, reject) => {
     pending.set(id, { resolve, reject, method })
-    send(JSON.stringify({ id, method, params }))
+    send(envelope(id, method, params, project))
     signal?.addEventListener('abort', () => {
       if (pending.delete(id)) {
         send(JSON.stringify({ method: '$/cancel', params: { id } }))
@@ -140,7 +159,11 @@ onLangChange((l) => notify('client.lang', { lang: l }))
 
 /** notify sends a request without waiting for its answer. */
 export function notify(method: string, params?: any) {
-  send(JSON.stringify({ id: 0, method, params }))
+  notifyIn(scope(method, params), method, params)
+}
+
+export function notifyIn(project: string | undefined, method: string, params?: any) {
+  send(envelope(0, method, params, project))
 }
 
 export function on(event: string, h: Handler): () => void {

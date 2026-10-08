@@ -82,25 +82,30 @@ run(async ({ page, ctx }) => {
     await page.click('[data-testid=ticket-plan-save]')
     await page.waitForSelector('[data-testid=ticket-status]:has-text("To do")')
 
-    // Start: branch + worktree, its window opens and runs the conversation.
-    const [win] = await Promise.all([ctx.waitForEvent('page'), page.click('[data-testid=ticket-start]')])
+    // Start: branch + worktree, shown in the same window, which runs the conversation.
+    const pages = ctx.pages().length
+    await page.click('[data-testid=ticket-start]')
     const wt = repo + '/.ide/worktrees/1-data-export'
-    await win.waitForSelector('[data-testid=worktree-banner]:has-text("#1")', { timeout: 15000 })
-    assert(true, 'worktree window opened with its banner')
+    await page.waitForSelector('[data-testid=worktree-banner]:has-text("Ticket #1")', { timeout: 15000 })
+    assert(ctx.pages().length === pages, 'worktree of the ticket shown in the same window')
     assert(fs.existsSync(wt + '/src/main.go'), 'worktree created in .ide/worktrees')
     assert(git('branch --show-current', wt) === 'ticket/1-data-export', 'branch of the ticket')
     // Only the files of .ide meant to be committed may show up (icon, .gitignore), never the worktree or the bases.
     const status = git('status --porcelain --untracked-files=all')
     assert(!/worktrees|\.db/.test(status) && status.split('\n').every((l) => !l || l.startsWith('?? .ide/')), 'the main folder stays clean (worktrees ignored): ' + status)
-    await win.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Fait.")', { timeout: 20000 })
+    await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Fait.")', { timeout: 20000 })
     const r0 = requests[0]
     const bashOut = (requests[1].messages.find((m) => m.tool_call_id === 'b1') ?? {}).content ?? ''
     assert(bashOut.includes('/.ide/worktrees/1-data-export'), 'the commands run in the worktree')
     assert(r0.messages[0].content.includes('You **develop** this ticket on the branch ticket/1-data-export'), 'development prompt with the branch')
-    assert(await win.isVisible('[data-testid=ai-ticket-bar]:has-text("#1")'), 'conversation linked to the ticket in the worktree window')
+    assert(await page.isVisible('[data-testid=ai-ticket-bar]:has-text("#1")'), 'conversation linked to the ticket')
     assert(fs.existsSync(wt + '/setup.log'), 'setup command run in the worktree')
 
-    // The ticket in the main window.
+    // The ticket view stays open; the explorer goes back to the main folder.
+    await page.click('[data-testid=branch-selector]')
+    await page.click('.pick-item:has-text("main folder")')
+    await page.waitForSelector('[data-testid=branch-selector]:not(:has([data-testid=worktree-banner]))')
+    await page.click('.tab:has-text("#1")')
     await page.waitForSelector('[data-testid=ticket-status]:has-text("To test")', { timeout: 10000 })
     await page.waitForSelector('[data-testid=ticket-git] [data-testid=ticket-branch]:has-text("ticket/1-data-export")')
     await page.waitForSelector('[data-testid=ticket-diff-file]:has-text("export.txt")', { timeout: 10000 })
@@ -150,12 +155,11 @@ run(async ({ page, ctx }) => {
     const ghArgs = fs.readFileSync(repo + '/.git/gh-args', 'utf8')
     assert(ghArgs.includes('--title\n#1 Data export\n') && ghArgs.includes('--base\nmain\n') && ghArgs.includes('export.txt exists'), 'gh pr create with title, base and goals: ' + ghArgs.replace(/\n/g, ' '))
 
-    // Close: worktree removed, its window leaves, the change stays readable.
+    // Close: worktree removed, the change stays readable.
     await page.click('[data-testid=ticket-close]')
     await page.waitForSelector('[data-testid=ticket-status]:has-text("Done")', { timeout: 10000 })
     assert(!fs.existsSync(wt), 'worktree removed when closing')
     assert(git('branch --list ticket/1-data-export') !== '', 'branch kept')
-    await win.waitForSelector('.home', { timeout: 5000 }).then(() => assert(true, 'the worktree window closes'), () => assert(false, 'the worktree window closes'))
     await page.waitForSelector('[data-testid=ticket-diff-file]:has-text("export.txt")', { timeout: 10000 })
     assert(true, 'changes still visible after closing')
   } finally {

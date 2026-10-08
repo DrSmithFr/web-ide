@@ -1,11 +1,12 @@
 // Console tool: terminals and tasks run by the pod (they survive reloads), one xterm instance
 // per console, kept while the page lives. Problems tool: diagnostics and language server output.
-import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js'
+import { createEffect, createRoot, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
-import { notify, on as onPod, request } from '../pod/rpc'
-import { diagnostics, mutate, openFile, relPath, root, session } from '../state/project'
+import { notifyIn, on as onPod, request, requestIn } from '../pod/rpc'
+import { attached, diagnostics, home, mutate, openFile, project, relPath, root, session } from '../state/project'
+import { WorktreeChip } from '../ui/WorktreeChip'
 import { showTool } from '../state/zones'
 import { dropClasses, dropIndex, moveItem, setDropAt } from '../ui/tabDrop'
 import { settings } from '../state/settings'
@@ -24,19 +25,44 @@ export interface ConsoleInfo {
   command?: string[]
   exited: boolean
   code: number
+  /** Worktree the console runs in (set by the page). */
+  project?: string
 }
 
 const [consoles, setConsoles] = createSignal<ConsoleInfo[]>([])
 const [logs, setLogs] = createSignal<string[]>([])
 export { consoles }
 
-export function setConsoleList(list: ConsoleInfo[]) {
-  setConsoles(list)
+/** Consoles of a worktree of the window (its project by default). */
+export function setConsoleList(list: ConsoleInfo[], pid = home()?.id) {
+  const mine = list.map((c) => ({ ...c, project: pid }))
+  setConsoles((l) => [...l.filter((c) => c.project !== pid), ...mine])
   // Forget the terminals that do not exist in the pod anymore.
-  for (const id of terms.keys()) if (!list.some((c) => c.id === id)) disposeTerm(id)
+  for (const id of terms.keys()) if (!consoles().some((c) => c.id === id)) disposeTerm(id)
 }
 
-onPod('console.created', (c: ConsoleInfo) => setConsoles((l) => (l.some((x) => x.id === c.id) ? l : [...l, c])))
+/** Lists the consoles of every worktree attached to the window again (after a reconnection). */
+export async function refreshConsoles() {
+  for (const pid of Object.keys(attached)) await requestIn<ConsoleInfo[]>(pid, 'console.list').then((l) => setConsoleList(l, pid), () => {})
+}
+
+// The consoles of a worktree come with it and go with it.
+createRoot(() =>
+  createEffect(
+    on(
+      () => Object.keys(attached),
+      (ids, prev) => {
+        if (!prev) return
+        for (const pid of ids) if (!prev.includes(pid) && pid !== home()?.id) requestIn<ConsoleInfo[]>(pid, 'console.list').then((l) => setConsoleList(l, pid), () => {})
+        for (const pid of prev) if (!ids.includes(pid)) setConsoleList([], pid)
+      },
+    ),
+  ),
+)
+
+const projectOf = (id: string) => consoles().find((c) => c.id === id)?.project
+
+onPod('console.created', (c: ConsoleInfo, from) => setConsoles((l) => (l.some((x) => x.id === c.id) ? l : [...l, { ...c, project: from ?? home()?.id }])))
 onPod('console.closed', (e: { id: string }) => {
   setConsoles((l) => l.filter((c) => c.id !== e.id))
   disposeTerm(e.id)
@@ -96,12 +122,12 @@ function getTerm(id: string): TermEntry {
   const fit = new FitAddon()
   term.loadAddon(fit)
   term.open(el)
-  term.onData((data) => notify('console.input', { id, data }))
-  term.onResize(({ cols, rows }) => notify('console.resize', { id, cols, rows }))
+  term.onData((data) => notifyIn(projectOf(id), 'console.input', { id, data }))
+  term.onResize(({ cols, rows }) => notifyIn(projectOf(id), 'console.resize', { id, cols, rows }))
   te = { term, fit, el, ready: false, queue: [] }
   terms.set(id, te)
   const entry = te
-  request('console.attach', { id })
+  requestIn(projectOf(id), 'console.attach', { id })
     .then((r) => {
       if (r.data) term.write(b64(r.data))
       for (const d of entry.queue.splice(0)) term.write(b64(d))
@@ -172,7 +198,7 @@ export function TermView(props: { id: string; focus?: boolean }) {
 
 export async function newConsole(o: { cwd?: string; command?: string[]; title?: string; kind?: 'terminal' | 'task' } = {}) {
   try {
-    const info: ConsoleInfo = await request('console.create', { kind: o.kind ?? 'terminal', title: o.title, command: o.command, cwd: o.cwd, cols: 120, rows: 30 })
+    const info: ConsoleInfo = { ...(await request('console.create', { kind: o.kind ?? 'terminal', title: o.title, command: o.command, cwd: o.cwd, cols: 120, rows: 30 })), project: project()?.id }
     setConsoles((l) => (l.some((x) => x.id === info.id) ? l : [...l, info]))
     mutate((s) => {
       showTool(s, 'console')
@@ -192,7 +218,7 @@ export async function runTask() {
 
 async function closeConsole(id: string) {
   try {
-    await request('console.close', { id })
+    await requestIn(projectOf(id), 'console.close', { id })
   } catch {
     /* already gone */
   }
@@ -203,7 +229,7 @@ async function closeConsole(id: string) {
 
 async function renameConsole(c: ConsoleInfo) {
   const title = await prompt({ title: t('Rename the console'), value: c.title })
-  if (title) request('console.rename', { id: c.id, title }).catch(errorToast)
+  if (title) requestIn(c.project, 'console.rename', { id: c.id, title }).catch(errorToast)
 }
 
 // ---------- tools ----------
@@ -299,6 +325,7 @@ export function ConsoleTool() {
             >
               <Icon name={c.kind === 'task' ? 'play' : 'terminal'} size={13} />
               <span class="tab-title">{c.title}</span>
+              <WorktreeChip project={c.project} />
               <Show when={c.exited}>
                 <span class={c.code === 0 ? 'ok' : 'danger'}>{c.code}</span>
               </Show>

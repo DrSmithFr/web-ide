@@ -1,11 +1,11 @@
-// Conversations of the assistant linked to a ticket: briefing and plan in the window of
-// the project, development and corrections in the worktree of the ticket (docs/kanban.md).
-import { mutate, project } from '../state/project'
-import { request, RpcError } from '../pod/rpc'
+// Conversations of the assistant linked to a ticket: briefing and plan in the project,
+// development and corrections in the worktree of the ticket (docs/kanban.md).
+import { mutate, project, showWorktree } from '../state/project'
+import { RpcError } from '../pod/rpc'
 import { toast, errorToast } from '../ui/toast'
-import { chat, config, emptyChat, loadConfig, resetChat, setChat, type ChatRole } from '../llm/state'
-import { agentOptions, openChat, send } from '../llm/agent'
-import { feedbackOp, inWorktreeOf, moveTicket, openWorktreeWindow, roleLabels, startWork, worktreeProject, type Feedback, type Ticket } from './state'
+import { chat, config, loadConfig, resetChat, setChat, type ChatRole } from '../llm/state'
+import { openChat, send } from '../llm/agent'
+import { feedbackOp, inWorktreeOf, moveTicket, roleLabels, startWork, worktreeProject, type Feedback, type Ticket } from './state'
 import { t } from '../i18n'
 
 const firstMessage: Record<ChatRole, (tk: Ticket, f?: Feedback) => string> = {
@@ -56,17 +56,14 @@ export async function openTicketChat(chatId: string) {
 }
 
 /**
- * Development, correction or conflict resolution: the conversation runs in the window of
- * the worktree of the ticket (created on the way). From that window it starts at once;
- * from another one, the pod starts it in the worktree and the worktree window opens on it.
+ * Development, correction or conflict resolution: the conversation works in the worktree
+ * of the ticket (created on the way), which the window shows.
  */
 export async function startWorkSession(tk: Ticket, role: ChatRole, feedback?: Feedback, force = false) {
   if (project()?.ticket === tk.id) return startTicketChat(tk, role, undefined, feedback)
   let target: string
   try {
     target = (await startWork(tk.id, '', force)).project
-    // A step of a lineage started from the window of its worktree goes on there.
-    if (inWorktreeOf(tk)) return startTicketChat(tk, role, undefined, feedback)
   } catch (e) {
     const msg = (e as Error).message
     if (e instanceof RpcError && e.code === 'not_git' && confirm(t('{error}.\n\nDevelop in the project folder, without branch or worktree?', { error: msg }))) {
@@ -77,36 +74,19 @@ export async function startWorkSession(tk: Ticket, role: ChatRole, feedback?: Fe
     return
   }
   try {
-    await loadConfig()
-    if (!config.server || !config.model) {
-      toast(t('Choose a server and a model in the assistant, then try again.'), 'warn')
-      openWorktreeWindow(target)
-      return
-    }
-    // The conversation runs in the pod, in the worktree; its window shows it.
-    const id = emptyChat().id
-    const ticket = { id: tk.id, role, ...(feedback ? { feedback: feedback.id } : {}) }
-    const title = `#${tk.id} ${roleLabels[role]} · ${tk.title}`.slice(0, 80)
-    await request('agent.send', { id, text: firstMessage[role](tk, feedback), server: config.server, model: config.model, mode: 'build', options: agentOptions(), ticket, title, project: target })
-    const c = { id, title }
-    await request('kanban.chat.link', { id: tk.id, chatId: c.id, role, title: c.title }).catch(() => {})
-    await linkFeedback(tk, feedback, c.id)
-    try {
-      localStorage.setItem(`webide.llm.active.${target}`, c.id)
-    } catch {
-      /* private mode: the window opens on a new conversation */
-    }
-    openWorktreeWindow(target, true)
+    await showWorktree(target)
   } catch (e) {
     errorToast(e)
+    return
   }
+  return startTicketChat(tk, role, undefined, feedback)
 }
 
-/** Opens the window of the worktree of a ticket. */
+/** Shows the worktree of a ticket in the window. */
 export async function openWorktree(tk: Ticket) {
   if (inWorktreeOf(tk)) return
   try {
-    openWorktreeWindow((await worktreeProject(tk.id)).project)
+    await showWorktree((await worktreeProject(tk.id)).project)
   } catch (e) {
     errorToast(e)
   }

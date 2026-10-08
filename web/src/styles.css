@@ -229,6 +229,8 @@ button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 .tab.conflict { background: color-mix(in srgb, var(--conflict-bg) 70%, transparent); }
 .tab.readonly .tab-title { font-style: italic; }
 .tab-title { overflow: hidden; text-overflow: ellipsis; }
+/* Worktree of a tab or a console (not the main folder): ticket or branch. */
+.wt-chip { --wt: hsl(var(--wt-hue) 62% 50%); flex: none; max-width: 110px; overflow: hidden; text-overflow: ellipsis; padding: 0 6px; border-radius: 9px; font-size: 12px; font-weight: 600; line-height: 17px; color: var(--wt); background: color-mix(in srgb, var(--wt) 16%, transparent); }
 .tab-kind { width: 6px; height: 6px; border-radius: 2px; background: var(--fg-faint); flex: none; }
 .kind-sql { background: var(--info); }
 .kind-table { background: var(--ok); }

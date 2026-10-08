@@ -239,8 +239,11 @@ func (s *Server) closeRuntime(id string) {
 	rt := s.runtimes[id]
 	delete(s.runtimes, id)
 	for c := range s.clients {
-		if c.project == id {
-			c.project = ""
+		if c.sees(id) {
+			if c.project == id {
+				c.project = ""
+			}
+			delete(c.attached, id)
 			go c.push("project.closed", map[string]string{"id": id})
 		}
 	}
@@ -331,13 +334,17 @@ func (s *Server) registerProject() {
 		s.mu.Lock()
 		prev := s.runtimes[c.project]
 		same := c.project == a.ID
+		held := c.attached[a.ID] // already counted as an attached worktree
+		delete(c.attached, a.ID)
 		c.project = a.ID
 		s.mu.Unlock()
 		if !same {
 			if prev != nil {
 				prev.Detach()
 			}
-			rt.Attach()
+			if !held {
+				rt.Attach()
+			}
 		}
 		s.Projects.Touch(a.ID)
 		v, _ := s.Projects.Get(a.ID)

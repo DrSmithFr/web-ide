@@ -48,7 +48,46 @@ func (s *Server) rootOf(c *Client) (*projects.Project, *runtime.Runtime, error) 
 	return root, prt, nil
 }
 
+// family is the project owning the repository of a project (itself or its parent).
+func (s *Server) family(id string) string {
+	if p, ok := s.Projects.Get(id); ok && p.Parent != "" {
+		return p.Parent
+	}
+	return id
+}
+
 func (s *Server) registerWorktrees() {
+	// Attaches another worktree of the repository to the window: its files, consoles and
+	// git open in the same page (requests naming it in `project`), its events reach the window.
+	s.handle("project.attach", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		a, err := bind[struct{ ID string }](p)
+		if err != nil {
+			return nil, err
+		}
+		if c.project == "" || s.family(a.ID) != s.family(c.project) {
+			return nil, i18n.New("this worktree is not one of the project")
+		}
+		rt, err := s.openRuntime(a.ID, sshx.Creds{})
+		if err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		fresh := a.ID != c.project && !c.attached[a.ID]
+		if fresh {
+			c.attached[a.ID] = true
+		}
+		s.mu.Unlock()
+		if fresh {
+			rt.Attach()
+		}
+		v, _ := s.Projects.Get(a.ID)
+		return map[string]any{
+			"project":  projects.View{Project: v, DisplayName: v.Name()},
+			"root":     rt.Root,
+			"local":    rt.Local,
+			"consoles": rt.Consoles.List(),
+		}, nil
+	})
 	s.handle("worktrees.list", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 		root, rt, err := s.rootOf(c)
 		if err != nil {

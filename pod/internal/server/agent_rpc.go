@@ -24,6 +24,17 @@ func (s *Server) chatOf(c *Client) (chatCtx, error) {
 	return chatCtx{loc, root}, err
 }
 
+// runProject is where the tools of a conversation work: a ticket conversation stays in the
+// project it started in, the others work in the worktree the window names.
+func (s *Server) runProject(chat *agent.Chat, root, project string) string {
+	if chat.Ticket != nil && chat.Ticket.Project != "" {
+		if _, r, err := s.chatLoc(chat.Ticket.Project); err == nil && r == root {
+			return chat.Ticket.Project
+		}
+	}
+	return project
+}
+
 // change applies f to a conversation: under the lock of its run when it runs (then the run
 // saves and announces it), else loaded, changed, saved and announced here. f returns the
 // index of the first message it changed (-1: none).
@@ -240,6 +251,12 @@ func (s *Server) registerAgent() {
 		if a.Ticket != nil && chat.Ticket == nil {
 			chat.Ticket = a.Ticket
 		}
+		if a.Project == "" {
+			project = s.runProject(chat, cc.root, project)
+		}
+		if chat.Ticket != nil {
+			chat.Ticket.Project = project
+		}
 		from = minFrom(from, skipQuestions(chat))
 		chat.Messages = append(chat.Messages, &agent.Message{Role: "user", Content: userContent(a.Text, a.Parts), Display: displayOf(a.Text, a.Display, a.Parts), Attachments: a.Attachments})
 		s.startRun(cc.loc, cc.root, project, c.language(), chat, from)
@@ -293,7 +310,7 @@ func (s *Server) registerAgent() {
 		if err != nil {
 			return err
 		}
-		s.startRun(cc.loc, cc.root, c.project, c.language(), chat, from)
+		s.startRun(cc.loc, cc.root, s.runProject(chat, cc.root, c.project), c.language(), chat, from)
 		return nil
 	}
 	// agent.resume goes on from the last completed step (after an error or a stop), with

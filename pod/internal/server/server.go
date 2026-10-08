@@ -264,14 +264,24 @@ func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request) {
 
 // ---------- WebSocket ----------
 
+// Client is a window seen from a request: its connection and the project the request
+// runs in. A window has its own project (the one it opened, with its session) and may
+// attach the other worktrees of the same repository: a request names one of them in
+// `project`, and the events of their runtimes reach the window tagged with their project.
 type Client struct {
+	*window
+	project string
+}
+
+type window struct {
 	id      string
 	srv     *Server
 	conn    *websocket.Conn
 	send    chan []byte
 	ctx     context.Context
-	project string
-	cancels sync.Map
+	// attached are the worktree projects of the window besides its own (under srv.mu).
+	attached map[string]bool
+	cancels  sync.Map
 	// streams holds the stop functions of the log streams of the window, by id.
 	streams sync.Map
 	// lang is the language of the window (messages are translated for it).
@@ -290,6 +300,8 @@ type request struct {
 	ID     int64           `json:"id"`
 	Method string          `json:"method"`
 	Params json.RawMessage `json:"params"`
+	// Project is the attached worktree the request runs in (the project of the window by default).
+	Project string `json:"project,omitempty"`
 }
 
 type rpcError struct {
@@ -307,6 +319,8 @@ type response struct {
 type event struct {
 	Event string `json:"event"`
 	Data  any    `json:"data"`
+	// Project is the project whose runtime sent the event.
+	Project string `json:"project,omitempty"`
 }
 
 var clientSeq struct {
@@ -330,7 +344,7 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 	conn.SetReadLimit(64 << 20)
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
-	c := &Client{id: nextClientID(), srv: s, conn: conn, send: make(chan []byte, 1024), ctx: ctx}
+	c := &Client{window: &window{id: nextClientID(), srv: s, conn: conn, send: make(chan []byte, 1024), ctx: ctx, attached: map[string]bool{}}}
 	s.mu.Lock()
 	s.clients[c] = struct{}{}
 	s.windowsChanged()
@@ -341,11 +355,16 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	delete(s.clients, c)
 	s.windowsChanged()
-	project := c.project
-	rt := s.runtimes[project]
+	var rts []*runtime.Runtime
+	for id := range c.attached {
+		rts = append(rts, s.runtimes[id])
+	}
+	rts = append(rts, s.runtimes[c.project])
 	s.mu.Unlock()
-	if rt != nil {
-		rt.Detach()
+	for _, rt := range rts {
+		if rt != nil {
+			rt.Detach()
+		}
 	}
 	conn.Close(websocket.StatusNormalClosure, "")
 }
@@ -389,6 +408,26 @@ func (c *Client) enqueue(v any) {
 }
 
 func (c *Client) push(name string, data any) { c.enqueue(event{Event: name, Data: data}) }
+
+// sees tells whether the window receives the events of a project (under srv.mu).
+func (c *Client) sees(projectID string) bool {
+	return projectID != "" && (c.project == projectID || c.attached[projectID])
+}
+
+// in returns the view of the window for a request naming a project: its own project, or
+// one of the worktrees it attached.
+func (c *Client) in(projectID string) (*Client, error) {
+	if projectID == "" || projectID == c.project {
+		return c, nil
+	}
+	c.srv.mu.Lock()
+	ok := c.attached[projectID]
+	c.srv.mu.Unlock()
+	if !ok {
+		return nil, i18n.New("this worktree is not open in the window")
+	}
+	return &Client{window: c.window, project: projectID}, nil
+}
 
 // queue runs the messages of a sequential group in order and counts them, so that a
 // request can wait for the notifications received before it (see barrier).
@@ -480,8 +519,11 @@ func (c *Client) dispatch(ctx context.Context, req request) {
 	h, ok := c.srv.handlers[req.Method]
 	var res any
 	var err error
+	sc, scopeErr := c.in(req.Project)
 	if !ok {
 		err = i18n.Errorf("unknown method: %s", req.Method)
+	} else if scopeErr != nil {
+		err = scopeErr
 	} else {
 		rctx, cancel := context.WithCancel(ctx)
 		c.cancels.Store(req.ID, cancel)
@@ -492,7 +534,7 @@ func (c *Client) dispatch(ctx context.Context, req request) {
 					err = i18n.New("internal error of the pod")
 				}
 			}()
-			res, err = h(rctx, c, req.Params)
+			res, err = h(rctx, sc, req.Params)
 		}()
 		c.cancels.Delete(req.ID)
 		cancel()
@@ -544,13 +586,13 @@ func (s *Server) emitter(projectID string) runtime.Emit {
 		s.mu.Lock()
 		var targets []*Client
 		for c := range s.clients {
-			if c.project == projectID && c.id != except {
+			if c.sees(projectID) && c.id != except {
 				targets = append(targets, c)
 			}
 		}
 		s.mu.Unlock()
 		for _, c := range targets {
-			c.push(name, data)
+			c.enqueue(event{Event: name, Data: data, Project: projectID})
 		}
 	}
 }

@@ -1,9 +1,9 @@
 // Main window of a project: menu bar, icon rails, side panels, editor area, bottom tools.
 import { createEffect, createSignal, For, type JSX, onCleanup, onMount, Show } from 'solid-js'
 import { Dynamic } from 'solid-js/web'
-import { RpcError, formatRate, on as onPod, podRates, podState, request } from '../pod/rpc'
+import { RpcError, formatRate, on as onPod, podRates, podState } from '../pod/rpc'
 import {
-  activeLeaf, activeTab, closeTab, conflictedDocs, cycleTab, docsVersion, mutate, navigate as navHistory, openProject, project, relPath, reopenProject, root,
+  activeLeaf, activeTab, closeTab, conflictedDocs, cycleTab, docsVersion, home, mutate, navigate as navHistory, openProject, project, relPath, reopenProject, root,
   openFile, saveAll, session, setConflictOpener, splitPane, closeProject,
 } from '../state/project'
 import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, toggleTool, toolsIn, zoneOf, zones, type Zone } from '../state/zones'
@@ -12,7 +12,7 @@ import { focusEditorQuietly, isTyping, lockEditor, mobileView, phone, revealCare
 import { settings, updateSettings } from '../state/settings'
 import { navigate } from '../app/router'
 import { EditorArea } from '../ui/EditorArea'
-import { ConsoleTool, ProblemsTool, newConsole, problemCount, setConsoleList } from '../console/consoles'
+import { ConsoleTool, ProblemsTool, newConsole, problemCount, refreshConsoles, setConsoleList } from '../console/consoles'
 import { createIn, Explorer } from '../panels/Explorer'
 import { GlobalSearch, focusGlobalSearch } from '../panels/GlobalSearch'
 import { GitPanel } from '../panels/git/GitPanel'
@@ -593,10 +593,12 @@ export function ProjectPage(props: { id: string }) {
     }),
     onPod('pod.reconnected', async () => {
       await reopenProject()
-      request('console.list').then(setConsoleList).catch(() => {})
+      void refreshConsoles()
       refreshConnections()
     }),
-    onPod('project.closed', () => {
+    // A worktree shown besides goes by itself (state/project).
+    onPod('project.closed', (e: { id: string }) => {
+      if (e.id !== home()?.id) return
       toast(t('The project was closed (changed or deleted)'), 'warn')
       navigate('/')
     }),

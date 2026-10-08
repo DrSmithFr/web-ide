@@ -36,6 +36,7 @@ import { t } from '../i18n'
 import { dropClasses, dropIndex, setDropAt } from './tabDrop'
 import { focusPart } from '../state/focus'
 import { copyText } from './clipboard'
+import { WorktreeChip } from './WorktreeChip'
 
 export function EditorArea(props: { detached?: boolean }) {
   return (
@@ -208,6 +209,9 @@ function Pane(props: { id: string }) {
                 >
                   <span class={`tab-kind kind-${tab().kind}`} />
                   <span class="tab-title">{tabTitle(tab())}</span>
+                  <Show when={tab().kind === 'file'}>
+                    <WorktreeChip path={tab().path} />
+                  </Show>
                   <Show when={doc()?.conflict()}>
                     <span class="tab-badge conflict" title={t('In conflict')}>!</span>
                   </Show>

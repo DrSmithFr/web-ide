@@ -1,7 +1,8 @@
 // Tools of the agent that act on the interface, run by this window when the pod asks it
 // (agent.ui): show a file, bring a panel, a console or the problems to the front, draw a page
 // of the board (it needs the doodle code of the page: text measures, description, PNG).
-import { loadDoc, mutate, openFile, relPath, root } from '../state/project'
+import { attached, loadDoc, mutate, openFile, relPath, root } from '../state/project'
+import { chat } from './state'
 import { consoles } from '../console/consoles'
 import { showTool, toolIds } from '../state/zones'
 import { t } from '../i18n'
@@ -18,10 +19,13 @@ interface UiResult {
   page?: ModelPage
 }
 
-/** Absolute path in the project; "..", "." and duplicate slashes are resolved. */
-export function absPath(p: string): string {
+/** Root of the worktree the conversation shown works in (a ticket one may work in another worktree than the one shown). */
+const chatRoot = () => attached[chat.ticket?.project ?? '']?.root ?? root()
+
+/** Absolute path in the project of the conversation; "..", "." and duplicate slashes are resolved. */
+export function absPath(p: string, base = chatRoot()): string {
   p = (p ?? '').trim()
-  const base = p.startsWith('/') ? '' : root()
+  if (p.startsWith('/')) base = ''
   const out: string[] = []
   for (const seg of `${base}/${p}`.split('/')) {
     if (!seg || seg === '.') continue
@@ -33,9 +37,9 @@ export function absPath(p: string): string {
 
 const ok = (content: string, summary: string): UiResult => ({ content, summary, status: 'ok' })
 
-async function showFile(p: string, line?: number, endLine?: number): Promise<UiResult> {
+async function showFile(p: string, line?: number, endLine?: number, base?: string): Promise<UiResult> {
   if (!p) throw new Error('path is missing')
-  const abs = absPath(p)
+  const abs = absPath(p, base)
   if (!line) {
     await openFile(abs)
     return ok(`${relPath(abs)} opened in the editor.`, t('{path} opened', { path: relPath(abs) }))
@@ -49,12 +53,13 @@ async function showFile(p: string, line?: number, endLine?: number): Promise<UiR
   return ok(`${relPath(abs)} opened in the editor, ${range}.`, `${relPath(abs)} · ${endLine ? t('lines {from}-{to}', { from: l1 + 1, to: l2 + 1 }) : t('line {n}', { n: l1 + 1 })}`)
 }
 
-async function focus(a: Record<string, any>): Promise<UiResult> {
+async function focus(a: Record<string, any>, base?: string): Promise<UiResult> {
   switch (a.target) {
     case 'file': {
       if (!a.path) throw new Error('path is missing')
-      await openFile(absPath(a.path))
-      return ok(`${relPath(absPath(a.path))} brought to the front.`, relPath(absPath(a.path)))
+      const abs = absPath(a.path, base)
+      await openFile(abs)
+      return ok(`${relPath(abs)} brought to the front.`, relPath(abs))
     }
     case 'panel': {
       const id = String(a.panel ?? '')
@@ -161,7 +166,8 @@ export async function drawPage(a: DrawArgs & { number: number; clone?: number; s
   return { ...ok(description, t('Page {n} · {name}', { n: a.number, name: title })), page }
 }
 
-export function runUiTool(tool: string, args: Record<string, any>): Promise<UiResult> {
+/** base: root of the worktree the run works in (relative paths). */
+export function runUiTool(tool: string, args: Record<string, any>, base?: string): Promise<UiResult> {
   if (tool === 'board_draw') return drawPage(args as any)
-  return tool === 'open_file' ? showFile(args.path, args.line, args.end_line) : focus(args)
+  return tool === 'open_file' ? showFile(args.path, args.line, args.end_line, base) : focus(args, base)
 }

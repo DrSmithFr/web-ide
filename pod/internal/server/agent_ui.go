@@ -29,9 +29,9 @@ func (s *Server) uiClient(r *agentRun) *Client {
 	for c := range s.clients {
 		sc := -1
 		switch {
-		case c.project == r.project && c.chat() == r.id:
+		case c.sees(r.project) && c.chat() == r.id:
 			sc = 3
-		case c.project == r.project:
+		case c.sees(r.project):
 			sc = 2
 		case c.chat() == r.id:
 			sc = 1
@@ -77,7 +77,7 @@ func (s *Server) uiCall(r *agentRun, name string, args any, wait bool, timeout t
 		delete(s.agents.ui, id)
 		s.agents.mu.Unlock()
 	}()
-	c.push("agent.ui", map[string]any{"id": id, "chat": r.id, "tool": name, "args": args})
+	c.push("agent.ui", map[string]any{"id": id, "chat": r.id, "tool": name, "args": args, "project": r.project})
 	if !wait {
 		return res, true, false
 	}

@@ -1,8 +1,8 @@
 // Project part of the menu bar: icon, title, and the selector of the worktrees of the
-// repository (main folder, tickets, other branches) opened each in its own window.
+// repository (main folder, tickets, other branches), shown in the same window or in a new one.
 import { createEffect, createSignal, Show } from 'solid-js'
 import { RpcError, request } from '../pod/rpc'
-import { project } from '../state/project'
+import { home, project, showWorktree } from '../state/project'
 import { gitStatus } from '../state/git'
 import { board, ensureBoard, openTicket, openWorktreeWindow, statusLabels, summary, worktreeProject } from '../kanban/state'
 import { pick, prompt, type PickItem } from '../ui/overlay'
@@ -10,6 +10,7 @@ import { errorToast, toast } from '../ui/toast'
 import { Icon } from '../ui/icons'
 import { iconOf, iconURL, useProjectIcon, withBadge } from '../ui/projectIcon'
 import { IconEditor } from '../ui/IconEditor'
+import { newConsole } from '../console/consoles'
 import { t } from '../i18n'
 
 interface Worktree {
@@ -20,7 +21,7 @@ interface Worktree {
   ticket?: number
 }
 
-type Choice = { kind: 'remove' } | { kind: 'open-ticket'; id: number } | { kind: 'project'; id: string } | { kind: 'ticket'; id: number } | { kind: 'worktree'; path: string } | { kind: 'branch' }
+type Choice = { kind: 'remove' } | { kind: 'window' } | { kind: 'open-ticket'; id: number } | { kind: 'project'; id: string } | { kind: 'ticket'; id: number } | { kind: 'worktree'; path: string } | { kind: 'branch' }
 
 export function ProjectBar() {
   const owner = useProjectIcon(project)
@@ -38,6 +39,7 @@ export function ProjectBar() {
 
   const open = async (e: MouseEvent) => {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const anchor = { left: r.left, top: r.bottom + 2 }
     try {
       ensureBoard()
       const list = await request<{ root: string; items: Worktree[] }>('worktrees.list')
@@ -45,49 +47,61 @@ export function ProjectBar() {
       // branch is the branch of a ticket.
       const ticketOf = (w: Worktree) => w.ticket || board.tickets.find((tk) => tk.branch && tk.branch === w.branch && tk.worktree)?.id || 0
       const here = project()?.id
-      const items: PickItem<Choice>[] = []
-      const n = ticket()
-      if (n) items.push({ label: t('Open the ticket #{id}', { id: n }), value: { kind: 'open-ticket', id: n } })
+      const shown = t('shown')
+      const worktrees: PickItem<Choice>[] = []
       const main = list.items.find((w) => w.main)
-      items.push({
+      worktrees.push({
         label: main?.branch || t('main folder'),
         detail: t('main folder'),
-        hint: list.root === here ? t('this window') : '',
+        hint: list.root === here ? shown : '',
         value: { kind: 'project', id: list.root },
       })
       const rest = list.items.filter((w) => !w.main)
       for (const w of rest.filter(ticketOf).sort((a, b) => ticketOf(a) - ticketOf(b))) {
         const n = ticketOf(w)
         const tk = summary(n)
-        items.push({
+        worktrees.push({
           label: `#${n} ${tk?.title ?? ''}`,
           detail: w.branch,
-          hint: w.project && w.project === here ? t('this window') : tk ? statusLabels[tk.status] : '',
+          hint: w.project && w.project === here ? shown : tk ? statusLabels[tk.status] : '',
           value: { kind: 'ticket', id: n },
         })
       }
       for (const w of rest.filter((w) => !ticketOf(w)))
-        items.push({
+        worktrees.push({
           label: w.branch || w.path.split('/').pop()!,
           detail: main && w.path.startsWith(main.path + '/') ? w.path.slice(main.path.length + 1) : w.path,
-          hint: w.project && w.project === here ? t('this window') : '',
+          hint: w.project && w.project === here ? shown : '',
           value: w.project ? { kind: 'project', id: w.project } : { kind: 'worktree', path: w.path },
         })
+      const items: PickItem<Choice>[] = []
+      const n = ticket()
+      if (n) items.push({ label: t('Open the ticket #{id}', { id: n }), value: { kind: 'open-ticket', id: n } })
+      items.push(...worktrees)
       items.push({ label: t('Open a branch…'), detail: t('in its own worktree'), value: { kind: 'branch' } })
+      items.push({ label: t('Open in a new window…'), detail: t('a worktree in its own window'), value: { kind: 'window' } })
       const removable = rest.filter((w) => !ticketOf(w))
       if (removable.length) items.push({ label: t('Remove a worktree…'), detail: t('the branch is kept'), value: { kind: 'remove' } })
-      const c = await pick<Choice>({ placeholder: t('Worktrees and branches'), items, anchor: { left: r.left, top: r.bottom + 2 } })
+      const c = await pick<Choice>({ placeholder: t('Worktrees and branches'), items, anchor })
       if (!c) return
       if (c.kind === 'open-ticket') openTicket(c.id)
-      else if (c.kind === 'project') {
-        if (c.id !== here) openWorktreeWindow(c.id)
-      } else if (c.kind === 'ticket') openWorktreeWindow((await worktreeProject(c.id)).project)
-      else if (c.kind === 'worktree') openWorktreeWindow((await request<{ project: string }>('worktrees.open', { path: c.path })).project)
       else if (c.kind === 'branch') await openBranch(list.items, r)
-      else await removeWorktree(list.root, rest.filter((w) => !ticketOf(w)), r)
+      else if (c.kind === 'remove') await removeWorktree(list.root, removable, r)
+      else if (c.kind === 'window') {
+        const w = await pick<Choice>({ placeholder: t('Open in a new window…'), items: worktrees, anchor })
+        if (w) openWorktreeWindow(await projectOf(w))
+      } else await showWorktree(await projectOf(c))
     } catch (err) {
       errorToast(err)
     }
+  }
+
+  // Project opened on a worktree chosen in the list.
+  const projectOf = async (c: Choice): Promise<string> => {
+    if (c.kind === 'project') return c.id
+    if (c.kind === 'ticket') return (await worktreeProject(c.id)).project
+    if (c.kind === 'worktree') return (await request<{ project: string }>('worktrees.open', { path: c.path })).project
+    throw new Error('not a worktree')
   }
 
   // A branch is checked out in a new worktree: the main folder and its changes stay as they are.
@@ -115,15 +129,18 @@ export function ProjectBar() {
       create = true
     }
     const added = await request<{ project: string; setup: string }>('worktrees.add', { branch: name, create })
-    openWorktreeWindow(added.project, false, !!added.setup)
+    await showWorktree(added.project)
+    // The setup command of the kanban (npm install…) runs in a console of the new worktree.
+    if (added.setup) void newConsole({ kind: 'task', command: ['sh', '-c', added.setup], title: t('Worktree setup') })
   }
 
   const removeWorktree = async (root: string, worktrees: Worktree[], r: DOMRect) => {
     const here = project()?.id
+    const shown = t('shown')
     const w = await pick<Worktree>({
       placeholder: t('Remove a worktree…'),
       anchor: { left: r.left, top: r.bottom + 2 },
-      items: worktrees.map((w) => ({ label: w.branch || w.path.split('/').pop()!, detail: w.path, hint: w.project && w.project === here ? t('this window') : '', value: w })),
+      items: worktrees.map((w) => ({ label: w.branch || w.path.split('/').pop()!, detail: w.path, hint: w.project && w.project === here ? shown : '', value: w })),
     })
     if (!w || !confirm(t('Remove the worktree of {branch}? The branch is kept.', { branch: w.branch ?? w.path }))) return
     try {
@@ -133,8 +150,8 @@ export function ProjectBar() {
       await request('worktrees.remove', { path: w.path, force: true })
     }
     toast(t('Worktree removed'), 'ok')
-    // This window was on it: back to the main folder.
-    if (w.project && w.project === here) location.assign(`/project/${encodeURIComponent(root)}`)
+    // A window opened on it goes back to the main folder (one showing it does by itself).
+    if (w.project && w.project === home()?.id) location.assign(`/project/${encodeURIComponent(root)}`)
   }
 
   return (
@@ -164,12 +181,9 @@ export function ProjectBar() {
             ensureBoard()
             const tk = () => summary(n())
             return (
-              <span class="mb-ticket" data-testid="worktree-banner">
+              <span class="mb-ticket" data-testid="worktree-banner" title={tk() ? `#${n()} ${tk()!.title} · ${statusLabels[tk()!.status]}` : undefined}>
                 <Icon name="kanban" size={12} />
-                <span class="ellipsis">{t('Ticket #{id} {title}', { id: n(), title: tk()?.title ?? '' })}</span>
-                <Show when={tk()}>
-                  <span class={`kb-status st-${tk()!.status}`}>{statusLabels[tk()!.status]}</span>
-                </Show>
+                <span class="ellipsis">{t('Ticket #{id}', { id: n() })}</span>
               </span>
             )
           }}

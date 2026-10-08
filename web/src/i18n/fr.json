@@ -921,7 +921,6 @@
   "This model reads neither images nor video": "Ce modèle ne lit pas les images ni la vidéo",
   "Threshold": "Seuil",
   "Threshold: {n} % of the context": "Seuil : {n} % du contexte",
-  "Ticket #{id} {title}": "Ticket #{id} {title}",
   "Ticket created": "Ticket créé",
   "timeout": "délai dépassé",
   "Tiny (fast, rough)": "Tiny (rapide, approximatif)",
@@ -1131,7 +1130,6 @@
   "Diamond": "Losange",
   "Open the ticket #{id}": "Ouvrir le ticket #{id}",
   "main folder": "dossier principal",
-  "this window": "cette fenêtre",
   "Open a branch…": "Ouvrir une branche…",
   "in its own worktree": "dans son propre worktree",
   "Worktrees and branches": "Worktrees et branches",
@@ -1634,5 +1632,9 @@
   "answered by Claude Code": "répondu par Claude Code",
   "Resume with {model}": "Reprendre avec {model}",
   "Go on from the last completed step with the model chosen": "Continuer depuis la dernière étape terminée avec le modèle choisi",
-  "Start the answer again from your message with the model chosen": "Relancer la réponse depuis votre message avec le modèle choisi"
+  "Start the answer again from your message with the model chosen": "Relancer la réponse depuis votre message avec le modèle choisi",
+  "Ticket #{id}": "Ticket #{id}",
+  "shown": "affiché",
+  "Open in a new window…": "Ouvrir dans une nouvelle fenêtre…",
+  "a worktree in its own window": "un worktree dans sa propre fenêtre"
 }

@@ -10,6 +10,7 @@ import { fuzzy } from '../ui/overlay'
 import { Icon } from '../ui/icons'
 import { FileIcon } from '../panels/fileIcons'
 import { keepFocus } from '../state/focus'
+import { WorktreeChip } from '../ui/WorktreeChip'
 import { t } from '../i18n'
 import './popups.css'
 
@@ -219,6 +220,7 @@ export function RecentFilesHost(props: { tools: () => SwitcherTool[]; onTool: (i
                         <FileIcon name={basename(p)} />
                       </span>
                       <span class={`pick-label rf-name git-${fileState(p) ?? 'clean'}`}>{basename(p)}</span>
+                      <WorktreeChip path={p} />
                       <Show when={getDoc(p)?.dirty()}>
                         <span class="rf-dirty" title={t('Unsaved changes')}>●</span>
                       </Show>

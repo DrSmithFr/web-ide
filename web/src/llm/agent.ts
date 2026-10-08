@@ -5,7 +5,7 @@
 import { produce, reconcile } from 'solid-js/store'
 import { createSignal } from 'solid-js'
 import { on, request } from '../pod/rpc'
-import { activeTab, project, relPath, session } from '../state/project'
+import { activeTab, attachWorktree, home, relPath, session } from '../state/project'
 import { approval, chat, config, emptyChat, live, newId, prefs, refreshChats, setApproval, setChat, setIncomingDraft, setLive, type Chat, type ChatMessage, type Mode, type Part } from './state'
 import { runUiTool } from './uiTools'
 import { entryToString, type AnswerEntry } from './ask'
@@ -190,8 +190,10 @@ on('agent.error', (e: { id: string; error: string }) => {
 })
 
 /** A tool of the agent that acts on the interface: this window runs it. */
-on('agent.ui', async (req: { id: string; chat: string; tool: string; args: Record<string, any> }) => {
-  const res = await runUiTool(req.tool, req.args).catch((e) => ({ content: `Error: ${(e as Error).message}`, summary: (e as Error).message, status: 'error' as const }))
+on('agent.ui', async (req: { id: string; chat: string; tool: string; args: Record<string, any>; project?: string }) => {
+  // The run may work in another worktree than the one shown: its files open from there.
+  const base = req.project ? await attachWorktree(req.project).then((w) => w.root, () => undefined) : undefined
+  const res = await runUiTool(req.tool, req.args, base).catch((e) => ({ content: `Error: ${(e as Error).message}`, summary: (e as Error).message, status: 'error' as const }))
   if (!req.args.quiet) request('agent.ui.result', { id: req.id, ...res }).catch(() => {})
 })
 
@@ -211,7 +213,7 @@ export async function loadStates() {
 
 // ---------- the conversation shown ----------
 
-const activeKey = () => `webide.llm.active.${project()?.id ?? ''}`
+const activeKey = () => `webide.llm.active.${home()?.id ?? ''}`
 
 function rememberActive() {
   try {
@@ -243,7 +245,7 @@ let chatProject = ''
  * new one. Called when the panel opens; nothing changes when the project is the same.
  */
 export async function restoreActive() {
-  const pid = project()?.id ?? ''
+  const pid = home()?.id ?? ''
   if (!pid || pid === chatProject) return
   const changed = chatProject !== ''
   chatProject = pid

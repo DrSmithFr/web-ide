@@ -172,7 +172,8 @@ export function refreshBoard(): Promise<void> {
 /** Loads the board once for the open project (and again when the project changes). */
 let loadedFor = ''
 export function ensureBoard() {
-  const pid = project()?.id ?? ''
+  // The worktrees of a project share its kanban.
+  const pid = project()?.parent || project()?.id || ''
   if (pid && pid !== loadedFor) {
     loadedFor = pid
     setBoard({ tickets: [], loaded: false })

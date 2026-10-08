@@ -8,6 +8,10 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 - Claude Code answers the local assistant: the MCP tools `kanban_reply` (a message in a conversation linked to a ticket) and `kanban_answer` (the `ask_user` questions waiting); `kanban_conversation` lists the questions waiting. The thread marks what Claude wrote or answered.
 
+### Changed
+
+- Worktrees open in the same window: the worktree selector (and *Start development*, *Open the worktree*) switches the explorer, the search, the Git tool and the new consoles without reloading; tabs and consoles of several worktrees stay open side by side, each with a chip (`#<n>` or the branch). The selector shows *Ticket #<n>*; *Open in a new window…* keeps the former way. A development conversation keeps working in the worktree of its ticket.
+
 ## [1.4.0] - 2026-10-07
 
 ### Added

@@ -4,7 +4,7 @@
 import type { Indent } from '../editor/indent'
 import { batch, createEffect, createRoot, createSignal, on as track } from 'solid-js'
 import { createStore, produce, reconcile, unwrap } from 'solid-js/store'
-import { notify, on, request } from '../pod/rpc'
+import { notify, on, request, setScope } from '../pod/rpc'
 import { Doc } from '../editor/doc'
 import { detectLanguage, lspLanguage, lspLanguageId } from '../editor/languages'
 import { merge3 } from '../editor/merge'
@@ -68,6 +68,9 @@ export interface SessionData {
   git: { tab: 'commit' | 'history'; form: number; detail: number }
   /** Docker tool: shown tab, chosen Compose profiles, tab of the detail pane. */
   docker: { tab: 'project' | 'host' | 'disk' | 'tunnels' | 'previews'; profiles: string[]; detail: 'infos' | 'logs' }
+  /** Other worktrees of the repository open in the window, and the one shown (none: the project of the window). */
+  attached: string[]
+  worktree?: string
 }
 
 export interface ProjectInfo {
@@ -105,14 +108,30 @@ function emptySession(): SessionData {
     explorer: { hidden: true, excluded: true, singleClick: false, follow: false },
     git: { tab: 'commit', form: 150, detail: 260 },
     docker: { tab: 'project', profiles: [], detail: 'infos' },
+    attached: [],
   }
 }
 
 // ---------- reactive state ----------
 
+/**
+ * A window opens one project (home: its session) and may show the other worktrees of the
+ * same repository without reloading (attached). project, root and isLocal are those of the
+ * worktree shown: the explorer, the search, the Git tool and new consoles follow it, while
+ * a file or a console stays in the worktree it belongs to.
+ */
+export interface Attached {
+  project: ProjectInfo
+  root: string
+  local: boolean
+}
+
+const [home, setHome] = createSignal<ProjectInfo | null>(null)
+const [attached, setAttached] = createStore<Record<string, Attached>>({})
 const [project, setProject] = createSignal<ProjectInfo | null>(null)
 const [root, setRoot] = createSignal('')
 const [isLocal, setIsLocal] = createSignal(true)
+export { home, attached }
 const [session, setSession] = createStore<SessionData>(emptySession())
 const [diagnostics, setDiagnostics] = createStore<Record<string, LspDiagnostic[]>>({})
 const [docsVersion, setDocsVersion] = createSignal(0)
@@ -147,8 +166,8 @@ export function mutate(fn: (s: SessionData) => void) {
   pushSession()
 }
 
-on('session.changed', (data: SessionData) => {
-  if (!data || !project()) return
+on('session.changed', (data: SessionData, from?: string) => {
+  if (!data || !project() || (from && from !== home()?.id)) return
   applyingRemote = true
   setSession(reconcile(normalize(data)))
   applyingRemote = false
@@ -166,6 +185,7 @@ function normalize(raw: any): SessionData {
   if (s.right.panel && panelAliases[s.right.panel]) s.right.panel = panelAliases[s.right.panel]
   s.placement = normalizePlacement(raw.placement)
   if (!Array.isArray(s.recent)) s.recent = []
+  if (!Array.isArray(s.attached)) s.attached = []
   // Former bottom panel: consoles, problems and output in one strip.
   if (raw.bottom && 'open' in raw.bottom) {
     const { open, ...rest } = s.bottom as any
@@ -400,11 +420,91 @@ export function basename(p: string) {
   return p.slice(p.lastIndexOf('/') + 1)
 }
 
+/** Path relative to the worktree holding it. */
 export function relPath(p: string) {
-  const r = root()
+  const id = projectOfPath(p)
+  const r = id ? attached[id].root : root()
   if (r && p.startsWith(r + '/')) return p.slice(r.length + 1)
   return p
 }
+
+// ---------- worktrees ----------
+
+/** The attached worktree holding a path (the deepest root: ticket worktrees live in .ide/worktrees of the main folder). */
+export function projectOfPath(path: string): string | undefined {
+  let best: Attached | undefined
+  for (const a of Object.values(attached)) if ((path === a.root || path.startsWith(a.root + '/')) && (!best || a.root.length > best.root.length)) best = a
+  return best?.project.id
+}
+
+// Requests on a file run in the worktree of the file; the others in the worktree shown,
+// except those of the window itself (its session, its database connections) and of the
+// repository (worktrees).
+const byPath = /^(fs|git|lsp|buffer|folders)\./
+const ownMethods = /^(session|project|worktrees|db)\./
+function pathOf(params: any): string | undefined {
+  const p = params?.path ?? params?.params?.textDocument?.uri
+  if (typeof p !== 'string') return undefined
+  return p.startsWith('file://') ? pathFromUri(p) : p.startsWith('/') ? p : undefined
+}
+setScope((method, params) => {
+  if (ownMethods.test(method)) return undefined
+  const p = byPath.test(method) ? pathOf(params) : undefined
+  const id = (p && projectOfPath(p)) || project()?.id
+  return id && id !== home()?.id ? id : undefined
+})
+
+/** Chip of a worktree on the tabs and consoles: its ticket (#12) or its branch; none for the main folder. */
+export function worktreeChip(id: string | undefined): { label: string; title: string; hue: number } | null {
+  const p = id ? attached[id]?.project : undefined
+  if (!p?.parent) return null
+  let h = 0
+  for (const ch of p.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  return { label: p.ticket ? `#${p.ticket}` : p.title || basename(attached[id!].root), title: p.title, hue: h % 360 }
+}
+
+/** Opens another worktree of the repository in the window (its files, consoles and git). */
+export async function attachWorktree(id: string): Promise<Attached> {
+  if (attached[id]) return attached[id]
+  const r = await request('project.attach', { id })
+  const a: Attached = { project: r.project, root: r.root, local: r.local }
+  setAttached(id, a)
+  if (id !== home()?.id && !session.attached.includes(id)) mutate((s) => s.attached.push(id))
+  return a
+}
+
+/** Shows a worktree in the window: the explorer, the search and the Git tool follow it. */
+export async function showWorktree(id: string) {
+  const a = await attachWorktree(id)
+  batch(() => {
+    setProject(a.project)
+    setRoot(a.root)
+    setIsLocal(a.local)
+  })
+  const w = id === home()?.id ? undefined : id
+  if (session.worktree !== w) mutate((s) => (s.worktree = w))
+}
+
+/** A worktree closed by the pod (removed, its ticket finished): its tabs close, the window goes back to its project. */
+function dropWorktree(id: string) {
+  const a = attached[id]
+  if (!a) return
+  if (project()?.id === id) void showWorktree(home()!.id)
+  for (const l of leaves())
+    for (const tab of l.tabs) {
+      const p = session.tabs[tab]?.path
+      if (p && projectOfPath(p) === id) closeTab(l.id, tab)
+    }
+  setAttached(produce((m) => delete m[id]))
+  mutate((s) => {
+    s.attached = s.attached.filter((x) => x !== id)
+    if (s.worktree === id) s.worktree = undefined
+  })
+}
+
+on('project.closed', (e: { id: string }) => {
+  if (e.id !== home()?.id) dropWorktree(e.id)
+})
 
 export function getDoc(path: string): Doc | null {
   return docs.get(path)?.doc ?? null
@@ -743,23 +843,37 @@ export function navigate(dir: -1 | 1) {
 export async function openProject(id: string, creds?: { password?: string; passphrase?: string }) {
   const r = await request('project.open', { id, creds })
   batch(() => {
-    setProject({ ...r.project, name: r.project.name })
+    setHome(r.project)
+    setAttached(reconcile({ [id]: { project: r.project, root: r.root, local: r.local } }))
+    setProject(r.project)
     setRoot(r.root)
     setIsLocal(r.local)
     applyingRemote = true
     setSession(reconcile(normalize(r.session)))
     applyingRemote = false
   })
+  await reattach()
   syncDocsWithTabs()
   return r
 }
 
+/** Attaches again the worktrees the window had (those gone are forgotten) and shows the one it showed. */
+async function reattach() {
+  const gone: string[] = []
+  for (const w of [...session.attached]) await attachWorktree(w).catch(() => gone.push(w))
+  if (gone.length) mutate((s) => (s.attached = s.attached.filter((x) => !gone.includes(x))))
+  const w = session.worktree
+  if (w && attached[w]) await showWorktree(w)
+  else if (w) mutate((s) => (s.worktree = undefined))
+}
+
 /** After a reconnection: reopen the project and catch up with changes made meanwhile. */
 export async function reopenProject() {
-  const p = project()
+  const p = home()
   if (!p) return
   try {
     await request('project.open', { id: p.id })
+    for (const w of Object.keys(attached)) if (w !== p.id) await request('project.attach', { id: w }).catch(() => dropWorktree(w))
   } catch {
     return
   }
@@ -777,6 +891,8 @@ export async function reopenProject() {
 export function closeProject() {
   for (const e of docs.values()) e.dispose()
   docs.clear()
+  setHome(null)
+  setAttached(reconcile({}))
   setProject(null)
   setRoot('')
   setSession(reconcile(emptySession()))

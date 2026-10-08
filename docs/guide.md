@@ -107,9 +107,9 @@ On the ticket, *Generate the plan* starts a conversation in Plan mode: the model
 
 ### 3. Development in a worktree
 
-![The model develops the ticket in its own window](images/develop.gif)
+![The model develops the ticket in its worktree](images/develop.gif)
 
-*Start development* creates the branch `ticket/<n>-<slug>` and a git worktree for it in `.ide/worktrees/`, runs the setup command of the kanban settings in it (`npm install`, copy a `.env`…), and opens it in its own window, where the model starts working:
+*Start development* creates the branch `ticket/<n>-<slug>` and a git worktree for it in `.ide/worktrees/`, runs the setup command of the kanban settings in it (`npm install`, copy a `.env`…), and shows it in the same window, where the model starts working:
 
 - it follows the plan and the project instructions (`CLAUDE.md`, `AGENTS.md`, skills);
 - it reads, searches, edits files, uses the language servers and runs commands (build, tests);
@@ -124,7 +124,7 @@ Your main folder is never touched: you can keep working there, or develop severa
 
 ![The ticket to test: how to test, goals, changed files and their diff](images/review.png)
 
-In **To test**, the ticket shows how to test, the goals, and the change against its base branch, file by file. Test it in the worktree window (its terminals, its run commands). Then:
+In **To test**, the ticket shows how to test, the goals, and the change against its base branch, file by file. Test it in its worktree (the worktree selector of the menu bar; its files and terminals carry the chip `#<n>`). Then:
 
 - **Add feedback** (bug, info or new feature) for what is wrong: *Fix session* sends one feedback or all of them to the model, which fixes them in the worktree and marks them handled.
 - **Rebase** on the base branch when it moved; conflicts are listed with *Continue*, *Abort* and a *Resolution session* for the model.

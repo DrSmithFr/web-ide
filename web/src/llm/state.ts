@@ -261,7 +261,8 @@ export interface Chat {
   /** Plan: explore and propose without changing files; Build (default): act. */
   mode?: Mode
   /** Kanban ticket this conversation works on, and its role (docs/kanban.md). */
-  ticket?: { id: number; role: ChatRole; feedback?: number }
+  /** project: where the conversation works (the worktree of its ticket for a development). */
+  ticket?: { id: number; role: ChatRole; feedback?: number; project?: string }
   /** Change or command waiting for the user. */
   approval?: Approval
   /** A sub-agent: the conversation that started it, and its task; the sub-agents started here. */
