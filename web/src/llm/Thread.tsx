@@ -322,49 +322,70 @@ function UserMessage(props: { msg: ChatMessage; index: number }) {
 
 // ---------- answers ----------
 
-function Reasoning(props: { text: string; live?: boolean; ms?: number }) {
-  const now = useNow(() => !!props.live, 500)
-  const label = () => {
-    if (props.live) return `${t('Thinking')}${live.thinkStart ? ` · ${formatDuration(now() - live.thinkStart)}` : ''}…`
-    return props.ms ? `${t('Thinking')} · ${formatDuration(props.ms)}` : t('Thinking')
-  }
-  // The box has its own scroll: while the model thinks, it follows the end of the text
-  // unless the user scrolled up in it.
-  let box: HTMLDivElement | undefined
-  let stick = true
-  createEffect(() => {
-    props.text
-    if (props.live && stick && box) box.scrollTop = box.scrollHeight
-  })
+/** A block open while it runs and folded when it ends, unless the user toggled it. */
+function useFold(running: () => boolean) {
+  const [user, setUser] = createSignal<boolean>()
+  const open = () => user() ?? running()
+  return [open, () => setUser(!open())] as const
+}
+
+/** Duration of a block: counted while it runs, then the final one. */
+function Elapsed(props: { running: boolean; start?: number; ms?: number }) {
+  const now = useNow(() => props.running && !!props.start, 500)
+  const ms = () => (props.running ? (props.start ? now() - props.start : undefined) : props.ms)
   return (
-    <details class="ai-reasoning" classList={{ live: !!props.live }} open={props.live}>
-      <summary>
-        <Icon name="chevron" size={11} />
-        <span class={props.live ? 'ai-shimmer' : ''}>{label()}</span>
-      </summary>
-      <div
-        ref={box}
-        class="ai-reasoning-text"
-        data-testid="ai-reasoning-text"
-        onScroll={() => (stick = box!.scrollHeight - box!.scrollTop - box!.clientHeight < 30)}
-      >
+    <Show when={ms() !== undefined}>
+      <span class="ai-dur">{formatDuration(Math.max(0, ms()!))}</span>
+    </Show>
+  )
+}
+
+/** A box that follows the end of its text while it streams, unless the user scrolled up in it. */
+function follow(el: HTMLElement, streaming: () => boolean, text: () => unknown) {
+  let stick = true
+  el.addEventListener('scroll', () => (stick = el.scrollHeight - el.scrollTop - el.clientHeight < 30))
+  createEffect(() => {
+    text()
+    if (streaming() && stick) el.scrollTop = el.scrollHeight
+  })
+}
+
+function Reasoning(props: { text: string; live?: boolean; ms?: number }) {
+  const [open, toggle] = useFold(() => !!props.live)
+  return (
+    <div class="ai-reasoning" classList={{ live: !!props.live, open: open() }}>
+      <button class="ai-tool-head" onClick={toggle}>
+        <span class="ai-tool-icon">
+          <Show when={!props.live} fallback={<span class="spinner" />}>
+            <Icon name="sparkle" size={13} />
+          </Show>
+        </span>
+        <span class={props.live ? 'ai-tool-name ai-shimmer' : 'ai-tool-name'}>{props.live ? `${t('Thinking')}…` : t('Thinking')}</span>
+        <span class="grow" />
+        <Elapsed running={!!props.live} start={live.thinkStart || undefined} ms={props.ms} />
+        <span class="ai-chev" classList={{ open: open() }}>
+          <Icon name="chevron" size={11} />
+        </span>
+      </button>
+      {/* Its own scroll: while the model thinks, it follows the end of the text. */}
+      <div class="ai-reasoning-text" data-testid="ai-reasoning-text" ref={(el) => follow(el, () => !!props.live && open(), () => props.text)}>
         {props.text}
       </div>
-    </details>
+    </div>
   )
 }
 
 function ToolRow(props: { msg: ChatMessage; call?: ToolCall }) {
-  const [open, setOpen] = createSignal(false)
   const label = () => callLabel(props.call, props.msg.name ?? '')
   const pending = () => !props.msg.status
+  const [open, toggle] = useFold(pending)
   const path = () => {
     const a = safeArgs(props.call)
     return typeof a.path === 'string' && props.msg.status === 'ok' && props.msg.name !== 'list_dir' ? absPath(a.path) : ''
   }
   return (
     <div class={`ai-tool ${props.msg.status ?? 'running'}`}>
-      <button class="ai-tool-head" onClick={() => setOpen(!open())} title={t('{tool}: show the result', { tool: props.msg.name ?? '' })}>
+      <button class="ai-tool-head" onClick={toggle} title={t('{tool}: show the result', { tool: props.msg.name ?? '' })}>
         <span class="ai-tool-icon">
           <Show when={!pending()} fallback={<span class="spinner" />}>
             <Icon name={toolIcons[props.msg.name ?? ''] ?? 'puzzle'} size={13} />
@@ -377,11 +398,13 @@ function ToolRow(props: { msg: ChatMessage; call?: ToolCall }) {
         </span>
         <span class="grow" />
         <span class="ai-tool-sum ellipsis">{pending() ? '' : summaryText(props.msg.summary)}</span>
+        {/* elapsedMs is left out when under a millisecond. */}
+        <Elapsed running={pending()} start={props.msg.startedAt} ms={props.msg.startedAt ? props.msg.elapsedMs ?? 0 : undefined} />
         <span class="ai-chev" classList={{ open: open() }}>
           <Icon name="chevron" size={11} />
         </span>
       </button>
-      <Show when={props.msg.diff?.length && (open() || props.msg.status === 'ok')}>
+      <Show when={props.msg.diff?.length && open()}>
         <DiffBlock lines={props.msg.diff!} />
       </Show>
       <Show when={props.msg.page}>
@@ -411,12 +434,12 @@ function ToolRow(props: { msg: ChatMessage; call?: ToolCall }) {
                     {props.msg.name}({props.call!.function.arguments.length > 300 ? props.call!.function.arguments.slice(0, 300) + '…' : props.call!.function.arguments})
                   </div>
                 </Show>
-                <pre class="ai-tool-out">{typeof props.msg.content === 'string' ? props.msg.content : ''}</pre>
+                <pre class="ai-tool-out" ref={(el) => follow(el, pending, () => props.msg.content)}>{typeof props.msg.content === 'string' ? props.msg.content : ''}</pre>
               </>
             }
           >
             {/* A terminal-like block: the command, then its output. */}
-            <pre class="ai-term">
+            <pre class="ai-term" ref={(el) => follow(el, pending, () => props.msg.content)}>
               <span class="ai-term-cmd">$ {safeArgs(props.call).command}</span>
               {'\n' + (typeof props.msg.content === 'string' ? props.msg.content : '')}
             </pre>
@@ -429,12 +452,15 @@ function ToolRow(props: { msg: ChatMessage; call?: ToolCall }) {
 
 function ToolSteps(props: { items: { msg: ChatMessage; call?: ToolCall }[] }) {
   const running = () => props.items.some((i) => !i.msg.status)
+  const [open, toggle] = useFold(running)
   const failed = () => props.items.filter((i) => i.msg.status === 'error').length
   const names = () => [...new Set(props.items.map((i) => (toolVerbs[i.msg.name ?? ''] ? t(toolVerbs[i.msg.name ?? '']) : i.msg.name)))].slice(0, 3).join(', ')
+  const start = () => props.items.find((i) => i.msg.startedAt)?.msg.startedAt
+  const total = () => props.items.reduce((n, i) => n + (i.msg.elapsedMs ?? 0), 0) || undefined
   return (
     <Show when={props.items.length > 2} fallback={<div class="ai-steps-flat">{<For each={props.items}>{(i) => <ToolRow msg={i.msg} call={i.call} />}</For>}</div>}>
-      <details class="ai-steps" open={running() || undefined}>
-        <summary>
+      <div class="ai-steps" classList={{ open: open() }}>
+        <button class="ai-steps-head" onClick={toggle}>
           <Show when={running()} fallback={<Icon name="check" size={12} />}>
             <span class="spinner" />
           </Show>
@@ -445,12 +471,13 @@ function ToolSteps(props: { items: { msg: ChatMessage; call?: ToolCall }[] }) {
             <span class="badge danger">{t('{n} failed', { n: failed() })}</span>
           </Show>
           <span class="grow" />
-          <span class="ai-chev ai-steps-chev">
+          <Elapsed running={running()} start={start()} ms={total()} />
+          <span class="ai-chev" classList={{ open: open() }}>
             <Icon name="chevron" size={11} />
           </span>
-        </summary>
+        </button>
         <For each={props.items}>{(i) => <ToolRow msg={i.msg} call={i.call} />}</For>
-      </details>
+      </div>
     </Show>
   )
 }

@@ -238,7 +238,11 @@ run(async ({ page, ctx }) => {
     assert(/Hello/.test(symResult?.content ?? '') && /Greeter/.test(symResult?.content ?? ''), 'lsp_symbols returns the structure (gopls): ' + (symResult?.content ?? '').slice(0, 60).replace(/\n/g, ' | '))
     assert(requests[0].messages[0].role === 'system' && requests[0].tools.length >= 10 && requests[0].stream === true, 'system prompt and tools sent')
     assert(!requests[0].messages.some((m) => 'usage' in m || 'attachments' in m), 'fields of the page removed from the messages')
-    assert(await page.isVisible('.ai-reasoning:has-text("I need to read the file.")'), 'reasoning shown')
+    assert(await page.isVisible('.ai-reasoning .ai-tool-head:has-text("Thinking")'), 'reasoning shown as a block')
+    assert(!(await page.isVisible('.ai-reasoning-text')) && !(await page.isVisible('.ai-tool-detail')), 'blocks folded once done')
+    assert((await page.$$eval('.ai-tool .ai-dur', (e) => e.length)) === 3, 'each tool block shows its duration')
+    await page.click('.ai-reasoning .ai-tool-head')
+    assert(await page.isVisible('.ai-reasoning-text:has-text("I need to read the file.")'), 'reasoning unfolded by a click')
     assert((await page.$$eval('.ai-usage', (e) => e[e.length - 1].textContent)).includes('42.5 tokens/s'), 'usage and speed shown')
     await page.screenshot({ path: OUT + '/llm-answer.png' })
 

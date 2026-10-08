@@ -197,9 +197,9 @@ func (s *Server) agentTool(r *agentRun, ref *runtimeRef, call agent.ToolCall, mo
 	case "share_preview":
 		res, err = sharePreview(r, ref.rt, a)
 	case "bash":
-		res, err = bashTool(r.ctx, ref.rt, a.str("command"), a.str("cwd"), a.num("timeout"))
+		res, err = bashTool(r.ctx, ref.rt, a.str("command"), a.str("cwd"), a.num("timeout"), s.toolProgress(r, call.ID))
 	case "run_command":
-		res, err = s.runCommand(r, ref.rt, a.str("command"), a.str("cwd"), a.num("timeout"))
+		res, err = s.runCommand(r, ref.rt, a.str("command"), a.str("cwd"), a.num("timeout"), s.toolProgress(r, call.ID))
 	case "list_consoles":
 		res = listConsoles(ref.rt)
 	case "read_console":
@@ -213,6 +213,25 @@ func (s *Server) agentTool(r *agentRun, ref *runtimeRef, call agent.ToolCall, mo
 		return fail(r, err)
 	}
 	return res
+}
+
+// toolProgress shows the output of a tool call while it runs: the page follows it in its
+// block. Not saved (the result replaces it), and only the end of a long output.
+func (s *Server) toolProgress(r *agentRun, callID string) func(string) {
+	return func(text string) {
+		text = agent.Tail(agent.PlainOutput(text), 400, 16000)
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		for i := len(r.chat.Messages) - 1; i >= 0; i-- {
+			if m := r.chat.Messages[i]; m.Role == "tool" && m.ToolCallID == callID {
+				if m.Status == "" {
+					m.Content = agent.String(text)
+					s.emitAgent(r.root, "agent.update", updateOf(r.chat, r.state, r.ahead, i))
+				}
+				return
+			}
+		}
+	}
 }
 
 // confirm asks the user before a file change or a command; false when refused or stopped.
@@ -571,7 +590,7 @@ func (s *Server) readSkillFile(rt *runtime.Runtime, name, file string) (toolResu
 
 // ---------- shell and consoles ----------
 
-func bashTool(ctx context.Context, rt *runtime.Runtime, command, cwd string, timeout int) (toolResult, error) {
+func bashTool(ctx context.Context, rt *runtime.Runtime, command, cwd string, timeout int, progress func(string)) (toolResult, error) {
 	if strings.TrimSpace(command) == "" {
 		return toolResult{}, failf("command is missing")
 	}
@@ -581,7 +600,7 @@ func bashTool(ctx context.Context, rt *runtime.Runtime, command, cwd string, tim
 	if timeout <= 0 {
 		timeout = 120
 	}
-	res, err := runShell(ctx, rt, command, cwd, timeout)
+	res, err := runShell(ctx, rt, command, cwd, timeout, progress)
 	if err != nil {
 		return toolResult{}, err
 	}
@@ -629,7 +648,7 @@ type consoleInfo struct {
 	Code   int
 }
 
-func (s *Server) runCommand(r *agentRun, rt *runtime.Runtime, command, cwd string, timeout int) (toolResult, error) {
+func (s *Server) runCommand(r *agentRun, rt *runtime.Runtime, command, cwd string, timeout int, progress func(string)) (toolResult, error) {
 	if strings.TrimSpace(command) == "" {
 		return toolResult{}, failf("command is missing")
 	}
@@ -644,8 +663,9 @@ func (s *Server) runCommand(r *agentRun, rt *runtime.Runtime, command, cwd strin
 	// The console comes to the front in the windows of the project (if any).
 	go s.uiTool(r, "focus", toolArgs{"target": json.RawMessage(`"console"`), "console_id": jsonString(info.ID), "quiet": json.RawMessage("true")})
 	until := time.Now().Add(limit)
-	var text string
+	var text, last string
 	var now *consoleInfo
+	shown := time.Now()
 	for {
 		text, now, err = consoleText(rt, info.ID)
 		if err != nil {
@@ -653,6 +673,10 @@ func (s *Server) runCommand(r *agentRun, rt *runtime.Runtime, command, cwd strin
 		}
 		if now.Exited || time.Now().After(until) || r.ctx.Err() != nil {
 			break
+		}
+		if time.Since(shown) >= 500*time.Millisecond && text != last {
+			progress(text)
+			shown, last = time.Now(), text
 		}
 		time.Sleep(150 * time.Millisecond)
 	}

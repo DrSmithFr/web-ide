@@ -120,6 +120,8 @@ export interface ChatMessage {
   /** Time spent thinking, and from the request to the end of the answer (ms). */
   thinkMs?: number
   elapsedMs?: number
+  /** Start of a tool call (ms); its elapsedMs is set when it ends. */
+  startedAt?: number
   /** Mode in which an answer was written. */
   mode?: Mode
   /** Plan proposed with exit_plan_mode (tool message), and what the user did with it. */

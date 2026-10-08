@@ -43,7 +43,7 @@ const fake = http.createServer(async (req, res) => {
     return end(res)
   }
   if (scenario === 'slow-tool') {
-    if (last.role === 'user') return sse(res, { tool_calls: [call('b1', 'bash', { command: 'sleep 3; echo done' })] }), end(res, 'tool_calls')
+    if (last.role === 'user') return sse(res, { tool_calls: [call('b1', 'bash', { command: 'echo started; sleep 3; echo done' })] }), end(res, 'tool_calls')
     sse(res, { content: `Resumed: ${text(last)}` })
     return end(res)
   }
@@ -187,9 +187,14 @@ run(async ({ page, ctx }) => {
     await page.fill('.ai-composer textarea', 'slow-tool now')
     await page.keyboard.press('Enter')
     await page.waitForSelector('.ai-tool.running', { timeout: 10000 })
+    const streamed = await page.waitForSelector('.ai-tool.running .ai-term:has-text("started")', { timeout: 2500 }).then(() => true, () => false)
+    assert(streamed, 'the running block is open and follows the output of the command')
+    assert(/\d/.test((await page.textContent('.ai-tool.running .ai-dur').catch(() => '')) ?? ''), 'the running block counts its duration')
     await page.reload()
     const resumed = await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Resumed: Exit code 0")', { timeout: 15000 }).then(() => true, () => false)
     const rows = await page.$$eval('.ai-tool', (e) => e.filter((x) => x.textContent.includes('sleep 3')).map((x) => x.className))
+    const done = await page.$$eval('.ai-tool', (e) => e.filter((x) => x.textContent.includes('sleep 3')).map((x) => ({ term: !!x.querySelector('.ai-term'), dur: x.querySelector('.ai-dur')?.textContent ?? '' })))
+    assert(done.length === 1 && !done[0].term && /^[3-9][.\d]* s$/.test(done[0].dur), 'the block folds when it ends and keeps its duration: ' + JSON.stringify(done))
     assert(resumed && rows.length === 1 && !rows[0].includes('error') && byScenario['slow-tool'] === 2, `tool not interrupted by the reload, then the agent goes on (${rows.length} tool, ${byScenario['slow-tool']} requests)`)
 
     // Another window opened during an answer follows its stream.

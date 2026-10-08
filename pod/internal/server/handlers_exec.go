@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/execx"
@@ -20,11 +21,14 @@ const (
 
 // capped keeps the first execHead bytes and the last execTail bytes written to it.
 type capped struct {
+	mu         sync.Mutex
 	head, tail []byte
 	total      int
 }
 
 func (c *capped) Write(p []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	n0 := len(p)
 	c.total += n0
 	if room := execHead - len(c.head); room > 0 {
@@ -40,6 +44,8 @@ func (c *capped) Write(p []byte) (int, error) {
 }
 
 func (c *capped) String() (string, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.total <= execHead+execTail {
 		return string(c.head) + string(c.tail), false
 	}
@@ -77,7 +83,7 @@ func (s *Server) registerExec() {
 		if a.Command == "" {
 			return nil, i18n.New("empty command")
 		}
-		r, err := runShell(ctx, rt, a.Command, a.Cwd, a.Timeout)
+		r, err := runShell(ctx, rt, a.Command, a.Cwd, a.Timeout, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -100,7 +106,8 @@ type shellResult struct {
 
 // runShell runs a shell command without a terminal (no input): the output (stdout and stderr
 // together) and the exit code once it ends, or when the time limit or ctx stops it.
-func runShell(ctx context.Context, rt *runtime.Runtime, command, cwd string, timeout int) (shellResult, error) {
+// runShell runs a command; progress (if any) gets its output so far while it runs.
+func runShell(ctx context.Context, rt *runtime.Runtime, command, cwd string, timeout int, progress func(string)) (shellResult, error) {
 	var err error
 	dir := rt.Root
 	if cwd != "" {
@@ -126,6 +133,12 @@ func runShell(ctx context.Context, rt *runtime.Runtime, command, cwd string, tim
 	}()
 	timer := time.NewTimer(limit)
 	defer timer.Stop()
+	var tick <-chan time.Time
+	if progress != nil {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		tick = ticker.C
+	}
 	timedOut, canceled := false, false
 	// After a kill, a process left in the background may still hold the output open.
 	drain := func() {
@@ -134,16 +147,32 @@ func runShell(ctx context.Context, rt *runtime.Runtime, command, cwd string, tim
 		case <-time.After(2 * time.Second):
 		}
 	}
-	select {
-	case <-copied:
-	case <-timer.C:
-		timedOut = true
-		_ = proc.Kill()
-		drain()
-	case <-ctx.Done():
-		canceled = true
-		_ = proc.Kill()
-		drain()
+	sent := 0
+wait:
+	for {
+		select {
+		case <-copied:
+			break wait
+		case <-tick:
+			out.mu.Lock()
+			total := out.total
+			out.mu.Unlock()
+			if total != sent {
+				sent = total
+				text, _ := out.String()
+				progress(text)
+			}
+		case <-timer.C:
+			timedOut = true
+			_ = proc.Kill()
+			drain()
+			break wait
+		case <-ctx.Done():
+			canceled = true
+			_ = proc.Kill()
+			drain()
+			break wait
+		}
 	}
 	code := execx.ExitCode(proc.Wait())
 	// Read the buffer only once the copy is over (or abandoned).

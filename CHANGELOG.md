@@ -16,6 +16,7 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 - The conversations of the assistant: the last Orchestrator conversation first with its working children, then the other active conversations as trees, then the history by day; an ended sub-agent leaves its parent for the history of the day it ended.
 - An orange dot marks a conversation waiting for an answer, a red one a conversation whose last answer failed; both stay among the active conversations. *Abandon* leaves a failed conversation (a sub-agent is stopped, its parent told). The older Orchestrator conversations with working children keep their tree at the top.
 - Worktrees open in the same window: the worktree selector (and *Start development*, *Open the worktree*) switches the explorer, the search, the Git tool and the new consoles without reloading; tabs and consoles of several worktrees stay open side by side, each with a chip (`#<n>` or the branch). The selector shows *Ticket #<n>*; *Open in a new window…* keeps the former way. A development conversation keeps working in the worktree of its ticket.
+- The steps of an answer are blocks: the reasoning like the tool calls, each with its duration, counted while it runs. The running block is open and follows its stream (the reasoning, the output of a command as it comes); it folds once done, unless the user toggled it.
 
 ## [1.4.0] - 2026-10-07
 

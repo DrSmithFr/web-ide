@@ -124,6 +124,7 @@ type Message struct {
 	Summarized int             `json:"summarized,omitempty"`
 	ThinkMs    int64           `json:"thinkMs,omitempty"`
 	ElapsedMs  int64           `json:"elapsedMs,omitempty"`
+	StartedAt  int64           `json:"startedAt,omitempty"` // start of a tool call (Unix ms); its ElapsedMs is set at its end
 	Mode       string          `json:"mode,omitempty"`
 	Plan       string          `json:"plan,omitempty"`
 	PlanState  string          `json:"planState,omitempty"`

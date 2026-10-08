@@ -626,7 +626,8 @@ func (s *Server) runCalls(r *agentRun, ref *runtimeRef, calls []agent.ToolCall, 
 		if agent.WriteTools[name] {
 			running = agent.T("waiting…", nil)
 		}
-		m := &agent.Message{Role: "tool", ToolCallID: call.ID, Name: name, Content: agent.String(""), Summary: running.Raw()}
+		start := time.Now()
+		m := &agent.Message{Role: "tool", ToolCallID: call.ID, Name: name, Content: agent.String(""), Summary: running.Raw(), StartedAt: start.UnixMilli()}
 		r.chat.Messages = append(r.chat.Messages, m)
 		idx := len(r.chat.Messages) - 1
 		s.publish(r, idx)
@@ -650,6 +651,7 @@ func (s *Server) runCalls(r *agentRun, ref *runtimeRef, calls []agent.ToolCall, 
 			if mm := r.chat.Messages[i]; mm.Role == "tool" && mm.ToolCallID == call.ID {
 				mm.Content, mm.Summary, mm.Status, mm.Diff, mm.Page, mm.Preview, mm.Child = agent.String(res.Content), res.Summary, res.Status, res.Diff, res.Page, res.Preview, res.Child
 				mm.Card, mm.Opened = res.Card, res.Opened
+				mm.ElapsedMs = time.Since(start).Milliseconds()
 				idx = i
 				break
 			}

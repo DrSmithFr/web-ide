@@ -388,7 +388,7 @@ func (s *Server) kanbanCall(r *agentRun, name string, a toolArgs, mode string) (
 		if err != nil {
 			return toolResult{}, err
 		}
-		out, err := runShell(r.ctx, ref.rt, "git log -1 --format='%H%x1f%s' "+shellQuote(hash), "", 20)
+		out, err := runShell(r.ctx, ref.rt, "git log -1 --format='%H%x1f%s' "+shellQuote(hash), "", 20, nil)
 		parts := strings.SplitN(strings.TrimSpace(out.Output), "\x1f", 2)
 		if err != nil || out.Code != 0 || parts[0] == "" {
 			return toolResult{}, failf("commit not found: %s", hash)
