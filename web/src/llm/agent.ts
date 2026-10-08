@@ -323,6 +323,7 @@ export async function send(text: string, parts: Part[], attachments: ChatMessage
     mode: currentMode(),
     options: agentOptions(),
     ticket: chat.ticket,
+    adoptedBy: chat.adoptedBy,
     title: chat.title,
     from,
   })

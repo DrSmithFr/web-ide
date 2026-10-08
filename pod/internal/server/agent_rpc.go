@@ -52,6 +52,24 @@ func (s *Server) runProject(chat *agent.Chat, root, project string) string {
 	return project
 }
 
+// adoptedBy makes a conversation started from a card of an Orchestrator its sub-agent
+// (agent_adopt from the start: it announces itself as its prompt says).
+func (s *Server) adoptedBy(cc chatCtx, parent string, chat *agent.Chat) error {
+	err := s.change(cc, parent, func(p *agent.Chat, _ *agentRun) (int, error) {
+		if p.Mode != agent.Orchestrator || p.Parent != "" {
+			return -1, i18n.New("only an Orchestrator conversation adopts another one")
+		}
+		p.Children = append(p.Children, chat.ID)
+		return -1, nil
+	})
+	if err != nil {
+		return err
+	}
+	chat.Parent = parent
+	chat.Agent = &agent.SubAgent{Task: chat.Title, Status: agent.AgentRunning, Depth: 1, Orchestrated: true, Adopted: true}
+	return nil
+}
+
 // revive: an adopted conversation the user goes on with works again for its parent (its
 // end, a stop or an error, is reported again).
 func revive(chat *agent.Chat) {
@@ -227,6 +245,8 @@ func (s *Server) registerAgent() {
 			Project string `json:"project"`
 			// From: the conversation restarts from this message (an edited message).
 			From *int `json:"from"`
+			// AdoptedBy: the Orchestrator conversation whose card started this one; it follows it.
+			AdoptedBy string `json:"adoptedBy"`
 		}](p)
 		if err != nil {
 			return nil, err
@@ -276,6 +296,11 @@ func (s *Server) registerAgent() {
 		}
 		if a.Ticket != nil && chat.Ticket == nil {
 			chat.Ticket = a.Ticket
+		}
+		if a.AdoptedBy != "" && chat.Parent == "" && chat.ID != a.AdoptedBy {
+			if err := s.adoptedBy(cc, a.AdoptedBy, chat); err != nil {
+				return nil, err
+			}
 		}
 		if a.Project == "" {
 			project = s.runProject(chat, cc.root, project)

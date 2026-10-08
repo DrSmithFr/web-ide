@@ -46,7 +46,8 @@ export function ActionCard(props: { msg: ChatMessage; index: number }) {
             return
           }
           await record('done', t('development started'))
-          await startWorkSession(tk, 'dev')
+          // The Orchestrator follows the development it started.
+          await startWorkSession(tk, 'dev', undefined, false, chat.id)
       }
     } catch (e) {
       errorToast(e)

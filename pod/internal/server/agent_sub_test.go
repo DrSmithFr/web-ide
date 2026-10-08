@@ -367,4 +367,17 @@ func TestAgentAdopt(t *testing.T) {
 	a.call("agent.send", map[string]any{"id": "dev", "text": "Finish", "server": "s1", "model": "m", "mode": "build"})
 	waitFor("orc", "report: done]\nAll done.")
 	waitFor("orc", "Noted.")
+	// A development started from a card of the Orchestrator is followed from its start; only
+	// an Orchestrator adopts.
+	a.waitUpdate("orc", idle)
+	a.call("agent.send", map[string]any{"id": "dev2", "text": "Work", "server": "s1", "model": "m", "mode": "build", "adoptedBy": "orc"})
+	if d := open("dev2"); d["parent"] != "orc" || d["agent"].(map[string]any)["adopted"] != true {
+		t.Fatalf("started from a card: %+v", d["agent"])
+	}
+	if kids := open("orc")["children"].([]any); len(kids) != 2 || kids[1] != "dev2" {
+		t.Fatalf("children of the Orchestrator: %v", kids)
+	}
+	if r := a.callRaw("agent.send", map[string]any{"id": "dev3", "text": "Work", "server": "s1", "model": "m", "adoptedBy": "dev"}); r["error"] == nil {
+		t.Fatal("adopted by a conversation that is not an Orchestrator")
+	}
 }

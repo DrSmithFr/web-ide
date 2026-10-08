@@ -270,6 +270,8 @@ export interface Chat {
   /** A sub-agent: the conversation that started it, and its task; the sub-agents started here. */
   parent?: string
   agent?: SubAgent
+  /** Page only: the Orchestrator whose card started this conversation (sent with its first message). */
+  adoptedBy?: string
   children?: string[]
   /** First message prepared by the Orchestrator, for the message box. */
   draft?: string
