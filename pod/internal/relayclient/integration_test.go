@@ -394,8 +394,6 @@ func TestIntegrationRelay(t *testing.T) {
 	}
 }
 
-
-
 // bigBodyPattern builds a 2 MB body whose bytes depend on the offset, so a corrupt or
 // truncated reassembly is detected. It stays printable ASCII so it survives JSON.
 func bigBodyPattern() []byte {
@@ -405,8 +403,6 @@ func bigBodyPattern() []byte {
 	}
 	return b
 }
-
-
 
 // envelope is one message of the tunnel JSON protocol: a response (id, result, error) or
 // an event (event, data). The server pushes both over the same channel.

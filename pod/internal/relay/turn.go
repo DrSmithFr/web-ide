@@ -23,10 +23,10 @@ type Turn struct {
 	logger logging.LoggerFactory
 	ice    []string
 
-	gen    *turnserver.RelayAddressGeneratorStatic
-	srv    *turnserver.Server
-	udp    *net.UDPConn
-	tcp    net.Listener
+	gen *turnserver.RelayAddressGeneratorStatic
+	srv *turnserver.Server
+	udp *net.UDPConn
+	tcp net.Listener
 
 	mu     sync.Mutex
 	active map[string]bool // in-flight short-lived credential usernames
@@ -110,7 +110,7 @@ func NewTurn(st *Store, cfg TurnConfig) (*Turn, error) {
 			{PacketConn: udp, RelayAddressGenerator: gen, PermissionHandler: turnserver.DefaultPermissionHandler},
 		},
 		ListenerConfigs: listeners,
-		AuthHandler: turnserver.LongTermTURNRESTAuthHandler(string(secret), nil),
+		AuthHandler:     turnserver.LongTermTURNRESTAuthHandler(string(secret), nil),
 		EventHandler: turnserver.EventHandler{
 			OnAllocationCreated: t.onAllocation,
 			OnAllocationDeleted: t.onDeallocate,

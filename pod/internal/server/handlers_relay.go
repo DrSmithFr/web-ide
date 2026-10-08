@@ -13,7 +13,7 @@ type RelayInfo struct {
 	URL   string `json:"url"`
 	PodID string `json:"podId"`
 	// Link the user opens from another network, with its token.
-	Link  string `json:"link"`
+	Link string `json:"link"`
 	// State of the link to the relay: off, connecting or connected.
 	State string `json:"state"`
 }

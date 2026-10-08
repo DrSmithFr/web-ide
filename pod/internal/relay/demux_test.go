@@ -19,11 +19,11 @@ func clientHello(alpn string) []byte {
 		ext = append(ext, list...)
 	}
 	var body []byte
-	body = append(body, 0x03, 0x03)                   // version
-	body = append(body, make([]byte, 32)...)          // random
-	body = append(body, 0)                            // empty session id
-	body = append(body, 0x00, 0x02, 0x00, 0x2f)       // one cipher suite
-	body = append(body, 1, 0)                         // null compression
+	body = append(body, 0x03, 0x03)             // version
+	body = append(body, make([]byte, 32)...)    // random
+	body = append(body, 0)                      // empty session id
+	body = append(body, 0x00, 0x02, 0x00, 0x2f) // one cipher suite
+	body = append(body, 1, 0)                   // null compression
 	body = append(body, byte(len(ext)>>8), byte(len(ext)))
 	body = append(body, ext...)
 	msg := append([]byte{0x01}, byte(len(body)>>16), byte(len(body)>>8), byte(len(body)))

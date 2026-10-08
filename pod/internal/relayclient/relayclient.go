@@ -43,13 +43,13 @@ type sigMsg struct {
 
 // Config of a relayclient.
 type Config struct {
-	RelayURL  string // ws:// or wss:// URL of the relay (the base, without /_relay/pod)
-	PodID     string // the pod id registered with the relay
-	Secret    string // the pod secret (register, or re-register)
-	Name      string // a human name for the relay UI (optional)
-	Server    *server.Server
-	Token     string // the pod token, proved inside the tunnel
-	Limits    *tunnel.RateLimiter
+	RelayURL string // ws:// or wss:// URL of the relay (the base, without /_relay/pod)
+	PodID    string // the pod id registered with the relay
+	Secret   string // the pod secret (register, or re-register)
+	Name     string // a human name for the relay UI (optional)
+	Server   *server.Server
+	Token    string // the pod token, proved inside the tunnel
+	Limits   *tunnel.RateLimiter
 	// ForceTurn only advertises relay (TURN) candidates (e2e).
 	ForceTurn bool
 	// OnState is called with the state of the link to the relay (connecting, connected,
@@ -241,7 +241,7 @@ type session struct {
 	// rpcCh carries the "rpc" DataChannel the browser created: OnDataChannel hands it
 	// here (its OnMessage is registered synchronously, before any data can arrive), and
 	// serveRPC — started once the answer is set, so its fingerprint is known — takes it.
-	rpcCh  chan *dataChannelChunk
+	rpcCh chan *dataChannelChunk
 	// chans carries every other DataChannel of this session (term:<id>, xfer:<n>,
 	// http:<n>), framed, to ServeTunnel.
 	chans chan tunnel.LabeledConn

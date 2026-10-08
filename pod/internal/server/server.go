@@ -296,10 +296,10 @@ type Client struct {
 // transport carries the requests; the extra channels of a tunnel (term:<id>, xfer:<n>,
 // http:<n>) are transports of their own.
 type window struct {
-	id   string
-	srv  *Server
-	rpc  *transport
-	ctx  context.Context
+	id  string
+	srv *Server
+	rpc *transport
+	ctx context.Context
 	// attached are the worktree projects of the window besides its own (under srv.mu).
 	attached map[string]bool
 	cancels  sync.Map
@@ -476,6 +476,7 @@ func (w *channelWriter) Write(b []byte) (int, error) {
 	}
 	return n, nil
 }
+
 // language is the language of the window (English until it tells its own).
 func (c *Client) language() string {
 	l, _ := c.lang.Load().(string)
@@ -532,7 +533,9 @@ func (w *wsConn) Read() ([]byte, error) {
 	return data, err
 }
 
-func (w *wsConn) Write(b []byte) error { return w.c.Write(context.Background(), websocket.MessageText, b) }
+func (w *wsConn) Write(b []byte) error {
+	return w.c.Write(context.Background(), websocket.MessageText, b)
+}
 
 func (w *wsConn) Close() error {
 	w.c.Close(websocket.StatusNormalClosure, "")
@@ -919,7 +922,8 @@ func (s *Server) emitter(projectID string) runtime.Emit {
 func (s *Server) Broadcast(name string, data any) { s.broadcast(name, data, nil) }
 
 // broadcast sends an event to every client (project list, settings).
-func (s *Server) broadcast(name string, data any, except *Client) {	s.mu.Lock()
+func (s *Server) broadcast(name string, data any, except *Client) {
+	s.mu.Lock()
 	var targets []*Client
 	for c := range s.clients {
 		if c != except {

@@ -38,10 +38,10 @@ type sigMsg struct {
 // proved inside the DataChannel, bound to both DTLS fingerprints, so the relay cannot
 // MITM.
 type Server struct {
-	store  *Store
-	turn   *Turn
-	mu     sync.Mutex
-	pods   map[string]*podConn       // online pods, by pod id
+	store    *Store
+	turn     *Turn
+	mu       sync.Mutex
+	pods     map[string]*podConn     // online pods, by pod id
 	browsers map[string]*browserConn // active browsers, by session id
 }
 
@@ -62,10 +62,10 @@ func (pc *podConn) send(m sigMsg) error {
 
 // browserConn is one active browser signaling to a pod, in one session.
 type browserConn struct {
-	podID  string
+	podID   string
 	session string
-	ws     *websocket.Conn
-	mu     sync.Mutex
+	ws      *websocket.Conn
+	mu      sync.Mutex
 }
 
 func (bc *browserConn) send(m sigMsg) error {
