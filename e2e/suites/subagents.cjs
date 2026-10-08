@@ -2,7 +2,8 @@
 // and asks; the parent, woken by the question, asks the user first (ask_user), then replies;
 // the change of the child waits for the user (toast "Sub-agent … asks to change a file",
 // approved in the child thread, with its header and its task); its report wakes the parent;
-// the child is nested under its parent in the side bar. Then a cloud server (OpenAI-compatible,
+// while it works the child is listed under its parent among the active conversations, then in
+// the history of the day. Then a cloud server (OpenAI-compatible,
 // with a key and a typed model) offered to sub-agents: the parent picks it for a child, whose
 // card shows its model, tokens and cost.
 const http = require('http')
@@ -96,6 +97,13 @@ run(async ({ page }) => {
     const names = cr.tools.map((t) => t.function.name)
     assert(text(cr.messages[1]).includes('Replace the greeting Bonjour') && !text(cr.messages[1]).includes('Delegate') && names.includes('agent_report') && !names.includes('spawn_agent') && !names.includes('ask_user'), 'the child gets its task in a fresh context, with its own tools')
 
+    // Both wait (the parent for the user, the child for its parent): listed first, the child
+    // under its parent.
+    await page.click('.ai-panel button[title="Conversations of the project"]')
+    await page.waitForSelector('[data-testid=ai-side-active] [data-testid=ai-chat-child]:has-text("Change the greeting")', { timeout: 5000 })
+    assert((await page.textContent('.ai-side-group-name')) === 'Active', 'the active conversations come first, the working sub-agent under its parent')
+    await page.click('.ai-panel button[title="Conversations of the project"]')
+
     // The question of the child woke the parent, which asks the user first.
     assert(await page.isVisible('[data-testid=ai-event-question]:has-text("Which word should replace Bonjour?")'), 'the question of the child in the parent thread')
     assert(await page.isVisible('[data-testid=ai-event-note]:has-text("Found the greeting")'), 'the note of the child in the parent thread')
@@ -125,10 +133,10 @@ run(async ({ page }) => {
     assert(true, 'the card of the child says it is done')
     await page.screenshot({ path: OUT + '/subagent-report.png' })
 
-    // The side bar nests the child under its parent.
+    // Ended, the child goes to the history of the day, beside its parent.
     if (!(await page.isVisible('[data-testid=ai-sidebar]'))) await page.click('.ai-panel button[title="Conversations of the project"]')
-    await page.waitForSelector('[data-testid=ai-chat-child]:has-text("Change the greeting")')
-    assert(true, 'the child is listed under its parent')
+    await page.waitForSelector('.ai-side-group:has(.ai-side-group-name:text-is("Today")) .ai-chat-item:not(.nested):has-text("Change the greeting")', { timeout: 5000 })
+    assert(!(await page.isVisible('[data-testid=ai-side-active]')), 'the ended sub-agent is in the history of the day, nothing active left')
 
     // A cloud server for the sub-agents: kind, key, a typed model, a note.
     await page.click('.ai-panel button[title^="Settings"]')

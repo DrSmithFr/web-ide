@@ -120,6 +120,8 @@ function applyState(state: RunState, ahead = 0) {
 }
 
 on('agent.update', (u: Update) => {
+  // A conversation that starts or ends moves in the list (active ones first).
+  if ((runStates()[u.id] ?? 'idle') !== u.state) listSoon()
   setRunStates((s) => {
     const next = { ...s }
     if (u.state === 'idle') delete next[u.id]

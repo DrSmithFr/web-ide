@@ -11,6 +11,7 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ### Changed
 
+- The conversations of the assistant list the active ones first; an ended sub-agent leaves its parent for the history of the day it ended.
 - Worktrees open in the same window: the worktree selector (and *Start development*, *Open the worktree*) switches the explorer, the search, the Git tool and the new consoles without reloading; tabs and consoles of several worktrees stay open side by side, each with a chip (`#<n>` or the branch). The selector shows *Ticket #<n>*; *Open in a new window…* keeps the former way. A development conversation keeps working in the worktree of its ticket.
 
 ## [1.4.0] - 2026-10-07

@@ -1,5 +1,6 @@
-// History side bar of the assistant: conversations of the project grouped by date, search,
-// rename and delete; the sub-agents of a conversation under it.
+// History side bar of the assistant: the active conversations first, then the others grouped
+// by date; search, rename and delete. A sub-agent is listed under its parent while it works;
+// once ended, it goes to the history of the day it ended.
 import { createMemo, createSignal, For, onMount, Show } from 'solid-js'
 import { Icon } from '../ui/icons'
 import { prompt } from '../ui/overlay'
@@ -28,23 +29,36 @@ const runLabels: Record<string, string> = {
   compacting: 'Compacting',
 }
 
+const endedStatus = new Set(['done', 'blocked', 'stopped', 'error'])
+
 export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
   const [q, setQ] = createSignal('')
   onMount(refreshChats)
+  const ids = createMemo(() => new Set(chatList().map((c) => c.id)))
+  // A sub-agent still working is listed under its parent.
+  const underParent = (c: ChatInfo) => !!c.parent && ids().has(c.parent) && !endedStatus.has(c.status ?? '')
+  const children = (id: string) => chatList().filter((c) => c.parent === id && underParent(c))
+  // Running, waiting for the model server, for the user or for its parent, or with a sub-agent at work.
+  const busy = (c: ChatInfo) => !!runStates()[c.id] || c.status === 'waiting_parent'
+  const active = (c: ChatInfo) => busy(c) || children(c.id).some(busy)
   const groups = createMemo(() => {
     const query = q().trim().toLowerCase()
     const out: { name: string; items: ChatInfo[] }[] = []
-    const ids = new Set(chatList().map((c) => c.id))
-    for (const c of chatList()) {
-      if (query && !(c.title || '').toLowerCase().includes(query)) continue
-      // A sub-agent is listed under its parent (unless searched for).
-      if (!query && c.parent && ids.has(c.parent)) continue
-      const g = groupOf(c.updated)
-      let last = out[out.length - 1]
-      if (!last || last.name !== g) out.push((last = { name: g, items: [] }))
-      last.items.push(c)
+    const add = (name: string, c: ChatInfo) => {
+      let g = out.find((x) => x.name === name)
+      if (!g) out.push((g = { name, items: [] }))
+      g.items.push(c)
     }
-    return out
+    for (const c of chatList()) {
+      if (query) {
+        if ((c.title || '').toLowerCase().includes(query)) add(groupOf(c.updated), c)
+        continue
+      }
+      if (underParent(c)) continue
+      add(active(c) ? t('Active') : groupOf(c.updated), c)
+    }
+    // The active ones first, the others by date (the list comes most recent first).
+    return out.sort((a, b) => (b.name === t('Active') ? 1 : 0) - (a.name === t('Active') ? 1 : 0))
   })
   const open = async (id: string) => {
     try {
@@ -62,11 +76,10 @@ export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
     if (!confirm(t('Delete the conversation “{title}”?', { title: c.title || t('Untitled') }))) return
     await deleteChat(c.id).catch(errorToast)
   }
-  const children = (id: string) => chatList().filter((c) => c.parent === id)
   const item = (c: ChatInfo, nested: boolean) => (
     <div class="ai-chat-item" classList={{ active: c.id === chat.id, nested }} data-testid={nested ? 'ai-chat-child' : undefined}>
       <button class="ai-chat-open" onClick={() => open(c.id)} title={c.model ? `${c.title} · ${c.model}` : c.title}>
-        <Show when={runStates()[c.id]} fallback={<Show when={nested}>{<span class={`ai-agent-dot ${c.status ?? ''}`} title={t(agentLabels[c.status ?? ''] ?? '')} />}</Show>}>
+        <Show when={runStates()[c.id]} fallback={<Show when={c.parent}>{<span class={`ai-agent-dot ${c.status ?? ''}`} title={t(agentLabels[c.status ?? ''] ?? '')} />}</Show>}>
           {(st) => <span class={`ai-run-dot ${st()}`} title={t(runLabels[st()])} data-testid="ai-run-dot" />}
         </Show>
         <Show when={c.mode === 'orchestrator'}>
@@ -101,7 +114,7 @@ export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
         <Show when={groups().length} fallback={<p class="muted small ai-side-empty">{q() ? t('No conversation found.') : t('No conversation for this project.')}</p>}>
           <For each={groups()}>
             {(g) => (
-              <div class="ai-side-group">
+              <div class="ai-side-group" data-testid={g.name === t('Active') ? 'ai-side-active' : undefined}>
                 <div class="ai-side-group-name">{g.name}</div>
                 <For each={g.items}>
                   {(c) => (
