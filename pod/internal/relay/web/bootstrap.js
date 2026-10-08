@@ -68,7 +68,7 @@ const fingerprint = (desc) => {
 let pc, rpc
 let handshakeDone = false
 const buffers = new Map()
-const appPort = null
+let appPort = null
 
 function read(dc, e) {
   const r = unframe(e.data, buffers.get(dc))
@@ -109,7 +109,7 @@ async function main() {
   async function start(ice) {
     pc = new RTCPeerConnection({ iceServers: [{ urls: ice.urls, username: ice.username, credential: ice.credential }] })
     window.tunnel = { pc, session, pod } // read by the e2e suite (getStats)
-    rpc = pc.createDataChannel('rpc', { ordered: true, maxRetransmits: 0 })
+    rpc = pc.createDataChannel('rpc', { ordered: true })
     rpc.onmessage = async (e) => {
       const m = read(rpc, e)
       if (!m) return
@@ -155,16 +155,18 @@ async function main() {
 function send(dc, obj) { frame(dc, new TextEncoder().encode(JSON.stringify(obj))) }
 
 // The app (in its iframe) and the Service Worker ask the bootstrap for channels: the
-// bootstrap owns the PeerConnection.
-window.addEventListener('message', (e) => {
-  const d = e.data
+// bootstrap owns the PeerConnection. The app posts on the parent window; the messages of
+// the Service Worker arrive on navigator.serviceWorker, not on window.
+function onMessage(d) {
   if (!d || !pc) return
   if (d.kind === 'port') bridge(d.label, d.port)
   else if (d.kind === 'http') httpFetch(d)
-})
+}
+window.addEventListener('message', (e) => onMessage(e.data))
+navigator.serviceWorker.addEventListener('message', (e) => onMessage(e.data))
 
 function bridge(label, port) {
-  const dc = label === 'rpc' ? rpc : pc.createDataChannel(label, { ordered: true, maxRetransmits: 0 })
+  const dc = label === 'rpc' ? rpc : pc.createDataChannel(label, { ordered: true })
   if (label === 'rpc') appPort = port
   port.onmessage = (e) => {
     if (dc.readyState === 'open') frame(dc, new TextEncoder().encode(typeof e.data === 'string' ? e.data : JSON.stringify(e.data)))
@@ -180,7 +182,7 @@ function bridge(label, port) {
 // One fetch of the page, answered by the pod on an http:<n> channel: the head as JSON,
 // then the body as raw chunks, closed by an empty one.
 function httpFetch(d) {
-  const dc = pc.createDataChannel(d.id, { ordered: true, maxRetransmits: 0 })
+  const dc = pc.createDataChannel(d.id, { ordered: true })
   const sendReq = () => {
     if (dc.readyState !== 'open') return setTimeout(sendReq, 200)
     frame(dc, new TextEncoder().encode(JSON.stringify({

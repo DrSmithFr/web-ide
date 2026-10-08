@@ -471,7 +471,12 @@ func (w *channelWriter) Write(b []byte) (int, error) {
 		if c > 64*1024 {
 			c = 64 * 1024
 		}
-		w.c.sendRaw(w.tr, b[:c])
+		// The caller reuses its buffer for the next chunk (io.Copy reads into the same
+		// slice), so each chunk must be copied out: a message still queued would otherwise
+		// be overwritten by the chunk written later.
+		chunk := make([]byte, c)
+		copy(chunk, b[:c])
+		w.c.sendRaw(w.tr, chunk)
 		b = b[c:]
 	}
 	return n, nil

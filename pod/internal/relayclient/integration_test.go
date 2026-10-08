@@ -50,6 +50,7 @@ type testEnv struct {
 	podID   string
 	secret  string
 	token   string
+	pod     *server.Server
 }
 
 // startEnv starts a real relay (signaling + embedded TURN) and a real pod wired to it.
@@ -114,7 +115,7 @@ func startEnv(t *testing.T) *testEnv {
 	if !st.OnlinePod(podID) {
 		t.Fatal("the pod did not register with the relay")
 	}
-	return &testEnv{httpSrv: httpSrv, podID: podID, token: podToken}
+	return &testEnv{httpSrv: httpSrv, podID: podID, token: podToken, pod: s}
 }
 
 // buildPod builds a real server.Server in a temp dir, the way main.go does.
@@ -466,4 +467,57 @@ func readEnvelope(t *testing.T, rpc *tunnel.Framed, d time.Duration) envelope {
 		t.Fatalf("no rpc message within %s", d)
 	}
 	return envelope{}
+}
+
+// TestHTTPChannelOrder: a static file bigger than one 64 KB chunk must arrive byte for
+// byte, in order. The pod writes the body in chunks of 64 KB; each chunk must be copied out
+// of the writer's buffer, else the caller (io.Copy, which reuses its buffer) overwrites the
+// chunks still queued on the channel.
+func TestHTTPChannelOrder(t *testing.T) {
+	env := startEnv(t)
+	pc, _ := openBrowser(t, env, "http-order", env.token)
+
+	body := make([]byte, 300*1024)
+	for i := range body {
+		body[i] = byte('a' + (i % 26))
+	}
+	env.pod.Static = fstest.MapFS{"big.bin": {Data: body}}
+
+	httpCh := openTestChannel(t, pc, "http:1")
+	q, _ := json.Marshal(map[string]any{"path": "/big.bin", "method": "GET"})
+	if err := httpCh.Write(q); err != nil {
+		t.Fatal("http write:", err)
+	}
+	head, err := httpCh.Read()
+	if err != nil {
+		t.Fatal("head read:", err)
+	}
+	var h struct {
+		Status  int               `json:"status"`
+		Headers map[string]string `json:"headers"`
+	}
+	if err := json.Unmarshal(head, &h); err != nil || h.Status != 200 {
+		t.Fatalf("head = %s", string(head))
+	}
+	var got []byte
+	for {
+		b, err := httpCh.Read()
+		if err != nil {
+			t.Fatal("body read:", err)
+		}
+		if len(b) == 0 {
+			break
+		}
+		got = append(got, b...)
+	}
+	if len(got) != len(body) {
+		t.Fatalf("got %d bytes, want %d", len(got), len(body))
+	}
+	if !bytes.Equal(got, body) {
+		for i := range got {
+			if got[i] != body[i] {
+				t.Fatalf("first difference at %d (mod 16384 = %d)", i, i%16384)
+			}
+		}
+	}
 }
