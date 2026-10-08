@@ -3,6 +3,7 @@
 import { createEffect, createRoot, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 import { notifyIn, on as onPod, request, requestIn } from '../pod/rpc'
 import { attached, diagnostics, home, mutate, openFile, project, relPath, root, session } from '../state/project'
@@ -13,6 +14,7 @@ import { settings } from '../state/settings'
 import { accentOf, themeById } from '../settings/themes'
 import { prompt } from '../ui/overlay'
 import { errorToast } from '../ui/toast'
+import { copyText } from '../ui/clipboard'
 import { Icon } from '../ui/icons'
 import { EmptyState } from '../ui/EmptyState'
 import { shortcutOf } from '../keys/bindings'
@@ -121,6 +123,19 @@ function getTerm(id: string): TermEntry {
   })
   const fit = new FitAddon()
   term.loadAddon(fit)
+  // Ctrl+click (Cmd+click) opens a link; a plain click stays a click in the terminal.
+  term.loadAddon(new WebLinksAddon((e, uri) => (e.ctrlKey || e.metaKey) && window.open(uri, '_blank', 'noopener')))
+  // Ctrl+C copies the selection instead of interrupting the command; Ctrl+Shift+C always copies.
+  term.attachCustomKeyEventHandler((e) => {
+    if (!e.ctrlKey || e.altKey || e.metaKey || e.key.toLowerCase() !== 'c') return true
+    if (!term.hasSelection()) return !e.shiftKey
+    if (e.type === 'keydown') {
+      copyText(term.getSelection())
+      term.clearSelection()
+    }
+    e.preventDefault()
+    return false
+  })
   term.open(el)
   term.onData((data) => notifyIn(projectOf(id), 'console.input', { id, data }))
   term.onResize(({ cols, rows }) => notifyIn(projectOf(id), 'console.resize', { id, cols, rows }))

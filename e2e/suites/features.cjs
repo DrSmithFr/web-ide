@@ -54,6 +54,51 @@ run(async ({ page }) => {
   await page.waitForTimeout(800)
   const term = await page.textContent('.xterm-rows')
   assert(term.includes('pod-42'), 'terminal runs commands')
+  // Links open with Ctrl+click; Ctrl+C copies the selection without interrupting the command
+  await page.evaluate(() => {
+    window.__opened = []
+    window.open = (u) => window.__opened.push(u)
+    window.__copied = []
+    navigator.clipboard.writeText = async (s) => window.__copied.push(s)
+  })
+  const textAt = (text) => page.evaluate((text) => {
+    const rows = [...document.querySelectorAll('.xterm-rows > div')].filter((r) => r.textContent.includes(text) && !r.textContent.includes('echo'))
+    const row = rows[rows.length - 1]
+    const walk = document.createTreeWalker(row, NodeFilter.SHOW_TEXT)
+    for (let n; (n = walk.nextNode()); ) {
+      const i = n.textContent.indexOf(text)
+      if (i < 0) continue
+      const r = document.createRange()
+      r.setStart(n, i + 1)
+      r.setEnd(n, i + 2)
+      const b = r.getBoundingClientRect()
+      return { x: b.x + b.width / 2, y: b.y + b.height / 2 }
+    }
+  }, text)
+  await page.keyboard.type('echo see http://example.test/$((40+2))\n')
+  await page.waitForFunction(() => document.querySelector('.xterm-rows').textContent.includes('see http://example.test/42'))
+  const link = await textAt('http://example.test/42')
+  await page.mouse.move(link.x, link.y)
+  await page.waitForTimeout(200)
+  await page.mouse.click(link.x, link.y)
+  assert((await page.evaluate(() => window.__opened.length)) === 0, 'a plain click does not open a link')
+  await page.keyboard.down('Control')
+  await page.mouse.click(link.x, link.y)
+  await page.keyboard.up('Control')
+  assert((await page.evaluate(() => window.__opened)).includes('http://example.test/42'), 'Ctrl+click opens the link of the terminal')
+  await page.keyboard.type('sleep 1.5; echo still-$((1+1))\n')
+  await page.waitForTimeout(300)
+  const word = await textAt('pod-42')
+  await page.mouse.dblclick(word.x, word.y)
+  await page.keyboard.press('Control+c')
+  await page.waitForFunction(() => document.querySelector('.xterm-rows').textContent.includes('still-2'), null, { timeout: 4000 }).catch(() => {})
+  assert((await page.evaluate(() => window.__copied)).some((s) => s.includes('pod')), 'Ctrl+C copies the selection of the terminal')
+  assert((await page.textContent('.xterm-rows')).includes('still-2'), 'Ctrl+C with a selection does not interrupt the command')
+  await page.keyboard.type('sleep 1.5; echo late-$((1+1))\n')
+  await page.waitForTimeout(300)
+  await page.keyboard.press('Control+c')
+  await page.waitForTimeout(2000)
+  assert(!(await page.textContent('.xterm-rows')).includes('late-2'), 'Ctrl+C without a selection interrupts the command')
   assert(await page.isVisible('.console-tabs.tabbar .tab.active .tab-close'), 'console tabs styled like the file tabs')
   assert(!(await page.$('.console-tabs [title="Detach in a window"]')), 'no detach button on a console tab')
   await page.click('.console-tabs button[title^="New terminal"]')
