@@ -36,6 +36,7 @@ $(DEV_DATA):
 	  case $$f in */models) ln -s $$f $@/models ;; */config.json) ;; *) cp -r $$f $@/ ;; esac; done
 
 test: pod/webdist/dist
+	@unformatted="$$($(dir $(GO))gofmt -l pod)"; test -z "$$unformatted" || (echo "gofmt needed:"; echo "$$unformatted"; exit 1)
 	cd pod && $(GO) vet ./... && $(GO) test ./...
 	cd web && npm run check
 

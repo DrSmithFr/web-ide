@@ -22,8 +22,8 @@ func TestBoardDrawChecks(t *testing.T) {
 	for js, want := range map[string]string{
 		`{"title":"x","elements":[],"clone":2}`:                 "the board has no page yet",
 		`{"title":"x","elements":[],"clone":1,"size":"square"}`: "size and clone cannot go together",
-		`{"title":"x","elements":{}}`:                          "must be a list",
-		`{"title":"x"}`:                                        "must be a list",
+		`{"title":"x","elements":{}}`:                           "must be a list",
+		`{"title":"x"}`:                                         "must be a list",
 		`{"title":"x","elements":[{"type":"stroke","points":[` + strings.Repeat("[1,2],", 500) + `[1,2]]}]}`: "element 1: 501 points",
 		`{"title":"x","elements":[{"type":"rect","x":1,"y":1,"w":5,"h":5}]}`:                                 "needs an IDE window open",
 	} {

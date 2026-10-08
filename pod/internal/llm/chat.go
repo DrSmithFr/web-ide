@@ -262,7 +262,7 @@ func (m *Manager) openaiChat(ctx context.Context, s Server, req ChatRequest, b *
 					Reasoning string `json:"reasoning_content"`
 					// OpenRouter and others.
 					Reasoning2 string `json:"reasoning"`
-					ToolCalls []struct {
+					ToolCalls  []struct {
 						Index    int    `json:"index"`
 						ID       string `json:"id"`
 						Type     string `json:"type"`
