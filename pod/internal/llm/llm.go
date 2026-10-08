@@ -55,11 +55,11 @@ type ModelConf struct {
 
 // ServerView is what the page receives.
 type ServerView struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Kind     string `json:"kind"`
-	URL      string `json:"url"`
-	HasKey   bool   `json:"hasKey"`
+	ID       string      `json:"id"`
+	Name     string      `json:"name"`
+	Kind     string      `json:"kind"`
+	URL      string      `json:"url"`
+	HasKey   bool        `json:"hasKey"`
 	Context  int         `json:"context,omitempty"`
 	Parallel int         `json:"parallel,omitempty"`
 	Models   []ModelConf `json:"models,omitempty"`
@@ -85,12 +85,14 @@ type Manager struct {
 	kinds  map[string]string  // detected kind per server URL
 	dbs    map[string]*sql.DB // conversation bases by path
 	jobs   map[string]*job    // completions running or recently ended, by stream
+	// contexts read from the loaded models behind llama-swap, by server URL and model
+	contexts map[string]int
 }
 
 const configFile = "llm.json"
 
 func New(st *store.Store) *Manager {
-	m := &Manager{st: st, client: &http.Client{}, kinds: map[string]string{}, dbs: map[string]*sql.DB{}, jobs: map[string]*job{}}
+	m := &Manager{st: st, client: &http.Client{}, kinds: map[string]string{}, dbs: map[string]*sql.DB{}, jobs: map[string]*job{}, contexts: map[string]int{}}
 	if err := st.ReadJSON(configFile, &m.cfg); err != nil && !store.IsNotExist(err) {
 		m.cfg = Config{}
 	}

@@ -253,6 +253,44 @@ func TestModels(t *testing.T) {
 	}
 }
 
+// llama-swap lists no context for a model it does not run with llama-server's --ctx-size:
+// read from the /props of the loaded one, kept once unloaded, never asked while unloaded.
+func TestLlamaSwapContext(t *testing.T) {
+	loaded := true
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/models":
+			state := map[bool]string{true: "loaded", false: "unloaded"}[loaded]
+			io.WriteString(w, `{"data":[{"id":"cpp","context_length":114688,"status":{"value":"unloaded"}},`+
+				`{"id":"strata x","status":{"value":"`+state+`"}},{"id":"other","status":{"value":"unloaded"}}]}`)
+		case "/upstream/strata x/props":
+			if !loaded {
+				t.Errorf("props of an unloaded model asked")
+			}
+			io.WriteString(w, `{"default_generation_settings":{"n_ctx":262144},"total_slots":3}`)
+		default:
+			t.Errorf("unexpected %s", r.URL)
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+	m, id := newManager(t, ts.URL, "openai")
+	for _, l := range []bool{true, false} {
+		loaded = l
+		list, err := m.Models(context.Background(), id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := map[string]int{}
+		for _, md := range list.Models {
+			got[md.ID] = md.Context
+		}
+		if got["cpp"] != 114688 || got["strata x"] != 262144 || got["other"] != DefaultContext {
+			t.Fatalf("loaded %v: %v", l, got)
+		}
+	}
+}
+
 func TestChats(t *testing.T) {
 	m, _ := newManager(t, "h:1", "llamacpp")
 	// A conversation of the JSON era is imported.

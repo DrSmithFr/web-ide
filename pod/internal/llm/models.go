@@ -206,7 +206,7 @@ func withTyped(models []Model, typed []ModelConf) []Model {
 const DefaultContext = 128000
 
 func (m *Manager) openaiModels(ctx context.Context, s Server) ([]Model, error) {
-	// OpenRouter adds the context size and the input modalities.
+	// OpenRouter adds the context size and the input modalities; llama-swap the state.
 	var list struct {
 		Data []struct {
 			ID           string `json:"id"`
@@ -215,6 +215,9 @@ func (m *Manager) openaiModels(ctx context.Context, s Server) ([]Model, error) {
 				Input []string `json:"input_modalities"`
 			} `json:"architecture"`
 			Params []string `json:"supported_parameters"`
+			Status *struct {
+				Value string `json:"value"`
+			} `json:"status"`
 		} `json:"data"`
 	}
 	if err := m.getJSON(ctx, s, "/v1/models", &list); err != nil {
@@ -223,6 +226,12 @@ func (m *Manager) openaiModels(ctx context.Context, s Server) ([]Model, error) {
 	models := make([]Model, 0, len(list.Data))
 	for _, d := range list.Data {
 		md := Model{ID: d.ID, Context: d.Context, Caps: Caps{Tools: true}}
+		if d.Status != nil {
+			md.State = d.Status.Value
+		}
+		if md.Context == 0 {
+			md.Context = m.upstreamContext(ctx, s, md)
+		}
 		if md.Context == 0 {
 			md.Context = DefaultContext
 		}
@@ -242,6 +251,24 @@ func (m *Manager) openaiModels(ctx context.Context, s Server) ([]Model, error) {
 		models = append(models, md)
 	}
 	return models, nil
+}
+
+// upstreamContext is the context of a model behind llama-swap that does not list it (it reads
+// only llama-server's --ctx-size): the /props of the loaded server, kept for when it is
+// unloaded. An unloaded model is never asked, that would load it. 0 when unknown.
+func (m *Manager) upstreamContext(ctx context.Context, s Server, md Model) int {
+	key := s.URL + "\n" + md.ID
+	if md.State == "loaded" || md.State == "ready" {
+		var p llamaProps
+		if m.getJSON(ctx, s, "/upstream/"+url.PathEscape(md.ID)+"/props", &p) == nil && p.Settings.NCtx > 0 {
+			m.mu.Lock()
+			m.contexts[key] = p.Settings.NCtx
+			m.mu.Unlock()
+		}
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.contexts[key]
 }
 
 // ---------- Ollama ----------
