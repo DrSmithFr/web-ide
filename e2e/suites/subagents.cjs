@@ -139,6 +139,7 @@ run(async ({ page }) => {
     if (!(await page.isVisible('[data-testid=ai-sidebar]'))) await page.click('.ai-panel button[title="Conversations of the project"]')
     await page.waitForSelector('.ai-side-group:has(.ai-side-group-name:text-is("Today")) .ai-chat-item:not(.nested):has-text("Change the greeting")', { timeout: 5000 })
     assert(!(await page.isVisible('[data-testid=ai-side-active]')), 'the ended sub-agent is in the history of the day, nothing active left')
+    assert(!(await page.isVisible('.ai-chat-item:has-text("Change the greeting") .ai-agent-dot')), 'no dot on an ended sub-agent')
 
     // A cloud server for the sub-agents: kind, key, a typed model, a note.
     await page.click('.ai-panel button[title^="Settings"]')

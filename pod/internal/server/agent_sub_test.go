@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DrSmithFr/web-ide/pod/internal/agent"
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 )
 
@@ -380,6 +381,24 @@ func TestAgentAdopt(t *testing.T) {
 	if r := a.callRaw("agent.send", map[string]any{"id": "dev3", "text": "Work", "server": "s1", "model": "m", "adoptedBy": "dev"}); r["error"] == nil {
 		t.Fatal("adopted by a conversation that is not an Orchestrator")
 	}
+	// A sub-agent that failed, abandoned by the user: stopped, no longer failed, its parent told.
+	loc, _, _ := s.chatLoc(id)
+	if err := s.saveChat(loc, &agent.Chat{ID: "kid", Title: "Kid", Parent: "orc", Agent: &agent.SubAgent{Task: "t", Status: agent.AgentError, Depth: 1},
+		Messages: []*agent.Message{{Role: "user", Content: agent.String("go")}, {Role: "assistant", Error: "boom"}}}); err != nil {
+		t.Fatal(err)
+	}
+	a.waitUpdate("orc", idle)
+	a.call("agent.dismiss", map[string]any{"id": "kid"})
+	if k := open("kid"); k["dismissed"] != true || k["agent"].(map[string]any)["status"] != "stopped" {
+		t.Fatalf("abandoned: %+v", k)
+	}
+	waitFor("orc", "report: stopped]\nAbandoned by the user after an error.")
+	for _, c := range a.call("llm.chats.list", nil)["result"].([]any) {
+		if c := c.(map[string]any); c["id"] == "kid" && c["failed"] == true {
+			t.Fatal("abandoned conversation still failed in the list")
+		}
+	}
+
 	// Runs still writing would outlive the temporary folder.
 	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline) && (s.run("dev2") != nil || s.run("orc") != nil || s.run("dev") != nil); {
 		time.Sleep(50 * time.Millisecond)

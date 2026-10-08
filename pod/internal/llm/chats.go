@@ -34,7 +34,7 @@ type ChatInfo struct {
 	Mode   string  `json:"mode,omitempty"`
 	Ticket int64   `json:"ticket,omitempty"`
 	// Waiting: questions, a plan, a capture, an approval wait for the user (or a question of
-	// a sub-agent for its parent); Failed: its last answer ended in an error.
+	// a sub-agent for its parent); Failed: its last answer ended in an error (not abandoned).
 	Waiting bool `json:"waiting,omitempty"`
 	Failed  bool `json:"failed,omitempty"`
 }
@@ -156,6 +156,7 @@ func (m *Manager) ListChats(loc ChatLocation) ([]ChatInfo, error) {
 			AND (json_extract(m.data, '$.askState') = 'pending' OR json_extract(m.data, '$.planState') = 'pending'
 				OR json_extract(m.data, '$.capture') = 'pending' OR json_extract(m.data, '$.wait') = 'parent')),
 		coalesce((SELECT json_extract(data, '$.error') FROM messages WHERE chat_id = chats.id ORDER BY seq DESC LIMIT 1), '') != ''
+			AND coalesce(json_extract(extra, '$.dismissed'), 0) = 0
 		FROM chats ORDER BY updated DESC LIMIT 500`)
 	if err != nil {
 		return nil, err

@@ -5,7 +5,7 @@ import { Icon } from '../ui/icons'
 import { errorToast, toast } from '../ui/toast'
 import { activeTab, openFile, project, relPath } from '../state/project'
 import { approval, chat, config, live, liveSpeed, savePrefs, setPrefs, type Attachment, type ChatMessage, type Part, type ToolCall } from './state'
-import { answerApproval, currentMode, otherModel, resume, retry, stepsSinceUser } from './agent'
+import { answerApproval, currentMode, dismiss, otherModel, resume, retry, stepsSinceUser } from './agent'
 import { AttachmentChip, callLabel, DiffBlock, formatDuration, formatTokens, Markdown, safeArgs, summaryText, toolIcons, toolVerbs } from './parts'
 import { absPath } from './uiTools'
 import { focusComposer, reuseDoodle, runCommand } from './Composer'
@@ -810,7 +810,7 @@ export function Thread(props: { onSuggest: (t: string) => void; onSettings: () =
       <Show when={approval()}>
         <ApprovalCard />
       </Show>
-      <Show when={lastFailed()}>
+      <Show when={lastFailed() && !chat.dismissed}>
         <div class="ai-retry">
           <Show when={stepsSinceUser()}>
             <button class="btn small primary" data-testid="ai-resume" title={t('Go on from the last completed step: the steps already done are kept')} onClick={() => resume().catch(errorToast)}>
@@ -819,6 +819,9 @@ export function Thread(props: { onSuggest: (t: string) => void; onSettings: () =
           </Show>
           <button class="btn small" title={t('Start the answer again from your message')} onClick={() => retry().catch(errorToast)}>
             <Icon name="refresh" size={12} /> {t('Retry')}
+          </button>
+          <button class="btn small" data-testid="ai-dismiss" title={t('Leave it: the conversation goes to the history (a sub-agent is stopped)')} onClick={() => dismiss().catch(errorToast)}>
+            <Icon name="close" size={12} /> {t('Abandon')}
           </button>
           <Show when={otherModel()}>
             <div class="ai-retry-other">

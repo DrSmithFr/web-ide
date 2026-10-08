@@ -273,6 +273,8 @@ export interface Chat {
   /** Page only: the Orchestrator whose card started this conversation (sent with its first message). */
   adoptedBy?: string
   children?: string[]
+  /** Abandoned by the user after an error. */
+  dismissed?: boolean
   /** First message prepared by the Orchestrator, for the message box. */
   draft?: string
 }

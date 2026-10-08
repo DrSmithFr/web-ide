@@ -154,29 +154,30 @@ func (s *Server) saveChat(loc llm.ChatLocation, c *agent.Chat) error {
 // update is what the windows receive about a conversation: its state, its fields, and its
 // messages from an index (all of them with from 0, none with from -1).
 type agentUpdate struct {
-	ID       string                `json:"id"`
-	State    string                `json:"state"`
-	Ahead    int                   `json:"ahead,omitempty"`
-	Stream   string                `json:"stream,omitempty"`
-	Title    string                `json:"title"`
-	Mode     string                `json:"mode,omitempty"`
-	Ticket   *agent.TicketLink     `json:"ticket,omitempty"`
-	Queue    []agent.QueuedMessage `json:"queue"`
-	Approval *agent.Approval       `json:"approval,omitempty"`
-	ResetAt  int                   `json:"resetAt,omitempty"`
-	Server   string                `json:"server"`
-	Model    string                `json:"model"`
-	Parent   string                `json:"parent,omitempty"`
-	Agent    *agent.SubAgent       `json:"agent,omitempty"`
-	Children []string              `json:"children,omitempty"`
-	From     int                   `json:"from"`
-	Count    int                   `json:"count"`
-	Messages []*agent.Message      `json:"messages,omitempty"`
+	ID        string                `json:"id"`
+	State     string                `json:"state"`
+	Ahead     int                   `json:"ahead,omitempty"`
+	Stream    string                `json:"stream,omitempty"`
+	Title     string                `json:"title"`
+	Mode      string                `json:"mode,omitempty"`
+	Ticket    *agent.TicketLink     `json:"ticket,omitempty"`
+	Queue     []agent.QueuedMessage `json:"queue"`
+	Approval  *agent.Approval       `json:"approval,omitempty"`
+	ResetAt   int                   `json:"resetAt,omitempty"`
+	Server    string                `json:"server"`
+	Model     string                `json:"model"`
+	Parent    string                `json:"parent,omitempty"`
+	Agent     *agent.SubAgent       `json:"agent,omitempty"`
+	Children  []string              `json:"children,omitempty"`
+	Dismissed bool                  `json:"dismissed,omitempty"`
+	From      int                   `json:"from"`
+	Count     int                   `json:"count"`
+	Messages  []*agent.Message      `json:"messages,omitempty"`
 }
 
 func updateOf(c *agent.Chat, state string, ahead, from int) agentUpdate {
 	u := agentUpdate{ID: c.ID, State: state, Ahead: ahead, Title: c.Title, Mode: c.Mode, Ticket: c.Ticket, Queue: c.Queue, Approval: c.Approval,
-		ResetAt: c.ResetAt, Server: c.Server, Model: c.Model, Parent: c.Parent, Agent: c.Agent, Children: c.Children, From: from, Count: len(c.Messages)}
+		ResetAt: c.ResetAt, Server: c.Server, Model: c.Model, Parent: c.Parent, Agent: c.Agent, Children: c.Children, Dismissed: c.Dismissed, From: from, Count: len(c.Messages)}
 	if u.Queue == nil {
 		u.Queue = []agent.QueuedMessage{}
 	}

@@ -62,7 +62,7 @@ type SubAgent struct {
 	// Tokens read and written, and cost (when the provider tells it), over all its requests.
 	Tokens int     `json:"tokens,omitempty"`
 	Cost   float64 `json:"cost,omitempty"`
-	Nudged   bool       `json:"nudged,omitempty"` // told once to end with agent_report
+	Nudged bool    `json:"nudged,omitempty"` // told once to end with agent_report
 	// Adopted: a conversation of its own (a development…) an Orchestrator took under its
 	// wing (agent_adopt). It keeps its tools and talks with the user; it tells its parent
 	// where it is (agent_note) and reports when its task is over (agent_report).
@@ -143,10 +143,10 @@ func agentDefs() (parent, child []Def) {
 	parent = []Def{
 		fn("spawn_agent", "Delegates a task to a sub-agent: a child conversation with a fresh context and your rights (same mode, same ticket), running in the background. Returns its id at once; its questions and its report come back as messages. At most 5 running at once.",
 			obj{
-				"title": str("Short title of the task, e.g. \"Find the login code\""),
-				"task":  str("The task, complete and precise: the child does not see this conversation"),
-				"files": strList("Files the child should read first (paths relative to the root)"),
-				"mode":  enum("Mode of the child (default: yours, plan for an Orchestrator); build changes files, plan only reads", Build, Plan, Briefing),
+				"title":  str("Short title of the task, e.g. \"Find the login code\""),
+				"task":   str("The task, complete and precise: the child does not see this conversation"),
+				"files":  strList("Files the child should read first (paths relative to the root)"),
+				"mode":   enum("Mode of the child (default: yours, plan for an Orchestrator); build changes files, plan only reads", Build, Plan, Briefing),
 				"server": str("Server of the child, among the servers for sub-agents listed in your instructions (default: the default one, else yours)"),
 				"model":  str("Model of the child on that server (required with server, unless it is the default server)"),
 			}, "title", "task"),

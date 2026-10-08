@@ -32,6 +32,7 @@ func (s *Server) startRun(loc llm.ChatLocation, root, project, lang string, c *a
 	s.agents.mu.Unlock()
 	r.mu.Lock()
 	c.Running = &agent.Running{}
+	c.Dismissed = false
 	s.publish(r, from)
 	r.mu.Unlock()
 	go s.loop(r)

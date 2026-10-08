@@ -343,6 +343,19 @@ run(async ({ page, ctx }) => {
     const otherSent = requests.slice(beforeOther)
     const last = otherSent[otherSent.length - 1]
     assert(last.model === 'other-model' && last.messages.filter((m) => m.role === 'tool' && m.tool_call_id === 'k2').length === 1, 'the other model goes on from the step already done: ' + otherSent.map((q) => q.model).join(', '))
+
+    // Abandon a failed conversation: no more Resume, no more red dot, in the history.
+    await page.click('[data-testid=model-pill]')
+    await page.click('.ai-model-item:has-text("fake-model")')
+    await page.click('.ai-panel button[title="New conversation"]')
+    await page.fill('.ai-composer textarea', 'crash until another model')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid=ai-dismiss]', { timeout: 10000 })
+    await page.click('[data-testid=ai-dismiss]')
+    await page.waitForSelector('[data-testid=ai-resume]', { state: 'detached', timeout: 5000 })
+    await page.click('.ai-panel button[title="Conversations of the project"]')
+    await page.waitForFunction(() => document.querySelector('.ai-chat-item.active') && !document.querySelector('.ai-chat-item.active [data-testid=ai-dot-failed]'), null, { timeout: 5000 })
+    assert(!(await page.isVisible('[data-testid=ai-side-active] .ai-chat-item.active')), 'the abandoned conversation leaves the active ones for the history, without its red dot')
   } finally {
     fake.close()
   }

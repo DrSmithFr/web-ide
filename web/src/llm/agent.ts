@@ -97,6 +97,7 @@ interface Update {
   parent?: string
   agent?: Chat['agent']
   children?: string[]
+  dismissed?: boolean
   from: number
   count: number
   messages?: ChatMessage[]
@@ -146,6 +147,7 @@ on('agent.update', (u: Update) => {
       c.parent = u.parent
       c.agent = u.agent
       c.children = u.children
+      c.dismissed = u.dismissed
     }),
   )
   setApproval(u.approval ?? null)
@@ -392,6 +394,12 @@ export async function resume(switchModel = false) {
 export async function retry(switchModel = false) {
   if (live.busy) return
   await request('agent.retry', { id: chat.id, ...chosen(switchModel) })
+}
+
+/** Abandons a conversation that failed: it is no longer shown as failed (a sub-agent is stopped). */
+export async function dismiss(id = chat.id) {
+  await request('agent.dismiss', { id })
+  listSoon()
 }
 
 export function stop() {

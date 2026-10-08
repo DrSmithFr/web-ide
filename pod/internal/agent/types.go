@@ -40,6 +40,9 @@ type Chat struct {
 	// Draft: a first message prepared for the user (open_conversation), put in the message
 	// box of the window that opens the conversation.
 	Draft string `json:"draft,omitempty"`
+	// Dismissed: the user abandoned it after an error; it is no longer shown as failed (until
+	// it runs again).
+	Dismissed bool `json:"dismissed,omitempty"`
 }
 
 // ActionCard is an action the page runs when the user clicks it; State and Result once done.

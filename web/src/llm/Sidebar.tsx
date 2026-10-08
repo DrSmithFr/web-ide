@@ -1,12 +1,13 @@
-// History side bar of the assistant: the last Orchestrator conversation with its active
-// children, then the other active conversations as trees, then the rest by day; search,
-// rename and delete. A child is active until it reports or is stopped by hand; an ended child
-// goes to the history of the day it ended.
+// History side bar of the assistant: the last Orchestrator conversation and the older ones
+// with working children, each with its tree; then the other active conversations (running,
+// waiting for an answer, failed, or with a working child) as trees, the most recent first;
+// then the rest by day. Search, rename, delete, abandon a failed one. A child works until it
+// reports or is stopped by hand; once ended it goes to the history of the day it ended.
 import { createMemo, createSignal, For, onMount, Show } from 'solid-js'
 import { Icon } from '../ui/icons'
 import { prompt } from '../ui/overlay'
 import { errorToast } from '../ui/toast'
-import { openChat, runStates } from './agent'
+import { dismiss, openChat, runStates } from './agent'
 import { chat, chatList, deleteChat, refreshChats, renameChat, resetChat, type ChatInfo } from './state'
 import { t } from '../i18n'
 import { agentLabels } from './SubAgents'
@@ -40,9 +41,14 @@ interface Group {
   items: { c: ChatInfo; kids: { c: ChatInfo; depth: number }[] }[]
 }
 
-/** State of a conversation that does not run: a question waiting (orange), an error (red), else the status of a sub-agent. */
+/** State of a conversation that does not run: a question waiting (orange), an error (red), else the status of a working sub-agent (none once ended). */
 function StateDot(props: { c: ChatInfo }) {
-  const state = () => (props.c.waiting ? 'waiting' : props.c.failed || props.c.status === 'error' ? 'failed' : props.c.parent ? props.c.status ?? '' : '')
+  const state = () => {
+    const c = props.c
+    if (c.waiting) return 'waiting'
+    if (c.failed || c.status === 'error') return 'failed'
+    return c.parent && !endedStatus.has(c.status ?? '') ? c.status ?? '' : ''
+  }
   const labels: Record<string, string> = { waiting: 'Waiting for you', failed: 'Error' }
   return (
     <Show when={state()}>
@@ -73,6 +79,7 @@ export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
     const working = (c: ChatInfo) => !!c.parent && ids.has(c.parent) && !endedStatus.has(c.status ?? '')
     const kidsOf = (id: string) => list.filter((c) => c.parent === id && working(c))
     const tree = (id: string, depth = 1): { c: ChatInfo; depth: number }[] => kidsOf(id).flatMap((k) => [{ c: k, depth }, ...tree(k.id, depth + 1)])
+    const failed = (c: ChatInfo) => !!c.failed || c.status === 'error'
     const running = (c: ChatInfo) => !!runStates()[c.id] || (!!c.parent && !ids.has(c.parent) && !endedStatus.has(c.status ?? '') && !!c.status)
     const tops = list.filter((c) => !working(c))
     const shown = new Set<string>()
@@ -82,9 +89,11 @@ export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
       return { c, kids }
     }
     const out: Group[] = []
-    const orchestrator = tops.find((c) => c.mode === 'orchestrator')
-    if (orchestrator) out.push({ name: t('Orchestrator'), testid: 'ai-side-orchestrator', items: [take(orchestrator)] })
-    const active = tops.filter((c) => !shown.has(c.id) && (running(c) || kidsOf(c.id).length > 0))
+    // The last Orchestrator, and the older ones whose children still work.
+    const last = tops.find((c) => c.mode === 'orchestrator')
+    const orchestrators = tops.filter((c) => c.mode === 'orchestrator' && (c === last || kidsOf(c.id).length > 0))
+    if (orchestrators.length) out.push({ name: t('Orchestrator'), testid: 'ai-side-orchestrator', items: orchestrators.map(take) })
+    const active = tops.filter((c) => !shown.has(c.id) && (running(c) || c.waiting || failed(c) || kidsOf(c.id).length > 0))
     if (active.length) out.push({ name: t('Active'), testid: 'ai-side-active', items: active.map(take) })
     return [...out, ...byDay(tops.filter((c) => !shown.has(c.id)))]
   })
@@ -115,6 +124,11 @@ export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
         </Show>
         <span class="ellipsis">{c.title || t('Untitled')}</span>
       </button>
+      <Show when={!runStates()[c.id] && (c.failed || c.status === 'error')}>
+        <button class="ai-chat-act" title={t('Abandon')} data-testid="ai-chat-dismiss" onClick={() => dismiss(c.id).catch(errorToast)}>
+          <Icon name="stop" size={12} />
+        </button>
+      </Show>
       <button class="ai-chat-act" title={t('Rename')} onClick={() => rename(c)}>
         <Icon name="edit" size={12} />
       </button>

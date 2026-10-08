@@ -343,16 +343,17 @@ func TestChats(t *testing.T) {
 	// Questions waiting behind the last answer, a failed last answer.
 	_ = m.SaveChat(loc, json.RawMessage(`{"id":"q","updated":5,"messages":[{"role":"assistant","content":""},{"role":"tool","askState":"pending"},{"role":"tool","content":"x"}]}`))
 	_ = m.SaveChat(loc, json.RawMessage(`{"id":"f","updated":6,"messages":[{"role":"user","content":"a"},{"role":"assistant","content":"","error":"boom"}]}`))
+	_ = m.SaveChat(loc, json.RawMessage(`{"id":"gone","updated":8,"dismissed":true,"messages":[{"role":"assistant","content":"","error":"boom"}]}`))
 	_ = m.SaveChat(loc, json.RawMessage(`{"id":"ok","updated":7,"messages":[{"role":"tool","askState":"pending"},{"role":"assistant","content":"b"}]}`))
 	got := map[string][2]bool{}
 	list, _ = m.ListChats(loc)
 	for _, c := range list {
 		got[c.ID] = [2]bool{c.Waiting, c.Failed}
 	}
-	if got["q"] != [2]bool{true, false} || got["f"] != [2]bool{false, true} || got["ok"] != [2]bool{} {
+	if got["q"] != [2]bool{true, false} || got["f"] != [2]bool{false, true} || got["ok"] != [2]bool{} || got["gone"] != [2]bool{} {
 		t.Fatalf("waiting/failed: %v", got)
 	}
-	for _, id := range []string{"q", "f", "ok"} {
+	for _, id := range []string{"q", "f", "ok", "gone"} {
 		_ = m.DeleteChat(loc, id)
 	}
 	_ = m.DeleteChat(loc, "c1")

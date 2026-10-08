@@ -503,6 +503,37 @@ func (s *Server) registerAgent() {
 		})
 	}))
 	// agent.draft: the first message prepared for the user was put in the message box.
+	// agent.dismiss: the user abandons a conversation that failed: it goes to the history; a
+	// sub-agent is stopped and its parent told.
+	s.handle("agent.dismiss", withChat(func(ctx context.Context, c *Client, cc chatCtx, p json.RawMessage) (any, error) {
+		a, err := bind[idArg](p)
+		if err != nil {
+			return nil, err
+		}
+		if s.run(a.ID) != nil {
+			return nil, i18n.New("the conversation is running: stop it first")
+		}
+		chat, err := s.loadChat(cc.loc, a.ID)
+		if err != nil {
+			return nil, err
+		}
+		chat.Dismissed = true
+		from := -1
+		var ev *agent.AgentEvent
+		// A sub-agent that did not report nor was stopped (an error leaves it working).
+		if sa := chat.Agent; sa != nil && sa.Status != agent.AgentDone && sa.Status != agent.AgentBlocked && sa.Status != agent.AgentStopped {
+			sa.Status, sa.Question = agent.AgentStopped, ""
+			from = skipParentWait(chat)
+			ev = &agent.AgentEvent{Child: chat.ID, Title: chat.Title, Type: "report", Status: agent.AgentStopped, Text: "Abandoned by the user after an error."}
+		}
+		if err := s.publishIdle(cc.loc, cc.root, chat, from); err != nil {
+			return nil, err
+		}
+		if ev != nil {
+			s.toParent(&agentRun{id: chat.ID, loc: cc.loc, root: cc.root, project: c.project, lang: c.language(), chat: chat}, chat.Parent, *ev, true)
+		}
+		return nil, nil
+	}))
 	s.handle("agent.draft", withChat(func(ctx context.Context, c *Client, cc chatCtx, p json.RawMessage) (any, error) {
 		a, err := bind[idArg](p)
 		if err != nil {

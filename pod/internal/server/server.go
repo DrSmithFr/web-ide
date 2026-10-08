@@ -58,7 +58,7 @@ type Server struct {
 	// Previews serve the apps of the projects on temporary URLs (Tailscale by default).
 	Previews  *preview.Manager
 	PreviewTS preview.Tailscale
-	Static  fs.FS
+	Static    fs.FS
 	// AllowRemote accepts connections from other machines (the token is then the only protection).
 	AllowRemote bool
 	// Version of the pod, shown by the page.
@@ -274,11 +274,11 @@ type Client struct {
 }
 
 type window struct {
-	id      string
-	srv     *Server
-	conn    *websocket.Conn
-	send    chan []byte
-	ctx     context.Context
+	id   string
+	srv  *Server
+	conn *websocket.Conn
+	send chan []byte
+	ctx  context.Context
 	// attached are the worktree projects of the window besides its own (under srv.mu).
 	attached map[string]bool
 	cancels  sync.Map

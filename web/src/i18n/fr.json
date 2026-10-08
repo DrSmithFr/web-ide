@@ -1640,5 +1640,7 @@
   "Adopts a conversation": "Adopte une conversation",
   "adopted: {title}": "adoptée : {title}",
   "Followed by": "Suivie par",
-  "Active": "Actives"
+  "Active": "Actives",
+  "Abandon": "Abandonner",
+  "Leave it: the conversation goes to the history (a sub-agent is stopped)": "La laisser : la conversation passe dans l’historique (un sous-agent est arrêté)"
 }
