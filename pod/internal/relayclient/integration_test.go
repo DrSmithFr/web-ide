@@ -11,10 +11,12 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -98,7 +100,6 @@ func startEnv(t *testing.T) *testEnv {
 		Token:     podToken,
 		Limits:    limits,
 		ForceTurn: true,
-		OnChannel: func(label string, conn tunnel.MsgConn) { onTestChannel(t, label, conn) },
 	})
 	go cli.Run(runCtx)
 
@@ -139,21 +140,21 @@ func buildPod(t *testing.T) (*server.Server, *tunnel.RateLimiter) {
 	return s, tunnel.NewRateLimiter(5, 5*time.Minute)
 }
 
-// xferDone signals when the pod has read back the big xfer transfer.
-var xferDone = make(chan []byte, 1)
-
-// onTestChannel is the pod's handler for the non-"rpc" channels. For "xfer:1" it reads
-// the whole >1 MB message back and hands it to the test.
-func onTestChannel(t *testing.T, label string, conn tunnel.MsgConn) {
-	if label != "xfer:1" {
-		return
-	}
-	b, err := conn.Read()
+// openTestChannel opens one channel from the browser side and waits for it.
+func openTestChannel(t *testing.T, pc *webrtc.PeerConnection, label string) *tunnel.Framed {
+	t.Helper()
+	dc, err := pc.CreateDataChannel(label, nil)
 	if err != nil {
-		t.Errorf("xfer:1 read: %v", err)
-		return
+		t.Fatalf("browser %s channel: %v", label, err)
 	}
-	xferDone <- b
+	opened := make(chan struct{})
+	dc.OnOpen(func() { close(opened) })
+	select {
+	case <-opened:
+	case <-time.After(10 * time.Second):
+		t.Fatalf("the %s DataChannel did not open", label)
+	}
+	return tunnel.NewFramed(newDataChannelChunk(dc), 8*1024*1024)
 }
 
 // browserSig is the browser's signaling link to the relay, in one session of a pod.
@@ -269,8 +270,8 @@ func nonceHex() string {
 
 // TestIntegrationRelay: a Pion peer plays the browser and opens a real tunnel to a real
 // pod through a real relay (TURN forced). It checks the handshake (the right token), the
-// rpc protocol (workspace.get), and a >1 MB transfer on the xfer channel that must
-// traverse the 16 KB framing intact.
+// rpc protocol (workspace.get), a >1 MB request on its own xfer channel, the terminal
+// input and output on its term channel, and an HTTP fetch on an http channel.
 func TestIntegrationRelay(t *testing.T) {
 	env := startEnv(t)
 
@@ -292,54 +293,127 @@ func TestIntegrationRelay(t *testing.T) {
 		t.Fatalf("workspace.get result = %s", string(res.Result))
 	}
 
-	// xfer: a >1 MB message on its own channel, through the 16 KB framing, must arrive
-	// byte-for-byte. The browser writes it; the pod's OnChannel reads it back.
+	// xfer: a >1 MB request on its own channel, through the 16 KB framing, must reach the
+	// pod and its answer come back on the same channel.
+	dir := t.TempDir()
+	open := rpcCall(t, rpc, 2, "projects.create", map[string]any{"type": "local", "path": dir})
+	var proj struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(open.Result, &proj); err != nil || proj.ID == "" {
+		t.Fatalf("projects.create result = %s", string(open.Result))
+	}
+	rpcCall(t, rpc, 3, "project.open", map[string]any{"id": proj.ID})
+	xfer := openTestChannel(t, pc, "xfer:1")
 	body := bigBodyPattern()
-	xfer := tunnel.NewFramed(newDataChannelChunk(createXferChannel(t, pc)), 8*1024*1024)
-	if err := xfer.Write(body); err != nil {
+	r, err := json.Marshal(map[string]any{"id": 4, "method": "fs.write",
+		"params": map[string]any{"path": "big.bin", "content": string(body)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := xfer.Write(r); err != nil {
 		t.Fatalf("xfer write: %v", err)
 	}
-	select {
-	case got := <-xferDone:
-		if !bytes.Equal(got, body) {
-			t.Fatalf("xfer: %d bytes, want %d (mismatch)", len(got), len(body))
+	e := readEnvelope(t, xfer, 30*time.Second)
+	if e.ID != 4 {
+		t.Fatalf("xfer answer = %s", string(e.Result))
+	}
+	if len(e.Error) > 0 {
+		t.Fatalf("fs.write over xfer: %s", string(e.Error))
+	}
+	// The file on disk is the whole body, byte for byte.
+	got, err := os.ReadFile(filepath.Join(dir, "big.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, body) {
+		t.Fatalf("big.bin: %d bytes, want %d (mismatch)", len(got), len(body))
+	}
+
+	// term:<id>: the input goes on the channel of the terminal, its output comes back on
+	// it, so a long scrollback never delays the rpc channel.
+	cres := rpcCall(t, rpc, 5, "console.create", map[string]any{"kind": "terminal", "command": []string{"cat"}, "cols": 80, "rows": 24})
+	var cinfo struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(cres.Result, &cinfo); err != nil || cinfo.ID == "" {
+		t.Fatalf("console.create result = %s", string(cres.Result))
+	}
+	term := openTestChannel(t, pc, "term:"+cinfo.ID)
+	n, _ := json.Marshal(map[string]any{"id": 0, "method": "console.input", "params": map[string]any{"id": cinfo.ID, "data": "hello\r"}})
+	if err := term.Write(n); err != nil {
+		t.Fatalf("term write: %v", err)
+	}
+	tm := readEnvelope(t, term, 20*time.Second)
+	if tm.Event != "console.output" {
+		t.Fatalf("term answer = %s", string(tm.Result))
+	}
+	var out struct {
+		ID   string `json:"id"`
+		Data string `json:"data"`
+	}
+	if err := json.Unmarshal(tm.Data, &out); err != nil || out.ID != cinfo.ID {
+		t.Fatalf("terminal output = %s", string(tm.Data))
+	}
+	b, err := base64.StdEncoding.DecodeString(out.Data)
+	if err != nil || !strings.Contains(string(b), "hello") {
+		t.Fatalf("terminal echo = %q", out.Data)
+	}
+
+	// http:<n>: one fetch of the app, answered by the pod through the channel: the head as
+	// JSON, then the body as raw chunks.
+	httpCh := openTestChannel(t, pc, "http:1")
+	q, _ := json.Marshal(map[string]any{"path": "/", "method": "GET"})
+	if err := httpCh.Write(q); err != nil {
+		t.Fatalf("http write: %v", err)
+	}
+	head, err := httpCh.Read()
+	if err != nil {
+		t.Fatalf("http head read: %v", err)
+	}
+	var h struct {
+		Status  int               `json:"status"`
+		Headers map[string]string `json:"headers"`
+	}
+	if err := json.Unmarshal(head, &h); err != nil || h.Status != 200 {
+		t.Fatalf("http head = %s", string(head))
+	}
+	var page []byte
+	for {
+		b, err := httpCh.Read()
+		if err != nil {
+			t.Fatalf("http body read: %v", err)
 		}
-	case <-time.After(30 * time.Second):
-		t.Fatal("the xfer transfer did not arrive")
+		if len(b) == 0 {
+			break
+		}
+		page = append(page, b...)
+	}
+	if !strings.Contains(string(page), "app") {
+		t.Fatalf("http body = %q", string(page))
 	}
 }
 
+
+
 // bigBodyPattern builds a 2 MB body whose bytes depend on the offset, so a corrupt or
-// truncated reassembly is detected.
+// truncated reassembly is detected. It stays printable ASCII so it survives JSON.
 func bigBodyPattern() []byte {
 	b := make([]byte, bigBody)
 	for i := range b {
-		b[i] = byte(i%251) + 1
+		b[i] = byte('a' + i%26)
 	}
 	return b
 }
 
-func createXferChannel(t *testing.T, pc *webrtc.PeerConnection) *webrtc.DataChannel {
-	t.Helper()
-	dc, err := pc.CreateDataChannel("xfer:1", nil)
-	if err != nil {
-		t.Fatalf("browser xfer channel: %v", err)
-	}
-	opened := make(chan struct{})
-	dc.OnOpen(func() { close(opened) })
-	select {
-	case <-opened:
-	case <-time.After(10 * time.Second):
-		t.Fatal("the xfer DataChannel did not open")
-	}
-	return dc
-}
+
 
 // envelope is one message of the tunnel JSON protocol: a response (id, result, error) or
 // an event (event, data). The server pushes both over the same channel.
 type envelope struct {
 	ID     int64           `json:"id"`
 	Event  string          `json:"event,omitempty"`
+	Data   json.RawMessage `json:"data,omitempty"`
 	Result json.RawMessage `json:"result,omitempty"`
 	Error  json.RawMessage `json:"error,omitempty"`
 }

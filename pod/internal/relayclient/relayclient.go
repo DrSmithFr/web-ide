@@ -49,10 +49,8 @@ type Config struct {
 	Server    *server.Server
 	Token     string // the pod token, proved inside the tunnel
 	Limits    *tunnel.RateLimiter
-	ForceTurn bool // only advertise relay (TURN) candidates (e2e)
-	// OnChannel is called for each non-"rpc" DataChannel the browser opens
-	// (term:<id>, xfer:<n>, http:<n>); the pod reads and writes it.
-	OnChannel func(label string, conn tunnel.MsgConn)
+	// ForceTurn only advertises relay (TURN) candidates (e2e).
+	ForceTurn bool
 }
 
 // Client is one pod's relay client: one outbound link to the relay and one
@@ -181,7 +179,7 @@ func (c *Client) dropSession(id string) {
 // serves the tunnel. It runs in its own goroutine (per session), so one handshake does
 // not block the signaling loop.
 func (c *Client) handleOffer(m sigMsg, link *podLink) {
-	s := &session{client: c, link: link, id: m.Session, rpcCh: make(chan *dataChannelChunk, 1)}
+	s := &session{client: c, link: link, id: m.Session, rpcCh: make(chan *dataChannelChunk, 1), chans: make(chan tunnel.LabeledConn, 64)}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	c.addSession(m.Session, s)
 	if err := s.setupOffer(m); err != nil {
@@ -232,7 +230,12 @@ type session struct {
 	// here (its OnMessage is registered synchronously, before any data can arrive), and
 	// serveRPC — started once the answer is set, so its fingerprint is known — takes it.
 	rpcCh  chan *dataChannelChunk
-	closed bool
+	// chans carries every other DataChannel of this session (term:<id>, xfer:<n>,
+	// http:<n>), framed, to ServeTunnel.
+	chans chan tunnel.LabeledConn
+	// rpcConn is the framed rpc channel, so the pod can answer on it (terminal output).
+	rpcConn *tunnel.Framed
+	closed  bool
 }
 
 func (s *session) setupOffer(m sigMsg) error {
@@ -251,9 +254,10 @@ func (s *session) setupOffer(m sigMsg) error {
 	s.mu.Unlock()
 	pc.OnDataChannel(func(dc *webrtc.DataChannel) {
 		// Register the incoming-message handler synchronously (before any data can
-		// arrive). "rpc" goes to serveRPC; the rest are handed to the pod. The handler
-		// runs in its own goroutine: this callback must return before Pion starts the
-		// channel's read loop, and the pod reads the channel at its own pace.
+		// arrive). "rpc" goes to serveRPC; the rest are handed to the pod as labeled
+		// channels. The handler runs in its own goroutine: this callback must return
+		// before Pion starts the channel's read loop, and the pod reads the channel at its
+		// own pace.
 		chunk := newDataChannelChunk(dc)
 		if dc.Label() == "rpc" {
 			select {
@@ -262,9 +266,8 @@ func (s *session) setupOffer(m sigMsg) error {
 			}
 			return
 		}
-		if s.client.cfg.OnChannel != nil {
-			go s.client.cfg.OnChannel(dc.Label(), tunnel.NewFramed(chunk, 8*1024*1024))
-		}
+		conn := tunnel.NewFramed(chunk, 8*1024*1024)
+		s.chans <- tunnel.LabeledConn{Label: dc.Label(), Conn: conn}
 	})
 	pc.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
 		if state == webrtc.ICEConnectionStateFailed {
@@ -329,7 +332,7 @@ func (s *session) serveRPC() {
 		s.close()
 		return
 	}
-	s.client.cfg.Server.ServeTunnel(s.ctx, conn)
+	s.client.cfg.Server.ServeTunnel(s.ctx, conn, s.chans)
 	// ServeTunnel returned: the browser closed the tunnel.
 	s.close()
 }

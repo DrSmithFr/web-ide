@@ -28,6 +28,13 @@ type Chunk interface {
 	Close() error
 }
 
+// LabeledConn is one DataChannel of a tunnel: its label ("rpc", "term:<id>", "xfer:<n>",
+// "http:<n>") and the whole-message connection the pod reads and writes.
+type LabeledConn struct {
+	Label string
+	Conn  MsgConn
+}
+
 // ErrClosed is returned once a connection is closed.
 var ErrClosed = errors.New("tunnel: connection closed")
 

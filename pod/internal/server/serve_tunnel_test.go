@@ -6,6 +6,8 @@ import (
 	"io"
 	"sync"
 	"testing"
+
+	"github.com/DrSmithFr/web-ide/pod/internal/tunnel"
 )
 
 // msgChannel is one end of an in-memory whole-message transport: a Read returns one
@@ -89,7 +91,7 @@ func TestServeTunnel(t *testing.T) {
 	p := newMsgPipe()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go s.ServeTunnel(ctx, p.server)
+	go s.ServeTunnel(ctx, p.server, make(chan tunnel.LabeledConn))
 
 	res := p.call(t, 1, "workspace.get", nil)
 	if res["error"] != nil {

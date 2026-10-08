@@ -288,12 +288,13 @@ type Client struct {
 }
 
 // A window reads and writes whole messages: a WebSocket frame, or one message of a tunnel
-// channel (a DataChannel of the relay). The JSON protocol is the same on both.
+// channel (a DataChannel of the relay). The JSON protocol is the same on both. Its rpc
+// transport carries the requests; the extra channels of a tunnel (term:<id>, xfer:<n>,
+// http:<n>) are transports of their own.
 type window struct {
 	id   string
 	srv  *Server
-	conn tunnel.MsgConn
-	send chan []byte
+	rpc  *transport
 	ctx  context.Context
 	// attached are the worktree projects of the window besides its own (under srv.mu).
 	attached map[string]bool
@@ -304,8 +305,162 @@ type window struct {
 	lang atomic.Value
 	// watching is the conversation of the assistant the window shows.
 	watching atomic.Value
+	// channels are the extra channels of the tunnel of this window (term:<id>, xfer:<n>),
+	// by label. Empty on a WebSocket, where the rpc transport carries everything.
+	mu       sync.Mutex
+	channels map[string]*transport
+	// queues are the sequential groups of the window (see sequential).
+	queues map[string]*queue
 }
 
+// transport is one whole-message connection of a window: the rpc channel, or an extra
+// channel of the tunnel. A request read on it is dispatched on the window and its answer
+// goes back on it; events go on the rpc transport, except the output of a terminal that
+// has its own channel.
+type transport struct {
+	c    *Client
+	conn tunnel.MsgConn
+	send chan []byte
+	// ws is the WebSocket of the rpc transport (the only transport that can be pinged).
+	ws *websocket.Conn
+}
+
+func newTransport(c *Client, conn tunnel.MsgConn) *transport {
+	return &transport{c: c, conn: conn, send: make(chan []byte, 1024)}
+}
+
+// channel returns the transport of a label, nil when the window has none.
+func (c *Client) channel(label string) *transport {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.channels[label]
+}
+
+// openChannel registers an extra channel of the tunnel and starts serving it.
+func (c *Client) openChannel(ctx context.Context, label string, conn tunnel.MsgConn) {
+	tr := newTransport(c, conn)
+	c.mu.Lock()
+	c.channels[label] = tr
+	c.mu.Unlock()
+	go c.writeLoop(ctx, tr)
+	// An http:<n> channel carries one HTTP request (the Service Worker of the relay
+	// forwards the fetches of the page), not a request of the JSON protocol.
+	if strings.HasPrefix(label, "http:") {
+		c.serveHTTPChannel(ctx, tr)
+		return
+	}
+	c.handleLoop(ctx, tr)
+}
+
+// httpRequest is one fetch forwarded by the Service Worker of the relay on an http:<n>
+// channel: the path of the pod (the app, an asset, a preview) and the headers of the page.
+type httpRequest struct {
+	Path    string            `json:"path"`
+	Preview string            `json:"preview,omitempty"`
+	Method  string            `json:"method,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
+	Body    string            `json:"body,omitempty"`
+}
+
+// httpHead is the answer of an http channel: the status and the headers, then the body as
+// raw messages (one per chunk), closed by an empty one.
+type httpHead struct {
+	Status  int               `json:"status"`
+	Headers map[string]string `json:"headers"`
+}
+
+// serveHTTPChannel answers one fetch of the page through the tunnel. The window is already
+// authorized (the token was proved in the handshake), so the request is served as a local
+// one: the app, its assets, and the previews under /__preview/<id>/.
+func (c *Client) serveHTTPChannel(ctx context.Context, tr *transport) {
+	data, err := tr.read(ctx)
+	if err != nil {
+		return
+	}
+	var req httpRequest
+	if json.Unmarshal(data, &req) != nil {
+		return
+	}
+	h, ok := c.srv.httpHandler(req)
+	if !ok {
+		c.sendRaw(tr, mustJSON(httpHead{Status: http.StatusNotFound, Headers: map[string]string{}}))
+		return
+	}
+	w := &channelWriter{c: c, tr: tr}
+	r, err := http.NewRequest(req.Method, "http://"+c.srv.host()+req.Path, strings.NewReader(req.Body))
+	if err != nil {
+		c.sendRaw(tr, mustJSON(httpHead{Status: http.StatusBadRequest, Headers: map[string]string{}}))
+		return
+	}
+	for k, v := range req.Headers {
+		r.Header.Set(k, v)
+	}
+	// The tunnel is the pod's own connection: the window is authorized, and it comes from
+	// the machine of the pod.
+	r.Header.Set("Cookie", cookieName+"="+c.srv.Token)
+	r.RemoteAddr = "127.0.0.1:0"
+	h.ServeHTTP(w, r)
+	if !w.head {
+		c.sendRaw(tr, mustJSON(httpHead{Status: http.StatusInternalServerError, Headers: map[string]string{}}))
+		return
+	}
+	c.sendRaw(tr, nil) // the end of the body
+}
+
+// httpHandler picks the handler of a path of the page: a preview, or the static app.
+func (s *Server) httpHandler(req httpRequest) (http.Handler, bool) {
+	if req.Preview != "" {
+		return s.Previews.Handler(req.Preview)
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { s.serveStatic(w, r) }), true
+}
+
+// host is the address the page is served at (the public URL of the pod, else its address).
+func (s *Server) host() string {
+	if s.Cfg != nil && s.Cfg.PublicURL != "" {
+		return strings.TrimPrefix(strings.TrimPrefix(s.Cfg.PublicURL, "https://"), "http://")
+	}
+	return s.Cfg.Addr
+}
+
+func mustJSON(v any) []byte {
+	b, _ := json.Marshal(v)
+	return b
+}
+
+// channelWriter writes an HTTP answer on a tunnel channel: the head as JSON, then the body
+// in chunks of at most 64 KB (one message each), so the Service Worker can stream it.
+type channelWriter struct {
+	c    *Client
+	tr   *transport
+	head bool
+}
+
+func (w *channelWriter) Header() http.Header { return http.Header{} }
+
+func (w *channelWriter) WriteHeader(code int) {
+	if w.head {
+		return
+	}
+	w.head = true
+	w.c.sendRaw(w.tr, mustJSON(httpHead{Status: code, Headers: map[string]string{}}))
+}
+
+func (w *channelWriter) Write(b []byte) (int, error) {
+	if !w.head {
+		w.WriteHeader(http.StatusOK)
+	}
+	n := len(b)
+	for len(b) > 0 {
+		c := len(b)
+		if c > 64*1024 {
+			c = 64 * 1024
+		}
+		w.c.sendRaw(w.tr, b[:c])
+		b = b[c:]
+	}
+	return n, nil
+}
 // language is the language of the window (English until it tells its own).
 func (c *Client) language() string {
 	l, _ := c.lang.Load().(string)
@@ -318,6 +473,8 @@ type request struct {
 	Params json.RawMessage `json:"params"`
 	// Project is the attached worktree the request runs in (the project of the window by default).
 	Project string `json:"project,omitempty"`
+	// tr is the transport the request came on (the answer goes back on it).
+	tr *transport
 }
 
 type rpcError struct {
@@ -376,44 +533,63 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 	conn.SetReadLimit(64 << 20)
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
-	c := &Client{window: &window{id: nextClientID(), srv: s, conn: &wsConn{c: conn}, send: make(chan []byte, 1024), ctx: ctx, attached: map[string]bool{}}}
-	s.mu.Lock()
-	s.clients[c] = struct{}{}
-	s.windowsChanged()
-	s.mu.Unlock()
-	go c.writeLoop(ctx)
+	c := newClient(s, ctx)
+	c.rpc = newTransport(c, &wsConn{c: conn})
+	c.rpc.ws = conn
+	s.addClient(c)
+	go c.writeLoop(ctx, c.rpc)
 	c.push("hello", map[string]string{"clientId": c.id})
-	c.handleLoop(ctx)
-	s.mu.Lock()
-	delete(s.clients, c)
-	s.windowsChanged()
-	var rts []*runtime.Runtime
-	for id := range c.attached {
-		rts = append(rts, s.runtimes[id])
-	}
-	rts = append(rts, s.runtimes[c.project])
-	s.mu.Unlock()
-	for _, rt := range rts {
-		if rt != nil {
-			rt.Detach()
-		}
-	}
-	c.conn.Close()
+	c.handleLoop(ctx, c.rpc)
+	s.dropClient(c)
+	c.rpc.conn.Close()
 }
 
 // ServeTunnel runs the WebSocket protocol on a whole-message transport that is not a
 // WebSocket (a WebRTC DataChannel over the relay). The JSON protocol is unchanged: the
-// same handler set, the same per-client queues and events. The tunnel owns the read side
-// (conn.Read); the pod owns the write side through the send channel and writeLoop.
-func (s *Server) ServeTunnel(ctx context.Context, conn tunnel.MsgConn) {
-	c := &Client{window: &window{id: nextClientID(), srv: s, conn: conn, send: make(chan []byte, 1024), ctx: ctx, attached: map[string]bool{}}}
+// same handler set, the same per-client queues and events. The rpc channel carries the
+// requests; each extra channel the browser opens (term:<id>, xfer:<n>, http:<n>) is read
+// on its own goroutine, so a 2 MB transfer never delays a keystroke. ServeTunnel returns
+// when the rpc channel is closed (the window closed) and channels is drained.
+func (s *Server) ServeTunnel(ctx context.Context, rpc tunnel.MsgConn, channels <-chan tunnel.LabeledConn) {
+	c := newClient(s, ctx)
+	c.rpc = newTransport(c, rpc)
+	s.addClient(c)
+	go c.writeLoop(ctx, c.rpc)
+	c.push("hello", map[string]string{"clientId": c.id})
+	done := make(chan struct{})
+	go func() {
+		c.handleLoop(ctx, c.rpc)
+		close(done)
+	}()
+	for {
+		select {
+		case <-done:
+			s.dropClient(c)
+			return
+		case <-ctx.Done():
+			s.dropClient(c)
+			return
+		case ch := <-channels:
+			go c.openChannel(ctx, ch.Label, ch.Conn)
+		}
+	}
+}
+
+func newClient(s *Server, ctx context.Context) *Client {
+	return &Client{window: &window{
+		id: nextClientID(), srv: s, ctx: ctx, attached: map[string]bool{},
+		channels: map[string]*transport{}, queues: map[string]*queue{},
+	}}
+}
+
+func (s *Server) addClient(c *Client) {
 	s.mu.Lock()
 	s.clients[c] = struct{}{}
 	s.windowsChanged()
 	s.mu.Unlock()
-	go c.writeLoop(ctx)
-	c.push("hello", map[string]string{"clientId": c.id})
-	c.handleLoop(ctx)
+}
+
+func (s *Server) dropClient(c *Client) {
 	s.mu.Lock()
 	delete(s.clients, c)
 	s.windowsChanged()
@@ -428,68 +604,89 @@ func (s *Server) ServeTunnel(ctx context.Context, conn tunnel.MsgConn) {
 			rt.Detach()
 		}
 	}
-	s.windowsChanged()
-	project := c.project
-	rt := s.runtimes[project]
-	s.mu.Unlock()
-	if rt != nil {
-		rt.Detach()
+	_ = c.rpc.conn.Close()
+	for _, tr := range c.channels {
+		_ = tr.conn.Close()
 	}
-	_ = conn.Close()
 }
 
-func (c *Client) writeLoop(ctx context.Context) {
-	wsc, isWS := c.conn.(*wsConn)
+func (c *Client) writeLoop(ctx context.Context, tr *transport) {
 	ping := time.NewTicker(20 * time.Second)
 	defer ping.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case msg := <-c.send:
+		case msg := <-tr.send:
 			wctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-			err := c.writeMsg(wctx, msg)
+			err := tr.writeMsg(wctx, msg)
 			cancel()
 			if err != nil {
-				c.conn.Close()
+				tr.conn.Close()
 				return
 			}
 		case <-ping.C:
 			// Only a WebSocket can be pinged; a DataChannel has no keepalive of its own.
-			if !isWS {
+			if tr.ws == nil {
 				continue
 			}
 			pctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-			_ = wsc.c.Ping(pctx)
+			_ = tr.ws.Ping(pctx)
 			cancel()
 		}
 	}
 }
 
 // writeMsg sends one whole message through the transport of the window.
-func (c *Client) writeMsg(ctx context.Context, msg []byte) error {
-	if wsc, ok := c.conn.(*wsConn); ok {
-		return wsc.c.Write(ctx, websocket.MessageText, msg)
+func (t *transport) writeMsg(ctx context.Context, msg []byte) error {
+	if t.ws != nil {
+		return t.ws.Write(ctx, websocket.MessageText, msg)
 	}
-	return c.conn.Write(msg)
+	return t.conn.Write(msg)
 }
 
-func (c *Client) enqueue(v any) {
+func (c *Client) enqueueOn(tr *transport, v any) {
+	if tr == nil {
+		return
+	}
 	data, err := json.Marshal(v)
 	if err != nil {
 		log.Printf("encoding: %v", err)
 		return
 	}
+	c.sendRaw(tr, data)
+}
+
+// sendRaw queues one whole message on a transport (JSON or raw bytes, as the http channels
+// send their body chunks).
+func (c *Client) sendRaw(tr *transport, data []byte) {
 	select {
-	case c.send <- data:
+	case tr.send <- data:
 	case <-c.ctx.Done():
 	case <-time.After(5 * time.Second):
 		// A client that does not read anymore is dropped rather than blocking the pod.
-		c.conn.Close()
+		tr.conn.Close()
 	}
 }
 
-func (c *Client) push(name string, data any) { c.enqueue(event{Event: name, Data: data}) }
+func (c *Client) enqueue(v any) { c.enqueueOn(c.rpc, v) }
+
+// push sends an event to the window, and pushIn an event of a project (the worktree of a
+// runtime). The output of a terminal goes on its own channel when the window opened one
+// (term:<id>), so a long scrollback never delays a keystroke.
+func (c *Client) push(name string, data any) { c.pushIn(name, data, "") }
+
+func (c *Client) pushIn(name string, data any, project string) {
+	if name == "console.output" {
+		if e, ok := data.(map[string]string); ok {
+			if tr := c.channel("term:" + e["id"]); tr != nil {
+				c.enqueueOn(tr, event{Event: name, Data: data, Project: project})
+				return
+			}
+		}
+	}
+	c.enqueueOn(c.rpc, event{Event: name, Data: data, Project: project})
+}
 
 // sees tells whether the window receives the events of a project (under srv.mu).
 func (c *Client) sees(projectID string) bool {
@@ -528,14 +725,14 @@ var barrier = map[string]string{"lsp.request": "lsp"}
 // read returns the next whole message, or an error once ctx ends or the transport
 // closes. The WebSocket transport already bounds its reads to the connection context;
 // a DataChannel blocks, so it is copied out on a goroutine that cancels with ctx.
-func (c *Client) read(ctx context.Context) ([]byte, error) {
+func (t *transport) read(ctx context.Context) ([]byte, error) {
 	type rmsg struct {
 		b   []byte
 		err error
 	}
 	ch := make(chan rmsg, 1)
 	go func() {
-		b, err := c.conn.Read()
+		b, err := t.conn.Read()
 		ch <- rmsg{b, err}
 	}()
 	select {
@@ -546,19 +743,9 @@ func (c *Client) read(ctx context.Context) ([]byte, error) {
 	}
 }
 
-func (c *Client) handleLoop(ctx context.Context) {
-	queues := map[string]*queue{}
-	defer func() {
-		for _, q := range queues {
-			close(q.ch)
-			q.mu.Lock()
-			q.done = q.enq // release the waiting requests
-			q.cond.Broadcast()
-			q.mu.Unlock()
-		}
-	}()
+func (c *Client) handleLoop(ctx context.Context, tr *transport) {
 	for {
-		data, err := c.read(ctx)
+		data, err := tr.read(ctx)
 		if err != nil {
 			return
 		}
@@ -566,6 +753,7 @@ func (c *Client) handleLoop(ctx context.Context) {
 		if json.Unmarshal(data, &req) != nil {
 			continue
 		}
+		req.tr = tr
 		if req.Method == "$/cancel" {
 			var p struct{ ID int64 }
 			_ = json.Unmarshal(req.Params, &p)
@@ -575,21 +763,7 @@ func (c *Client) handleLoop(ctx context.Context) {
 			continue
 		}
 		if group, ok := sequential[req.Method]; ok {
-			q := queues[group]
-			if q == nil {
-				q = &queue{ch: make(chan request, 4096)}
-				q.cond = sync.NewCond(&q.mu)
-				queues[group] = q
-				go func() {
-					for r := range q.ch {
-						c.dispatch(ctx, r)
-						q.mu.Lock()
-						q.done++
-						q.cond.Broadcast()
-						q.mu.Unlock()
-					}
-				}()
-			}
+			q := c.queueFor(group)
 			q.mu.Lock()
 			q.enq++
 			q.mu.Unlock()
@@ -597,7 +771,10 @@ func (c *Client) handleLoop(ctx context.Context) {
 			continue
 		}
 		var wait func()
-		if q := queues[barrier[req.Method]]; q != nil {
+		c.mu.Lock()
+		q := c.queues[barrier[req.Method]]
+		c.mu.Unlock()
+		if q != nil {
 			q.mu.Lock()
 			target := q.enq
 			q.mu.Unlock()
@@ -613,12 +790,34 @@ func (c *Client) handleLoop(ctx context.Context) {
 			if wait != nil {
 				wait()
 			}
-			c.dispatch(ctx, req)
+			c.dispatch(ctx, req, tr)
 		}()
 	}
 }
 
-func (c *Client) dispatch(ctx context.Context, req request) {
+// queueFor returns the sequential queue of a group, starting its reader on first use.
+func (c *Client) queueFor(group string) *queue {
+	c.mu.Lock()
+	q := c.queues[group]
+	if q == nil {
+		q = &queue{ch: make(chan request, 4096)}
+		q.cond = sync.NewCond(&q.mu)
+		c.queues[group] = q
+		go func() {
+			for r := range q.ch {
+				c.dispatch(c.ctx, r, r.tr)
+				q.mu.Lock()
+				q.done++
+				q.cond.Broadcast()
+				q.mu.Unlock()
+			}
+		}()
+	}
+	c.mu.Unlock()
+	return q
+}
+
+func (c *Client) dispatch(ctx context.Context, req request, tr *transport) {
 	h, ok := c.srv.handlers[req.Method]
 	var res any
 	var err error
@@ -652,7 +851,7 @@ func (c *Client) dispatch(ctx context.Context, req request) {
 	} else if res == nil {
 		resp.Result = true
 	}
-	c.enqueue(resp)
+	c.enqueueOn(req.tr, resp)
 }
 
 // codeError gives an error a code the page can test (its message is still translated).
@@ -695,7 +894,7 @@ func (s *Server) emitter(projectID string) runtime.Emit {
 		}
 		s.mu.Unlock()
 		for _, c := range targets {
-			c.enqueue(event{Event: name, Data: data, Project: projectID})
+			c.pushIn(name, data, projectID)
 		}
 	}
 }
