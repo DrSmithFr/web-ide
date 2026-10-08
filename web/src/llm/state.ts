@@ -301,6 +301,10 @@ export interface ChatInfo {
   cost?: number
   mode?: Mode
   ticket?: number
+  /** Something waits for the user (questions, a plan, an approval) or for the parent. */
+  waiting?: boolean
+  /** Its last answer ended in an error. */
+  failed?: boolean
 }
 
 export const [config, setConfig] = createStore<{ servers: ServerView[]; server: string; model: string; childServer?: string; childModel?: string }>({ servers: [], server: '', model: '' })

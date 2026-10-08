@@ -33,6 +33,10 @@ type ChatInfo struct {
 	Cost   float64 `json:"cost,omitempty"`
 	Mode   string  `json:"mode,omitempty"`
 	Ticket int64   `json:"ticket,omitempty"`
+	// Waiting: questions, a plan, a capture, an approval wait for the user (or a question of
+	// a sub-agent for its parent); Failed: its last answer ended in an error.
+	Waiting bool `json:"waiting,omitempty"`
+	Failed  bool `json:"failed,omitempty"`
 }
 
 // ChatLocation says where the conversations of a project live.
@@ -146,7 +150,12 @@ func (m *Manager) ListChats(loc ChatLocation) ([]ChatInfo, error) {
 	}
 	rows, err := db.Query(`SELECT id, title, updated, model, coalesce(json_extract(extra, '$.parent'), ''), coalesce(json_extract(extra, '$.agent.status'), ''),
 		coalesce(json_extract(extra, '$.agent.tokens'), 0), coalesce(json_extract(extra, '$.agent.cost'), 0),
-		coalesce(json_extract(extra, '$.mode'), ''), coalesce(json_extract(extra, '$.ticket.id'), 0)
+		coalesce(json_extract(extra, '$.mode'), ''), coalesce(json_extract(extra, '$.ticket.id'), 0),
+		json_extract(extra, '$.approval') IS NOT NULL OR EXISTS (SELECT 1 FROM messages m WHERE m.chat_id = chats.id AND m.role = 'tool'
+			AND m.seq > (SELECT coalesce(max(seq), -1) FROM messages WHERE chat_id = chats.id AND role != 'tool')
+			AND (json_extract(m.data, '$.askState') = 'pending' OR json_extract(m.data, '$.planState') = 'pending'
+				OR json_extract(m.data, '$.capture') = 'pending' OR json_extract(m.data, '$.wait') = 'parent')),
+		coalesce((SELECT json_extract(data, '$.error') FROM messages WHERE chat_id = chats.id ORDER BY seq DESC LIMIT 1), '') != ''
 		FROM chats ORDER BY updated DESC LIMIT 500`)
 	if err != nil {
 		return nil, err
@@ -155,7 +164,7 @@ func (m *Manager) ListChats(loc ChatLocation) ([]ChatInfo, error) {
 	list := []ChatInfo{}
 	for rows.Next() {
 		var c ChatInfo
-		if err := rows.Scan(&c.ID, &c.Title, &c.Updated, &c.Model, &c.Parent, &c.Status, &c.Tokens, &c.Cost, &c.Mode, &c.Ticket); err != nil {
+		if err := rows.Scan(&c.ID, &c.Title, &c.Updated, &c.Model, &c.Parent, &c.Status, &c.Tokens, &c.Cost, &c.Mode, &c.Ticket, &c.Waiting, &c.Failed); err != nil {
 			return nil, err
 		}
 		list = append(list, c)

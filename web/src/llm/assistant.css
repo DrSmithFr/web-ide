@@ -459,8 +459,8 @@
 .ai-chat-item.nested { padding-left: 14px; }
 .ai-agent-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--fg-muted); }
 .ai-agent-dot.done { background: var(--ok); }
-.ai-agent-dot.error, .ai-agent-dot.stopped { background: var(--danger); }
-.ai-agent-dot.waiting_parent, .ai-agent-dot.blocked { background: var(--warn); }
+.ai-agent-dot.error, .ai-agent-dot.failed { background: var(--danger); }
+.ai-agent-dot.waiting_parent, .ai-agent-dot.blocked, .ai-agent-dot.waiting { background: var(--warn); }
 .ai-preview { display: grid; gap: 6px; margin: 4px 0 4px 22px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-2); }
 .ai-preview.running { border-color: color-mix(in srgb, var(--ok) 55%, var(--line)); }
 .ai-preview-head, .ai-preview-actions, .ai-preview-public { display: flex; align-items: center; gap: 8px; min-width: 0; }

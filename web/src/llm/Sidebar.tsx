@@ -40,6 +40,17 @@ interface Group {
   items: { c: ChatInfo; kids: { c: ChatInfo; depth: number }[] }[]
 }
 
+/** State of a conversation that does not run: a question waiting (orange), an error (red), else the status of a sub-agent. */
+function StateDot(props: { c: ChatInfo }) {
+  const state = () => (props.c.waiting ? 'waiting' : props.c.failed || props.c.status === 'error' ? 'failed' : props.c.parent ? props.c.status ?? '' : '')
+  const labels: Record<string, string> = { waiting: 'Waiting for you', failed: 'Error' }
+  return (
+    <Show when={state()}>
+      <span class={`ai-agent-dot ${state()}`} title={t(labels[state()] ?? agentLabels[state()] ?? '')} data-testid={`ai-dot-${state()}`} />
+    </Show>
+  )
+}
+
 export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
   const [q, setQ] = createSignal('')
   onMount(refreshChats)
@@ -96,7 +107,7 @@ export function Sidebar(props: { onPicked: () => void; onNew: () => void }) {
   const item = (c: ChatInfo, depth = 0) => (
     <div class="ai-chat-item" classList={{ active: c.id === chat.id, nested: depth > 0 }} style={depth > 1 ? { 'padding-left': `${depth * 14}px` } : undefined} data-testid={depth ? 'ai-chat-child' : undefined}>
       <button class="ai-chat-open" onClick={() => open(c.id)} title={c.model ? `${c.title} · ${c.model}` : c.title}>
-        <Show when={runStates()[c.id]} fallback={<Show when={c.parent}>{<span class={`ai-agent-dot ${c.status ?? ''}`} title={t(agentLabels[c.status ?? ''] ?? '')} />}</Show>}>
+        <Show when={runStates()[c.id]} fallback={<StateDot c={c} />}>
           {(st) => <span class={`ai-run-dot ${st()}`} title={t(runLabels[st()])} data-testid="ai-run-dot" />}
         </Show>
         <Show when={c.mode === 'orchestrator'}>

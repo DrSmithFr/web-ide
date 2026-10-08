@@ -102,6 +102,8 @@ run(async ({ page }) => {
     await page.click('.ai-panel button[title="Conversations of the project"]')
     await page.waitForSelector('[data-testid=ai-side-active] [data-testid=ai-chat-child]:has-text("Change the greeting")', { timeout: 5000 })
     assert((await page.textContent('.ai-side-group-name')) === 'Active', 'the active conversations come first, the working sub-agent under its parent')
+    await page.waitForSelector('[data-testid=ai-side-active] .ai-chat-item:not(.nested) [data-testid=ai-dot-waiting]', { timeout: 5000 })
+    assert(await page.isVisible('[data-testid=ai-chat-child] [data-testid=ai-dot-waiting]'), 'orange dots: the parent waits for the user, the child for its parent')
     await page.click('.ai-panel button[title="Conversations of the project"]')
 
     // The question of the child woke the parent, which asks the user first.
