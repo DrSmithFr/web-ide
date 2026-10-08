@@ -326,6 +326,8 @@ func TestAgentAdopt(t *testing.T) {
 		sys := req["messages"].([]any)[0].(map[string]any)["content"].(string)
 		if strings.Contains(sys, "Orchestrator mode") {
 			switch {
+			case content == "Resume broken":
+				return toolCalls([3]string{"z1", "agent_resume", `{"chat":"broken"}`}, [3]string{"z2", "agent_resume", `{"chat":"dev"}`})
 			case content == "Adopt":
 				return toolCalls([3]string{"a1", "agent_adopt", `{"chat":"dev"}`}, [3]string{"a2", "agent_adopt", `{"chat":"dev"}`}, [3]string{"a3", "agent_adopt", `{"chat":"orc"}`})
 			case strings.Contains(content, "report: done]"):
@@ -397,6 +399,26 @@ func TestAgentAdopt(t *testing.T) {
 		if c := c.(map[string]any); c["id"] == "kid" && c["failed"] == true {
 			t.Fatal("abandoned conversation still failed in the list")
 		}
+	}
+
+	// A conversation that failed on its own: resumed by the Orchestrator from its last step,
+	// adopted on the way; one that did not fail is not resumed.
+	if err := s.saveChat(loc, &agent.Chat{ID: "broken", Title: "Broken", Server: "s1", Model: "m", Mode: "build",
+		Messages: []*agent.Message{{Role: "user", Content: agent.String("go")}, {Role: "assistant", Error: "Interrupted: the pod stopped."}}}); err != nil {
+		t.Fatal(err)
+	}
+	a.waitUpdate("orc", idle)
+	a.call("agent.send", map[string]any{"id": "orc", "text": "Resume broken", "server": "s1", "model": "m", "mode": "orchestrator"})
+	waitFor("orc", "did not fail: nothing to resume")
+	waitFor("broken", "Still working.")
+	b := open("broken")
+	bc := contents("broken")
+	if b["parent"] != "orc" || b["agent"].(map[string]any)["adopted"] != true || strings.Contains(bc, "Interrupted: the pod stopped.") || !strings.Contains(bc, "Your last answer failed") {
+		t.Fatalf("resumed: parent %v\n%s", b["parent"], bc)
+	}
+	waitFor("orc", "note] Ticket 1")
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline) && s.run("broken") != nil; {
+		time.Sleep(50 * time.Millisecond)
 	}
 
 	// Runs still writing would outlive the temporary folder.

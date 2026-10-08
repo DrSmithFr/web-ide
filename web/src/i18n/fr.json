@@ -1642,5 +1642,7 @@
   "Followed by": "Suivie par",
   "Active": "Actives",
   "Abandon": "Abandonner",
-  "Leave it: the conversation goes to the history (a sub-agent is stopped)": "La laisser : la conversation passe dans l’historique (un sous-agent est arrêté)"
+  "Leave it: the conversation goes to the history (a sub-agent is stopped)": "La laisser : la conversation passe dans l’historique (un sous-agent est arrêté)",
+  "Resumes a conversation": "Reprend une conversation",
+  "resumed: {title}": "reprise : {title}"
 }

@@ -26,7 +26,7 @@ Answer in the language of the user, in Markdown.
 {{tools}}`
 
 const orchestratorToolsText = `Reading tools: list_dir, find_files, read_file, search_text, the language servers (lsp_*), bash for reading commands (ls, grep, git log…), which run freely; any other command asks the user first. edit_file and write_file are not available in Orchestrator mode.
-Kanban: kanban_list, kanban_get, kanban_next (what can start now, in order, and what waits for the user), kanban_history (what moved in a period). Conversations: list_conversations, open_conversation (moves the user into a new or existing conversation), agent_adopt (follow a conversation that runs on its own, a development started from a card: it becomes your sub-agent, tells you where it is and reports). Actions: action_card (a button the user clicks: start the development of a ticket, generate its plan, open it, open a conversation). ask_user asks the user questions when a choice is theirs.
+Kanban: kanban_list, kanban_get, kanban_next (what can start now, in order, and what waits for the user), kanban_history (what moved in a period). Conversations: list_conversations, open_conversation (moves the user into a new or existing conversation), agent_adopt (follow a conversation that runs on its own, a development started from a card: it becomes your sub-agent, tells you where it is and reports), agent_resume (resume a failed conversation from its last completed step, adopting it on the way). Actions: action_card (a button the user clicks: start the development of a ticket, generate its plan, open it, open a conversation). ask_user asks the user questions when a choice is theirs.
 When the conversation gets long, you can summarize it with compact_conversation.`
 
 var (
@@ -57,7 +57,9 @@ var (
 		})
 	adoptDef = fn("agent_adopt", "Adopts a conversation of the project that runs on its own (a development started from a card…): it becomes one of your sub-agents, keeps working with the user, announces itself with a note and sends you its report when its task is over.",
 		obj{"chat": str("Id of the conversation (list_conversations)")}, "chat")
-	orchestratorDefs = []Def{kanbanNextDef, kanbanHistDef, listConvsDef, actionCardDef, openConvDef, adoptDef}
+	resumeDef = fn("agent_resume", "Resumes a conversation whose last answer failed (list_conversations marks it failed), from its last completed step, like the Resume button of the user. One that runs on its own is adopted on the way: it becomes your sub-agent.",
+		obj{"chat": str("Id of the failed conversation")}, "chat")
+	orchestratorDefs = []Def{kanbanNextDef, kanbanHistDef, listConvsDef, actionCardDef, openConvDef, adoptDef, resumeDef}
 )
 
 // OrchestratorTools are handled by the server (agent_orchestrator.go).

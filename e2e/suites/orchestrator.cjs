@@ -38,6 +38,10 @@ const fake = http.createServer(async (req, res) => {
   if (!sys.includes('**Orchestrator mode**')) {
     outputs.devSystem = sys
     if (content.includes('You are now followed')) return call(res, 'an', 'agent_note', { title: 'Login page under way', text: 'The form is done.' })
+    if (content === 'Break please') {
+      res.write(`data: ${JSON.stringify({ error: { message: 'model server crashed' } })}\n\n`)
+      return res.end()
+    }
     return say(res, 'Developing.')
   }
   outputs.tools = r.tools.map((t) => t.function.name)
@@ -51,6 +55,12 @@ const fake = http.createServer(async (req, res) => {
     outputs.history = content
     return say(res, 'Two tickets were planned.')
   }
+  if (content === 'Resume the broken one') return call(res, 'lb', 'list_conversations', { query: 'Break' })
+  if (last.role === 'tool' && last.tool_call_id === 'lb') {
+    outputs.failedLine = content
+    return call(res, 'rs', 'agent_resume', { chat: /^- (\w+) "/m.exec(content)[1] })
+  }
+  if (last.role === 'tool' && last.tool_call_id === 'rs') return say(res, 'Resumed it.')
   if (content === 'Follow the footer') return call(res, 'l', 'list_conversations', { query: 'footer' })
   if (last.role === 'tool' && last.tool_call_id === 'l') return call(res, 'ad', 'agent_adopt', { chat: /^- (\w+) "/m.exec(content)[1] })
   if (last.role === 'tool' && last.tool_call_id === 'ad') return say(res, 'I follow the footer now.')
@@ -156,6 +166,23 @@ run(
       await page.click('[data-testid=ai-chat-child]:has-text("footer")')
       await page.waitForSelector('[data-testid=ai-child-header]:has-text("Followed by")', { timeout: 5000 })
       assert(true, 'the adopted conversation says who follows it')
+
+      // 5. A conversation failed on its own: the orchestrator resumes it and adopts it.
+      await page.click('.ai-panel button[title="New conversation"]')
+      await page.focus('.ai-composer textarea')
+      await page.keyboard.press('Shift+Tab') // Build
+      await page.fill('.ai-composer textarea', 'Break please')
+      await page.keyboard.press('Enter')
+      await page.waitForSelector('[data-testid=ai-dismiss]', { timeout: 20000 })
+      await page.click('.ai-panel button[title="New conversation"]')
+      await page.fill('.ai-composer textarea', 'Resume the broken one')
+      await page.keyboard.press('Enter')
+      await page.waitForSelector('.ai-msg.assistant .md:has-text("Resumed it.")', { timeout: 20000 })
+      assert(outputs.failedLine.includes('failed (agent_resume)'), 'list_conversations tells the failed conversation: ' + outputs.failedLine)
+      await page.waitForSelector('[data-testid=ai-child]:has-text("Break please")', { timeout: 10000 })
+      if (!(await page.isVisible('[data-testid=ai-sidebar]'))) await page.click('.ai-panel button[title="Conversations of the project"]')
+      await page.waitForSelector('[data-testid=ai-side-orchestrator] [data-testid=ai-chat-child]:has-text("Break please")', { timeout: 10000 })
+      assert(!(await page.isVisible('[data-testid=ai-chat-child]:has-text("Break please") [data-testid=ai-dot-failed]')), 'resumed and adopted: under the orchestrator, no longer failed')
     } finally {
       fake.close()
     }

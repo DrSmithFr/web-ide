@@ -70,6 +70,28 @@ func (s *Server) adoptedBy(cc chatCtx, parent string, chat *agent.Chat) error {
 	return nil
 }
 
+// resumeFrom drops the failed answer of a conversation and closes the tool calls left
+// open: it goes on from its last completed step. Returns the first message changed.
+func resumeFrom(chat *agent.Chat) int {
+	n := len(chat.Messages)
+	if n > 0 {
+		if last := chat.Messages[n-1]; last.Role == "assistant" && last.Error != "" && len(last.ToolCalls) == 0 {
+			chat.Messages = chat.Messages[:n-1]
+		}
+	}
+	closeToolCalls(chat, "Interrupted: the run stopped before this tool ended.")
+	return max(0, n-1)
+}
+
+// failed tells a conversation whose last answer ended in an error (or a sub-agent in error).
+func failed(chat *agent.Chat) bool {
+	if chat.Agent != nil && chat.Agent.Status == agent.AgentError {
+		return true
+	}
+	n := len(chat.Messages)
+	return n > 0 && chat.Messages[n-1].Role == "assistant" && chat.Messages[n-1].Error != ""
+}
+
 // revive: an adopted conversation the user goes on with works again for its parent (its
 // end, a stop or an error, is reported again).
 func revive(chat *agent.Chat) {
@@ -373,14 +395,7 @@ func (s *Server) registerAgent() {
 			return nil, err
 		}
 		return nil, restart(c, cc, a, func(chat *agent.Chat) (int, error) {
-			n := len(chat.Messages)
-			if n > 0 {
-				if last := chat.Messages[n-1]; last.Role == "assistant" && last.Error != "" && len(last.ToolCalls) == 0 {
-					chat.Messages = chat.Messages[:n-1]
-				}
-			}
-			closeToolCalls(chat, "Interrupted: the run stopped before this tool ended.")
-			return max(0, n-1), nil
+			return resumeFrom(chat), nil
 		})
 	}))
 	// agent.retry asks again from the last message of the user, with another model when given.

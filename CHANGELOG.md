@@ -8,6 +8,7 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 - Claude Code answers the local assistant: the MCP tools `kanban_reply` (a message in a conversation linked to a ticket) and `kanban_answer` (the `ask_user` questions waiting); `kanban_conversation` lists the questions waiting. The thread marks what Claude wrote or answered.
 - The Orchestrator adopts a conversation that runs on its own (`agent_adopt`), and follows from their start the developments its cards start: such a conversation becomes its sub-agent, announces itself with a note, keeps working with the user and reports when its task is over.
+- The Orchestrator resumes a conversation whose last answer failed (`agent_resume`), from its last completed step, and adopts it on the way.
 
 ### Changed
 

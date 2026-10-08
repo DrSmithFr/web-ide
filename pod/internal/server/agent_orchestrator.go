@@ -160,6 +160,10 @@ func (s *Server) listConversations(r *agentRun, query string, limit int) (toolRe
 		}
 		if state, _ := s.stateOf(c.ID); state != "idle" {
 			line += " · " + state
+		} else if c.Waiting {
+			line += " · waiting for the user"
+		} else if c.Failed {
+			line += " · failed (agent_resume)"
 		}
 		lines = append(lines, line)
 		if len(lines) == limit {

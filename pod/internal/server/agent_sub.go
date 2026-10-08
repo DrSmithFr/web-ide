@@ -422,6 +422,24 @@ func (s *Server) agentStatus(r *agentRun) (toolResult, error) {
 	return ok(b.String(), agent.Tn(len(ids), "{n} sub-agent", "{n} sub-agents", nil)), nil
 }
 
+// adoptable checks that the Orchestrator of r may adopt a conversation, and makes it its
+// adopted sub-agent (the caller saves it and adds it to the children of r).
+func adoptable(r *agentRun, c *agent.Chat) error {
+	switch {
+	case c.ID == r.id:
+		return failf("a conversation cannot adopt itself")
+	case c.Parent == r.id:
+		return failf("%s is already one of your sub-agents", c.ID)
+	case c.Parent != "":
+		return failf("%s is a sub-agent of %s: it reports there", c.ID, c.Parent)
+	case c.Mode == agent.Orchestrator:
+		return failf("an Orchestrator conversation cannot be adopted")
+	}
+	c.Parent = r.id
+	c.Agent = &agent.SubAgent{Task: c.Title, Status: agent.AgentRunning, Depth: 1, Orchestrated: true, Adopted: true}
+	return nil
+}
+
 // agentAdopt: an Orchestrator takes a conversation that runs on its own under its wing; it
 // is asked to announce itself.
 func (s *Server) agentAdopt(r *agentRun, a toolArgs) (toolResult, error) {
@@ -431,17 +449,8 @@ func (s *Server) agentAdopt(r *agentRun, a toolArgs) (toolResult, error) {
 	}
 	var title string
 	adopt := func(c *agent.Chat) error {
-		switch {
-		case c.Parent == r.id:
-			return failf("%s is already one of your sub-agents", id)
-		case c.Parent != "":
-			return failf("%s is a sub-agent of %s: it reports there", id, c.Parent)
-		case c.Mode == agent.Orchestrator:
-			return failf("an Orchestrator conversation cannot be adopted")
-		}
-		c.Parent, title = r.id, c.Title
-		c.Agent = &agent.SubAgent{Task: c.Title, Status: agent.AgentRunning, Depth: 1, Orchestrated: true, Adopted: true}
-		return nil
+		title = c.Title
+		return adoptable(r, c)
 	}
 	if t := s.run(id); t != nil {
 		t.mu.Lock()
@@ -475,6 +484,58 @@ func (s *Server) agentAdopt(r *agentRun, a toolArgs) (toolResult, error) {
 		return toolResult{}, err
 	}
 	res := ok(fmt.Sprintf("Conversation %s %q adopted: it goes on with the user, announces itself with a note and will send its report when its task is over.", id, title), agent.T("adopted: {title}", map[string]any{"title": title}))
+	res.Child = id
+	return res, nil
+}
+
+// agentResume: an Orchestrator resumes a conversation whose last answer failed, from its last
+// completed step; one that runs on its own is adopted on the way (and told so).
+func (s *Server) agentResume(r *agentRun, a toolArgs) (toolResult, error) {
+	id := strings.TrimSpace(a.str("chat"))
+	if id == r.id {
+		return toolResult{}, failf("a conversation cannot resume itself")
+	}
+	if s.run(id) != nil {
+		return toolResult{}, failf("%s is running already", id)
+	}
+	c, err := s.loadChat(r.loc, id)
+	if err != nil {
+		return toolResult{}, failf("unknown conversation %q (see list_conversations)", id)
+	}
+	if !failed(c) {
+		return toolResult{}, failf("%s did not fail: nothing to resume (agent_message writes to your sub-agents)", id)
+	}
+	adopted := false
+	if c.Parent != r.id {
+		if err := adoptable(r, c); err != nil {
+			return toolResult{}, err
+		}
+		adopted = true
+	}
+	from := resumeFrom(c)
+	revive(c)
+	if c.Agent != nil {
+		c.Agent.Status, c.Agent.Error = agent.AgentRunning, ""
+	}
+	r.mu.Lock()
+	parentTitle := r.chat.Title
+	if adopted {
+		r.chat.Children = append(r.chat.Children, id)
+		s.publish(r, -1)
+	}
+	r.mu.Unlock()
+	if adopted {
+		ev := agent.AgentEvent{Child: id, Title: parentTitle, Type: "message", Text: agent.AdoptText + " Your last answer failed: go on from where you stopped."}
+		c.Messages = append(c.Messages, &agent.Message{Role: "user", Kind: "agent_event", Content: agent.String(agent.EventText(ev)), Event: &ev})
+	}
+	if !s.startRun(r.loc, r.root, s.runProject(c, r.root, r.project), r.lang, c, from) {
+		return toolResult{}, failf("%s is running already", id)
+	}
+	text := fmt.Sprintf("Conversation %s %q resumed from its last completed step.", id, c.Title)
+	if adopted {
+		text += " It is now one of your sub-agents: it announces itself with a note and reports when its task is over."
+	}
+	res := ok(text, agent.T("resumed: {title}", map[string]any{"title": c.Title}))
 	res.Child = id
 	return res, nil
 }
