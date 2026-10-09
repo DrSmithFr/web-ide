@@ -257,7 +257,8 @@ func TestModels(t *testing.T) {
 }
 
 // llama-swap lists no context for a model it does not run with llama-server's --ctx-size:
-// read from the /props of the loaded one, kept once unloaded, never asked while unloaded.
+// read from the /props of the loaded one, kept once unloaded (also by a restarted pod), never
+// asked while unloaded.
 func TestLlamaSwapContext(t *testing.T) {
 	loaded := true
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -290,6 +291,16 @@ func TestLlamaSwapContext(t *testing.T) {
 		}
 		if got["cpp"] != 114688 || got["strata x"] != 262144 || got["other"] != DefaultContext {
 			t.Fatalf("loaded %v: %v", l, got)
+		}
+	}
+	// A restarted pod still knows it while the model is unloaded.
+	list, err := New(m.st).Models(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, md := range list.Models {
+		if md.ID == "strata x" && md.Context != 262144 {
+			t.Fatalf("after a restart: %d", md.Context)
 		}
 	}
 }

@@ -263,14 +263,18 @@ func (m *Manager) openaiModels(ctx context.Context, s Server) ([]Model, error) {
 
 // upstreamContext is the context of a model behind llama-swap that does not list it (it reads
 // only llama-server's --ctx-size): the /props of the loaded server, kept for when it is
-// unloaded. An unloaded model is never asked, that would load it. 0 when unknown.
+// unloaded, across restarts of the pod. An unloaded model is never asked, that would load
+// it. 0 when unknown.
 func (m *Manager) upstreamContext(ctx context.Context, s Server, md Model) int {
 	key := s.URL + "\n" + md.ID
 	if md.State == "loaded" || md.State == "ready" {
 		var p llamaProps
 		if m.getJSON(ctx, s, "/upstream/"+url.PathEscape(md.ID)+"/props", &p) == nil && p.Settings.NCtx > 0 {
 			m.mu.Lock()
-			m.contexts[key] = p.Settings.NCtx
+			if m.contexts[key] != p.Settings.NCtx {
+				m.contexts[key] = p.Settings.NCtx
+				m.st.WriteJSON(contextsFile, m.contexts)
+			}
 			m.mu.Unlock()
 		}
 	}

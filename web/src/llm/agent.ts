@@ -6,7 +6,7 @@ import { produce, reconcile } from 'solid-js/store'
 import { createSignal } from 'solid-js'
 import { on, request } from '../pod/rpc'
 import { activeTab, attachWorktree, home, relPath, session } from '../state/project'
-import { approval, chat, config, emptyChat, live, newId, prefs, refreshChats, setApproval, setChat, setIncomingDraft, setLive, type Chat, type ChatMessage, type Mode, type Part } from './state'
+import { approval, chat, config, emptyChat, live, loadModels, newId, prefs, refreshChats, setApproval, setChat, setIncomingDraft, setLive, type Chat, type ChatMessage, type Mode, type Part } from './state'
 import { runUiTool } from './uiTools'
 import { entryToString, type AnswerEntry } from './ask'
 import { toast } from '../ui/toast'
@@ -151,6 +151,8 @@ on('agent.update', (u: Update) => {
     }),
   )
   setApproval(u.approval ?? null)
+  // A run that ends: its model may have been loaded meanwhile, with its real context.
+  if (live.busy && u.state === 'idle') loadModels().catch(() => {})
   applyState(u.state, u.ahead)
   attach(u.state === 'idle' ? undefined : u.stream)
   rememberActive()
