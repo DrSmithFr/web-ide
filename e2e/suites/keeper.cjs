@@ -1,10 +1,39 @@
 // Keeper: a terminal survives a restart of the pod (run.sh starts a keeper for this suite and
 // gives the command restarting the pod). The page attaches again from its offset: the output
-// goes on without gap or duplicate, input works, closing the terminal ends its process.
+// goes on without gap or duplicate, input works, closing the terminal ends its process. A
+// conversation of the assistant survives too: restarted while the answer is written, then while
+// its command runs, it ends whole, the model asked once per step.
 const fs = require('fs')
 const net = require('net')
 const { execFileSync } = require('child_process')
+const http = require('http')
 const { run, openProject, assert } = require('../common.cjs')
+
+// A model server that writes slowly: 40 words in 4 s, then runs a command, then ends.
+const requests = []
+const fake = http.createServer(async (req, res) => {
+  if (req.url === '/v1/models') return res.end(JSON.stringify({ data: [{ id: 'slow-model' }] }))
+  if (req.url !== '/v1/chat/completions') return res.writeHead(404).end()
+  let body = ''
+  for await (const c of req) body += c
+  const r = JSON.parse(body)
+  requests.push(r)
+  res.writeHead(200, { 'Content-Type': 'text/event-stream' })
+  const send = (delta, finish = null) => res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`)
+  const results = r.messages.filter((m) => m.role === 'tool').length
+  if (results === 0) {
+    for (let i = 0; i < 40 && !res.destroyed; i++) {
+      send({ content: `word${i} ` })
+      await new Promise((ok) => setTimeout(ok, 100))
+    }
+    send({ tool_calls: [{ index: 0, id: 'k1', type: 'function', function: { name: 'run_command', arguments: JSON.stringify({ command: 'sleep 3; echo done-cmd', timeout: 30 }) } }] })
+    send({}, 'tool_calls')
+  } else {
+    send({ content: 'finished' })
+    send({}, 'stop')
+  }
+  res.end('data: [DONE]\n\n')
+})
 
 /** Asks the keeper of the test its processes (frames: uint32 length, JSON header, newline). */
 function keeperList() {
@@ -68,4 +97,39 @@ run(async ({ page }) => {
     if (!gone) await page.waitForTimeout(100)
   }
   assert(gone, 'a closed terminal leaves the keeper')
+
+  // The assistant: the pod restarts while the answer is written, then while its command runs.
+  await new Promise((r) => fake.listen(0, '127.0.0.1', r))
+  try {
+    await page.click('.rail-right .rail-btn[title="AI assistant"]')
+    await page.waitForSelector('.ai-panel .ai-empty')
+    await page.click('.ai-empty button:has-text("Add a model server")')
+    await page.fill('.ai-servers input[name=url]', `127.0.0.1:${fake.address().port}`)
+    await page.click('.ai-servers button:has-text("Add")')
+    await page.waitForSelector('.ai-server-row:has-text("127.0.0.1")')
+    await page.click('.ai-servers .modal-head button')
+    await page.waitForSelector('[data-testid=model-pill]:has-text("slow-model")', { timeout: 5000 })
+    await page.fill('.ai-composer textarea', 'Write slowly then run the command')
+    await page.keyboard.press('Enter')
+    await page.waitForFunction(() => /word5 /.test(document.querySelector('.ai-msg.live')?.textContent ?? ''), null, { timeout: 10000 })
+    execFileSync('bash', [process.env.E2E_RESTART_POD])
+    const whole = await page
+      .waitForFunction(() => [...document.querySelectorAll('.ai-msg.assistant')].some((m) => /word0 [\s\S]*word39/.test(m.textContent)), null, { timeout: 20000 })
+      .then(() => true, () => false)
+    const text = await page.$$eval('.ai-msg.assistant', (e) => e.map((m) => m.textContent).join(' | '))
+    const words = [...text.matchAll(/word(\d+)/g)].map((m) => Number(m[1]))
+    assert(whole && consecutive(words) && words.length === 40, 'the answer written across the restart is whole, once: ' + words.join(' '))
+    assert(!/Interrupted/.test(await page.textContent('.ai-panel')), 'the conversation is not interrupted')
+
+    // The command runs (sleep 3): the pod restarts again.
+    await page.waitForSelector('.ai-tool.running', { timeout: 10000 })
+    await page.waitForTimeout(800)
+    execFileSync('bash', [process.env.E2E_RESTART_POD])
+    const finished = await page.waitForFunction(() => /finished/.test(document.querySelector('.ai-panel .ai-messages')?.textContent ?? ''), null, { timeout: 30000 }).then(() => true, () => false)
+    const toolResult = requests[1]?.messages.find((m) => m.role === 'tool')?.content ?? ''
+    assert(finished && /done-cmd/.test(toolResult) && /Exit code: 0/.test(toolResult), 'the command ends across the restart and its result reaches the model: ' + toolResult.slice(0, 120))
+    assert(requests.length === 2, 'the model is asked once per step: ' + requests.length + ' requests')
+  } finally {
+    fake.close()
+  }
 })

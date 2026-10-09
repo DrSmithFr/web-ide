@@ -17,7 +17,9 @@ browser (SolidJS app)  ──WebSocket JSON-RPC──▶  pod (Go binary)
 
 The front end is built by Vite and embedded in the pod binary (`pod/webdist`), so the page and the WebSocket share one origin: no mixed content, and pairing is a cookie.
 
-The local terminals run in a second service, the **keeper** (`web-ide-pod keeper`, installed as `~/.local/lib/web-ide/web-ide-keeper` and the unit `web-ide-keeper.service`): it spawns them, holds their PTY and their output numbered by offset. The pod talks to it over `<data>/keeper.sock` and can restart freely: when it opens a project again, it adopts the terminals the keeper still runs for it (their console id, title and kind travel as metadata of the process) and the page attaches again from the offset it has. Without a keeper (tests, `-keeper off`, no socket), the pod runs the terminals itself and they end with it. SSH terminals, language servers and the commands of the agent stay in the pod.
+The local terminals run in a second service, the **keeper** (`web-ide-pod keeper`, installed as `~/.local/lib/web-ide/web-ide-keeper` and the unit `web-ide-keeper.service`): it spawns them, holds their PTY and their output numbered by offset. The pod talks to it over `<data>/keeper.sock` and can restart freely: when it opens a project again, it adopts the terminals the keeper still runs for it (their console id, title and kind travel as metadata of the process) and the page attaches again from the offset it has. Without a keeper (tests, `-keeper off`, no socket), the pod runs the terminals itself and they end with it. SSH terminals and language servers stay in the pod.
+
+The keeper also relays HTTP requests (`keeper/http.go`): the completions of the agent go through it (`llm.Relay`), so the answer being written is kept outside the pod. The conversations running are listed in `<data>/running.json`; a pod that stops saves nothing more, and the next one takes them back before it listens (`server/agent_resume.go`): the completion awaited is read again from the relay (the parser replays it from the start, the model is not asked again), the command of a tool call that ran in the keeper (`bash` as a piped process, `run_command` in its console) is followed again until its deadline, the other tool calls without result run again (an approval is asked again). A run whose stream the keeper does not have is closed as interrupted, as without keeper.
 
 ## Repository layout
 
@@ -31,7 +33,7 @@ The local terminals run in a second service, the **keeper** (`web-ide-pod keeper
 
 ## Data on disk
 
-- `~/.web-ide/` (pod data, `-data` flag): `keeper.sock` (socket of the keeper, 0600), `config.json` (address, workspace), `token`, `projects.json`, `settings.json` (with history), `clipboard.json` (clipboard history), `sessions/<project>.json` (layout, tabs, tool zones, explorer options, recent files, and per file the cursor, folds and chosen indentation), `secrets.json` (0600), `known_hosts` (trust on first use, in addition to `~/.ssh/known_hosts`), `sql-history/`, `llm.json` (model servers), `system-prompt.md` / `plan-prompt.md` / `briefing-prompt.md`, `models/hf/` (speech models), `chats/` and `kanban/` (bases of SSH projects), `icons/<project>.svg` (copy of the project icons for the home page: an SSH project is not reached to list it).
+- `~/.web-ide/` (pod data, `-data` flag): `keeper.sock` (socket of the keeper, 0600), `running.json` (conversations running, taken back by the next pod), `config.json` (address, workspace), `token`, `projects.json`, `settings.json` (with history), `clipboard.json` (clipboard history), `sessions/<project>.json` (layout, tabs, tool zones, explorer options, recent files, and per file the cursor, folds and chosen indentation), `secrets.json` (0600), `known_hosts` (trust on first use, in addition to `~/.ssh/known_hosts`), `sql-history/`, `llm.json` (model servers), `system-prompt.md` / `plan-prompt.md` / `briefing-prompt.md`, `models/hf/` (speech models), `chats/` and `kanban/` (bases of SSH projects), `icons/<project>.svg` (copy of the project icons for the home page: an SSH project is not reached to list it).
 - `<project>/.ide/`: `connections.json` (database connections, no secret), `tunnels.json` (tunnels of an SSH project), `folders.json` (folder marks: source, tests, excluded), `project.json` (`lsp`: command per language; `tests`: pattern per extension, e.g. `{".php": "{name}Spec.php"}`), `chats.db` (conversations), `kanban.db` (tickets), `worktrees/` (one git worktree per ticket in development), `icon.svg` and `icon.json` (project icon, drawn by the page: `ui/projectIcon.ts`, `ui/IconEditor.tsx`). `.ide/.gitignore` keeps the bases and the worktrees out of git.
 
 ## Protocol
@@ -52,7 +54,7 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 | `sshx` | SSH agent, keys, passwords, host keys (TOFU), connection pool |
 | `execx` | Local or SSH processes, PTYs |
 | `console` | Terminals and commands with scrollback and output offsets; run by the keeper when there is one, adopted again after a restart of the pod |
-| `keeper` | The keeper: protocol (frames of a length, a JSON header and raw bytes), server (processes, output rings, attachments from an offset, GC of ended processes) and the client of the pod (reconnection, attachments resumed from their offset) |
+| `keeper` | The keeper: protocol (frames of a length, a JSON header and raw bytes), server (processes, output rings, attachments from an offset, GC of ended processes; HTTP relay of the completions) and the client of the pod (reconnection, attachments resumed from their offset) |
 | `lsp` | Language servers per project and language |
 | `db` | SQLite (modernc), PostgreSQL (pgx), Redis (go-redis), SSH tunnels |
 | `git` | Git panel operations |
