@@ -14,7 +14,8 @@ import { Sidebar } from './Sidebar'
 import { DiagramViewer } from './DiagramViewer'
 import { DoodleHost } from './doodle/DoodleModal'
 import { Board } from './board/Board'
-import { boardShown, pages, setBoardWide, showBoard } from './board/pages'
+import { boardShown, pages, setBoardWide, showBoard, showSide, toggleSide } from './board/pages'
+import { Stats } from './Stats'
 import { board, ensureBoard, openTicket, roleLabels, statusLabels, summary, type ChatRole } from '../kanban/state'
 import { pick } from '../ui/overlay'
 import { request } from '../pod/rpc'
@@ -152,10 +153,19 @@ export function AssistantTool() {
         </span>
         <span class="grow" />
         <button
+          class="icon-btn"
+          classList={{ on: boardShown() && prefs.sideView === 'stats' }}
+          title={boardShown() && prefs.sideView === 'stats' && !boardWide() ? t('Back to the conversation') : t('Statistics')}
+          onClick={() => toggleSide('stats')}
+          data-testid="ai-stats-toggle"
+        >
+          <Icon name="chart" size={15} />
+        </button>
+        <button
           class="icon-btn ai-board-btn"
-          classList={{ on: boardShown() }}
-          title={boardShown() && !boardWide() ? t('Back to the conversation') : t('Board of the conversation')}
-          onClick={() => showBoard(!boardShown())}
+          classList={{ on: boardShown() && prefs.sideView === 'board' }}
+          title={boardShown() && prefs.sideView === 'board' && !boardWide() ? t('Back to the conversation') : t('Board of the conversation')}
+          onClick={() => toggleSide('board')}
           data-testid="ai-board-toggle"
         >
           <Icon name="layout" size={15} />
@@ -243,7 +253,21 @@ export function AssistantTool() {
             />
           </Show>
           <div class="ai-board-col" style={{ flex: boardWide() ? `${1 - prefs.boardSplit} 1 0` : '1 1 0' }}>
-            <Board closable={boardWide()} />
+            <div class="ai-side-tabs" role="tablist">
+              <button role="tab" aria-selected={prefs.sideView === 'board'} classList={{ on: prefs.sideView === 'board' }} onClick={() => showSide('board')} data-testid="ai-side-board">
+                <Icon name="layout" size={13} /> {t('Board')}
+              </button>
+              <button role="tab" aria-selected={prefs.sideView === 'stats'} classList={{ on: prefs.sideView === 'stats' }} onClick={() => showSide('stats')} data-testid="ai-side-stats">
+                <Icon name="chart" size={13} /> {t('Statistics')}
+              </button>
+              <span class="grow" />
+              <button class="icon-btn" title={boardWide() ? t('Close') : t('Back to the conversation')} onClick={() => showBoard(false)}>
+                <Icon name="close" size={14} />
+              </button>
+            </div>
+            <Show when={prefs.sideView === 'stats'} fallback={<Board />}>
+              <Stats />
+            </Show>
           </div>
         </Show>
       </div>

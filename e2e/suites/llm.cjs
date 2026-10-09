@@ -260,6 +260,25 @@ run(async ({ page, ctx }) => {
     assert((await page.evaluate(() => JSON.parse(localStorage.getItem('webide.llm.prefs')).effort)) === 'medium', 'the effort is kept with the preferences')
     await page.click('[data-testid=opt-effort] button:has-text("Dynamic")')
     await page.keyboard.press('Escape')
+
+    // Statistics of the conversation, next to the board: two of the three calls in one answer.
+    await page.click('[data-testid=ai-stats-toggle]')
+    await page.waitForSelector('[data-testid=st-tools] td:has-text("read_file")', { timeout: 5000 })
+    await page.screenshot({ path: OUT + '/llm-stats.png' })
+    const tile = (id) => page.textContent(`[data-testid=${id}] .st-tile-value`)
+    assert((await tile('st-multi')) === '50 %' && (await tile('st-failures')) === '0 %', 'calls at once and failures: ' + (await tile('st-multi')) + ' / ' + (await tile('st-failures')))
+    assert(/^[\d.]+ t\/s$/.test(await tile('st-write')), 'writing speed: ' + (await tile('st-write')))
+    assert(/^(<0:01|\d+:\d\d)$/.test(await tile('st-generation')), 'durations as a clock: ' + (await tile('st-generation')))
+    const toolRows = await page.$$eval('[data-testid=st-tools] tbody tr', (r) => r.map((x) => x.firstElementChild.textContent))
+    assert(['read_file', 'lsp_symbols', 'edit_file'].every((n) => toolRows.includes(n)), 'time by tool: ' + toolRows)
+    await page.click('[data-testid=st-scope-project]')
+    await page.waitForSelector('.st-note:has-text("conversations")', { timeout: 5000 })
+    assert(await page.isVisible('[data-testid=st-effort]'), 'the project is filtered by effort')
+    await page.click('[data-testid=ai-side-board]')
+    assert((await page.isVisible('[data-testid=bd-board]')) && !(await page.isVisible('[data-testid=st-view]')), 'the column switches to the board')
+    await page.click('[data-testid=ai-side-stats]')
+    await page.click('[data-testid=ai-stats-toggle]')
+    assert(!(await page.isVisible('[data-testid=st-view]')), 'the statistics close')
     assert((await page.$$eval('.ai-usage', (e) => e[e.length - 1].textContent)).includes('42.5 tokens/s'), 'usage and speed shown')
     await page.screenshot({ path: OUT + '/llm-answer.png' })
 
@@ -377,6 +396,22 @@ run(async ({ page, ctx }) => {
     await page.click('.ai-panel button[title="Conversations of the project"]')
     await page.waitForFunction(() => document.querySelector('.ai-chat-item.active') && !document.querySelector('.ai-chat-item.active [data-testid=ai-dot-failed]'), null, { timeout: 5000 })
     assert(!(await page.isVisible('[data-testid=ai-side-active] .ai-chat-item.active')), 'the abandoned conversation leaves the active ones for the history, without its red dot')
+
+    // A wide window: the statistics next to a conversation follow it while it runs (the
+    // reading step is counted while the edit waits for its approval).
+    const w = await page.context().newPage()
+    await w.goto(new URL(new URL(page.url()).pathname.replace(/\/$/, '') + '/tool/assistant', page.url()).href)
+    await w.waitForSelector('.ai-panel.detached')
+    await w.click('.ai-panel button[title="New conversation"]')
+    await w.click('[data-testid=ai-stats-toggle]')
+    await w.waitForSelector('[data-testid=st-view]')
+    await w.fill('.ai-composer textarea', 'Explain the greeter')
+    await w.keyboard.press('Enter')
+    const followed = await w.waitForSelector('[data-testid=st-tools] td:has-text("lsp_symbols")', { timeout: 8000 }).then(() => true, () => false)
+    assert(followed && (await w.isVisible('.ai-composer')) && !!(await w.$('[data-testid=stop]')), 'the statistics follow the answer running next to them')
+    await w.screenshot({ path: OUT + '/llm-stats-wide.png' })
+    await w.click('[data-testid=stop]')
+    await w.close()
   } finally {
     fake.close()
   }

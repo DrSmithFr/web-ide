@@ -26,7 +26,7 @@ func (s *Server) orchestratorTool(r *agentRun, ref *runtimeRef, name string, a t
 	case "open_conversation":
 		return s.openConversation(r, a)
 	}
-	return toolResult{}, failf("unknown tool: %s", name)
+	return toolResult{}, usagef("unknown tool: %s", name)
 }
 
 func ticketLine(t kanban.Summary) string {
@@ -88,7 +88,7 @@ func parseDay(s string) (time.Time, error) {
 			return t, nil
 		}
 	}
-	return time.Time{}, failf("invalid date %q: use YYYY-MM-DD or YYYY-MM-DD HH:MM", s)
+	return time.Time{}, usagef("invalid date %q: use YYYY-MM-DD or YYYY-MM-DD HH:MM", s)
 }
 
 func (s *Server) kanbanHistory(r *agentRun, fromArg, toArg string) (toolResult, error) {
@@ -183,14 +183,14 @@ func (s *Server) actionCard(r *agentRun, a toolArgs) (toolResult, error) {
 		known = known || k == card.Kind
 	}
 	if !known {
-		return toolResult{}, failf("unknown kind %q (%s)", card.Kind, strings.Join(agent.ActionKinds, ", "))
+		return toolResult{}, usagef("unknown kind %q (%s)", card.Kind, strings.Join(agent.ActionKinds, ", "))
 	}
 	if card.Label == "" {
-		return toolResult{}, failf("label is missing")
+		return toolResult{}, usagef("label is missing")
 	}
 	if card.Kind == "open_conversation" {
 		if _, err := s.loadChat(r.loc, card.Chat); err != nil {
-			return toolResult{}, failf("unknown conversation %q (see list_conversations)", card.Chat)
+			return toolResult{}, usagef("unknown conversation %q (see list_conversations)", card.Chat)
 		}
 	} else if _, err := s.Kanban.Get(kanbanLocOf(r.loc), card.Ticket); err != nil {
 		return toolResult{}, failf("ticket #%d not found", card.Ticket)
@@ -205,7 +205,7 @@ func (s *Server) openConversation(r *agentRun, a toolArgs) (toolResult, error) {
 	if id = strings.TrimSpace(a.str("chat")); id != "" {
 		c, err := s.loadChat(r.loc, id)
 		if err != nil {
-			return toolResult{}, failf("unknown conversation %q (see list_conversations)", id)
+			return toolResult{}, usagef("unknown conversation %q (see list_conversations)", id)
 		}
 		title = c.Title
 	} else {
@@ -215,7 +215,7 @@ func (s *Server) openConversation(r *agentRun, a toolArgs) (toolResult, error) {
 			mode = agent.Briefing
 		case agent.Briefing, agent.Plan, agent.Build:
 		default:
-			return toolResult{}, failf("mode must be briefing, plan or build")
+			return toolResult{}, usagef("mode must be briefing, plan or build")
 		}
 		r.mu.Lock()
 		server, model := r.chat.Server, r.chat.Model

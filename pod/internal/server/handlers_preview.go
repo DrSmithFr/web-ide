@@ -143,10 +143,10 @@ func sharePreview(r *agentRun, rt *runtime.Runtime, a toolArgs) (toolResult, err
 	pv := &agent.Preview{Project: r.project, Title: strings.TrimSpace(a.str("title")), Command: strings.TrimSpace(a.str("command")),
 		Cwd: a.str("cwd"), Port: a.num("port")}
 	if pv.Command == "" {
-		return toolResult{}, failf("command is missing")
+		return toolResult{}, usagef("command is missing")
 	}
 	if pv.Port < 1 || pv.Port > 65535 {
-		return toolResult{}, failf("port must go from 1 to 65535")
+		return toolResult{}, usagef("port must go from 1 to 65535")
 	}
 	if pv.Cwd != "" {
 		if pv.Cwd = relPath(rt.Root, absPath(rt.Root, pv.Cwd)); pv.Cwd == "." {

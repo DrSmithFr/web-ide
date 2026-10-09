@@ -575,7 +575,7 @@ func (s *Server) runCalls(r *agentRun, ref *runtimeRef, calls []agent.ToolCall, 
 				m.Content, m.Status, m.Summary, m.Plan, m.PlanState = agent.String("Plan presented to the user, who will accept it or ask for changes. Wait for their answer."), "ok", agent.T("plan proposed", nil).Raw(), plan, "pending"
 				stop = true
 			} else {
-				m.Content, m.Status, m.Summary = agent.String("Error: empty plan."), "error", agent.T("empty plan", nil).Raw()
+				m.Content, m.Status, m.Summary, m.Failure = agent.String("Error: empty plan."), "error", agent.T("empty plan", nil).Raw(), "usage"
 			}
 			r.chat.Messages = append(r.chat.Messages, m)
 			s.publish(r, len(r.chat.Messages)-1)
@@ -623,7 +623,7 @@ func (s *Server) runCalls(r *agentRun, ref *runtimeRef, calls []agent.ToolCall, 
 				m.Content, m.Status, m.Summary, m.Questions, m.AskState = agent.String("Questions asked to the user: waiting for their answers."), "ok", agent.Tn(len(qs), "{n} question", "{n} questions", nil).Raw(), qs, "pending"
 				stop = true
 			} else {
-				m.Content, m.Status, m.Summary = agent.String("Error: "+err.Error()+". Fix the questions and ask again."), "error", agent.T("invalid questions", nil).Raw()
+				m.Content, m.Status, m.Summary, m.Failure = agent.String("Error: "+err.Error()+". Fix the questions and ask again."), "error", agent.T("invalid questions", nil).Raw(), "usage"
 			}
 			r.chat.Messages = append(r.chat.Messages, m)
 			s.publish(r, len(r.chat.Messages)-1)
@@ -660,12 +660,17 @@ func (s *Server) runCalls(r *agentRun, ref *runtimeRef, calls []agent.ToolCall, 
 			res = s.agentTool(r, ref, call, mode)
 		}
 		r.mu.Lock()
+		if res.Status == "error" && res.Failure == "" {
+			res.Failure = "error"
+		}
 		// The compaction may have moved the message: it is the last tool result of this call.
 		for i := len(r.chat.Messages) - 1; i >= 0; i-- {
 			if mm := r.chat.Messages[i]; mm.Role == "tool" && mm.ToolCallID == call.ID {
 				mm.Content, mm.Summary, mm.Status, mm.Diff, mm.Page, mm.Preview, mm.Child = agent.String(res.Content), res.Summary, res.Status, res.Diff, res.Page, res.Preview, res.Child
 				mm.Card, mm.Opened = res.Card, res.Opened
 				mm.ElapsedMs = time.Since(start).Milliseconds()
+				mm.Failure, mm.WaitMs = res.Failure, r.waited.Milliseconds()
+				r.waited = 0
 				idx = i
 				break
 			}

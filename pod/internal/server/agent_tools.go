@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path"
 	"regexp"
@@ -30,6 +31,7 @@ type runtimeRef struct {
 
 type toolResult struct {
 	Content string
+	Failure string // usage, exit or error (see agent.Message)
 	Summary json.RawMessage
 	Status  string
 	Diff    []agent.DiffLine
@@ -49,10 +51,22 @@ func okPlain(content, summary string) toolResult {
 }
 
 func fail(r *agentRun, err error) toolResult {
-	return toolResult{Content: "Error: " + i18n.Translate("en", err), Summary: agent.Plain(i18n.Translate(r.lang, err)), Status: "error"}
+	failure := "error"
+	if errors.As(err, new(usageError)) {
+		failure = "usage"
+	}
+	return toolResult{Content: "Error: " + i18n.Translate("en", err), Summary: agent.Plain(i18n.Translate(r.lang, err)), Status: "error", Failure: failure}
 }
 
 func failf(format string, a ...any) error { return fmt.Errorf(format, a...) }
+
+// usageError: the call itself is wrong (a parameter missing or invalid, an unknown tool…), as
+// counted by the statistics.
+type usageError struct{ msg string }
+
+func (e usageError) Error() string { return e.msg }
+
+func usagef(format string, a ...any) error { return usageError{fmt.Sprintf(format, a...)} }
 
 // args of a tool call, read field by field.
 type toolArgs map[string]json.RawMessage
@@ -119,7 +133,7 @@ func (s *Server) agentTool(r *agentRun, ref *runtimeRef, call agent.ToolCall, mo
 	}()
 	var a toolArgs
 	if err := json.Unmarshal([]byte(orEmpty(call.Function.Arguments)), &a); err != nil {
-		return fail(r, failf("invalid JSON arguments: %.200s", call.Function.Arguments))
+		return fail(r, usagef("invalid JSON arguments: %.200s", call.Function.Arguments))
 	}
 	if agent.KanbanTools[name] {
 		return s.kanbanTool(r, name, a, mode)
@@ -207,7 +221,7 @@ func (s *Server) agentTool(r *agentRun, ref *runtimeRef, call agent.ToolCall, mo
 	case "console_input":
 		res, err = consoleInput(r.ctx, ref.rt, a.str("console_id"), a.str("text"), a.boolean("enter", true))
 	default:
-		err = failf("unknown tool: %s", name)
+		err = usagef("unknown tool: %s", name)
 	}
 	if err != nil {
 		return fail(r, err)
@@ -251,12 +265,14 @@ func (s *Server) confirm(r *agentRun, req agent.Approval) bool {
 	s.publish(r, -1)
 	s.emitAgent(r.root, "agent.attention", map[string]any{"id": r.id, "title": r.chat.Title, "kind": req.Kind, "sub": r.chat.Parent != ""})
 	r.mu.Unlock()
+	asked := time.Now()
 	var allowed bool
 	select {
 	case allowed = <-ch:
 	case <-r.ctx.Done():
 	}
 	r.mu.Lock()
+	r.waited += time.Since(asked)
 	r.approve, r.chat.Approval, r.state = nil, nil, prev
 	s.publish(r, -1)
 	r.mu.Unlock()
@@ -379,7 +395,7 @@ func readText(rt *runtime.Runtime, abs string) (*runtime.FileContent, error) {
 
 func readFileTool(rt *runtime.Runtime, p string, start, end int) (toolResult, error) {
 	if p == "" {
-		return toolResult{}, failf("path is missing")
+		return toolResult{}, usagef("path is missing")
 	}
 	abs := absPath(rt.Root, p)
 	f, err := readText(rt, abs)
@@ -415,7 +431,7 @@ func readFileTool(rt *runtime.Runtime, p string, start, end int) (toolResult, er
 
 func searchText(ctx context.Context, rt *runtime.Runtime, query string, regex bool, include string) (toolResult, error) {
 	if query == "" {
-		return toolResult{}, failf("query is missing")
+		return toolResult{}, usagef("query is missing")
 	}
 	o := search.Options{Query: query, Regex: regex, Include: include, Max: 200, Exclude: rt.Excluded()}
 	var res *search.Result
@@ -465,14 +481,14 @@ func counts(d []agent.DiffLine) (int, int) {
 func (s *Server) editFile(r *agentRun, rt *runtime.Runtime, call agent.ToolCall, a toolArgs) (toolResult, error) {
 	p := a.str("path")
 	if p == "" {
-		return toolResult{}, failf("path is missing")
+		return toolResult{}, usagef("path is missing")
 	}
 	if !a.has("old_string") || !a.has("new_string") {
-		return toolResult{}, failf("old_string and new_string are required")
+		return toolResult{}, usagef("old_string and new_string are required")
 	}
 	oldStr, newStr := a.str("old_string"), a.str("new_string")
 	if oldStr == newStr {
-		return toolResult{}, failf("old_string and new_string are identical")
+		return toolResult{}, usagef("old_string and new_string are identical")
 	}
 	abs := absPath(rt.Root, p)
 	f, err := readText(rt, abs)
@@ -483,10 +499,10 @@ func (s *Server) editFile(r *agentRun, rt *runtime.Runtime, call agent.ToolCall,
 	rel := relPath(rt.Root, abs)
 	at := strings.Index(text, oldStr)
 	if at < 0 {
-		return toolResult{}, failf("old_string not found in %s (read the file again with read_file and copy the exact text, without the line numbers)", rel)
+		return toolResult{}, usagef("old_string not found in %s (read the file again with read_file and copy the exact text, without the line numbers)", rel)
 	}
 	if strings.Contains(text[at+1:], oldStr) {
-		return toolResult{}, failf("old_string appears several times in %s: add context to make it unique", rel)
+		return toolResult{}, usagef("old_string appears several times in %s: add context to make it unique", rel)
 	}
 	next := text[:at] + newStr + text[at+len(oldStr):]
 	diff := agent.DiffLines(text, next)
@@ -507,10 +523,10 @@ func (s *Server) editFile(r *agentRun, rt *runtime.Runtime, call agent.ToolCall,
 func (s *Server) writeFile(r *agentRun, rt *runtime.Runtime, call agent.ToolCall, a toolArgs) (toolResult, error) {
 	p := a.str("path")
 	if p == "" {
-		return toolResult{}, failf("path is missing")
+		return toolResult{}, usagef("path is missing")
 	}
 	if !a.has("content") {
-		return toolResult{}, failf("content is missing")
+		return toolResult{}, usagef("content is missing")
 	}
 	content := a.str("content")
 	abs := absPath(rt.Root, p)
@@ -561,7 +577,7 @@ func (s *Server) writeFile(r *agentRun, rt *runtime.Runtime, call agent.ToolCall
 
 func (s *Server) loadSkill(rt *runtime.Runtime, name string) (toolResult, error) {
 	if name == "" {
-		return toolResult{}, failf("name is missing")
+		return toolResult{}, usagef("name is missing")
 	}
 	sk, err := s.LLM.ReadSkill(llm.Project{Root: rt.Root, FS: rt.FS}, name)
 	if err != nil {
@@ -579,7 +595,7 @@ func (s *Server) loadSkill(rt *runtime.Runtime, name string) (toolResult, error)
 
 func (s *Server) readSkillFile(rt *runtime.Runtime, name, file string) (toolResult, error) {
 	if name == "" || file == "" {
-		return toolResult{}, failf("name and file are required")
+		return toolResult{}, usagef("name and file are required")
 	}
 	text, err := s.LLM.ReadSkillFile(llm.Project{Root: rt.Root, FS: rt.FS}, name, file)
 	if err != nil {
@@ -596,7 +612,7 @@ const gitDefaults = "export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.commentChar
 
 func bashTool(ctx context.Context, rt *runtime.Runtime, command, cwd string, timeout int, progress func(string)) (toolResult, error) {
 	if strings.TrimSpace(command) == "" {
-		return toolResult{}, failf("command is missing")
+		return toolResult{}, usagef("command is missing")
 	}
 	if cwd != "" {
 		cwd = absPath(rt.Root, cwd)
@@ -633,7 +649,7 @@ func bashTool(ctx context.Context, rt *runtime.Runtime, command, cwd string, tim
 		tr.Summary = agent.Plain(fmt.Sprintf("code %d · %s s", res.Code, secs))
 	}
 	if res.Code != 0 || res.TimedOut || res.Canceled {
-		tr.Status = "error"
+		tr.Status, tr.Failure = "error", "exit"
 	}
 	return tr, nil
 }
@@ -654,7 +670,7 @@ type consoleInfo struct {
 
 func (s *Server) runCommand(r *agentRun, rt *runtime.Runtime, command, cwd string, timeout int, progress func(string)) (toolResult, error) {
 	if strings.TrimSpace(command) == "" {
-		return toolResult{}, failf("command is missing")
+		return toolResult{}, usagef("command is missing")
 	}
 	if timeout <= 0 {
 		timeout = 20
@@ -693,7 +709,7 @@ func (s *Server) runCommand(r *agentRun, rt *runtime.Runtime, command, cwd strin
 	}
 	tr := toolResult{Content: fmt.Sprintf("Exit code: %d (console %s)\n%s", now.Code, info.ID, out), Summary: agent.Plain(fmt.Sprintf("code %d", now.Code)), Status: "ok"}
 	if now.Code != 0 {
-		tr.Status = "error"
+		tr.Status, tr.Failure = "error", "exit"
 	}
 	return tr, nil
 }
@@ -743,7 +759,7 @@ func listConsoles(rt *runtime.Runtime) toolResult {
 
 func readConsole(rt *runtime.Runtime, id string, lines int) (toolResult, error) {
 	if id == "" {
-		return toolResult{}, failf("console_id is missing")
+		return toolResult{}, usagef("console_id is missing")
 	}
 	text, info, err := consoleText(rt, id)
 	if err != nil {

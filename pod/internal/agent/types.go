@@ -128,17 +128,24 @@ type Message struct {
 	Summarized int             `json:"summarized,omitempty"`
 	ThinkMs    int64           `json:"thinkMs,omitempty"`
 	Effort     string          `json:"effort,omitempty"` // reasoning effort of the answer
-	ElapsedMs  int64           `json:"elapsedMs,omitempty"`
-	StartedAt  int64           `json:"startedAt,omitempty"` // start of a tool call (Unix ms); its ElapsedMs is set at its end
-	Mode       string          `json:"mode,omitempty"`
-	Plan       string          `json:"plan,omitempty"`
-	PlanState  string          `json:"planState,omitempty"`
-	Questions  []Question      `json:"questions,omitempty"`
-	Answers    [][]string      `json:"answers,omitempty"`
-	Notes      []string        `json:"notes,omitempty"`
-	Path       []int           `json:"path,omitempty"`    // questions asked, in order (a graph)
-	OffPath    *int            `json:"offPath,omitempty"` // question where the user left the path
-	AskState   string          `json:"askState,omitempty"`
+	// At: when the message was added (Unix ms; for an answer, the end of its generation).
+	At int64 `json:"at,omitempty"`
+	// WaitMs: time a tool call waited for the approval of the user (within its ElapsedMs).
+	WaitMs int64 `json:"waitMs,omitempty"`
+	// Failure of a tool call in error: usage (the call itself is wrong: a parameter missing or
+	// invalid, an unknown tool…), exit (a command that ended with a code, or timed out), error.
+	Failure   string     `json:"failure,omitempty"`
+	ElapsedMs int64      `json:"elapsedMs,omitempty"`
+	StartedAt int64      `json:"startedAt,omitempty"` // start of a tool call (Unix ms); its ElapsedMs is set at its end
+	Mode      string     `json:"mode,omitempty"`
+	Plan      string     `json:"plan,omitempty"`
+	PlanState string     `json:"planState,omitempty"`
+	Questions []Question `json:"questions,omitempty"`
+	Answers   [][]string `json:"answers,omitempty"`
+	Notes     []string   `json:"notes,omitempty"`
+	Path      []int      `json:"path,omitempty"`    // questions asked, in order (a graph)
+	OffPath   *int       `json:"offPath,omitempty"` // question where the user left the path
+	AskState  string     `json:"askState,omitempty"`
 	// Page drawn on the board by board_draw (tool message), and the state of the capture of
 	// the screen it waits for (pending, done, refused, skipped).
 	Page    *Page  `json:"page,omitempty"`

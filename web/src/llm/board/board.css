@@ -22,4 +22,4 @@
 /* Layout in the assistant: the board next to the conversation, or in its place */
 .ai-split { flex: none; width: 5px; cursor: col-resize; background: var(--line); touch-action: none; }
 .ai-split:hover, .ai-split.on { background: var(--accent); }
-.ai-board-col { display: flex; min-width: 280px; min-height: 0; }
+.ai-board-col { display: flex; flex-direction: column; min-width: 280px; min-height: 0; background: var(--bg-2); }

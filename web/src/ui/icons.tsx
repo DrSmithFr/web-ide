@@ -66,6 +66,7 @@ const paths: Record<string, string> = {
   up: 'M6 15l6-6 6 6',
   down: 'M6 9l6 6 6-6',
   clock: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM12 7v5l3 3',
+  chart: 'M4 4v16h16M8 16v-4M12 16V8M16 16v-7',
   warning: 'M12 3 2 20h20zM12 10v4M12 17v.5',
 }
 
