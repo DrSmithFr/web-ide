@@ -20,7 +20,7 @@ import (
 
 // Protocol changes when the keeper and the pod no longer understand each other: the pod then
 // runs its processes itself, and install.sh replaces the keeper.
-const Protocol = 1
+const Protocol = 2
 
 // ScrollbackMax is the output kept for each process.
 const ScrollbackMax = 512 * 1024

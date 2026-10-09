@@ -83,12 +83,19 @@ func (c *Client) read(conn net.Conn) {
 		a := c.attached[h.ID]
 		c.mu.Unlock()
 		switch {
+		case h.Kind == KindHead && a != nil:
+			if a.Head != nil {
+				a.Head(h.Result)
+			}
 		case h.Kind == KindOutput && a != nil:
 			a.output(h, payload)
 		case h.Kind == KindExit && a != nil:
 			c.mu.Lock()
 			delete(c.attached, h.ID)
 			c.mu.Unlock()
+			a.mu.Lock()
+			a.err = h.Error
+			a.mu.Unlock()
 			a.exit(h.Code)
 		case ch != nil:
 			ch <- h
@@ -253,16 +260,20 @@ func (c *Client) Forget(id string) error { return c.call(OpForget, procArgs{ID: 
 type Attachment struct {
 	c      *Client
 	id     string
+	op     string // OpAttach, OpHTTPAttach
+	err    string // the error the followed thing ended with
 	mu     sync.Mutex
 	next   int64 // offset of the next byte expected
 	done   bool
 	Output func(offset int64, data []byte, truncated bool)
 	Exit   func(code int)
+	// Head gets the status and headers of a relayed HTTP response (again after a reconnection).
+	Head func(head json.RawMessage)
 }
 
 // Attach follows the process id from the offset from.
 func (c *Client) Attach(id string, from int64, output func(offset int64, data []byte, truncated bool), exit func(code int)) (*Attachment, error) {
-	a := &Attachment{c: c, id: id, next: from, Output: output, Exit: exit}
+	a := &Attachment{c: c, id: id, op: OpAttach, next: from, Output: output, Exit: exit}
 	return a, c.attach(a)
 }
 
@@ -276,7 +287,7 @@ func (c *Client) attach(a *Attachment) error {
 	a.mu.Lock()
 	from := a.next
 	a.mu.Unlock()
-	err := c.send(reqID, OpAttach, procArgs{ID: a.id, From: from}, nil)
+	err := c.send(reqID, a.op, procArgs{ID: a.id, From: from}, nil)
 	var h header
 	ok := false
 	if err == nil {

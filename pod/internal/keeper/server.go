@@ -42,6 +42,7 @@ type Server struct {
 	mu      sync.Mutex
 	procs   map[string]*proc
 	order   []string
+	relays  map[string]*relay
 	started time.Time
 	ln      net.Listener
 	conns   map[*serverConn]bool
@@ -49,7 +50,7 @@ type Server struct {
 }
 
 func NewServer(version string) *Server {
-	return &Server{Version: version, procs: map[string]*proc{}, started: time.Now(), conns: map[*serverConn]bool{}}
+	return &Server{Version: version, procs: map[string]*proc{}, relays: map[string]*relay{}, started: time.Now(), conns: map[*serverConn]bool{}}
 }
 
 // Listen opens the socket at path (0600). A socket file left by a keeper that stopped is
@@ -284,6 +285,7 @@ func (s *Server) gcLoop() {
 	defer t.Stop()
 	for range t.C {
 		s.gc(time.Now())
+		s.httpGC(time.Now())
 	}
 }
 
@@ -351,7 +353,7 @@ func (sc *serverConn) serve() {
 func (sc *serverConn) handle(h header, payload []byte) {
 	s := sc.s
 	var a procArgs
-	if h.Op != OpSpawn && len(h.Args) > 0 {
+	if h.Op != OpSpawn && h.Op != OpHTTPStart && len(h.Args) > 0 {
 		if err := json.Unmarshal(h.Args, &a); err != nil {
 			sc.reply(h.ID, nil, err)
 			return
@@ -386,6 +388,32 @@ func (sc *serverConn) handle(h header, payload []byte) {
 		sc.reply(h.ID, struct{}{}, err)
 	case OpForget:
 		s.forget(a.ID)
+		sc.reply(h.ID, struct{}{}, nil)
+	case OpHTTPStart:
+		var hs HTTPStart
+		if err := json.Unmarshal(h.Args, &hs); err != nil {
+			sc.reply(h.ID, nil, err)
+			return
+		}
+		sc.reply(h.ID, struct{}{}, s.httpStart(hs, payload))
+	case OpHTTPAttach:
+		r, err := s.httpGet(a.ID)
+		if err != nil {
+			sc.reply(h.ID, nil, err)
+			return
+		}
+		sc.reply(h.ID, struct{}{}, nil)
+		go sc.httpAttach(h.ID, r, a.From)
+	case OpHTTPList:
+		sc.reply(h.ID, s.httpList(a.Owner), nil)
+	case OpHTTPCancel:
+		r, err := s.httpGet(a.ID)
+		if err == nil {
+			r.cancel()
+		}
+		sc.reply(h.ID, struct{}{}, err)
+	case OpHTTPForget:
+		s.httpForget(a.ID)
 		sc.reply(h.ID, struct{}{}, nil)
 	default:
 		sc.reply(h.ID, nil, fmt.Errorf("unknown op %q", h.Op))
