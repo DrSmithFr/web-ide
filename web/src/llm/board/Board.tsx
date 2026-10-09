@@ -8,7 +8,7 @@ import { newDoodle, reuseDoodle } from '../Composer'
 import { doodleSession } from '../doodle/session'
 import { toSVG } from '../doodle/render'
 import { DoodleView } from './DoodleView'
-import { pages, selectedPage, selectPage, showBoard, type Page } from './pages'
+import { pages, selectedPage, selectPage, type Page } from './pages'
 import './board.css'
 
 function Thumb(props: { page: Page; on: boolean }) {
@@ -26,7 +26,7 @@ function Thumb(props: { page: Page; on: boolean }) {
   )
 }
 
-export function Board(props: { closable: boolean }) {
+export function Board() {
   let fit = () => {}
   const page = () => selectedPage()
   const move = (d: number) => {
@@ -72,11 +72,6 @@ export function Board(props: { closable: boolean }) {
               <button class="btn small" onClick={() => fit()} data-testid="bd-fit">
                 {t('Fit')}
               </button>
-              <Show when={props.closable}>
-                <button class="icon-btn" title={t('Close the board')} onClick={() => showBoard(false)}>
-                  <Icon name="close" size={14} />
-                </button>
-              </Show>
             </div>
             <div class="bd-stage">
               <DoodleView doc={p().doc} ref={(api) => (fit = api.fit)} />

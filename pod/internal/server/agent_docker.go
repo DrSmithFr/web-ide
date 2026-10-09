@@ -127,7 +127,7 @@ func (s *Server) dockerTool(r *agentRun, ref *runtimeRef, name string, a toolArg
 	}
 	service, container := strings.TrimSpace(a.str("service")), strings.TrimSpace(a.str("container"))
 	if service == "" && container == "" {
-		return fail(r, failf("service or container is missing"))
+		return fail(r, usagef("service or container is missing"))
 	}
 	lines := a.num("lines")
 	if lines <= 0 {

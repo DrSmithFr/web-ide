@@ -76,7 +76,7 @@ func setEffort(args map[string]json.RawMessage) (toolResult, string) {
 	var level string
 	_ = json.Unmarshal(args["level"], &level)
 	if !efforts[level] {
-		return toolResult{Content: "Error: level must be xhigh, medium or low.", Summary: agent.T("invalid effort", nil).Raw(), Status: "error"}, ""
+		return toolResult{Content: "Error: level must be xhigh, medium or low.", Summary: agent.T("invalid effort", nil).Raw(), Status: "error", Failure: "usage"}, ""
 	}
 	return toolResult{Content: "Effort set to " + level + " until the user writes again.", Summary: agent.Plain(level), Status: "ok"}, level
 }

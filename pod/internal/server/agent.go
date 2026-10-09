@@ -26,9 +26,10 @@ import (
 type agentRun struct {
 	id      string
 	loc     llm.ChatLocation
-	root    string // windows of this project and of its worktrees follow the conversation
-	project string // project whose runtime the tools use (a worktree for a development)
-	lang    string // language of the window that started it (errors)
+	root    string        // windows of this project and of its worktrees follow the conversation
+	project string        // project whose runtime the tools use (a worktree for a development)
+	lang    string        // language of the window that started it (errors)
+	waited  time.Duration // approval wait of the tool call running (confirm)
 	ctx     context.Context
 	cancel  context.CancelFunc
 
@@ -118,6 +119,12 @@ func (s *Server) saveChat(loc llm.ChatLocation, c *agent.Chat) error {
 	c.Updated = time.Now().UnixMilli()
 	if c.Created == 0 {
 		c.Created = c.Updated
+	}
+	// The messages added since the last save (those of before the field were dated once).
+	for _, m := range c.Messages {
+		if m.At == 0 {
+			m.At = c.Updated
+		}
 	}
 	if c.Title == "" {
 		for _, m := range c.Messages {

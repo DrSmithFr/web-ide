@@ -80,9 +80,10 @@ export const pages = createRoot(() => {
         // says so when it would hide the conversation.
         if (id !== prev[0] || last.from !== 'model') return
         if (wideMode()) {
+          setPrefs('sideView', 'board')
           setPrefs('boardOpen', true)
           savePrefs()
-        } else if (!boardShown()) toast(t('New page on the board'), 'info', { label: t('Show'), run: () => showBoard(true) })
+        } else if (!boardShown()) toast(t('New page on the board'), 'info', { label: t('Show'), run: () => showSide('board') })
       },
     ),
   )
@@ -108,5 +109,16 @@ export function showBoard(v: boolean) {
 /** Shows a page on the board (a doodle card of the thread). */
 export function showPage(key: string) {
   selectPage(key)
+  showSide('board')
+}
+
+/** Opens the column on a view, or closes it when it already shows that view. */
+export function toggleSide(view: 'board' | 'stats') {
+  if (boardShown() && prefs.sideView === view) showBoard(false)
+  else showSide(view)
+}
+
+export function showSide(view: 'board' | 'stats') {
+  setPrefs('sideView', view)
   showBoard(true)
 }

@@ -223,7 +223,7 @@ func (s *Server) lspTool(r *agentRun, rt *runtime.Runtime, name string, a toolAr
 	}
 	p := a.str("path")
 	if p == "" {
-		return toolResult{}, failf("path is missing")
+		return toolResult{}, usagef("path is missing")
 	}
 	abs := absPath(rt.Root, p)
 	rel := relPath(rt.Root, abs)
@@ -257,7 +257,7 @@ func (s *Server) lspTool(r *agentRun, rt *runtime.Runtime, name string, a toolAr
 	line := a.num("line")
 	symbol := a.str("symbol")
 	if line < 1 {
-		return toolResult{}, failf("line is missing (starting at 1)")
+		return toolResult{}, usagef("line is missing (starting at 1)")
 	}
 	return withDoc(rt, abs, func(lang, text string) (toolResult, error) {
 		lines := strings.Split(text, "\n")

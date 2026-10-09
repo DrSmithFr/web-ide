@@ -198,7 +198,7 @@ func (s *Server) kanbanCall(r *agentRun, name string, a toolArgs, mode string) (
 	case "kanban_create":
 		title := strings.TrimSpace(a.str("title"))
 		if title == "" {
-			return toolResult{}, failf("title is missing")
+			return toolResult{}, usagef("title is missing")
 		}
 		if long := tooLongDescription(a.str("description")); long != nil {
 			return *long, nil
@@ -268,11 +268,11 @@ func (s *Server) kanbanCall(r *agentRun, name string, a toolArgs, mode string) (
 		}
 		plan := a.str("plan")
 		if strings.TrimSpace(plan) == "" {
-			return toolResult{}, failf("empty plan")
+			return toolResult{}, usagef("empty plan")
 		}
 		size := a.str("size")
 		if size == "" {
-			return toolResult{}, failf("size is required: s, m, l or xl")
+			return toolResult{}, usagef("size is required: s, m, l or xl")
 		}
 		if err := s.Kanban.Update(loc, id, kanban.Patch{Size: &size}, kanban.ByModel); err != nil {
 			return toolResult{}, err
@@ -333,12 +333,12 @@ func (s *Server) kanbanCall(r *agentRun, name string, a toolArgs, mode string) (
 			}
 			return okPlain(fmt.Sprintf("Goal %s: %s. %d goal(s) left.", word, text, left), mark+" "+text), nil
 		default:
-			return toolResult{}, failf("unknown action: %s", action)
+			return toolResult{}, usagef("unknown action: %s", action)
 		}
 	case "kanban_feedback":
 		action := a.str("action")
 		if action != "done" && action != "reopen" {
-			return toolResult{}, failf("unknown action: %s", action)
+			return toolResult{}, usagef("unknown action: %s", action)
 		}
 		fid := int64(a.num("id"))
 		if _, err := s.Kanban.Feedback(loc, id, kanban.FeedbackOp{Op: "check", ID: fid, Done: action == "done"}, kanban.ByModel); err != nil {
@@ -402,7 +402,7 @@ func (s *Server) kanbanCall(r *agentRun, name string, a toolArgs, mode string) (
 		}
 		return ok(fmt.Sprintf("Commit %s linked to the ticket.", parts[0][:min(10, len(parts[0]))]), agent.T("commit {hash}", map[string]any{"hash": parts[0][:min(8, len(parts[0]))]})), nil
 	}
-	return toolResult{}, failf("unknown tool: %s", name)
+	return toolResult{}, usagef("unknown tool: %s", name)
 }
 
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }

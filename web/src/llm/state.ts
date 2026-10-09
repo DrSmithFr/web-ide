@@ -124,6 +124,10 @@ export interface ChatMessage {
   thinkMs?: number
   /** Reasoning effort of an answer; on a set_effort result, the level the model chose. */
   effort?: Effort
+  /** When it was added (ms); approval wait of a tool call (ms); kind of its failure. */
+  at?: number
+  waitMs?: number
+  failure?: 'usage' | 'exit' | 'error'
   elapsedMs?: number
   /** Start of a tool call (ms); its elapsedMs is set when it ends. */
   startedAt?: number
@@ -397,6 +401,8 @@ export const [prefs, setPrefs] = createStore({
   boardOpen: false,
   boardView: 'chat' as 'chat' | 'board',
   boardSplit: 0.5,
+  /** What the column of the board shows: the pages, or the statistics. */
+  sideView: 'board' as 'board' | 'stats',
   /** Model of the Plan mode ('' server: the model of the conversation). */
   planServer: '',
   planModel: '',

@@ -172,12 +172,7 @@ func minFrom(a, b int) int {
 // stopped is closed as interrupted.
 func (s *Server) openChat(cc chatCtx, id string) (*agent.Chat, error) {
 	if r := s.run(id); r != nil {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		data, _ := json.Marshal(r.chat)
-		var copy agent.Chat
-		_ = json.Unmarshal(data, &copy)
-		return &copy, nil
+		return s.readChat(cc, id)
 	}
 	c, err := s.loadChat(cc.loc, id)
 	if err != nil {
@@ -222,6 +217,8 @@ func (s *Server) registerAgent() {
 		state, ahead := s.stateOf(a.ID)
 		return map[string]any{"chat": chat, "state": state, "ahead": ahead}, nil
 	}))
+	// agent.stats: statistics of a conversation (with its sub-agents) or of the project.
+	s.handle("agent.stats", withChat(s.agentStats))
 	// agent.watch: the conversation shown by the window ("" for none).
 	s.handle("agent.watch", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 		a, err := bind[idArg](p)

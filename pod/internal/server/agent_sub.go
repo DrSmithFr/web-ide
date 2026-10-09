@@ -138,7 +138,7 @@ func (s *Server) liveStatus(c *agent.Chat) string {
 func (s *Server) spawnAgent(r *agentRun, a toolArgs) (toolResult, error) {
 	title, task := strings.TrimSpace(a.str("title")), strings.TrimSpace(a.str("task"))
 	if title == "" || task == "" {
-		return toolResult{}, failf("title and task are required")
+		return toolResult{}, usagef("title and task are required")
 	}
 	r.mu.Lock()
 	if !agent.CanSpawn(r.chat) {
@@ -224,7 +224,7 @@ func (s *Server) childTarget(r *agentRun, server, model, parentServer, parentMod
 		found = server
 	}
 	if found == "" {
-		return "", "", failf("unknown server for sub-agents: %q (servers: %s)", server, strings.Join(names, ", "))
+		return "", "", usagef("unknown server for sub-agents: %q (servers: %s)", server, strings.Join(names, ", "))
 	}
 	if model == "" {
 		if ds, dm := s.LLM.ChildDefault(); ds == found {
@@ -298,7 +298,7 @@ func (s *Server) waitIdle(id string) bool {
 func (s *Server) agentReply(r *agentRun, a toolArgs) (toolResult, error) {
 	id, answer := a.str("child"), strings.TrimSpace(a.str("answer"))
 	if answer == "" {
-		return toolResult{}, failf("answer is missing")
+		return toolResult{}, usagef("answer is missing")
 	}
 	c, err := s.childOf(r, id)
 	if err != nil {
@@ -332,7 +332,7 @@ func (s *Server) agentReply(r *agentRun, a toolArgs) (toolResult, error) {
 func (s *Server) agentMessage(r *agentRun, a toolArgs) (toolResult, error) {
 	id, text := a.str("child"), strings.TrimSpace(a.str("text"))
 	if text == "" {
-		return toolResult{}, failf("text is missing")
+		return toolResult{}, usagef("text is missing")
 	}
 	c, err := s.childOf(r, id)
 	if err != nil {
@@ -465,7 +465,7 @@ func (s *Server) agentAdopt(r *agentRun, a toolArgs) (toolResult, error) {
 	} else {
 		c, err := s.loadChat(r.loc, id)
 		if err != nil {
-			return toolResult{}, failf("unknown conversation %q (see list_conversations)", id)
+			return toolResult{}, usagef("unknown conversation %q (see list_conversations)", id)
 		}
 		if err := adopt(c); err != nil {
 			return toolResult{}, err
@@ -500,7 +500,7 @@ func (s *Server) agentResume(r *agentRun, a toolArgs) (toolResult, error) {
 	}
 	c, err := s.loadChat(r.loc, id)
 	if err != nil {
-		return toolResult{}, failf("unknown conversation %q (see list_conversations)", id)
+		return toolResult{}, usagef("unknown conversation %q (see list_conversations)", id)
 	}
 	if !failed(c) {
 		return toolResult{}, failf("%s did not fail: nothing to resume (agent_message writes to your sub-agents)", id)
@@ -545,7 +545,7 @@ func (s *Server) agentResume(r *agentRun, a toolArgs) (toolResult, error) {
 func (s *Server) agentNote(r *agentRun, a toolArgs) (toolResult, error) {
 	title, text := strings.TrimSpace(a.str("title")), strings.TrimSpace(a.str("text"))
 	if title == "" {
-		return toolResult{}, failf("title is missing")
+		return toolResult{}, usagef("title is missing")
 	}
 	r.mu.Lock()
 	if r.chat.Agent == nil {
