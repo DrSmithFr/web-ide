@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"log"
 	"path"
 	"sync"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
 	"github.com/DrSmithFr/web-ide/pod/internal/store"
+	"golang.org/x/crypto/ssh"
 )
 
 const maxFile = 10 << 20
@@ -57,12 +59,14 @@ type Runtime struct {
 	Config ProjectConfig
 
 	Consoles *console.Manager
-	// Keeper runs the processes that survive the pod (local projects with a keeper), else nil.
-	Keeper *keeper.Client
-	LSP    *lsp.Manager
-	DB     *db.Manager
-	Git    *git.Repo
-	Docker *docker.Docker
+	// Keeper runs the processes that survive the pod, else nil; KeeperTarget is where: ""
+	// (local) or "ssh:<key>" (its own connection to the host of an SSH project).
+	Keeper       *keeper.Client
+	KeeperTarget string
+	LSP          *lsp.Manager
+	DB           *db.Manager
+	Git          *git.Repo
+	Docker       *docker.Docker
 
 	emit    Emit
 	watcher fsx.Watcher
@@ -126,9 +130,23 @@ func Open(p projects.Project, creds sshx.Creds, d Deps, emit Emit) (*Runtime, er
 		},
 	})
 	// Local terminals run in the keeper when there is one: they survive the pod updates.
-	if r.Local && d.Keeper != nil {
+	switch {
+	case d.Keeper == nil:
+	case r.Local:
 		r.Keeper = d.Keeper
-		r.Consoles.UseKeeper(d.Keeper, p.ID)
+		r.Consoles.UseKeeper(d.Keeper, p.ID, "")
+	default:
+		// The keeper opens its own connection, with the host key the pool accepted.
+		if key, creds, ok := d.Pool.Pinned(r.target); ok {
+			name := sshx.Key(r.target)
+			err := d.Keeper.SSHDial(keeper.SSHDial{Key: name, Target: r.target, Creds: creds, HostKey: string(ssh.MarshalAuthorizedKey(key))})
+			if err == nil {
+				r.Keeper, r.KeeperTarget = d.Keeper, "ssh:"+name
+				r.Consoles.UseKeeper(d.Keeper, p.ID, r.KeeperTarget)
+			} else {
+				log.Printf("runtime: the keeper cannot reach %s (%v): its terminals run in the pod", name, err)
+			}
+		}
 	}
 	exists := func(p string) bool { _, err := r.FS.Stat(p); return err == nil }
 	r.LSP = lsp.NewManager(r.Runner, root, r.Local, r.Config.LSP, exists, func(ev string, data any) { r.emit(ev, data, "") })

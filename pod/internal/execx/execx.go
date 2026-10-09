@@ -195,6 +195,14 @@ func (p *sshProc) Kill() error {
 	return p.s.Close()
 }
 
+// RemoteShell is the remote command of an SSH terminal: the login shell, in dir.
+func RemoteShell(dir string) string {
+	return "cd " + Quote(dir) + " 2>/dev/null; exec $SHELL -l"
+}
+
+// RemoteCmd is the remote command running argv in dir over SSH.
+func RemoteCmd(argv []string, dir string) string { return remoteCmd(argv, dir) }
+
 func remoteCmd(argv []string, dir string) string {
 	cmd := "exec " + Join(argv)
 	if dir != "" {
@@ -265,7 +273,7 @@ func (r SSH) StartPTY(argv []string, dir string, cols, rows int) (PTY, error) {
 	s.Stderr = nil
 	var cmd string
 	if len(argv) == 0 {
-		cmd = "cd " + Quote(dir) + " 2>/dev/null; exec $SHELL -l"
+		cmd = RemoteShell(dir)
 	} else {
 		cmd = remoteCmd(argv, dir)
 	}

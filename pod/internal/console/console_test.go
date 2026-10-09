@@ -94,7 +94,7 @@ func TestKeeperConsole(t *testing.T) {
 
 	e1, ev1 := newEvents(t)
 	m1 := NewManager(execx.Local{}, dir, ev1)
-	m1.UseKeeper(c1, "p1")
+	m1.UseKeeper(c1, "p1", "")
 	info, err := m1.Create("task", "Counter", []string{"sh", "-c", "i=0; while :; do echo tick $i; i=$((i+1)); sleep 0.02; done"}, "", 80, 20)
 	if err != nil {
 		t.Fatal(err)
@@ -119,7 +119,7 @@ func TestKeeperConsole(t *testing.T) {
 	defer c2.Close()
 	e2, ev2 := newEvents(t)
 	m2 := NewManager(execx.Local{}, dir, ev2)
-	m2.UseKeeper(c2, "p1")
+	m2.UseKeeper(c2, "p1", "")
 	list := m2.List()
 	if len(list) != 2 || list[0].ID != info.ID || list[0].Title != "Renamed" || list[0].Kind != "task" || list[1].Kind != "terminal" {
 		t.Fatalf("adopted: %+v", list)

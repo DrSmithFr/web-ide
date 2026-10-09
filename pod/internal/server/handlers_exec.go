@@ -135,7 +135,7 @@ func runShellIn(ctx context.Context, rt *runtime.Runtime, command, cwd string, t
 	argv := []string{"sh", "-c", "{\n" + command + "\n} 2>&1"}
 	var proc execx.Process
 	if k != nil && rt.Keeper != nil {
-		kp, err := execx.StartKeeper(rt.Keeper, k.owner, argv, dir)
+		kp, err := execx.StartKeeper(rt.Keeper, k.owner, rt.KeeperTarget, argv, dir)
 		if err != nil {
 			return shellResult{}, err
 		}

@@ -21,9 +21,13 @@ type KeeperProcess struct {
 	code int
 }
 
-// StartKeeper runs argv in the keeper for owner, its stdout and stderr together.
-func StartKeeper(c *keeper.Client, owner string, argv []string, dir string) (*KeeperProcess, error) {
-	p, err := c.Spawn(keeper.Spawn{Owner: owner, Argv: argv, Dir: dir})
+// StartKeeper runs argv in dir in the keeper for owner, its stdout and stderr together, on
+// target ("" local, "ssh:<key>" a connection of the keeper).
+func StartKeeper(c *keeper.Client, owner, target string, argv []string, dir string) (*KeeperProcess, error) {
+	if target != "" {
+		argv, dir = []string{RemoteCmd(argv, dir)}, ""
+	}
+	p, err := c.Spawn(keeper.Spawn{Owner: owner, Target: target, Argv: argv, Dir: dir})
 	if err != nil {
 		return nil, err
 	}

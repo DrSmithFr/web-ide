@@ -60,19 +60,22 @@ type Manager struct {
 	ev       Events
 	consoles map[string]*Console
 	order    []string
-	// keeper runs the consoles when set, for the processes of owner (the project).
+	// keeper runs the consoles when set, for the processes of owner (the project), on target
+	// ("" local, "ssh:<key>" a connection of the keeper).
 	keeper *keeper.Client
 	owner  string
+	target string
 }
 
 func NewManager(r execx.Runner, root string, ev Events) *Manager {
 	return &Manager{runner: r, root: root, ev: ev, consoles: map[string]*Console{}}
 }
 
-// UseKeeper runs the new consoles in the keeper, and adopts those it already runs for owner.
-func (m *Manager) UseKeeper(c *keeper.Client, owner string) {
+// UseKeeper runs the new consoles in the keeper, on target, and adopts those it already runs
+// for owner.
+func (m *Manager) UseKeeper(c *keeper.Client, owner, target string) {
 	m.mu.Lock()
-	m.keeper, m.owner = c, owner
+	m.keeper, m.owner, m.target = c, owner, target
 	m.mu.Unlock()
 	m.adopt()
 }
@@ -118,7 +121,14 @@ func (m *Manager) Create(kind, title string, command []string, cwd string, cols,
 	k := m.keeper
 	m.mu.Unlock()
 	if k != nil {
-		p, err := k.Spawn(keeper.Spawn{Owner: m.owner, Argv: execx.ShellArgv(command), Dir: cwd, Env: execx.TermEnv, PTY: true, Cols: cols, Rows: rows, Meta: c.meta()})
+		sp := keeper.Spawn{Owner: m.owner, Target: m.target, Argv: execx.ShellArgv(command), Dir: cwd, Env: execx.TermEnv, PTY: true, Cols: cols, Rows: rows, Meta: c.meta()}
+		if m.target != "" { // the remote command, built here: the keeper knows no shell
+			sp.Argv, sp.Dir, sp.Env = []string{execx.RemoteShell(cwd)}, "", nil
+			if len(command) > 0 {
+				sp.Argv = []string{execx.RemoteCmd(command, cwd)}
+			}
+		}
+		p, err := k.Spawn(sp)
 		switch {
 		case err == nil:
 			c.term = &keeperTerm{c: k, id: p.ID}

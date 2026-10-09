@@ -58,6 +58,10 @@ make service                         # or install this build as the service
 
 Building needs Go 1.27+ and Node.js 20.19+. Options of the pod: `-addr`, `-workspace` (default folder of new projects, `~/Apps`), `-data` (`~/.web-ide`), `-allow-remote` (plain HTTP to other machines, token only: prefer Tailscale), `-version`.
 
+### Updating
+
+Run the installer again (or `make service`). Your terminals keep running and your conversations with the assistant go on: they live in a second service, `web-ide-keeper`, which the pod reconnects to; the page reconnects by itself. When the keeper itself changes, it updates in place and waits for the answers being written; only the SSH terminals are closed then. `systemctl --user status web-ide-pod web-ide-keeper` shows both.
+
 ## Projects
 
 ![The home page with the project and its icon](images/home.png)
