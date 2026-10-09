@@ -288,6 +288,8 @@ export function agentOptions() {
   return {
     autoApply: prefs.autoApply,
     think: prefs.think,
+    effort: prefs.effort,
+    effortTool: prefs.effortTool,
     tools: prefs.tools,
     autoCompact: prefs.autoCompact,
     compactAt: prefs.compactAt,

@@ -42,7 +42,10 @@ type ChatRequest struct {
 	Messages []Message         `json:"messages"`
 	Tools    []json.RawMessage `json:"tools,omitempty"`
 	// Think: nil leaves the model default.
-	Think       *bool    `json:"think,omitempty"`
+	Think *bool `json:"think,omitempty"`
+	// Effort: the reasoning effort when thinking (xhigh, medium, low; "" leaves the default).
+	// Sent to llama.cpp-style servers in chat_template_kwargs, as Qwen's template reads it.
+	Effort      string   `json:"effort,omitempty"`
 	Temperature *float64 `json:"temperature,omitempty"`
 }
 
@@ -225,7 +228,11 @@ func (m *Manager) openaiChat(ctx context.Context, s Server, req ChatRequest, b *
 	}
 	if !cloud {
 		if req.Think != nil {
-			body["chat_template_kwargs"] = map[string]bool{"enable_thinking": *req.Think}
+			kw := map[string]any{"enable_thinking": *req.Think}
+			if *req.Think && req.Effort != "" {
+				kw["reasoning_effort"] = req.Effort
+			}
+			body["chat_template_kwargs"] = kw
 		}
 		// llama.cpp: timings in every chunk and progress of the prompt reading (other servers
 		// ignore these fields; tokens are then counted from the chunks).

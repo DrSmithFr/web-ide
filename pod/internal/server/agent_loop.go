@@ -439,9 +439,17 @@ func (s *Server) loop(r *agentRun) {
 			adopted := r.chat.Agent != nil && r.chat.Agent.Adopted
 			req.Tools = agent.ToolsFor(mode, r.chat.Ticket, r.chat.Parent != "" && !adopted, agent.CanSpawn(r.chat), adopted)
 		}
+		effort := ""
 		if info.caps.Thinking {
 			think := boolOr(o.Think, true)
 			req.Think = &think
+			if think {
+				effort = effortFor(r.chat, o)
+				req.Effort = effort
+				if tools && o.EffortTool && dynamicEffort(o) {
+					req.Tools = append(req.Tools, agent.SetEffortDef.JSON)
+				}
+			}
 		}
 		stream := newID()
 		r.chat.Running = &agent.Running{Stream: ""}
@@ -486,7 +494,7 @@ func (s *Server) loop(r *agentRun) {
 			r.mu.Unlock()
 			return
 		}
-		msg := &agent.Message{Role: "assistant", Content: agent.String(agent.ContentText(res.Message.Content)), Reasoning: res.Message.Reasoning, Model: model, Mode: mode}
+		msg := &agent.Message{Role: "assistant", Content: agent.String(agent.ContentText(res.Message.Content)), Reasoning: res.Message.Reasoning, Model: model, Mode: mode, Effort: effort}
 		for _, c := range res.Message.ToolCalls {
 			var tc agent.ToolCall
 			tc.ID, tc.Type = c.ID, c.Type
@@ -633,7 +641,13 @@ func (s *Server) runCalls(r *agentRun, ref *runtimeRef, calls []agent.ToolCall, 
 		s.publish(r, idx)
 		r.mu.Unlock()
 		var res toolResult
-		if name == "compact_conversation" {
+		if name == "set_effort" {
+			var level string
+			res, level = setEffort(args)
+			r.mu.Lock()
+			m.Effort = level
+			r.mu.Unlock()
+		} else if name == "compact_conversation" {
 			// Asked by the model: everything but the last exchange is summarized.
 			var instructions string
 			_ = json.Unmarshal(args["instructions"], &instructions)

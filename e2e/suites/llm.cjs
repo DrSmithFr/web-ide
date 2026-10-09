@@ -243,6 +243,23 @@ run(async ({ page, ctx }) => {
     assert((await page.$$eval('.ai-tool .ai-dur', (e) => e.length)) === 3, 'each tool block shows its duration')
     await page.click('.ai-reasoning .ai-tool-head')
     assert(await page.isVisible('.ai-reasoning-text:has-text("I need to read the file.")'), 'reasoning unfolded by a click')
+    // Dynamic effort: the most after the message, medium after reading, low after an edit.
+    const efforts = requests.slice(0, 3).map((r) => r.chat_template_kwargs?.reasoning_effort)
+    assert(efforts.join() === 'xhigh,medium,low', 'reasoning effort of each step: ' + efforts)
+    assert(!requests[0].tools.some((d) => d.function.name === 'set_effort'), 'no set_effort unless turned on')
+    assert((await page.textContent('.ai-reasoning .ai-effort').catch(() => '')) === 'Max', 'the effort of the answer is shown')
+    await page.click('[data-testid=ai-options]')
+    await page.waitForSelector('[data-testid=opt-effort]', { timeout: 3000 }).catch(() => {})
+    await page.waitForTimeout(200) // the popover fades in
+    await page.screenshot({ path: OUT + '/llm-effort.png' })
+    assert(await page.isVisible('[data-testid=opt-effort] button.on:has-text("Dynamic")') && (await page.isVisible('[data-testid=opt-effort-tool]')), 'effort selector, dynamic by default, with its tool toggle')
+    const box = await page.$eval('.ai-options-pop', (e) => e.getBoundingClientRect().toJSON())
+    assert(box.left >= 0 && box.right <= page.viewportSize().width, 'the options stay on the screen: ' + JSON.stringify(box))
+    await page.click('[data-testid=opt-effort] button:has-text("Medium")')
+    assert(!(await page.isVisible('[data-testid=opt-effort-tool]')), 'the tool toggle only in the dynamic mode')
+    assert((await page.evaluate(() => JSON.parse(localStorage.getItem('webide.llm.prefs')).effort)) === 'medium', 'the effort is kept with the preferences')
+    await page.click('[data-testid=opt-effort] button:has-text("Dynamic")')
+    await page.keyboard.press('Escape')
     assert((await page.$$eval('.ai-usage', (e) => e[e.length - 1].textContent)).includes('42.5 tokens/s'), 'usage and speed shown')
     await page.screenshot({ path: OUT + '/llm-answer.png' })
 

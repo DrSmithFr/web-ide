@@ -72,6 +72,10 @@
 .ai-reasoning .ai-tool-icon { color: var(--accent); }
 .ai-reasoning-text { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 280px; overflow: auto; border-top: 1px solid var(--line); padding: 6px 12px 8px; font-size: 13px; color: var(--fg-muted); line-height: 1.55; }
 .ai-reasoning:not(.open) .ai-reasoning-text { display: none; }
+.ai-effort { font-size: 11px; color: var(--fg-muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 5px; flex: none; }
+.ai-effort-row { display: flex; flex-direction: column; gap: 6px; padding: 7px 8px; font-size: 13px; }
+.ai-effort-row .segmented { display: flex; align-self: stretch; }
+.ai-effort-row .segmented button { flex: 1; padding: 3px 6px; font-size: 12px; }
 .ai-dur { color: var(--fg-faint); font-size: 12px; flex: none; font-variant-numeric: tabular-nums; }
 .ai-shimmer { background: linear-gradient(90deg, var(--fg-muted) 0%, var(--fg) 45%, var(--fg-muted) 90%); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: ai-shimmer 1.6s linear infinite; }
 @keyframes ai-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }

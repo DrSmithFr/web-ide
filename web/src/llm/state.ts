@@ -31,6 +31,9 @@ export interface ModelConf {
   thinking: boolean
 }
 
+/** Reasoning effort: xhigh thinks the most. */
+export type Effort = 'xhigh' | 'medium' | 'low'
+
 export interface Caps {
   vision: boolean
   video: boolean
@@ -119,6 +122,8 @@ export interface ChatMessage {
   summarized?: number
   /** Time spent thinking, and from the request to the end of the answer (ms). */
   thinkMs?: number
+  /** Reasoning effort of an answer; on a set_effort result, the level the model chose. */
+  effort?: Effort
   elapsedMs?: number
   /** Start of a tool call (ms); its elapsedMs is set when it ends. */
   startedAt?: number
@@ -371,6 +376,9 @@ export const [approval, setApproval] = createSignal<Approval | null>(null)
 export const [prefs, setPrefs] = createStore({
   autoApply: false,
   think: true,
+  /** Reasoning effort: auto lets the agent choose at each step; effortTool lets the model change it. */
+  effort: 'auto' as 'auto' | Effort,
+  effortTool: false,
   tools: true,
   /** Local speech recognition: Whisper model and language. */
   whisperModel: 'base',

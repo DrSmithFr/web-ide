@@ -94,13 +94,16 @@ func TestOpenAIChatStream(t *testing.T) {
 	m, id := newManager(t, ts.URL, "auto")
 	var deltas []Delta
 	think := false
-	res, err := m.Chat(context.Background(), ChatRequest{Server: id, Model: "m", Think: &think,
+	res, err := m.Chat(context.Background(), ChatRequest{Server: id, Model: "m", Think: &think, Effort: "low",
 		Messages: []Message{{Role: "user", Content: json.RawMessage(`"salut"`)}}}, func(d Delta) { deltas = append(deltas, d) })
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got["stream"] != true || got["model"] != "m" || got["chat_template_kwargs"] == nil {
 		t.Fatalf("request: %v", got)
+	}
+	if kw, _ := got["chat_template_kwargs"].(map[string]any); kw["enable_thinking"] != false || kw["reasoning_effort"] != nil {
+		t.Fatalf("no effort without thinking: %v", got)
 	}
 	msg := res.Message
 	if string(msg.Content) != `"Here"` || msg.Reasoning != "I think" || res.Finish != "tool_calls" {
@@ -507,5 +510,27 @@ func TestJobSurvivesDetach(t *testing.T) {
 	m.CancelChat("s2")
 	if _, err := m.WaitChat(context.Background(), "s2", nil, func(Delta) {}); err == nil {
 		t.Fatal("cancelled job ended without error")
+	}
+}
+
+func TestOpenAIChatEffort(t *testing.T) {
+	var got map[string]any
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/chat/completions" {
+			_ = json.NewDecoder(r.Body).Decode(&got)
+			sse(w, `{"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}`)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer ts.Close()
+	m, id := newManager(t, ts.URL, "auto")
+	think := true
+	if _, err := m.Chat(context.Background(), ChatRequest{Server: id, Model: "m", Think: &think, Effort: "medium",
+		Messages: []Message{{Role: "user", Content: json.RawMessage(`"salut"`)}}}, func(Delta) {}); err != nil {
+		t.Fatal(err)
+	}
+	if kw, _ := got["chat_template_kwargs"].(map[string]any); kw["enable_thinking"] != true || kw["reasoning_effort"] != "medium" {
+		t.Fatalf("the effort goes with the thinking: %v", got)
 	}
 }

@@ -421,14 +421,22 @@ function ContextMenu() {
   )
 }
 
+const efforts = [
+  { id: 'auto', label: () => t('Dynamic'), hint: () => t('Maximum after your message, medium between the tools, low after simple edits, maximum again after a failure') },
+  { id: 'xhigh', label: () => t('Max'), hint: () => t('Maximum effort at every step') },
+  { id: 'medium', label: () => t('Medium'), hint: () => t('Medium effort at every step') },
+  { id: 'low', label: () => t('Low'), hint: () => t('Low effort at every step') },
+] as const
+
 function Options() {
-  const set = (k: 'tools' | 'autoApply' | 'think', v: boolean) => {
+  const set = (k: 'tools' | 'autoApply' | 'think' | 'effortTool', v: boolean) => {
     setPrefs(k, v)
     savePrefs()
   }
   return (
     <Popover
       class="ai-options-pop"
+      align="right"
       trigger={(toggle, open) => (
         <button class="ai-icon" classList={{ on: open }} onClick={toggle} title={t('Assistant options')} data-testid="ai-options">
           <Icon name="sliders" size={16} />
@@ -441,6 +449,26 @@ function Options() {
           <Switch label={t('Apply without asking')} hint={t('File changes without confirmation')} checked={prefs.autoApply} onChange={(v) => set('autoApply', v)} testid="opt-auto" />
           <Show when={currentModel()?.caps.thinking}>
             <Switch label={t('Thinking')} hint={t('The model thinks before answering')} checked={prefs.think} onChange={(v) => set('think', v)} testid="opt-think" />
+            <Show when={prefs.think}>
+              <div class="ai-effort-row">
+                <span>
+                  <span>{t('Effort')}</span>
+                  <span class="ai-switch-hint">{prefs.effort === 'auto' ? t('The most after your message, less between the tools') : t('The same at every step')}</span>
+                </span>
+                <div class="segmented" role="radiogroup" data-testid="opt-effort">
+                  <For each={efforts}>
+                    {(e) => (
+                      <button type="button" role="radio" aria-checked={prefs.effort === e.id} classList={{ on: prefs.effort === e.id }} title={e.hint()} onClick={() => (setPrefs('effort', e.id), savePrefs())}>
+                        {e.label()}
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </div>
+              <Show when={prefs.effort === 'auto'}>
+                <Switch label={t('Effort tool')} hint={t('The model can change its effort itself')} checked={prefs.effortTool} onChange={(v) => set('effortTool', v)} testid="opt-effort-tool" />
+              </Show>
+            </Show>
           </Show>
         </>
       )}

@@ -4,7 +4,7 @@ import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'so
 import { Icon } from '../ui/icons'
 import { errorToast, toast } from '../ui/toast'
 import { activeTab, openFile, project, relPath } from '../state/project'
-import { approval, chat, config, live, liveSpeed, savePrefs, setPrefs, type Attachment, type ChatMessage, type Part, type ToolCall } from './state'
+import { approval, chat, config, live, liveSpeed, savePrefs, setPrefs, type Attachment, type ChatMessage, type Effort, type Part, type ToolCall } from './state'
 import { answerApproval, currentMode, dismiss, otherModel, resume, retry, stepsSinceUser } from './agent'
 import { AttachmentChip, callLabel, DiffBlock, formatDuration, formatTokens, Markdown, safeArgs, summaryText, toolIcons, toolVerbs } from './parts'
 import { absPath } from './uiTools'
@@ -350,7 +350,9 @@ function follow(el: HTMLElement, streaming: () => boolean, text: () => unknown) 
   })
 }
 
-function Reasoning(props: { text: string; live?: boolean; ms?: number }) {
+const effortLabels = { xhigh: () => t('Max'), medium: () => t('Medium'), low: () => t('Low') }
+
+function Reasoning(props: { text: string; live?: boolean; ms?: number; effort?: Effort }) {
   const [open, toggle] = useFold(() => !!props.live)
   return (
     <div class="ai-reasoning" classList={{ live: !!props.live, open: open() }}>
@@ -361,6 +363,13 @@ function Reasoning(props: { text: string; live?: boolean; ms?: number }) {
           </Show>
         </span>
         <span class={props.live ? 'ai-tool-name ai-shimmer' : 'ai-tool-name'}>{props.live ? `${t('Thinking')}…` : t('Thinking')}</span>
+        <Show when={props.effort && effortLabels[props.effort]}>
+          {(label) => (
+            <span class="ai-effort" title={t('Reasoning effort')}>
+              {label()()}
+            </span>
+          )}
+        </Show>
         <span class="grow" />
         <Elapsed running={!!props.live} start={live.thinkStart || undefined} ms={props.ms} />
         <span class="ai-chev" classList={{ open: open() }}>
@@ -566,7 +575,7 @@ function AssistantMessage(props: { msg: ChatMessage; index: number; lastOfTurn: 
   return (
     <div class="ai-msg assistant" classList={{ 'turn-end': props.lastOfTurn }}>
       <Show when={props.msg.reasoning_content}>
-        <Reasoning text={props.msg.reasoning_content!} ms={props.msg.thinkMs} />
+        <Reasoning text={props.msg.reasoning_content!} ms={props.msg.thinkMs} effort={props.msg.effort} />
       </Show>
       <Show when={typeof props.msg.content === 'string' && props.msg.content}>
         <Markdown text={props.msg.content as string} final />

@@ -262,6 +262,9 @@ var kanbanWriteDefs = []Def{
 var (
 	exitPlanDef = fn("exit_plan_mode", "Presents the finished plan to the user (Plan mode). They can accept it, which switches to Build mode to carry it out, or ask for changes. After this call, wait for their answer.",
 		obj{"plan": str("The full plan in Markdown: goal, files, numbered steps, tests")}, "plan")
+	// SetEffortDef: offered in the dynamic effort mode when the user turned it on.
+	SetEffortDef = fn("set_effort", "Sets how much you think before your next answers, until the user writes again. xhigh: a hard step (a design choice, a subtle bug, a result you do not understand). medium: a routine step. low: mechanical steps (a series of simple edits, bookkeeping). Without it, the IDE chooses at each step.",
+		obj{"level": enum("", "xhigh", "medium", "low"), "reason": str("Why, in a few words")}, "level")
 	compactDef = fn("compact_conversation", "Summarizes the older messages of the conversation to free context (the last exchange is kept). Use it when a task is done or the conversation gets long.",
 		obj{"instructions": str("What the summary must keep first (optional)")})
 )

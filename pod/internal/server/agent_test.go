@@ -20,6 +20,8 @@ type fakeModel struct {
 	mu       sync.Mutex
 	requests []map[string]any
 	answer   func(req map[string]any) []string
+	// models: the ids listed by /v1/models (none: the server lists nothing, capabilities unknown).
+	models []string
 }
 
 func (f *fakeModel) serve(t *testing.T) *httptest.Server {
@@ -38,6 +40,16 @@ func (f *fakeModel) serve(t *testing.T) *httptest.Server {
 				w.(http.Flusher).Flush()
 			}
 			fmt.Fprint(w, "data: [DONE]\n\n")
+		case "/v1/models":
+			if f.models == nil {
+				http.NotFound(w, r)
+				return
+			}
+			var data []map[string]string
+			for _, id := range f.models {
+				data = append(data, map[string]string{"id": id})
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": data})
 		default:
 			http.NotFound(w, r)
 		}

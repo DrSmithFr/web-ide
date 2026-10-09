@@ -72,8 +72,12 @@ type TicketLink struct {
 
 // Options are the preferences of the page that change how the agent runs.
 type Options struct {
-	AutoApply   bool   `json:"autoApply,omitempty"`
-	Think       *bool  `json:"think,omitempty"`
+	AutoApply bool  `json:"autoApply,omitempty"`
+	Think     *bool `json:"think,omitempty"`
+	// Effort: the reasoning effort, xhigh, medium or low; "" or "auto" lets the agent choose
+	// at each step. EffortTool offers set_effort to the model in that dynamic mode.
+	Effort      string `json:"effort,omitempty"`
+	EffortTool  bool   `json:"effortTool,omitempty"`
 	Tools       *bool  `json:"tools,omitempty"`
 	AutoCompact *bool  `json:"autoCompact,omitempty"`
 	CompactAt   int    `json:"compactAt,omitempty"`
@@ -123,6 +127,7 @@ type Message struct {
 	Kind       string          `json:"kind,omitempty"`
 	Summarized int             `json:"summarized,omitempty"`
 	ThinkMs    int64           `json:"thinkMs,omitempty"`
+	Effort     string          `json:"effort,omitempty"` // reasoning effort of the answer
 	ElapsedMs  int64           `json:"elapsedMs,omitempty"`
 	StartedAt  int64           `json:"startedAt,omitempty"` // start of a tool call (Unix ms); its ElapsedMs is set at its end
 	Mode       string          `json:"mode,omitempty"`
