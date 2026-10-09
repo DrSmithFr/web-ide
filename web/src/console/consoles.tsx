@@ -43,9 +43,11 @@ export function setConsoleList(list: ConsoleInfo[], pid = home()?.id) {
   for (const id of terms.keys()) if (!consoles().some((c) => c.id === id)) disposeTerm(id)
 }
 
-/** Lists the consoles of every worktree attached to the window again (after a reconnection). */
+/** Lists the consoles of every worktree attached to the window again (after a reconnection),
+ *  and gets the output the open terminals missed: a pod restarted with a keeper still runs them. */
 export async function refreshConsoles() {
   for (const pid of Object.keys(attached)) await requestIn<ConsoleInfo[]>(pid, 'console.list').then((l) => setConsoleList(l, pid), () => {})
+  for (const [id, entry] of terms) attachTerm(id, entry, entry.next)
 }
 
 // The consoles of a worktree come with it and go with it.
@@ -72,12 +74,13 @@ onPod('console.closed', (e: { id: string }) => {
 onPod('console.renamed', (e: { id: string; title: string }) => setConsoles((l) => l.map((c) => (c.id === e.id ? { ...c, title: e.title } : c))))
 onPod('console.exit', (e: { id: string; code: number }) => {
   setConsoles((l) => l.map((c) => (c.id === e.id ? { ...c, exited: true, code: e.code } : c)))
-  terms.get(e.id)?.term.write(`\r\n\x1b[2m[${t('process exited, code {code}', { code: e.code })}]\x1b[0m\r\n`)
+  const entry = terms.get(e.id)
+  if (entry) termExited(entry, e.code)
 })
-onPod('console.output', (e: { id: string; data: string }) => {
+onPod('console.output', (e: { id: string; data: string; offset: number }) => {
   const t = terms.get(e.id)
-  if (t?.ready) t.term.write(b64(e.data))
-  else t?.queue.push(e.data)
+  if (t?.ready) writeAt(t, e.offset, b64(e.data))
+  else t?.queue.push(e)
 })
 onPod('lsp.log', (e: { lang: string; method: string; params: { type: number; message: string } }) => {
   const kind = t(['', 'error', 'warn.', 'info', 'log'][e.params?.type] ?? '')
@@ -98,9 +101,41 @@ interface TermEntry {
   fit: FitAddon
   el: HTMLDivElement
   ready: boolean
-  queue: string[]
+  /** Output received while the scrollback is asked. */
+  queue: { data: string; offset: number }[]
+  /** Offset of the next byte of output expected. */
+  next: number
+  /** The end of the process is written. */
+  exited?: boolean
 }
 const terms = new Map<string, TermEntry>()
+
+/** Writes output at its offset: what the terminal already shows is skipped. */
+function writeAt(entry: TermEntry, offset: number, data: Uint8Array) {
+  if (offset < entry.next) data = data.subarray(Math.min(data.length, entry.next - offset))
+  if (data.length) entry.term.write(data)
+  entry.next = Math.max(entry.next, offset + data.length)
+}
+
+/** Gets the scrollback of a console (from the offset the terminal has, on a reconnection). */
+function attachTerm(id: string, entry: TermEntry, from?: number) {
+  entry.ready = false
+  requestIn(projectOf(id), 'console.attach', from === undefined ? { id } : { id, from })
+    .then((r) => {
+      if (r.data) writeAt(entry, r.start ?? entry.next, b64(r.data))
+      entry.next = Math.max(entry.next, r.offset ?? entry.next)
+      for (const d of entry.queue.splice(0)) writeAt(entry, d.offset ?? entry.next, b64(d.data))
+      entry.ready = true
+      if (r.info.exited) termExited(entry, r.info.code)
+    })
+    .catch(() => (entry.ready = true))
+}
+
+function termExited(entry: TermEntry, code: number) {
+  if (entry.exited) return
+  entry.exited = true
+  entry.term.write(`\r\n\x1b[2m[${t('process exited, code {code}', { code })}]\x1b[0m\r\n`)
+}
 
 function xtermTheme() {
   const th = themeById(settings.theme)
@@ -139,17 +174,9 @@ function getTerm(id: string): TermEntry {
   term.open(el)
   term.onData((data) => notifyIn(projectOf(id), 'console.input', { id, data }))
   term.onResize(({ cols, rows }) => notifyIn(projectOf(id), 'console.resize', { id, cols, rows }))
-  te = { term, fit, el, ready: false, queue: [] }
+  te = { term, fit, el, ready: false, queue: [], next: 0 }
   terms.set(id, te)
-  const entry = te
-  requestIn(projectOf(id), 'console.attach', { id })
-    .then((r) => {
-      if (r.data) term.write(b64(r.data))
-      for (const d of entry.queue.splice(0)) term.write(b64(d))
-      entry.ready = true
-      if (r.info.exited) term.write(`\r\n\x1b[2m[${t('process exited, code {code}', { code: r.info.code })}]\x1b[0m\r\n`)
-    })
-    .catch(() => (entry.ready = true))
+  attachTerm(id, te)
   return te
 }
 

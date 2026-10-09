@@ -138,15 +138,22 @@ func shell() string {
 	return "/bin/sh"
 }
 
-func (Local) StartPTY(argv []string, dir string, cols, rows int) (PTY, error) {
+// TermEnv is added to the environment of the local terminals.
+var TermEnv = []string{"TERM=xterm-256color", "COLORTERM=truecolor"}
+
+// ShellArgv is what a local terminal runs: the user's shell, or argv through it.
+func ShellArgv(argv []string) []string {
 	if len(argv) == 0 {
-		argv = []string{shell()}
-	} else {
-		argv = []string{shell(), "-lc", Join(argv)}
+		return []string{shell()}
 	}
+	return []string{shell(), "-lc", Join(argv)}
+}
+
+func (Local) StartPTY(argv []string, dir string, cols, rows int) (PTY, error) {
+	argv = ShellArgv(argv)
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor")
+	cmd.Env = append(os.Environ(), TermEnv...)
 	f, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
 	if err != nil {
 		return nil, err

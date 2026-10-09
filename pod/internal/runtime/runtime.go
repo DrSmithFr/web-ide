@@ -18,6 +18,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/fsx"
 	"github.com/DrSmithFr/web-ide/pod/internal/git"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
+	"github.com/DrSmithFr/web-ide/pod/internal/keeper"
 	"github.com/DrSmithFr/web-ide/pod/internal/lsp"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
@@ -32,6 +33,8 @@ type Emit func(event string, data any, except string)
 type Deps struct {
 	Pool  *sshx.Pool
 	Store *store.Store
+	// Keeper runs the local terminals (nil: the pod runs them).
+	Keeper *keeper.Client
 }
 
 type fileState struct {
@@ -113,13 +116,17 @@ func Open(p projects.Project, creds sshx.Creds, d Deps, emit Emit) (*Runtime, er
 	go r.watchLoop()
 
 	r.Consoles = console.NewManager(r.Runner, root, console.Events{
-		Output: func(id string, data []byte) {
-			r.emit("console.output", map[string]string{"id": id, "data": base64.StdEncoding.EncodeToString(data)}, "")
+		Output: func(id string, data []byte, offset int64) {
+			r.emit("console.output", map[string]any{"id": id, "data": base64.StdEncoding.EncodeToString(data), "offset": offset}, "")
 		},
 		Exit: func(id string, code int) {
 			r.emit("console.exit", map[string]any{"id": id, "code": code}, "")
 		},
 	})
+	// Local terminals run in the keeper when there is one: they survive the pod updates.
+	if r.Local && d.Keeper != nil {
+		r.Consoles.UseKeeper(d.Keeper, p.ID)
+	}
 	exists := func(p string) bool { _, err := r.FS.Stat(p); return err == nil }
 	r.LSP = lsp.NewManager(r.Runner, root, r.Local, r.Config.LSP, exists, func(ev string, data any) { r.emit(ev, data, "") })
 	r.Git = git.New(r.Runner, root)
@@ -150,8 +157,20 @@ func (r *Runtime) Detach() {
 	}
 }
 
+// Close ends everything the project runs (the project is closed).
 func (r *Runtime) Close() {
 	r.Consoles.CloseAll()
+	r.release()
+}
+
+// Release ends what the project runs but the terminals of the keeper (the pod stops: it
+// adopts them again when it starts).
+func (r *Runtime) Release() {
+	r.Consoles.Release()
+	r.release()
+}
+
+func (r *Runtime) release() {
 	r.LSP.StopAll()
 	r.DB.CloseAll()
 	_ = r.watcher.Close()

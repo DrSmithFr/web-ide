@@ -17,6 +17,7 @@ import (
 
 	"github.com/DrSmithFr/web-ide/pod/internal/config"
 	"github.com/DrSmithFr/web-ide/pod/internal/hfcache"
+	"github.com/DrSmithFr/web-ide/pod/internal/keeper"
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 	"github.com/DrSmithFr/web-ide/pod/internal/server"
@@ -31,6 +32,10 @@ import (
 var version = "dev"
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "keeper" {
+		runKeeper(os.Args[2:])
+		return
+	}
 	home, _ := os.UserHomeDir()
 	dataDir := flag.String("data", filepath.Join(home, ".web-ide"), "folder of the settings, projects and sessions")
 	addr := flag.String("addr", "", "listen address (default: config.json, else "+config.DefaultAddr+")")
@@ -38,6 +43,7 @@ func main() {
 	allowRemote := flag.Bool("allow-remote", false, "accept connections from other machines (protected by the token only)")
 	publicURL := flag.String("public-url", "", "address the IDE is opened at, for the links given to Claude Code (default: config.json, else http://<addr>)")
 	static := flag.String("static", "", "serve the front end from this folder instead of the embedded one")
+	keeperPath := flag.String("keeper", "", "socket of the keeper that runs the terminals (default: <data>/keeper.sock when it answers; off: the pod runs them)")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 	if *showVersion {
@@ -83,6 +89,7 @@ func main() {
 	if *static != "" {
 		srv.Static = os.DirFS(*static)
 	}
+	srv.Keeper = dialKeeper(*keeperPath, st.Path("keeper.sock"))
 	srv.Init()
 
 	httpSrv := &http.Server{Addr: cfg.Addr, Handler: srv, ReadHeaderTimeout: 10 * time.Second}
@@ -101,6 +108,59 @@ func main() {
 	if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
+}
+
+// dialKeeper connects to the keeper, or returns nil: the pod then runs the terminals itself.
+func dialKeeper(path, def string) *keeper.Client {
+	if path == "off" {
+		log.Print("keeper: off, the pod runs the terminals")
+		return nil
+	}
+	explicit := path != ""
+	if !explicit {
+		path = def
+		if _, err := os.Stat(path); err != nil {
+			log.Print("keeper: none, the pod runs the terminals (they end with it)")
+			return nil
+		}
+	}
+	c, h, err := keeper.Dial(path)
+	if err != nil {
+		log.Printf("keeper: %s does not answer (%v), the pod runs the terminals (they end with it)", path, err)
+		return nil
+	}
+	log.Printf("keeper: %s (pid %d, %s): the terminals survive the updates of the pod", path, h.Pid, h.Version)
+	return c
+}
+
+// runKeeper is the keeper service: web-ide-pod keeper [-data DIR] [-protocol].
+func runKeeper(args []string) {
+	home, _ := os.UserHomeDir()
+	fs := flag.NewFlagSet("keeper", flag.ExitOnError)
+	dataDir := fs.String("data", filepath.Join(home, ".web-ide"), "folder of the settings (the socket is keeper.sock in it)")
+	socket := fs.String("socket", "", "socket path (default: <data>/keeper.sock)")
+	protocol := fs.Bool("protocol", false, "print the protocol of the keeper and exit")
+	_ = fs.Parse(args)
+	if *protocol {
+		fmt.Println(keeper.Protocol)
+		return
+	}
+	path := *socket
+	if path == "" {
+		path = filepath.Join(config.ExpandHome(*dataDir), "keeper.sock")
+	}
+	ln, err := keeper.Listen(path)
+	check(err)
+	srv := keeper.NewServer(version)
+	go func() {
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+		<-sig
+		log.Print("keeper: stopping, its processes end")
+		srv.Close()
+	}()
+	log.Printf("keeper %s (protocol %d) on %s", version, keeper.Protocol, path)
+	check(srv.Serve(ln))
 }
 
 func check(err error) {
