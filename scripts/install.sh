@@ -9,7 +9,8 @@
 # The binary goes to ~/.local/bin/web-ide-pod, the unit to ~/.config/systemd/user/web-ide-pod.service.
 # Running it again upgrades the pod; data in ~/.web-ide is kept.
 # A second service, web-ide-keeper (a copy of the binary in ~/.local/lib/web-ide), runs the
-# terminals: they survive the updates of the pod. It is replaced only when its protocol changes.
+# terminals: they survive the updates of the pod. It is replaced only when its protocol changes,
+# and then updates itself in place (re-exec, same process): its terminals stay.
 set -eu
 
 REPO=DrSmithFr/web-ide
@@ -58,8 +59,8 @@ install -m755 "$BINARY" "$BIN_DIR/web-ide-pod.new"
 mv -f "$BIN_DIR/web-ide-pod.new" "$BIN_DIR/web-ide-pod"
 echo "Installed $("$BIN_DIR/web-ide-pod" -version) in $BIN_DIR"
 
-# The keeper: replaced (and restarted, closing the terminals) only when the pod speaks another
-# protocol; never overwritten in place, it may be running.
+# The keeper: replaced only when the pod speaks another protocol; never overwritten in place,
+# it may be running (it re-executes the new file below).
 KEEPER_DIR=$HOME/.local/lib/web-ide
 KEEPER=$KEEPER_DIR/web-ide-keeper
 mkdir -p "$KEEPER_DIR"
@@ -115,8 +116,14 @@ fi
 systemctl --user daemon-reload
 systemctl --user enable web-ide-keeper web-ide-pod >/dev/null 2>&1
 if [ -n "$KEEPER_CHANGED" ] && systemctl --user is-active --quiet web-ide-keeper; then
-  echo "warning: the keeper changed protocol: it restarts, the terminals are closed" >&2
-  systemctl --user restart web-ide-keeper
+  # The pod stops first (its conversations are taken back by the new one), then the keeper
+  # re-executes the new binary, waiting for the answers being written. A keeper that cannot
+  # update itself (older than this mechanism) is restarted.
+  systemctl --user stop web-ide-pod
+  if ! "$KEEPER" keeper -upgrade; then
+    echo "warning: the keeper cannot update itself: it restarts, the terminals are closed" >&2
+    systemctl --user restart web-ide-keeper
+  fi
 else
   systemctl --user start web-ide-keeper
 fi

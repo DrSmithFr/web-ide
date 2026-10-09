@@ -5,7 +5,13 @@
 // its command runs, it ends whole, the model asked once per step.
 const fs = require('fs')
 const net = require('net')
-const { execFileSync } = require('child_process')
+const { execFileSync, execFile } = require('child_process')
+const path = require('path')
+
+const POD = path.join(__dirname, '../../bin/web-ide-pod')
+/** Updates the keeper of the test in place (web-ide-pod keeper -upgrade): its output. */
+const upgrade = () =>
+  new Promise((resolve) => execFile(POD, ['keeper', '-upgrade', '-data', process.env.E2E_DATA], (err, stdout, stderr) => resolve({ err, out: stdout + stderr })))
 const http = require('http')
 const { run, openProject, assert } = require('../common.cjs')
 
@@ -82,6 +88,16 @@ run(async ({ page }) => {
   assert(resumed && consecutive(seen) && seen[0] <= before + 1, `the counter goes on across the restart, no gap or duplicate (before ${before}): ${seen.join(' ')}`)
   assert((await keeperList())[0].id === listed[0].id, 'the same process, adopted by the new pod')
 
+  // The keeper updates itself in place (re-exec): same pid, the counter goes on.
+  const atUpgrade = Math.max(...ticks(await page.textContent('.xterm-rows')))
+  const up = await upgrade()
+  assert(!up.err && /updated in place \(pid \d+\)/.test(up.out), 'the keeper re-executes itself, same pid: ' + up.out.trim())
+  const goesOn = await page
+    .waitForFunction((n) => new RegExp(`tick ${n}\\b`).test(document.querySelector('.xterm-rows')?.textContent ?? ''), atUpgrade + 10, { timeout: 15000 })
+    .then(() => true, () => false)
+  const after = ticks(await page.textContent('.xterm-rows'))
+  assert(goesOn && consecutive(after) && (await keeperList())[0].id === listed[0].id, 'the counter goes on across the update of the keeper: ' + after.join(' '))
+
   // Input works again.
   await page.click('.xterm')
   await page.keyboard.press('Control+c')
@@ -129,6 +145,18 @@ run(async ({ page }) => {
     const toolResult = requests[1]?.messages.find((m) => m.role === 'tool')?.content ?? ''
     assert(finished && /done-cmd/.test(toolResult) && /Exit code: 0/.test(toolResult), 'the command ends across the restart and its result reaches the model: ' + toolResult.slice(0, 120))
     assert(requests.length === 2, 'the model is asked once per step: ' + requests.length + ' requests')
+
+    // An update of the keeper while an answer is written waits for its end.
+    await page.click('.ai-panel button[title="New conversation"]')
+    await page.fill('.ai-composer textarea', 'Write slowly again')
+    await page.keyboard.press('Enter')
+    await page.waitForFunction(() => /word3 /.test(document.querySelector('.ai-msg.live')?.textContent ?? ''), null, { timeout: 10000 })
+    const waited = await upgrade()
+    assert(!waited.err && /waiting for HTTP request/.test(waited.out) && /updated in place/.test(waited.out), 'the update waits for the answer being written: ' + waited.out.trim().split('\n').join(' / '))
+    const whole2 = await page
+      .waitForFunction(() => [...document.querySelectorAll('.ai-msg.assistant')].some((m) => /word0 [\s\S]*word39/.test(m.textContent)), null, { timeout: 20000 })
+      .then(() => true, () => false)
+    assert(whole2 && !/Interrupted/.test(await page.textContent('.ai-panel')), 'the answer is whole after the update of the keeper')
   } finally {
     fake.close()
   }

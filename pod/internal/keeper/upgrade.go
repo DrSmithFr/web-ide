@@ -109,7 +109,7 @@ func (s *Server) blockers() []string {
 	var out []string
 	for _, r := range s.relays {
 		if !r.Done {
-			out = append(out, fmt.Sprintf("HTTP request %s (%s, %d KiB so far)", r.ID, r.Owner, r.Size>>10))
+			out = append(out, "HTTP request "+r.ID)
 		}
 	}
 	return out
@@ -250,7 +250,7 @@ func (s *Server) upgrade(u Upgrade, report func(string)) error {
 	for _, fd := range fds {
 		inherit(fd, true)
 	}
-	report(fmt.Sprintf("re-executing %s (%d processes kept)", path, len(running)))
+	report(fmt.Sprintf("re-executing %s, keeping %d running process(es)", path, len(running)))
 	log.Printf("keeper: re-executing %s", path)
 	env := append(os.Environ(), StateEnv+"="+statePath)
 	err = syscall.Exec(path, os.Args, env)
