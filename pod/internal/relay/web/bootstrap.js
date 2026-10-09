@@ -168,9 +168,16 @@ navigator.serviceWorker.addEventListener('message', (e) => onMessage(e.data))
 function bridge(label, port) {
   const dc = label === 'rpc' ? rpc : pc.createDataChannel(label, { ordered: true })
   if (label === 'rpc') appPort = port
-  port.onmessage = (e) => {
-    if (dc.readyState === 'open') frame(dc, new TextEncoder().encode(typeof e.data === 'string' ? e.data : JSON.stringify(e.data)))
+  // A DataChannel is not open when the app asks for it: keep its messages until it is, else
+  // the first request of the window is dropped.
+  const pending = []
+  const write = (text) => {
+    const bytes = new TextEncoder().encode(typeof text === 'string' ? text : JSON.stringify(text))
+    if (dc.readyState === 'open') frame(dc, bytes)
+    else pending.push(bytes)
   }
+  port.onmessage = (e) => write(e.data)
+  dc.onopen = () => { for (const b of pending.splice(0)) frame(dc, b) }
   dc.onmessage = (e) => {
     const m = read(dc, e)
     if (m) port.postMessage(new TextDecoder().decode(m))

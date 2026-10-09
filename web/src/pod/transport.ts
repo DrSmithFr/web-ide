@@ -33,16 +33,22 @@ export function wsChannel(): Channel {
 /** A channel over a MessagePort: the bootstrap page of the relay wires it to a DataChannel. */
 export function portChannel(port: MessagePort): Channel {
   const handlers = { open: () => {}, close: () => {}, message: (_: string) => {} }
+  // A port is open from the start, unlike a WebSocket: the open callback must still reach
+  // the handler registered after the channel was created (rpc.ts calls onOpen later).
+  let opened = false
   port.onmessage = (e) => handlers.message(e.data as string)
   // The close event is not in the DOM types of MessagePort, but the browser dispatches it
   // when the other end closes.
   const p = port as any
   p.addEventListener('close', () => handlers.close())
-  handlers.open()
+  opened = true
   return {
     send: (text) => port.postMessage(text),
     onMessage: (cb) => (handlers.message = cb),
-    onOpen: (cb) => (handlers.open = cb),
+    onOpen: (cb) => {
+      handlers.open = cb
+      if (opened) cb()
+    },
     onClose: (cb) => (handlers.close = cb),
     close: () => port.close(),
     openChannel: (label) => askPort(label),
