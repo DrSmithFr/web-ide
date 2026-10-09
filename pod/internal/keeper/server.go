@@ -7,16 +7,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/creack/pty"
+	"golang.org/x/crypto/ssh"
 )
 
 // GCAfter: an ended process nobody attached to is dropped after this long.
@@ -29,7 +32,11 @@ type proc struct {
 	pty   *os.File // master of a PTY
 	out   *os.File // read end of the output of a piped process (stdout and stderr)
 	stdin *os.File // write end of the input of a piped process
-	buf   []byte   // output kept: buf[0] is at offset Base
+	// An SSH process: its session, input and output.
+	sess  *ssh.Session
+	sin   io.WriteCloser
+	sout  io.Reader
+	buf   []byte // output kept: buf[0] is at offset Base
 	ended time.Time
 	// attached counts the attachments running; cond wakes them on output or exit.
 	attached int
@@ -50,14 +57,16 @@ func (p *proc) output() *os.File {
 type Server struct {
 	Version string
 
-	mu      sync.Mutex
-	procs   map[string]*proc
-	order   []string
-	relays  map[string]*relay
-	started time.Time
-	ln      net.Listener
-	conns   map[*serverConn]bool
-	closed  bool
+	mu     sync.Mutex
+	procs  map[string]*proc
+	order  []string
+	relays map[string]*relay
+	// sshConns: the SSH connections opened for the pod, by key.
+	sshConns map[string]*ssh.Client
+	started  time.Time
+	ln       net.Listener
+	conns    map[*serverConn]bool
+	closed   bool
 	// exe is the binary to re-execute for an update; upgrading: an update is running.
 	exe       string
 	upgrading bool
@@ -65,7 +74,7 @@ type Server struct {
 
 func NewServer(version string) *Server {
 	exe, _ := os.Executable()
-	return &Server{exe: exe, Version: version, procs: map[string]*proc{}, relays: map[string]*relay{}, started: time.Now(), conns: map[*serverConn]bool{}}
+	return &Server{exe: exe, Version: version, procs: map[string]*proc{}, relays: map[string]*relay{}, sshConns: map[string]*ssh.Client{}, started: time.Now(), conns: map[*serverConn]bool{}}
 }
 
 // Listen opens the socket at path (0600). A socket file left by a keeper that stopped is
@@ -143,6 +152,12 @@ func (s *Server) Close() {
 	for _, p := range procs {
 		p.kill()
 	}
+	s.mu.Lock()
+	for k, c := range s.sshConns {
+		c.Close()
+		delete(s.sshConns, k)
+	}
+	s.mu.Unlock()
 }
 
 func newID() string {
@@ -161,9 +176,13 @@ func (s *Server) spawn(a Spawn) (Spawned, error) {
 	cmd := exec.Command(a.Argv[0], a.Argv[1:]...)
 	cmd.Dir = a.Dir
 	cmd.Env = append(os.Environ(), a.Env...)
-	p := &proc{Proc: Proc{ID: newID(), Owner: a.Owner, PTY: a.PTY, Meta: a.Meta}}
+	p := &proc{Proc: Proc{ID: newID(), Owner: a.Owner, Target: a.Target, PTY: a.PTY, Meta: a.Meta}}
 	p.cond = sync.NewCond(&s.mu)
-	if a.PTY {
+	if strings.HasPrefix(a.Target, "ssh:") {
+		if err := s.spawnSSH(p, a); err != nil {
+			return Spawned{}, err
+		}
+	} else if a.PTY {
 		cols, rows := a.Cols, a.Rows
 		if cols <= 0 || rows <= 0 {
 			cols, rows = 120, 30
@@ -196,7 +215,9 @@ func (s *Server) spawn(a Spawn) (Spawned, error) {
 		}
 		p.stdin, p.out = inW, outR
 	}
-	p.Pid = cmd.Process.Pid
+	if p.sess == nil {
+		p.Pid = cmd.Process.Pid
+	}
 	s.mu.Lock()
 	s.procs[p.ID] = p
 	s.order = append(s.order, p.ID)
@@ -209,7 +230,10 @@ func (s *Server) spawn(a Spawn) (Spawned, error) {
 // pump keeps the output of p in its ring and wakes its attachments; then its exit code. An
 // update stops it with a read deadline: it returns, leaving the rest to the next keeper.
 func (s *Server) pump(p *proc) {
-	out := p.output()
+	var out io.Reader = p.output()
+	if p.sess != nil {
+		out = p.sout
+	}
 	b := make([]byte, 32*1024)
 	for {
 		n, err := out.Read(b)
@@ -232,10 +256,16 @@ func (s *Server) pump(p *proc) {
 			break
 		}
 	}
-	if p.pty == nil {
-		p.out.Close()
+	var code int
+	switch {
+	case p.sess != nil:
+		code = sshWait(p.sess)
+	default:
+		if p.pty == nil {
+			p.out.Close()
+		}
+		code = waitPid(p.Pid)
 	}
-	code := waitPid(p.Pid)
 	s.mu.Lock()
 	p.Exited, p.Code, p.ended = true, code, time.Now()
 	if p.pty != nil {
@@ -263,6 +293,10 @@ func waitPid(pid int) int {
 }
 
 func (p *proc) kill() {
+	if p.sess != nil {
+		_ = sshSignal(p.sess, "KILL")
+		return
+	}
 	if p.Pid == 0 {
 		return
 	}
@@ -388,7 +422,7 @@ func (sc *serverConn) serve() {
 func (sc *serverConn) handle(h header, payload []byte) {
 	s := sc.s
 	var a procArgs
-	if h.Op != OpSpawn && h.Op != OpHTTPStart && h.Op != OpUpgrade && len(h.Args) > 0 {
+	if h.Op != OpSpawn && h.Op != OpHTTPStart && h.Op != OpUpgrade && h.Op != OpSSHDial && len(h.Args) > 0 {
 		if err := json.Unmarshal(h.Args, &a); err != nil {
 			sc.reply(h.ID, nil, err)
 			return
@@ -424,6 +458,13 @@ func (sc *serverConn) handle(h header, payload []byte) {
 	case OpForget:
 		s.forget(a.ID)
 		sc.reply(h.ID, struct{}{}, nil)
+	case OpSSHDial:
+		var d SSHDial
+		if err := json.Unmarshal(h.Args, &d); err != nil {
+			sc.reply(h.ID, nil, err)
+			return
+		}
+		sc.reply(h.ID, struct{}{}, s.sshDial(d))
 	case OpUpgrade:
 		var u Upgrade
 		_ = json.Unmarshal(h.Args, &u)
@@ -463,9 +504,14 @@ func (sc *serverConn) handle(h header, payload []byte) {
 func (sc *serverConn) act(op string, p *proc, a procArgs, payload []byte) error {
 	switch op {
 	case OpInput:
-		w := p.stdin
-		if p.pty != nil {
+		var w io.Writer = p.stdin
+		switch {
+		case p.sess != nil:
+			w = p.sin
+		case p.pty != nil:
 			w = p.pty
+		case p.stdin == nil:
+			w = nil
 		}
 		if w == nil || p.Exited {
 			return errors.New("the process has ended")
@@ -473,16 +519,25 @@ func (sc *serverConn) act(op string, p *proc, a procArgs, payload []byte) error 
 		_, err := w.Write(payload)
 		return err
 	case OpCloseStdin:
+		if p.sess != nil {
+			return p.sin.Close()
+		}
 		if p.stdin == nil {
 			return errors.New("no stdin to close")
 		}
 		return p.stdin.Close()
 	case OpResize:
+		if p.sess != nil && p.PTY {
+			return p.sess.WindowChange(a.Rows, a.Cols)
+		}
 		if p.pty == nil {
 			return errors.New("not a terminal")
 		}
 		return pty.Setsize(p.pty, &pty.Winsize{Cols: uint16(a.Cols), Rows: uint16(a.Rows)})
 	case OpSignal:
+		if p.sess != nil {
+			return sshSignal(p.sess, a.Signal)
+		}
 		switch a.Signal {
 		case "HUP":
 			if p.pty != nil {

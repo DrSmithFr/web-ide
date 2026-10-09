@@ -112,7 +112,29 @@ func (s *Server) blockers() []string {
 			out = append(out, "HTTP request "+r.ID)
 		}
 	}
+	for _, p := range s.procs {
+		if p.sess != nil && !p.Exited {
+			out = append(out, "SSH command "+p.ID)
+		}
+	}
 	return out
+}
+
+// closeSSHTerminals ends the SSH terminals: they cannot cross an update, and waiting for an
+// interactive shell is pointless (the SSH commands of the agent are waited for).
+func (s *Server) closeSSHTerminals(report func(string)) {
+	s.mu.Lock()
+	var terms []*proc
+	for _, p := range s.procs {
+		if p.sess != nil && p.PTY && !p.Exited {
+			terms = append(terms, p)
+		}
+	}
+	s.mu.Unlock()
+	for _, p := range terms {
+		report("SSH terminal " + p.ID + " closed: it cannot cross an update")
+		p.kill()
+	}
 }
 
 // UpgradeSelf re-executes the keeper with its own (new) binary (SIGHUP).
@@ -147,6 +169,7 @@ func (s *Server) upgrade(u Upgrade, report func(string)) error {
 	}
 
 	// What cannot cross the exec: wait for it, or cancel it.
+	s.closeSSHTerminals(report)
 	wait := u.Wait
 	if wait <= 0 {
 		wait = 10 * time.Minute
@@ -164,6 +187,11 @@ func (s *Server) upgrade(u Upgrade, report func(string)) error {
 			for _, r := range s.relays {
 				if !r.Done {
 					r.cancel()
+				}
+			}
+			for _, p := range s.procs {
+				if p.sess != nil && !p.Exited {
+					p.kill()
 				}
 			}
 			s.mu.Unlock()

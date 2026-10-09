@@ -70,9 +70,12 @@ type Hello struct {
 }
 
 type Spawn struct {
-	Owner string   `json:"owner"`
-	Argv  []string `json:"argv"`
-	Dir   string   `json:"dir,omitempty"`
+	Owner string `json:"owner"`
+	// Target: "" (local) or "ssh:<key>" (a connection opened by ssh.dial; Argv is then the
+	// remote command, "" for the login shell).
+	Target string   `json:"target,omitempty"`
+	Argv   []string `json:"argv"`
+	Dir    string   `json:"dir,omitempty"`
 	// Env is added to the environment of the keeper.
 	Env  []string        `json:"env,omitempty"`
 	PTY  bool            `json:"pty,omitempty"`
@@ -90,6 +93,7 @@ type Spawned struct {
 type Proc struct {
 	ID     string          `json:"id"`
 	Owner  string          `json:"owner"`
+	Target string          `json:"target,omitempty"`
 	Pid    int             `json:"pid"`
 	PTY    bool            `json:"pty,omitempty"`
 	Exited bool            `json:"exited,omitempty"`

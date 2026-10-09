@@ -408,3 +408,6 @@ func (c *Client) Upgrade(u Upgrade, report func(string)) error {
 	}
 	return nil
 }
+
+// SSHDial has the keeper open (or keep) an SSH connection, for the processes of target "ssh:"+d.Key.
+func (c *Client) SSHDial(d SSHDial) error { return c.call(OpSSHDial, d, nil, nil) }
