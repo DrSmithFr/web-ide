@@ -1697,7 +1697,6 @@
   "Reading": "Lecture",
   "Refused": "Refusés",
   "Repeated calls": "Appels répétés",
-  "Several calls": "Appels multiples",
   "Share of the prompts read from the cache": "Part des prompts lue depuis le cache",
   "Statistics": "Statistiques",
   "Steps": "Étapes",
@@ -1714,5 +1713,7 @@
   "Whole project": "Tout le projet",
   "Your messages": "Vos messages",
   "Failures": "Échecs",
-  "Failures: {list}": "Échecs : {list}"
+  "Failures: {list}": "Échecs : {list}",
+  "Cache hit": "Cache hit",
+  "Tool chains": "Chaînes d'outils"
 }

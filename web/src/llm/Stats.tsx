@@ -5,7 +5,7 @@ import { createEffect, createResource, createSignal, For, on, onCleanup, Show } 
 import { request } from '../pod/rpc'
 import { t } from '../i18n'
 import { chat, currentModel, live } from './state'
-import { formatDuration, formatTokens } from './parts'
+import { formatTokens } from './parts'
 
 interface Speed {
   tokens: number
@@ -99,8 +99,18 @@ const failureText = (r?: Record<string, number>) =>
     .map((k) => `${failureLabels[k]()} ${r![k]}`)
     .join(' · ')
 const pct = (n: number, of: number) => (of > 0 ? `${Math.round((n / of) * 100)} %` : '–')
-const ms = (v: number) => (v > 0 ? formatDuration(v) : '–')
-const speed = (s: Speed) => (s.perSecond > 0 ? t('{n} tokens/s', { n: s.perSecond.toFixed(1) }) : '–')
+/** A duration as a clock: 34:51, or 3:34:51 from an hour; under a second, <0:01. */
+export function clock(v: number) {
+  if (!(v > 0)) return '–'
+  if (v < 1000) return '<0:01'
+  const total = Math.round(v / 1000)
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const sec = String(total % 60).padStart(2, '0')
+  return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`
+}
+const ms = clock
+const speed = (s: Speed) => (s.perSecond > 0 ? `${s.perSecond.toFixed(1)} t/s` : '–')
 const sum = (r?: Record<string, number>) => Object.values(r ?? {}).reduce((a, b) => a + b, 0)
 
 export function Stats() {
@@ -241,7 +251,7 @@ function Body(props: { s: StatsData; children: ChatResult['children'] & {}; proj
           })}
           testid="st-write"
         />
-        <Tile label={t('Generation')} value={ms(s().generationMs)} hint={t('{n} answers', { n: s().answers })} />
+        <Tile label={t('Generation')} value={ms(s().generationMs)} hint={t('{n} answers', { n: s().answers })} testid="st-generation" />
         <Tile
           label={t('Thinking')}
           value={ms(s().thinkMs)}
@@ -250,7 +260,7 @@ function Body(props: { s: StatsData; children: ChatResult['children'] & {}; proj
           })}
         />
         <Tile label={t('Thinking tokens')} value={pct(s().reasoningTokens, s().write.tokens)} hint={t('Estimated share of the generated tokens')} />
-        <Tile label={t('Cache')} value={pct(s().cached, s().prompt)} hint={t('Share of the prompts read from the cache')} />
+        <Tile label={t('Cache hit')} value={pct(s().cached, s().prompt)} hint={t('Share of the prompts read from the cache')} />
         <Tile
           label={t('Tools')}
           value={ms(s().toolMs)}
@@ -259,7 +269,7 @@ function Body(props: { s: StatsData; children: ChatResult['children'] & {}; proj
           })}
         />
         <Tile label={t('Tool failures')} value={pct(failures(), s().toolCalls)} hint={t('{n} of {m} calls', { n: failures(), m: s().toolCalls })} testid="st-failures" />
-        <Tile label={t('Several calls')} value={pct(s().multi, s().withTools)} hint={t('Answers calling several tools at once, among those calling tools')} testid="st-multi" />
+        <Tile label={t('Tool chains')} value={pct(s().multi, s().withTools)} hint={t('Answers calling several tools at once, among those calling tools')} testid="st-multi" />
         <Tile label={t('Repeated calls')} value={String(s().repeats)} hint={t('Calls identical to one made since the last message of the user')} />
       </div>
 
