@@ -25,7 +25,8 @@ type Client struct {
 	wmu      sync.Mutex
 	nextID   int64
 	pending  map[int64]chan header
-	attached map[int64]*Attachment // by the id of their attach request
+	logs     map[int64]func(string) // progress of an upgrade
+	attached map[int64]*Attachment  // by the id of their attach request
 	closed   bool
 	// Retry is the delay between two reconnections (1 s).
 	Retry time.Duration
@@ -33,7 +34,17 @@ type Client struct {
 
 // Dial connects to the keeper at path and checks its protocol.
 func Dial(path string) (*Client, Hello, error) {
-	c := &Client{path: path, pending: map[int64]chan header{}, attached: map[int64]*Attachment{}, Retry: time.Second}
+	c, h, err := DialAny(path)
+	if err == nil && h.Protocol != Protocol {
+		c.Close()
+		return nil, h, fmt.Errorf("keeper: protocol %d, the pod speaks %d", h.Protocol, Protocol)
+	}
+	return c, h, err
+}
+
+// DialAny connects to the keeper whatever its protocol (to update it).
+func DialAny(path string) (*Client, Hello, error) {
+	c := &Client{path: path, pending: map[int64]chan header{}, logs: map[int64]func(string){}, attached: map[int64]*Attachment{}, Retry: time.Second}
 	if err := c.connect(); err != nil {
 		return nil, Hello{}, err
 	}
@@ -41,10 +52,6 @@ func Dial(path string) (*Client, Hello, error) {
 	if err := c.call(OpHello, nil, nil, &h); err != nil {
 		c.Close()
 		return nil, h, err
-	}
-	if h.Protocol != Protocol {
-		c.Close()
-		return nil, h, fmt.Errorf("keeper: protocol %d, the pod speaks %d", h.Protocol, Protocol)
 	}
 	return c, h, nil
 }
@@ -81,8 +88,11 @@ func (c *Client) read(conn net.Conn) {
 		c.mu.Lock()
 		ch := c.pending[h.ID]
 		a := c.attached[h.ID]
+		logf := c.logs[h.ID]
 		c.mu.Unlock()
 		switch {
+		case h.Kind == KindLog && logf != nil:
+			logf(h.Error)
 		case h.Kind == KindHead && a != nil:
 			if a.Head != nil {
 				a.Head(h.Result)
@@ -369,4 +379,32 @@ func (a *Attachment) Stop() {
 		}
 	}
 	c.mu.Unlock()
+}
+
+// Upgrade asks the keeper to re-execute itself; report gets its progress. nil when the
+// connection dropped at the exec (Dial again to check the new keeper).
+func (c *Client) Upgrade(u Upgrade, report func(string)) error {
+	id := c.newID()
+	ch := make(chan header, 1)
+	c.mu.Lock()
+	c.pending[id] = ch
+	c.logs[id] = report
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		delete(c.pending, id)
+		delete(c.logs, id)
+		c.mu.Unlock()
+	}()
+	if err := c.send(id, OpUpgrade, u, nil); err != nil {
+		return err
+	}
+	h, ok := <-ch
+	if !ok {
+		return nil // the keeper re-executed: the connection closed with it
+	}
+	if h.Kind == KindError {
+		return errors.New(h.Error)
+	}
+	return nil
 }

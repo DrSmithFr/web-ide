@@ -82,6 +82,9 @@ func (s *Server) httpStart(a HTTPStart, body []byte) error {
 	if a.ID == "" || a.URL == "" {
 		return fmt.Errorf("id and url are needed")
 	}
+	if err := s.accepting(); err != nil {
+		return err
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	req, err := http.NewRequestWithContext(ctx, a.Method, a.URL, bytes.NewReader(body))
 	if err != nil {

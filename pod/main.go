@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -144,27 +145,86 @@ func runKeeper(args []string) {
 	dataDir := fs.String("data", filepath.Join(home, ".web-ide"), "folder of the settings (the socket is keeper.sock in it)")
 	socket := fs.String("socket", "", "socket path (default: <data>/keeper.sock)")
 	protocol := fs.Bool("protocol", false, "print the protocol of the keeper and exit")
+	stateVersion := fs.Bool("state-version", false, "print the version of the state file it reads (updates by re-exec) and exit")
+	upgrade := fs.Bool("upgrade", false, "update the running keeper: it re-executes its binary, keeping its processes")
+	binary := fs.String("binary", "", "with -upgrade: the binary to re-execute (default: the keeper's own)")
+	force := fs.Bool("force", false, "with -upgrade: cancel what cannot cross the update instead of waiting for it")
+	wait := fs.Duration("wait", 10*time.Minute, "with -upgrade: how long to wait for what cannot cross the update")
 	_ = fs.Parse(args)
-	if *protocol {
+	switch {
+	case *protocol:
 		fmt.Println(keeper.Protocol)
+		return
+	case *stateVersion:
+		fmt.Println(keeper.StateVersion)
 		return
 	}
 	path := *socket
 	if path == "" {
 		path = filepath.Join(config.ExpandHome(*dataDir), "keeper.sock")
 	}
-	ln, err := keeper.Listen(path)
+	if *upgrade {
+		upgradeKeeper(path, keeper.Upgrade{Path: *binary, Force: *force, Wait: *wait})
+		return
+	}
+	var srv *keeper.Server
+	var ln net.Listener
+	var err error
+	if state := os.Getenv(keeper.StateEnv); state != "" {
+		srv, ln, err = keeper.Restore(state, version)
+	} else if ln, err = keeper.Listen(path); err == nil {
+		srv = keeper.NewServer(version)
+	}
 	check(err)
-	srv := keeper.NewServer(version)
 	go func() {
 		sig := make(chan os.Signal, 1)
-		signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-		<-sig
-		log.Print("keeper: stopping, its processes end")
-		srv.Close()
+		signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+		for s := range sig {
+			if s == syscall.SIGHUP {
+				if err := srv.UpgradeSelf(); err != nil {
+					log.Printf("keeper: not updated: %v", err)
+				}
+				continue
+			}
+			log.Print("keeper: stopping, its processes end")
+			srv.Close()
+			return
+		}
 	}()
 	log.Printf("keeper %s (protocol %d) on %s", version, keeper.Protocol, path)
 	check(srv.Serve(ln))
+}
+
+// upgradeKeeper asks the keeper at path to re-execute itself, shows its progress and checks it
+// came back with the same pid. Exit code 2: the keeper cannot update itself (restart it).
+func upgradeKeeper(path string, u keeper.Upgrade) {
+	c, before, err := keeper.DialAny(path)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "keeper not reachable:", err)
+		os.Exit(2)
+	}
+	err = c.Upgrade(u, func(line string) { fmt.Println("keeper:", line) })
+	c.Close()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "keeper not updated:", err)
+		os.Exit(2)
+	}
+	for i := 0; i < 100; i++ {
+		time.Sleep(100 * time.Millisecond)
+		c, after, err := keeper.DialAny(path)
+		if err != nil {
+			continue
+		}
+		c.Close()
+		if after.Pid != before.Pid {
+			fmt.Fprintf(os.Stderr, "keeper restarted (pid %d → %d): its processes are lost\n", before.Pid, after.Pid)
+			os.Exit(1)
+		}
+		fmt.Printf("keeper updated in place (pid %d): %s, protocol %d → %s, protocol %d\n", after.Pid, before.Version, before.Protocol, after.Version, after.Protocol)
+		return
+	}
+	fmt.Fprintln(os.Stderr, "the keeper does not answer after its update")
+	os.Exit(1)
 }
 
 func check(err error) {

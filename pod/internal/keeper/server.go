@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"os"
@@ -23,16 +22,28 @@ import (
 // GCAfter: an ended process nobody attached to is dropped after this long.
 const GCAfter = time.Hour
 
+// proc is a process of the keeper, known by its pid and its file descriptors only (no
+// exec.Cmd): a keeper that re-executes itself rebuilds it (upgrade.go).
 type proc struct {
 	Proc
-	cmd   *exec.Cmd
-	pty   *os.File       // master of a PTY
-	stdin io.WriteCloser // of a piped process
-	buf   []byte         // output kept: buf[0] is at offset Base
+	pty   *os.File // master of a PTY
+	out   *os.File // read end of the output of a piped process (stdout and stderr)
+	stdin *os.File // write end of the input of a piped process
+	buf   []byte   // output kept: buf[0] is at offset Base
 	ended time.Time
 	// attached counts the attachments running; cond wakes them on output or exit.
 	attached int
 	cond     *sync.Cond
+	// pumped is closed when the pump stops reading for an update (the output stays in the
+	// kernel for the next keeper).
+	pumped chan struct{}
+}
+
+func (p *proc) output() *os.File {
+	if p.pty != nil {
+		return p.pty
+	}
+	return p.out
 }
 
 // Server is the keeper: it owns the processes and serves the pod on a Unix socket.
@@ -47,10 +58,14 @@ type Server struct {
 	ln      net.Listener
 	conns   map[*serverConn]bool
 	closed  bool
+	// exe is the binary to re-execute for an update; upgrading: an update is running.
+	exe       string
+	upgrading bool
 }
 
 func NewServer(version string) *Server {
-	return &Server{Version: version, procs: map[string]*proc{}, relays: map[string]*relay{}, started: time.Now(), conns: map[*serverConn]bool{}}
+	exe, _ := os.Executable()
+	return &Server{exe: exe, Version: version, procs: map[string]*proc{}, relays: map[string]*relay{}, started: time.Now(), conns: map[*serverConn]bool{}}
 }
 
 // Listen opens the socket at path (0600). A socket file left by a keeper that stopped is
@@ -140,12 +155,14 @@ func (s *Server) spawn(a Spawn) (Spawned, error) {
 	if len(a.Argv) == 0 {
 		return Spawned{}, errors.New("argv is empty")
 	}
+	if err := s.accepting(); err != nil {
+		return Spawned{}, err
+	}
 	cmd := exec.Command(a.Argv[0], a.Argv[1:]...)
 	cmd.Dir = a.Dir
 	cmd.Env = append(os.Environ(), a.Env...)
-	p := &proc{Proc: Proc{ID: newID(), Owner: a.Owner, PTY: a.PTY, Meta: a.Meta}, cmd: cmd}
+	p := &proc{Proc: Proc{ID: newID(), Owner: a.Owner, PTY: a.PTY, Meta: a.Meta}}
 	p.cond = sync.NewCond(&s.mu)
-	var out io.Reader
 	if a.PTY {
 		cols, rows := a.Cols, a.Rows
 		if cols <= 0 || rows <= 0 {
@@ -155,38 +172,44 @@ func (s *Server) spawn(a Spawn) (Spawned, error) {
 		if err != nil {
 			return Spawned{}, err
 		}
-		p.pty, out = f, f
+		p.pty = f
 	} else {
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-		stdin, err := cmd.StdinPipe()
+		inR, inW, err := os.Pipe()
 		if err != nil {
 			return Spawned{}, err
 		}
-		r, w, err := os.Pipe()
+		outR, outW, err := os.Pipe()
 		if err != nil {
+			inR.Close()
+			inW.Close()
 			return Spawned{}, err
 		}
-		cmd.Stdout, cmd.Stderr = w, w
-		if err := cmd.Start(); err != nil {
-			r.Close()
-			w.Close()
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = inR, outW, outW
+		err = cmd.Start()
+		inR.Close()
+		outW.Close()
+		if err != nil {
+			inW.Close()
+			outR.Close()
 			return Spawned{}, err
 		}
-		w.Close()
-		p.stdin, out = stdin, r
+		p.stdin, p.out = inW, outR
 	}
 	p.Pid = cmd.Process.Pid
 	s.mu.Lock()
 	s.procs[p.ID] = p
 	s.order = append(s.order, p.ID)
 	s.mu.Unlock()
-	go s.pump(p, out)
+	go s.pump(p)
 	log.Printf("keeper: %s started (pid %d, %s): %v", p.ID, p.Pid, map[bool]string{true: "pty", false: "pipe"}[p.PTY], a.Argv)
 	return Spawned{ID: p.ID, Pid: p.Pid}, nil
 }
 
-// pump keeps the output of p in its ring and wakes its attachments; then its exit code.
-func (s *Server) pump(p *proc, out io.Reader) {
+// pump keeps the output of p in its ring and wakes its attachments; then its exit code. An
+// update stops it with a read deadline: it returns, leaving the rest to the next keeper.
+func (s *Server) pump(p *proc) {
+	out := p.output()
 	b := make([]byte, 32*1024)
 	for {
 		n, err := out.Read(b)
@@ -201,22 +224,18 @@ func (s *Server) pump(p *proc, out io.Reader) {
 			p.cond.Broadcast()
 			s.mu.Unlock()
 		}
+		if errors.Is(err, os.ErrDeadlineExceeded) && s.pausing() {
+			close(p.pumped)
+			return
+		}
 		if err != nil {
 			break
 		}
 	}
-	if c, ok := out.(io.Closer); ok && p.pty == nil {
-		c.Close()
+	if p.pty == nil {
+		p.out.Close()
 	}
-	err := p.cmd.Wait()
-	code := 0
-	var ee *exec.ExitError
-	switch {
-	case errors.As(err, &ee):
-		code = ee.ExitCode()
-	case err != nil:
-		code = -1
-	}
+	code := waitPid(p.Pid)
 	s.mu.Lock()
 	p.Exited, p.Code, p.ended = true, code, time.Now()
 	if p.pty != nil {
@@ -227,16 +246,32 @@ func (s *Server) pump(p *proc, out io.Reader) {
 	log.Printf("keeper: %s ended (code %d)", p.ID, code)
 }
 
+// waitPid waits for the end of a child: its exit code, -1 when a signal ended it (or when it
+// was reaped already).
+func waitPid(pid int) int {
+	var ws syscall.WaitStatus
+	for {
+		_, err := syscall.Wait4(pid, &ws, 0, nil)
+		if err == syscall.EINTR {
+			continue
+		}
+		if err != nil || !ws.Exited() {
+			return -1
+		}
+		return ws.ExitStatus()
+	}
+}
+
 func (p *proc) kill() {
-	if p.cmd.Process == nil {
+	if p.Pid == 0 {
 		return
 	}
 	if p.pty != nil {
-		_ = p.cmd.Process.Signal(syscall.SIGHUP)
+		_ = syscall.Kill(p.Pid, syscall.SIGHUP)
 		_ = p.pty.Close()
 		return
 	}
-	_ = syscall.Kill(-p.cmd.Process.Pid, syscall.SIGKILL)
+	_ = syscall.Kill(-p.Pid, syscall.SIGKILL)
 }
 
 func (s *Server) get(id string) (*proc, error) {
@@ -353,7 +388,7 @@ func (sc *serverConn) serve() {
 func (sc *serverConn) handle(h header, payload []byte) {
 	s := sc.s
 	var a procArgs
-	if h.Op != OpSpawn && h.Op != OpHTTPStart && len(h.Args) > 0 {
+	if h.Op != OpSpawn && h.Op != OpHTTPStart && h.Op != OpUpgrade && len(h.Args) > 0 {
 		if err := json.Unmarshal(h.Args, &a); err != nil {
 			sc.reply(h.ID, nil, err)
 			return
@@ -389,6 +424,11 @@ func (sc *serverConn) handle(h header, payload []byte) {
 	case OpForget:
 		s.forget(a.ID)
 		sc.reply(h.ID, struct{}{}, nil)
+	case OpUpgrade:
+		var u Upgrade
+		_ = json.Unmarshal(h.Args, &u)
+		err := s.upgrade(u, func(line string) { _ = sc.send(header{ID: h.ID, Kind: KindLog, Error: line}, nil) })
+		sc.reply(h.ID, struct{}{}, err)
 	case OpHTTPStart:
 		var hs HTTPStart
 		if err := json.Unmarshal(h.Args, &hs); err != nil {
@@ -423,7 +463,7 @@ func (sc *serverConn) handle(h header, payload []byte) {
 func (sc *serverConn) act(op string, p *proc, a procArgs, payload []byte) error {
 	switch op {
 	case OpInput:
-		w := io.Writer(p.stdin)
+		w := p.stdin
 		if p.pty != nil {
 			w = p.pty
 		}
