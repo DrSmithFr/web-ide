@@ -135,6 +135,9 @@ func (s *Server) agentTool(r *agentRun, ref *runtimeRef, call agent.ToolCall, mo
 	if err := json.Unmarshal([]byte(orEmpty(call.Function.Arguments)), &a); err != nil {
 		return fail(r, usagef("invalid JSON arguments: %.200s", call.Function.Arguments))
 	}
+	if res, ok := s.followed(r, ref, call, a); ok {
+		return res
+	}
 	if agent.KanbanTools[name] {
 		return s.kanbanTool(r, name, a, mode)
 	}
@@ -211,7 +214,7 @@ func (s *Server) agentTool(r *agentRun, ref *runtimeRef, call agent.ToolCall, mo
 	case "share_preview":
 		res, err = sharePreview(r, ref.rt, a)
 	case "bash":
-		res, err = bashTool(r.ctx, ref.rt, a.str("command"), a.str("cwd"), a.num("timeout"), s.toolProgress(r, call.ID))
+		res, err = bashTool(r.ctx, ref.rt, a.str("command"), a.str("cwd"), a.num("timeout"), s.toolProgress(r, call.ID), s.keptFor(r))
 	case "run_command":
 		res, err = s.runCommand(r, ref.rt, a.str("command"), a.str("cwd"), a.num("timeout"), s.toolProgress(r, call.ID))
 	case "list_consoles":
@@ -610,7 +613,7 @@ func (s *Server) readSkillFile(rt *runtime.Runtime, name, file string) (toolResu
 // must not take "#" for the comment character (a rebase --continue would strip the subject).
 const gitDefaults = "export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.commentChar GIT_CONFIG_VALUE_0=auto\n"
 
-func bashTool(ctx context.Context, rt *runtime.Runtime, command, cwd string, timeout int, progress func(string)) (toolResult, error) {
+func bashTool(ctx context.Context, rt *runtime.Runtime, command, cwd string, timeout int, progress func(string), k *kept) (toolResult, error) {
 	if strings.TrimSpace(command) == "" {
 		return toolResult{}, usagef("command is missing")
 	}
@@ -620,10 +623,15 @@ func bashTool(ctx context.Context, rt *runtime.Runtime, command, cwd string, tim
 	if timeout <= 0 {
 		timeout = 120
 	}
-	res, err := runShell(ctx, rt, gitDefaults+command, cwd, timeout, progress)
+	res, err := runShellIn(ctx, rt, gitDefaults+command, cwd, timeout, progress, k)
 	if err != nil {
 		return toolResult{}, err
 	}
+	return shellToolResult(res), nil
+}
+
+// shellToolResult is the result of the bash tool for the model.
+func shellToolResult(res shellResult) toolResult {
 	secs := fmt.Sprintf("%.1f", float64(res.DurationMs)/1000)
 	out := agent.TrimEnd(agent.PlainOutput(res.Output))
 	if out == "" {
@@ -651,7 +659,7 @@ func bashTool(ctx context.Context, rt *runtime.Runtime, command, cwd string, tim
 	if res.Code != 0 || res.TimedOut || res.Canceled {
 		tr.Status, tr.Failure = "error", "exit"
 	}
-	return tr, nil
+	return tr
 }
 
 func consoleText(rt *runtime.Runtime, id string) (string, *consoleInfo, error) {
@@ -683,6 +691,16 @@ func (s *Server) runCommand(r *agentRun, rt *runtime.Runtime, command, cwd strin
 	// The console comes to the front in the windows of the project (if any).
 	go s.uiTool(r, "focus", toolArgs{"target": json.RawMessage(`"console"`), "console_id": jsonString(info.ID), "quiet": json.RawMessage("true")})
 	until := time.Now().Add(limit)
+	if rt.Keeper != nil {
+		s.toolRunning(r, func(run *agent.Running) { run.Console, run.Until = info.ID, until.UnixMilli() })
+	}
+	return s.waitCommand(r, rt, command, info.ID, until, progress)
+}
+
+// waitCommand follows the console of run_command until the command ends or its deadline.
+func (s *Server) waitCommand(r *agentRun, rt *runtime.Runtime, command, console string, until time.Time, progress func(string)) (toolResult, error) {
+	info := struct{ ID string }{console}
+	var err error
 	var text, last string
 	var now *consoleInfo
 	shown := time.Now()

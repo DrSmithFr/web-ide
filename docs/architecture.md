@@ -7,7 +7,8 @@ How Web IDE is built, where things live, and the traps already met. Read [spec.m
 ```
 browser (SolidJS app)  ──WebSocket JSON-RPC──▶  pod (Go binary)
                                                  ├─ local disk, or SSH/SFTP host
-                                                 ├─ terminals (PTY), commands
+                                                 ├─ terminals (PTY), in the keeper ─unix socket─▶ web-ide-keeper
+                                                 ├─ commands
                                                  ├─ language servers (LSP)
                                                  ├─ databases (SQLite, PostgreSQL, Redis)
                                                  ├─ git, docker
@@ -15,6 +16,14 @@ browser (SolidJS app)  ──WebSocket JSON-RPC──▶  pod (Go binary)
 ```
 
 The front end is built by Vite and embedded in the pod binary (`pod/webdist`), so the page and the WebSocket share one origin: no mixed content, and pairing is a cookie.
+
+The local terminals run in a second service, the **keeper** (`web-ide-pod keeper`, installed as `~/.local/lib/web-ide/web-ide-keeper` and the unit `web-ide-keeper.service`): it spawns them, holds their PTY and their output numbered by offset. The pod talks to it over `<data>/keeper.sock` and can restart freely: when it opens a project again, it adopts the terminals the keeper still runs for it (their console id, title and kind travel as metadata of the process) and the page attaches again from the offset it has. Without a keeper (tests, `-keeper off`, no socket), the pod runs the terminals itself and they end with it. Language servers stay in the pod.
+
+For an SSH project the keeper opens its own connection (`keeper/ssh.go`): the pod dials first and checks the host key (first use, its questions), then gives the keeper that key, pinned, and the secrets of the connection (kept in memory). The terminals and the commands of the agent of the project run on it (target `ssh:<key>`); the pod builds their remote command.
+
+The keeper updates itself without losing its processes (`keeper/upgrade.go`): `web-ide-pod keeper -upgrade` (or `SIGHUP`) has it re-execute its binary in the same process. Its processes stay its children; their PTY masters and pipes and the listening socket cross the exec as inherited descriptors, the output rings, the metadata and the ended HTTP requests go through `keeper-state.json`. What cannot cross waits: the HTTP requests in flight and the SSH commands are waited for (10 min by default, `-force` cancels them), the SSH terminals are closed. A failed exec leaves the keeper as it was. `install.sh` stops the pod, updates the keeper this way when its protocol changed, then starts the pod.
+
+The keeper also relays HTTP requests (`keeper/http.go`): the completions of the agent go through it (`llm.Relay`), so the answer being written is kept outside the pod. The conversations running are listed in `<data>/running.json`; a pod that stops saves nothing more, and the next one takes them back before it listens (`server/agent_resume.go`): the completion awaited is read again from the relay (the parser replays it from the start, the model is not asked again), the command of a tool call that ran in the keeper (`bash` as a piped process, `run_command` in its console) is followed again until its deadline, the other tool calls without result run again (an approval is asked again). A run whose stream the keeper does not have is closed as interrupted, as without keeper.
 
 ## Repository layout
 
@@ -28,7 +37,7 @@ The front end is built by Vite and embedded in the pod binary (`pod/webdist`), s
 
 ## Data on disk
 
-- `~/.web-ide/` (pod data, `-data` flag): `config.json` (address, workspace), `token`, `projects.json`, `settings.json` (with history), `clipboard.json` (clipboard history), `sessions/<project>.json` (layout, tabs, tool zones, explorer options, recent files, and per file the cursor, folds and chosen indentation), `secrets.json` (0600), `known_hosts` (trust on first use, in addition to `~/.ssh/known_hosts`), `sql-history/`, `llm.json` (model servers), `system-prompt.md` / `plan-prompt.md` / `briefing-prompt.md`, `models/hf/` (speech models), `chats/` and `kanban/` (bases of SSH projects), `icons/<project>.svg` (copy of the project icons for the home page: an SSH project is not reached to list it).
+- `~/.web-ide/` (pod data, `-data` flag): `keeper.sock` (socket of the keeper, 0600), `keeper-state.json` (only during an update of the keeper), `running.json` (conversations running, taken back by the next pod), `config.json` (address, workspace), `token`, `projects.json`, `settings.json` (with history), `clipboard.json` (clipboard history), `sessions/<project>.json` (layout, tabs, tool zones, explorer options, recent files, and per file the cursor, folds and chosen indentation), `secrets.json` (0600), `known_hosts` (trust on first use, in addition to `~/.ssh/known_hosts`), `sql-history/`, `llm.json` (model servers), `system-prompt.md` / `plan-prompt.md` / `briefing-prompt.md`, `models/hf/` (speech models), `chats/` and `kanban/` (bases of SSH projects), `icons/<project>.svg` (copy of the project icons for the home page: an SSH project is not reached to list it).
 - `<project>/.ide/`: `connections.json` (database connections, no secret), `tunnels.json` (tunnels of an SSH project), `folders.json` (folder marks: source, tests, excluded), `project.json` (`lsp`: command per language; `tests`: pattern per extension, e.g. `{".php": "{name}Spec.php"}`), `chats.db` (conversations), `kanban.db` (tickets), `worktrees/` (one git worktree per ticket in development), `icon.svg` and `icon.json` (project icon, drawn by the page: `ui/projectIcon.ts`, `ui/IconEditor.tsx`). `.ide/.gitignore` keeps the bases and the worktrees out of git.
 
 ## Protocol
@@ -48,7 +57,8 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 | `fsx` | Local and SFTP file systems, watching (fsnotify or polling) |
 | `sshx` | SSH agent, keys, passwords, host keys (TOFU), connection pool |
 | `execx` | Local or SSH processes, PTYs |
-| `console` | Terminals and commands with scrollback |
+| `console` | Terminals and commands with scrollback and output offsets; run by the keeper when there is one, adopted again after a restart of the pod |
+| `keeper` | The keeper: protocol (frames of a length, a JSON header and raw bytes), server (processes known by pid and descriptors, output rings, attachments from an offset, GC of ended processes; HTTP relay of the completions; SSH connections; update by re-exec) and the client of the pod (reconnection, attachments resumed from their offset) |
 | `lsp` | Language servers per project and language |
 | `db` | SQLite (modernc), PostgreSQL (pgx), Redis (go-redis), SSH tunnels |
 | `git` | Git panel operations |
@@ -112,10 +122,10 @@ make shots          # pictures of docs/images, replaying e2e/shots/recording.jso
 make service        # this build as a systemd user service started at boot (scripts/install.sh)
 make test           # go vet + go test + tsc
 make e2e            # browser tests, all suites (a few minutes)
-./e2e/run.sh git    # one suite: editing editor features restore+ keyboard git projects explorer lsp llm agent chat plan doodle kanban kanbanai kanbangit docker tunnels preview subagents orchestrator mobile i18n speech perf
+./e2e/run.sh git    # one suite: editing editor features restore+ keyboard git projects explorer lsp llm agent chat plan doodle kanban kanbanai kanbangit docker tunnels preview subagents orchestrator mobile i18n speech perf keeper
 ```
 
-- Each e2e suite gets a fresh pod with temporary data and a workspace copied from `e2e/fixtures`; a suite ending with `+` reuses the previous pod. The assistant suites use a scripted fake OpenAI-compatible server. Chromium comes from the Playwright cache or `CHROME=…`; the `speech` suite downloads `whisper-tiny` once (kept in `~/.cache/web-ide-e2e/models`); the `lsp` suite needs `gopls`; the `docker` suite needs Docker with Compose and the `postgres:17-alpine` image (skipped otherwise); the `tunnels` suite builds `sshtestd` (Go) and opens an SSH project on it. `e2e/bin` (first in the `PATH` of the pod) holds fake `claude`, `gh` and `tailscale` commands: the `preview` suite keeps its previews on `127.0.0.1`.
+- Each e2e suite gets a fresh pod with temporary data and a workspace copied from `e2e/fixtures`; a suite ending with `+` reuses the previous pod. The suites run without keeper, but `keeper`: `run.sh` starts one next to its pod and gives it the script restarting the pod (`E2E_RESTART_POD`). The assistant suites use a scripted fake OpenAI-compatible server. Chromium comes from the Playwright cache or `CHROME=…`; the `speech` suite downloads `whisper-tiny` once (kept in `~/.cache/web-ide-e2e/models`); the `lsp` suite needs `gopls`; the `docker` suite needs Docker with Compose and the `postgres:17-alpine` image (skipped otherwise); the `tunnels` suite builds `sshtestd` (Go) and opens an SSH project on it. `e2e/bin` (first in the `PATH` of the pod) holds fake `claude`, `gh` and `tailscale` commands: the `preview` suite keeps its previews on `127.0.0.1`.
 - Optional database driver tests against real servers: `WEBIDE_TEST_PG=host:port:user:pass WEBIDE_TEST_REDIS=host:port:pass go test ./internal/db/`.
 - Code navigation needs the language servers in the pod's `PATH` (`gopls` also needs `go`). The service keeps the `PATH` of the shell that installed it.
 - Versions: `make build` stamps the binary with `git describe` (`web-ide-pod -version`, shown on the home page). Pushing a tag `v*` runs `.github/workflows/release.yml`, which builds the Linux and macOS archives and publishes the release with the notes of that version in `CHANGELOG.md`; `scripts/install.sh v1.2.3` installs one as the service.
@@ -133,7 +143,7 @@ make e2e            # browser tests, all suites (a few minutes)
 - **A Solid store merges objects**: `setChat('running', {})` clears nothing; write `{ stream: undefined }`.
 - **DOMPurify** drops attributes containing `-->` (Mermaid sources are stored URI-encoded) and HTML inside `foreignObject` (Mermaid uses `htmlLabels: false`).
 - **Git**: git speaks the language of the user, so its messages are never parsed (`git.Show` asks `cat-file -e` first); ticket commits start with `#<n>`, so `rebase --continue` and `commit --no-edit` run with `core.commentChar=auto`; diff prefixes are forced (`--src-prefix=a/ --dst-prefix=b/`) because user settings such as `diff.mnemonicPrefix` change them; after a merge the branch has nothing left against its base, so the change is frozen in the ticket at merge time.
-- **Shell**: never `pkill -x web-ide-pod` nor `pkill -f web-ide-pod`: the pod of the IDE (the service, which runs the assistant and its conversations) has the same name and dies with it. Kill a test pod by the PID you kept (`$!`); `pkill -f <pattern>` also kills the command running it. Start a test pod with `setsid` / `< /dev/null`, otherwise a pipe stays open.
+- **Shell**: never `pkill -x web-ide-pod` nor `pkill -f web-ide-pod`: the pod of the IDE (the service, which runs the assistant and its conversations) has the same name and dies with it, and `-f` also matches the keeper (`web-ide-keeper keeper`), which ends every terminal. Restart the pod with `systemctl --user restart web-ide-pod` only, and update the keeper with `web-ide-keeper keeper -upgrade`, never `systemctl --user restart web-ide-keeper`: a restart ends every terminal. Kill a test pod by the PID you kept (`$!`); `pkill -f <pattern>` also kills the command running it. Start a test pod with `setsid` / `< /dev/null`, otherwise a pipe stays open.
 - **Copy through `copyText`** (`ui/clipboard.ts`), not `navigator.clipboard.writeText`: the text then goes to the clipboard history. A popup gives the focus back with `keepFocus` (`state/focus.ts`): focusing the editor again puts its caret at the start otherwise.
 - **E2E tests** must wait actively (`waitForFunction`): language servers start cold. `<option>` elements are never "visible" for Playwright (`state: 'attached'`).
 

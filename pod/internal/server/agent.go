@@ -40,6 +40,15 @@ type agentRun struct {
 	approve chan bool
 	// done: the run has ended; a message for it goes to the stored conversation.
 	done bool
+	// A run taken back after a restart of the pod (agent_resume.go): the completion to read
+	// again, the tool calls to end first, the command of one of them to follow.
+	resumeStream *agent.Running
+	resumeCalls  []agent.ToolCall
+	follow       *agent.Running
+}
+
+func contextWithCancel() (context.Context, context.CancelFunc) {
+	return context.WithCancel(context.Background())
 }
 
 // agents are the conversations running in the pod.
@@ -200,6 +209,9 @@ func updateOf(c *agent.Chat, state string, ahead, from int) agentUpdate {
 // publish saves the conversation of a run and sends its changes from a message index.
 // Called with r.mu held.
 func (s *Server) publish(r *agentRun, from int) {
+	if s.stopping() {
+		return // what is saved is what the next pod takes back
+	}
 	if err := s.saveChat(r.loc, r.chat); err != nil {
 		s.emitAgent(r.root, "agent.error", map[string]string{"id": r.id, "error": i18n.Translate(r.lang, err)})
 	}

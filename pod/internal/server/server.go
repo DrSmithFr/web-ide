@@ -26,6 +26,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/hfcache"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
+	"github.com/DrSmithFr/web-ide/pod/internal/keeper"
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 	"github.com/DrSmithFr/web-ide/pod/internal/preview"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
@@ -49,8 +50,11 @@ type Server struct {
 	// Clipboard is the history of the texts copied in the IDE, shared by every window.
 	Clipboard *clipboard.History
 	Pool      *sshx.Pool
-	LLM       *llm.Manager
-	Kanban    *kanban.Manager
+	// Keeper runs the local terminals so that they survive the updates of the pod (nil: the
+	// pod runs them).
+	Keeper *keeper.Client
+	LLM    *llm.Manager
+	Kanban *kanban.Manager
 	// Models caches the speech recognition models downloaded for the page.
 	Models *hfcache.Cache
 	// Tunnels are the port forwardings of the SSH projects.
@@ -63,6 +67,9 @@ type Server struct {
 	AllowRemote bool
 	// Version of the pod, shown by the page.
 	Version string
+
+	// stopped: the pod stops (Shutdown); the runs are left as they are, to be taken back.
+	stopped atomic.Bool
 
 	mu       sync.Mutex
 	clients  map[*Client]struct{}
@@ -612,8 +619,11 @@ func (s *Server) broadcast(name string, data any, except *Client) {
 	}
 }
 
-// Shutdown stops every project runtime (consoles, language servers, databases).
+// Shutdown stops every project runtime (consoles, language servers, databases); the
+// terminals of the keeper keep running.
 func (s *Server) Shutdown() {
+	s.stopped.Store(true)
+	s.saveRunning()
 	s.mu.Lock()
 	rts := s.runtimes
 	s.runtimes = map[string]*runtime.Runtime{}
@@ -621,7 +631,7 @@ func (s *Server) Shutdown() {
 	s.Tunnels.CloseAll()
 	s.Previews.Shutdown()
 	for _, rt := range rts {
-		rt.Close()
+		rt.Release()
 	}
 	s.Sessions.FlushAll()
 	s.Pool.CloseAll()

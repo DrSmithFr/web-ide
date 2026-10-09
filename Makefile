@@ -27,13 +27,15 @@ run: build
 # service); its data starts as a copy of ~/.web-ide (the speech models are shared).
 DEV_ADDR ?= 0.0.0.0:4434
 DEV_DATA ?= $(HOME)/.web-ide-dev
+# The dev pod has its own keeper: restarting the pod alone keeps its terminals.
 dev: pod/webdist/dist $(DEV_DATA)
-	cd pod && $(GO) run . -addr $(DEV_ADDR) -data $(DEV_DATA) -allow-remote & cd web && POD=http://127.0.0.1:$(lastword $(subst :, ,$(DEV_ADDR))) npm run dev -- --host 0.0.0.0
+	cd pod && $(GO) build -o ../bin/web-ide-pod-dev . && (../bin/web-ide-pod-dev keeper -data $(DEV_DATA) &) && sleep 0.3 && \
+	  ../bin/web-ide-pod-dev -addr $(DEV_ADDR) -data $(DEV_DATA) -allow-remote & cd web && POD=http://127.0.0.1:$(lastword $(subst :, ,$(DEV_ADDR))) npm run dev -- --host 0.0.0.0
 
 $(DEV_DATA):
 	mkdir -p $@
 	[ ! -d $(HOME)/.web-ide ] || for f in $(HOME)/.web-ide/*; do \
-	  case $$f in */models) ln -s $$f $@/models ;; */config.json) ;; *) cp -r $$f $@/ ;; esac; done
+	  case $$f in */models) ln -s $$f $@/models ;; */config.json|*/keeper.sock) ;; *) cp -r $$f $@/ ;; esac; done
 
 test: pod/webdist/dist
 	@unformatted="$$($(dir $(GO))gofmt -l pod)"; test -z "$$unformatted" || (echo "gofmt needed:"; echo "$$unformatted"; exit 1)

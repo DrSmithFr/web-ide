@@ -33,6 +33,9 @@ func (t Target) key() string {
 	return fmt.Sprintf("%s@%s:%d/%s/%s", t.User, t.Host, t.Port, t.Auth, t.KeyPath)
 }
 
+// Key names a resolved target (the connections of the pool, those of the keeper).
+func Key(t Target) string { return Resolve(t).key() }
+
 // Creds carries secrets typed by the user. They stay in the pod memory.
 type Creds struct {
 	Password   string `json:"password,omitempty"`
@@ -189,6 +192,16 @@ func (h *HostKeys) callback(hostname string, remote net.Addr, key ssh.PublicKey)
 }
 
 func Dial(t Target, c Creds, hk *HostKeys) (*ssh.Client, error) {
+	return dial(t, c, hk.callback)
+}
+
+// DialPinned connects accepting only the host key given: the one the pod accepted (the
+// keeper dials with it, the questions of a first use stay in the pod).
+func DialPinned(t Target, c Creds, key ssh.PublicKey) (*ssh.Client, error) {
+	return dial(t, c, ssh.FixedHostKey(key))
+}
+
+func dial(t Target, c Creds, hostKey ssh.HostKeyCallback) (*ssh.Client, error) {
 	t = Resolve(t)
 	methods, err := authMethods(t, c)
 	if err != nil {
@@ -197,7 +210,7 @@ func Dial(t Target, c Creds, hk *HostKeys) (*ssh.Client, error) {
 	cfg := &ssh.ClientConfig{
 		User:            t.User,
 		Auth:            methods,
-		HostKeyCallback: hk.callback,
+		HostKeyCallback: hostKey,
 		Timeout:         10 * time.Second,
 	}
 	client, err := ssh.Dial("tcp", net.JoinHostPort(t.Host, strconv.Itoa(t.Port)), cfg)
@@ -213,10 +226,21 @@ type Pool struct {
 	hk      *HostKeys
 	clients map[string]*ssh.Client
 	creds   map[string]Creds
+	keys    map[string]ssh.PublicKey // host key accepted for each connection
 }
 
 func NewPool(hk *HostKeys) *Pool {
-	return &Pool{hk: hk, clients: map[string]*ssh.Client{}, creds: map[string]Creds{}}
+	return &Pool{hk: hk, clients: map[string]*ssh.Client{}, creds: map[string]Creds{}, keys: map[string]ssh.PublicKey{}}
+}
+
+// Pinned is what another process needs to open the same connection as the pool: the host key
+// it accepted and the secrets given for it (false before a connection).
+func (p *Pool) Pinned(t Target) (ssh.PublicKey, Creds, bool) {
+	k := Resolve(t).key()
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	key, ok := p.keys[k]
+	return key, p.creds[k], ok
 }
 
 // Get returns a live connection, dialing it when needed. Creds given once are remembered
@@ -235,13 +259,21 @@ func (p *Pool) Get(t Target, c Creds) (*ssh.Client, error) {
 		}
 		client.Close()
 	}
-	client, err := Dial(t, c, p.hk)
+	var hostKey ssh.PublicKey
+	client, err := dial(t, c, func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		if err := p.hk.callback(hostname, remote, key); err != nil {
+			return err
+		}
+		hostKey = key
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
 	p.mu.Lock()
 	p.clients[k] = client
 	p.creds[k] = c
+	p.keys[k] = hostKey
 	p.mu.Unlock()
 	return client, nil
 }

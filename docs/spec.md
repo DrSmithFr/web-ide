@@ -9,6 +9,7 @@ An IDE that runs in the browser, usable without installing anything on the front
 - A browser alone cannot open a TCP socket or an SSH connection.
 - The pod is a single binary (Go, no runtime dependency) running on the user's machine.
 - The pod gives access to the local disk, to SSH (with the local key set), to databases, terminals and language servers.
+- Updating or restarting the pod keeps the local terminals running (they run in the keeper service): the page reconnects and shows their output without gap. A conversation of the assistant goes on too: the answer being written ends whole, a command running ends and its result reaches the model, an approval waiting is asked again. The terminals of SSH projects survive too (the keeper has its own connection), and so does an update of the keeper itself (it re-executes in place; only the SSH terminals are closed).
 - Private keys never leave the machine and are never sent to a remote backend.
 
 ## 2. Stack

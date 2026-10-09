@@ -199,5 +199,6 @@
   "this worktree is not open in the window": "ce worktree n’est pas ouvert dans la fenêtre",
   "this worktree is not one of the project": "ce worktree n’appartient pas au projet",
   "only an Orchestrator conversation adopts another one": "seule une conversation Orchestrateur adopte une autre conversation",
-  "the conversation is running: stop it first": "la conversation tourne : arrêtez-la d’abord"
+  "the conversation is running: stop it first": "la conversation tourne : arrêtez-la d’abord",
+  "the command is not reachable anymore": "la commande n'est plus joignable"
 }

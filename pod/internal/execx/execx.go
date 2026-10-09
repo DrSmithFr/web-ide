@@ -138,15 +138,22 @@ func shell() string {
 	return "/bin/sh"
 }
 
-func (Local) StartPTY(argv []string, dir string, cols, rows int) (PTY, error) {
+// TermEnv is added to the environment of the local terminals.
+var TermEnv = []string{"TERM=xterm-256color", "COLORTERM=truecolor"}
+
+// ShellArgv is what a local terminal runs: the user's shell, or argv through it.
+func ShellArgv(argv []string) []string {
 	if len(argv) == 0 {
-		argv = []string{shell()}
-	} else {
-		argv = []string{shell(), "-lc", Join(argv)}
+		return []string{shell()}
 	}
+	return []string{shell(), "-lc", Join(argv)}
+}
+
+func (Local) StartPTY(argv []string, dir string, cols, rows int) (PTY, error) {
+	argv = ShellArgv(argv)
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor")
+	cmd.Env = append(os.Environ(), TermEnv...)
 	f, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
 	if err != nil {
 		return nil, err
@@ -187,6 +194,14 @@ func (p *sshProc) Kill() error {
 	_ = p.s.Signal(ssh.SIGKILL)
 	return p.s.Close()
 }
+
+// RemoteShell is the remote command of an SSH terminal: the login shell, in dir.
+func RemoteShell(dir string) string {
+	return "cd " + Quote(dir) + " 2>/dev/null; exec $SHELL -l"
+}
+
+// RemoteCmd is the remote command running argv in dir over SSH.
+func RemoteCmd(argv []string, dir string) string { return remoteCmd(argv, dir) }
 
 func remoteCmd(argv []string, dir string) string {
 	cmd := "exec " + Join(argv)
@@ -258,7 +273,7 @@ func (r SSH) StartPTY(argv []string, dir string, cols, rows int) (PTY, error) {
 	s.Stderr = nil
 	var cmd string
 	if len(argv) == 0 {
-		cmd = "cd " + Quote(dir) + " 2>/dev/null; exec $SHELL -l"
+		cmd = RemoteShell(dir)
 	} else {
 		cmd = remoteCmd(argv, dir)
 	}
@@ -305,7 +320,7 @@ func ExitCode(err error) int {
 	if err == nil {
 		return 0
 	}
-	var ee *exec.ExitError
+	var ee interface{ ExitCode() int } // exec.ExitError, a process of the keeper
 	if errors.As(err, &ee) {
 		return ee.ExitCode()
 	}

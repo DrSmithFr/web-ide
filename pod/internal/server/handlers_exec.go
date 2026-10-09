@@ -108,6 +108,18 @@ type shellResult struct {
 // together) and the exit code once it ends, or when the time limit or ctx stops it.
 // runShell runs a command; progress (if any) gets its output so far while it runs.
 func runShell(ctx context.Context, rt *runtime.Runtime, command, cwd string, timeout int, progress func(string)) (shellResult, error) {
+	return runShellIn(ctx, rt, command, cwd, timeout, progress, nil)
+}
+
+// kept runs a command in the keeper, so that a pod that restarts follows it again
+// (followShell); started records the process and its deadline.
+type kept struct {
+	owner   string
+	started func(id string, until time.Time)
+	ended   func(id string) // the result is known: the keeper forgets the process
+}
+
+func runShellIn(ctx context.Context, rt *runtime.Runtime, command, cwd string, timeout int, progress func(string), k *kept) (shellResult, error) {
 	var err error
 	dir := rt.Root
 	if cwd != "" {
@@ -120,11 +132,38 @@ func runShell(ctx context.Context, rt *runtime.Runtime, command, cwd string, tim
 		limit = 120 * time.Second
 	}
 	start := time.Now()
-	proc, err := rt.Runner.Start([]string{"sh", "-c", "{\n" + command + "\n} 2>&1"}, dir)
-	if err != nil {
+	argv := []string{"sh", "-c", "{\n" + command + "\n} 2>&1"}
+	var proc execx.Process
+	if k != nil && rt.Keeper != nil {
+		kp, err := execx.StartKeeper(rt.Keeper, k.owner, rt.KeeperTarget, argv, dir)
+		if err != nil {
+			return shellResult{}, err
+		}
+		k.started(kp.ID, start.Add(limit))
+		proc = kp
+		defer k.ended(kp.ID)
+	} else if proc, err = rt.Runner.Start(argv, dir); err != nil {
 		return shellResult{}, err
 	}
 	proc.Stdin().Close() // no input: a command waiting for one gets end of file
+	return waitShell(ctx, proc, start, limit, progress, dir), nil
+}
+
+// followShell waits again for a command run in the keeper (the pod restarted), until the
+// deadline it was given.
+func followShell(ctx context.Context, rt *runtime.Runtime, id string, started, until time.Time, progress func(string)) (shellResult, error) {
+	if rt.Keeper == nil {
+		return shellResult{}, i18n.New("the command is not reachable anymore")
+	}
+	proc, err := execx.FollowKeeper(rt.Keeper, id)
+	if err != nil {
+		return shellResult{}, err
+	}
+	return waitShell(ctx, proc, started, max(time.Until(until), time.Second), progress, ""), nil
+}
+
+// waitShell gathers the output of a command until it ends, its time limit or ctx.
+func waitShell(ctx context.Context, proc execx.Process, start time.Time, limit time.Duration, progress func(string), dir string) shellResult {
 	out := &capped{}
 	copied := make(chan struct{})
 	go func() {
@@ -177,5 +216,5 @@ wait:
 	code := execx.ExitCode(proc.Wait())
 	// Read the buffer only once the copy is over (or abandoned).
 	text, truncated := out.String()
-	return shellResult{Output: text, Code: code, TimedOut: timedOut, Canceled: canceled, Truncated: truncated, DurationMs: time.Since(start).Milliseconds(), Cwd: dir}, nil
+	return shellResult{Output: text, Code: code, TimedOut: timedOut, Canceled: canceled, Truncated: truncated, DurationMs: time.Since(start).Milliseconds(), Cwd: dir}
 }

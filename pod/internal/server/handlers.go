@@ -298,7 +298,7 @@ func (s *Server) openRuntime(id string, creds sshx.Creds) (*runtime.Runtime, err
 	if !ok {
 		return nil, i18n.New("project not found")
 	}
-	rt, err := runtime.Open(*p, creds, runtime.Deps{Pool: s.Pool, Store: s.Store}, s.emitter(id))
+	rt, err := runtime.Open(*p, creds, runtime.Deps{Pool: s.Pool, Store: s.Store, Keeper: s.Keeper}, s.emitter(id))
 	if err != nil {
 		return nil, err
 	}
@@ -494,15 +494,24 @@ func (s *Server) registerProject() {
 		return info, err
 	}))
 	s.handle("console.attach", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
-		a, err := bind[struct{ ID string }](p)
+		a, err := bind[struct {
+			ID string
+			// From: the offset the page already has (a reconnection): only what follows.
+			From *int64
+		}](p)
 		if err != nil {
 			return nil, err
 		}
-		info, buf, err := rt.Consoles.Attach(a.ID)
+		info, buf, end, err := rt.Consoles.Snapshot(a.ID)
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"info": info, "data": base64.StdEncoding.EncodeToString(buf)}, nil
+		start := end - int64(len(buf))
+		if a.From != nil && *a.From >= start && *a.From <= end {
+			buf, start = buf[*a.From-start:], *a.From
+		}
+		// The output events that follow start at offset; the data starts at start.
+		return map[string]any{"info": info, "data": base64.StdEncoding.EncodeToString(buf), "start": start, "offset": end}, nil
 	}))
 	s.handle("console.input", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
 		a, err := bind[struct{ ID, Data string }](p)

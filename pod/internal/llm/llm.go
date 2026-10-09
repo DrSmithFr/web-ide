@@ -80,11 +80,13 @@ type Config struct {
 type Manager struct {
 	st     *store.Store
 	client *http.Client
-	mu     sync.Mutex
-	cfg    Config
-	kinds  map[string]string  // detected kind per server URL
-	dbs    map[string]*sql.DB // conversation bases by path
-	jobs   map[string]*job    // completions running or recently ended, by stream
+	// Relay runs the completions of the jobs outside the pod (the keeper); nil: the pod does.
+	Relay Relay
+	mu    sync.Mutex
+	cfg   Config
+	kinds map[string]string  // detected kind per server URL
+	dbs   map[string]*sql.DB // conversation bases by path
+	jobs  map[string]*job    // completions running or recently ended, by stream
 	// contexts read from the loaded models behind llama-swap, by server URL and model
 	contexts map[string]int
 	// swaps: the servers of kind openai seen to be llama-swap (local llama.cpp-style servers
@@ -266,25 +268,38 @@ func (m *Manager) do(ctx context.Context, s Server, method, path string, body an
 	if s.APIKey != "" {
 		req.Header.Set("Authorization", "Bearer "+s.APIKey)
 	}
+	// The completions of a job go through the relay of the keeper when there is one.
+	if id, _ := streamOf(ctx); id != "" && m.Relay != nil && body != nil {
+		data, _ := json.Marshal(body)
+		return m.relayed(ctx, s, req, data)
+	}
 	resp, err := m.client.Do(req)
 	if err != nil {
-		var ue interface{ Timeout() bool }
-		if errors.As(err, &ue) && ue.Timeout() {
-			return nil, i18n.Errorf("%s: no answer", s.URL)
-		}
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		return nil, i18n.Errorf("%s cannot be reached: %v", s.URL, unwrapNet(err))
+		return nil, i18nReach(s, err)
 	}
 	if resp.StatusCode >= 300 {
 		defer resp.Body.Close()
 		data, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		he := &HTTPError{Status: resp.StatusCode, Message: errorMessage(data)}
-		he.RetryAfter, _ = strconv.Atoi(resp.Header.Get("Retry-After"))
-		return nil, he
+		return nil, httpError(resp, data)
 	}
 	return resp, nil
+}
+
+func i18nReach(s Server, err error) error {
+	var ue interface{ Timeout() bool }
+	if errors.As(err, &ue) && ue.Timeout() {
+		return i18n.Errorf("%s: no answer", s.URL)
+	}
+	return i18n.Errorf("%s cannot be reached: %v", s.URL, unwrapNet(err))
+}
+
+func httpError(resp *http.Response, data []byte) *HTTPError {
+	he := &HTTPError{Status: resp.StatusCode, Message: errorMessage(data)}
+	he.RetryAfter, _ = strconv.Atoi(resp.Header.Get("Retry-After"))
+	return he
 }
 
 type HTTPError struct {

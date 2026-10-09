@@ -22,6 +22,8 @@ type fakeModel struct {
 	answer   func(req map[string]any) []string
 	// models: the ids listed by /v1/models (none: the server lists nothing, capabilities unknown).
 	models []string
+	// delay between two chunks of an answer.
+	delay time.Duration
 }
 
 func (f *fakeModel) serve(t *testing.T) *httptest.Server {
@@ -32,12 +34,13 @@ func (f *fakeModel) serve(t *testing.T) *httptest.Server {
 			_ = json.NewDecoder(r.Body).Decode(&req)
 			f.mu.Lock()
 			f.requests = append(f.requests, req)
-			answer := f.answer
+			answer, delay := f.answer, f.delay
 			f.mu.Unlock()
 			w.Header().Set("Content-Type", "text/event-stream")
 			for _, c := range answer(req) {
 				fmt.Fprintf(w, "data: %s\n\n", c)
 				w.(http.Flusher).Flush()
+				time.Sleep(delay)
 			}
 			fmt.Fprint(w, "data: [DONE]\n\n")
 		case "/v1/models":

@@ -8,6 +8,9 @@
 #
 # The binary goes to ~/.local/bin/web-ide-pod, the unit to ~/.config/systemd/user/web-ide-pod.service.
 # Running it again upgrades the pod; data in ~/.web-ide is kept.
+# A second service, web-ide-keeper (a copy of the binary in ~/.local/lib/web-ide), runs the
+# terminals: they survive the updates of the pod. It is replaced only when its protocol changes,
+# and then updates itself in place (re-exec, same process): its terminals stay.
 set -eu
 
 REPO=DrSmithFr/web-ide
@@ -56,14 +59,45 @@ install -m755 "$BINARY" "$BIN_DIR/web-ide-pod.new"
 mv -f "$BIN_DIR/web-ide-pod.new" "$BIN_DIR/web-ide-pod"
 echo "Installed $("$BIN_DIR/web-ide-pod" -version) in $BIN_DIR"
 
+# The keeper: replaced only when the pod speaks another protocol; never overwritten in place,
+# it may be running (it re-executes the new file below).
+KEEPER_DIR=$HOME/.local/lib/web-ide
+KEEPER=$KEEPER_DIR/web-ide-keeper
+mkdir -p "$KEEPER_DIR"
+NEW_PROTOCOL=$("$BIN_DIR/web-ide-pod" keeper -protocol)
+OLD_PROTOCOL=$("$KEEPER" keeper -protocol 2>/dev/null || echo none)
+KEEPER_CHANGED=
+if [ "$NEW_PROTOCOL" != "$OLD_PROTOCOL" ]; then
+  install -m755 "$BIN_DIR/web-ide-pod" "$KEEPER.new"
+  mv -f "$KEEPER.new" "$KEEPER"
+  KEEPER_CHANGED=1
+  echo "Installed the keeper (protocol $NEW_PROTOCOL) in $KEEPER_DIR"
+fi
+
 # systemd does not read the shell profile: the PATH of the installing shell is kept so the
 # pod finds git, the language servers (gopls also needs go), node, docker…
 SVC_PATH=$BIN_DIR:$HOME/go/bin:$HOME/sdk/go/bin:$PATH
+cat >"$UNIT_DIR/web-ide-keeper.service" <<EOF
+# Web IDE keeper (written by scripts/install.sh): runs the terminals of the pod, so that they
+# survive its updates. Stopping it ends the terminals.
+[Unit]
+Description=Web IDE keeper (terminals of the pod)
+
+[Service]
+ExecStart=$KEEPER keeper
+Environment=PATH=$SVC_PATH
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+EOF
 cat >"$UNIT_DIR/web-ide-pod.service" <<EOF
 # Web IDE pod (written by scripts/install.sh): starts at boot, restarts on failure.
 [Unit]
 Description=Web IDE pod
-After=network-online.target
+After=network-online.target web-ide-keeper.service
+Wants=web-ide-keeper.service
 
 [Service]
 ExecStart=$BIN_DIR/web-ide-pod -addr $ADDR
@@ -80,7 +114,19 @@ if [ "$(loginctl show-user "$(id -un)" -p Linger --value 2>/dev/null)" != yes ];
   loginctl enable-linger "$(id -un)" || echo "warning: loginctl enable-linger failed; the pod will start with your session only" >&2
 fi
 systemctl --user daemon-reload
-systemctl --user enable web-ide-pod >/dev/null 2>&1
+systemctl --user enable web-ide-keeper web-ide-pod >/dev/null 2>&1
+if [ -n "$KEEPER_CHANGED" ] && systemctl --user is-active --quiet web-ide-keeper; then
+  # The pod stops first (its conversations are taken back by the new one), then the keeper
+  # re-executes the new binary, waiting for the answers being written. A keeper that cannot
+  # update itself (older than this mechanism) is restarted.
+  systemctl --user stop web-ide-pod
+  if ! "$KEEPER" keeper -upgrade; then
+    echo "warning: the keeper cannot update itself: it restarts, the terminals are closed" >&2
+    systemctl --user restart web-ide-keeper
+  fi
+else
+  systemctl --user start web-ide-keeper
+fi
 systemctl --user restart web-ide-pod
 
 PORT=${ADDR##*:}
@@ -92,7 +138,7 @@ fi
 TOKEN_FILE=$HOME/.web-ide/token
 for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "$TOKEN_FILE" ] && break; sleep 0.3; done
 echo
-echo "The pod runs: systemctl --user status web-ide-pod"
+echo "The pod runs: systemctl --user status web-ide-pod web-ide-keeper"
 [ -s "$TOKEN_FILE" ] && echo "Open: http://$ADDR/?token=$(cat "$TOKEN_FILE")"
 if [ -n "$TAILSCALE" ]; then
   HOST=$(tailscale status --self --json 2>/dev/null | sed -n 's/.*"DNSName": *"\([^"]*\)\.".*/\1/p' | head -n1)
