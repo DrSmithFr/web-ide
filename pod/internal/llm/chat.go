@@ -212,7 +212,7 @@ func (b *batcher) flush() {
 // ---------- OpenAI compatible (llama.cpp) ----------
 
 // openaiChat streams a completion; cloud: a provider (OpenAI, OpenRouter…) that may refuse
-// the fields of llama.cpp.
+// the fields of llama.cpp, unless it is llama-swap (local servers behind it).
 func (m *Manager) openaiChat(ctx context.Context, s Server, req ChatRequest, b *batcher, cloud bool) (*ChatResult, error) {
 	body := map[string]any{
 		"model":          req.Model,
@@ -226,7 +226,10 @@ func (m *Manager) openaiChat(ctx context.Context, s Server, req ChatRequest, b *
 	if req.Temperature != nil {
 		body["temperature"] = *req.Temperature
 	}
-	if !cloud {
+	m.mu.Lock()
+	swap := m.swaps[s.URL]
+	m.mu.Unlock()
+	if !cloud || swap {
 		if req.Think != nil {
 			kw := map[string]any{"enable_thinking": *req.Think}
 			if *req.Think && req.Effort != "" {

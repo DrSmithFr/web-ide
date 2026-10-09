@@ -210,6 +210,7 @@ func (m *Manager) openaiModels(ctx context.Context, s Server) ([]Model, error) {
 	var list struct {
 		Data []struct {
 			ID           string `json:"id"`
+			OwnedBy      string `json:"owned_by"`
 			Context      int    `json:"context_length"`
 			Architecture *struct {
 				Input []string `json:"input_modalities"`
@@ -226,6 +227,13 @@ func (m *Manager) openaiModels(ctx context.Context, s Server) ([]Model, error) {
 	models := make([]Model, 0, len(list.Data))
 	for _, d := range list.Data {
 		md := Model{ID: d.ID, Context: d.Context, Caps: Caps{Tools: true}}
+		if d.OwnedBy == "llama-swap" {
+			// Local servers behind llama-swap: reasoning_content is shown when the model sends it.
+			md.Caps.Thinking = true
+			m.mu.Lock()
+			m.swaps[s.URL] = true
+			m.mu.Unlock()
+		}
 		if d.Status != nil {
 			md.State = d.Status.Value
 		}

@@ -534,3 +534,41 @@ func TestOpenAIChatEffort(t *testing.T) {
 		t.Fatalf("the effort goes with the thinking: %v", got)
 	}
 }
+
+// A server of kind openai that is llama-swap runs local models: they think, and get the fields
+// of llama.cpp (the effort among them); a cloud provider does not.
+func TestLlamaSwapThinking(t *testing.T) {
+	for _, owner := range []string{"llama-swap", "openai"} {
+		var got map[string]any
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/v1/models":
+				io.WriteString(w, `{"data":[{"id":"q","context_length":8192,"owned_by":"`+owner+`"}]}`)
+			case "/v1/chat/completions":
+				_ = json.NewDecoder(r.Body).Decode(&got)
+				sse(w, `{"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}`)
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		m, id := newManager(t, ts.URL, "openai")
+		list, err := m.Models(context.Background(), id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		swap := owner == "llama-swap"
+		if list.Models[0].Caps.Thinking != swap {
+			t.Fatalf("%s: thinking %v", owner, list.Models[0].Caps.Thinking)
+		}
+		think := true
+		if _, err := m.Chat(context.Background(), ChatRequest{Server: id, Model: "q", Think: &think, Effort: "low",
+			Messages: []Message{{Role: "user", Content: json.RawMessage(`"salut"`)}}}, func(Delta) {}); err != nil {
+			t.Fatal(err)
+		}
+		kw, _ := got["chat_template_kwargs"].(map[string]any)
+		if swap != (kw["reasoning_effort"] == "low") || swap != (got["timings_per_token"] == true) {
+			t.Fatalf("%s: request %v", owner, got)
+		}
+		ts.Close()
+	}
+}

@@ -87,12 +87,15 @@ type Manager struct {
 	jobs   map[string]*job    // completions running or recently ended, by stream
 	// contexts read from the loaded models behind llama-swap, by server URL and model
 	contexts map[string]int
+	// swaps: the servers of kind openai seen to be llama-swap (local llama.cpp-style servers
+	// behind it), by URL.
+	swaps map[string]bool
 }
 
 const configFile = "llm.json"
 
 func New(st *store.Store) *Manager {
-	m := &Manager{st: st, client: &http.Client{}, kinds: map[string]string{}, dbs: map[string]*sql.DB{}, jobs: map[string]*job{}, contexts: map[string]int{}}
+	m := &Manager{st: st, client: &http.Client{}, kinds: map[string]string{}, dbs: map[string]*sql.DB{}, jobs: map[string]*job{}, contexts: map[string]int{}, swaps: map[string]bool{}}
 	if err := st.ReadJSON(configFile, &m.cfg); err != nil && !store.IsNotExist(err) {
 		m.cfg = Config{}
 	}

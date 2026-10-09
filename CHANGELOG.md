@@ -11,6 +11,7 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 - The Orchestrator resumes a conversation whose last answer failed (`agent_resume`), from its last completed step, and adopts it on the way.
 - `kanban_conversation` (MCP) reads the last messages only (`last`) with the tool calls, errors and notes (`tools`); the skill `/review-dev` of this repository reviews the developments in progress with it.
 - Reasoning effort of the assistant (options of the message box): *Dynamic* by default, or fixed at *Max*, *Medium* or *Low*. Dynamic thinks the most after a message of the user, medium after tool results, low after a step of simple edits or bookkeeping that succeeded, the most again after a failed or refused call. The *Effort tool* switch offers `set_effort` to the model, which then chooses the level until the user writes again. The block of the reasoning shows the effort of the answer. Sent as `reasoning_effort` in `chat_template_kwargs` (Qwen 3.8 templates; Strata needs `"effort_position": "end"` to keep its conversation cache when the effort changes).
+- A server of kind *OpenAI-compatible* that is llama-swap is treated as the local servers behind it: its models can think (the *Thinking* option and the effort show), and it gets the fields of llama.cpp (`chat_template_kwargs`, the progress of the prompt reading).
 
 ### Changed
 
