@@ -128,6 +128,7 @@ func (c *Client) runOnce(ctx context.Context) error {
 	if m.Type != "ready" {
 		return errors.New("relay refused the pod: " + m.Type)
 	}
+	c.tell("connected")
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()

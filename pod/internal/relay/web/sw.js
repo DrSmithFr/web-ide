@@ -19,7 +19,9 @@ async function bootstrap() {
 self.addEventListener('fetch', (event) => {
   const req = event.request
   const url = new URL(req.url)
-  if (url.pathname.startsWith('/_relay') || url.pathname === '/sw.js') return
+  // The bootstrap page and the Service Worker itself come from the relay: the tunnel is not
+  // open yet when the bootstrap page is loaded, so answering it from the pod would hang.
+  if (url.pathname.startsWith('/_relay') || url.pathname === '/sw.js' || url.pathname === '/' || url.pathname === '/index.html') return
   event.respondWith(handle(req, url, event.clientId))
 })
 

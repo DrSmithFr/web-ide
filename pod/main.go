@@ -60,7 +60,7 @@ func main() {
 		return
 	}
 	if len(flag.Args()) > 0 && flag.Arg(0) == "relay" {
-		runRelayCmd(*dataDir, *turnPort, *turnIP)
+		runRelayCmd(*dataDir, *addr, *turnPort, *turnIP)
 		return
 	}
 
@@ -304,8 +304,8 @@ func check(err error) {
 }
 
 // runRelayCmd runs the relay server subcommand until interrupted.
-func runRelayCmd(dataDir string, turnPort int, turnIP string) {
+func runRelayCmd(dataDir string, addr string, turnPort int, turnIP string) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	check(relay.Run(ctx, relay.RelayConfig{DataDir: dataDir, TurnPort: turnPort, AdvertiseIP: turnIP}))
+	check(relay.Run(ctx, relay.RelayConfig{DataDir: dataDir, Addr: addr, TurnPort: turnPort, AdvertiseIP: turnIP}))
 }

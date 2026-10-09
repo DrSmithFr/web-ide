@@ -35,7 +35,8 @@ exports.start = async (opts = {}) => {
   const errors = []
   page.on('console', (m) => m.type() === 'error' && errors.push('console: ' + m.text()))
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message))
-  await page.goto(`${process.env.E2E_URL}/?token=${process.env.E2E_TOKEN}`)
+  // The relay suite opens the bootstrap page of the relay (its own url); the others the pod.
+  await page.goto(opts.url ?? `${process.env.E2E_URL}/?token=${process.env.E2E_TOKEN}`)
   return { browser, ctx, page, errors }
 }
 
