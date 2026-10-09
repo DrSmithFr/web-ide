@@ -90,7 +90,11 @@ func main() {
 		srv.Static = os.DirFS(*static)
 	}
 	srv.Keeper = dialKeeper(*keeperPath, st.Path("keeper.sock"))
+	if srv.Keeper != nil {
+		srv.LLM.Relay = llm.KeeperRelay{C: srv.Keeper} // the answers being written survive the pod too
+	}
 	srv.Init()
+	srv.ResumeRuns()
 
 	httpSrv := &http.Server{Addr: cfg.Addr, Handler: srv, ReadHeaderTimeout: 10 * time.Second}
 	go func() {

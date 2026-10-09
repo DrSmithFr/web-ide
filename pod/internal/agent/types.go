@@ -56,9 +56,18 @@ type ActionCard struct {
 	Result string `json:"result,omitempty"`
 }
 
-// Running is set while the agent runs, with the stream of the completion awaited.
+// Running is set while the agent runs, with the stream of the completion awaited: enough
+// for a pod that restarts to take the run back (server/agent_resume.go).
 type Running struct {
 	Stream string `json:"stream,omitempty"`
+	// StartedAt: when the completion was asked (Unix ms); Effort: its reasoning effort.
+	StartedAt int64  `json:"startedAt,omitempty"`
+	Effort    string `json:"effort,omitempty"`
+	// The command of the tool call running, in the keeper: a process (bash) or a console
+	// (run_command), and its deadline (Unix ms).
+	Proc    string `json:"proc,omitempty"`
+	Console string `json:"console,omitempty"`
+	Until   int64  `json:"until,omitempty"`
 }
 
 type TicketLink struct {

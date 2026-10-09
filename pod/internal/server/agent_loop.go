@@ -30,6 +30,7 @@ func (s *Server) startRun(loc llm.ChatLocation, root, project, lang string, c *a
 	r := &agentRun{id: c.ID, loc: loc, root: root, project: project, lang: lang, ctx: ctx, cancel: cancel, chat: c, state: "running"}
 	s.agents.runs[c.ID] = r
 	s.agents.mu.Unlock()
+	s.saveRunning()
 	r.mu.Lock()
 	c.Running = &agent.Running{}
 	c.Dismissed = false
@@ -317,14 +318,19 @@ func (a *answer) timing(m *agent.Message) {
 	m.ElapsedMs = now.Sub(a.started).Milliseconds()
 }
 
-// complete runs one completion as a job of the pod (the pages follow it with llm.attach).
-func (s *Server) complete(r *agentRun, req llm.ChatRequest, stream string) (*llm.ChatResult, *answer, error) {
-	a := &answer{started: time.Now()}
-	if err := s.LLM.StartChat(stream, req); err != nil {
+// complete runs one completion as a job of the pod (the pages follow it with llm.attach); a
+// resumed one reads again what the relay received for it, then goes on.
+func (s *Server) complete(r *agentRun, req llm.ChatRequest, stream string, resumed bool, started time.Time) (*llm.ChatResult, *answer, error) {
+	a := &answer{started: started}
+	start := s.LLM.StartChat
+	if resumed {
+		start = func(stream string, req llm.ChatRequest) error { return s.LLM.ResumeChat(stream, req, started) }
+	}
+	if err := start(stream, req); err != nil {
 		return nil, a, err
 	}
 	res, err := s.LLM.WaitChat(r.ctx, stream, nil, a.add)
-	if err != nil && r.ctx.Err() != nil {
+	if err != nil && r.ctx.Err() != nil && !s.stopping() {
 		s.LLM.CancelChat(stream)
 	}
 	return res, a, err
@@ -367,6 +373,9 @@ func (s *Server) systemPrompt(r *agentRun, ref *runtimeRef, c *agent.Chat, tools
 // loop runs the turns of a conversation until it stops.
 func (s *Server) loop(r *agentRun) {
 	defer func() {
+		if s.stopping() {
+			return // the pod stops: the run stays as saved, to be taken back
+		}
 		r.mu.Lock()
 		r.chat.Running, r.chat.Approval = nil, nil
 		r.state = "idle"
@@ -384,6 +393,9 @@ func (s *Server) loop(r *agentRun) {
 		s.agents.mu.Lock()
 		delete(s.agents.runs, r.id)
 		s.agents.mu.Unlock()
+		if !s.stopping() {
+			s.saveRunning()
+		}
 		s.publish(r, from)
 		r.mu.Unlock()
 		r.cancel()
@@ -405,67 +417,101 @@ func (s *Server) loop(r *agentRun) {
 	ref.rt.Attach()
 	defer ref.rt.Detach()
 	compactedForError := false
+	// A run taken back after a restart of the pod first ends what it was doing.
+	if calls := r.resumeCalls; calls != nil {
+		r.resumeCalls = nil
+		r.mu.Lock()
+		mode := r.chat.Mode
+		r.mu.Unlock()
+		if mode == "" {
+			mode = agent.Build
+		}
+		if stop := s.runCalls(r, ref, calls, mode); stop || r.ctx.Err() != nil {
+			return
+		}
+	}
 	for {
 		if r.ctx.Err() != nil {
 			return
 		}
-		r.mu.Lock()
-		from := len(r.chat.Messages)
-		drainQueue(r.chat)
-		server, model := target(r.chat)
-		r.mu.Unlock()
-		info := s.modelInfo(r.ctx, server, model)
-		r.mu.Lock()
-		o := opt(r.chat)
-		needs := boolOr(o.AutoCompact, true) && info.context > 0 && contextUsed(r.chat) > info.context*max(o.CompactAt, 75)/100
-		r.mu.Unlock()
-		if needs {
-			if err := s.compact(r, false, ""); err == nil {
-				from = 0
+		var req llm.ChatRequest
+		var server, model, mode, effort, stream string
+		started := time.Now()
+		resumed := r.resumeStream != nil
+		if rs := r.resumeStream; rs != nil {
+			// The completion the relay still runs: no new step, the same answer goes on.
+			r.resumeStream = nil
+			r.mu.Lock()
+			server, model = target(r.chat)
+			mode, effort, stream = r.chat.Mode, rs.Effort, rs.Stream
+			if rs.StartedAt > 0 {
+				started = time.UnixMilli(rs.StartedAt)
 			}
+			req = llm.ChatRequest{Server: server, Model: model}
+			r.state = "running"
+			r.mu.Unlock()
+		} else {
+			r.mu.Lock()
+			from := len(r.chat.Messages)
+			drainQueue(r.chat)
+			server, model = target(r.chat)
+			r.mu.Unlock()
+			info := s.modelInfo(r.ctx, server, model)
+			r.mu.Lock()
+			o := opt(r.chat)
+			needs := boolOr(o.AutoCompact, true) && info.context > 0 && contextUsed(r.chat) > info.context*max(o.CompactAt, 75)/100
+			r.mu.Unlock()
+			if needs {
+				if err := s.compact(r, false, ""); err == nil {
+					from = 0
+				}
+			}
+			if r.ctx.Err() != nil {
+				return
+			}
+			r.mu.Lock()
+			tools := boolOr(o.Tools, true) && (!info.found || info.caps.Tools)
+			mode = r.chat.Mode
+			system := s.systemPrompt(r, ref, r.chat, tools)
+			req = llm.ChatRequest{Server: server, Model: model, Messages: apiMessages(system, r.chat.Messages, !info.found || info.caps.Vision)}
+			if tools {
+				adopted := r.chat.Agent != nil && r.chat.Agent.Adopted
+				req.Tools = agent.ToolsFor(mode, r.chat.Ticket, r.chat.Parent != "" && !adopted, agent.CanSpawn(r.chat), adopted)
+			}
+			if info.caps.Thinking {
+				think := boolOr(o.Think, true)
+				req.Think = &think
+				if think {
+					effort = effortFor(r.chat, o)
+					req.Effort = effort
+					if tools && o.EffortTool && dynamicEffort(o) {
+						req.Tools = append(req.Tools, agent.SetEffortDef.JSON)
+					}
+				}
+			}
+			stream = newID()
+			r.chat.Running = &agent.Running{Stream: ""}
+			r.state = "running"
+			s.publish(r, from)
+			r.mu.Unlock()
 		}
-		if r.ctx.Err() != nil {
-			return
-		}
-		r.mu.Lock()
-		tools := boolOr(o.Tools, true) && (!info.found || info.caps.Tools)
-		mode := r.chat.Mode
 		if mode == "" {
 			mode = agent.Build
 		}
-		system := s.systemPrompt(r, ref, r.chat, tools)
-		req := llm.ChatRequest{Server: server, Model: model, Messages: apiMessages(system, r.chat.Messages, !info.found || info.caps.Vision)}
-		if tools {
-			adopted := r.chat.Agent != nil && r.chat.Agent.Adopted
-			req.Tools = agent.ToolsFor(mode, r.chat.Ticket, r.chat.Parent != "" && !adopted, agent.CanSpawn(r.chat), adopted)
-		}
-		effort := ""
-		if info.caps.Thinking {
-			think := boolOr(o.Think, true)
-			req.Think = &think
-			if think {
-				effort = effortFor(r.chat, o)
-				req.Effort = effort
-				if tools && o.EffortTool && dynamicEffort(o) {
-					req.Tools = append(req.Tools, agent.SetEffortDef.JSON)
-				}
-			}
-		}
-		stream := newID()
-		r.chat.Running = &agent.Running{Stream: ""}
-		r.state = "running"
-		s.publish(r, from)
-		r.mu.Unlock()
 
 		release, err := s.slot(r, server)
 		if err != nil {
 			return
 		}
+		if !resumed {
+			started = time.Now()
+		}
 		r.mu.Lock()
-		r.chat.Running = &agent.Running{Stream: stream}
-		s.emitAgent(r.root, "agent.update", updateOf(r.chat, r.state, 0, -1))
+		// Saved: a pod that restarts takes the completion back from the relay.
+		r.chat.Running = &agent.Running{Stream: stream, StartedAt: started.UnixMilli(), Effort: effort}
+		s.publish(r, -1)
 		r.mu.Unlock()
-		res, ans, err := s.complete(r, req, stream)
+		res, ans, err := s.complete(r, req, stream, resumed, started)
 		release()
 
 		r.mu.Lock()
@@ -554,6 +600,9 @@ func (s *Server) loop(r *agentRun) {
 func (s *Server) runCalls(r *agentRun, ref *runtimeRef, calls []agent.ToolCall, mode string) bool {
 	stop := false
 	for _, call := range calls {
+		if s.stopping() {
+			return true // the next pod runs it
+		}
 		r.mu.Lock()
 		if r.ctx.Err() != nil {
 			r.chat.Messages = append(r.chat.Messages, &agent.Message{Role: "tool", ToolCallID: call.ID, Name: call.Function.Name, Content: agent.String("Canceled by the user."), Status: "denied", Summary: agent.T("canceled", nil).Raw()})
@@ -671,6 +720,9 @@ func (s *Server) runCalls(r *agentRun, ref *runtimeRef, calls []agent.ToolCall, 
 				mm.ElapsedMs = time.Since(start).Milliseconds()
 				mm.Failure, mm.WaitMs = res.Failure, r.waited.Milliseconds()
 				r.waited = 0
+				if run := r.chat.Running; run != nil {
+					run.Proc, run.Console, run.Until = "", "", 0
+				}
 				idx = i
 				break
 			}

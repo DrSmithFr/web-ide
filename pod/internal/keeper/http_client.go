@@ -63,6 +63,11 @@ func (c *Client) OpenHTTP(ctx context.Context, id string, from int64) (*http.Res
 	case resp := <-heads:
 		return resp, nil
 	case msg := <-ended:
+		select {
+		case resp := <-heads: // an ended request: its head came first
+			return resp, nil
+		default:
+		}
 		stop()
 		if msg == "" {
 			msg = "the request ended without an answer"

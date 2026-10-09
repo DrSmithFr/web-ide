@@ -68,6 +68,9 @@ type Server struct {
 	// Version of the pod, shown by the page.
 	Version string
 
+	// stopped: the pod stops (Shutdown); the runs are left as they are, to be taken back.
+	stopped atomic.Bool
+
 	mu       sync.Mutex
 	clients  map[*Client]struct{}
 	runtimes map[string]*runtime.Runtime
@@ -619,6 +622,8 @@ func (s *Server) broadcast(name string, data any, except *Client) {
 // Shutdown stops every project runtime (consoles, language servers, databases); the
 // terminals of the keeper keep running.
 func (s *Server) Shutdown() {
+	s.stopped.Store(true)
+	s.saveRunning()
 	s.mu.Lock()
 	rts := s.runtimes
 	s.runtimes = map[string]*runtime.Runtime{}

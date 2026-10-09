@@ -312,7 +312,7 @@ func ExitCode(err error) int {
 	if err == nil {
 		return 0
 	}
-	var ee *exec.ExitError
+	var ee interface{ ExitCode() int } // exec.ExitError, a process of the keeper
 	if errors.As(err, &ee) {
 		return ee.ExitCode()
 	}

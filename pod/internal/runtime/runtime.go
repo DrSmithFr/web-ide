@@ -57,10 +57,12 @@ type Runtime struct {
 	Config ProjectConfig
 
 	Consoles *console.Manager
-	LSP      *lsp.Manager
-	DB       *db.Manager
-	Git      *git.Repo
-	Docker   *docker.Docker
+	// Keeper runs the processes that survive the pod (local projects with a keeper), else nil.
+	Keeper *keeper.Client
+	LSP    *lsp.Manager
+	DB     *db.Manager
+	Git    *git.Repo
+	Docker *docker.Docker
 
 	emit    Emit
 	watcher fsx.Watcher
@@ -125,6 +127,7 @@ func Open(p projects.Project, creds sshx.Creds, d Deps, emit Emit) (*Runtime, er
 	})
 	// Local terminals run in the keeper when there is one: they survive the pod updates.
 	if r.Local && d.Keeper != nil {
+		r.Keeper = d.Keeper
 		r.Consoles.UseKeeper(d.Keeper, p.ID)
 	}
 	exists := func(p string) bool { _, err := r.FS.Stat(p); return err == nil }

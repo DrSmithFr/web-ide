@@ -71,7 +71,10 @@ func TestRelay(t *testing.T) {
 		t.Fatalf("body: %v %q", err, string(buf[:n])+string(rest))
 	}
 	// From an offset, once ended.
-	resp, _ = c.OpenHTTP(context.Background(), "r1", 10)
+	resp, err = c.OpenHTTP(context.Background(), "r1", 10)
+	if err != nil {
+		t.Fatal("from 10:", err)
+	}
 	if b, _ := io.ReadAll(resp.Body); string(b) != want(15)[10:] {
 		t.Fatalf("from 10: %q", b)
 	}
