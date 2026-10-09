@@ -58,6 +58,9 @@ func (j *job) subscribe(f func(Delta)) (Snapshot, func()) {
 	defer j.mu.Unlock()
 	id := j.nextID
 	j.nextID++
+	if f == nil {
+		f = func(Delta) {}
+	}
 	j.subs[id] = f
 	snap := Snapshot{Delta: j.acc, StartedAt: j.started.UnixMilli()}
 	return snap, func() {
@@ -69,6 +72,19 @@ func (j *job) subscribe(f func(Delta)) (Snapshot, func()) {
 
 // StartChat starts a completion as a job identified by stream (chosen by the page).
 func (m *Manager) StartChat(stream string, req ChatRequest) error {
+	return m.startJob(stream, req, false, time.Now())
+}
+
+// ResumeChat takes back a completion the relay still runs for stream (the pod restarted): it
+// reads it again from its start, then follows it. started is when it was first asked.
+func (m *Manager) ResumeChat(stream string, req ChatRequest, started time.Time) error {
+	if m.Relay == nil {
+		return i18n.New("completion not found (the pod may have restarted)")
+	}
+	return m.startJob(stream, req, true, started)
+}
+
+func (m *Manager) startJob(stream string, req ChatRequest, resume bool, started time.Time) error {
 	if stream == "" {
 		return i18n.New("stream id is missing")
 	}
@@ -79,12 +95,15 @@ func (m *Manager) StartChat(stream string, req ChatRequest) error {
 		return i18n.New("stream already in use")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	j := &job{cancel: cancel, started: time.Now(), subs: map[int]func(Delta){}, done: make(chan struct{})}
+	j := &job{cancel: cancel, started: started, subs: map[int]func(Delta){}, done: make(chan struct{})}
 	m.jobs[stream] = j
 	m.mu.Unlock()
 	go func() {
 		defer cancel()
-		res, err := m.Chat(ctx, req, j.publish)
+		res, err := m.Chat(withStream(ctx, stream, resume), req, j.publish)
+		if ctx.Err() != nil && m.Relay != nil {
+			_ = m.Relay.Cancel(stream) // Stop: the relay stops asking the model too
+		}
 		j.mu.Lock()
 		j.result, j.err, j.ended = res, err, time.Now()
 		j.mu.Unlock()
