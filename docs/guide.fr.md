@@ -48,6 +48,22 @@ Le pod ne répond qu'à la machine locale. Pour l'utiliser depuis un portable, u
 
 Le script lance `tailscale serve`, qui donne au pod une adresse HTTPS avec un vrai certificat, comme `https://mon-pc.mon-tailnet.ts.net/?token=…`, joignable depuis tous les appareils du tailnet, à la maison comme ailleurs. Le HTTPS compte : les navigateurs ne donnent le micro (dictée) et le presse-papier qu'aux pages sécurisées. Si `tailscale serve` est refusé, autorisez votre utilisateur une fois avec `sudo tailscale set --operator=$USER`.
 
+### Depuis un autre réseau : le relay
+
+Le relay est une pièce optionnelle : il ne fait que présenter le navigateur et le pod, le traffic entre eux est chiffré et le relay ne voit jamais votre token. Lancez le vôtre :
+
+```sh
+web-ide-pod relay            # signaling + STUN/TURN + page de bootstrap, SQLite dans ~/.web-ide-relay
+```
+
+Puis démarrez un pod avec `-relay http://127.0.0.1:4430` (ou `relay` dans `config.json`). Le pod affiche son lien distant, aussi visible dans Réglages > Accès distant :
+
+```
+remote : http://127.0.0.1:4430/#pod=<id>&t=<token>
+```
+
+Ouvrez ce lien depuis n'importe quel navigateur d'un autre réseau : une petite page de bootstrap et un Service Worker viennent du relay, l'application elle-même vient de votre pod à travers le tunnel. Le pod garde un seul WebSocket sortant vers son relay (aucun port à ouvrir sur la machine) et se reconnecte seul ; le token est prouvé dans le DataChannel, lié aux empreintes des deux côtés. Si le relay est arrêté, `127.0.0.1` continue de fonctionner comme avant. Les credentials TURN sont de courte durée et donnés seulement à un pod enregistré et en ligne. Voir [relay.md](relay.md).
+
 ### Depuis les sources
 
 ```sh
