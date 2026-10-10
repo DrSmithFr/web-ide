@@ -772,8 +772,9 @@ export function Composer(props: {
       class="ai-composer-wrap"
       classList={{ full: fullComposer() && !props.inDoodle, [currentMode()]: true, busy: live.busy && live.state !== 'waiting_user', compacting: live.compacting }}
     >
-      {props.head}
       <div class="ai-led" data-testid="ai-led" />
+      {props.head}
+      <div class="ai-led" />
       <div class="ai-composer">
         <Show when={chat.queue?.length}>
           <div class="ai-queue" data-testid="ai-queue">

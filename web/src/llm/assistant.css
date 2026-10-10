@@ -148,15 +148,16 @@
 
 /* ---------- composer ---------- */
 /* Docked at the bottom of the tool, like an editor pane: a rule on top colored by the mode. */
-.ai-composer-wrap { --mode: var(--warn); position: relative; flex: none; display: flex; flex-direction: column; border-top: 1px solid var(--line); background: var(--bg); }
+.ai-composer-wrap { --mode: var(--warn); position: relative; flex: none; display: flex; flex-direction: column; background: var(--bg); }
 /* The color of the mode: the LED strip and the mode button. */
 .ai-composer-wrap.orchestrator { --mode: var(--ok); }
 .ai-composer-wrap.build { --mode: var(--warn); }
 .ai-composer-wrap.briefing { --mode: var(--mark-excluded); }
 .ai-composer-wrap.plan { --mode: var(--info); }
 .ai-composer-wrap.compacting { --mode: #b78cff; }
-/* LED strip under the ticket bar: a glow of the mode, brighter with the focus, pulsing while the assistant works. */
+/* LED strips above and under the ticket bar: a glow of the mode, brighter with the focus, pulsing while the assistant works. */
 .ai-led { flex: none; height: 2px; background: var(--mode); opacity: 0.55; box-shadow: 0 0 4px color-mix(in srgb, var(--mode) 50%, transparent); transition: opacity 0.15s, box-shadow 0.15s, background 0.3s; }
+.ai-led + .ai-led { display: none; }
 .ai-composer-wrap:focus-within .ai-led { opacity: 1; box-shadow: 0 0 6px 1px color-mix(in srgb, var(--mode) 75%, transparent), 0 0 14px color-mix(in srgb, var(--mode) 35%, transparent); }
 .ai-composer-wrap.busy .ai-led { animation: ai-led 1.6s ease-in-out infinite; }
 @keyframes ai-led { 50% { opacity: 0.3; box-shadow: 0 0 2px color-mix(in srgb, var(--mode) 30%, transparent); } }
