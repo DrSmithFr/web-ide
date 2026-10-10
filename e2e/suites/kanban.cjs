@@ -275,6 +275,10 @@ run(async ({ page, ctx }) => {
   const [b2, b5, b6] = [await box(2), await box(5), await box(6)]
   assert(Math.round(b5.y - b3.y) === 40 && Math.round(b6.y - b2.y) === 40, 'a lineage waiting for another one comes right below it')
   assert(Math.round(b2.y - b5.y) === 56, 'a gap between two groups of linked lineages')
+  await tool('kanban_create', { title: 'Lone one' })
+  await tool('kanban_create', { title: 'Lone two' })
+  await page.waitForSelector('[data-testid=roadmap-block-8]')
+  assert(Math.round((await box(8)).y - (await box(7)).y) === 40, 'no gap between two lone lineages')
   assert(!(await page.$('[data-testid=roadmap-block-1]')), 'a closed lineage is not on the roadmap')
   assert((await page.$$('[data-testid=roadmap-arrow]')).length === 2, 'arrows for the dependencies')
   await page.focus('[data-testid=roadmap-block-3]')

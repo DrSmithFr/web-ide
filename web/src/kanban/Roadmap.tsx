@@ -40,11 +40,14 @@ export function Roadmap(props: { tickets: Summary[]; query: string }) {
   const shown = createMemo(() => layout().rows.map((r, i) => ({ r, i })).filter(({ r }) => r.blocks.some((b) => match(b.ticket))))
   const place = createMemo(() => new Map(shown().map(({ i }, k) => [i, k])))
   const arrows = createMemo(() => layout().arrows.filter((a) => place().has(a.from.row) && place().has(a.to.row)))
-  // Top of each shown row: a gap where a group of linked lineages ends.
+  // Top of each shown row: a gap around a group of linked lineages, none between lone lineages.
   const tops = createMemo(() => {
+    const size = new Map<number, number>()
+    for (const { r } of shown()) size.set(r.group, (size.get(r.group) ?? 0) + 1)
     let y = 0
     return shown().map(({ r }, k) => {
-      if (k) y += r.group === shown()[k - 1].r.group ? ROW : ROW + GAP
+      const prev = shown()[k - 1]?.r
+      if (prev) y += prev.group !== r.group && (size.get(prev.group)! > 1 || size.get(r.group)! > 1) ? ROW + GAP : ROW
       return y
     })
   })
