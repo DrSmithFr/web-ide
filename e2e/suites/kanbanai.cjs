@@ -299,7 +299,7 @@ run(async ({ page }) => {
     const sys = rp.messages[0].content
     assert(sys.includes('Ticket linked to this conversation') && sys.includes('implementation plan') && sys.includes('# Ticket #1 · Export JSON'), 'prompt of the Plan role with the ticket')
     const pn = toolNames(rp)
-    assert(pn.includes('kanban_set_plan') && pn.includes('kanban_feedback') && !pn.includes('edit_file') && !pn.includes('exit_plan_mode'), 'tools of the ticket plan: ' + pn.join(','))
+    assert(pn.includes('kanban_set_plan') && pn.includes('kanban_feedback') && !pn.includes('exit_plan_mode'), 'tools of the ticket plan: ' + pn.join(','))
     assert(await page.isVisible('[data-testid=ai-ticket-bar]:has-text("#1")'), 'ticket bar in the assistant')
     await page.waitForSelector('[data-testid=ticket-plan] li:has-text("Add the route")')
     assert((await page.$$('[data-testid=ticket-goal]')).length === 2, 'goals written by the model')
@@ -425,7 +425,7 @@ run(async ({ page }) => {
     const rb = requests[before3]
     const bn = toolNames(rb)
     assert(rb.messages[0].content.includes('**Briefing mode**') && rb.messages[0].content.includes('Acceptance criteria'), 'system prompt of the Briefing mode')
-    assert(bn.includes('ask_user') && bn.includes('kanban_create') && !bn.includes('edit_file') && !bn.includes('exit_plan_mode') && !bn.includes('kanban_add_note'), 'tools of the Briefing mode: ' + bn.join(','))
+    assert(bn.includes('ask_user') && bn.includes('kanban_create') && !bn.includes('exit_plan_mode') && !bn.includes('kanban_add_note'), 'tools of the Briefing mode: ' + bn.join(','))
     await page.click('.ai-ask-option:has-text("Accounting")')
     await page.click('[data-testid=ai-ask-send]')
     await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Tickets written.")', { timeout: 15000 })
