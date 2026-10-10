@@ -71,6 +71,8 @@ const paths: Record<string, string> = {
   clock: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM12 7v5l3 3',
   chart: 'M4 4v16h16M8 16v-4M12 16V8M16 16v-7',
   warning: 'M12 3 2 20h20zM12 10v4M12 17v.5',
+  code: 'M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16',
+  eye: 'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12zM12 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6z',
 }
 
 export function Icon(props: { name: keyof typeof paths | string; size?: number; title?: string } & JSX.SvgSVGAttributes<SVGSVGElement>) {

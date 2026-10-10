@@ -447,6 +447,10 @@ func (s *Server) registerProject() {
 	s.handle("fs.related", withPath(func(ctx context.Context, c *Client, rt *runtime.Runtime, path string, p json.RawMessage) (any, error) {
 		return rt.FindRelated(ctx, path)
 	}))
+	// An image of the project as a data URL: the pictures of a rendered Markdown file.
+	s.handle("fs.image", withPath(func(ctx context.Context, c *Client, rt *runtime.Runtime, path string, p json.RawMessage) (any, error) {
+		return readImage(rt.FS, path)
+	}))
 
 	s.handle("search.grep", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
 		o, err := bind[search.Options](p)

@@ -9,6 +9,10 @@ run(async ({ page }) => {
   fs.writeFileSync(WS + '/demo/latin.txt', Buffer.from('caf\xe9\n', 'latin1'))
   fs.writeFileSync(WS + '/demo/long.md', '# Title\n\n' + Array.from({ length: 90 }, (_, i) => 'word' + i).join(' ') + '\nafter\n')
   fs.writeFileSync(WS + '/demo/conf.yaml', 'server:\n  host: x\n  ports:\n    - 80\n    - 443\nname: demo\n')
+  fs.mkdirSync(WS + '/demo/img', { recursive: true })
+  fs.writeFileSync(WS + '/demo/img/dot.png', Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==', 'base64'))
+  fs.writeFileSync(WS + '/demo/guide.md', '# Guide\n\nSee [the notes](notes.txt#L1) and [the web](https://example.com).\n\n![dot](img/dot.png)\n\n- [x] done\n- [ ] todo\n\n## Second part\n\n```go\nfunc main() {}\n```\n\n[Back up](#second-part)\n' +
+    Array.from({ length: 80 }, (_, i) => `\n## Section ${i}\n\nText ${i}.\n`).join(''))
   await openProject(page)
   await open(page, 'main.go')
 
@@ -267,8 +271,66 @@ run(async ({ page }) => {
   await page.keyboard.press('Control+z')
   await menuItem('indent', 'Tab')
 
+  // Markdown: rendered by default, the source with the floating button or Alt+M.
+  await open(page, 'guide.md')
+  const view = '.pane.active [data-testid=md-view]'
+  await page.waitForSelector(view + ' h1#guide')
+  assert(await page.$eval('.pane.active .editor-mount', (e) => e.inert), 'a Markdown file opens rendered, the source out of reach')
+  await page.waitForFunction((v) => document.querySelector(v + ' img')?.src.startsWith('data:image/png') && document.querySelector(v + ' img').naturalWidth === 1, view)
+  assert(true, 'an image of the project is shown')
+  assert((await page.$$(view + ' .md-codeblock .tok-keyword')).length > 0 && (await page.$$(view + ' input[type=checkbox]')).length === 2, 'code colored, task list checkboxes')
+  await page.click('.pane.active [data-testid=md-toggle]')
+  await page.waitForFunction(() => !document.querySelector('.pane.active [data-testid=md-view]') && document.activeElement?.closest('.pane.active .ed-content'))
+  assert(true, 'the button shows the source, with the keyboard')
+  await page.keyboard.press('Control+Home')
+  await page.keyboard.press('End')
+  await page.keyboard.type(' draft')
+  await page.keyboard.press('Alt+KeyM')
+  await page.waitForFunction((v) => document.querySelector(v + ' h1')?.textContent === 'Guide draft', view)
+  assert(await page.$('.pane.active .tab.active.dirty'), 'Alt+M shows the rendering of the unsaved text')
+  // Same place in the file both ways.
+  await page.$eval(view, (el) => (el.scrollTop = el.querySelector('#section-60').offsetTop))
+  await page.keyboard.press('Alt+KeyM')
+  await page.waitForSelector('.pane.active .editor-mount:not([inert])')
+  const sourceTop = await page.$eval('.pane.active .ed-scroll', (s) => Math.round(s.scrollTop / parseFloat(getComputedStyle(s.querySelector('.ed-content')).lineHeight)))
+  const line60 = fs.readFileSync(WS + '/demo/guide.md', 'utf8').split('\n').indexOf('## Section 60')
+  assert(Math.abs(sourceTop - line60) <= 2, 'the source opens where the rendering was ' + JSON.stringify([sourceTop, line60]))
+  await page.keyboard.press('Alt+KeyM')
+  await page.waitForSelector(view)
+  await page.waitForFunction((v) => {
+    const el = document.querySelector(v)
+    const h = el.querySelector('#section-60')
+    return h && Math.abs(h.getBoundingClientRect().top - el.getBoundingClientRect().top) < 80
+  }, view)
+  assert(true, 'and the rendering where the source was')
+  await page.screenshot({ path: OUT + '/editor-markdown.png' })
+  // A double-click goes to the source, the caret on the line of the block.
+  await page.$eval(view, (el) => (el.scrollTop = 0))
+  await page.dblclick(view + ' h2#second-part')
+  await page.waitForSelector('.pane.active .editor-mount:not([inert])')
+  assert((await item('cursor')).startsWith('10:'), 'a double-click shows the source at the line of the block: ' + (await item('cursor')))
+  // Ctrl+F searches the source.
+  await page.keyboard.press('Alt+KeyM')
+  await page.waitForSelector(view)
+  await page.keyboard.press('Control+f')
+  await page.waitForSelector('.pane.active .findbar')
+  assert(!(await page.$(view)), 'Ctrl+F shows the source with the find bar')
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Alt+KeyM')
+  // An anchor scrolls the rendering, a relative link opens the file of the project.
+  await page.$eval(view, (el) => (el.scrollTop = el.querySelector('a[href="#second-part"]').offsetTop))
+  await page.click(view + ' a:has-text("Back up")')
+  assert(await page.$eval(view, (el) => Math.abs(el.querySelector('#second-part').getBoundingClientRect().top - el.getBoundingClientRect().top) < 40), 'an anchor scrolls to its heading')
+  await page.$eval(view, (el) => (el.scrollTop = 0))
+  await page.click(view + ' a:has-text("the notes")')
+  await page.waitForFunction(() => document.querySelector('.pane.active .tab.active')?.textContent.includes('notes.txt') && document.activeElement?.closest('.pane.active .ed-content'))
+  assert(true, 'a relative link opens the file')
+  await page.waitForTimeout(300)
+
   // Soft wrap: on for Markdown by default, rows read from the layout, Alt+Z toggles it.
   await open(page, 'long.md')
+  await page.click('.pane.active [data-testid=md-toggle]')
+  await page.waitForSelector('.pane.active .editor-mount:not([inert])')
   const geo = () => page.evaluate(() => {
     const p = '.pane.active '
     const scroll = document.querySelector(p + '.ed-scroll')

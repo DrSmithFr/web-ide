@@ -85,7 +85,7 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 | `keys/` | Binding table and QWERTY / AZERTY presets |
 | `lsp/` | Client, completion, edits, rename and formatting |
 | `popups/` | Search Everywhere, Recent Files and the switcher, paste from history (the history itself: `ui/clipboard.ts`) |
-| `ui/` | Editor area, status bar, diff view, overlays (modal, prompt, pick list, context menu), toasts, icons, empty states, keyboard navigation of the toolbars and tab bars (`roving.ts`) |
+| `ui/` | Editor area, rendered Markdown files (`MarkdownView.tsx`), status bar, diff view, overlays (modal, prompt, pick list, context menu), toasts, icons, empty states, keyboard navigation of the toolbars and tab bars (`roving.ts`) |
 | `panels/` | Explorer (with file type icons, `fileIcons.tsx`), global search, Git tool (`panels/git/`: tabs, tree of changes, graph lanes `graph.ts`, commit detail) |
 | `tools/`, `db/`, `console/`, `conflict/`, `settings/`, `pages/` | Right-panel tools, database explorer, Console and Problems tools, conflict dialog, settings modal, pages |
 | `llm/` | AI assistant: state, agent loop, tools, prompt, Markdown, attachments, speech recognition, sub-agents (`SubAgents.tsx`), doodles (`llm/doodle/`: document model, SVG rendering, export, modal), the board of a conversation (`llm/board/`), app previews (`previews.ts`, `PreviewCard.tsx`) |

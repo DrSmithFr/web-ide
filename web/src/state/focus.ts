@@ -17,7 +17,7 @@ export function trackFocus(e: Event) {
 
 /** Gives the keyboard to the editor of the active pane. */
 export function focusEditor() {
-  document.querySelector<HTMLElement>('.pane.active .ed-content')?.focus()
+  document.querySelector<HTMLElement>('.pane.active .md-file-view, .pane.active .ed-content')?.focus()
 }
 
 /**

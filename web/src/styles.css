@@ -257,6 +257,21 @@ button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 .file-editor { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .editor-host { position: relative; flex: 1; min-height: 0; display: flex; }
 .editor-mount { position: absolute; inset: 0; display: flex; }
+.md-toggle { position: absolute; top: 8px; right: 22px; z-index: 12; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--bg-2) 88%, transparent); box-shadow: 0 2px 8px rgb(0 0 0 / 0.18); opacity: 0.75; transition: opacity 0.12s; }
+.md-toggle:hover, .md-toggle:focus-visible { opacity: 1; }
+.md-toggle.on { color: var(--accent); }
+.phone .md-toggle { right: 60px; top: 14px; width: 36px; height: 36px; opacity: 1; }
+.md-file-view { position: absolute; inset: 0; z-index: 5; overflow: auto; background: var(--bg); outline: none; }
+.md-file { max-width: 880px; margin: 0 auto; padding: 24px 48px 40vh; font-size: max(14px, calc(var(--font-size-code) + 1px)); }
+.phone .md-file { padding: 16px 16px 40vh; }
+.md-file h1, .md-file h2 { padding-bottom: 0.25em; border-bottom: 1px solid var(--line); }
+.md-file h1 { font-size: 1.8em; } .md-file h2 { font-size: 1.45em; } .md-file h3 { font-size: 1.2em; } .md-file h4 { font-size: 1.05em; }
+.md-file .md-block > :first-child { margin-top: 0.9em; }
+.md-file > .md-block:first-child > :first-child { margin-top: 0; }
+.md-file table { display: table; }
+.md-file li > input[type=checkbox] { margin: 0 0.4em 0 -1.3em; vertical-align: middle; }
+.md-file li:has(> input[type=checkbox]) { list-style: none; }
+.md-img-missing { display: inline-block; min-width: 24px; min-height: 24px; border: 1px dashed var(--line); }
 .banner { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 12.5px; flex-wrap: wrap; flex: none; }
 .banner-conflict { background: var(--conflict-bg); border-bottom: 1px solid var(--danger); }
 .banner-warn { background: color-mix(in srgb, var(--warn) 18%, var(--bg)); }

@@ -1487,6 +1487,12 @@ export class EditorView {
     return [this.lineOfRow(first), this.lineOfRow(last)]
   }
 
+  /** Scrolls so that a line is at the top. */
+  scrollToLine(line: number) {
+    this.scroller.scrollTop = this.lineTop(line) - this.padTop
+    this.schedule()
+  }
+
   render() {
     if (!this.root.isConnected) return
     const n = this.doc.lineCount

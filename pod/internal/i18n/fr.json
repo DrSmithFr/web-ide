@@ -209,5 +209,7 @@
   "the folder of “%s” must be inside the project": "le dossier de « %s » doit être dans le projet",
   "invalid port: %d": "port invalide : %d",
   "command not found: %s": "commande introuvable : %s",
-  "the command “%s” has no port": "la commande « %s » n’a pas de port"
+  "the command “%s” has no port": "la commande « %s » n’a pas de port",
+  "not an image": "ce n'est pas une image",
+  "image too large": "image trop grande"
 }

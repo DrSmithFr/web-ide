@@ -1782,5 +1782,8 @@
   "Runs the project command": "Lance la commande du projet",
   "{command}: already running": "{command} : déjà en cours",
   "{n} command": "{n} commande",
-  "{n} commands": "{n} commandes"
+  "{n} commands": "{n} commandes",
+  "Markdown: rendered / raw": "Markdown : rendu / brut",
+  "Show the source": "Afficher la source",
+  "Show the rendering": "Afficher le rendu"
 }

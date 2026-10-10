@@ -146,6 +146,9 @@
     "view.wordWrap": [
       "Alt+KeyZ"
     ],
+    "view.markdown": [
+      "Alt+KeyM"
+    ],
     "view.nextTab": [
       "Alt+PageDown"
     ],

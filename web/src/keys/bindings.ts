@@ -89,6 +89,7 @@ export const actions: ActionDef[] = [
   { id: 'view.focusDim', label: 'Dim out of focus', category: 'View', inTerminal: true },
   { id: 'view.whitespace', label: 'Show whitespace', category: 'View' },
   { id: 'view.wordWrap', label: 'Wrap the long lines', category: 'View' },
+  { id: 'view.markdown', label: 'Markdown: rendered / raw', category: 'View' },
   { id: 'tool.explorer', label: 'Explorer', category: 'Tools', inTerminal: true },
   { id: 'tool.search', label: 'Search', category: 'Tools', inTerminal: true },
   { id: 'tool.git', label: 'Git', category: 'Tools', inTerminal: true },

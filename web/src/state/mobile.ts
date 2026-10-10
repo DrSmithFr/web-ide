@@ -101,7 +101,7 @@ export function lockEditor() {
 
 /** Gives the focus to the editor (locked on a phone: no keyboard). */
 export function focusEditorQuietly() {
-  document.querySelector<HTMLElement>('.pane.active .ed-content')?.focus({ preventScroll: true })
+  document.querySelector<HTMLElement>('.pane.active .md-file-view, .pane.active .ed-content')?.focus({ preventScroll: true })
 }
 
 // Fields that open the keyboard: on a phone they take the focus only when the user touches

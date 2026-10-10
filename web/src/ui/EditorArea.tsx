@@ -37,6 +37,7 @@ import { dropClasses, dropIndex, setDropAt } from './tabDrop'
 import { focusPart } from '../state/focus'
 import { copyText } from './clipboard'
 import { WorktreeChip } from './WorktreeChip'
+import { isMarkdownPath, MarkdownView, showRaw, shownRaw, type MarkdownViewApi } from './MarkdownView'
 
 export function EditorArea(props: { detached?: boolean }) {
   return (
@@ -197,7 +198,7 @@ function Pane(props: { id: string }) {
                       // A click shows the tab and gives the keyboard to its content (the tab keeps
                       // the focus only from the keyboard).
                       activateTab(props.id, id)
-                      requestAnimationFrame(() => document.querySelector<HTMLElement>('.pane.active .ed-content')?.focus())
+                      requestAnimationFrame(() => document.querySelector<HTMLElement>('.pane.active .md-file-view, .pane.active .ed-content')?.focus())
                     }
                   }}
                   onKeyDown={(e) => {
@@ -407,6 +408,29 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
 
   const isActive = () => session.activePane === props.paneId && findLeaf(session.layout, props.paneId)?.active === props.tab.id
 
+  // Markdown: rendered by default, the source on demand, at about the same place.
+  const markdown = isMarkdownPath(path)
+  const rendered = () => markdown && !shownRaw(props.tab.id) && !!doc() && !error()
+  let md: MarkdownViewApi | undefined
+  const toggleMarkdown = (caretLine?: number) => {
+    const v = view()
+    if (!v) return
+    if (rendered()) {
+      const top = md?.topLine() ?? 0
+      showRaw(props.tab.id, true)
+      if (caretLine !== undefined) v.setSelection(v.doc.offset(caretLine, 0), undefined, false)
+      v.scrollToLine(top)
+      requestAnimationFrame(() => v.focus())
+    } else {
+      const top = v.visibleLines()[0]
+      showRaw(props.tab.id, false)
+      requestAnimationFrame(() => {
+        md?.scrollToLine(top)
+        md?.focus()
+      })
+    }
+  }
+
   // The completion needs the view, the view forwards keys and keystrokes to the completion.
   let completion: ReturnType<typeof useCompletion> | null = null
   const view = useEditorView(doc, hostEl, {
@@ -465,6 +489,8 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
     const v = view()
     if (!r || !v || r.path !== path || !untrack(isActive)) return
     untrack(() => {
+      if (r.seq > revealSeen && rendered()) showRaw(props.tab.id, true)
+      revealSeen = Math.max(revealSeen, r.seq)
       const t = r.target
       const from = t.offset ?? v.doc.offset(t.line ?? 0, t.col ?? 0)
       v.setSelection(from, t.end ?? from, false)
@@ -573,11 +599,13 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
     registerAction('edit.foldAll', when((v) => v.foldAll(), true)),
     registerAction('edit.unfoldAll', when((v) => v.unfoldAll(), true)),
     registerAction('view.wordWrap', when((_, d) => toggleWrap(d))),
+    registerAction('view.markdown', () => (markdown && isActive() ? toggleMarkdown() : false)),
     registerAction('nav.subwordLeft', when((v) => v.moveSubword(-1, false), true)),
     registerAction('nav.subwordRight', when((v) => v.moveSubword(1, false), true)),
     registerAction('nav.subwordLeftSelect', when((v) => v.moveSubword(-1, true), true)),
     registerAction('nav.subwordRightSelect', when((v) => v.moveSubword(1, true), true)),
     registerAction('search.find', when((v) => {
+      if (rendered()) toggleMarkdown()
       if (findOpen() && !v.hasFocus()) {
         setFindOpen(false)
         v.focus()
@@ -713,7 +741,22 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
       </Show>
       <div class="editor-host" onContextMenu={editorMenu}>
         {/* The view is mounted by hand: it gets its own node, never touched by Solid. */}
-        <div class="editor-mount" ref={host} />
+        <div class="editor-mount" ref={host} inert={rendered()} />
+        <Show when={rendered()}>
+          <MarkdownView doc={doc()!} path={path} api={(a) => (md = a)} onEdit={(line) => toggleMarkdown(line)} />
+        </Show>
+        <Show when={markdown && doc() && !error() && !findOpen()}>
+          <button
+            class="icon-btn md-toggle"
+            classList={{ on: !rendered() }}
+            title={`${rendered() ? t('Show the source') : t('Show the rendering')} (${shortcutOf('view.markdown')})`}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => toggleMarkdown()}
+            data-testid="md-toggle"
+          >
+            <Icon name={rendered() ? 'code' : 'eye'} size={16} />
+          </button>
+        </Show>
         <Show when={findOpen() && view() && doc()}>
           <FindBar view={view()!} doc={doc()!} initial={findInitial()} focusSignal={findFocus()} onClose={() => setFindOpen(false)} />
         </Show>
@@ -722,6 +765,9 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
     </div>
   )
 }
+
+/** Reveals handled: an old one does not show the source of a Markdown file opened again. */
+let revealSeen = 0
 
 /** Read-only text (DDL, definitions, merge markers). */
 function TextViewer(props: { tab: TabState; paneId: string }) {

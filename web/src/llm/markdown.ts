@@ -80,6 +80,51 @@ export function renderMarkdown(text: string): string {
   return DOMPurify.sanitize(html, { ADD_ATTR: ['target', 'data-src', 'data-closed'], FORBID_TAGS: ['style', 'form', 'input'] })
 }
 
+/**
+ * HTML of a Markdown file: each top-level block in a div whose data-line is the line where
+ * it starts (scroll and double-click back to the source), headings with a slug id (links
+ * to #anchors). Links keep their target: the view of the file handles the clicks. Images
+ * of the project lose their src for a data-path (the view reads them through the pod).
+ */
+export function renderMarkdownFile(text: string): DocumentFragment {
+  const tokens = md.lexer(text)
+  const slugs = new Map<string, number>()
+  let line = 0
+  let html = ''
+  for (const tok of tokens) {
+    const start = line
+    line += tok.raw.split('\n').length - 1
+    if (tok.type === 'space' || tok.type === 'def') continue
+    let block = md.parser(Object.assign([tok], { links: tokens.links }))
+    if (tok.type === 'heading') {
+      const base = slug((tok as Tokens.Heading).text)
+      const n = slugs.get(base) ?? 0
+      slugs.set(base, n + 1)
+      block = block.replace(/^<h(\d)>/, `<h$1 id="${n ? `${base}-${n}` : base}">`)
+    }
+    html += `<div class="md-block" data-line="${start}">${block}</div>`
+  }
+  // A fragment of an inert document: its images load nothing until the view places them.
+  const frag = DOMPurify.sanitize(html, { ADD_ATTR: ['data-src', 'data-closed', 'data-line'], FORBID_TAGS: ['style', 'form'], RETURN_DOM_FRAGMENT: true })
+  for (const img of frag.querySelectorAll('img')) {
+    const src = img.getAttribute('src') ?? ''
+    if (/^([a-z][a-z0-9+.-]*:|\/\/)/i.test(src)) continue
+    img.dataset.path = src
+    img.removeAttribute('src')
+  }
+  return frag
+}
+
+/** GitHub-like anchor of a heading. */
+export function slug(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/<[^>]*>|[`*_~]/g, '')
+    .replace(/[^\p{L}\p{N}\s-]/gu, '')
+    .trim()
+    .replace(/\s/g, '-')
+}
+
 let mermaidSeq = 0
 let mermaidLoad: Promise<any> | null = null
 /** Diagrams already drawn, by source and theme: re-inserted at once on each render. */
