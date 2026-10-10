@@ -148,11 +148,19 @@
 
 /* ---------- composer ---------- */
 /* Docked at the bottom of the tool, like an editor pane: a rule on top colored by the mode. */
-.ai-composer-wrap { --rule: transparent; position: relative; flex: none; display: flex; flex-direction: column; border-top: 1px solid var(--line); background: var(--bg); }
-.ai-composer-wrap::before { content: ''; position: absolute; left: 0; right: 0; top: -1px; height: 2px; z-index: 4; background: var(--rule); transition: background 0.12s; pointer-events: none; }
-.ai-composer-wrap.plan, .ai-composer-wrap.orchestrator { --rule: color-mix(in srgb, var(--info) 55%, transparent); }
-.ai-composer-wrap.briefing { --rule: color-mix(in srgb, var(--warn) 55%, transparent); }
-.ai-composer-wrap:focus-within { --rule: color-mix(in srgb, var(--accent) 70%, transparent); }
+.ai-composer-wrap { --mode: var(--warn); position: relative; flex: none; display: flex; flex-direction: column; border-top: 1px solid var(--line); background: var(--bg); }
+/* The color of the mode: the LED strip and the mode button. */
+.ai-composer-wrap.orchestrator { --mode: var(--ok); }
+.ai-composer-wrap.build { --mode: var(--warn); }
+.ai-composer-wrap.briefing { --mode: var(--mark-excluded); }
+.ai-composer-wrap.plan { --mode: var(--info); }
+.ai-composer-wrap.compacting { --mode: #b78cff; }
+/* LED strip under the ticket bar: a glow of the mode, brighter with the focus, pulsing while the assistant works. */
+.ai-led { flex: none; height: 2px; background: var(--mode); opacity: 0.55; box-shadow: 0 0 4px color-mix(in srgb, var(--mode) 50%, transparent); transition: opacity 0.15s, box-shadow 0.15s, background 0.3s; }
+.ai-composer-wrap:focus-within .ai-led { opacity: 1; box-shadow: 0 0 6px 1px color-mix(in srgb, var(--mode) 75%, transparent), 0 0 14px color-mix(in srgb, var(--mode) 35%, transparent); }
+.ai-composer-wrap.busy .ai-led { animation: ai-led 1.6s ease-in-out infinite; }
+@keyframes ai-led { 50% { opacity: 0.3; box-shadow: 0 0 2px color-mix(in srgb, var(--mode) 30%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .ai-composer-wrap.busy .ai-led { animation: none; } }
 .ai-composer { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px 6px 14px; }
 .ai-editing { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--warn); }
 .ai-editor { display: flex; min-height: 24px; max-height: 40vh; }
@@ -331,11 +339,10 @@
 
 /* Plan / Build */
 .ai-mode { display: inline-flex; align-items: center; gap: 5px; height: 28px; max-width: 200px; padding: 0 9px; margin-right: 4px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--fg-muted); cursor: pointer; font-size: 12px; min-width: 0; }
-.ai-mode:hover { color: var(--fg); background: var(--bg-hover); }
-.ai-mode.plan { color: var(--info); border-color: color-mix(in srgb, var(--info) 55%, var(--line)); background: color-mix(in srgb, var(--info) 12%, transparent); }
+.ai-mode:hover { background: color-mix(in srgb, var(--mode) 22%, transparent); }
+.ai-mode { color: var(--mode); border-color: color-mix(in srgb, var(--mode) 55%, var(--line)); background: color-mix(in srgb, var(--mode) 12%, transparent); }
 .ai-mode-model { color: var(--fg-muted); }
 .ai-plan-badge { background: color-mix(in srgb, var(--info) 18%, transparent); color: var(--info); margin-left: 4px; }
-.ai-mode.briefing { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); background: color-mix(in srgb, var(--warn) 12%, transparent); }
 .ai-briefing-badge { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); margin-left: 4px; }
 .ai-plan { border: 1px solid color-mix(in srgb, var(--info) 50%, var(--line)); border-radius: 12px; background: var(--bg-2); padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
 .ai-plan.done { border-color: var(--line); }
@@ -452,7 +459,6 @@
 .ai-capture { display: flex; align-items: center; gap: 8px; margin: 4px 0 4px 22px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line)); border-radius: 10px; background: var(--bg-2); flex-wrap: wrap; }
 .ai-action { display: flex; align-items: center; gap: 10px; margin: 4px 0 4px 22px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line)); border-radius: 10px; background: var(--bg-2); }
 .ai-action.used { border-color: var(--line); }
-.ai-mode.orchestrator { color: var(--info); border-color: color-mix(in srgb, var(--info) 55%, var(--line)); background: color-mix(in srgb, var(--info) 12%, transparent); }
 .ai-child { display: grid; gap: 4px; margin: 4px 0 4px 22px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-2); }
 .ai-model-conf { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .ai-model-conf input[name=modelId] { flex: 1 1 160px; min-width: 0; }

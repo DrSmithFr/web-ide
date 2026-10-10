@@ -105,6 +105,15 @@ run(async ({ page, ctx }) => {
     // line and continues the lists, @paths stand out, Ctrl+S sends.
     const xs = await page.evaluate(() => ['[data-testid=ai-mode]', '.ai-mic', '[data-testid=ai-attach]', '[data-testid=ai-options]'].map((s) => document.querySelector('.ai-composer-bar ' + s).getBoundingClientRect().left))
     assert(xs.every((x, i) => i === 0 || x > xs[i - 1]), 'bar order: Mode, Dictate, Attach, Options')
+    assert((await page.textContent('.ai-editor .ed-hint')) === 'Message…', 'short placeholder')
+    // The LED strip takes the color of each mode (a click on the mode button cycles through the four).
+    const leds = []
+    for (let i = 0; i < 4; i++) {
+      await page.waitForTimeout(400)
+      leds.push(await page.$eval('[data-testid=ai-led]', (e) => getComputedStyle(e).backgroundColor))
+      await page.click('[data-testid=ai-mode]')
+    }
+    assert(new Set(leds).size === 4, 'a LED color per mode ' + leds.join(' '))
     await page.click('.ai-composer .ed-content')
     for (const k of ['Steps:', 'Enter', '- one', 'Enter', 'two', 'Enter', 'Enter', '1. a', 'Enter', 'b', 'Enter', 'Enter', '- [x] done', 'Enter', 'next', 'Enter', 'Enter', 'see @src/main.go']) {
       if (k === 'Enter') await page.keyboard.press('Enter')
@@ -113,7 +122,7 @@ run(async ({ page, ctx }) => {
     await page.keyboard.press('Escape')
     const listed = 'Steps:\n- one\n- two\n1. a\n2. b\n- [x] done\n- [ ] next\nsee @src/main.go'
     assert((await composerText(page)) === listed, 'Enter adds a line and continues the lists ' + JSON.stringify(await composerText(page)))
-    assert(await page.evaluate(() => CSS.highlights.get('ai-ref')?.size === 1), 'the @path is highlighted')
+    assert(await page.waitForFunction(() => CSS.highlights.get('ai-ref')?.size === 1, null, { timeout: 3000 }).then(() => true, () => false), 'the @path is highlighted')
     await page.screenshot({ path: OUT + '/chat-composer-editor.png' })
     await page.keyboard.press('Control+s')
     await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Answer to Steps:")', { timeout: 20000 })

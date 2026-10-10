@@ -712,7 +712,7 @@ export function Composer(props: {
     }
   }
 
-  const placeholder = () => (live.busy ? t('Write on: the message will wait for the next step…') : config.model ? t('Message to {model}…', { model: config.model }) : t('Choose a model to start…'))
+  const placeholder = () => (!config.model ? t('Choose a model…') : live.busy ? t('Queued message…') : t('Message…'))
   onMount(() => {
     const v = new EditorView(doc, {
       tabSize: settings.editor.tabSize,
@@ -770,9 +770,10 @@ export function Composer(props: {
   return (
     <div
       class="ai-composer-wrap"
-      classList={{ full: fullComposer() && !props.inDoodle, plan: currentMode() === 'plan', briefing: currentMode() === 'briefing', orchestrator: currentMode() === 'orchestrator' }}
+      classList={{ full: fullComposer() && !props.inDoodle, [currentMode()]: true, busy: live.busy && live.state !== 'waiting_user', compacting: live.compacting }}
     >
       {props.head}
+      <div class="ai-led" data-testid="ai-led" />
       <div class="ai-composer">
         <Show when={chat.queue?.length}>
           <div class="ai-queue" data-testid="ai-queue">
