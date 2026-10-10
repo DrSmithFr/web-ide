@@ -5,11 +5,12 @@ import { batch, createEffect, createSignal, For, type JSX, on, onCleanup, onMoun
 import { Portal } from 'solid-js/web'
 import { request } from '../pod/rpc'
 import { activeTab, basename, openFile, relPath, session } from '../state/project'
-import { actions, isCapturingKeys, runAction, shortcutOf } from '../keys/bindings'
+import { actionLabel, allActions, isCapturingKeys, runAction, shortcutOf } from '../keys/bindings'
 import { lspLanguage } from '../editor/languages'
 import * as lspc from '../lsp/client'
 import { fuzzy } from '../ui/overlay'
 import { FileIcon } from '../panels/fileIcons'
+import { Icon } from '../ui/icons'
 import { keepFocus } from '../state/focus'
 import { t } from '../i18n'
 import './popups.css'
@@ -106,15 +107,17 @@ async function findSymbols(q: string, max: number, signal: AbortSignal) {
     )
 }
 
+/** The actions, the saved commands of the project first (dynamic actions with an icon). */
 function findActions(q: string, max: number) {
-  const all = actions.map((a) => ({ a, label: t(a.label), category: t(a.category) }))
+  const list = allActions()
+  const all = [...list.filter((a) => a.run), ...list.filter((a) => !a.run)].map((a) => ({ a, label: actionLabel(a), category: t(a.category) }))
   const ranked = !q ? all : all.map((x) => ({ ...x, s: Math.max(fuzzy(q, x.label), fuzzy(q, x.category) * 0.5) })).filter((x) => x.s > 0).sort((a, b) => b.s - a.s)
   return ranked.slice(0, max).map(
     ({ a, label, category }): Hit => ({
       label,
-      detail: category,
+      detail: a.detail ?? category,
       hint: shortcutOf(a.id),
-      icon: () => <span class="se-glyph">›</span>,
+      icon: () => (a.icon ? <Icon name={a.icon} size={13} /> : <span class="se-glyph">›</span>),
       run: () => requestAnimationFrame(() => runAction(a.id)),
     }),
   )

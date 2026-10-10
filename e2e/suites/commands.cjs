@@ -1,6 +1,6 @@
 // Saved commands of the project: quick access of the empty Console, modal list + detail
 // (bash editor), ▶ menu, one console per command with Restart in the same tab, ad hoc
-// command saved, .ide/commands.json.
+// command saved, .ide/commands.json; the commands in Search Everywhere and their shortcuts.
 const fs = require('fs')
 const { run, openProject, assert, OUT, WS } = require('../common.cjs')
 
@@ -16,6 +16,8 @@ run(async ({ page }) => {
   await openProject(page)
   if (!(await page.isVisible('.console-tabs'))) await page.keyboard.press('Alt+F12')
   await page.waitForSelector('[data-testid=quick-commands]')
+  // The tool shown takes the keyboard a few frames later: typing in the modal waits for it.
+  await page.waitForTimeout(500)
 
   // Empty Console without commands: New terminal and Create a command.
   assert(await page.isVisible('[data-testid=quick-commands] button:has-text("New terminal")'), 'empty Console offers a new terminal')
@@ -122,4 +124,66 @@ run(async ({ page }) => {
   await page.waitForSelector('[data-testid=cmd-save]:disabled')
   assert(JSON.parse(fs.readFileSync(file, 'utf8')).commands.length === 2, 'command deleted')
   await page.screenshot({ path: OUT + '/commands-console.png' })
+  await page.click('.cmd-modal .modal-foot button:has-text("Cancel")')
+  await page.waitForSelector('.cmd-modal', { state: 'detached' })
+
+  // Search Everywhere: one action per command, with its flag icon and description; Enter runs it.
+  // A console just shown takes the keyboard a few frames later: the query is typed once it settled.
+  const palette = async (q) => {
+    await page.waitForTimeout(300)
+    await page.keyboard.press('Control+Shift+a')
+    await page.click('.pick.se .pick-input')
+    await page.keyboard.press('Control+a')
+    await page.keyboard.type(q)
+  }
+  await palette('build')
+  await page.waitForSelector('.pick-item:has-text("Run: Build")')
+  const hit = await page.textContent('.pick-item.selected')
+  assert(hit.includes('Run: Build') && hit.includes('Prints its folder') && (await page.isVisible('.pick-item.selected .pick-icon svg')), 'command in Search Everywhere with its icon and description: ' + hit)
+  await page.screenshot({ path: OUT + '/commands-search.png' })
+  asked = ''
+  await page.keyboard.press('Enter')
+  await page.waitForSelector('.pick.se', { state: 'detached' })
+  await page.waitForSelector('.console-tabs .tab.active:has-text("Build")')
+  assert(asked === '', 'an ended command runs from Search Everywhere')
+  await palette('dev server')
+  await page.waitForSelector('.pick-item.selected:has-text("Run: Dev server")')
+  await page.keyboard.press('Enter')
+  await page.waitForFunction(() => document.querySelector('.console-tabs .tab.active')?.textContent.includes('Dev server'))
+  assert(/Restart/.test(asked), 'a running command asks Restart from Search Everywhere: ' + asked)
+
+  // Keymap settings: the commands under their category, no default shortcut; one is set.
+  await palette('settings')
+  await page.waitForSelector('.pick-item.selected:has-text("Settings")')
+  await page.keyboard.press('Enter')
+  await page.waitForSelector('.settings')
+  await page.click('.settings-nav button:has-text("Keyboard shortcuts")')
+  await page.fill('.settings-body input[placeholder*="category"]', 'project commands')
+  await page.waitForSelector('.keys-table tr:has-text("Run: Build")')
+  const row = '.keys-table tr:has-text("Run: Build")'
+  assert((await page.textContent(row)).includes('Project commands') && !(await page.$(row + ' kbd')), 'command in the keymap, no default shortcut')
+  await page.click(row + ' button:has-text("+")')
+  await page.keyboard.press('Control+Alt+Shift+B')
+  await page.waitForSelector(row + ' kbd:has-text("Ctrl+Alt+Shift+B")')
+  assert(true, 'shortcut set for a command')
+  await page.click('.modal-settings .modal-head .icon-btn')
+  await page.waitForSelector('.settings', { state: 'detached' })
+
+  // Renamed, the command keeps its shortcut (bound by id), which runs it.
+  await page.click('[data-testid=console-commands]')
+  await page.click('.ctx-item:has-text("Edit commands…")')
+  await page.click('[data-testid=cmd-item]:has-text("Build")')
+  await page.fill('[data-testid=cmd-name]', 'Build all')
+  await page.click('[data-testid=cmd-save]')
+  await page.waitForSelector('[data-testid=cmd-save]:disabled')
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('.cmd-modal', { state: 'detached' })
+  await page.click('.console-tabs .tab:has-text("Dev server")')
+  await page.keyboard.press('Control+Alt+Shift+B')
+  await page.waitForSelector('.console-tabs .tab.active:has-text("Build all")')
+  assert(true, 'the shortcut runs the renamed command, from a terminal')
+  await palette('build all')
+  await page.waitForSelector('.pick-item.selected:has-text("Run: Build all") kbd:has-text("Ctrl+Alt+Shift+B")')
+  assert(true, 'Search Everywhere shows the shortcut of the command')
+  await page.keyboard.press('Escape')
 })

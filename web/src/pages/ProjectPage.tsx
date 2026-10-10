@@ -13,6 +13,7 @@ import { settings, updateSettings } from '../state/settings'
 import { navigate } from '../app/router'
 import { EditorArea } from '../ui/EditorArea'
 import { ConsoleTool, ProblemsTool, newConsole, problemCount, refreshConsoles, setConsoleList } from '../console/consoles'
+import { loadCommands } from '../console/commands'
 import { createIn, Explorer } from '../panels/Explorer'
 import { GlobalSearch, focusGlobalSearch } from '../panels/GlobalSearch'
 import { GitPanel } from '../panels/git/GitPanel'
@@ -568,6 +569,7 @@ export function ProjectPage(props: { id: string }) {
       }
       setReady(true)
       refreshGit(0)
+      void loadCommands() // their shortcuts and Search Everywhere entries
       window.name = `project-${props.id}` // see openWorktreeWindow
     } catch (e) {
       setError((e as Error).message)
