@@ -88,6 +88,21 @@ func TestStaysIn(t *testing.T) {
 		{"~/scripts/deploy.sh", "/p", false},
 		{"/opt/tools/bin/unknown-tool x", "/p", false},
 		{"./run.sh", "/p", true},
+		// Here-documents are input, not commands; the command and its redirection are checked.
+		{"cat > /tmp/v.mjs <<'EOF'\n// a comment\nconst t = `${x}/../../etc`\nEOF\nnode /tmp/v.mjs", "/p", true},
+		{"python3 - <<EOF\np = 'go.mod' // indirect\nEOF", "/p", true},
+		{"cat <<-EOF > x.txt\n\t/etc/passwd\n\tEOF\ncat x.txt", "/p", true},
+		{"cat > /etc/f <<'EOF'\nx\nEOF", "/p", false},
+		{"cat > f <<EOF\n$(rm -rf /x)\nEOF", "/p", false},
+		{"cat > f <<'EOF'\n$(not run)\nEOF\nrm -rf /x", "/p", false},
+		// A quoted argument is one word.
+		{`git commit -q -m "Step 2: proofs / fingerprints\n\nkeys ~ certs"`, "/p", true},
+		{`rm "/etc/passwd"`, "/p", false},
+		{"go test ./... -coverprofile /dev/null", "/p", true},
+		// A shell given a command: that command is checked.
+		{`bash -c "rm -rf /x"`, "/p", false},
+		{`sh -ec 'make && rm -rf build'`, "/p", true},
+		{`eval "rm -rf ~"`, "/p", false},
 	} {
 		if got := StaysIn(c.cmd, c.cwd, "/p", Scratch); got != c.stay {
 			t.Errorf("StaysIn(%q, cwd %q) = %v, want %v", c.cmd, c.cwd, got, c.stay)

@@ -136,7 +136,8 @@ func pathOf(dir, w string) string {
 	return resolvePath(dir, w)
 }
 
-const ops = "|;&<>\n"
+// ops are the operators hidden inside quotes, with the blanks: a quoted word stays one word.
+const ops = "|;&<>\n \t"
 
 // redirMark starts the word that replaces an output redirection: the mark, then the target.
 const redirMark = "\ue010"
@@ -151,7 +152,43 @@ var (
 	quotedWord   = regexp.MustCompile(`^(['"])(.*)(['"])$`)
 	assignment   = regexp.MustCompile(`^\w+=`)
 	flagWithArg  = regexp.MustCompile(`^-[nIPLdsEk]$`)
+	heredoc      = regexp.MustCompile(`(^|[^<])<<(-?)[ \t]*(?:'(\w+)'|"(\w+)"|\\?(\w+))`)
 )
+
+// stripHeredocs removes the bodies of the here-documents, the input of a command and not
+// commands (`cat > /tmp/x.js <<'EOF'`, `python3 - <<EOF`), and their markers. False when the
+// body of an unquoted one has a substitution, which the shell runs. A marker without its
+// closing line is left as it is.
+func stripHeredocs(c string) (string, bool) {
+	lines := strings.Split(c, "\n")
+	var out []string
+	for i := 0; i < len(lines); i++ {
+		ms := heredoc.FindAllStringSubmatch(lines[i], -1)
+		if ms == nil {
+			out = append(out, lines[i])
+			continue
+		}
+		end := i
+		for _, m := range ms {
+			delim := m[3] + m[4] + m[5]
+			j := end + 1
+			for j < len(lines) && (m[2] == "" && lines[j] != delim || m[2] != "" && strings.TrimLeft(lines[j], "\t") != delim) {
+				j++
+			}
+			if j == len(lines) {
+				return c, true
+			}
+			body := strings.Join(lines[end+1:j], "\n")
+			if m[5] != "" && (strings.Contains(body, "$(") || strings.Contains(body, "`")) {
+				return "", false
+			}
+			end = j
+		}
+		out = append(out, heredoc.ReplaceAllString(lines[i], "$1"))
+		i = end
+	}
+	return strings.Join(out, "\n"), true
+}
 
 // mask hides the operators inside quotes (private use characters), unmask puts them back.
 func mask(q string) string {
@@ -165,7 +202,7 @@ func mask(q string) string {
 
 func unmask(w string) string {
 	return strings.Map(func(r rune) rune {
-		if r >= 0xe000 && r <= 0xe005 {
+		if r >= 0xe000 && r < 0xe000+rune(len(ops)) {
 			return rune(ops[r-0xe000])
 		}
 		return r
@@ -177,7 +214,11 @@ func unmask(w string) string {
 // substitutions are walked first, from cwd. False when it cannot follow the command or when
 // each returns false.
 func walk(command, cwd string, each func(words []string, dir string, redirs []string) bool) bool {
-	c := strings.ReplaceAll(command, "\\\n", " ")
+	c, ok := stripHeredocs(command)
+	if !ok {
+		return false
+	}
+	c = strings.ReplaceAll(c, "\\\n", " ")
 	// Substitutions: walked, then replaced by a plain word.
 	for guard := 0; strings.Contains(c, "$(") || strings.Contains(c, "`"); guard++ {
 		m := substitution.FindStringSubmatchIndex(c)
@@ -253,6 +294,9 @@ func RunsFreely(command, root, cwd string) bool {
 	})
 }
 
+// Shells that run the command given by -c.
+var shells = setOf("sh", "bash", "zsh", "dash")
+
 // Commands that act beyond the files given to them: privileges, other machines, services,
 // processes.
 var escapes = setOf("sudo", "su", "doas", "pkexec", "ssh", "scp", "sftp", "systemctl", "service", "shutdown", "reboot", "mount", "umount", "chroot", "crontab", "kill", "pkill", "killall")
@@ -262,6 +306,7 @@ var escapes = setOf("sudo", "su", "doas", "pkexec", "ssh", "scp", "sftp", "syste
 // folders, write their output in them (or /dev/null), and their path arguments resolve in
 // them. A guess like RunsFreely: a path made of a variable or of the home asks.
 func StaysIn(command, cwd string, dirs ...string) bool {
+	args := append(dirs[:len(dirs):len(dirs)], "/dev/null") // where path arguments may be
 	return walk(command, cwd, func(words []string, dir string, redirs []string) bool {
 		for _, t := range redirs {
 			if t != "/dev/null" && !InZone(t, dirs...) {
@@ -274,12 +319,19 @@ func StaysIn(command, cwd string, dirs ...string) bool {
 		if !InZone(dir, dirs...) || escapes[words[0]] {
 			return false
 		}
+		// A shell given a command (`bash -c "…"`, `eval "…"`): that command is checked.
+		if words[0] == "eval" {
+			return StaysIn(strings.Join(words[1:], " "), dir, dirs...)
+		}
+		if shells[words[0]] && len(words) > 2 && strings.HasPrefix(words[1], "-") && strings.Contains(words[1], "c") {
+			return StaysIn(words[2], dir, dirs...)
+		}
 		for _, w := range words {
 			if strings.HasPrefix(w, "-") {
 				_, w, _ = strings.Cut(w, "=") // --out=path
 			}
 			w = strings.Trim(w, `'"`)
-			if (strings.Contains(w, "/") || strings.HasPrefix(w, "~") || strings.Contains(w, "$")) && !InZone(pathOf(dir, w), dirs...) {
+			if (strings.Contains(w, "/") || strings.HasPrefix(w, "~") || strings.Contains(w, "$")) && !InZone(pathOf(dir, w), args...) {
 				return false
 			}
 		}
