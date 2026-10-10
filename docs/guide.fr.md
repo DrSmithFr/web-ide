@@ -56,6 +56,8 @@ Le relay est une pièce optionnelle : il ne fait que présenter le navigateur et
 web-ide-pod relay            # signaling + STUN/TURN + page de bootstrap, SQLite dans ~/.web-ide-relay
 ```
 
+Son propre dossier de données (`~/.web-ide-relay`, `-data` seulement quand il est donné explicitement), il ne partage donc pas celui du pod. Options : `-addr` (`127.0.0.1:4430`), `-turn-port` (3478), `-turn-ip` (l'IP annoncée aux clients), `-tls-port` (443, partagé avec HTTPS et TURN over TLS ; un port en dessous de 1024 demande root, et TURN over TLS est simplement désactivé quand il ne peut pas être lié). Ouvrez le lien affiché par le pod — `#pod=<id>&t=<token>`, le token reste dans le hash et ne parvient jamais au relay.
+
 Puis démarrez un pod avec `-relay http://127.0.0.1:4430` (ou `relay` dans `config.json`). Le pod affiche son lien distant, aussi visible dans Réglages > Accès distant :
 
 ```

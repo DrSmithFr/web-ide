@@ -11,7 +11,7 @@ const session = rand()
 const fr = (navigator.languages?.[0] ?? navigator.language ?? 'en').startsWith('fr')
 const words = {
   connecting: fr ? 'Connexion…' : 'Connecting…',
-  nopod: fr ? 'Aucun pod indiqué. Ouvrez <relay>/?pod=<id>&t=<token>.' : 'No pod given. Open <relay>/?pod=<id>&t=<token>.',
+  nopod: fr ? 'Aucun pod indiqué. Ouvrez <relay>/#pod=<id>&t=<token>.' : 'No pod given. Open <relay>/#pod=<id>&t=<token>.',
   offline: fr ? 'Ce pod n’est pas en ligne sur le relay.' : 'This pod is not online at the relay.',
   connected: fr ? 'Connecté.' : 'Connected.',
   loading: fr ? 'Chargement de l’IDE…' : 'Loading the IDE…',

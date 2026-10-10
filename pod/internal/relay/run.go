@@ -53,7 +53,11 @@ func Run(ctx context.Context, cfg RelayConfig) error {
 	if tcfg, err := TLSConfig(dataDir, cfg.CertFile, cfg.KeyFile); err == nil {
 		ln, err := net.Listen("tcp", net.JoinHostPort(cfg.AdvertiseIP, strconv.Itoa(cfg.TLSPort)))
 		if err != nil {
-			log.Printf("relay: tls on %d: %v", cfg.TLSPort, err)
+			hint := ""
+			if cfg.TLSPort < 1024 {
+				hint = " (TURN over TLS is off: a port below 1024 needs root, or use -tls-port)"
+			}
+			log.Printf("relay: tls on %d: %v%s", cfg.TLSPort, err, hint)
 		} else if d, err := NewDemux(tcfg, ln); err != nil {
 			log.Printf("relay: tls demux on %d: %v", cfg.TLSPort, err)
 			ln.Close()
@@ -77,7 +81,7 @@ func Run(ctx context.Context, cfg RelayConfig) error {
 		<-ctx.Done()
 		_ = httpSrv.Shutdown(context.Background())
 	}()
-	fmt.Printf("Web IDE relay\n  data      : %s\n  open      : http://%s/?pod=<id>&t=<token>\n  STUN/TURN : %s\n", st.DBPath(), cfg.Addr, turn.ICE())
+	fmt.Printf("Web IDE relay\n  data      : %s\n  open      : http://%s/#pod=<id>&t=<token>\n  STUN/TURN : %s\n", st.DBPath(), cfg.Addr, turn.ICE())
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- httpSrv.ListenAndServe() }()

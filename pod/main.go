@@ -42,7 +42,8 @@ func main() {
 		return
 	}
 	home, _ := os.UserHomeDir()
-	dataDir := flag.String("data", filepath.Join(home, ".web-ide"), "folder of the settings, projects and sessions")
+	defaultData := filepath.Join(home, ".web-ide")
+	dataDir := flag.String("data", defaultData, "folder of the settings, projects and sessions")
 	addr := flag.String("addr", "", "listen address (default: config.json, else "+config.DefaultAddr+")")
 	workspace := flag.String("workspace", "", "default workspace (default: ~/Apps)")
 	allowRemote := flag.Bool("allow-remote", false, "accept connections from other machines (protected by the token only)")
@@ -53,6 +54,7 @@ func main() {
 	forceTurn := flag.Bool("force-turn", false, "force the browser through TURN (no direct or STUN path)")
 	turnPort := flag.Int("turn-port", 0, "relay: the STUN/TURN control port (default 3478)")
 	turnIP := flag.String("turn-ip", "", "relay: the STUN/TURN IP given to clients (default: the machine IP)")
+	tlsPort := flag.Int("tls-port", 0, "relay: the TLS port shared with HTTPS and TURN over TLS (default 443; below 1024 needs root)")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 	if *showVersion {
@@ -60,7 +62,9 @@ func main() {
 		return
 	}
 	if len(flag.Args()) > 0 && flag.Arg(0) == "relay" {
-		runRelayCmd(*dataDir, *addr, *turnPort, *turnIP)
+		// The relay has its own data folder (~/.web-ide-relay): pass "" when -data was not
+		// set explicitly, else the pod's default would hold relay.db.
+		runRelayCmd(flagValue(flag.CommandLine, "data", ""), *addr, *turnPort, *turnIP, *tlsPort)
 		return
 	}
 
@@ -303,9 +307,21 @@ func check(err error) {
 	}
 }
 
+// flagValue returns the value of a flag only when it was set on the command line
+// (else def): the relay keeps its own default data folder.
+func flagValue(fs *flag.FlagSet, name, def string) string {
+	v := def
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			v = f.Value.String()
+		}
+	})
+	return v
+}
+
 // runRelayCmd runs the relay server subcommand until interrupted.
-func runRelayCmd(dataDir string, addr string, turnPort int, turnIP string) {
+func runRelayCmd(dataDir string, addr string, turnPort int, turnIP string, tlsPort int) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	check(relay.Run(ctx, relay.RelayConfig{DataDir: dataDir, Addr: addr, TurnPort: turnPort, AdvertiseIP: turnIP}))
+	check(relay.Run(ctx, relay.RelayConfig{DataDir: dataDir, Addr: addr, TurnPort: turnPort, AdvertiseIP: turnIP, TLSPort: tlsPort}))
 }
