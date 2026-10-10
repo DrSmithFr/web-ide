@@ -38,6 +38,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/_relay/pod", s.servePod)
 	mux.HandleFunc("/_relay/signal", s.serveSignal)
+	mux.HandleFunc("/_relay/identity", s.serveIdentity)
 	mux.HandleFunc("/_relay/bootstrap.js", staticJS(bootstrapJS))
 	mux.HandleFunc("/sw.js", staticJS(swJS))
 	mux.HandleFunc("/", s.bootstrapPage)

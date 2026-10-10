@@ -16,7 +16,10 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const dbVersion = 1
+// dbVersion 2 adds the identity tables (accounts, devices, pairings), see accounts.go and
+// pairing.go. The relay stores certificates and signed revocation lists, never a private key
+// or the phrase.
+const dbVersion = 2
 
 type Pod struct {
 	ID       string
@@ -86,6 +89,9 @@ func migrate(db *sql.DB) error {
 				ts INTEGER NOT NULL,
 				in_bytes INTEGER NOT NULL DEFAULT 0,
 				out_bytes INTEGER NOT NULL DEFAULT 0)`); err != nil {
+			return err
+		}
+		if err := migrateIdentity(db); err != nil {
 			return err
 		}
 		if _, err := db.Exec(fmt.Sprintf("PRAGMA user_version = %d", dbVersion)); err != nil {
