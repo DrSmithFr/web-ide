@@ -27,6 +27,9 @@ func Markdown(t *Ticket) string {
 	if t.Size != "" {
 		fmt.Fprintf(&b, " · size: %s", SizeNames[t.Size])
 	}
+	if t.Complexity != "" {
+		fmt.Fprintf(&b, " · complexity: %s", ComplexityNames[t.Complexity])
+	}
 	if t.Branch != "" {
 		fmt.Fprintf(&b, " · branch: %s", t.Branch)
 	}
@@ -99,7 +102,11 @@ func Markdown(t *Ticket) string {
 			if f.Done {
 				mark = "x"
 			}
-			fmt.Fprintf(&b, "- [%s] (id %d, %s, %s) %s\n", mark, f.ID, FeedbackNames[f.Kind], isoDate(f.Created), indent(f.Text))
+			kind := FeedbackNames[f.Kind]
+			if f.Complexity != "" {
+				kind += ", complexity " + ComplexityNames[f.Complexity]
+			}
+			fmt.Fprintf(&b, "- [%s] (id %d, %s, %s) %s\n", mark, f.ID, kind, isoDate(f.Created), indent(f.Text))
 		}
 	}
 	if len(t.ChatList) > 0 {

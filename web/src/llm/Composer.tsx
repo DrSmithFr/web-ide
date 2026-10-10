@@ -23,9 +23,11 @@ import {
   select,
   serverKind,
   resetChat,
+  setChat,
   setIncomingDraft,
   setPrefs,
   type Attachment,
+  type Effort,
   type Model,
 } from './state'
 import { compactNow, currentMode, nextMode, send, setMode, stop, unqueue } from './agent'
@@ -429,6 +431,12 @@ const efforts = [
 ] as const
 
 function Options() {
+  // A ticket session has its own effort (from the complexity), else the one of the options.
+  const effort = () => chat.ticket?.effort ?? prefs.effort
+  const setEffort = (e: 'auto' | Effort) => {
+    if (chat.ticket?.effort) setChat('ticket', 'effort', e)
+    else (setPrefs('effort', e), savePrefs())
+  }
   const set = (k: 'tools' | 'autoApply' | 'think' | 'effortTool', v: boolean) => {
     setPrefs(k, v)
     savePrefs()
@@ -453,19 +461,22 @@ function Options() {
               <div class="ai-effort-row">
                 <span>
                   <span>{t('Effort')}</span>
-                  <span class="ai-switch-hint">{prefs.effort === 'auto' ? t('The most after your message, less between the tools') : t('The same at every step')}</span>
+                  <span class="ai-switch-hint">
+                    {effort() === 'auto' ? t('The most after your message, less between the tools') : t('The same at every step')}
+                    {chat.ticket?.effort ? ` · ${t('chosen for this ticket session')}` : ''}
+                  </span>
                 </span>
                 <div class="segmented" role="radiogroup" data-testid="opt-effort">
                   <For each={efforts}>
                     {(e) => (
-                      <button type="button" role="radio" aria-checked={prefs.effort === e.id} classList={{ on: prefs.effort === e.id }} title={e.hint()} onClick={() => (setPrefs('effort', e.id), savePrefs())}>
+                      <button type="button" role="radio" aria-checked={effort() === e.id} classList={{ on: effort() === e.id }} title={e.hint()} onClick={() => setEffort(e.id)}>
                         {e.label()}
                       </button>
                     )}
                   </For>
                 </div>
               </div>
-              <Show when={prefs.effort === 'auto'}>
+              <Show when={effort() === 'auto'}>
                 <Switch label={t('Effort tool')} hint={t('The model can change its effort itself')} checked={prefs.effortTool} onChange={(v) => set('effortTool', v)} testid="opt-effort-tool" />
               </Show>
             </Show>

@@ -6,10 +6,13 @@ const { run, openProject, assert, unfold, OUT, WS } = require('../common.cjs')
 
 const requests = []
 const sse = (res, delta) => res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`)
+// Each answer lasts a little: the ticket shows the time of the answers.
 function end(res, reason = 'stop') {
-  res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: reason }] })}\n\n`)
-  res.write(`data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 200, completion_tokens: 10 } })}\n\n`)
-  res.end('data: [DONE]\n\n')
+  setTimeout(() => {
+    res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: reason }] })}\n\n`)
+    res.write(`data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 200, completion_tokens: 10 } })}\n\n`)
+    res.end('data: [DONE]\n\n')
+  }, 30)
 }
 const text = (m) => (typeof m.content === 'string' ? m.content : (m.content ?? []).map((p) => p.text ?? '').join(' '))
 const calls = (list) => list.map(([id, name, args], index) => ({ index, id, type: 'function', function: { name, arguments: JSON.stringify(args) } }))
@@ -32,7 +35,7 @@ const fake = http.createServer(async (req, res) => {
       return (
         sse(res, {
           tool_calls: calls([
-            ['s1', 'kanban_set_plan', { plan: '## Approach\n1. Add the route\n2. Test', goals: [{ title: 'The route answers', description: 'curl /export gives 200' }, 'The tests pass'], size: 'l' }],
+            ['s1', 'kanban_set_plan', { plan: '## Approach\n1. Add the route\n2. Test', goals: [{ title: 'The route answers', description: 'curl /export gives 200' }, 'The tests pass'], size: 'l', complexity: 'low' }],
           ]),
         }),
         end(res, 'tool_calls')
@@ -80,7 +83,7 @@ const fake = http.createServer(async (req, res) => {
             ['d7', 'kanban_goal', { action: 'add', title: 'Temporary goal' }],
             ['d8', 'kanban_goal', { action: 'delete', id: ids[1] + 1 }],
             ['d9', 'kanban_goal', { action: 'edit', id: ids[1], title: 'The CSV has a header row' }],
-            ['d10', 'kanban_feedback', { action: 'add', kind: 'info', text: 'Exports over 10k rows take 2 s.' }],
+            ['d10', 'kanban_feedback', { action: 'add', kind: 'info', text: 'Exports over 10k rows take 2 s.', complexity: 'high' }],
           ]),
         }),
         end(res, 'tool_calls')
@@ -311,6 +314,7 @@ run(async ({ page }) => {
     await page.waitForSelector('[data-testid=ticket-status]:has-text("To test")', { timeout: 15000 })
     const rd = requests[before2]
     assert(rd.messages[0].content.includes('You **develop** this ticket') && toolNames(rd).includes('edit_file'), 'dev role in Build mode')
+    assert(rd.chat_template_kwargs?.reasoning_effort === 'low', 'a low complexity ticket is developed with a low effort: ' + rd.chat_template_kwargs?.reasoning_effort)
     await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Development finished.")', { timeout: 10000 })
     const rr = requests[requests.length - 1].messages.filter((m) => m.role === 'tool')
     const d3 = text(rr.find((m) => m.tool_call_id === 'd3'))
@@ -328,10 +332,6 @@ run(async ({ page }) => {
     )
     assert(await page.isVisible('[data-testid=ticket-feedback-item].k-info:has-text("10k rows")'), 'test feedback added by the model')
     assert((await page.$$('[data-testid=ticket-chat]')).length === 2, 'two linked conversations')
-    assert(
-      (await page.$$('[data-testid=ticket-chat-time]')).length === 2 && (await page.getAttribute('[data-testid=ticket-chat-time]', 'title')).includes('Time of the answers'),
-      'each conversation shows the time of its answers',
-    )
     await page.screenshot({ path: OUT + '/kanban-ai.png' })
 
     // Test feedback handled by a fix session: the model marks it done.
@@ -339,6 +339,11 @@ run(async ({ page }) => {
     await page.fill('[data-testid=ticket-feedback-input]', 'The header is missing')
     await page.click('[data-testid=ticket-feedback-add]')
     await page.waitForSelector('[data-testid=ticket-feedback-item]:has-text("header is missing")')
+    // The times are read when the ticket changes: this feedback, after the development.
+    assert(
+      (await page.$$('[data-testid=ticket-chat-time]')).length === 2 && (await page.getAttribute('[data-testid=ticket-chat-time]', 'title')).includes('Time of the answers'),
+      'each conversation shows the time of its answers: ' + (await page.$$eval('[data-testid=ticket-chat] , [data-testid=ticket-chat-time]', (l) => l.map((e) => e.textContent.trim()).join(' | '))),
+    )
     const before4 = requests.length
     await page.click('[data-testid=ticket-feedback-item]:has-text("header is missing") [data-testid=ticket-feedback-session]')
     await page.waitForSelector('[data-testid=ticket-feedback-item].done:has-text("header is missing")', { timeout: 15000 })

@@ -8,11 +8,12 @@ import { request } from '../pod/rpc'
 import { openFile, project, root, showWorktree } from '../state/project'
 import {
   abortGit, continueGit, filePatch, finishTicket, gitInfo, inWorktreeOf, mergeTicket, openPR, rebaseTicket, roleLabels, ticketDiff, ticketVersion, unlinkChat, updateTicket,
-  validateStep, workTime, worktreeProject, type ChatRole, type Diff, type GitInfo, type GitOpState, type Status, type Ticket,
+  validateStep, workTime, worktreeProject, type ChatRole, type Complexity, type Diff, type GitInfo, type GitOpState, type Status, type Ticket,
 } from './state'
 import { openTicketChat, openWorktree, startTicketChat, startWorkSession } from './sessions'
 import { blockerText } from './Lineage'
 import { runClaude } from './claude'
+import { hardest, tierOf, type Tier } from './route'
 import { Section, type Apply } from './TicketView'
 import { t, tn } from '../i18n'
 
@@ -29,6 +30,30 @@ export interface ActionButton {
   /** The same action with Claude Code in a terminal: a split button offers both (only:
    * no integrated assistant yet, the button runs Claude Code). */
   claude?: { run: () => void; opus?: boolean; only?: boolean }
+  /** A session routed by the complexity: the arrow offers each level (route.ts). */
+  route?: Route
+}
+
+export interface Route {
+  complexity?: Complexity
+  /** The session with the integrated assistant (none: Claude Code only) or Claude Code. */
+  ai?: (x: Tier) => void
+  claude: (x: Tier) => void
+  /** The levels offered (default: all). */
+  levels?: Complexity[]
+}
+
+/** The level a route runs on a click: the one of its complexity, among those it offers. */
+export function recommended(r: Route): Tier {
+  const x = tierOf(r.complexity)
+  if (!r.levels || r.levels.includes(x.complexity)) return x
+  return tierOf(r.levels.includes('medium') ? 'medium' : r.levels[0])
+}
+
+/** A button running a routed session: its click runs the recommended level. */
+export function routed(b: Omit<ActionButton, 'run'>, route: Route): ActionButton {
+  const x = recommended(route)
+  return { ...b, route, run: route.ai ? () => route.ai!(x) : () => route.claude(x) }
 }
 
 interface Ctx {
@@ -43,23 +68,33 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
   const blocked = tk.blockers?.length ? tk.blockers.map(blockerText).join(', ') : ''
   const openChildren = (tk.children ?? []).filter((c) => c.status !== 'done' && c.status !== 'abandoned')
   const worktree: ActionButton[] = tk.worktree && !here ? [{ label: t('Open the worktree'), run: () => void openWorktree(tk), more: true }] : []
-  const review: ActionButton = {
-    label: t('Review'),
-    title: t('A review of the work: its findings become test feedback'),
-    run: () => runClaude(tk, 'review'),
-    claude: { run: () => runClaude(tk, 'review'), opus: true, only: true },
-    testid: 'ticket-review',
+  const review = routed(
+    { label: t('Review'), title: t('A review of the work: its findings become test feedback'), testid: 'ticket-review' },
+    { complexity: tk.complexity, claude: (x) => runClaude(tk, 'review', undefined, x.claude), levels: ['high', 'medium'] },
+  )
+  const dev: Route = {
+    complexity: tk.complexity,
+    ai: (x) => void startWorkSession(tk, 'dev', undefined, false, undefined, x.effort),
+    claude: (x) => runClaude(tk, 'dev', undefined, x.claude),
+  }
+  // Every open feedback at once: the hardest of them.
+  const open = tk.feedbackList.filter((f) => !f.done)
+  const fixAll: Route = {
+    complexity: hardest(open.map((f) => f.complexity)) ?? tk.complexity,
+    ai: (x) => void startWorkSession(tk, 'correction', undefined, false, undefined, x.effort),
+    claude: (x) => runClaude(tk, 'fix', undefined, x.claude),
   }
   switch (tk.status) {
     case 'new':
       return [
-        {
-          label: 'Briefing',
-          run: () => void startTicketChat(tk, 'briefing'),
-          claude: { run: () => runClaude(tk, 'brief'), opus: true },
-          title: t('Conversation (Plan mode) to clarify the ticket'),
-          testid: 'ticket-briefing',
-        },
+        routed(
+          { label: 'Briefing', title: t('Conversation (Plan mode) to clarify the ticket'), testid: 'ticket-briefing' },
+          {
+            complexity: tk.complexity,
+            ai: (x) => void startTicketChat(tk, 'briefing', undefined, undefined, undefined, x.effort),
+            claude: (x) => runClaude(tk, 'brief', undefined, x.claude),
+          },
+        ),
         {
           label: t('Generate the plan'),
           primary: true,
@@ -71,19 +106,20 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
       ]
     case 'todo':
       return [
-        {
-          label: t('Start development'),
-          primary: true,
-          disabled: !!blocked,
-          title: blocked
-            ? t('Cannot start yet: {blockers}', { blockers: blocked })
-            : tk.parent
-              ? t('Starts this step in the worktree of #{id}, then a development conversation in its window', { id: tk.parent })
-              : t('Creates the branch and the worktree of the ticket, then starts a development conversation in its window'),
-          run: () => void startWorkSession(tk, 'dev'),
-          claude: { run: () => runClaude(tk, 'dev') },
-          testid: 'ticket-start',
-        },
+        routed(
+          {
+            label: t('Start development'),
+            primary: true,
+            disabled: !!blocked,
+            title: blocked
+              ? t('Cannot start yet: {blockers}', { blockers: blocked })
+              : tk.parent
+                ? t('Starts this step in the worktree of #{id}, then a development conversation in its window', { id: tk.parent })
+                : t('Creates the branch and the worktree of the ticket, then starts a development conversation in its window'),
+            testid: 'ticket-start',
+          },
+          dev,
+        ),
         { label: t('Back to “New”'), run: () => void ctx.move('new'), more: true },
         { label: t('Redo the plan'), run: () => void startTicketChat(tk, 'plan'), more: true },
         { label: t('Redo the plan with Claude Code (Opus)'), run: () => runClaude(tk, 'plan'), more: true },
@@ -93,7 +129,7 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
                 label: t('Start anyway…'),
                 more: true,
                 run: () => {
-                  if (confirm(t('Ticket #{id} waits for {blockers}. Start it anyway?', { id: tk.id, blockers: blocked }))) void startWorkSession(tk, 'dev', undefined, true)
+                  if (confirm(t('Ticket #{id} waits for {blockers}. Start it anyway?', { id: tk.id, blockers: blocked }))) void startWorkSession(tk, 'dev', undefined, true, undefined, recommended(dev).effort)
                 },
               },
             ]
@@ -104,8 +140,8 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
         review,
         { label: t('Send to testing'), primary: true, run: () => void ctx.move('review'), testid: 'ticket-to-review' },
         ...worktree,
-        { label: t('New dev session'), run: () => void startWorkSession(tk, 'dev'), more: true },
-        { label: t('Develop with Claude Code'), run: () => runClaude(tk, 'dev'), more: true },
+        { label: t('New dev session'), run: () => dev.ai!(recommended(dev)), more: true },
+        { label: t('Develop with Claude Code'), run: () => dev.claude(recommended(dev)), more: true },
       ]
     case 'review':
       return [
@@ -114,14 +150,15 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
         // Open test feedback first: validating waits for it to be handled.
         ...(tk.feedbackOpen
           ? [
-              {
-                label: t('Fix feedbacks'),
-                primary: true,
-                title: tn(tk.feedbackOpen, '{n} test feedback not handled yet', '{n} test feedbacks not handled yet'),
-                run: () => void startWorkSession(tk, 'correction'),
-                claude: { run: () => runClaude(tk, 'fix') },
-                testid: 'ticket-fix-feedbacks',
-              },
+              routed(
+                {
+                  label: t('Fix feedbacks'),
+                  primary: true,
+                  title: tn(tk.feedbackOpen, '{n} test feedback not handled yet', '{n} test feedbacks not handled yet'),
+                  testid: 'ticket-fix-feedbacks',
+                },
+                fixAll,
+              ),
             ]
           : [
               ...(openChildren.length && !tk.stepDone
@@ -142,7 +179,7 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
           ]),
         ...worktree,
         { label: t('Back to “In progress”'), run: () => void ctx.move('in_progress'), more: true },
-        { label: t('Develop with Claude Code'), run: () => runClaude(tk, 'dev'), more: true },
+        { label: t('Develop with Claude Code'), run: () => dev.claude(recommended(dev)), more: true },
       ]
     case 'done':
       return [{ label: t('Reopen (→ To test)'), run: () => void ctx.move('review'), testid: 'ticket-reopen' }]

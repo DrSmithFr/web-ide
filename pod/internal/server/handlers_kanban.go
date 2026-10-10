@@ -242,15 +242,16 @@ func (s *Server) registerKanban() {
 	}))
 	s.handle("kanban.plan", change(func(k kctx, a idArg, p json.RawMessage) error {
 		b, err := bind[struct {
-			Plan  string             `json:"plan"`
-			Goals []kanban.GoalInput `json:"goals"`
-			Size  *string            `json:"size"`
+			Plan       string             `json:"plan"`
+			Goals      []kanban.GoalInput `json:"goals"`
+			Size       *string            `json:"size"`
+			Complexity *string            `json:"complexity"`
 		}](p)
 		if err != nil {
 			return err
 		}
-		if b.Size != nil {
-			if err := s.Kanban.Update(k.loc, a.ID, kanban.Patch{Size: b.Size, PlanSize: true}, a.By); err != nil {
+		if b.Size != nil || b.Complexity != nil {
+			if err := s.Kanban.Update(k.loc, a.ID, kanban.Patch{Size: b.Size, Complexity: b.Complexity, PlanSize: true}, a.By); err != nil {
 				return err
 			}
 		}

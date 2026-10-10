@@ -41,6 +41,15 @@ func TestEffortFor(t *testing.T) {
 			t.Errorf("%s: %s, want %s", c.name, got, c.want)
 		}
 	}
+	// A session of a ticket keeps the effort of its complexity, the dynamic one included.
+	low := &agent.Chat{Messages: []*agent.Message{user}, Ticket: &agent.TicketLink{ID: 1, Role: "dev", Effort: "low"}}
+	if got := effortFor(low, dyn); got != "low" {
+		t.Fatalf("effort of a low ticket: %s", got)
+	}
+	auto := &agent.Chat{Messages: []*agent.Message{user, answer, tool("read_file", "ok")}, Ticket: &agent.TicketLink{ID: 1, Role: "dev", Effort: "auto"}}
+	if got := effortFor(auto, agent.Options{Effort: "low"}); got != "medium" {
+		t.Fatalf("dynamic effort of a medium ticket: %s", got)
+	}
 }
 
 func TestAgentEffort(t *testing.T) {

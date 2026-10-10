@@ -6,6 +6,7 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ### Added
 
+- Complexity of a ticket and of a test feedback (low, medium, high), estimated by the model with the plan and the feedback it adds, editable: it routes the sessions. *Briefing*, *Start development*, *Fix session* and *Fix feedbacks* run the integrated assistant with the effort of the complexity (Max, Dynamic, Low) on a click, and list every level with Claude Opus, Sonnet or Haiku; *Review* offers Opus or Sonnet.
 - The cards of the board list the titles of their goals and show the time of the answers of their conversations; the ticket view shows it next to each conversation (sub-agents included, the thinking in the tooltip).
 
 ## [1.6.0] - 2026-10-10

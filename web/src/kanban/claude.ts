@@ -5,16 +5,18 @@ import { request } from '../pod/rpc'
 import { root } from '../state/project'
 import { newConsole } from '../console/consoles'
 import type { Ticket } from './state'
+import type { ClaudeModel } from './route'
 
 type Role = 'brief' | 'plan' | 'dev' | 'fix' | 'review'
 
 const opus: Record<Role, boolean> = { brief: true, plan: true, dev: false, fix: false, review: true }
 
 /** Runs Claude Code on a ticket in a terminal: in its worktree for development; a fix may
- * name one feedback. */
-export function runClaude(tk: Ticket, role: Role, feedback?: number) {
+ * name one feedback; model: the one of the complexity (else Opus for the roles that ask for it). */
+export function runClaude(tk: Ticket, role: Role, feedback?: number, model?: ClaudeModel) {
   const cwd = (role === 'dev' || role === 'fix' || role === 'review') && tk.worktree ? tk.worktree : root()
-  const args = [...(opus[role] ? ['--model', 'opus'] : []), `/mcp__web-ide__${role} ${tk.id}${feedback ? ` ${feedback}` : ''}`]
+  const m = model ?? (opus[role] ? 'opus' : undefined)
+  const args = [...(m ? ['--model', m] : []), `/mcp__web-ide__${role} ${tk.id}${feedback ? ` ${feedback}` : ''}`]
   // WEBIDE_CLAUDE (environment of the pod) names another command: the fake one of the tests.
   const script = 'c="${WEBIDE_CLAUDE:-claude}"; command -v "$c" >/dev/null || { echo "$c: not found in the PATH of the pod"; exit 127; }; exec "$c" "$@"'
   void newConsole({ kind: 'terminal', cwd, command: ['sh', '-c', script, 'sh', ...args], title: `Claude #${tk.id} ${role}` })

@@ -27,6 +27,10 @@ func dynamicEffort(o agent.Options) bool {
 
 // effortFor is the reasoning effort of the next answer of c.
 func effortFor(c *agent.Chat, o agent.Options) string {
+	// A session of a ticket keeps the effort of its complexity.
+	if c.Ticket != nil && c.Ticket.Effort != "" {
+		o.Effort = c.Ticket.Effort
+	}
 	if !dynamicEffort(o) {
 		return o.Effort
 	}

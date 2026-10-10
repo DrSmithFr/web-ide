@@ -194,12 +194,14 @@ var sharePreviewDef = fn("share_preview",
 	}, "title", "command", "port")
 
 var (
-	statuses      = []string{"new", "todo", "in_progress", "review", "done", "abandoned"}
-	priorities    = []string{"low", "normal", "high", "critical"}
-	sizes         = []string{"s", "m", "l", "xl"}
-	sizeProp      = enum("Estimated effort of the whole ticket: s (a few files, an hour of agent work), m, l, xl (many files across the pod and the page, several days)", sizes...)
-	lineageParent = integer("Parent ticket: this one becomes the next step of its lineage, developed in the parent's worktree after it (0 takes it out). Only before its development starts")
-	lineageDeps   = obj{"type": "array", "items": obj{"type": "integer"}, "description": "Tickets of other lineages this one waits for: it starts once they are merged or done (replaces the list)"}
+	statuses       = []string{"new", "todo", "in_progress", "review", "done", "abandoned"}
+	priorities     = []string{"low", "normal", "high", "critical"}
+	sizes          = []string{"s", "m", "l", "xl"}
+	complexities   = []string{"low", "medium", "high"}
+	complexityProp = enum("How hard the work is, which picks the model and the effort of its sessions: low (a small obvious change: a color, a label, a one-line fix), medium (usual work), high (a delicate design, concurrency, security, a bug hard to find)", complexities...)
+	sizeProp       = enum("Estimated effort of the whole ticket: s (a few files, an hour of agent work), m, l, xl (many files across the pod and the page, several days)", sizes...)
+	lineageParent  = integer("Parent ticket: this one becomes the next step of its lineage, developed in the parent's worktree after it (0 takes it out). Only before its development starts")
+	lineageDeps    = obj{"type": "array", "items": obj{"type": "integer"}, "description": "Tickets of other lineages this one waits for: it starts once they are merged or done (replaces the list)"}
 )
 
 var kanbanReadDefs = []Def{
@@ -226,6 +228,7 @@ var kanbanWriteDefs = []Def{
 			"add_files":    strList("Files to link"),
 			"remove_files": strList("Files to unlink"),
 			"size":         sizeProp,
+			"complexity":   complexityProp,
 			"parent":       lineageParent,
 			"depends_on":   lineageDeps,
 		}),
@@ -239,8 +242,9 @@ var kanbanWriteDefs = []Def{
 				"description": "Goals, each one verifiable",
 				"items":       obj{"type": "object", "properties": obj{"title": str("Short title, one sentence"), "description": str("How to check it (optional, a few lines)")}, "required": []string{"title"}},
 			},
-			"size": sizeProp,
-		}, "plan", "goals", "size"),
+			"size":       sizeProp,
+			"complexity": complexityProp,
+		}, "plan", "goals", "size", "complexity"),
 	fn("kanban_goal", "Checks, unchecks, adds, edits or deletes a goal of the linked ticket. Check each goal as soon as it is reached and verified.",
 		obj{
 			"action":      enum("", "check", "uncheck", "add", "edit", "delete"),
@@ -250,10 +254,11 @@ var kanbanWriteDefs = []Def{
 		}, "action"),
 	fn("kanban_feedback", "Test feedback of the linked ticket: add one (a bug, a missing feature or an info found while testing), mark one handled (done) once fixed and verified, or open again (reopen).",
 		obj{
-			"action": enum("", "add", "done", "reopen"),
-			"id":     integer("Feedback id (done, reopen), see kanban_get"),
-			"kind":   enum("Kind (add)", "bug", "feature", "info"),
-			"text":   str(fmt.Sprintf("What was noticed (add, %d characters max)", MaxNote)),
+			"action":     enum("", "add", "done", "reopen"),
+			"id":         integer("Feedback id (done, reopen), see kanban_get"),
+			"kind":       enum("Kind (add)", "bug", "feature", "info"),
+			"complexity": enum("How hard the fix is (add): low, medium or high; it picks the model of the fix session", complexities...),
+			"text":       str(fmt.Sprintf("What was noticed (add, %d characters max)", MaxNote)),
 		}, "action"),
 	fn("kanban_move", "Moves the linked ticket from In progress to To test (status review), with test_summary: how to test it. Other changes belong to the user.",
 		obj{

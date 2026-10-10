@@ -168,6 +168,9 @@ func (s *Server) kanbanCall(r *agentRun, name string, a toolArgs, mode string) (
 			if t.Size != "" {
 				line += " · size " + kanban.SizeNames[t.Size]
 			}
+			if t.Complexity != "" {
+				line += " · complexity " + kanban.ComplexityNames[t.Complexity]
+			}
 			if t.Goals > 0 {
 				line += fmt.Sprintf(" · goals %d/%d", t.GoalsDone, t.Goals)
 			}
@@ -241,7 +244,7 @@ func (s *Server) kanbanCall(r *agentRun, name string, a toolArgs, mode string) (
 			return *long, nil
 		}
 		p := kanban.Patch{Title: a.optStr("title"), Description: a.optStr("description"), Priority: a.optStr("priority"), TestSummary: a.optStr("test_summary"),
-			Size: a.optStr("size"), AddFiles: a.strs("add_files"), RemoveFiles: a.strs("remove_files")}
+			Size: a.optStr("size"), Complexity: a.optStr("complexity"), AddFiles: a.strs("add_files"), RemoveFiles: a.strs("remove_files")}
 		a.links(&p)
 		if err := s.Kanban.Update(loc, id, p, kanban.ByModel); err != nil {
 			return toolResult{}, err
@@ -274,7 +277,11 @@ func (s *Server) kanbanCall(r *agentRun, name string, a toolArgs, mode string) (
 		if size == "" {
 			return toolResult{}, usagef("size is required: s, m, l or xl")
 		}
-		if err := s.Kanban.Update(loc, id, kanban.Patch{Size: &size, PlanSize: true}, kanban.ByModel); err != nil {
+		complexity := a.str("complexity")
+		if complexity == "" {
+			return toolResult{}, usagef("complexity is required: low, medium or high")
+		}
+		if err := s.Kanban.Update(loc, id, kanban.Patch{Size: &size, Complexity: &complexity, PlanSize: true}, kanban.ByModel); err != nil {
 			return toolResult{}, err
 		}
 		if err := s.Kanban.SetPlan(loc, id, plan, kept, kanban.ByModel); err != nil {
@@ -348,7 +355,10 @@ func (s *Server) kanbanCall(r *agentRun, name string, a toolArgs, mode string) (
 	case "kanban_feedback":
 		action := a.str("action")
 		if action == "add" {
-			fid, err := s.Kanban.Feedback(loc, id, kanban.FeedbackOp{Op: "add", Kind: a.str("kind"), Text: a.str("text"), ChatID: chatID}, kanban.ByModel)
+			if a.str("complexity") == "" {
+				return toolResult{}, usagef("complexity is required: low, medium or high")
+			}
+			fid, err := s.Kanban.Feedback(loc, id, kanban.FeedbackOp{Op: "add", Kind: a.str("kind"), Text: a.str("text"), Complexity: a.str("complexity"), ChatID: chatID}, kanban.ByModel)
 			if err != nil {
 				return toolResult{}, err
 			}

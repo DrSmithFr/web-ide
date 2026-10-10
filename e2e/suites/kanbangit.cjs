@@ -73,7 +73,7 @@ run(async ({ page, ctx }) => {
     await page.fill('[data-testid=kanban-title]', 'Data export')
     await page.click('[data-testid=kanban-create]')
     await page.waitForSelector('[data-testid=ticket-view]')
-    await mcp('kanban_set_plan', { id: 1, plan: 'Write export.txt', goals: [{ title: 'export.txt exists' }], size: 's' })
+    await mcp('kanban_set_plan', { id: 1, plan: 'Write export.txt', goals: [{ title: 'export.txt exists' }], size: 's', complexity: 'medium' })
     await page.waitForSelector('[data-testid=ticket-status]:has-text("To do")')
     await page.waitForSelector('[data-testid=ticket-goal]')
 

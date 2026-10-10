@@ -27,7 +27,7 @@ var mcpRoles = []mcpRole{
 - Do not change any file. Sum up what you changed and offer to write the plan (/mcp__web-ide__plan {{id}}).`},
 	{"plan", "Write the implementation plan of a ticket", `Write the **implementation plan** of ticket #{{id}}.
 - Read the ticket (kanban_get) and, if useful, its briefing conversations (kanban_conversation); explore the code concerned. Ask the user when essential information is missing.
-- Save the plan with kanban_set_plan: Markdown (approach, files to change, steps, risks, tests), the estimated size of the ticket, and goals, each one a verifiable objective with a short title and, if useful, how to check it. The ticket then moves to "To do" by itself.
+- Save the plan with kanban_set_plan: Markdown (approach, files to change, steps, risks, tests), the estimated size of the ticket (the volume of work), its complexity (how hard it is: low, medium, high; it picks the model and the effort of the development), and goals, each one a verifiable objective with a short title and, if useful, how to check it. The ticket then moves to "To do" by itself.
 - Sum up the plan in a few lines. Do not change any file.`},
 	{"dev", "Develop a ticket in its worktree", `**Develop** ticket #{{id}}.
 - Read the ticket (kanban_get). If it has no worktree yet, start it with kanban_start; if it cannot start yet (a previous step or a dependency), tell the user and stop.
@@ -45,7 +45,7 @@ var mcpRoles = []mcpRole{
 - Read the ticket (kanban_get): description, plan, goals, notes, how to test, open feedback. Work in its worktree (EnterWorktree, path: the worktree, unless you already work there; else absolute paths); a ticket without a worktree is reviewed in the project folder.
 - Read the change of its branch against its base (git log and git diff base...HEAD, plus the uncommitted changes): correctness, goals really reached, plan followed, tests, edge cases, security, the conventions of the project.
 - Run the tests and the build of the project if they are quick. Do not change any file, do not commit, do not move the ticket.
-- Each finding the developer must act on becomes a test feedback with kanban_feedback (action add): kind bug (wrong behavior), feature (missing from the plan or the goals) or info (worth knowing); one concrete finding each, with the file and line, under 1000 characters. Skip what an open feedback already says; no feedback for style nits.
+- Each finding the developer must act on becomes a test feedback with kanban_feedback (action add): kind bug (wrong behavior), feature (missing from the plan or the goals) or info (worth knowing), and the complexity of the fix (low, medium, high); one concrete finding each, with the file and line, under 1000 characters. Skip what an open feedback already says; no feedback for style nits.
 - Then one note with kanban_add_note: the verdict in a few lines (ready to test, or what blocks).
 - Sum up for the user: the feedback added, the verdict.`},
 }

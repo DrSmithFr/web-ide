@@ -46,7 +46,7 @@ run(async ({ page, ctx }) => {
   await page.click('[data-testid=ticket-description] .btn:has-text("Cancel")')
 
   // Plan and goals: the plan moves the ticket to To do, whose sections follow.
-  await mcp('kanban_set_plan', { id: 1, plan: '1. Add the route\n2. Write the CSV', goals: [], size: 's' })
+  await mcp('kanban_set_plan', { id: 1, plan: '1. Add the route\n2. Write the CSV', goals: [], size: 's', complexity: 'medium' })
   await page.waitForSelector('[data-testid=ticket-status]:has-text("To do")')
   await page.waitForSelector('[data-testid=ticket-plan] ol li')
   assert(
@@ -124,15 +124,15 @@ run(async ({ page, ctx }) => {
   await page.click('[data-testid=ticket-start]')
   await page.waitForSelector('[data-testid=ticket-status]:has-text("In progress")')
   assert(
-    (await page.isVisible('.tk-meta-row span.badge:has-text("priority")')) && (await page.isVisible('span[data-testid=ticket-size]')) && !(await page.$('.tk-meta-row select')),
+    (await page.isVisible('.tk-meta-row span.badge:has-text("priority")')) && (await page.isVisible('span[data-testid=ticket-size]')) && !(await page.$('.tk-meta-row select:not([data-testid=ticket-complexity])')),
     'In progress: priority and size fixed, shown as badges',
   )
-  assert((await header()).join() === 'Review,Send to testing', 'In progress: Review and Send to testing in the header: ' + (await header()).join())
+  assert((await header()).join() === 'Review · Sonnet,Send to testing', 'In progress: Review (Sonnet for a medium ticket) and Send to testing in the header: ' + (await header()).join())
   await page.click('[data-testid=ticket-review-with]')
-  assert((await page.$$eval('.ctx-menu button', (l) => l.map((e) => e.textContent.trim()))).join() === 'With Claude Code (Opus)', 'Review: Claude Code only for now')
+  assert((await page.$$eval('.ctx-menu button', (l) => l.map((e) => e.textContent.trim()))).join() === 'With Claude Opus,With Claude Sonnet★', 'Review: Claude Opus or Sonnet, Sonnet recommended for a medium ticket')
   await page.keyboard.press('Escape')
   await page.click('[data-testid=ticket-review]')
-  await page.waitForFunction(() => [...document.querySelectorAll('.xterm-rows')].some((e) => e.textContent.includes('fake claude: --model opus /mcp__web-ide__review 1')))
+  await page.waitForFunction(() => [...document.querySelectorAll('.xterm-rows')].some((e) => e.textContent.includes('fake claude: --model sonnet /mcp__web-ide__review 1')))
   assert(true, 'Review runs Claude Code on the ticket')
   await page.click('.pane .tab:has-text("#1")')
   await page2.waitForSelector('[data-testid=ticket-status]:has-text("In progress")', { timeout: 5000 })
@@ -143,7 +143,7 @@ run(async ({ page, ctx }) => {
     (await sections()).join() === 'How to test,Feedback,Git and changes,|,-Description,-Briefing conversations,-Notes,-Plan conversations,-Implementation plan,-Goals · 1/2,-Development conversations',
     'To test: test, feedback and git first, then the earlier sections folded, no pull request without a branch: ' + (await sections()).join(),
   )
-  assert((await header()).join() === 'Add feedback,Review,Validate the ticket', 'To test: Add feedback, Review and Validate the ticket in the header: ' + (await header()).join())
+  assert((await header()).join() === 'Add feedback,Review · Sonnet,Validate the ticket', 'To test: Add feedback, Review and Validate the ticket in the header: ' + (await header()).join())
   await page.click('[data-testid=ticket-feedback]')
   assert(await page.evaluate(() => document.activeElement?.dataset.testid === 'ticket-feedback-input'), 'Add feedback focuses the feedback box')
   await page.selectOption('[data-testid=ticket-feedback-kind]', 'bug')
@@ -151,12 +151,21 @@ run(async ({ page, ctx }) => {
   await page.click('[data-testid=ticket-feedback-add]')
   await page.waitForSelector('[data-testid=ticket-feedback-item].k-bug:has-text("The file is empty")')
   assert((await page.textContent('[data-testid=ticket-status]')).includes('To test'), 'a feedback leaves the ticket in To test')
-  assert((await header()).join() === 'Add feedback,Review,Fix feedbacks', 'an open feedback: Fix feedbacks instead of Validate: ' + (await header()).join())
+  assert((await header()).join() === 'Add feedback,Review · Sonnet,Fix feedbacks', 'an open feedback: Fix feedbacks instead of Validate: ' + (await header()).join())
   assert(await page.isVisible('[data-testid=ticket-feedback-item] [data-testid=ticket-feedback-session]'), 'fix session offered for an open feedback')
+  // Routing by complexity: a hard feedback is fixed with the most effort, or Claude Opus.
+  assert((await page.$eval('[data-testid=ticket-complexity]', (e) => e.value)) === 'medium', 'complexity of the ticket, written with the plan')
+  await page.selectOption('[data-testid=ticket-feedback-item] [data-testid=ticket-feedback-complexity]', 'high')
+  await page.waitForSelector('[data-testid=ticket-feedback-item] [data-testid=ticket-feedback-session]:has-text("Max")')
   await page.click('[data-testid=ticket-feedback-item] [data-testid=ticket-feedback-session-with]')
-  await page.click('.ctx-menu button:has-text("With Claude Code")')
-  await page.waitForFunction(() => [...document.querySelectorAll('.xterm-rows')].some((e) => /fake claude: \/mcp__web-ide__fix 1 \d+/.test(e.textContent)))
-  assert(true, 'a fix session of the feedback with Claude Code')
+  assert(
+    (await page.$$eval('.ctx-menu button', (l) => l.map((e) => e.textContent.trim()))).join() ===
+      'With the integrated AI (Max)★,With Claude Opus,With the integrated AI,With Claude Sonnet,With the integrated AI (Low),With Claude Haiku',
+    'Fix session: each level, the one of the feedback recommended',
+  )
+  await page.click('.ctx-menu button:has-text("With Claude Opus")')
+  await page.waitForFunction(() => [...document.querySelectorAll('.xterm-rows')].some((e) => /fake claude: --model opus \/mcp__web-ide__fix 1 \d+/.test(e.textContent)))
+  assert(true, 'a fix session of the feedback with Claude Opus')
   await page.click('.pane .tab:has-text("#1")')
   await page.click('[data-testid=ticket-feedback-item] input[type=checkbox]')
   await page.waitForSelector('[data-testid=ticket-feedback-item].done')
@@ -212,7 +221,7 @@ run(async ({ page, ctx }) => {
   await tool('kanban_create', { title: 'Lineage step', parent: 3 })
   await tool('kanban_create', { title: 'Waits for the root', depends_on: [3] })
   // Sizes for the roadmap below: fixed once the development started.
-  for (const [id, size] of [[3, 'xl'], [4, 's'], [5, 'm']]) await tool('kanban_set_plan', { id, plan: 'p', goals: [{ title: 'g' }], size })
+  for (const [id, size] of [[3, 'xl'], [4, 's'], [5, 'm']]) await tool('kanban_set_plan', { id, plan: 'p', goals: [{ title: 'g' }], size, complexity: 'medium' })
   await page.click('.pane.active .tab:has-text("Kanban")')
   await page.waitForSelector('[data-testid=ticket-card-4] [data-testid=card-parent]:has-text("#3")')
   assert((await page.textContent('[data-testid=ticket-card-4] [data-testid=card-blocked]')).includes('#3'), 'card of a step: parent and blocker badges')
@@ -252,7 +261,7 @@ run(async ({ page, ctx }) => {
   const refused = await tool('kanban_update', { id: 3, size: 's' })
   assert(refused.result?.isError && JSON.stringify(refused).includes('fixed once the development started'), 'the size of a ticket in progress is refused')
   await tool('kanban_create', { title: 'Waits for the second ticket', depends_on: [2] })
-  await tool('kanban_set_plan', { id: 6, plan: 'p', goals: [{ title: 'g' }], size: 'm' })
+  await tool('kanban_set_plan', { id: 6, plan: 'p', goals: [{ title: 'g' }], size: 'm', complexity: 'medium' })
   await page.click('.pane.active .tab:has-text("Kanban")')
   await page.click('[data-testid=kanban-view-roadmap]')
   await page.waitForSelector('[data-testid=roadmap] [data-testid=roadmap-block-6]')

@@ -11,6 +11,8 @@ export type Status = 'new' | 'todo' | 'in_progress' | 'review' | 'done' | 'aband
 export type Priority = 'low' | 'normal' | 'high' | 'critical'
 /** Estimated effort of a whole ticket, written with its plan. */
 export type Size = 's' | 'm' | 'l' | 'xl'
+/** How hard a ticket or a feedback is: it picks the model and the effort of its sessions. */
+export type Complexity = 'low' | 'medium' | 'high'
 export type ChatRole = 'briefing' | 'plan' | 'dev' | 'correction' | 'resolve'
 export type FeedbackKind = 'info' | 'bug' | 'feature'
 
@@ -30,6 +32,7 @@ export interface Summary {
   updated: number
   closed?: number
   size?: Size
+  complexity?: Complexity
   /** Lineage: the parent (developed in its worktree after it), the place among its children. */
   parent?: number
   pos?: number
@@ -87,6 +90,7 @@ export interface Feedback {
   author: Author
   chatId?: string
   created: number
+  complexity?: Complexity
 }
 
 export interface DiffFile {
@@ -132,6 +136,7 @@ const legacyNames: Record<string, string> = { ready: 'Ready', fix: 'Fix' }
 export const feedbackNames: Record<FeedbackKind, string> = { info: 'Info', bug: 'Bug', feature: 'New feature' }
 export const priorityNames: Record<Priority, string> = { low: 'Low', normal: 'Normal', high: 'High', critical: 'Critical' }
 export const sizeNames: Record<Size, string> = { s: 'S', m: 'M', l: 'L', xl: 'XL' }
+export const complexityNames: Record<Complexity, string> = { low: 'Low complexity', medium: 'Medium complexity', high: 'High complexity' }
 export const roleNames: Record<ChatRole, string> = { briefing: 'Briefing', plan: 'Plan', dev: 'Development', correction: 'Correction', resolve: 'Conflicts' }
 
 /** A record whose values are translated when read (reactive in views). */
@@ -142,6 +147,7 @@ export const statusLabels = translated(statusNames)
 export const feedbackLabels = translated(feedbackNames)
 export const priorityLabels = translated(priorityNames)
 export const roleLabels = translated(roleNames)
+export const complexityLabels = translated(complexityNames)
 
 export const [board, setBoard] = createStore<{ project: string; tickets: Summary[]; meta: Record<string, string>; loaded: boolean; error: string }>({
   project: '',
@@ -201,6 +207,9 @@ export function eventText(text: string): string {
       const e = JSON.parse(text)
       if (e?.key) {
         const params = { ...e.params }
+        // The pod names the complexity in English (Low, Medium, High).
+        const c = String(params.complexity ?? '').toLowerCase()
+        if (e.key === 'Complexity: {complexity}' && c in complexityNames) return complexityLabels[c as Complexity]
         for (const k of ['from', 'to'] as const) {
           if (params[k] in statusNames) params[k] = statusLabels[params[k] as Status]
           else if (params[k] in legacyNames) params[k] = t(legacyNames[params[k]])
@@ -237,6 +246,7 @@ export interface TicketPatch {
   addFiles?: string[]
   removeFiles?: string[]
   size?: Size | ''
+  complexity?: Complexity | ''
   /** 0 takes the ticket out of its lineage. */
   parent?: number
   dependsOn?: number[]
@@ -257,7 +267,7 @@ export const goalOp = (
 ) => request<Ticket>('kanban.goal', { id, goal, by })
 export const feedbackOp = (
   id: number,
-  feedback: { op: 'add' | 'check' | 'chat' | 'delete'; id?: number; kind?: FeedbackKind; text?: string; done?: boolean; chatId?: string },
+  feedback: { op: 'add' | 'check' | 'chat' | 'delete' | 'complexity'; id?: number; kind?: FeedbackKind; text?: string; done?: boolean; chatId?: string; complexity?: Complexity | '' },
   by: By = 'user',
 ) => request<Ticket>('kanban.feedback', { id, feedback, by })
 

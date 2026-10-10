@@ -275,7 +275,8 @@ export interface Chat {
   mode?: Mode
   /** Kanban ticket this conversation works on, and its role (docs/kanban.md). */
   /** project: where the conversation works (the worktree of its ticket for a development). */
-  ticket?: { id: number; role: ChatRole; feedback?: number; project?: string }
+  /** effort: chosen for the session from the complexity of the ticket, instead of the one of the options. */
+  ticket?: { id: number; role: ChatRole; feedback?: number; project?: string; effort?: 'auto' | Effort }
   /** Change or command waiting for the user. */
   approval?: Approval
   /** A sub-agent: the conversation that started it, and its task; the sub-agents started here. */

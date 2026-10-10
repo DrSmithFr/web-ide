@@ -33,7 +33,10 @@ var (
 	Statuses   = []string{New, Todo, InProgress, Review, Done, Abandoned}
 	Priorities = []string{"low", "normal", "high", "critical"}
 	// Sizes: the estimated effort of a whole ticket, written with its plan.
-	Sizes         = []string{"s", "m", "l", "xl"}
+	Sizes = []string{"s", "m", "l", "xl"}
+	// Complexities: how hard a ticket or a feedback is, which picks the model and the effort
+	// of its sessions (low: a small change; high: a delicate design or bug).
+	Complexities  = []string{"low", "medium", "high"}
 	ChatRoles     = []string{"briefing", "plan", "dev", "correction", "resolve"}
 	FeedbackKinds = []string{"info", "bug", "feature"}
 )
@@ -219,6 +222,9 @@ CREATE TABLE deps (
 	`ALTER TABLE tickets ADD COLUMN size TEXT NOT NULL DEFAULT '';`,
 	// 5: no more linked commits (the ticket shows the changes of its branch).
 	`DROP TABLE IF EXISTS commits;`,
+	// 6: estimated complexity of a ticket and of a test feedback.
+	`ALTER TABLE tickets ADD COLUMN complexity TEXT NOT NULL DEFAULT '';
+ALTER TABLE feedback ADD COLUMN complexity TEXT NOT NULL DEFAULT '';`,
 }
 
 func migrate(db *sql.DB) error {

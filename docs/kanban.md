@@ -16,6 +16,16 @@ Number (#1, #2… per project), title, priority (low, normal, high, critical), l
 - **New**: description (Markdown, 1500 characters max: the model tends to be verbose), notes (1000 characters max each, with the conversation that wrote them), briefing conversations.
 - **To do**: implementation plan (Markdown), goals (a title and a description of how to check it, checkable), plan conversations, estimated size (S, M, L, XL: required when a model writes the plan, editable by the user).
 
+**Complexity** (low, medium, high: how hard the work is, apart from its size) routes the sessions: a model writing the plan estimates it (required with `kanban_set_plan`), as it does for each test feedback it adds (`kanban_feedback` action `add`); the user changes it on the ticket and on each feedback (a feedback without one takes the one of its ticket). Each level is an effort of the integrated assistant and a model of Claude Code:
+
+| Complexity | Integrated assistant | Claude Code |
+|---|---|---|
+| High | effort Max | Opus |
+| Medium, or not estimated | effort Dynamic | Sonnet |
+| Low | effort Low | Haiku |
+
+*Briefing*, *Start development*, *Fix session* and *Fix feedbacks* (the hardest of the open feedback) run the level of the complexity on a click, named on the button (*· Max*, *· Low*); their arrow lists every level, the recommended one starred. *Review* offers Claude Opus (high) or Sonnet. The effort of a session stays with its conversation (`ticket.effort`), whatever the options of the assistant; changing the effort in the conversation changes it for that session.
+
 The priority and the size are fixed once the development started (*In progress*, *To test*, *Done*, *Abandoned*): the view shows them as badges, the pod refuses a change from the user or a model, and a plan written then keeps the size.
 - **In progress**: development conversations, git and changes, how to test (written by the model when it finishes).
 - **To test**: test feedback (info, bug or new feature; 1000 characters max; checked once handled, by the model or the user; with the conversation handling it), pull request.

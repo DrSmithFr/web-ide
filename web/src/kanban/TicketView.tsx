@@ -12,9 +12,10 @@ import { basename, closeTab, leaves, openFile, relPath, root, type TabState } fr
 import {
   addAttachment, addNote, eventText, attachmentBlob, deleteAttachment, deleteNote, deleteTicket, ensureBoard, feedbackLabels, feedbackOp, getTicket, goalOp,
   moveTicket, priorityLabels, sizeNames, statusLabels, ticketVersion, updateTicket,
-  MAX_DESCRIPTION, MAX_NOTE, type FeedbackKind, type Goal, type Priority, type Size, type Status, type Ticket,
+  complexityLabels, complexityNames, MAX_DESCRIPTION, MAX_NOTE, type Complexity, type FeedbackKind, type Goal, type Priority, type Size, type Status, type Ticket,
 } from './state'
-import { abandonTicket, ChatLink, PullRequest, ticketActions, TicketChats, TicketGit, type ActionButton } from './actions'
+import { abandonTicket, ChatLink, PullRequest, recommended, routed, ticketActions, TicketChats, TicketGit, type ActionButton } from './actions'
+import { aiLabel, aiSuffix, claudeLabel, claudeSuffix, tiers, type Tier } from './route'
 import { runClaude } from './claude'
 import { startWorkSession } from './sessions'
 import { LineageSection } from './Lineage'
@@ -174,6 +175,7 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
               <For each={Object.entries(sizeNames)}>{([v, l]) => <option value={v}>{t('Size {size}', { size: l })}</option>}</For>
             </select>
           </Show>
+          <ComplexitySelect value={tk().complexity} onChange={(c) => props.apply(updateTicket(tk().id, { complexity: c }))} testid="ticket-complexity" />
           <span class="muted small">{t('created on {date}', { date: fmtDate(tk().created) })}</span>
           <span class="grow" />
           <For each={buttons().filter((b) => !b.more)}>{(b) => <ActionBtn b={b} />}</For>
@@ -367,10 +369,11 @@ function Notes(props: { tk: Ticket; apply: Apply; folded?: boolean }) {
 function FeedbackList(props: { tk: Ticket; apply: Apply; areaRef: (el: HTMLTextAreaElement) => void; folded?: boolean }) {
   const [text, setText] = createSignal('')
   const [kind, setKind] = createSignal<FeedbackKind>('bug')
+  const [complexity, setComplexity] = createSignal<Complexity | ''>('')
   const list = () => props.tk.feedbackList
   const open = () => list().filter((f) => !f.done).length
   const add = async () => {
-    await props.apply(feedbackOp(props.tk.id, { op: 'add', kind: kind(), text: text() }))
+    await props.apply(feedbackOp(props.tk.id, { op: 'add', kind: kind(), text: text(), complexity: complexity() }))
     setText('')
   }
   // Correction conversations not tied to a feedback.
@@ -389,6 +392,12 @@ function FeedbackList(props: { tk: Ticket; apply: Apply; areaRef: (el: HTMLTextA
                   onChange={(e) => props.apply(feedbackOp(props.tk.id, { op: 'check', id: f.id, done: e.currentTarget.checked }))}
                 />
                 <span class={`tk-fb-kind k-${f.kind}`}>{feedbackLabels[f.kind]}</span>
+                <ComplexitySelect
+                  value={f.complexity}
+                  inherit
+                  onChange={(c) => props.apply(feedbackOp(props.tk.id, { op: 'complexity', id: f.id, complexity: c }))}
+                  testid="ticket-feedback-complexity"
+                />
                 <span class="muted small">{fmtDate(f.created)}</span>
                 <Show when={f.chatId}>
                   <ChatLink tk={props.tk} chatId={f.chatId!} />
@@ -397,12 +406,14 @@ function FeedbackList(props: { tk: Ticket; apply: Apply; areaRef: (el: HTMLTextA
                 <Show when={!f.done && props.tk.status === 'review'}>
                   <ActionBtn
                     icon="sparkle"
-                    b={{
-                      label: t('Fix session'),
-                      run: () => void startWorkSession(props.tk, 'correction', f),
-                      claude: { run: () => runClaude(props.tk, 'fix', f.id) },
-                      testid: 'ticket-feedback-session',
-                    }}
+                    b={routed(
+                      { label: t('Fix session'), testid: 'ticket-feedback-session' },
+                      {
+                        complexity: f.complexity || props.tk.complexity,
+                        ai: (x) => void startWorkSession(props.tk, 'correction', f, false, undefined, x.effort),
+                        claude: (x) => runClaude(props.tk, 'fix', f.id, x.claude),
+                      },
+                    )}
                   />
                 </Show>
                 <button class="icon-btn small" title={t('Delete')} onClick={() => props.apply(feedbackOp(props.tk.id, { op: 'delete', id: f.id }))}>
@@ -418,6 +429,7 @@ function FeedbackList(props: { tk: Ticket; apply: Apply; areaRef: (el: HTMLTextA
             <select class="small" value={kind()} onChange={(e) => setKind(e.currentTarget.value as FeedbackKind)} data-testid="ticket-feedback-kind">
               <For each={Object.entries(feedbackLabels)}>{([v, l]) => <option value={v}>{l}</option>}</For>
             </select>
+            <ComplexitySelect value={complexity()} inherit onChange={setComplexity} testid="ticket-feedback-add-complexity" />
             <textarea
               ref={props.areaRef}
               class="tk-note-input"
@@ -487,9 +499,65 @@ async function openAttachment(id: number, aid: number) {
 
 // ---------- pieces ----------
 
+/** The complexity of a ticket, or of a feedback (inherit: "" is the one of its ticket). */
+function ComplexitySelect(props: { value?: Complexity | ''; inherit?: boolean; onChange: (c: Complexity | '') => void; testid?: string }) {
+  return (
+    <select
+      class="small"
+      value={props.value ?? ''}
+      onChange={(e) => props.onChange(e.currentTarget.value as Complexity | '')}
+      title={t('How hard it is: it picks the model and the effort of its sessions')}
+      data-testid={props.testid}
+    >
+      <option value="">{props.inherit ? t('Complexity of the ticket') : t('Complexity not estimated')}</option>
+      <For each={Object.keys(complexityNames) as Complexity[]}>{(c) => <option value={c}>{complexityLabels[c]}</option>}</For>
+    </select>
+  )
+}
+
 /** A button of an action; with a Claude Code variant, a split button: the integrated
  * assistant on a click, the arrow offers Claude Code instead (Claude Code only for now
  * for some actions: the click runs it). */
+/** A routed session (route.ts): the click runs the level of the complexity, named on the
+ * button (Max, Low, the Claude model); the arrow lists every level, the recommended one starred. */
+function RoutedBtn(props: { b: ActionButton; icon?: string }) {
+  const b = props.b
+  const r = b.route!
+  const rec = recommended(r)
+  const suffix = r.ai ? aiSuffix(rec) : claudeSuffix(rec)
+  const star = (x: Tier, ai: boolean) => (x === rec && ai === !!r.ai ? '★' : undefined)
+  const choices = (): MenuItem[] =>
+    tiers
+      .filter((x) => !r.levels || r.levels.includes(x.complexity))
+      .flatMap((x, i) => [
+        ...(i ? [{ label: '', separator: true }] : []),
+        ...(r.ai ? [{ label: aiLabel(x), action: () => r.ai!(x), hint: star(x, true) }] : []),
+        { label: claudeLabel(x), action: () => r.claude(x), hint: star(x, false) },
+      ])
+  return (
+    <span class="tk-split">
+      <button class={`btn small ${b.primary ? 'primary' : ''}`} disabled={b.disabled} title={b.title} onClick={b.run} data-testid={b.testid}>
+        <Show when={props.icon}>
+          <Icon name={props.icon!} size={12} />{' '}
+        </Show>
+        {b.label}
+        <Show when={suffix}>
+          <span class="tk-tier"> · {suffix}</span>
+        </Show>
+      </button>
+      <button
+        class={`btn small ${b.primary ? 'primary' : ''}`}
+        disabled={b.disabled}
+        title={r.ai ? t('With the integrated AI or Claude Code') : t('With Claude Code')}
+        onClick={(e) => contextMenu(e, choices())}
+        data-testid={b.testid && `${b.testid}-with`}
+      >
+        <Icon name="chevron" size={11} />
+      </button>
+    </span>
+  )
+}
+
 function ActionBtn(props: { b: ActionButton; icon?: string }) {
   const b = props.b
   const main = (
@@ -500,6 +568,7 @@ function ActionBtn(props: { b: ActionButton; icon?: string }) {
       {b.label}
     </button>
   )
+  if (b.route) return <RoutedBtn b={b} icon={props.icon} />
   if (!b.claude) return main
   const choices = (): MenuItem[] => [
     ...(b.claude!.only ? [] : [{ label: t('With the integrated AI'), action: b.run }]),

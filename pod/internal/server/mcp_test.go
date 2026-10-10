@@ -115,10 +115,13 @@ func TestMCPKanban(t *testing.T) {
 	if text, failed := m.tool("kanban_set_plan", map[string]any{"cwd": cwd, "id": 1, "plan": "# Plan", "goals": []any{"g"}}); !failed || !strings.Contains(text, "size is required") {
 		t.Fatalf("plan without a size: %s", text)
 	}
-	m.ok("kanban_set_plan", map[string]any{"cwd": cwd, "id": 1, "plan": "# Plan", "goals": []any{map[string]any{"title": "exported"}}, "size": "m"})
+	if text, failed := m.tool("kanban_set_plan", map[string]any{"cwd": cwd, "id": 1, "plan": "# Plan", "goals": []any{"g"}, "size": "m"}); !failed || !strings.Contains(text, "complexity is required") {
+		t.Fatalf("plan without a complexity: %s", text)
+	}
+	m.ok("kanban_set_plan", map[string]any{"cwd": cwd, "id": 1, "plan": "# Plan", "goals": []any{map[string]any{"title": "exported"}}, "size": "m", "complexity": "high"})
 	m.ok("kanban_add_note", map[string]any{"cwd": cwd, "id": 1, "text": "comma separator"})
 	md := m.ok("kanban_get", map[string]any{"cwd": cwd, "id": 1})
-	if !strings.Contains(md, "Status: To do · priority: Normal · size: M") || !strings.Contains(md, "(Claude, ") || !strings.Contains(md, "- [ ] (id 1) exported") {
+	if !strings.Contains(md, "Status: To do · priority: Normal · size: M · complexity: High") || !strings.Contains(md, "(Claude, ") || !strings.Contains(md, "- [ ] (id 1) exported") {
 		t.Fatalf("get: %s", md)
 	}
 	tk := a.call("kanban.get", map[string]any{"id": 1})["result"].(map[string]any)
@@ -146,14 +149,17 @@ func TestMCPKanban(t *testing.T) {
 	m.ok("kanban_goal", map[string]any{"cwd": wt, "action": "add", "title": "extra"})
 	m.ok("kanban_goal", map[string]any{"cwd": wt, "action": "edit", "goal": 1, "title": "exported as CSV"})
 	m.ok("kanban_goal", map[string]any{"cwd": wt, "action": "delete", "goal": 2})
-	if text := m.ok("kanban_feedback", map[string]any{"cwd": wt, "action": "add", "kind": "bug", "text": "no header row"}); !strings.Contains(text, "Feedback 1 added") {
+	if text, failed := m.tool("kanban_feedback", map[string]any{"cwd": wt, "action": "add", "kind": "bug", "text": "no header row"}); !failed || !strings.Contains(text, "complexity is required") {
+		t.Fatalf("feedback without a complexity: %s", text)
+	}
+	if text := m.ok("kanban_feedback", map[string]any{"cwd": wt, "action": "add", "kind": "bug", "text": "no header row", "complexity": "low"}); !strings.Contains(text, "Feedback 1 added") {
 		t.Fatalf("feedback add: %s", text)
 	}
-	if text, failed := m.tool("kanban_feedback", map[string]any{"cwd": wt, "action": "add", "kind": "nope", "text": "x"}); !failed || !strings.Contains(text, "unknown feedback kind") {
+	if text, failed := m.tool("kanban_feedback", map[string]any{"cwd": wt, "action": "add", "kind": "nope", "text": "x", "complexity": "low"}); !failed || !strings.Contains(text, "unknown feedback kind") {
 		t.Fatalf("feedback of an unknown kind: %s", text)
 	}
 	md = m.ok("kanban_get", map[string]any{"cwd": wt})
-	if !strings.Contains(md, "- [x] (id 1) exported as CSV") || strings.Contains(md, "extra") || !strings.Contains(md, "(id 1, Bug, ") {
+	if !strings.Contains(md, "- [x] (id 1) exported as CSV") || strings.Contains(md, "extra") || !strings.Contains(md, "(id 1, Bug, complexity Low, ") {
 		t.Fatalf("goals and feedback of Claude: %s", md)
 	}
 	m.ok("kanban_feedback", map[string]any{"cwd": wt, "action": "done", "feedback": 1})
@@ -161,8 +167,8 @@ func TestMCPKanban(t *testing.T) {
 	// Lineage: a child waits for the step of its parent, then works in its worktree, where
 	// it becomes the default ticket.
 	text = m.ok("kanban_create", map[string]any{"cwd": cwd, "title": "Export step 2", "parent": 1})
-	m.ok("kanban_set_plan", map[string]any{"cwd": cwd, "id": 2, "plan": "p", "goals": []any{"g"}, "size": "s"})
-	if text := m.ok("kanban_list", map[string]any{"cwd": cwd}); !strings.Contains(text, "#2 [To do] (Normal) Export step 2 · size S · goals 0/1 · child of #1 · blocked by #1 (previous step not validated)") {
+	m.ok("kanban_set_plan", map[string]any{"cwd": cwd, "id": 2, "plan": "p", "goals": []any{"g"}, "size": "s", "complexity": "low"})
+	if text := m.ok("kanban_list", map[string]any{"cwd": cwd}); !strings.Contains(text, "#2 [To do] (Normal) Export step 2 · size S · complexity Low · goals 0/1 · child of #1 · blocked by #1 (previous step not validated)") {
 		t.Fatalf("list with a lineage: %s", text)
 	}
 	if text, failed := m.tool("kanban_start", map[string]any{"cwd": cwd, "id": 2}); !failed || !strings.Contains(text, "#1 (previous step not validated)") || !strings.Contains(text, "Only the user") {

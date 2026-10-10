@@ -290,7 +290,7 @@ export function agentOptions() {
   return {
     autoApply: prefs.autoApply,
     think: prefs.think,
-    effort: prefs.effort,
+    effort: chat.ticket?.effort ?? prefs.effort,
     effortTool: prefs.effortTool,
     tools: prefs.tools,
     autoCompact: prefs.autoCompact,

@@ -50,9 +50,10 @@ func enum(description string, values ...string) map[string]any {
 var ticketID = map[string]any{"type": "integer", "description": "Ticket number (default: the ticket of the worktree you are in)"}
 
 var (
-	parentProp    = map[string]any{"type": "integer", "description": "Parent ticket: this one becomes the next step of its lineage, developed in the parent's worktree after it (0 takes it out). Only before its development starts"}
-	sizeProp      = enum("Estimated effort of the whole ticket: s (a few files, an hour of agent work), m, l, xl (many files across the pod and the page, several days)", kanban.Sizes...)
-	dependsOnProp = map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "Tickets of other lineages this one waits for: it starts once they are merged or done (replaces the list)"}
+	parentProp     = map[string]any{"type": "integer", "description": "Parent ticket: this one becomes the next step of its lineage, developed in the parent's worktree after it (0 takes it out). Only before its development starts"}
+	complexityProp = enum("How hard the work is, which picks the model and the effort of its sessions: low (a small obvious change: a color, a label, a one-line fix), medium (usual work), high (a delicate design, concurrency, security, a bug hard to find)", kanban.Complexities...)
+	sizeProp       = enum("Estimated effort of the whole ticket: s (a few files, an hour of agent work), m, l, xl (many files across the pod and the page, several days)", kanban.Sizes...)
+	dependsOnProp  = map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "Tickets of other lineages this one waits for: it starts once they are merged or done (replaces the list)"}
 )
 
 // mcpScope is the kanban a call works on, found from the working directory of the client.
@@ -191,6 +192,9 @@ var mcpTools = []mcpTool{
 				fmt.Fprintf(&b, "#%d [%s] (%s) %s", t.ID, kanban.StatusNames[t.Status], kanban.PriorityNames[t.Priority], t.Title)
 				if t.Size != "" {
 					fmt.Fprintf(&b, " · size %s", kanban.SizeNames[t.Size])
+				}
+				if t.Complexity != "" {
+					fmt.Fprintf(&b, " · complexity %s", kanban.ComplexityNames[t.Complexity])
 				}
 				if t.Goals > 0 {
 					fmt.Fprintf(&b, " · goals %d/%d", t.GoalsDone, t.Goals)
@@ -350,6 +354,7 @@ var mcpTools = []mcpTool{
 			"add_files":    strList("Files to link"),
 			"remove_files": strList("Files to unlink"),
 			"size":         sizeProp,
+			"complexity":   complexityProp,
 			"parent":       parentProp,
 			"depends_on":   dependsOnProp,
 		},
@@ -360,12 +365,12 @@ var mcpTools = []mcpTool{
 			RemoveFiles                  []string `json:"remove_files"`
 			Parent                       *int64
 			DependsOn                    *[]int64 `json:"depends_on"`
-			Size                         string
+			Size, Complexity             string
 		}) (string, error) {
 			if err := tooLong(a.Description, kanban.MaxDescription, descriptionAdvice); err != nil {
 				return "", err
 			}
-			p := kanban.Patch{Title: nonEmpty(a.Title), Description: nonEmpty(a.Description), Priority: nonEmpty(a.Priority), TestSummary: nonEmpty(a.TestSummary), AddFiles: a.AddFiles, RemoveFiles: a.RemoveFiles, Parent: a.Parent, DependsOn: a.DependsOn, Size: nonEmpty(a.Size)}
+			p := kanban.Patch{Title: nonEmpty(a.Title), Description: nonEmpty(a.Description), Priority: nonEmpty(a.Priority), TestSummary: nonEmpty(a.TestSummary), AddFiles: a.AddFiles, RemoveFiles: a.RemoveFiles, Parent: a.Parent, DependsOn: a.DependsOn, Size: nonEmpty(a.Size), Complexity: nonEmpty(a.Complexity)}
 			if err := s.Kanban.Update(sc.loc, id, p, kanban.ByClaude); err != nil {
 				return "", err
 			}
@@ -400,13 +405,14 @@ var mcpTools = []mcpTool{
 					"title": str("Short title, one sentence"), "description": str("How to check it (optional, a few lines)"),
 				}},
 			},
-			"size": sizeProp,
+			"size":       sizeProp,
+			"complexity": complexityProp,
 		},
-		required: []string{"plan", "goals", "size"},
+		required: []string{"plan", "goals", "size", "complexity"},
 		run: ticketTool(func(ctx context.Context, s *Server, sc mcpScope, id int64, a struct {
-			Plan  string
-			Goals []kanban.GoalInput
-			Size  string
+			Plan             string
+			Goals            []kanban.GoalInput
+			Size, Complexity string
 		}) (string, error) {
 			if strings.TrimSpace(a.Plan) == "" {
 				return "", fmt.Errorf("empty plan")
@@ -414,7 +420,10 @@ var mcpTools = []mcpTool{
 			if a.Size == "" {
 				return "", fmt.Errorf("size is required: s, m, l or xl")
 			}
-			if err := s.Kanban.Update(sc.loc, id, kanban.Patch{Size: &a.Size, PlanSize: true}, kanban.ByClaude); err != nil {
+			if a.Complexity == "" {
+				return "", fmt.Errorf("complexity is required: low, medium or high")
+			}
+			if err := s.Kanban.Update(sc.loc, id, kanban.Patch{Size: &a.Size, Complexity: &a.Complexity, PlanSize: true}, kanban.ByClaude); err != nil {
 				return "", err
 			}
 			if err := s.Kanban.SetPlan(sc.loc, id, a.Plan, a.Goals, kanban.ByClaude); err != nil {
@@ -482,19 +491,23 @@ var mcpTools = []mcpTool{
 		name:        "kanban_feedback",
 		description: "Test feedback of a ticket: add one (a bug, a missing feature or an info found while testing), mark one handled (done) once fixed and verified, or open again (reopen).",
 		props: map[string]any{
-			"id":       ticketID,
-			"action":   enum("What to do", "add", "done", "reopen"),
-			"feedback": map[string]any{"type": "integer", "description": "Feedback id (done, reopen), see kanban_get"},
-			"kind":     enum("Kind (add)", kanban.FeedbackKinds...),
-			"text":     str(fmt.Sprintf("What was noticed (add, %d characters max)", kanban.MaxNote)),
+			"id":         ticketID,
+			"action":     enum("What to do", "add", "done", "reopen"),
+			"feedback":   map[string]any{"type": "integer", "description": "Feedback id (done, reopen), see kanban_get"},
+			"kind":       enum("Kind (add)", kanban.FeedbackKinds...),
+			"complexity": enum("How hard the fix is (add): low, medium or high; it picks the model of the fix session", kanban.Complexities...),
+			"text":       str(fmt.Sprintf("What was noticed (add, %d characters max)", kanban.MaxNote)),
 		},
 		required: []string{"action"},
 		run: ticketTool(func(ctx context.Context, s *Server, sc mcpScope, id int64, a struct {
-			Action, Kind, Text string
-			Feedback           int64
+			Action, Kind, Text, Complexity string
+			Feedback                       int64
 		}) (string, error) {
 			if a.Action == "add" {
-				fid, err := s.Kanban.Feedback(sc.loc, id, kanban.FeedbackOp{Op: "add", Kind: a.Kind, Text: a.Text}, kanban.ByClaude)
+				if a.Complexity == "" {
+					return "", fmt.Errorf("complexity is required: low, medium or high")
+				}
+				fid, err := s.Kanban.Feedback(sc.loc, id, kanban.FeedbackOp{Op: "add", Kind: a.Kind, Text: a.Text, Complexity: a.Complexity}, kanban.ByClaude)
 				if err != nil {
 					return "", err
 				}

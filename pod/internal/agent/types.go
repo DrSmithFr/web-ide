@@ -77,6 +77,9 @@ type TicketLink struct {
 	// Project the conversation works in (the worktree of the ticket for a development):
 	// it stays there whatever worktree the window shows.
 	Project string `json:"project,omitempty"`
+	// Effort of the integrated assistant chosen for the session from the complexity (auto,
+	// xhigh, low): it replaces the one of the options of the user.
+	Effort string `json:"effort,omitempty"`
 }
 
 // Options are the preferences of the page that change how the agent runs.

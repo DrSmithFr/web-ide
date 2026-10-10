@@ -37,6 +37,8 @@ type Feedback struct {
 	Author  string `json:"author"`
 	ChatID  string `json:"chatId,omitempty"`
 	Created int64  `json:"created"`
+	// Complexity: low | medium | high ("" when not estimated).
+	Complexity string `json:"complexity,omitempty"`
 }
 
 type ChatLink struct {
@@ -99,11 +101,14 @@ type Summary struct {
 	// Lineage: the parent (0: none), the place among its children, and for a parent its
 	// own step validated (its children may start).
 	// Size: estimated effort, s | m | l | xl ("" when not estimated yet).
-	Size      string  `json:"size,omitempty"`
-	Parent    int64   `json:"parent,omitempty"`
-	Pos       int     `json:"pos,omitempty"`
-	StepDone  bool    `json:"stepDone,omitempty"`
-	DependsOn []int64 `json:"dependsOn"`
+	Size string `json:"size,omitempty"`
+	// Complexity: low | medium | high ("" when not estimated): it picks the model and the
+	// effort of the sessions.
+	Complexity string  `json:"complexity,omitempty"`
+	Parent     int64   `json:"parent,omitempty"`
+	Pos        int     `json:"pos,omitempty"`
+	StepDone   bool    `json:"stepDone,omitempty"`
+	DependsOn  []int64 `json:"dependsOn"`
 	// Blockers keep a ticket from starting (filled by the server for the tickets that may
 	// start: it needs git).
 	Blockers []Blocker `json:"blockers,omitempty"`
@@ -141,12 +146,12 @@ const summaryCols = `t.id, t.title, t.priority, t.status, t.branch, t.worktree, 
   (SELECT COUNT(*) FROM goals g WHERE g.ticket_id = t.id),
   (SELECT COUNT(*) FROM chats c WHERE c.ticket_id = t.id),
   (SELECT COUNT(*) FROM feedback f WHERE f.ticket_id = t.id AND f.done = 0),
-  t.parent_id, t.pos, t.step_done, t.size`
+  t.parent_id, t.pos, t.step_done, t.size, t.complexity`
 
 func scanSummary(row interface{ Scan(...any) error }, s *Summary) error {
 	s.DependsOn = []int64{}
 	return row.Scan(&s.ID, &s.Title, &s.Priority, &s.Status, &s.Branch, &s.Worktree, &s.Created, &s.Updated, &s.Closed, &s.GoalsDone, &s.Goals, &s.Chats, &s.FeedbackOpen,
-		&s.Parent, &s.Pos, &s.StepDone, &s.Size)
+		&s.Parent, &s.Pos, &s.StepDone, &s.Size, &s.Complexity)
 }
 
 // summaries reads tickets with their dependencies (where: an SQL condition on t).
@@ -259,7 +264,7 @@ func get(db *sql.DB, id int64) (*Ticket, error) {
 	var snap string
 	row := db.QueryRow(`SELECT `+summaryCols+`, t.description, t.plan, t.test_summary, t.pr, t.base, t.setup, t.setup_log, t.snapshot FROM tickets t WHERE t.id = ?`, id)
 	err := row.Scan(&t.ID, &t.Title, &t.Priority, &t.Status, &t.Branch, &t.Worktree, &t.Created, &t.Updated, &t.Closed, &t.GoalsDone, &t.Goals, &t.Chats, &t.FeedbackOpen,
-		&t.Parent, &t.Pos, &t.StepDone, &t.Size,
+		&t.Parent, &t.Pos, &t.StepDone, &t.Size, &t.Complexity,
 		&t.Description, &t.Plan, &t.TestSummary, &t.PR, &t.Base, &t.Setup, &t.SetupLog, &snap)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -313,9 +318,9 @@ func get(db *sql.DB, id int64) (*Ticket, error) {
 	}); err != nil {
 		return nil, err
 	}
-	if err := each(`SELECT id, kind, text, done, author, chat_id, created FROM feedback WHERE ticket_id = ? ORDER BY created, id`, func(r *sql.Rows) error {
+	if err := each(`SELECT id, kind, text, done, author, chat_id, created, complexity FROM feedback WHERE ticket_id = ? ORDER BY created, id`, func(r *sql.Rows) error {
 		var f Feedback
-		err := r.Scan(&f.ID, &f.Kind, &f.Text, &f.Done, &f.Author, &f.ChatID, &f.Created)
+		err := r.Scan(&f.ID, &f.Kind, &f.Text, &f.Done, &f.Author, &f.ChatID, &f.Created, &f.Complexity)
 		t.FeedbackList = append(t.FeedbackList, f)
 		return err
 	}); err != nil {
@@ -353,6 +358,7 @@ type Patch struct {
 	Title       *string   `json:"title"`
 	Priority    *string   `json:"priority"`
 	Size        *string   `json:"size"`
+	Complexity  *string   `json:"complexity"`
 	Description *string   `json:"description"`
 	Plan        *string   `json:"plan"`
 	TestSummary *string   `json:"testSummary"`
@@ -385,6 +391,9 @@ func (p *Patch) validate() error {
 	}
 	if p.Size != nil && *p.Size != "" && !contains(Sizes, *p.Size) {
 		return i18n.Errorf("unknown size: %s (%s)", *p.Size, strings.Join(Sizes, ", "))
+	}
+	if p.Complexity != nil && *p.Complexity != "" && !contains(Complexities, *p.Complexity) {
+		return i18n.Errorf("unknown complexity: %s (%s)", *p.Complexity, strings.Join(Complexities, ", "))
 	}
 	return nil
 }
@@ -533,6 +542,9 @@ func (m *Manager) Update(loc Location, id int64, p Patch, by string) error {
 		if err := setSize(tx, id, p.Size, by, now); err != nil {
 			return err
 		}
+		if err := setComplexity(tx, id, p.Complexity, by, now); err != nil {
+			return err
+		}
 		if p.Plan != nil {
 			return planned(tx, id, *p.Plan, by, now)
 		}
@@ -556,6 +568,24 @@ func setSize(tx *sql.Tx, id int64, size *string, by string, now int64) error {
 		return err
 	}
 	return event(tx, id, by, "Size: {size}", Params{"size": SizeNames[*size]}, now)
+}
+
+// ComplexityNames are the names of the complexities, as shown and read by the models.
+var ComplexityNames = map[string]string{"low": "Low", "medium": "Medium", "high": "High"}
+
+// setComplexity changes the estimated complexity of a ticket, with a line in its history.
+func setComplexity(tx *sql.Tx, id int64, c *string, by string, now int64) error {
+	if c == nil {
+		return nil
+	}
+	var cur string
+	if err := tx.QueryRow(`SELECT complexity FROM tickets WHERE id = ?`, id).Scan(&cur); err != nil || cur == *c {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE tickets SET complexity = ? WHERE id = ?`, *c, id); err != nil {
+		return err
+	}
+	return event(tx, id, by, "Complexity: {complexity}", Params{"complexity": ComplexityNames[*c]}, now)
 }
 
 // StatusNames are the English names of the statuses (translated in messages).
@@ -818,6 +848,8 @@ type FeedbackOp struct {
 	Text   string `json:"text"`
 	Done   bool   `json:"done"`
 	ChatID string `json:"chatId"`
+	// Complexity (add, complexity): low | medium | high.
+	Complexity string `json:"complexity"`
 }
 
 // Feedback changes the test feedback of a ticket; it returns the id of an added one.
@@ -838,7 +870,10 @@ func (m *Manager) Feedback(loc Location, id int64, op FeedbackOp, by string) (in
 			if !contains(FeedbackKinds, op.Kind) {
 				return i18n.Errorf("unknown feedback kind: %s (%s)", op.Kind, strings.Join(FeedbackKinds, ", "))
 			}
-			res, err = tx.Exec(`INSERT INTO feedback (ticket_id, kind, text, author, chat_id, created) VALUES (?, ?, ?, ?, ?, ?)`, id, op.Kind, text, by, op.ChatID, now)
+			if op.Complexity != "" && !contains(Complexities, op.Complexity) {
+				return i18n.Errorf("unknown complexity: %s (%s)", op.Complexity, strings.Join(Complexities, ", "))
+			}
+			res, err = tx.Exec(`INSERT INTO feedback (ticket_id, kind, text, author, chat_id, created, complexity) VALUES (?, ?, ?, ?, ?, ?, ?)`, id, op.Kind, text, by, op.ChatID, now, op.Complexity)
 			if err == nil {
 				fid, _ = res.LastInsertId()
 			}
@@ -846,6 +881,11 @@ func (m *Manager) Feedback(loc Location, id int64, op FeedbackOp, by string) (in
 			res, err = tx.Exec(`UPDATE feedback SET done = ? WHERE ticket_id = ? AND id = ?`, op.Done, id, op.ID)
 		case "chat":
 			res, err = tx.Exec(`UPDATE feedback SET chat_id = ? WHERE ticket_id = ? AND id = ?`, op.ChatID, id, op.ID)
+		case "complexity":
+			if op.Complexity != "" && !contains(Complexities, op.Complexity) {
+				return i18n.Errorf("unknown complexity: %s (%s)", op.Complexity, strings.Join(Complexities, ", "))
+			}
+			res, err = tx.Exec(`UPDATE feedback SET complexity = ? WHERE ticket_id = ? AND id = ?`, op.Complexity, id, op.ID)
 		case "delete":
 			res, err = tx.Exec(`DELETE FROM feedback WHERE ticket_id = ? AND id = ?`, id, op.ID)
 		default:
