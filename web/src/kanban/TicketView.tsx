@@ -267,13 +267,13 @@ type Stage = 'new' | 'todo' | 'in_progress' | 'review'
 // The sections each status shows, in order, and those open (the others folded).
 const layouts: Record<Stage, { parts: Part[]; open: Part[] }> = {
   new: { parts: ['description', 'briefing', 'notes'], open: ['description', 'briefing', 'notes'] },
-  todo: { parts: ['description', 'briefing', 'notes', 'planChats', 'plan', 'goals'], open: ['description', 'planChats', 'plan', 'goals'] },
+  todo: { parts: ['description', 'briefing', 'notes', 'planChats', 'goals', 'plan'], open: ['description', 'planChats', 'plan', 'goals'] },
   in_progress: {
-    parts: ['description', 'briefing', 'notes', 'planChats', 'plan', 'goals', 'devChats', 'git'],
+    parts: ['description', 'briefing', 'notes', 'planChats', 'plan', 'devChats', 'goals', 'git'],
     open: ['description', 'goals', 'devChats', 'git'],
   },
   review: {
-    parts: ['description', 'briefing', 'notes', 'planChats', 'plan', 'goals', 'devChats', 'test', 'git', 'feedback', 'pr'],
+    parts: ['description', 'briefing', 'notes', 'planChats', 'plan', 'goals', 'devChats', 'test', 'feedback', 'git', 'pr'],
     open: ['description', 'test', 'git', 'feedback', 'pr'],
   },
 }

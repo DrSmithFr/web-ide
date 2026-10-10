@@ -42,7 +42,7 @@ run(async ({ page, ctx }) => {
   await page.waitForSelector('[data-testid=ticket-status]:has-text("To do")')
   await page.waitForSelector('[data-testid=ticket-plan] ol li')
   assert(
-    (await sections()).join() === 'Description,-Briefing conversations,-Notes,Plan conversations,Implementation plan,Goals',
+    (await sections()).join() === 'Description,-Briefing conversations,-Notes,Plan conversations,Goals,Implementation plan',
     'To do: briefing and notes folded, plan and goals open: ' + (await sections()).join(),
   )
   for (const [g, d] of [['The /export route answers', 'curl /export'], ['The CSV has a header', '']]) {
@@ -118,7 +118,7 @@ run(async ({ page, ctx }) => {
   await page.click('[data-testid=ticket-to-review]')
   await page.waitForSelector('[data-testid=ticket-status]:has-text("To test")')
   assert(
-    (await sections()).join() === 'Description,-Briefing conversations,-Notes,-Plan conversations,-Implementation plan,-Goals · 1/2,-Development conversations,How to test,Git and changes,Feedback',
+    (await sections()).join() === 'Description,-Briefing conversations,-Notes,-Plan conversations,-Implementation plan,-Goals · 1/2,-Development conversations,How to test,Feedback,Git and changes',
     'To test: development folded, test, git and feedback open, no pull request without a branch: ' + (await sections()).join(),
   )
   await page.click('[data-testid=ticket-feedback]')

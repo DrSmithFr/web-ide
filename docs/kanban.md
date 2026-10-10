@@ -21,9 +21,9 @@ Number (#1, #2… per project), title, priority (low, normal, high, critical), l
 The ticket view lists, in one column, the sections of the status of the ticket; those of the earlier statuses stay, folded (each status change folds and opens them again):
 
 - **New**: description, briefing conversations, notes.
-- **To do**: + plan conversations, implementation plan, goals (briefing and notes folded).
-- **In progress**: + development conversations, git and changes (plan folded; goals open).
-- **To test**: + how to test, feedback, pull request, shown once it exists or can be made (development and goals folded).
+- **To do**: + plan conversations, goals, implementation plan (briefing and notes folded).
+- **In progress**: + development conversations, then goals and git and changes (plan folded; goals open).
+- **To test**: + how to test, feedback, then git and changes and the pull request, shown once it exists or can be made (development and goals folded).
 - **Done**, **Abandoned**: the sections of *To test* that have content, all folded but the description.
 
 Aside: lineage, linked files, attachments, history.
