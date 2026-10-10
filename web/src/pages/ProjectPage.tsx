@@ -150,8 +150,17 @@ function focusZone(zone: Zone, tries = 10, from = document.activeElement) {
   const moved = () => document.activeElement !== from && document.activeElement !== document.body
   if (!target && tries > 0) return void requestAnimationFrame(() => !moved() && focusZone(zone, tries - 1, from))
   ;(target ?? (phone() ? el : ([...el.querySelectorAll<HTMLElement>(fallbackTarget)].find(visible) ?? el))).focus()
-  // The rows of a tool still loading can be rendered again: the focus is given back if it was lost.
-  if (tries > 0) requestAnimationFrame(() => document.activeElement === document.body && focusPart() === zone && focusZone(zone, tries - 1))
+  // The rows of a tool still loading can be rendered again: the focus is given back if it is
+  // lost in the next frames.
+  if (tries > 0) keepZoneFocus(zone, 30)
+}
+
+function keepZoneFocus(zone: Zone, frames: number) {
+  requestAnimationFrame(() => {
+    if (focusPart() !== zone) return
+    if (document.activeElement === document.body) focusZone(zone, 0)
+    else if (frames > 0) keepZoneFocus(zone, frames - 1)
+  })
 }
 
 /** Shortcut of a tool: shows it and gives it the focus; hides it when it has the focus already. */

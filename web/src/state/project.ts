@@ -282,8 +282,8 @@ export function openTab(tab: Omit<TabState, 'id'>, paneId = session.activePane):
   mutate((s) => {
     s.tabs[id] = { ...tab, id }
     const l = findLeaf(s.layout, leaf.id)!
-    const at = l.active ? l.tabs.indexOf(l.active) + 1 : l.tabs.length
-    l.tabs.splice(at, 0, id)
+    // A new tab goes first (a tab already open keeps its place).
+    l.tabs.unshift(id)
     l.active = id
     s.activePane = l.id
   })

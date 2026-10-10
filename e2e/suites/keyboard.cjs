@@ -70,9 +70,10 @@ run(async ({ page }) => {
   const tabText = () => page.evaluate(() => document.activeElement?.textContent?.trim())
   const tab0 = await tabText()
   assert(tab0.includes('notes.txt'), 'the Tab stop of a tab bar is its active tab')
-  await page.keyboard.press('ArrowLeft')
+  // The new tab opened first: the one opened before is on its right.
+  await page.keyboard.press('ArrowRight')
   const tab1 = await tabText()
-  assert(tab1.includes('main.go'), 'ArrowLeft moves to the previous editor tab')
+  assert(tab1.includes('main.go'), 'ArrowRight moves to the next editor tab')
   await page.keyboard.press('Enter')
   await page.waitForFunction((n) => document.querySelector('.pane.active .tab.active')?.textContent.includes(n), tab1)
   assert(true, 'Enter activates the tab')

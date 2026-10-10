@@ -224,8 +224,9 @@ button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 .tab.drop-before { box-shadow: inset 2px 0 0 var(--accent); }
 .tab.drop-after { box-shadow: inset -2px 0 0 var(--accent); }
 .tab.active { background: var(--bg); color: var(--fg); }
-.pane.active .tab.active::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--fg); }
-.pane.focused .tab.active::after { background: var(--accent); }
+.pane .tabbar .tab.active::after { content: ''; position: absolute; inset: 0; border: 1px solid var(--fg-faint); border-bottom-width: 3px; pointer-events: none; }
+.pane.active .tabbar .tab.active::after { border-color: var(--fg); }
+.pane.focused .tabbar .tab.active::after { border-color: var(--accent); }
 .tab.conflict { background: color-mix(in srgb, var(--conflict-bg) 70%, transparent); }
 .tab.readonly .tab-title { font-style: italic; }
 .tab-title { overflow: hidden; text-overflow: ellipsis; }

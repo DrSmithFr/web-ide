@@ -120,6 +120,14 @@ function Pane(props: { id: string }) {
     return l?.active ? session.tabs[l.active] : undefined
   }
   const isActivePane = () => session.activePane === props.id
+  let tabbar!: HTMLDivElement
+  // The active tab stays in sight (a new one, first, when the bar is scrolled).
+  createEffect(
+    on(
+      () => leaf()?.active,
+      () => requestAnimationFrame(() => tabbar.querySelector('.tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })),
+    ),
+  )
 
   const tabMenu = (e: MouseEvent, tab: TabState) =>
     contextMenu(e, [
@@ -141,6 +149,7 @@ function Pane(props: { id: string }) {
   return (
     <div class="pane" classList={{ active: isActivePane(), focused: isActivePane() && focusPart() === 'editor' }} onMouseDown={() => setActivePane(props.id)}>
       <div
+        ref={tabbar}
         class="tabbar"
         role="tablist"
         onDragOver={(e) => {

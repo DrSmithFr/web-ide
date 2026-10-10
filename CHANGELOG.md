@@ -8,6 +8,11 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 - Markdown files open rendered in the editor: a floating button at the top right (or Alt+M) shows the source and back at about the same place, a double-click on a block shows its line in the source. Links open the files of the project, anchors scroll to their heading, images of the project are shown.
 
+### Changed
+
+- A new editor tab opens first, on the left of the bar (a tab already open keeps its place). The active editor tab has an inner border, thicker at the bottom.
+- A tool given the focus by its shortcut keeps it when its rows are rendered again a moment later.
+
 ## [1.8.0] - 2026-10-10
 
 ### Added

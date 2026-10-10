@@ -1,5 +1,5 @@
 // Navigation, splits, global search, terminal, palette, settings, SQLite explorer and console.
-const { run, openProject, assert, OUT } = require('../common.cjs')
+const { run, openProject, open, assert, OUT } = require('../common.cjs')
 run(async ({ page }) => {
   await openProject(page)
   await page.waitForTimeout(400)
@@ -41,10 +41,17 @@ run(async ({ page }) => {
 
   // File tabs reordered by drag and drop: on the right half of the next tab, one step right
   const tabs = (sel) => page.$$eval(sel, (els) => els.map((e) => e.querySelector('.tab-title').textContent))
-  assert(JSON.stringify(await tabs('.pane.active .tab')) === JSON.stringify(['app.php', 'main.go']), 'two file tabs')
+  assert(JSON.stringify(await tabs('.pane.active .tab')) === JSON.stringify(['main.go', 'app.php']), 'a new tab opens first: ' + JSON.stringify(await tabs('.pane.active .tab')))
+  const border = await page.$eval('.pane.active .tab.active', (e) => {
+    const cs = getComputedStyle(e, '::after')
+    return [cs.borderTopWidth, cs.borderLeftWidth, cs.borderRightWidth, cs.borderBottomWidth].join(' ')
+  })
+  assert(border === '1px 1px 1px 3px', 'the active tab has an inner border, thicker at the bottom: ' + border)
   const right = async (sel) => ({ x: (await page.$eval(sel, (e) => e.offsetWidth)) - 6, y: 12 })
-  await page.dragAndDrop('.pane.active .tab:has-text("app.php")', '.pane.active .tab:has-text("main.go")', { targetPosition: await right('.pane.active .tab:has-text("main.go")') })
-  assert(JSON.stringify(await tabs('.pane.active .tab')) === JSON.stringify(['main.go', 'app.php']), 'file tab moved one step right: ' + JSON.stringify(await tabs('.pane.active .tab')))
+  await page.dragAndDrop('.pane.active .tab:has-text("main.go")', '.pane.active .tab:has-text("app.php")', { targetPosition: await right('.pane.active .tab:has-text("app.php")') })
+  assert(JSON.stringify(await tabs('.pane.active .tab')) === JSON.stringify(['app.php', 'main.go']), 'file tab moved one step right: ' + JSON.stringify(await tabs('.pane.active .tab')))
+  await open(page, 'main.go')
+  assert(JSON.stringify(await tabs('.pane.active .tab')) === JSON.stringify(['app.php', 'main.go']), 'a tab already open keeps its place')
 
   // Terminal
   await page.keyboard.press('Control+Shift+Backquote')
@@ -188,7 +195,7 @@ run(async ({ page }) => {
   assert((await color('.zone-bottomRight .tab.active', '::after')) === fgRgb, 'active tab of an unfocused tool in white')
   await page.click('.pane .ed-content')
   assert(await page.isVisible('.pane.focused') && !(await page.isVisible('.zone.focused')), 'the clicked editor has the focus')
-  assert((await color('.pane.focused .tab.active', '::after')) === accentRgb, 'active tab of the focused pane in accent')
+  assert((await page.$eval('.pane.focused .tab.active', (e) => getComputedStyle(e, '::after').borderBottomColor)) === accentRgb, 'active tab of the focused pane in accent')
   // Accent color picked in the settings, visual focus mode from the palette
   await page.click('.menubar .icon-btn[title^="Settings"]')
   await page.click('.accent-card[data-accent=green]')
