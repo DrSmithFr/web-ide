@@ -8,10 +8,11 @@ import (
 
 	"github.com/DrSmithFr/web-ide/pod/internal/fsx"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
+	"github.com/DrSmithFr/web-ide/pod/internal/idedir"
 )
 
-// Folder marks: source, test and excluded folders, kept in .ide/folders.json (shared
-// with the repository). Excluded folders are skipped by the search and "go to file".
+// Folder marks: source, test and excluded folders, kept in .ide/folders.json of the main
+// project (its worktrees share them). Excluded folders are skipped by the search and "go to file".
 const (
 	MarkSource   = "source"
 	MarkTests    = "tests"
@@ -22,7 +23,7 @@ type folderFile struct {
 	Folders map[string]string `json:"folders"` // path relative to the root → mark
 }
 
-func (r *Runtime) foldersPath() string { return path.Join(r.Root, ".ide", "folders.json") }
+func (r *Runtime) foldersPath() string { return path.Join(r.IdeDir, "folders.json") }
 
 // Folders returns the marked folders, by path relative to the project root.
 func (r *Runtime) Folders() map[string]string {
@@ -55,6 +56,9 @@ func (r *Runtime) MarkFolder(abs, mark string) (map[string]string, error) {
 		m[rel] = mark
 	}
 	data, _ := json.MarshalIndent(folderFile{Folders: m}, "", "  ")
+	if err := idedir.Ensure(r.FS, r.IdeDir); err != nil {
+		return nil, err
+	}
 	if err := r.FS.Write(r.foldersPath(), append(data, '\n')); err != nil {
 		return nil, err
 	}

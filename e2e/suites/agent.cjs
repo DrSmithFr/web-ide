@@ -219,7 +219,7 @@ run(async ({ page }) => {
     await page.waitForTimeout(500)
     const db = demo + '/.ide/chats.db'
     assert(fs.existsSync(db), '.ide/chats.db base created')
-    assert(fs.readFileSync(demo + '/.ide/.gitignore', 'utf8').includes('chats.db'), '.ide/.gitignore ignores the base')
+    assert(fs.readFileSync(demo + '/.ide/.gitignore', 'utf8').includes('\n*\n'), '.ide/.gitignore ignores the whole folder')
     const count = execFileSync('python3', ['-c', `import sqlite3;c=sqlite3.connect('${db}');print(c.execute('select count(*) from chats').fetchone()[0], c.execute('select count(*) from messages').fetchone()[0])`], { encoding: 'utf8' }).trim().split(' ').map(Number)
     assert(count[0] === 1 && count[1] > 10, 'conversation and messages in SQLite: ' + count.join(' '))
     // Reload: the active conversation comes back by itself.

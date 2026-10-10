@@ -167,3 +167,37 @@ func TestWorktrees(t *testing.T) {
 		t.Fatalf("worktrees = %+v %v", list, err)
 	}
 }
+
+func TestUntrack(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git absent")
+	}
+	t.Setenv("GIT_AUTHOR_NAME", "t")
+	t.Setenv("GIT_AUTHOR_EMAIL", "t@x")
+	t.Setenv("GIT_COMMITTER_NAME", "t")
+	t.Setenv("GIT_COMMITTER_EMAIL", "t@x")
+	ctx := context.Background()
+	dir := t.TempDir()
+	g := New(execx.Local{}, dir)
+	if got := g.TrackedIn(ctx, ".ide"); len(got) != 0 {
+		t.Fatalf("outside a repository: %v", got)
+	}
+	run(t, dir, "init", "-q", "-b", "main")
+	os.MkdirAll(filepath.Join(dir, ".ide"), 0o755)
+	os.WriteFile(filepath.Join(dir, ".ide", "folders.json"), []byte("{}"), 0o644)
+	os.WriteFile(filepath.Join(dir, ".ide", "icon.svg"), []byte("<svg/>"), 0o644)
+	run(t, dir, "add", "-f", ".ide") // a global gitignore may leave .ide out
+	run(t, dir, "commit", "-q", "-m", "x")
+	if got := g.TrackedIn(ctx, ".ide"); len(got) != 2 || got[0] != ".ide/folders.json" {
+		t.Fatalf("tracked = %v", got)
+	}
+	if err := g.Untrack(ctx, ".ide"); err != nil {
+		t.Fatal(err)
+	}
+	if got := g.TrackedIn(ctx, ".ide"); len(got) != 0 {
+		t.Fatalf("still tracked: %v", got)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".ide", "icon.svg")); err != nil {
+		t.Fatal("file removed from disk")
+	}
+}

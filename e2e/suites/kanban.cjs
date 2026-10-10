@@ -25,7 +25,7 @@ run(async ({ page, ctx }) => {
   assert(true, 'description in Markdown')
   assert(await page.isVisible('.pane.active .tab.active:has-text("#1")'), 'title of the tab')
   assert(fs.existsSync(WS + '/demo/.ide/kanban.db'), 'kanban.db base in .ide')
-  assert(fs.readFileSync(WS + '/demo/.ide/.gitignore', 'utf8').includes('kanban.db'), 'kanban.db ignored by git')
+  assert(fs.readFileSync(WS + '/demo/.ide/.gitignore', 'utf8').includes('\n*\n'), '.ide ignored by git, kanban.db included')
   const sections = () => page.$$eval('.tk-main .tk-section, .tk-main .tk-sep', (l) => l.map((e) => (e.matches('.tk-sep') ? '|' : (e.classList.contains('folded') ? '-' : '') + e.querySelector('.tk-section-toggle').textContent.trim())))
   assert((await sections()).join() === 'Description,Briefing conversations,Notes', 'New: description, briefing and notes, open: ' + (await sections()).join())
   const header = () => page.$$eval('.tk-meta-row > .btn, .tk-meta-row > .tk-split > .btn:first-child', (l) => l.map((e) => e.textContent.trim()))

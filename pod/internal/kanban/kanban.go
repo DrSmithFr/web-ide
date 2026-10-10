@@ -5,11 +5,11 @@ package kanban
 
 import (
 	"database/sql"
+	"github.com/DrSmithFr/web-ide/pod/internal/idedir"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -258,7 +258,7 @@ func (m *Manager) db(loc Location) (*sql.DB, error) {
 	}
 	path := m.st.Path("kanban", loc.Project+".db")
 	if loc.IdeDir != "" {
-		if err := EnsureIgnored(loc.IdeDir); err == nil {
+		if err := idedir.Local(loc.IdeDir); err == nil {
 			path = filepath.Join(loc.IdeDir, "kanban.db")
 		}
 	}
@@ -285,46 +285,6 @@ func (m *Manager) db(loc Location) (*sql.DB, error) {
 	}
 	m.dbs[path] = db
 	return db, nil
-}
-
-// ignored lists what .ide/.gitignore keeps out of the repository for the kanban.
-var ignored = []string{"kanban.db", "kanban.db-*", "worktrees/"}
-
-// EnsureIgnored creates .ide and adds the kanban base and the worktrees to its .gitignore.
-func EnsureIgnored(dir string) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	gi := filepath.Join(dir, ".gitignore")
-	data, err := os.ReadFile(gi)
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	if text, changed := WithIgnored(string(data)); changed {
-		return os.WriteFile(gi, []byte(text), 0o644)
-	}
-	return nil
-}
-
-// WithIgnored returns the .gitignore text with the kanban entries, and whether it changed.
-func WithIgnored(text string) (string, bool) {
-	lines := map[string]bool{}
-	for _, l := range strings.Split(text, "\n") {
-		lines[strings.TrimSpace(l)] = true
-	}
-	var missing []string
-	for _, l := range ignored {
-		if !lines[l] {
-			missing = append(missing, l)
-		}
-	}
-	if len(missing) == 0 {
-		return text, false
-	}
-	if text != "" && !strings.HasSuffix(text, "\n") {
-		text += "\n"
-	}
-	return text + "# Kanban of the IDE and worktrees of its tickets (local only)\n" + strings.Join(missing, "\n") + "\n", true
 }
 
 // Close closes the bases.

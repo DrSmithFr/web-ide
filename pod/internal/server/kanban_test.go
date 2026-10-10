@@ -108,8 +108,8 @@ func TestKanbanWorktree(t *testing.T) {
 			t.Fatal("worktree project listed")
 		}
 	}
-	// The worktree and the bases stay out of git; .ide/.gitignore itself is for the user to commit.
-	if st := gitIn(t, dir, "status", "--porcelain", "--untracked-files=all"); st != "?? .ide/.gitignore" {
+	// The worktree, the bases and .ide/.gitignore itself stay out of git.
+	if st := gitIn(t, dir, "status", "--porcelain", "--untracked-files=all"); st != "" {
 		t.Fatalf("main folder not clean: %s", st)
 	}
 	b, _ := dial(t, ts, "secret-token-0123456789abcdef0123")

@@ -298,7 +298,11 @@ func (s *Server) openRuntime(id string, creds sshx.Creds) (*runtime.Runtime, err
 	if !ok {
 		return nil, i18n.New("project not found")
 	}
-	rt, err := runtime.Open(*p, creds, runtime.Deps{Pool: s.Pool, Store: s.Store, Keeper: s.Keeper}, s.emitter(id))
+	deps := runtime.Deps{Pool: s.Pool, Store: s.Store, Keeper: s.Keeper}
+	if main, ok := s.Projects.Get(p.Parent); ok && p.Parent != "" {
+		deps.SettingsRoot = main.Path
+	}
+	rt, err := runtime.Open(*p, creds, deps, s.emitter(id))
 	if err != nil {
 		return nil, err
 	}
@@ -354,6 +358,8 @@ func (s *Server) registerProject() {
 			"local":    rt.Local,
 			"session":  s.Sessions.Get(a.ID),
 			"consoles": rt.Consoles.List(),
+			// Files of .ide still tracked by git: the page offers to untrack them once.
+			"ideTracked": s.ideTracked(ctx, v, rt),
 		}, nil
 	})
 	s.handle("session.update", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {

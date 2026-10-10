@@ -4,7 +4,7 @@ Each project has a kanban, a tool of the IDE that is also where the user and the
 
 ## Storage
 
-- A SQLite base that is not versioned: `<project>/.ide/kanban.db` for a local project, `~/.web-ide/kanban/<project>.db` for an SSH one (like the conversations). `.ide/.gitignore` excludes `kanban.db*` and `worktrees/`.
+- A SQLite base that is not versioned: `<project>/.ide/kanban.db` for a local project, `~/.web-ide/kanban/<project>.db` for an SSH one (like the conversations). `.ide/.gitignore` ignores the whole folder (`*`), the base and the worktrees included.
 - Attachments are stored in the base (20 MB max per file).
 - The schema is versioned with `PRAGMA user_version`; an older base is migrated when it is opened (Ready → To do, Fix → To test, test feedback moved from goals and notes to its own table).
 - The worktree of a ticket, opened as its own project, uses the kanban and the conversations of its parent project.

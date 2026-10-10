@@ -1750,5 +1750,7 @@
   "Failures": "Échecs",
   "Failures: {list}": "Échecs : {list}",
   "Cache hit": "Cache hit",
-  "Tool chains": "Chaînes d'outils"
+  "Tool chains": "Chaînes d'outils",
+  "The settings of the IDE (.ide) stay out of git, but {n} of its files are committed:\n\n{files}\n\nTake them out of git (git rm --cached; the files stay on disk, you commit the change)?": "Les réglages de l'IDE (.ide) restent hors de git, mais {n} de ses fichiers sont commités :\n\n{files}\n\nLes retirer de git (git rm --cached ; les fichiers restent sur le disque, vous commitez le changement) ?",
+  "The files of .ide are no longer tracked: commit the change.": "Les fichiers de .ide ne sont plus suivis : commitez le changement."
 }

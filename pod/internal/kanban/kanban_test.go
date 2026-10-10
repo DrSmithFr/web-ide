@@ -241,7 +241,7 @@ func TestLinksAndAttachments(t *testing.T) {
 		t.Fatalf("id reused: %d", id2)
 	}
 	gi, _ := os.ReadFile(filepath.Join(loc.IdeDir, ".gitignore"))
-	if !strings.Contains(string(gi), "kanban.db") || !strings.Contains(string(gi), "worktrees/") {
+	if !strings.Contains(string(gi), "\n*\n") {
 		t.Fatalf("gitignore: %s", gi)
 	}
 	if _, err := os.Stat(filepath.Join(loc.IdeDir, "kanban.db")); err != nil {

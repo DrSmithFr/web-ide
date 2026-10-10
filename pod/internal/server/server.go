@@ -122,6 +122,7 @@ func (s *Server) Init() {
 	s.registerDockerLogs()
 	s.registerDockerDisk()
 	s.registerTunnels()
+	s.registerIdeDir()
 	s.registerPreviews()
 	s.registerKanban()
 	s.registerKanbanGit()

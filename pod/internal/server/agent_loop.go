@@ -339,7 +339,7 @@ func (s *Server) complete(r *agentRun, req llm.ChatRequest, stream string, resum
 // systemPrompt builds the system prompt of a run: the template of its mode, the
 // instructions and skills of the project, the ticket linked to the conversation.
 func (s *Server) systemPrompt(r *agentRun, ref *runtimeRef, c *agent.Chat, tools bool) string {
-	ctx := s.LLM.LoadContext(llm.Project{Root: ref.rt.Root, FS: ref.rt.FS})
+	ctx := s.LLM.LoadContext(llm.Project{Root: ref.rt.Root, FS: ref.rt.FS, IdeDir: ref.rt.IdeDir})
 	vars := agent.PromptVars{Root: ref.rt.Root, ActiveFile: opt(c).ActiveFile}
 	if ref.project != nil {
 		vars.Project = ref.project.Name()

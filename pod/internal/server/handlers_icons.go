@@ -8,6 +8,7 @@ import (
 
 	"github.com/DrSmithFr/web-ide/pod/internal/fsx"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
+	"github.com/DrSmithFr/web-ide/pod/internal/idedir"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 )
 
@@ -117,7 +118,7 @@ func (s *Server) registerIcons() {
 		if !ok {
 			return nil, i18n.New("open the project to change its icon")
 		}
-		_ = fs.Mkdir(dir)
+		_ = idedir.Ensure(fs, dir)
 		if err := fs.Write(path.Join(dir, "icon.svg"), []byte(a.SVG)); err != nil {
 			return nil, err
 		}

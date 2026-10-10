@@ -43,19 +43,28 @@ type Context struct {
 	Skills                []Skill           `json:"skills"`
 }
 
-// Project is what the context needs of a project: its root and its file system.
+// Project is what the context needs of a project: its root, its file system and the .ide
+// folder holding its prompts (the one of the main project for a worktree).
 type Project struct {
-	Root string
-	FS   fsx.FS
+	Root   string
+	FS     fsx.FS
+	IdeDir string
+}
+
+func (p Project) ideDir() string {
+	if p.IdeDir != "" {
+		return p.IdeDir
+	}
+	return path.Join(p.Root, ".ide")
 }
 
 const (
 	globalPromptFile          = "system-prompt.md"
-	projectPromptFile         = ".ide/system-prompt.md"
+	projectPromptFile         = "system-prompt.md"
 	globalPlanPromptFile      = "plan-prompt.md"
-	projectPlanPromptFile     = ".ide/plan-prompt.md"
+	projectPlanPromptFile     = "plan-prompt.md"
 	globalBriefingPromptFile  = "briefing-prompt.md"
-	projectBriefingPromptFile = ".ide/briefing-prompt.md"
+	projectBriefingPromptFile = "briefing-prompt.md"
 	maxInstruction            = 64 * 1024
 )
 
@@ -82,7 +91,7 @@ func (m *Manager) LoadContext(p Project) *Context {
 			s := string(data)
 			*global = &s
 		}
-		if data, err := p.FS.Read(path.Join(p.Root, ProjectPromptFile(kind))); err == nil {
+		if data, err := p.FS.Read(path.Join(p.ideDir(), ProjectPromptFile(kind))); err == nil {
 			s := string(data)
 			*project = &s
 		}
@@ -317,7 +326,7 @@ func (m *Manager) SaveGlobalPrompt(kind, content string) error {
 	return m.st.WriteFile(name, []byte(content))
 }
 
-// ProjectPromptFile returns the project template of a mode, relative to the root.
+// ProjectPromptFile returns the project template of a mode, in the .ide folder.
 func ProjectPromptFile(kind string) string {
 	switch kind {
 	case "plan":

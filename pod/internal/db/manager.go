@@ -18,6 +18,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/execx"
 	"github.com/DrSmithFr/web-ide/pod/internal/fsx"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
+	"github.com/DrSmithFr/web-ide/pod/internal/idedir"
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
 	"github.com/DrSmithFr/web-ide/pod/internal/store"
 )
@@ -73,8 +74,11 @@ type ConnView struct {
 }
 
 type Deps struct {
-	FS        fsx.FS
-	Root      string
+	FS   fsx.FS
+	Root string
+	// IdeDir holds connections.json: the .ide of the main project for a worktree.
+	IdeDir string
+	// ProjectID keys the secrets and the SQL history: the main project for a worktree.
 	ProjectID string
 	Local     bool
 	Runner    execx.Runner
@@ -105,11 +109,14 @@ type Manager struct {
 }
 
 func NewManager(d Deps) *Manager {
+	if d.IdeDir == "" {
+		d.IdeDir = path.Join(d.Root, ".ide")
+	}
 	return &Manager{d: d, live: map[string]Driver{}, status: map[string]Status{}, secrets: map[string]Secret{},
 		consoles: map[string]*console{}, cache: map[string]*Result{}}
 }
 
-func (m *Manager) file() string { return path.Join(m.d.Root, ".ide", "connections.json") }
+func (m *Manager) file() string { return path.Join(m.d.IdeDir, "connections.json") }
 
 func (m *Manager) load() {
 	if m.loaded {
@@ -123,6 +130,9 @@ func (m *Manager) load() {
 
 func (m *Manager) saveConfigs() error {
 	data, _ := json.MarshalIndent(m.configs, "", "  ")
+	if err := idedir.Ensure(m.d.FS, m.d.IdeDir); err != nil {
+		return err
+	}
 	return m.d.FS.Write(m.file(), data)
 }
 

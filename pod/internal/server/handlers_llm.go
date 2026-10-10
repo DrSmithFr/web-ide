@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/DrSmithFr/web-ide/pod/internal/fsx"
+	"github.com/DrSmithFr/web-ide/pod/internal/idedir"
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
 )
@@ -162,7 +164,7 @@ func (s *Server) registerLLM() {
 		}
 		return l
 	}
-	proj := func(rt *runtime.Runtime) llm.Project { return llm.Project{Root: rt.Root, FS: rt.FS} }
+	proj := func(rt *runtime.Runtime) llm.Project { return llm.Project{Root: rt.Root, FS: rt.FS, IdeDir: rt.IdeDir} }
 	type idArg struct {
 		ID string `json:"id"`
 	}
@@ -244,12 +246,23 @@ func (s *Server) registerLLM() {
 		if a.Scope == "global" {
 			return nil, s.LLM.SaveGlobalPrompt(a.Kind, a.Content)
 		}
-		target := path.Join(rt.Root, llm.ProjectPromptFile(a.Kind))
+		// A worktree writes in the .ide of its main project, out of its own root.
+		target := path.Join(rt.IdeDir, llm.ProjectPromptFile(a.Kind))
+		inRoot := fsx.Within(rt.Root, target)
 		if strings.TrimSpace(a.Content) == "" {
 			if _, err := rt.FS.Stat(target); err != nil {
 				return nil, nil
 			}
+			if !inRoot {
+				return nil, rt.FS.Remove(target)
+			}
 			return nil, rt.Delete(target)
+		}
+		if err := idedir.Ensure(rt.FS, rt.IdeDir); err != nil {
+			return nil, err
+		}
+		if !inRoot {
+			return nil, rt.FS.Write(target, []byte(a.Content))
 		}
 		_, err = rt.Write(target, a.Content, runtime.Format{}, "")
 		return nil, err

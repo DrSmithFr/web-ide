@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"github.com/DrSmithFr/web-ide/pod/internal/idedir"
 	"path"
 	"strconv"
 	"strings"
@@ -450,7 +451,6 @@ func (s *Server) removeWorktree(ctx context.Context, loc kanban.Location, root *
 	return nil
 }
 
-// ignoreWorktrees keeps .ide/worktrees out of the repository (also on an SSH host).
 // startTicket starts the development of a ticket (Start development, or Claude Code
 // through the MCP endpoint): branch and worktree created from the base, setup command,
 // ticket In progress, worktree registered as a child project.
@@ -554,19 +554,13 @@ func (s *Server) startTicket(ctx context.Context, k gctx, id int64, base0, by st
 	return t, child.ID, nil
 }
 
+// ignoreWorktrees keeps .ide, its worktrees included, out of the repository (also on an
+// SSH host).
 func (s *Server) ignoreWorktrees(root *projects.Project, rt *runtime.Runtime) error {
-	dir := path.Join(root.Path, ".ide")
 	if root.Type == "local" {
-		return kanban.EnsureIgnored(dir)
+		return idedir.Local(path.Join(root.Path, ".ide"))
 	}
-	gi := path.Join(dir, ".gitignore")
-	data, _ := rt.FS.Read(gi)
-	text, changed := kanban.WithIgnored(string(data))
-	if !changed {
-		return nil
-	}
-	_ = rt.FS.Mkdir(dir)
-	return rt.FS.Write(gi, []byte(text))
+	return idedir.Ensure(rt.FS, path.Join(rt.Root, ".ide"))
 }
 
 // runSetup runs the setup command of the kanban in a new worktree (npm install…).

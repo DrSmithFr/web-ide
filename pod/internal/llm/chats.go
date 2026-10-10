@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/DrSmithFr/web-ide/pod/internal/idedir"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -73,7 +74,7 @@ func (m *Manager) chatDB(loc ChatLocation) (*sql.DB, error) {
 	}
 	path := m.st.Path("chats", loc.Project+".db")
 	if loc.IdeDir != "" {
-		if err := ensureIdeDir(loc.IdeDir); err == nil {
+		if err := idedir.Local(loc.IdeDir); err == nil {
 			path = filepath.Join(loc.IdeDir, "chats.db")
 		}
 	}
@@ -97,27 +98,6 @@ func (m *Manager) chatDB(loc ChatLocation) (*sql.DB, error) {
 	m.dbs[path] = db
 	m.importJSON(db, loc.Project)
 	return db, nil
-}
-
-// ensureIdeDir creates .ide with a .gitignore keeping the base out of the repository.
-func ensureIdeDir(dir string) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	gi := filepath.Join(dir, ".gitignore")
-	data, err := os.ReadFile(gi)
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	if strings.Contains(string(data), "chats.db") {
-		return nil
-	}
-	text := string(data)
-	if text != "" && !strings.HasSuffix(text, "\n") {
-		text += "\n"
-	}
-	text += "# Conversations of the AI assistant (local only)\nchats.db\nchats.db-*\n"
-	return os.WriteFile(gi, []byte(text), 0o644)
 }
 
 // importJSON moves the conversations of the first versions (chats/<project>/*.json).

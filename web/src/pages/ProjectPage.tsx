@@ -31,6 +31,7 @@ import { actions, registerAction, runAction, shortcutOf } from '../keys/bindings
 import { contextMenu, focusBeforeMenus, prompt, type MenuItem } from '../ui/overlay'
 import { Icon } from '../ui/icons'
 import { refreshConnections } from '../db/api'
+import { offerIdeUntrack } from '../state/ideTracked'
 import { toast } from '../ui/toast'
 import { t, tn } from '../i18n'
 import { ProjectBar } from './ProjectBar'
@@ -63,6 +64,7 @@ export async function openWithAuth(id: string) {
       const r = await openProject(id, creds)
       setConsoleList(r.consoles)
       refreshConnections()
+      offerIdeUntrack(r.ideTracked)
       return r
     } catch (e) {
       if (e instanceof RpcError && e.code === 'auth_required') {

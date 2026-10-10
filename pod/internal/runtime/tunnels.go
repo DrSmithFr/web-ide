@@ -7,6 +7,7 @@ import (
 	"path"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
+	"github.com/DrSmithFr/web-ide/pod/internal/idedir"
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
 	"github.com/DrSmithFr/web-ide/pod/internal/tunnels"
 )
@@ -17,7 +18,7 @@ type tunnelFile struct {
 	Tunnels []tunnels.Spec `json:"tunnels"`
 }
 
-func (r *Runtime) tunnelsPath() string { return path.Join(r.Root, ".ide", "tunnels.json") }
+func (r *Runtime) tunnelsPath() string { return path.Join(r.IdeDir, "tunnels.json") }
 
 func (r *Runtime) TunnelSpecs() []tunnels.Spec {
 	var f tunnelFile
@@ -32,6 +33,9 @@ func (r *Runtime) TunnelSpecs() []tunnels.Spec {
 
 func (r *Runtime) SaveTunnelSpecs(list []tunnels.Spec) error {
 	data, _ := json.MarshalIndent(tunnelFile{Tunnels: list}, "", "  ")
+	if err := idedir.Ensure(r.FS, r.IdeDir); err != nil {
+		return err
+	}
 	return r.FS.Write(r.tunnelsPath(), append(data, '\n'))
 }
 

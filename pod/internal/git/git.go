@@ -378,3 +378,25 @@ func (g *Repo) RemoveWorktree(ctx context.Context, dir string) error {
 	_, err := g.git(ctx, "worktree", "remove", "--force", dir)
 	return err
 }
+
+// TrackedIn lists the tracked files of a folder of the project (relative to the root):
+// the files of .ide committed before the IDE ignored the whole folder.
+func (g *Repo) TrackedIn(ctx context.Context, dir string) []string {
+	out, err := g.git(ctx, "ls-files", "-z", "--", dir)
+	if err != nil {
+		return nil
+	}
+	var files []string
+	for _, f := range strings.Split(out, "\x00") {
+		if f != "" {
+			files = append(files, f)
+		}
+	}
+	return files
+}
+
+// Untrack removes a folder from the index, its files kept on disk (git rm --cached).
+func (g *Repo) Untrack(ctx context.Context, dir string) error {
+	_, err := g.git(ctx, "rm", "-r", "-q", "--cached", "--", dir)
+	return err
+}
