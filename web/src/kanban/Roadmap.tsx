@@ -76,15 +76,6 @@ export function Roadmap(props: { tickets: Summary[]; query: string }) {
       </div>
       <Show when={shown().length} fallback={<EmptyState icon="kanban" text={t('Nothing to plan: no open ticket.')} />}>
         <div class="rm-body">
-          <div class="rm-labels">
-            <For each={shown()}>
-              {({ r }) => (
-                <button class="rm-label link ellipsis" style={{ height: `${ROW}px` }} title={`#${r.root.id} ${r.root.title}`} onClick={() => openTicket(r.root.id)}>
-                  <span class="mono">#{r.root.id}</span> <span class="rm-label-title">{r.root.title}</span>
-                </button>
-              )}
-            </For>
-          </div>
           <div class="rm-scroll">
             <div class="rm-tracks" style={{ width: `${width()}px`, height: `${shown().length * ROW}px` }}>
               <svg class="rm-arrows" width={width()} height={shown().length * ROW}>
