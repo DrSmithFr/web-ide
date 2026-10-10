@@ -2,10 +2,19 @@ package identity
 
 import (
 	"crypto/ed25519"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
+)
+
+// Errors of a certificate check. The handshake maps them to the codes sent to the browser.
+var (
+	ErrNoCert         = errors.New("identity: no certificate")
+	ErrForeignAccount = errors.New("identity: certificate of another account")
+	ErrBadSignature   = errors.New("identity: the certificate signature does not match")
+	ErrRevoked        = errors.New("identity: device revoked")
 )
 
 // Kinds of device, as written in the certificate.
@@ -51,22 +60,22 @@ func NewCert(account *Account, device ed25519.PrivateKey, name, kind string) *Ce
 // is who: it checks every peer itself.
 func VerifyCert(c *Cert, pinned string, revoked *Revocations) error {
 	if c == nil {
-		return fmt.Errorf("identity: no certificate")
+		return ErrNoCert
 	}
 	if c.V != 1 {
 		return fmt.Errorf("identity: certificate version %d", c.V)
 	}
 	if c.Account != pinned {
-		return fmt.Errorf("identity: certificate of another account")
+		return ErrForeignAccount
 	}
 	if c.Scope != ScopeAll {
 		return fmt.Errorf("identity: scope %q", c.Scope)
 	}
 	if !Verify(pinned, c.Sig, []byte(c.Canonical())) {
-		return fmt.Errorf("identity: the certificate signature does not match")
+		return ErrBadSignature
 	}
 	if revoked.Has(c.Key) {
-		return fmt.Errorf("identity: device revoked")
+		return ErrRevoked
 	}
 	return nil
 }

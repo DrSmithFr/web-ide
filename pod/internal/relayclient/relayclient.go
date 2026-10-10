@@ -23,6 +23,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/pion/webrtc/v4"
 
+	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 	"github.com/DrSmithFr/web-ide/pod/internal/server"
 	"github.com/DrSmithFr/web-ide/pod/internal/tunnel"
 )
@@ -48,7 +49,8 @@ type Config struct {
 	Secret   string // the pod secret (register, or re-register)
 	Name     string // a human name for the relay UI (optional)
 	Server   *server.Server
-	Token    string // the pod token, proved inside the tunnel
+	Token    string                // the pod token, proved inside the tunnel (token mode)
+	Identity *identity.PodIdentity // the paired pod: its device key and its pinned account
 	Limits   *tunnel.RateLimiter
 	// ForceTurn only advertises relay (TURN) candidates (e2e).
 	ForceTurn bool
@@ -336,6 +338,7 @@ func (s *session) serveRPC() {
 	conn := tunnel.NewFramed(chunk, 8*1024*1024)
 	hs := &tunnel.Handshake{
 		Token:     s.client.cfg.Token,
+		Identity:  s.client.cfg.Identity,
 		FPBrowser: tunnel.Fingerprint(offer.SDP),
 		FPPod:     tunnel.Fingerprint(answer.SDP),
 		Limits:    s.client.limits,
