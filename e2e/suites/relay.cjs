@@ -167,11 +167,37 @@ run(
     assert((await bad.textContent('.err')).includes('connection could not be established'), 'a wrong token is refused by the pod')
     await bad.close()
 
-    // 127.0.0.1 unchanged: the same pod still serves its own page over a WebSocket.
+    // The relay stopped: the pod keeps working on 127.0.0.1, and Settings shows the link as
+    // disconnected (the pod notices it and reconnects with backoff when the relay comes back).
     const local = await ctx.newPage()
     await local.goto(`${process.env.E2E_URL}/?token=${TOKEN}`)
     await local.waitForSelector('.home .home-bar', { timeout: 15000 })
     assert(await local.evaluate(() => window.parent === window), '127.0.0.1 still works with the same pod')
+
+    const relayPid = Number(process.env.E2E_RELAY_PID)
+    if (!relayPid) throw new Error('E2E_RELAY_PID not set (run through e2e/run.sh)')
+    process.kill(relayPid)
+    await local.click('.home-head button[title="Settings"]')
+    await local.waitForSelector('.settings')
+    await local.click('.settings-nav button:has-text("Remote access")')
+    await local.waitForSelector('.settings-body .props')
+    for (let i = 0; i < 30 && !(await local.isVisible('.settings-body .dot-disconnected')); i++) await local.waitForTimeout(500)
+    assert(await local.isVisible('.settings-body .dot-disconnected'), 'the link to the relay shows disconnected after the relay stopped')
+    await local.click('.modal-settings .modal-head button')
+    await local.waitForFunction(() => document.querySelector('.project-list .project-card, .ws-dir'), null, { timeout: 15000 })
+    assert(await local.isVisible('.project-list .project-card, .ws-dir'), 'the pod still serves its projects with the relay down')
+
+    // The relay comes back: the pod reconnects by itself (backoff), and the link shows
+    // connected again.
+    const { spawn } = require('child_process')
+    const relay = spawn(process.env.E2E_BIN, ['-data', process.env.E2E_RELAY_DATA, '-addr', '127.0.0.1:' + process.env.E2E_RELAY_PORT, '-turn-ip', '127.0.0.1', 'relay'], { stdio: 'ignore' })
+    await local.click('.home-head button[title="Settings"]')
+    await local.waitForSelector('.settings')
+    await local.click('.settings-nav button:has-text("Remote access")')
+    // The backoff of the pod can reach 30 s between two dial attempts.
+    for (let i = 0; i < 140 && !(await local.isVisible('.settings-body .dot-connected')); i++) await local.waitForTimeout(500)
+    assert(await local.isVisible('.settings-body .dot-connected'), 'the pod reconnects to the relay after it is restarted')
+    relay.kill()
     await local.close()
 
     assert(!errors.some((e) => e.includes('404')), 'no missing asset through the Service Worker')
