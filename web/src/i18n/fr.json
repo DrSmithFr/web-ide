@@ -658,6 +658,8 @@
   "Fix feedbacks": "Corriger les retours",
   "{n} test feedback not handled yet": "{n} retour de test pas encore traité",
   "{n} test feedbacks not handled yet": "{n} retours de test pas encore traités",
+  "Review": "Review",
+  "A review of the work: its findings become test feedback": "Une review du travail : ses constats deviennent des retours de test",
   "Open the worktree": "Ouvrir le worktree",
   "open transaction": "transaction ouverte",
   "Opening the project…": "Ouverture du projet…",

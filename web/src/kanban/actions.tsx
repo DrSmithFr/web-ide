@@ -26,8 +26,9 @@ export interface ActionButton {
   testid?: string
   /** In the "More actions" menu rather than in the header. */
   more?: boolean
-  /** The same action with Claude Code in a terminal: a split button offers both. */
-  claude?: { run: () => void; opus?: boolean }
+  /** The same action with Claude Code in a terminal: a split button offers both (only:
+   * no integrated assistant yet, the button runs Claude Code). */
+  claude?: { run: () => void; opus?: boolean; only?: boolean }
 }
 
 interface Ctx {
@@ -42,6 +43,13 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
   const blocked = tk.blockers?.length ? tk.blockers.map(blockerText).join(', ') : ''
   const openChildren = (tk.children ?? []).filter((c) => c.status !== 'done' && c.status !== 'abandoned')
   const worktree: ActionButton[] = tk.worktree && !here ? [{ label: t('Open the worktree'), run: () => void openWorktree(tk), testid: 'ticket-open-worktree' }] : []
+  const review: ActionButton = {
+    label: t('Review'),
+    title: t('A review of the work: its findings become test feedback'),
+    run: () => runClaude(tk, 'review'),
+    claude: { run: () => runClaude(tk, 'review'), opus: true, only: true },
+    testid: 'ticket-review',
+  }
   switch (tk.status) {
     case 'new':
       return [
@@ -94,6 +102,7 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
     case 'in_progress':
       return [
         ...worktree,
+        review,
         { label: t('Send to testing'), primary: true, run: () => void ctx.move('review'), testid: 'ticket-to-review' },
         { label: t('New dev session'), run: () => void startWorkSession(tk, 'dev'), more: true },
         { label: t('Develop with Claude Code'), run: () => runClaude(tk, 'dev'), more: true },
@@ -101,6 +110,7 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
     case 'review':
       return [
         ...worktree,
+        review,
         { label: t('Add feedback'), run: ctx.focusFeedback, testid: 'ticket-feedback' },
         // Open test feedback first: validating waits for it to be handled.
         ...(tk.feedbackOpen

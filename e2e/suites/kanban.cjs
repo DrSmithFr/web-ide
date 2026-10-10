@@ -127,6 +127,14 @@ run(async ({ page, ctx }) => {
     (await page.isVisible('.tk-meta-row span.badge:has-text("priority")')) && (await page.isVisible('span[data-testid=ticket-size]')) && !(await page.$('.tk-meta-row select')),
     'In progress: priority and size fixed, shown as badges',
   )
+  assert((await header()).join() === 'Review,Send to testing', 'In progress: Review and Send to testing in the header: ' + (await header()).join())
+  await page.click('[data-testid=ticket-review-with]')
+  assert((await page.$$eval('.ctx-menu button', (l) => l.map((e) => e.textContent.trim()))).join() === 'With Claude Code (Opus)', 'Review: Claude Code only for now')
+  await page.keyboard.press('Escape')
+  await page.click('[data-testid=ticket-review]')
+  await page.waitForFunction(() => [...document.querySelectorAll('.xterm-rows')].some((e) => e.textContent.includes('fake claude: --model opus /mcp__web-ide__review 1')))
+  assert(true, 'Review runs Claude Code on the ticket')
+  await page.click('.pane .tab:has-text("#1")')
   await page2.waitForSelector('[data-testid=ticket-status]:has-text("In progress")', { timeout: 5000 })
   assert(true, 'the other window follows the status change')
   await page.click('[data-testid=ticket-to-review]')
@@ -135,7 +143,7 @@ run(async ({ page, ctx }) => {
     (await sections()).join() === 'How to test,Feedback,Git and changes,|,-Description,-Briefing conversations,-Notes,-Plan conversations,-Implementation plan,-Goals · 1/2,-Development conversations',
     'To test: test, feedback and git first, then the earlier sections folded, no pull request without a branch: ' + (await sections()).join(),
   )
-  assert((await header()).join() === 'Add feedback,Validate the ticket', 'To test: Add feedback and Validate the ticket in the header: ' + (await header()).join())
+  assert((await header()).join() === 'Review,Add feedback,Validate the ticket', 'To test: Review, Add feedback and Validate the ticket in the header: ' + (await header()).join())
   await page.click('[data-testid=ticket-feedback]')
   assert(await page.evaluate(() => document.activeElement?.dataset.testid === 'ticket-feedback-input'), 'Add feedback focuses the feedback box')
   await page.selectOption('[data-testid=ticket-feedback-kind]', 'bug')
@@ -143,7 +151,7 @@ run(async ({ page, ctx }) => {
   await page.click('[data-testid=ticket-feedback-add]')
   await page.waitForSelector('[data-testid=ticket-feedback-item].k-bug:has-text("The file is empty")')
   assert((await page.textContent('[data-testid=ticket-status]')).includes('To test'), 'a feedback leaves the ticket in To test')
-  assert((await header()).join() === 'Add feedback,Fix feedbacks', 'an open feedback: Fix feedbacks instead of Validate: ' + (await header()).join())
+  assert((await header()).join() === 'Review,Add feedback,Fix feedbacks', 'an open feedback: Fix feedbacks instead of Validate: ' + (await header()).join())
   assert(await page.isVisible('[data-testid=ticket-feedback-item] [data-testid=ticket-feedback-session]'), 'fix session offered for an open feedback')
   await page.click('[data-testid=ticket-feedback-item] [data-testid=ticket-feedback-session-with]')
   await page.click('.ctx-menu button:has-text("With Claude Code")')

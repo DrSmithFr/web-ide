@@ -188,6 +188,9 @@ func TestMCPKanban(t *testing.T) {
 	promptText := func(p map[string]any) string {
 		return p["messages"].([]any)[0].(map[string]any)["content"].(map[string]any)["text"].(string)
 	}
+	if msg := promptText(m.rpc("prompts/get", map[string]any{"name": "review", "arguments": map[string]string{"ticket": "1"}})); !strings.Contains(msg, "**Review** the work on ticket #1") || !strings.Contains(msg, "kanban_feedback (action add)") {
+		t.Fatalf("review prompt: %s", msg)
+	}
 	if msg := promptText(m.rpc("prompts/get", map[string]any{"name": "fix", "arguments": map[string]string{"ticket": "1"}})); !strings.Contains(msg, "Handle the open **test feedback** of ticket #1") {
 		t.Fatalf("fix prompt: %s", msg)
 	}

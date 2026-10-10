@@ -41,6 +41,13 @@ var mcpRoles = []mcpRole{
 - A bug: fix it. A new feature: build it if it fits the ticket, otherwise ask the user. An info: take it into account.
 - Commit on the ticket branch (messages starting with "#{{id}} "). Do not merge or push.
 - Once a feedback is handled, verified and committed, mark it done with kanban_feedback (action done). If how to test the ticket changed, update it with kanban_update (test_summary).`},
+	{"review", "Review the work on a ticket: findings become test feedback", `**Review** the work on ticket #{{id}}.
+- Read the ticket (kanban_get): description, plan, goals, notes, how to test, open feedback. Work in its worktree (EnterWorktree, path: the worktree, unless you already work there; else absolute paths); a ticket without a worktree is reviewed in the project folder.
+- Read the change of its branch against its base (git log and git diff base...HEAD, plus the uncommitted changes): correctness, goals really reached, plan followed, tests, edge cases, security, the conventions of the project.
+- Run the tests and the build of the project if they are quick. Do not change any file, do not commit, do not move the ticket.
+- Each finding the developer must act on becomes a test feedback with kanban_feedback (action add): kind bug (wrong behavior), feature (missing from the plan or the goals) or info (worth knowing); one concrete finding each, with the file and line, under 1000 characters. Skip what an open feedback already says; no feedback for style nits.
+- Then one note with kanban_add_note: the verdict in a few lines (ready to test, or what blocks).
+- Sum up for the user: the feedback added, the verdict.`},
 }
 
 func mcpPromptList() []map[string]any {

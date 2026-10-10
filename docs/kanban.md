@@ -51,11 +51,11 @@ Tickets move with buttons only (no drag and drop).
 |---|---|---|
 | New | Briefing, Generate the plan; *More actions*: Abandon | — (a plan moves the ticket to *To do* by itself, whoever writes it) |
 | To do | Start development (→ In progress); *More actions*: Back to New, Redo the plan (assistant or Claude Code), Start anyway (blocked), Abandon | — |
-| In progress | Open the worktree, Send to testing; *More actions*: New dev session, Develop with Claude Code, Abandon | move to *To test* (with how to test) |
-| To test | Open the worktree, Add feedback, with open test feedback Fix feedbacks (assistant or Claude Code, all the open feedback), else Validate the step (a ticket with open children) or Validate the ticket (→ Done); Fix session (per open feedback), Create the pull request in their sections; *More actions*: Back to In progress, Develop with Claude Code, Abandon | mark feedback handled |
+| In progress | Open the worktree, Review, Send to testing; *More actions*: New dev session, Develop with Claude Code, Abandon | move to *To test* (with how to test) |
+| To test | Open the worktree, Review, Add feedback, with open test feedback Fix feedbacks (assistant or Claude Code, all the open feedback), else Validate the step (a ticket with open children) or Validate the ticket (→ Done); Fix session (per open feedback), Create the pull request in their sections; *More actions*: Back to In progress, Develop with Claude Code, Abandon | mark feedback handled |
 | Done / Abandoned | Reopen (Done → To test, Abandoned → New) | — |
 
-The header keeps the main actions; *Briefing*, *Generate the plan*, *Start development* and the *Fix session* of a feedback are split buttons: a click starts the integrated assistant, the arrow offers Claude Code instead (in a terminal). The other actions are in the *More actions* menu.
+The header keeps the main actions; *Briefing*, *Generate the plan*, *Start development* and the *Fix session* of a feedback are split buttons: a click starts the integrated assistant, the arrow offers Claude Code instead (in a terminal). *Review* (In progress, To test) is a split button too, with Claude Code only for now: a review of the work whose findings become test feedback, plus a note with the verdict. The other actions are in the *More actions* menu.
 
 A feedback leaves the ticket in *To test*; while one is open, the ticket and its step cannot be validated (the pod refuses too). Closing or abandoning removes the worktree; the branch is kept (abandoning offers to delete it). The change is frozen in the ticket when it is merged, or else when it is closed.
 
@@ -114,7 +114,7 @@ claude mcp add --transport http --scope user web-ide http://127.0.0.1:4433/mcp -
 - The Claude Code mod `claude-mod/` (`claude --plugin-dir claude-mod`, or copied into a plugin folder): above the prompt, links to the project Claude works in and to the ticket of its worktree, and the files it changed, each a button opening the file in the IDE (the mobile app draws no band above the prompt: it gets the same links in a pane, opened when it joins the session and by `/webide`); `/webide <file[:line]>` opens any file. It reads the token in `~/.web-ide/token` (`WEBIDE_DATA`, `WEBIDE_URL` to change). Tests: `claude plugin test claude-mod`.
 - A session started at the root of the project moves into the worktree of a ticket with `EnterWorktree` (the worktrees of the IDE are git worktrees): `kanban_start` and the `dev` / `fix` prompts ask for it.
 - `kanban_conversation` takes `last` (the last messages only) and `tools` (the tool calls, their errors, the failed answers and the notes): what a review of a development needs. In this repository, the Claude Code skill `/review-dev` (`.claude/skills/review-dev`) reviews the tickets in progress (conversation, worktree, goals), reports, and comments with `kanban_reply` without asking, keeping for the user what is theirs to decide (`--dry`: propose only).
-- Prompts, commands of Claude Code: `/mcp__web-ide__brief <n>` (take over a briefing of the local assistant: check the need, complete the ticket), `plan`, `dev`, `fix` (`/mcp__web-ide__fix <n> [feedback]`: one feedback, else all the open ones).
+- Prompts, commands of Claude Code: `/mcp__web-ide__brief <n>` (take over a briefing of the local assistant: check the need, complete the ticket), `plan`, `dev`, `fix` (`/mcp__web-ide__fix <n> [feedback]`: one feedback, else all the open ones), `review` (read only: findings as test feedback, the verdict as a note; Opus).
 
 ## Git
 

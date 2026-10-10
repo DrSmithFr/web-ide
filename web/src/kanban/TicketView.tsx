@@ -488,7 +488,8 @@ async function openAttachment(id: number, aid: number) {
 // ---------- pieces ----------
 
 /** A button of an action; with a Claude Code variant, a split button: the integrated
- * assistant on a click, the arrow offers Claude Code instead. */
+ * assistant on a click, the arrow offers Claude Code instead (Claude Code only for now
+ * for some actions: the click runs it). */
 function ActionBtn(props: { b: ActionButton; icon?: string }) {
   const b = props.b
   const main = (
@@ -501,7 +502,7 @@ function ActionBtn(props: { b: ActionButton; icon?: string }) {
   )
   if (!b.claude) return main
   const choices = (): MenuItem[] => [
-    { label: t('With the integrated AI'), action: b.run },
+    ...(b.claude!.only ? [] : [{ label: t('With the integrated AI'), action: b.run }]),
     { label: b.claude!.opus ? t('With Claude Code (Opus)') : t('With Claude Code'), action: b.claude!.run },
   ]
   return (
