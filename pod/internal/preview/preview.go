@@ -33,13 +33,15 @@ var (
 	FunnelPorts = []int{8443, 10000}
 )
 
-// Spec is what starts a preview: the command of the app and its port.
+// Spec is what starts a preview: the command of the app and its port. CommandID: a saved
+// command of the project (its console, one per command), which gives the others.
 type Spec struct {
-	Project string `json:"project"`
-	Title   string `json:"title"`
-	Command string `json:"command"`
-	Cwd     string `json:"cwd"`
-	AppPort int    `json:"port"`
+	Project   string `json:"project"`
+	Title     string `json:"title"`
+	Command   string `json:"command"`
+	Cwd       string `json:"cwd"`
+	AppPort   int    `json:"port"`
+	CommandID string `json:"commandId,omitempty"`
 }
 
 func (s Spec) same(o Spec) bool {

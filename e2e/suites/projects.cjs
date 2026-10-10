@@ -60,12 +60,9 @@ run(async ({ page, ctx }) => {
   assert((await page.textContent('[data-testid=branch-selector]')).includes('main'), 'current branch in the menu bar')
   assert((await page.title()) === 'demo · main', 'window title: ' + (await page.title()))
 
-  // The setup command of the kanban runs in the new worktrees.
-  await page.click('.rail-left .rail-btn[title="Kanban"]')
-  await page.click('[data-testid=kanban-open-board]')
-  await page.click('[data-testid=kanban-settings]')
-  await page.fill('[data-testid=kanban-setup]', 'echo installed > setup.log')
-  await page.click('[data-testid=kanban-settings-save]')
+  // The setup commands of the project run in the new worktrees.
+  fs.mkdirSync(WS + '/demo/.ide', { recursive: true })
+  fs.writeFileSync(WS + '/demo/.ide/commands.json', JSON.stringify({ commands: [{ id: 'inst', name: 'Install', command: 'echo installed > setup.log', flag: 'setup' }] }))
 
   // Open the branch "feature": a worktree shown in the same window, the main folder untouched.
   fs.writeFileSync(WS + '/demo/main.txt', 'main\n')
@@ -92,7 +89,7 @@ run(async ({ page, ctx }) => {
 
   // The explorer shows the worktree; its files open with a chip, and stay open in the main folder.
   fs.writeFileSync(wt + '/feature.txt', 'feature\n')
-  await page.click('.rail-left .rail-btn[title="Explorer"]')
+  if (!(await page.isVisible('.explorer'))) await page.click('.rail-left .rail-btn[title="Explorer"]')
   await page.waitForSelector(`.explorer .tree-row[data-path="${wt}/feature.txt"]`, { timeout: 5000 })
   await page.dblclick(`.explorer .tree-row[data-path="${wt}/feature.txt"]`)
   await page.waitForSelector('.tab:has-text("feature.txt") [data-testid=worktree-chip]:has-text("feature")')

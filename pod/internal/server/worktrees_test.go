@@ -3,6 +3,7 @@ package server
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -115,7 +116,7 @@ func TestWorktrees(t *testing.T) {
 	}
 	// The setup command of the kanban comes with a new worktree.
 	a.call("kanban.meta.set", map[string]any{"values": map[string]string{"setup": "npm install"}})
-	if r := a.call("worktrees.add", map[string]any{"branch": "feature/x"})["result"].(map[string]any); r["setup"] != "npm install" {
+	if r := a.call("worktrees.add", map[string]any{"branch": "feature/x"})["result"].(map[string]any); !strings.Contains(r["setup"].(string), "bash -lc 'npm install'") {
 		t.Fatalf("add = %+v", r)
 	}
 }

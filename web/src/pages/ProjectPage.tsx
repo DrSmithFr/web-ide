@@ -20,7 +20,7 @@ import { GitPanel } from '../panels/git/GitPanel'
 import { KanbanPanel } from '../kanban/Panel'
 import { NewTicketHost } from '../kanban/Board'
 import { CommandsHost } from '../console/CommandsModal'
-import { board, ensureBoard, openBoard, openTicket, refreshBoard } from '../kanban/state'
+import { openBoard, openTicket } from '../kanban/state'
 import { refreshGit } from '../state/git'
 import { DatabaseTool } from '../db/DatabaseTool'
 import { AssistantTool } from '../llm/AssistantTool'
@@ -140,13 +140,15 @@ function newEntryDir() {
 const focusTargets = ['.xterm-helper-textarea', '.ai-composer .ed-content', '[role=tree] [aria-selected=true]', '[role=tree] [tabindex]', '.tree-row.active', '.tree-row', 'input:not([type=checkbox]), textarea']
 const fallbackTarget = '.panel-body button:not(:disabled), .tool-body button:not(:disabled), [tabindex="0"]:not(.detach), button:not(:disabled):not(.detach)'
 
-function focusZone(zone: Zone, tries = 10) {
+function focusZone(zone: Zone, tries = 10, from = document.activeElement) {
   const el = document.querySelector<HTMLElement>(`.zone-${zone}`)
   if (!el) return
   // A phone does not focus a field: the keyboard would open (the user touches it to type).
   const visible = (x: HTMLElement | null) => x && x.offsetParent !== null && !(phone() && isTyping(x))
   const target = focusTargets.map((s) => el.querySelector<HTMLElement>(s)).find(visible)
-  if (!target && tries > 0) return void requestAnimationFrame(() => focusZone(zone, tries - 1))
+  // While it waits, the user may put the focus elsewhere (a modal opened…): it stays there.
+  const moved = () => document.activeElement !== from && document.activeElement !== document.body
+  if (!target && tries > 0) return void requestAnimationFrame(() => !moved() && focusZone(zone, tries - 1, from))
   ;(target ?? (phone() ? el : ([...el.querySelectorAll<HTMLElement>(fallbackTarget)].find(visible) ?? el))).focus()
   // The rows of a tool still loading can be rendered again: the focus is given back if it was lost.
   if (tries > 0) requestAnimationFrame(() => document.activeElement === document.body && focusPart() === zone && focusZone(zone, tries - 1))
@@ -545,14 +547,6 @@ export function ProjectPage(props: { id: string }) {
       if (new URLSearchParams(location.search).has('assistant')) {
         mutate((s) => (s.right.panel = 'assistant'))
         history.replaceState(null, '', location.pathname)
-      }
-      // A worktree just created from the menu bar: run the setup command of the kanban.
-      if (new URLSearchParams(location.search).has('setup')) {
-        history.replaceState(null, '', location.pathname)
-        ensureBoard()
-        await refreshBoard()
-        const cmd = board.meta.setup?.trim()
-        if (cmd) void newConsole({ kind: 'task', command: ['sh', '-c', cmd], title: t('Worktree setup') })
       }
       // A ticket link of Claude Code: /project/<id>?ticket=<n>.
       const ticket = Number(new URLSearchParams(location.search).get('ticket'))

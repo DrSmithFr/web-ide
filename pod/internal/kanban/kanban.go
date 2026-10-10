@@ -252,16 +252,38 @@ func migrate(db *sql.DB) error {
 	return nil
 }
 
-func (m *Manager) db(loc Location) (*sql.DB, error) {
-	if !projectPattern.MatchString(loc.Project) {
-		return nil, i18n.New("invalid project")
-	}
+// path is the file of the base of a project.
+func (m *Manager) path(loc Location, ensure bool) string {
 	path := m.st.Path("kanban", loc.Project+".db")
 	if loc.IdeDir != "" {
+		if !ensure {
+			return filepath.Join(loc.IdeDir, "kanban.db")
+		}
 		if err := idedir.Local(loc.IdeDir); err == nil {
 			path = filepath.Join(loc.IdeDir, "kanban.db")
 		}
 	}
+	return path
+}
+
+// Has tells whether the project has a kanban base already (reading it would create one).
+func (m *Manager) Has(loc Location) bool {
+	if !projectPattern.MatchString(loc.Project) {
+		return false
+	}
+	for _, p := range []string{m.path(loc, false), m.st.Path("kanban", loc.Project+".db")} {
+		if _, err := os.Stat(p); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Manager) db(loc Location) (*sql.DB, error) {
+	if !projectPattern.MatchString(loc.Project) {
+		return nil, i18n.New("invalid project")
+	}
+	path := m.path(loc, true)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if db := m.dbs[path]; db != nil {

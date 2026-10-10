@@ -2,6 +2,7 @@ package commands
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -58,5 +59,37 @@ func TestSaveLoad(t *testing.T) {
 	}
 	if data, _ := os.ReadFile(filepath.Join(dir, "commands.json")); string(data) != "{oops" {
 		t.Fatal("invalid file rewritten")
+	}
+}
+
+func TestSetupScript(t *testing.T) {
+	if SetupScript([]Command{{Name: "b", Command: "make", Flag: "build"}}) != "" {
+		t.Fatal("script without setup command")
+	}
+	dir := t.TempDir()
+	os.Mkdir(filepath.Join(dir, "web"), 0o755)
+	list := []Command{
+		{Name: "Install", Command: "echo 'it''s' > done.txt\npwd >> done.txt", Flag: "setup", Cwd: "web"},
+		{Name: "Build", Command: "touch build.txt", Flag: "build"},
+		{Name: "Fails", Command: "exit 3", Flag: "setup"},
+		{Name: "Never", Command: "touch never.txt", Flag: "setup"},
+	}
+	cmd := exec.Command("sh", "-c", SetupScript(list))
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("failure not reported")
+	}
+	if !strings.Contains(string(out), "$ Install") || !strings.Contains(string(out), "$ Fails") || strings.Contains(string(out), "Never") {
+		t.Fatalf("output: %s", out)
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, "web", "done.txt"))
+	if !strings.HasPrefix(string(data), "its\n") || !strings.HasSuffix(strings.TrimSpace(string(data)), "/web") {
+		t.Fatalf("done.txt: %q", data)
+	}
+	for _, f := range []string{"build.txt", "never.txt", "web/never.txt"} {
+		if _, err := os.Stat(filepath.Join(dir, f)); err == nil {
+			t.Fatalf("%s run", f)
+		}
 	}
 }

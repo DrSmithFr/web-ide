@@ -23,6 +23,7 @@ var mcpProtocols = map[string]bool{"2024-11-05": true, "2025-03-26": true, "2025
 
 const mcpInstructions = `Kanban of the Web IDE of the user: tickets go New → To do (plan written) → In progress (branch and worktree) → To test → Done.
 Pass cwd (your working directory) to every tool: it selects the project; in the worktree of a ticket, that ticket is the default id.
+The saved commands of the project (list_commands, run_saved_command) run in consoles of the IDE that the user sees: use them for a development server or a command the user set up.
 Your changes are shown as written by Claude. Keep descriptions under 1500 characters and notes under 1000: notes are for decisions, not reports.
 When you mention a file of the project to the user, write it as a Markdown link to the IDE: [path:line](` + "<ide>" + `/open?path=<absolute path>&line=<line>), so that a click opens it in the IDE.`
 

@@ -9,6 +9,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/DrSmithFr/web-ide/pod/internal/execx"
 	"github.com/DrSmithFr/web-ide/pod/internal/fsx"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/idedir"
@@ -119,6 +120,31 @@ func Find(list []Command, id string) (Command, bool) {
 
 // Argv is what runs a command: bash, as a login shell (the PATH of the user).
 func Argv(c Command) []string { return []string{"bash", "-lc", c.Command} }
+
+// OfFlag keeps the commands of a flag, in their order.
+func OfFlag(list []Command, flag string) []Command {
+	var out []Command
+	for _, c := range list {
+		if c.Flag == flag {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// SetupScript is what sets a new worktree up: its setup commands one after the other, each
+// in its folder, stopping at the first one that fails; "" when there is none.
+func SetupScript(list []Command) string {
+	var steps []string
+	for _, c := range OfFlag(list, "setup") {
+		step := "echo " + execx.Quote("$ "+c.Name) + " && "
+		if c.Cwd != "" {
+			step += "cd " + execx.Quote(c.Cwd) + " && "
+		}
+		steps = append(steps, "("+step+"bash -lc "+execx.Quote(c.Command)+")")
+	}
+	return strings.Join(steps, " && ")
+}
 
 func newID() string {
 	b := make([]byte, 4)

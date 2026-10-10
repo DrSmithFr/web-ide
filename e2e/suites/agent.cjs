@@ -1,6 +1,6 @@
 // AI assistant, agent features: system prompt built from the editable template, the
 // instruction files (global and project) and the skills; IDE tools (skill, open_file,
-// focus, run_command); model switch; manual and automatic compaction with another model;
+// focus, run_command); saved commands (list_commands, run_saved_command); model switch; manual and automatic compaction with another model;
 // conversations in .ide/chats.db. The model is a scripted fake OpenAI server.
 const fs = require('fs')
 const http = require('http')
@@ -68,6 +68,23 @@ const fake = http.createServer(async (req, res) => {
       )
     sse(res, { content: 'Tools tried.' })
     return end(res, 'stop', { prompt_tokens: 900, completion_tokens: 10 })
+  }
+  if (ask.includes('saved commands')) {
+    // The saved commands: listed, one that ends, a server, then the server again (running).
+    if (last.role === 'user')
+      return (
+        sse(res, {
+          tool_calls: calls([
+            ['c1', 'list_commands', {}],
+            ['c2', 'run_saved_command', { id: 'tst' }],
+            ['c3', 'run_saved_command', { id: 'srv', timeout: 1 }],
+          ]),
+        }),
+        end(res, 'tool_calls')
+      )
+    if (last.tool_call_id === 'c3') return sse(res, { tool_calls: calls([['c4', 'run_saved_command', { id: 'srv' }]]) }), end(res, 'tool_calls')
+    sse(res, { content: 'Commands tried.' })
+    return end(res, 'stop', { prompt_tokens: 600, completion_tokens: 5 })
   }
   if (ask.includes('long')) {
     // Big usage: the next step must be preceded by an automatic compaction.
@@ -197,6 +214,28 @@ run(async ({ page }) => {
     const skillAsk = requests[requests.length - 1].messages.at(-1)
     assert(text(skillAsk).includes('load_skill') && text(skillAsk).includes('"greet"') && text(skillAsk).includes('Marie'), 'skill as a command: ' + text(skillAsk).slice(0, 80))
     assert(await page.isVisible('.ai-msg.user .ai-mention:has-text("/greet")'), 'the bubble shows the command')
+
+    // Saved commands of the project: listed, run in their console, a running one not again.
+    fs.writeFileSync(
+      demo + '/.ide/commands.json',
+      JSON.stringify({
+        commands: [
+          { id: 'tst', name: 'Unit tests', command: 'echo saved-tests-ok', flag: 'test' },
+          { id: 'srv', name: 'Dev server', command: 'echo srv-up\nsleep 60', flag: 'serve', port: 5199, description: 'the app' },
+        ],
+      }),
+    )
+    const before = requests.length
+    await ask(page, 'Try the saved commands', 'Commands tried.')
+    const res = requests.slice(before).flatMap((r) => r.messages.filter((m) => m.role === 'tool'))
+    const out = (id) => res.find((m) => m.tool_call_id === id)?.content ?? ''
+    assert(out('c1').includes('tst · test · Unit tests') && out('c1').includes('srv · serve · Dev server — the app · port 5199') && out('c1').includes('    sleep 60'), 'list_commands: ' + out('c1').slice(0, 120))
+    assert(out('c2').includes('Exit code: 0') && out('c2').includes('saved-tests-ok'), 'run_saved_command returns the output: ' + out('c2').slice(0, 80))
+    assert(out('c3').includes('still running') && out('c3').includes('srv-up'), 'a server keeps running: ' + out('c3').slice(0, 80))
+    assert(out('c4').includes('already running in console') && out('c4').includes('restart=true'), 'a running command is not started again: ' + out('c4').slice(0, 80))
+    await page.waitForSelector('.bottom .console-tabs .tab:has-text("Dev server")')
+    const devTabs = await page.$$eval('.bottom .console-tabs .tab', (e) => e.filter((x) => x.textContent.includes('Dev server')).length)
+    assert(devTabs === 1 && (await page.isVisible('.bottom .console-tabs .tab:has-text("Unit tests")')), 'the commands run in their consoles, one per command')
 
     // @ mention with completion: only the path is sent.
     await page.click('.ai-composer .ed-content')

@@ -1001,7 +1001,7 @@ func (m *Manager) Event(loc Location, id int64, by, key string, p Params) error 
 	return m.tx(loc, id, func(tx *sql.Tx, now int64) error { return event(tx, id, by, key, p, now) })
 }
 
-// Meta reads and writes the settings of the kanban of a project (worktree setup command…).
+// Meta reads and writes the settings of the kanban of a project (default base…).
 func (m *Manager) Meta(loc Location) (map[string]string, error) {
 	db, err := m.db(loc)
 	if err != nil {

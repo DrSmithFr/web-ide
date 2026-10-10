@@ -851,7 +851,6 @@
   "Settings (servers, prompt, compaction, transcription)": "Réglages (serveurs, prompt, compaction, transcription)",
   "Settings history": "Historique des réglages",
   "Settings restored (#{id}); this can itself be undone": "Réglages restaurés (#{id}) ; ce retour peut lui-même être annulé",
-  "Setup command of a worktree (run in the worktree when it is created)": "Commande d'initialisation d'un worktree (lancée dans le worktree à sa création)",
   "Shift": "Maj",
   "Shortcut": "Raccourci",
   "Shortcut reset": "Raccourci réinitialisé",
@@ -1773,5 +1772,15 @@
   "No open console. Run a command of the project:": "Aucune console ouverte. Lancez une commande du projet :",
   "Create a command…": "Créer une commande…",
   "Commands of the project": "Commandes du projet",
-  "Run: {name}": "Exécuter : {name}"
+  "Run: {name}": "Exécuter : {name}",
+  "Runs the command unless it runs already, waits for its port, then opens the app on a temporary URL": "Lance la commande sauf si elle tourne déjà, attend son port, puis ouvre l’app sur une URL temporaire",
+  "Open “{name}” in a preview": "Ouvrir « {name} » en aperçu",
+  "Setup of a worktree": "Préparation d’un worktree",
+  "Run in a new worktree, in this order: {names}.": "Lancées dans un nouveau worktree, dans cet ordre : {names}.",
+  "No command flagged “setup” yet (npm install, copy a .env…).": "Aucune commande marquée « setup » pour l’instant (npm install, copie d’un .env…).",
+  "Lists the project commands": "Liste les commandes du projet",
+  "Runs the project command": "Lance la commande du projet",
+  "{command}: already running": "{command} : déjà en cours",
+  "{n} command": "{n} commande",
+  "{n} commands": "{n} commandes"
 }

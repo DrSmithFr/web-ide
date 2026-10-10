@@ -42,7 +42,7 @@ const fake = http.createServer(async (req, res) => {
     return (
       sse(res, {
         tool_calls: calls([
-          ['b1', 'bash', { command: "printf 'export\\n' > export.txt && git add -A && git commit -q -m '#1 export' && pwd" }],
+          ['b1', 'bash', { command: "while [ ! -f setup.log ]; do sleep 0.1; done; printf 'export\\n' > export.txt && git add -A && git commit -q -m '#1 export' && pwd" }],
           ['b3', 'kanban_goal', { action: 'check', id: goal }],
           ['b4', 'kanban_move', { status: 'review', test_summary: 'Read `export.txt`.' }],
         ]),
@@ -70,11 +70,24 @@ run(async ({ page, ctx }) => {
     await page.click('.ai-servers .modal-head button')
     await page.waitForSelector('[data-testid=model-pill]:has-text("fake-model")')
 
-    // Kanban settings: worktree setup command.
+    // Kanban settings: the setup of a worktree is the project commands flagged setup, edited
+    // in the commands modal.
     await page.click('.rail-left .rail-btn[title="Kanban"]')
     await page.click('[data-testid=kanban-open-board]')
     await page.click('[data-testid=kanban-settings]')
-    await page.fill('[data-testid=kanban-setup]', 'echo installed > setup.log')
+    await page.waitForSelector('[data-testid=kanban-setup-list]:has-text("No command flagged")')
+    await page.click('[data-testid=kanban-setup-commands]')
+    await page.click('.cmd-modal [data-testid=cmd-new]')
+    await page.fill('[data-testid=cmd-name]', 'Install')
+    await page.selectOption('[data-testid=cmd-flag]', 'setup')
+    await page.click('[data-testid=cmd-command] .ed-content')
+    await page.keyboard.type('echo installed > setup.log')
+    await page.click('[data-testid=cmd-save]')
+    await page.waitForSelector('[data-testid=cmd-save]:disabled')
+    await page.click('.cmd-modal .modal-foot button:has-text("Cancel")')
+    await page.click('[data-testid=kanban-settings]')
+    await page.waitForSelector('[data-testid=kanban-setup-list]:has-text("in this order: Install.")')
+    assert(true, 'the kanban settings list the setup commands')
     await page.click('[data-testid=kanban-settings-save]')
 
     await page.click('[data-testid=kanban-new]')

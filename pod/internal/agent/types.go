@@ -190,6 +190,8 @@ type Preview struct {
 	Command string `json:"command"`
 	Cwd     string `json:"cwd,omitempty"`
 	Port    int    `json:"port"`
+	// CommandID: the saved command of the project it starts (Console ▶ menu).
+	CommandID string `json:"commandId,omitempty"`
 }
 
 // Page drawn by the model on the board of the conversation: its document (a doodle, see

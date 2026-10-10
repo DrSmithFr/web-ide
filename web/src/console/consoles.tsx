@@ -19,7 +19,7 @@ import { Icon } from '../ui/icons'
 import { EmptyState } from '../ui/EmptyState'
 import { shortcutOf } from '../keys/bindings'
 import { t } from '../i18n'
-import { adHocCommand, commands, flagIcon, loadCommands, runCommand, runningConsole } from './commands'
+import { adHocCommand, commands, flagIcon, loadCommands, openApp, runCommand, runningConsole, servesApp } from './commands'
 import { openCommands } from './CommandsModal'
 
 export interface ConsoleInfo {
@@ -269,6 +269,8 @@ async function commandsMenu(button: HTMLElement) {
   const at = { clientX: r.left, clientY: r.bottom + 2, preventDefault() {}, stopPropagation() {} } as MouseEvent
   const adHoc = adHocCommand()
   const items: MenuItem[] = commands().map((c) => ({ label: c.name, hint: (runningConsole(c.id) ? '● ' : '') + c.flag, action: () => void runCommand(c) }))
+  // The apps of the serve commands with a port, opened as previews.
+  for (const c of commands().filter(servesApp)) items.push({ label: t('Open “{name}” in a preview', { name: c.name }), hint: `:${c.port}`, action: () => void openApp(c) })
   if (items.length) items.push({ label: '', separator: true })
   items.push({ label: t('Run a command…'), action: () => void runTask() })
   if (adHoc) items.push({ label: t('Save “{command}” as a command…', { command: adHoc.length > 40 ? adHoc.slice(0, 40) + '…' : adHoc }), action: () => openCommands({ draft: { name: adHoc.split('\n')[0].slice(0, 40), command: adHoc } }) })

@@ -130,7 +130,7 @@ export function ProjectBar() {
     }
     const added = await request<{ project: string; setup: string }>('worktrees.add', { branch: name, create })
     await showWorktree(added.project)
-    // The setup command of the kanban (npm install…) runs in a console of the new worktree.
+    // The setup commands of the project (npm install…) run in a console of the new worktree.
     if (added.setup) void newConsole({ kind: 'task', command: ['sh', '-c', added.setup], title: t('Worktree setup') })
   }
 

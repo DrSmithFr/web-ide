@@ -3,9 +3,13 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"path"
+	"strings"
+	"sync"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/commands"
+	"github.com/DrSmithFr/web-ide/pod/internal/console"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
 )
@@ -41,28 +45,77 @@ func mainID(rt *runtime.Runtime) string {
 	return rt.P.ID
 }
 
-// runSaved runs a saved command in rt. A console of the command still running is
-// answered as running unless restart; it is closed (ended or restarted) and replaced.
-func (s *Server) runSaved(c *Client, rt *runtime.Runtime, id string, restart bool) (map[string]any, error) {
+// migrateMu keeps two loads from moving the setup command of the kanban twice.
+var migrateMu sync.Mutex
+
+// projectCommands loads the saved commands of the project of rt. The setup command of the
+// kanban settings (before the setup flag) becomes a setup command once, then is cleared.
+func (s *Server) projectCommands(rt *runtime.Runtime) ([]commands.Command, error) {
+	migrateMu.Lock()
+	defer migrateMu.Unlock()
 	list, err := commands.Load(rt.FS, rt.IdeDir)
 	if err != nil {
 		return nil, err
 	}
+	root, err := s.kanbanProject(rt.P.ID)
+	if err != nil || !s.Kanban.Has(kanbanLoc(root)) {
+		return list, nil
+	}
+	loc := kanbanLoc(root)
+	meta, err := s.Kanban.Meta(loc)
+	setup := strings.TrimSpace(meta["setup"])
+	if err != nil || setup == "" {
+		return list, nil
+	}
+	saved, err := commands.Save(rt.FS, rt.IdeDir, append(list, commands.Command{Name: "Worktree setup", Command: setup, Flag: "setup",
+		Description: "Moved from the kanban settings"}))
+	if err != nil {
+		log.Printf("setup command of the kanban of %s not moved: %v", root.ID, err)
+		return list, nil
+	}
+	if err := s.Kanban.SetMeta(loc, map[string]string{"setup": ""}); err != nil {
+		return saved, err
+	}
+	s.emitFamily(root.ID, "commands.changed", map[string]any{"commands": saved})
+	return saved, nil
+}
+
+// findCommand is a saved command of the project of rt by its id.
+func (s *Server) findCommand(rt *runtime.Runtime, id string) (commands.Command, error) {
+	list, err := s.projectCommands(rt)
+	if err != nil {
+		return commands.Command{}, err
+	}
 	cmd, ok := commands.Find(list, id)
 	if !ok {
-		return nil, i18n.New("command not found")
+		return commands.Command{}, i18n.Errorf("command not found: %s", id)
 	}
+	return cmd, nil
+}
+
+// savedRun is what running a saved command did: Running, the console of the command
+// still running (nothing started); else Console, the new one, which replaced Replaced.
+type savedRun struct {
+	Running  *console.Info `json:"running,omitempty"`
+	Console  *console.Info `json:"console,omitempty"`
+	Replaced string        `json:"replaced,omitempty"`
+}
+
+// runSaved runs a saved command in rt. A console of the command still running is
+// answered as running unless restart; it is closed (ended or restarted) and replaced.
+// except: the window that asked, which adds the console itself.
+func (s *Server) runSaved(rt *runtime.Runtime, cmd commands.Command, restart bool, except string) (savedRun, error) {
 	olds := rt.Consoles.OfCommand(cmd.ID)
 	for _, o := range olds {
 		if !o.Exited && !restart {
-			return map[string]any{"running": o}, nil
+			return savedRun{Running: &o}, nil
 		}
 	}
-	replaced := ""
+	var out savedRun
 	for _, o := range olds {
 		if rt.Consoles.Close(o.ID) == nil {
 			s.emitter(rt.P.ID)("console.closed", map[string]string{"id": o.ID}, "")
-			replaced = o.ID
+			out.Replaced = o.ID
 		}
 	}
 	cwd := rt.Root
@@ -71,14 +124,11 @@ func (s *Server) runSaved(c *Client, rt *runtime.Runtime, id string, restart boo
 	}
 	info, err := rt.Consoles.RunCommand(cmd.ID, cmd.Name, commands.Argv(cmd), cwd)
 	if err != nil {
-		return nil, err
-	}
-	except := ""
-	if c != nil {
-		except = c.id
+		return savedRun{}, err
 	}
 	s.emitter(rt.P.ID)("console.created", info, except)
-	return map[string]any{"console": info, "replaced": replaced}, nil
+	out.Console = &info
+	return out, nil
 }
 
 func (s *Server) registerCommands() {
@@ -93,7 +143,7 @@ func (s *Server) registerCommands() {
 	}
 	// The commands, and the error of an invalid file (shown, the file left as it is).
 	s.handle("commands.list", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
-		list, err := commands.Load(rt.FS, rt.IdeDir)
+		list, err := s.projectCommands(rt)
 		if err != nil {
 			return map[string]any{"commands": []commands.Command{}, "error": i18n.Translate(c.language(), err)}, nil
 		}
@@ -119,6 +169,10 @@ func (s *Server) registerCommands() {
 		if err != nil {
 			return nil, err
 		}
-		return s.runSaved(c, rt, a.ID, a.Restart)
+		cmd, err := s.findCommand(rt, a.ID)
+		if err != nil {
+			return nil, err
+		}
+		return s.runSaved(rt, cmd, a.Restart, c.id)
 	}))
 }

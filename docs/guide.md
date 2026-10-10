@@ -113,7 +113,7 @@ On the ticket, *Generate the plan* starts a conversation in Plan mode: the model
 
 ![The model develops the ticket in its worktree](images/develop.gif)
 
-*Start development* creates the branch `ticket/<n>-<slug>` and a git worktree for it in `.ide/worktrees/`, runs the setup command of the kanban settings in it (`npm install`, copy a `.env`…), and shows it in the same window, where the model starts working:
+*Start development* creates the branch `ticket/<n>-<slug>` and a git worktree for it in `.ide/worktrees/`, runs the setup commands of the project in it (the Console commands flagged `setup`: `npm install`, copy a `.env`…), and shows it in the same window, where the model starts working:
 
 - it follows the plan and the project instructions (`CLAUDE.md`, `AGENTS.md`, skills);
 - it reads, searches, edits files, uses the language servers and runs commands (build, tests);

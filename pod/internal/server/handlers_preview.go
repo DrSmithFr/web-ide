@@ -3,12 +3,15 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/agent"
+	"github.com/DrSmithFr/web-ide/pod/internal/commands"
+	"github.com/DrSmithFr/web-ide/pod/internal/console"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/preview"
 	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
@@ -50,26 +53,56 @@ func listens(ctx context.Context, dial preview.Dialer, port int) bool {
 
 // openPreview starts the command of an app (unless its port answers already), waits for
 // its port, then serves it.
+// A saved command (CommandID) runs in its own console, one per command: a console of it
+// still running is the one of the preview.
 func (s *Server) openPreview(ctx context.Context, sp preview.Spec) (preview.State, error) {
 	s.previewMu.Lock()
 	defer s.previewMu.Unlock()
+	rt, err := s.openRuntime(sp.Project, sshx.Creds{})
+	if err != nil {
+		return preview.State{}, err
+	}
+	var saved *commands.Command
+	if sp.CommandID != "" {
+		cmd, err := s.findCommand(rt, sp.CommandID)
+		if err != nil {
+			return preview.State{}, err
+		}
+		saved = &cmd
+		sp.Command, sp.Cwd = cmd.Command, cmd.Cwd
+		if sp.AppPort == 0 {
+			sp.AppPort = cmd.Port
+		}
+		if strings.TrimSpace(sp.Title) == "" {
+			sp.Title = cmd.Name
+		}
+		if sp.AppPort == 0 {
+			return preview.State{}, i18n.Errorf("the command “%s” has no port", cmd.Name)
+		}
+	}
 	if st, ok := s.Previews.Find(sp); ok {
 		return st, nil
 	}
 	if strings.TrimSpace(sp.Command) == "" {
 		return preview.State{}, i18n.New("command is missing")
 	}
-	rt, err := s.openRuntime(sp.Project, sshx.Creds{})
-	if err != nil {
-		return preview.State{}, err
-	}
 	dial := previewDialer(rt)
 	if listens(ctx, dial, sp.AppPort) {
 		// Already running (started by hand): the preview lives while the port answers.
 		return s.Previews.Start(sp, "", dial, func() bool { return listens(context.Background(), dial, sp.AppPort) })
 	}
-	info, err := s.startCommand(rt, rt.P.ID, sp.Command, sp.Cwd)
-	if err != nil {
+	var info console.Info
+	if saved != nil {
+		r, err := s.runSaved(rt, *saved, false, "")
+		if err != nil {
+			return preview.State{}, err
+		}
+		if r.Running != nil {
+			info = *r.Running
+		} else {
+			info = *r.Console
+		}
+	} else if info, err = s.startCommand(rt, rt.P.ID, sp.Command, sp.Cwd); err != nil {
 		return preview.State{}, err
 	}
 	until := time.Now().Add(PreviewWait)
@@ -139,9 +172,55 @@ func (s *Server) registerPreviews() {
 }
 
 // sharePreview is the tool share_preview: a card in the conversation, nothing runs yet.
-func sharePreview(r *agentRun, rt *runtime.Runtime, a toolArgs) (toolResult, error) {
+// The app is a saved serve command when there is one: command_id, else the only one with a
+// port when no command is given, else the one whose text is the command.
+func (s *Server) sharePreview(r *agentRun, rt *runtime.Runtime, a toolArgs) (toolResult, error) {
 	pv := &agent.Preview{Project: r.project, Title: strings.TrimSpace(a.str("title")), Command: strings.TrimSpace(a.str("command")),
-		Cwd: a.str("cwd"), Port: a.num("port")}
+		Cwd: a.str("cwd"), Port: a.num("port"), CommandID: strings.TrimSpace(a.str("command_id"))}
+	list, err := s.projectCommands(rt)
+	if err != nil && (pv.CommandID != "" || pv.Command == "") {
+		return toolResult{}, err
+	}
+	var saved *commands.Command
+	switch {
+	case pv.CommandID != "":
+		cmd, ok := commands.Find(list, pv.CommandID)
+		if !ok {
+			return toolResult{}, usagef("no saved command %q (see list_commands)", pv.CommandID)
+		}
+		saved = &cmd
+	case pv.Command == "":
+		var serve []string
+		for _, c := range commands.OfFlag(list, "serve") {
+			if c.Port > 0 || pv.Port > 0 {
+				serve = append(serve, fmt.Sprintf("%s (%s)", c.ID, c.Name))
+				if saved == nil {
+					saved = &c
+				}
+			}
+		}
+		if len(serve) == 0 {
+			return toolResult{}, usagef("command is missing (the project has no saved serve command with a port)")
+		}
+		if len(serve) > 1 {
+			return toolResult{}, usagef("several saved serve commands: pass command_id, one of %s", strings.Join(serve, ", "))
+		}
+	default:
+		for _, c := range commands.OfFlag(list, "serve") {
+			if strings.TrimSpace(c.Command) == pv.Command && (pv.Port == 0 || c.Port == 0 || pv.Port == c.Port) && saved == nil {
+				saved = &c
+			}
+		}
+	}
+	if saved != nil {
+		pv.CommandID, pv.Command, pv.Cwd = saved.ID, saved.Command, saved.Cwd
+		if pv.Port == 0 {
+			pv.Port = saved.Port
+		}
+		if pv.Title == "" {
+			pv.Title = saved.Name
+		}
+	}
 	if pv.Command == "" {
 		return toolResult{}, usagef("command is missing")
 	}
@@ -156,8 +235,14 @@ func sharePreview(r *agentRun, rt *runtime.Runtime, a toolArgs) (toolResult, err
 	if pv.Title == "" {
 		pv.Title = pv.Command
 	}
-	res := ok("A card is shown to the user: the app starts when they click it, and opens on a temporary URL. Do not run the command yourself.",
-		agent.T("{command} → port {port}", map[string]any{"command": pv.Command, "port": pv.Port}))
+	what := "the command"
+	sum := pv.Command
+	if saved != nil {
+		what = fmt.Sprintf("the saved command %q (%s)", saved.Name, saved.ID)
+		sum = saved.Name
+	}
+	res := ok(fmt.Sprintf("A card is shown to the user: %s starts when they click it (port %d), and the app opens on a temporary URL. Do not run the command yourself.", what, pv.Port),
+		agent.T("{command} → port {port}", map[string]any{"command": sum, "port": pv.Port}))
 	res.Preview = pv
 	return res, nil
 }
