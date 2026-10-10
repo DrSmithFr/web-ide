@@ -187,6 +187,7 @@ run(async ({ page, ctx }) => {
   await page.click('.kb-toolbar button:has-text("Done and abandoned")')
   await page.waitForSelector('[data-testid=ticket-card-1]')
   assert(true, 'closed ticket in the done column')
+  assert((await page.textContent('[data-testid=ticket-card-1] [data-testid=card-status]')) === 'Done', 'a closed card is tagged with its status')
   await page.waitForSelector('[data-testid=ticket-card-1] [data-testid=card-goals]')
   assert(
     (await page.$$eval('[data-testid=ticket-card-1] [data-testid=card-goals] li', (l) => l.map((e) => (e.classList.contains('done') ? '✓' : '○') + e.textContent.trim()))).join('|') ===

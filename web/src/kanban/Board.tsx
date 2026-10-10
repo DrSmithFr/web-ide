@@ -108,7 +108,7 @@ export function Board() {
             </header>
             <div class="kb-col-body">
               <For each={closed()} fallback={<p class="kb-empty">—</p>}>
-                {(tk) => <Card tk={tk} />}
+                {(tk) => <Card tk={tk} closed />}
               </For>
             </div>
           </section>
@@ -118,13 +118,19 @@ export function Board() {
   )
 }
 
-export function Card(props: { tk: Summary; compact?: boolean }) {
+/** closed: in the column of the closed tickets, which mixes done and abandoned: their status is tagged. */
+export function Card(props: { tk: Summary; compact?: boolean; closed?: boolean }) {
   const tk = () => props.tk
   return (
     <button class="kb-card" classList={{ compact: props.compact }} onClick={() => openTicket(tk().id)} data-testid={`ticket-card-${tk().id}`}>
       <div class="kb-card-top">
         <span class={`kb-prio p-${tk().priority}`} title={t('Priority: {priority}', { priority: priorityLabels[tk().priority] })} />
         <span class="kb-num">#{tk().id}</span>
+        <Show when={props.closed}>
+          <span class={`kb-status kb-tag st-${tk().status}`} data-testid="card-status">
+            {statusLabels[tk().status]}
+          </span>
+        </Show>
         <Show when={tk().parent}>
           <span class="kb-badge" title={t('Step of #{id}', { id: tk().parent! })} data-testid="card-parent">
             ↳ #{tk().parent}
