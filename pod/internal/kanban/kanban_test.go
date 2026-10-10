@@ -106,6 +106,17 @@ func TestTicketLifecycle(t *testing.T) {
 	if err := m.Move(loc, id, Done, ByModel, ""); err == nil {
 		t.Fatal("model closed the ticket")
 	}
+	// An open test feedback keeps the ticket To test.
+	fid, err = m.Feedback(loc, id, FeedbackOp{Op: "add", Kind: "bug", Text: "empty file"}, ByUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Move(loc, id, Done, ByUser, ""); err == nil {
+		t.Fatal("closed with an open feedback")
+	}
+	if _, err := m.Feedback(loc, id, FeedbackOp{Op: "check", ID: fid, Done: true}, ByUser); err != nil {
+		t.Fatal(err)
+	}
 	if err := m.Move(loc, id, Done, ByUser, ""); err != nil {
 		t.Fatal(err)
 	}

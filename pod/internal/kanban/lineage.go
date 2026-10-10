@@ -350,6 +350,9 @@ func (m *Manager) ValidateStep(loc Location, id int64, by string) error {
 		if status != Review {
 			return i18n.New("the step of a ticket is validated once it is “To test”")
 		}
+		if err := feedbackHandled(tx, id); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(`UPDATE tickets SET step_done = 1 WHERE id = ?`, id); err != nil {
 			return err
 		}

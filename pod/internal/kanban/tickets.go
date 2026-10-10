@@ -522,6 +522,11 @@ func (m *Manager) Move(loc Location, id int64, to, by, comment string) error {
 		if err := lineageMove(tx, id, from, to); err != nil {
 			return err
 		}
+		if to == Done {
+			if err := feedbackHandled(tx, id); err != nil {
+				return err
+			}
+		}
 		return setStatus(tx, id, from, to, by, comment, now)
 	})
 }
@@ -542,6 +547,18 @@ func lineageMove(tx *sql.Tx, id int64, from, to string) error {
 		}
 		_, err := tx.Exec(`UPDATE tickets SET step_done = 0 WHERE id = ?`, id)
 		return err
+	}
+	return nil
+}
+
+// feedbackHandled refuses to validate a ticket (or its step) while a test feedback is open.
+func feedbackHandled(tx *sql.Tx, id int64) error {
+	var open int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM feedback WHERE ticket_id = ? AND done = 0`, id).Scan(&open); err != nil {
+		return err
+	}
+	if open > 0 {
+		return i18n.Errorf("%d test feedback(s) not handled yet", open)
 	}
 	return nil
 }

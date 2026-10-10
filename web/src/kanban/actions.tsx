@@ -102,23 +102,36 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
       return [
         ...worktree,
         { label: t('Add feedback'), run: ctx.focusFeedback, testid: 'ticket-feedback' },
-        ...(openChildren.length && !tk.stepDone
+        // Open test feedback first: validating waits for it to be handled.
+        ...(tk.feedbackOpen
           ? [
               {
-                label: t('Validate the step'),
+                label: t('Fix feedbacks'),
                 primary: true,
-                title: t('Its work is tested: the next step of the lineage (#{id}) may start in this worktree', { id: openChildren[0].id }),
-                run: () => void ctx.apply(validateStep(tk.id)),
-                testid: 'ticket-step',
+                title: tn(tk.feedbackOpen, '{n} test feedback not handled yet', '{n} test feedbacks not handled yet'),
+                run: () => void startWorkSession(tk, 'correction'),
+                claude: { run: () => runClaude(tk, 'fix') },
+                testid: 'ticket-fix-feedbacks',
               },
             ]
-          : []),
-        // The ticket is validated once its lineage is finished.
-        ...(openChildren.length
-          ? []
-          : [{ label: t('Validate the ticket'), primary: true, title: t('Closes the ticket: Done'), run: () => void closeTicket(tk, ctx.apply), testid: 'ticket-close' }]),
+          : [
+              ...(openChildren.length && !tk.stepDone
+                ? [
+                    {
+                      label: t('Validate the step'),
+                      primary: true,
+                      title: t('Its work is tested: the next step of the lineage (#{id}) may start in this worktree', { id: openChildren[0].id }),
+                      run: () => void ctx.apply(validateStep(tk.id)),
+                      testid: 'ticket-step',
+                    },
+                  ]
+                : []),
+              // The ticket is validated once its lineage is finished.
+              ...(openChildren.length
+                ? []
+                : [{ label: t('Validate the ticket'), primary: true, title: t('Closes the ticket: Done'), run: () => void closeTicket(tk, ctx.apply), testid: 'ticket-close' }]),
+          ]),
         { label: t('Back to “In progress”'), run: () => void ctx.move('in_progress'), more: true },
-        { label: t('Handle the test feedback with Claude Code'), run: () => runClaude(tk, 'fix'), more: true },
         { label: t('Develop with Claude Code'), run: () => runClaude(tk, 'dev'), more: true },
       ]
     case 'done':

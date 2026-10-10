@@ -375,6 +375,10 @@ func (s *Server) registerKanbanGit() {
 		if !kanban.CanMove(t.Status, a.Status, kanban.ByUser) {
 			return nil, i18n.New("this ticket cannot move to this status")
 		}
+		// Before the worktree goes: the open test feedback keeps the ticket To test.
+		if a.Status == kanban.Done && t.FeedbackOpen > 0 {
+			return nil, i18n.Errorf("%d test feedback(s) not handled yet", t.FeedbackOpen)
+		}
 		if t.Parent != 0 {
 			return s.finishChild(ctx, k, t, a.Status, a.Comment)
 		}

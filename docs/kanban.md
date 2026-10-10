@@ -52,12 +52,12 @@ Tickets move with buttons only (no drag and drop).
 | New | Briefing, Generate the plan; *More actions*: Abandon | — (a plan moves the ticket to *To do* by itself, whoever writes it) |
 | To do | Start development (→ In progress); *More actions*: Back to New, Redo the plan (assistant or Claude Code), Start anyway (blocked), Abandon | — |
 | In progress | Open the worktree, Send to testing; *More actions*: New dev session, Develop with Claude Code, Abandon | move to *To test* (with how to test) |
-| To test | Open the worktree, Add feedback, Validate the step (a ticket with open children) or else Validate the ticket (→ Done); Fix session (per open feedback), Create the pull request in their sections; *More actions*: Back to In progress, Handle the test feedback with Claude Code, Develop with Claude Code, Abandon | mark feedback handled |
+| To test | Open the worktree, Add feedback, with open test feedback Fix feedbacks (assistant or Claude Code, all the open feedback), else Validate the step (a ticket with open children) or Validate the ticket (→ Done); Fix session (per open feedback), Create the pull request in their sections; *More actions*: Back to In progress, Develop with Claude Code, Abandon | mark feedback handled |
 | Done / Abandoned | Reopen (Done → To test, Abandoned → New) | — |
 
 The header keeps the main actions; *Briefing*, *Generate the plan*, *Start development* and the *Fix session* of a feedback are split buttons: a click starts the integrated assistant, the arrow offers Claude Code instead (in a terminal). The other actions are in the *More actions* menu.
 
-A feedback leaves the ticket in *To test*. Closing or abandoning removes the worktree; the branch is kept (abandoning offers to delete it). The change is frozen in the ticket when it is merged, or else when it is closed.
+A feedback leaves the ticket in *To test*; while one is open, the ticket and its step cannot be validated (the pod refuses too). Closing or abandoning removes the worktree; the branch is kept (abandoning offers to delete it). The change is frozen in the ticket when it is merged, or else when it is closed.
 
 ## Linked conversations
 
