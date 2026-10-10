@@ -70,6 +70,9 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 | `llm` | Model servers, chat completions as jobs that survive the page, conversations (SQLite), instructions and skills |
 | `agent` | What the agent of the assistant needs apart from the server: the stored conversation, the prompts and tool definitions, the Plan mode command rules, the line diff of a change, the questions of `ask_user`, the sub-agents (`subagents.go`); the loop itself is in `server/agent*.go` |
 | `kanban` | Tickets (SQLite), workflow rules, ticket git operations (worktrees, diff, merge, rebase) |
+| `tunnel` | Message connections with framing and back-pressure (`MsgConn`, `Framed`), the channel-binding handshake (`handshake.go`): the token is proved inside the DataChannel, bound to both DTLS fingerprints, so the relay never sees it |
+| `relay` | Relay server (`web-ide-pod relay`): signaling routes, STUN/TURN (Pion TURN, UDP, TCP, TLS 443 demuxed by ALPN), SQLite base, short-lived HMAC TURN credentials, bootstrap page and Service Worker (`web/`, `go:embed`) |
+| `relayclient` | The pod's link to its relay: one outbound WebSocket with backoff, one PeerConnection per offer, DataChannels handed to `server.ServeTunnel` |
 | `hfcache` | Hugging Face files downloaded once and served offline (speech models) |
 | `i18n` | Translation of the messages sent to the page |
 | `clipboard` | History of the texts copied in the IDE, shared by every window |
@@ -148,6 +151,8 @@ make e2e            # browser tests, all suites (a few minutes)
 - **Copy through `copyText`** (`ui/clipboard.ts`), not `navigator.clipboard.writeText`: the text then goes to the clipboard history. A popup gives the focus back with `keepFocus` (`state/focus.ts`): focusing the editor again puts its caret at the start otherwise.
 - **Side buttons of the mouse** (`keys/mouse.ts`): cancelled on `mouseup` (Chromium goes back in the browser history otherwise) and sent to the focused part (`focusPart`, which they do not change): `navigate` of `state/project.ts` (positions and tabs, recorded by `openFile`, `openTab` and `activateTab`), `navigateConsoles`, `navigateChats`.
 - **E2E tests** must wait actively (`waitForFunction`): language servers start cold. `<option>` elements are never "visible" for Playwright (`state: 'attached'`).
+- **Tunnel**: every message is framed into 16 KB fragments (Chrome caps a DataChannel message near 256 KB), so both sides must frame; a chunk sent to a queue must be **copied** (`channelWriter.Write`), otherwise a caller reusing its buffer corrupts the queued messages. The relay routes every signaling message by **session id** (one pod serves several browsers), and TURN credentials live 12 h: Pion re-checks expiry on refresh, a 5 min TTL kills a relayed tunnel.
+- **Service Worker of the relay**: install the stream handler *before* waiting for the HTTP head, otherwise the chunks arriving between the head and the handler are lost; the bootstrap page and `sw.js` themselves must not be answered from the pod (the tunnel is not open yet when the page loads). Preview apps that open their own WebSocket (HMR) cannot go through the Service Worker.
 
 ## Known limitations
 
