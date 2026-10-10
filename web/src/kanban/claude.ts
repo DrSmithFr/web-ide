@@ -10,10 +10,11 @@ type Role = 'brief' | 'plan' | 'dev' | 'fix'
 
 const opus: Record<Role, boolean> = { brief: true, plan: true, dev: false, fix: false }
 
-/** Runs Claude Code on a ticket in a terminal: in its worktree for development. */
-export function runClaude(tk: Ticket, role: Role) {
+/** Runs Claude Code on a ticket in a terminal: in its worktree for development; a fix may
+ * name one feedback. */
+export function runClaude(tk: Ticket, role: Role, feedback?: number) {
   const cwd = (role === 'dev' || role === 'fix') && tk.worktree ? tk.worktree : root()
-  const args = [...(opus[role] ? ['--model', 'opus'] : []), `/mcp__web-ide__${role} ${tk.id}`]
+  const args = [...(opus[role] ? ['--model', 'opus'] : []), `/mcp__web-ide__${role} ${tk.id}${feedback ? ` ${feedback}` : ''}`]
   // WEBIDE_CLAUDE (environment of the pod) names another command: the fake one of the tests.
   const script = 'c="${WEBIDE_CLAUDE:-claude}"; command -v "$c" >/dev/null || { echo "$c: not found in the PATH of the pod"; exit 127; }; exec "$c" "$@"'
   void newConsole({ kind: 'terminal', cwd, command: ['sh', '-c', script, 'sh', ...args], title: `Claude #${tk.id} ${role}` })

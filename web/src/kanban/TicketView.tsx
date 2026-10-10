@@ -14,7 +14,8 @@ import {
   moveTicket, priorityLabels, sizeNames, statusLabels, ticketVersion, updateTicket,
   MAX_DESCRIPTION, MAX_NOTE, type FeedbackKind, type Goal, type Priority, type Size, type Status, type Ticket,
 } from './state'
-import { abandonTicket, ChatLink, PullRequest, ticketActions, TicketChats, TicketGit } from './actions'
+import { abandonTicket, ChatLink, PullRequest, ticketActions, TicketChats, TicketGit, type ActionButton } from './actions'
+import { runClaude } from './claude'
 import { startWorkSession } from './sessions'
 import { LineageSection } from './Lineage'
 import { fmtDate, fmtSize, t } from '../i18n'
@@ -175,35 +176,7 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
           </Show>
           <span class="muted small">{t('created on {date}', { date: fmtDate(tk().created) })}</span>
           <span class="grow" />
-          <For each={buttons().filter((b) => !b.more)}>
-            {(b) => {
-              const main = (
-                <button class={`btn small ${b.primary ? 'primary' : ''} ${b.danger ? 'danger' : ''}`} disabled={b.disabled} title={b.title} onClick={b.run} data-testid={b.testid}>
-                  {b.label}
-                </button>
-              )
-              if (!b.claude) return main
-              // Split button: the integrated assistant on a click, Claude Code from the arrow.
-              const choices = (): MenuItem[] => [
-                { label: t('With the integrated AI'), action: b.run },
-                { label: b.claude!.opus ? t('With Claude Code (Opus)') : t('With Claude Code'), action: b.claude!.run },
-              ]
-              return (
-                <span class="tk-split" classList={{ primary: !!b.primary }}>
-                  {main}
-                  <button
-                    class={`btn small ${b.primary ? 'primary' : ''}`}
-                    disabled={b.disabled}
-                    title={t('With the integrated AI or Claude Code')}
-                    onClick={(e) => contextMenu(e, choices())}
-                    data-testid={b.testid && `${b.testid}-with`}
-                  >
-                    <Icon name="chevron" size={11} />
-                  </button>
-                </span>
-              )
-            }}
-          </For>
+          <For each={buttons().filter((b) => !b.more)}>{(b) => <ActionBtn b={b} />}</For>
           <button
             class="icon-btn"
             title={t('More actions')}
@@ -422,9 +395,15 @@ function FeedbackList(props: { tk: Ticket; apply: Apply; areaRef: (el: HTMLTextA
                 </Show>
                 <span class="grow" />
                 <Show when={!f.done && props.tk.status === 'review'}>
-                  <button class="btn small" onClick={() => void startWorkSession(props.tk, 'correction', f)} data-testid="ticket-feedback-session">
-                    <Icon name="sparkle" size={12} /> {t('Fix session')}
-                  </button>
+                  <ActionBtn
+                    icon="sparkle"
+                    b={{
+                      label: t('Fix session'),
+                      run: () => void startWorkSession(props.tk, 'correction', f),
+                      claude: { run: () => runClaude(props.tk, 'fix', f.id) },
+                      testid: 'ticket-feedback-session',
+                    }}
+                  />
                 </Show>
                 <button class="icon-btn small" title={t('Delete')} onClick={() => props.apply(feedbackOp(props.tk.id, { op: 'delete', id: f.id }))}>
                   <Icon name="close" size={11} />
@@ -507,6 +486,39 @@ async function openAttachment(id: number, aid: number) {
 }
 
 // ---------- pieces ----------
+
+/** A button of an action; with a Claude Code variant, a split button: the integrated
+ * assistant on a click, the arrow offers Claude Code instead. */
+function ActionBtn(props: { b: ActionButton; icon?: string }) {
+  const b = props.b
+  const main = (
+    <button class={`btn small ${b.primary ? 'primary' : ''} ${b.danger ? 'danger' : ''}`} disabled={b.disabled} title={b.title} onClick={b.run} data-testid={b.testid}>
+      <Show when={props.icon}>
+        <Icon name={props.icon!} size={12} />{' '}
+      </Show>
+      {b.label}
+    </button>
+  )
+  if (!b.claude) return main
+  const choices = (): MenuItem[] => [
+    { label: t('With the integrated AI'), action: b.run },
+    { label: b.claude!.opus ? t('With Claude Code (Opus)') : t('With Claude Code'), action: b.claude!.run },
+  ]
+  return (
+    <span class="tk-split">
+      {main}
+      <button
+        class={`btn small ${b.primary ? 'primary' : ''}`}
+        disabled={b.disabled}
+        title={t('With the integrated AI or Claude Code')}
+        onClick={(e) => contextMenu(e, choices())}
+        data-testid={b.testid && `${b.testid}-with`}
+      >
+        <Icon name="chevron" size={11} />
+      </button>
+    </span>
+  )
+}
 
 export function Section(props: { title: string; children: JSX.Element; folded?: boolean; actions?: JSX.Element }) {
   const [open, setOpen] = createSignal(!props.folded)

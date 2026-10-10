@@ -170,6 +170,15 @@ func TestMCPKanban(t *testing.T) {
 	if !strings.Contains(msg, "ticket #1") || !strings.Contains(msg, "kanban_set_plan") {
 		t.Fatalf("prompt: %s", msg)
 	}
+	promptText := func(p map[string]any) string {
+		return p["messages"].([]any)[0].(map[string]any)["content"].(map[string]any)["text"].(string)
+	}
+	if msg := promptText(m.rpc("prompts/get", map[string]any{"name": "fix", "arguments": map[string]string{"ticket": "1"}})); !strings.Contains(msg, "Handle the open **test feedback** of ticket #1") {
+		t.Fatalf("fix prompt: %s", msg)
+	}
+	if msg := promptText(m.rpc("prompts/get", map[string]any{"name": "fix", "arguments": map[string]string{"ticket": "1", "feedback": "3"}})); !strings.Contains(msg, "feedback** with id 3 (only this one) of ticket #1") {
+		t.Fatalf("fix prompt of one feedback: %s", msg)
+	}
 }
 
 func TestMCPConversation(t *testing.T) {
