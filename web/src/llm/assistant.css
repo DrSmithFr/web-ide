@@ -422,9 +422,12 @@
 .ai-ask-situation p { margin: 3px 0 0; font-size: 13px; }
 
 /* ticket linked to the conversation */
-.ai-ticket-bar { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-bottom: 1px solid var(--line); background: var(--bg-2); font-size: 12px; min-width: 0; flex: none; }
-.ai-ticket-bar .link { padding: 0; min-width: 0; }
-.ai-ticket-link { align-self: flex-start; margin: 4px 10px 0; border: 0; background: none; color: var(--fg-muted); font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.ai-ticket-bar { display: flex; align-items: center; padding: 4px 14px 0; border-top: 1px solid var(--line); background: var(--bg); font-size: 12px; min-width: 0; flex: none; }
+.ai-ticket-bar .link { display: inline-flex; align-items: center; gap: 5px; padding: 0; color: var(--fg-muted); }
+.ai-ticket-bar .link:hover { color: var(--accent); }
+/* Stuck on top of the message box: one rule for both. */
+.ai-ticket-bar + .ai-composer-wrap, .ai-ticket-link + .ai-composer-wrap { border-top: 0; }
+.ai-ticket-link { align-self: stretch; margin: 0; padding: 4px 14px 0; border: 0; border-top: 1px solid var(--line); background: var(--bg); background: none; color: var(--fg-muted); font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; flex: none; }
 .ai-ticket-link:hover { color: var(--accent); }
 
 /* Doodle sent, in the thread. */

@@ -53,14 +53,13 @@ function TicketBar() {
       }
     >
       <div class="ai-ticket-bar" data-testid="ai-ticket-bar">
-        <Icon name="kanban" size={13} />
-        <button class="link ellipsis" onClick={() => openTicket(chat.ticket!.id)}>
-          #{chat.ticket!.id} {tk()?.title ?? ''}
+        <button
+          class="link"
+          onClick={() => openTicket(chat.ticket!.id)}
+          title={[tk()?.title, roleLabels[chat.ticket!.role], tk() ? statusLabels[tk()!.status] : ''].filter(Boolean).join(' · ')}
+        >
+          <Icon name="kanban" size={12} /> {t('Ticket #{n}', { n: chat.ticket!.id })}
         </button>
-        <span class={`kb-role r-${chat.ticket!.role}`}>{roleLabels[chat.ticket!.role]}</span>
-        <Show when={tk()}>
-          <span class={`kb-status st-${tk()!.status}`}>{statusLabels[tk()!.status]}</span>
-        </Show>
       </div>
     </Show>
   )
@@ -180,7 +179,6 @@ export function AssistantTool() {
           <Icon name="gear" size={15} />
         </button>
       </div>
-      <TicketBar />
       <Show when={modelsError()}>
         <div class="ai-banner">
           <Icon name="conflict" size={13} /> {modelsError()}
@@ -223,6 +221,7 @@ export function AssistantTool() {
           >
             <Thread onSuggest={suggest} onSettings={() => setSettings(true)} />
           </div>
+          <TicketBar />
           <Composer
             onSettings={() => setSettings(true)}
             onSent={() => {

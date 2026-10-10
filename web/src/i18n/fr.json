@@ -481,6 +481,7 @@
   "lines {from}-{to}": "lignes {from}-{to}",
   "Link": "Lien",
   "Link this conversation to a ticket": "Lier cette conversation à un ticket",
+  "Ticket #{n}": "Ticket #{n}",
   "Link to a ticket…": "Lier à un ticket…",
   "Linked conversations": "Conversations liées",
   "Linked files": "Fichiers liés",
