@@ -109,7 +109,7 @@ run(
       await page.keyboard.press('Enter')
       await page.waitForSelector('.ai-msg.assistant .md:has-text("Click the card to start it.")', { timeout: 20000 })
       assert(outputs.next.includes('#1 [To do] (Normal) Login page') && outputs.next.includes('#2 [To do] (Normal) Dark theme'), 'kanban_next lists the tickets that can start: ' + outputs.next)
-      assert(!outputs.tools.includes('edit_file') && outputs.tools.includes('open_conversation'), 'the Orchestrator has its tools and changes no file')
+      assert(outputs.tools.includes('edit_file') && outputs.tools.includes('open_conversation'), 'the Orchestrator has its tools (file changes in the scratch folder only)')
       assert((await page.textContent('[data-testid=ai-action]')).includes('First in line'), 'the action card with its reason')
       await page.screenshot({ path: OUT + '/orchestrator-card.png' })
       assert(!(await page.isVisible('.ai-msg.assistant .md:has-text("Developing.")')), 'nothing started before the click')

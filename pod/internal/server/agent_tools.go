@@ -13,6 +13,7 @@ import (
 
 	"github.com/DrSmithFr/web-ide/pod/internal/agent"
 	"github.com/DrSmithFr/web-ide/pod/internal/console"
+	"github.com/DrSmithFr/web-ide/pod/internal/fsx"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
@@ -145,26 +146,34 @@ func (s *Server) agentTool(r *agentRun, ref *runtimeRef, call agent.ToolCall, mo
 		return s.dockerTool(r, ref, name, a)
 	}
 	root := ref.rt.Root
-	if mode != agent.Build {
-		if agent.WriteTools[name] {
-			if mode == agent.Plan {
-				return fail(r, failf("Plan mode: files cannot be changed. Present the plan with exit_plan_mode; it will be carried out in Build mode."))
-			}
-			if mode == agent.Orchestrator {
-				return fail(r, failf("Orchestrator mode: files cannot be changed. Propose the work with action_card, or open a conversation for it with open_conversation."))
-			}
-			return fail(r, failf("Briefing mode: files cannot be changed. Clarify the need and write it in tickets (kanban_create)."))
+	which := map[string]string{agent.Plan: "Plan", agent.Briefing: "Briefing", agent.Orchestrator: "Orchestrator"}[mode]
+	// Out of Build mode, files change only in the scratch folder.
+	if mode != agent.Build && agent.WriteTools[name] && !agent.InZone(absPath(root, a.str("path")), agent.Scratch) {
+		then := map[string]string{
+			agent.Plan:         "Present the plan with exit_plan_mode; it will be carried out in Build mode.",
+			agent.Briefing:     "Clarify the need and write it in tickets (kanban_create).",
+			agent.Orchestrator: "Propose the work with action_card, or open a conversation for it with open_conversation.",
+		}[mode]
+		return fail(r, failf("%s mode: files of the project cannot be changed (only scratch files in %s). %s", which, agent.Scratch, then))
+	}
+	// A command that may change something out of its zone waits for the user: the project and
+	// the scratch folder in Build mode; the scratch folder, reading commands and the builds and
+	// tests of the project in the other modes.
+	if name == "bash" || name == "run_command" {
+		cmd, cwd := a.str("command"), root
+		if a.str("cwd") != "" {
+			cwd = absPath(root, a.str("cwd"))
 		}
-		// A command that may change something waits for the user.
-		if name == "bash" || name == "run_command" {
-			cwd := root
-			if a.str("cwd") != "" {
-				cwd = absPath(root, a.str("cwd"))
+		free := agent.StaysIn(cmd, cwd, root, agent.Scratch)
+		if mode != agent.Build {
+			free = agent.RunsFreely(cmd, root, cwd) || agent.StaysIn(cmd, cwd, agent.Scratch)
+		}
+		if !free && !s.confirm(r, root, agent.Approval{Call: call, Kind: "command", Command: cmd}) {
+			why := "Build mode: commands that touch nothing out of the project and " + agent.Scratch + " run freely"
+			if mode != agent.Build {
+				why = which + " mode: only reading commands, the build and test commands of the project, and commands confined to " + agent.Scratch + ", run freely"
 			}
-			if !agent.RunsFreely(a.str("command"), root, cwd) && !s.confirm(r, agent.Approval{Call: call, Kind: "command", Command: a.str("command")}) {
-				which := map[string]string{agent.Plan: "Plan", agent.Briefing: "Briefing", agent.Orchestrator: "Orchestrator"}[mode]
-				return toolResult{Content: "The user refused this command (" + which + " mode: only reading commands, and the build and test commands of the project, run freely).", Summary: agent.T("command refused", nil).Raw(), Status: "denied"}
-			}
+			return toolResult{Content: "The user refused this command (" + why + ").", Summary: agent.T("command refused", nil).Raw(), Status: "denied"}
 		}
 	}
 	var err error
@@ -252,10 +261,11 @@ func (s *Server) toolProgress(r *agentRun, callID string) func(string) {
 }
 
 // confirm asks the user before a file change or a command; false when refused or stopped.
-// "Apply without asking" covers the file changes; commands always ask.
-func (s *Server) confirm(r *agentRun, req agent.Approval) bool {
+// Changes in the project or the scratch folder apply without asking; "Apply without asking"
+// covers the others; commands always ask.
+func (s *Server) confirm(r *agentRun, root string, req agent.Approval) bool {
 	r.mu.Lock()
-	if req.Kind == "edit" && opt(r.chat).AutoApply {
+	if req.Kind == "edit" && (opt(r.chat).AutoApply || agent.InZone(req.Path, root, agent.Scratch)) {
 		r.mu.Unlock()
 		return true
 	}
@@ -509,10 +519,10 @@ func (s *Server) editFile(r *agentRun, rt *runtime.Runtime, call agent.ToolCall,
 	}
 	next := text[:at] + newStr + text[at+len(oldStr):]
 	diff := agent.DiffLines(text, next)
-	if !s.confirm(r, agent.Approval{Call: call, Kind: "edit", Path: abs, Diff: diff}) {
+	if !s.confirm(r, rt.Root, agent.Approval{Call: call, Kind: "edit", Path: abs, Diff: diff}) {
 		return toolResult{Content: "The user refused this change.", Summary: agent.T("change refused", nil).Raw(), Status: "denied", Diff: diff}, nil
 	}
-	if _, err := rt.Write(abs, next, f.Format, ""); err != nil {
+	if err := save(rt, abs, next, f.Format); err != nil {
 		return toolResult{}, err
 	}
 	s.emitter(r.project)("git.changed", nil, "")
@@ -521,6 +531,20 @@ func (s *Server) editFile(r *agentRun, rt *runtime.Runtime, call agent.ToolCall,
 	res := okPlain(fmt.Sprintf("Change applied to %s (line %d).", rel, line), fmt.Sprintf("%s: +%d −%d", rel, add, del))
 	res.Diff = diff
 	return res, nil
+}
+
+// save writes a file changed by the assistant: through the runtime in the project (the
+// windows follow it), directly elsewhere (the scratch folder, or a change the user approved).
+func save(rt *runtime.Runtime, abs, content string, f runtime.Format) error {
+	if fsx.Within(rt.Root, abs) {
+		_, err := rt.Write(abs, content, f, "")
+		return err
+	}
+	data, err := runtime.EncodeText(content, f)
+	if err != nil {
+		return err
+	}
+	return rt.FS.Write(abs, data)
 }
 
 func (s *Server) writeFile(r *agentRun, rt *runtime.Runtime, call agent.ToolCall, a toolArgs) (toolResult, error) {
@@ -552,13 +576,13 @@ func (s *Server) writeFile(r *agentRun, rt *runtime.Runtime, call agent.ToolCall
 	if created && len(diff) > 0 && diff[0].T == "-" {
 		diff = diff[1:] // the empty line of "nothing"
 	}
-	if !s.confirm(r, agent.Approval{Call: call, Kind: "edit", Path: abs, Diff: diff, Created: created}) {
+	if !s.confirm(r, rt.Root, agent.Approval{Call: call, Kind: "edit", Path: abs, Diff: diff, Created: created}) {
 		return toolResult{Content: "The user refused this write.", Summary: agent.T("write refused", nil).Raw(), Status: "denied", Diff: diff}, nil
 	}
 	if created {
 		_ = rt.FS.Mkdir(path.Dir(abs))
 	}
-	if _, err := rt.Write(abs, content, format, ""); err != nil {
+	if err := save(rt, abs, content, format); err != nil {
 		return toolResult{}, err
 	}
 	s.emitter(r.project)("git.changed", nil, "")

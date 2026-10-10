@@ -1,14 +1,17 @@
 package agent
 
 import (
+	"os"
 	"regexp"
 	"strings"
 )
 
-// Shell commands the Plan and Briefing modes run without asking: commands that only read
-// (anywhere), and the build, test and lint commands or scripts of the project run from inside
-// it. Anything else (installs, deletions, writes out of the project, unknown programs) waits
-// for the user. A guess, kept conservative: what it cannot parse asks.
+// Shell commands run without asking. The Plan, Briefing and Orchestrator modes run the
+// commands that only read (anywhere), the build, test and lint commands or scripts of the
+// project run from inside it (RunsFreely), and anything confined to the scratch folder; the
+// Build mode runs anything confined to the project and the scratch folder (StaysIn). Anything
+// else (installs, deletions, writes out of the project, unknown programs) waits for the user.
+// A guess, kept conservative: what it cannot parse asks.
 
 var readCommands = setOf(
 	"ls", "cat", "head", "tail", "less", "more", "grep", "egrep", "fgrep", "rg", "ag", "fd", "wc", "file", "stat", "pwd", "echo", "printf", "tree", "du", "df",
@@ -104,13 +107,45 @@ func inside(root, p string) bool {
 	return p == root || strings.HasPrefix(p, r)
 }
 
+// Scratch is the folder the assistant uses freely in every mode, besides the project.
+// WEBIDE_SCRATCH replaces it for the tests, whose projects are in /tmp.
+var Scratch = "/tmp"
+
+func init() {
+	if d := os.Getenv("WEBIDE_SCRATCH"); d != "" {
+		Scratch = d
+	}
+}
+
+// InZone tells whether the absolute path p is in one of the folders dirs.
+func InZone(p string, dirs ...string) bool {
+	for _, d := range dirs {
+		if inside(d, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// pathOf is the absolute path of the word w from dir; "/~" (out of every folder) when it
+// depends on the home or a variable.
+func pathOf(dir, w string) string {
+	if strings.HasPrefix(w, "~") || strings.Contains(w, "$") {
+		return "/~"
+	}
+	return resolvePath(dir, w)
+}
+
 const ops = "|;&<>\n"
+
+// redirMark starts the word that replaces an output redirection: the mark, then the target.
+const redirMark = "\ue010"
 
 var (
 	substitution = regexp.MustCompile("\\$\\(([^()`]*)\\)|`([^`]*)`")
 	quoted       = regexp.MustCompile(`'[^']*'|"(?:[^"\\]|\\.)*"`)
 	streamRedir  = regexp.MustCompile(`\d?>&\d`)
-	safeRedir    = regexp.MustCompile(`(&|\d)?>>?\s*(/dev/null|/tmp/[\w./-]+)`)
+	redirect     = regexp.MustCompile(`(?:\d|&)?>>?\|?\s*([^\s|;&<>]*)`)
 	separators   = regexp.MustCompile(`&&|\|\||;|\||&|\n`)
 	edges        = regexp.MustCompile(`^[\s(]+|[\s)]+$`)
 	quotedWord   = regexp.MustCompile(`^(['"])(.*)(['"])$`)
@@ -137,14 +172,13 @@ func unmask(w string) string {
 	}, w)
 }
 
-// RunsFreely tells whether the Plan mode runs the command without asking. root: the
-// project; cwd: where the command starts (the project when empty).
-func RunsFreely(command, root, cwd string) bool {
-	if cwd == "" {
-		cwd = root
-	}
+// walk calls each for the simple commands of a shell command (wrappers removed), with the
+// folder each one runs in (cwd, then the cd) and the targets of its output redirections. The
+// substitutions are walked first, from cwd. False when it cannot follow the command or when
+// each returns false.
+func walk(command, cwd string, each func(words []string, dir string, redirs []string) bool) bool {
 	c := strings.ReplaceAll(command, "\\\n", " ")
-	// Substitutions: allowed when what they run is allowed, then replaced by a plain word.
+	// Substitutions: walked, then replaced by a plain word.
 	for guard := 0; strings.Contains(c, "$(") || strings.Contains(c, "`"); guard++ {
 		m := substitution.FindStringSubmatchIndex(c)
 		if m == nil || guard > 20 {
@@ -156,47 +190,101 @@ func RunsFreely(command, root, cwd string) bool {
 		} else {
 			inner = c[m[4]:m[5]]
 		}
-		if !RunsFreely(inner, root, cwd) {
+		if !walk(inner, cwd, each) {
 			return false
 		}
 		c = c[:m[0]] + "x" + c[m[1]:]
 	}
 	masked := quoted.ReplaceAllStringFunc(c, mask)
-	// Output redirections other than to /dev/null, to /tmp or between streams.
-	noSafe := safeRedir.ReplaceAllString(streamRedir.ReplaceAllString(masked, ""), "")
-	if strings.Contains(noSafe, ">") {
-		return false
-	}
+	masked = redirect.ReplaceAllString(streamRedir.ReplaceAllString(masked, ""), " "+redirMark+"$1")
 	dir := cwd
-	for _, seg := range separators.Split(noSafe, -1) {
-		var words []string
+	for _, seg := range separators.Split(masked, -1) {
+		var words, redirs []string
 		for _, w := range strings.Fields(edges.ReplaceAllString(seg, "")) {
 			w = unmask(w)
+			target, isRedir := strings.CutPrefix(w, redirMark)
+			if isRedir {
+				w = target
+			}
 			if m := quotedWord.FindStringSubmatch(w); m != nil && m[1] == m[3] {
 				w = m[2]
 			}
-			words = append(words, w)
+			if !isRedir {
+				words = append(words, w)
+			} else if w == "" {
+				return false
+			} else {
+				redirs = append(redirs, pathOf(dir, w))
+			}
 		}
-		if len(words) == 0 {
-			continue
-		}
-		if words[0] == "cd" || words[0] == "pushd" {
-			if len(words) > 1 && !strings.HasPrefix(words[1], "~") {
-				dir = resolvePath(dir, words[1])
+		if len(words) > 0 && (words[0] == "cd" || words[0] == "pushd") {
+			if len(words) > 1 {
+				dir = pathOf(dir, words[1])
 			} else {
 				dir = "/~"
 			}
 			continue
 		}
-		if words[0] == "popd" {
+		if len(words) > 0 && words[0] == "popd" {
 			dir = "/~" // unknown: out of the project from now on
 			continue
 		}
-		if !simpleRunsFreely(unwrap(words), inside(root, dir), dir, root) {
+		if (len(words) > 0 || len(redirs) > 0) && !each(unwrap(words), dir, redirs) {
 			return false
 		}
 	}
 	return true
+}
+
+// RunsFreely tells whether the Plan mode runs the command without asking. root: the
+// project; cwd: where the command starts (the project when empty).
+func RunsFreely(command, root, cwd string) bool {
+	if cwd == "" {
+		cwd = root
+	}
+	return walk(command, cwd, func(words []string, dir string, redirs []string) bool {
+		// Output redirections to /dev/null or to the scratch folder only.
+		for _, t := range redirs {
+			if !InZone(t, "/dev/null", Scratch) {
+				return false
+			}
+		}
+		return simpleRunsFreely(words, inside(root, dir), dir, root)
+	})
+}
+
+// Commands that act beyond the files given to them: privileges, other machines, services,
+// processes.
+var escapes = setOf("sudo", "su", "doas", "pkexec", "ssh", "scp", "sftp", "systemctl", "service", "shutdown", "reboot", "mount", "umount", "chroot", "crontab", "kill", "pkill", "killall")
+
+// StaysIn tells whether a command touches nothing out of the folders dirs, so that it runs
+// without asking: reading commands run from anywhere on anything; the others run in the
+// folders, write their output in them (or /dev/null), and their path arguments resolve in
+// them. A guess like RunsFreely: a path made of a variable or of the home asks.
+func StaysIn(command, cwd string, dirs ...string) bool {
+	return walk(command, cwd, func(words []string, dir string, redirs []string) bool {
+		for _, t := range redirs {
+			if t != "/dev/null" && !InZone(t, dirs...) {
+				return false
+			}
+		}
+		if len(words) == 0 || readOnly(words) {
+			return true
+		}
+		if !InZone(dir, dirs...) || escapes[words[0]] {
+			return false
+		}
+		for _, w := range words {
+			if strings.HasPrefix(w, "-") {
+				_, w, _ = strings.Cut(w, "=") // --out=path
+			}
+			w = strings.Trim(w, `'"`)
+			if (strings.Contains(w, "/") || strings.HasPrefix(w, "~") || strings.Contains(w, "$")) && !InZone(pathOf(dir, w), dirs...) {
+				return false
+			}
+		}
+		return true
+	})
 }
 
 // unwrap removes assignments and wrappers: `LANG=C timeout 60 nice -n 5 xargs -0 grep x` → `grep x`.
@@ -229,11 +317,9 @@ func unwrap(words []string) []string {
 	}
 }
 
-func simpleRunsFreely(words []string, inProject bool, dir, root string) bool {
-	if len(words) == 0 {
-		return true
-	}
-	cmd, rest := words[0], append([]string{}, words[1:]...)
+// readOnly tells whether a simple command only reads.
+func readOnly(words []string) bool {
+	cmd, rest := words[0], words[1:]
 	if cmd == "git" {
 		// Global options: git --no-pager -C dir -c k=v log
 		for len(rest) > 0 && strings.HasPrefix(rest[0], "-") {
@@ -244,10 +330,18 @@ func simpleRunsFreely(words []string, inProject bool, dir, root string) bool {
 			}
 		}
 	}
-	args := strings.Join(rest, " ")
-	if readCommands[cmd] && readOnlyArgs(cmd, args) {
+	return readCommands[cmd] && readOnlyArgs(cmd, strings.Join(rest, " "))
+}
+
+func simpleRunsFreely(words []string, inProject bool, dir, root string) bool {
+	if len(words) == 0 {
 		return true
 	}
+	if readOnly(words) {
+		return true
+	}
+	cmd, rest := words[0], words[1:]
+	args := strings.Join(rest, " ")
 	if !inProject || risky.MatchString(args) {
 		return false
 	}

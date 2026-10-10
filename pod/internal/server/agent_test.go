@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/DrSmithFr/web-ide/pod/internal/agent"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +15,9 @@ import (
 
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 )
+
+// The projects of the tests are in /tmp: an other scratch folder keeps their approvals.
+func init() { agent.Scratch = "/scratch-of-the-tests" }
 
 // fakeModel is an OpenAI-compatible server whose answers are written by the test.
 type fakeModel struct {
@@ -117,9 +121,12 @@ func TestAgentLoop(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, _ := dial(t, ts, "secret-token-0123456789abcdef0123")
+	// A change out of the project waits for the user.
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("un\n"), 0o644)
-	id := a.call("projects.create", map[string]any{"type": "local", "path": dir})["result"].(map[string]any)["id"].(string)
+	os.Mkdir(filepath.Join(dir, "p"), 0o755)
+	os.WriteFile(filepath.Join(dir, "p", "a.txt"), []byte("un\n"), 0o644)
+	id := a.call("projects.create", map[string]any{"type": "local", "path": filepath.Join(dir, "p")})["result"].(map[string]any)["id"].(string)
 	a.call("project.open", map[string]any{"id": id})
 	open := func(chat string) map[string]any {
 		return a.call("agent.open", map[string]any{"id": chat})["result"].(map[string]any)["chat"].(map[string]any)
@@ -135,7 +142,7 @@ func TestAgentLoop(t *testing.T) {
 	// Tools, then a change waiting for the user, then the answer.
 	model.answer = func(req map[string]any) []string {
 		if lastMessage(req)["role"] == "user" {
-			return toolCalls([3]string{"r1", "read_file", `{"path":"a.txt"}`}, [3]string{"e1", "edit_file", `{"path":"a.txt","old_string":"un","new_string":"deux"}`})
+			return toolCalls([3]string{"r1", "read_file", `{"path":"../a.txt"}`}, [3]string{"e1", "edit_file", `{"path":"../a.txt","old_string":"un","new_string":"deux"}`})
 		}
 		return text("Done.")
 	}
@@ -165,6 +172,19 @@ func TestAgentLoop(t *testing.T) {
 	model.mu.Unlock()
 	if !strings.Contains(sys, "Open project") || tools < 20 || second["role"] != "tool" {
 		t.Fatalf("requests: system %.80q, %d tools, last %+v", sys, tools, second)
+	}
+
+	// A change in the project applies without asking.
+	model.answer = func(req map[string]any) []string {
+		if lastMessage(req)["role"] == "user" {
+			return toolCalls([3]string{"e2", "edit_file", `{"path":"a.txt","old_string":"un","new_string":"trois"}`})
+		}
+		return text("Done.")
+	}
+	a.call("agent.send", map[string]any{"id": "c1b", "text": "Change a.txt", "server": "s1", "model": "m"})
+	a.waitUpdate("c1b", idle)
+	if got, _ := os.ReadFile(filepath.Join(dir, "p", "a.txt")); string(got) != "trois\n" {
+		t.Fatalf("change in the project: %q", got)
 	}
 
 	// Questions: the turn stops, the answers start it again.
@@ -203,8 +223,30 @@ func TestAgentLoop(t *testing.T) {
 	if ms[2]["status"] != "denied" || ms[3]["status"] != "ok" || !strings.Contains(ms[3]["content"].(string), "a.txt") {
 		t.Fatalf("plan mode commands: %+v / %+v", ms[2], ms[3])
 	}
-	if _, err := os.Stat(filepath.Join(dir, "a.txt")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, "p", "a.txt")); err != nil {
 		t.Fatal("the refused command ran")
+	}
+
+	// Plan mode: scratch files and their commands, without asking; the project stays unchanged.
+	scratch := t.TempDir()
+	agent.Scratch = scratch
+	defer func() { agent.Scratch = "/scratch-of-the-tests" }()
+	model.answer = func(req map[string]any) []string {
+		if lastMessage(req)["role"] == "user" {
+			return toolCalls([3]string{"w1", "write_file", `{"path":"` + scratch + `/s.sh","content":"echo hi"}`},
+				[3]string{"w2", "bash", `{"command":"cd ` + scratch + ` && cp s.sh t.sh"}`},
+				[3]string{"w3", "write_file", `{"path":"b.txt","content":"x"}`})
+		}
+		return text("Fine.")
+	}
+	a.call("agent.send", map[string]any{"id": "c3s", "text": "Try", "server": "s1", "model": "m", "mode": "plan"})
+	a.waitUpdate("c3s", idle)
+	ms = messages("c3s")
+	if _, err := os.Stat(filepath.Join(scratch, "t.sh")); err != nil || ms[4]["status"] != "error" || !strings.Contains(ms[4]["content"].(string), "Plan mode") {
+		t.Fatalf("plan mode scratch: %v / %+v", err, ms[2:5])
+	}
+	if _, err := os.Stat(filepath.Join(dir, "p", "b.txt")); err == nil {
+		t.Fatal("plan mode wrote in the project")
 	}
 
 	// Ticket commits start with "#<n>": git run by the model does not take "#" for a comment.

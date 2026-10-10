@@ -90,7 +90,7 @@ func TestOrchestrator(t *testing.T) {
 	mu.Lock()
 	ot := tools["orchestrator"]
 	mu.Unlock()
-	if ot["edit_file"] || ot["write_file"] || ot["kanban_create"] || ot["exit_plan_mode"] || !ot["action_card"] || !ot["kanban_history"] || !ot["spawn_agent"] {
+	if !ot["edit_file"] || ot["kanban_create"] || ot["exit_plan_mode"] || !ot["action_card"] || !ot["kanban_history"] || !ot["spawn_agent"] {
 		t.Fatalf("orchestrator tools: %v", ot)
 	}
 	// The card records what the click did.

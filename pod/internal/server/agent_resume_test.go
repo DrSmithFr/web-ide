@@ -102,7 +102,8 @@ func TestResumeRuns(t *testing.T) {
 	sock := keeperFor(t)
 	data := t.TempDir()
 	ws := t.TempDir()
-	os.WriteFile(filepath.Join(ws, "a.txt"), []byte("un\n"), 0o644)
+	os.WriteFile(filepath.Join(ws, "a.txt"), []byte("un\n"), 0o644) // out of the project: asks
+	os.Mkdir(filepath.Join(ws, "p"), 0o755)
 	model := &fakeModel{models: []string{"m"}, delay: 30 * time.Millisecond}
 	mts := model.serve(t)
 	model.answer = func(req map[string]any) []string {
@@ -121,7 +122,7 @@ func TestResumeRuns(t *testing.T) {
 			}
 			return append(parts, toolCalls([3]string{"b1", "bash", `{"command":"sleep 1.5; echo done-bash"}`})...)
 		case results == 1:
-			return toolCalls([3]string{"e1", "edit_file", `{"path":"a.txt","old_string":"un","new_string":"deux"}`})
+			return toolCalls([3]string{"e1", "edit_file", `{"path":"../a.txt","old_string":"un","new_string":"deux"}`})
 		}
 		return text("finished")
 	}
@@ -132,7 +133,7 @@ func TestResumeRuns(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, _ := dial(t, ts1, "secret-token-0123456789abcdef0123")
-	id := a.call("projects.create", map[string]any{"type": "local", "path": ws})["result"].(map[string]any)["id"].(string)
+	id := a.call("projects.create", map[string]any{"type": "local", "path": filepath.Join(ws, "p")})["result"].(map[string]any)["id"].(string)
 	a.call("project.open", map[string]any{"id": id})
 	a.call("agent.send", map[string]any{"id": "rs", "text": "Go", "server": "s1", "model": "m"})
 
@@ -171,8 +172,19 @@ func TestResumeRuns(t *testing.T) {
 	defer func() { ts3.Close(); s3.Shutdown() }()
 	b, _ := dial(t, ts3, "secret-token-0123456789abcdef0123")
 	b.call("project.open", map[string]any{"id": id})
-	u := b.waitUpdate("rs", func(u map[string]any) bool { return u["approval"] != nil })
-	b.call("agent.approve", map[string]any{"id": "rs", "approval": u["approval"].(map[string]any)["id"], "allow": true})
+	// Asked again, maybe before this window opened the project: read from the run.
+	var approval string
+	waitFor(t, "the approval asked again", func() bool {
+		if r := s3.run("rs"); r != nil {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			if r.chat.Approval != nil {
+				approval = r.chat.Approval.ID
+			}
+		}
+		return approval != ""
+	})
+	b.call("agent.approve", map[string]any{"id": "rs", "approval": approval, "allow": true})
 	waitFor(t, "the end", func() bool { return lastContent(chatOf(t, s3, id, "rs")) == "finished" })
 	if got, _ := os.ReadFile(filepath.Join(ws, "a.txt")); string(got) != "deux\n" {
 		t.Fatalf("file: %q", got)

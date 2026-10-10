@@ -454,7 +454,7 @@ function Options() {
       {() => (
         <>
           <Switch label={t('Tools')} hint={t('Files, search, language servers, consoles')} checked={prefs.tools} onChange={(v) => set('tools', v)} testid="opt-tools" />
-          <Switch label={t('Apply without asking')} hint={t('File changes without confirmation')} checked={prefs.autoApply} onChange={(v) => set('autoApply', v)} testid="opt-auto" />
+          <Switch label={t('Apply without asking')} hint={t('Changes outside the project and /tmp without confirmation')} checked={prefs.autoApply} onChange={(v) => set('autoApply', v)} testid="opt-auto" />
           <Show when={currentModel()?.caps.thinking}>
             <Switch label={t('Thinking')} hint={t('The model thinks before answering')} checked={prefs.think} onChange={(v) => set('think', v)} testid="opt-think" />
             <Show when={prefs.think}>

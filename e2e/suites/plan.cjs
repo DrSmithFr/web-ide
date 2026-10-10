@@ -1,10 +1,13 @@
-// AI assistant, Plan / Build modes: Shift+Tab, Plan prompt and tools (no file change,
+// AI assistant, Plan / Build modes: Shift+Tab, Plan prompt and tools (scratch files only,
 // exit_plan_mode), dedicated Plan model, bash guess (reading and project builds run, a change asks),
-// plan card and its execution in Build, compaction asked by the model.
+// plan card and its execution in Build (changes in the project without asking), compaction
+// asked by the model.
 const fs = require('fs')
 const http = require('http')
+const path = require('path')
 const { run, openProject, assert, WS, OUT } = require('../common.cjs')
 
+const SCRATCH = path.join(WS, '..', 'scratch') // WEBIDE_SCRATCH of run.sh
 const requests = []
 const summaries = []
 const sse = (res, delta) => res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`)
@@ -44,6 +47,7 @@ const fake = http.createServer(async (req, res) => {
             ['p1', 'bash', { command: 'git status; ls $(pwd)/src && cd src && go vet . 2>&1 | tail -3' }],
             ['p2', 'bash', { command: 'rm -rf src' }],
             ['p3', 'edit_file', { path: 'src/main.go', old_string: 'Bonjour', new_string: 'Salut' }],
+            ['p5', 'write_file', { path: SCRATCH + '/draft.md', content: 'draft' }],
           ]),
         }),
         end(res, 'tool_calls')
@@ -93,14 +97,15 @@ run(async ({ page }) => {
     assert(r0.model === 'fake-plan', 'request sent to the model of the Plan mode')
     assert(r0.messages[0].content.includes('Plan mode') && r0.messages[0].content.includes('exit_plan_mode'), 'system prompt of the Plan mode')
     const names = toolNames(r0)
-    assert(!names.includes('edit_file') && !names.includes('write_file') && names.includes('exit_plan_mode') && names.includes('compact_conversation'), 'tools of the Plan mode: no writing, with exit_plan_mode: ' + names.join(','))
+    assert(names.includes('write_file') && names.includes('exit_plan_mode') && names.includes('compact_conversation'), 'tools of the Plan mode: writing (scratch files), with exit_plan_mode: ' + names.join(','))
     await page.click('[data-testid=ai-approval] button:has-text("Refuse")')
     await page.waitForSelector('[data-testid=ai-plan]', { timeout: 10000 })
     const res1 = requests[1].messages.filter((m) => m.role === 'tool')
     const byId = (id) => text(res1.find((m) => m.tool_call_id === id) ?? { content: '' })
     assert(byId('p1').startsWith('Exit code 0'), 'reading and build commands in the project run without asking: ' + byId('p1').slice(0, 80))
     assert(byId('p2').includes('refused') && fs.existsSync(WS + '/demo/src/main.go'), 'changing command refused, nothing deleted')
-    assert(byId('p3').includes('Plan mode') && fs.readFileSync(WS + '/demo/src/main.go', 'utf8').includes('Bonjour'), 'edit_file refused in Plan mode')
+    assert(byId('p3').includes('Plan mode') && fs.readFileSync(WS + '/demo/src/main.go', 'utf8').includes('Bonjour'), 'edit_file refused in the project in Plan mode')
+    assert(fs.readFileSync(SCRATCH + '/draft.md', 'utf8') === 'draft', 'a scratch file is written without asking in Plan mode: ' + byId('p5'))
     const card = await page.waitForSelector('[data-testid=ai-plan] .md:has-text("Replace Bonjour with Salut")', { timeout: 5000 }).then(() => true, () => false)
     assert(card, 'plan card shown')
     await page.waitForSelector('[data-testid=send]')
@@ -110,13 +115,11 @@ run(async ({ page }) => {
 
     // Execute the plan: Build mode, model of the conversation, edit then compaction by the model.
     await page.click('[data-testid=ai-plan] button:has-text("Execute this plan")')
-    await page.waitForSelector('[data-testid=ai-approval]:has-text("src/main.go")', { timeout: 10000 })
-    await page.click('[data-testid=ai-approval] button:has-text("Apply")')
     await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Plan carried out.")', { timeout: 15000 })
     const r2 = requests[2]
     assert(r2.model === 'fake-model' && toolNames(r2).includes('edit_file') && !toolNames(r2).includes('exit_plan_mode'), 'carried out in Build mode with the model of the conversation')
     assert(!(await page.isVisible('[data-testid=ai-mode].plan')), 'the mode goes back to Build')
-    assert(fs.readFileSync(WS + '/demo/src/main.go', 'utf8').includes('"Salut %s"'), 'the plan is carried out (file changed)')
+    assert(fs.readFileSync(WS + '/demo/src/main.go', 'utf8').includes('"Salut %s"'), 'the plan is carried out (file changed without asking)')
     assert(summaries.length === 1 && summaries[0].messages[0].content.includes('keep the plan'), 'compaction asked by the model, with its instructions')
     assert(await page.isVisible('[data-testid=ai-summary]'), 'summary shown in the conversation')
     await page.click('.ai-compacted-toggle')

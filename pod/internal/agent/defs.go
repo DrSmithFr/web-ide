@@ -44,7 +44,7 @@ var (
 	symbolArg = str("The symbol as written on that line (function, variable, type name…)")
 )
 
-// WriteTools change files: only in Build mode.
+// WriteTools change files: anywhere in Build mode, in the scratch folder only in the others.
 var WriteTools = map[string]bool{"edit_file": true, "write_file": true}
 
 var projectDefs = []Def{
@@ -295,9 +295,9 @@ func names(lists ...[]Def) map[string]bool {
 	return out
 }
 
-// ToolsFor returns the tools offered in a mode: no file change in Plan and Briefing,
-// exit_plan_mode only in Plan (not for the briefing or the plan of a ticket, which end in
-// the ticket), the tools that change a ticket only with a linked ticket. A sub-agent (sub)
+// ToolsFor returns the tools offered in a mode: out of Build, file changes in the scratch
+// folder only (checked when they run); exit_plan_mode only in Plan (not for the briefing or
+// the plan of a ticket, which end in the ticket); the tools that change a ticket only with a linked ticket. A sub-agent (sub)
 // asks its parent instead of the user and reports instead of presenting a plan; spawn: it may
 // start sub-agents; adopted: a conversation of its own followed by an Orchestrator, which
 // keeps its tools and adds agent_note and agent_report. The Orchestrator reads, proposes
@@ -306,9 +306,7 @@ func ToolsFor(mode string, ticket *TicketLink, sub, spawn, adopted bool) []json.
 	var out []json.RawMessage
 	if mode == Orchestrator && !sub {
 		for _, d := range projectDefs {
-			if !WriteTools[d.Name] {
-				out = append(out, d.JSON)
-			}
+			out = append(out, d.JSON)
 		}
 		for _, d := range append(append(append([]Def{}, dockerDefs...), kanbanReadDefs...), orchestratorDefs...) {
 			if d.Name != "kanban_create" { // ideas go to a Briefing conversation
@@ -322,9 +320,6 @@ func ToolsFor(mode string, ticket *TicketLink, sub, spawn, adopted bool) []json.
 		return append(out, compactDef.JSON)
 	}
 	for _, d := range projectDefs {
-		if mode != Build && WriteTools[d.Name] {
-			continue
-		}
 		out = append(out, d.JSON)
 	}
 	for _, d := range dockerDefs {

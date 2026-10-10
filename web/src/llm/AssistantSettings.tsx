@@ -169,7 +169,7 @@ export function PlanSettings() {
   return (
     <div class="form" data-testid="plan-settings">
       <p class="muted small">
-        {t('In Plan mode (Shift+Tab in the message box), the assistant explores and proposes a plan without changing files: edit_file and write_file are removed, and a bash command that does not look like a reading asks for your approval. Its prompt is edited in the “Prompt and instructions” tab (plan button). When the plan is ready, “Execute this plan” switches to Build with the model of the conversation.')}
+        {t('In Plan mode (Shift+Tab in the message box), the assistant explores and proposes a plan without changing the project: edit_file and write_file only write scratch files in /tmp, and a bash command that is not a reading, a build or test of the project, or confined to /tmp, asks for your approval. Its prompt is edited in the “Prompt and instructions” tab (plan button). When the plan is ready, “Execute this plan” switches to Build with the model of the conversation.')}
       </p>
       <div class="field-row">
         <label class="field grow">

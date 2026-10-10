@@ -1,6 +1,6 @@
 // Sub-agents: the parent delegates with spawn_agent (a card in its thread); the child notes
 // and asks; the parent, woken by the question, asks the user first (ask_user), then replies;
-// the change of the child waits for the user (toast "Sub-agent … asks to change a file",
+// the change of the child out of the project waits for the user (toast "Sub-agent … asks to change a file",
 // approved in the child thread, with its header and its task); its report wakes the parent;
 // while it works the child is listed under its parent among the active conversations, then in
 // the history of the day. Then a cloud server (OpenAI-compatible,
@@ -58,7 +58,7 @@ const fake = http.createServer(async (req, res) => {
       })
       return end(res, 'tool_calls')
     }
-    if (content.includes('Answer of your parent: Hello')) return call(res, 'e1', 'edit_file', { path: 'src/main.go', old_string: 'return fmt.Sprintf("Bonjour %s", g.Name)', new_string: 'return fmt.Sprintf("Hello %s", g.Name)' })
+    if (content.includes('Answer of your parent: Hello')) return call(res, 'e1', 'edit_file', { path: '../greeting.txt', old_string: 'Bonjour', new_string: 'Hello' })
     if (last.role === 'tool') return call(res, 'p1', 'agent_report', { summary: 'Bonjour is now Hello in src/main.go.', files_changed: ['src/main.go'], status: 'done' })
     return say(res, 'unexpected')
   }
@@ -87,6 +87,7 @@ run(async ({ page }) => {
     await page.click('.ai-servers .modal-head button')
     await page.waitForSelector('[data-testid=model-pill]:has-text("fake-model")')
 
+    fs.writeFileSync(WS + '/greeting.txt', 'Bonjour\n') // out of the project: its change asks
     await page.fill('.ai-composer textarea', 'Delegate the greeting')
     await page.keyboard.press('Enter')
     await page.waitForSelector('[data-testid=ai-child]:has-text("Change the greeting")', { timeout: 20000 })
@@ -117,7 +118,7 @@ run(async ({ page }) => {
 
     // The child goes on; its change waits for the user, announced in the parent window.
     await page.waitForSelector('.toast:has-text("Sub-agent “Change the greeting” asks to change a file")', { timeout: 20000 })
-    assert(fs.readFileSync(WS + '/demo/src/main.go', 'utf8').includes('Bonjour'), 'nothing written before the user confirms')
+    assert(fs.readFileSync(WS + '/greeting.txt', 'utf8') === 'Bonjour\n', 'nothing written before the user confirms')
     await page.click('.toast:has-text("Sub-agent") button:has-text("Open")')
     await page.waitForSelector('[data-testid=ai-child-header]')
     assert((await page.textContent('[data-testid=ai-child-header]')).includes('Sub-agent of'), 'the child thread says whose sub-agent it is')
@@ -125,7 +126,7 @@ run(async ({ page }) => {
     assert(true, 'the child thread starts with its task')
     await page.click('[data-testid=ai-approval] button:has-text("Apply")')
     await page.waitForFunction(() => document.querySelector('[data-testid=ai-child-header] .badge')?.textContent.includes('Done'), null, { timeout: 20000 })
-    assert(fs.readFileSync(WS + '/demo/src/main.go', 'utf8').includes('Hello %s'), 'the change of the child applied once confirmed')
+    assert(fs.readFileSync(WS + '/greeting.txt', 'utf8') === 'Hello\n', 'the change of the child applied once confirmed')
 
     // Back to the parent: the report woke it.
     await page.click('[data-testid=ai-child-parent]')

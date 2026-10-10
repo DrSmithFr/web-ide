@@ -22,8 +22,9 @@ func TestAgentStats(t *testing.T) {
 	}
 	a, _ := dial(t, ts, "secret-token-0123456789abcdef0123")
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("un\n"), 0o644)
-	id := a.call("projects.create", map[string]any{"type": "local", "path": dir})["result"].(map[string]any)["id"].(string)
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("un\n"), 0o644) // out of the project: asks
+	os.Mkdir(filepath.Join(dir, "p"), 0o755)
+	id := a.call("projects.create", map[string]any{"type": "local", "path": filepath.Join(dir, "p")})["result"].(map[string]any)["id"].(string)
 	a.call("project.open", map[string]any{"id": id})
 
 	step := 0
@@ -31,7 +32,7 @@ func TestAgentStats(t *testing.T) {
 		step++
 		switch step {
 		case 1: // a forgotten parameter, and an edit
-			return toolCalls([3]string{"r1", "read_file", `{}`}, [3]string{"e1", "edit_file", `{"path":"a.txt","old_string":"un","new_string":"deux"}`})
+			return toolCalls([3]string{"r1", "read_file", `{}`}, [3]string{"e1", "edit_file", `{"path":"../a.txt","old_string":"un","new_string":"deux"}`})
 		case 2:
 			return toolCalls([3]string{"b1", "bash", `{"command":"exit 3"}`})
 		}

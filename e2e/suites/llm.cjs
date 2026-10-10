@@ -149,6 +149,7 @@ const fake = http.createServer(async (req, res) => {
   }
   if (last.role === 'tool' && toolResults === 2) {
     chunk(res, { tool_calls: [call('c3', 'edit_file', { path: 'src/main.go', old_string: '"Bonjour %s"', new_string: '"Salut %s"' })] })
+    chunk(res, { tool_calls: [{ ...call('c4', 'edit_file', { path: '../notes.txt', old_string: 'Bonjour', new_string: 'Salut' }), index: 1 }] })
     return finish(res, 'tool_calls')
   }
   for (const part of answer) {
@@ -187,13 +188,16 @@ run(async ({ page, ctx }) => {
     await other.goto(new URL(new URL(page.url()).pathname + '/tool/assistant', page.url()).href)
     await other.waitForSelector('.ai-panel.detached .ai-composer')
 
-    // Question → reading tools → confirmed edit → answer.
-    await page.fill('.ai-composer textarea', 'Replace Bonjour with Salut in main.go')
+    // Question → reading tools → edit in the project, applied directly, and edit out of it,
+    // confirmed → answer.
+    fs.writeFileSync(WS + '/notes.txt', 'Bonjour\n')
+    await page.fill('.ai-composer textarea', 'Replace Bonjour with Salut in main.go and in the notes')
     await page.keyboard.press('Enter')
     await page.waitForSelector('[data-testid=ai-approval]', { timeout: 20000 })
     const diff = await page.textContent('[data-testid=ai-approval] .ai-diff')
-    assert(diff.includes('- \treturn fmt.Sprintf("Bonjour %s", g.Name)') && diff.includes('+ \treturn fmt.Sprintf("Salut %s", g.Name)'), 'diff preview before the change')
-    assert(fs.readFileSync(WS + '/demo/src/main.go', 'utf8').includes('Bonjour'), 'nothing is written before confirmation')
+    assert(diff.includes('- Bonjour') && diff.includes('+ Salut'), 'diff preview before a change out of the project: ' + diff)
+    assert(fs.readFileSync(WS + '/demo/src/main.go', 'utf8').includes('"Salut %s"'), 'a change in the project applies without asking')
+    assert(fs.readFileSync(WS + '/notes.txt', 'utf8') === 'Bonjour\n', 'nothing is written out of the project before confirmation')
     await page.screenshot({ path: OUT + '/llm-approval.png' })
     // The other window opens it from its toast and confirms the change there.
     await other.waitForSelector('.toast:has-text("asks to change a file")', { timeout: 5000 })
@@ -224,12 +228,12 @@ run(async ({ page, ctx }) => {
     const labels = await page.$$eval('.md-mermaid-svg svg text, .md-mermaid-svg svg tspan', (e) => e.map((x) => x.textContent).join(' '))
     assert(labels.includes('main') && labels.includes('Hello'), 'labels of the diagram visible: ' + labels)
     assert((await page.$$('.md-codeblock .tok-keyword')).length > 0, 'code block highlighted by the grammar of the editor')
-    assert(fs.readFileSync(WS + '/demo/src/main.go', 'utf8').includes('"Salut %s"'), 'file changed on disk')
+    assert(fs.readFileSync(WS + '/notes.txt', 'utf8') === 'Salut\n', 'the confirmed change is written out of the project')
     await page.waitForFunction(() => document.querySelector('.pane.active .ed-content')?.textContent.includes('Salut %s'), null, { timeout: 5000 }).catch(() => {})
     assert((await text(page)).includes('"Salut %s"'), 'the open editor follows the change')
 
     const tools = await page.$$eval('.ai-tool', (els) => els.map((e) => ({ cls: e.className, text: e.textContent })))
-    assert(tools.length === 3 && tools.every((t) => t.cls.includes('ok')), 'three successful tool calls: ' + JSON.stringify(tools.map((t) => t.text)))
+    assert(tools.length === 4 && tools.every((t) => t.cls.includes('ok')), 'four successful tool calls: ' + JSON.stringify(tools.map((t) => t.text)))
     assert(tools[0].text.includes('Reads') && tools[0].text.includes('src/main.go') && tools[0].text.includes('lines 1-'), 'read_file summary: ' + tools[0].text)
     const second = requests[1]
     const readResult = second.messages.find((m) => m.role === 'tool' && m.tool_call_id === 'c1')
@@ -240,7 +244,7 @@ run(async ({ page, ctx }) => {
     assert(!requests[0].messages.some((m) => 'usage' in m || 'attachments' in m), 'fields of the page removed from the messages')
     assert(await page.isVisible('.ai-reasoning .ai-tool-head:has-text("Thinking")'), 'reasoning shown as a block')
     assert(!(await page.isVisible('.ai-reasoning-text')) && !(await page.isVisible('.ai-tool-detail')), 'blocks folded once done')
-    assert((await page.$$eval('.ai-tool .ai-dur', (e) => e.length)) === 3, 'each tool block shows its duration')
+    assert((await page.$$eval('.ai-tool .ai-dur', (e) => e.length)) === 4, 'each tool block shows its duration')
     await page.click('.ai-reasoning .ai-tool-head')
     assert(await page.isVisible('.ai-reasoning-text:has-text("I need to read the file.")'), 'reasoning unfolded by a click')
     // Dynamic effort: the most after the message, medium after reading, low after an edit.
@@ -261,12 +265,12 @@ run(async ({ page, ctx }) => {
     await page.click('[data-testid=opt-effort] button:has-text("Dynamic")')
     await page.keyboard.press('Escape')
 
-    // Statistics of the conversation, next to the board: two of the three calls in one answer.
+    // Statistics of the conversation, next to the board: the calls go by two in each answer.
     await page.click('[data-testid=ai-stats-toggle]')
     await page.waitForSelector('[data-testid=st-tools] td:has-text("read_file")', { timeout: 5000 })
     await page.screenshot({ path: OUT + '/llm-stats.png' })
     const tile = (id) => page.textContent(`[data-testid=${id}] .st-tile-value`)
-    assert((await tile('st-multi')) === '50 %' && (await tile('st-failures')) === '0 %', 'calls at once and failures: ' + (await tile('st-multi')) + ' / ' + (await tile('st-failures')))
+    assert((await tile('st-multi')) === '100 %' && (await tile('st-failures')) === '0 %', 'calls at once and failures: ' + (await tile('st-multi')) + ' / ' + (await tile('st-failures')))
     assert(/^[\d.]+ t\/s$/.test(await tile('st-write')), 'writing speed: ' + (await tile('st-write')))
     assert(/^(<0:01|\d+:\d\d)$/.test(await tile('st-generation')), 'durations as a clock: ' + (await tile('st-generation')))
     const toolRows = await page.$$eval('[data-testid=st-tools] tbody tr', (r) => r.map((x) => x.firstElementChild.textContent))
@@ -293,7 +297,7 @@ run(async ({ page, ctx }) => {
     await page.click('.ai-panel button[title="Conversations of the project"]')
     await page.click('.ai-chat-open:has-text("Replace Bonjour")')
     await page.waitForSelector('.ai-msg.assistant .md-codeblock')
-    assert((await page.$$('.ai-tool')).length === 3, 'conversation reopened with its tool calls')
+    assert((await page.$$('.ai-tool')).length === 4, 'conversation reopened with its tool calls')
 
     // Image attachment (new conversation).
     await page.click('.ai-panel button[title="New conversation"]')
