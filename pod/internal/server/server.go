@@ -701,10 +701,12 @@ func (c *Client) push(name string, data any) { c.pushIn(name, data, "") }
 
 func (c *Client) pushIn(name string, data any, project string) {
 	if name == "console.output" {
-		if e, ok := data.(map[string]string); ok {
-			if tr := c.channel("term:" + e["id"]); tr != nil {
-				c.enqueueOn(tr, event{Event: name, Data: data, Project: project})
-				return
+		if e, ok := data.(map[string]any); ok {
+			if id, ok := e["id"].(string); ok {
+				if tr := c.channel("term:" + id); tr != nil {
+					c.enqueueOn(tr, event{Event: name, Data: data, Project: project})
+					return
+				}
 			}
 		}
 	}

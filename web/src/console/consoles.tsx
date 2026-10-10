@@ -180,15 +180,15 @@ function getTerm(id: string): TermEntry {
     return false
   })
   term.open(el)
-  term.onData((data) => notifyOn(te.ch, 'console.input', { id, data }, projectOf(id)))
-  term.onResize(({ cols, rows }) => notifyIn(projectOf(id), 'console.resize', { id, cols, rows }))
-  te = { term, fit, el, ready: false, queue: [], next: 0, ch: null }
-  terms.set(id, te)
+  const entry: TermEntry = { term, fit, el, ready: false, queue: [], next: 0, ch: null }
+  terms.set(id, entry)
   // In the tunnel, each terminal has its own channel: its input and its output go on it,
   // so a long scrollback never delays the rpc channel. On a WebSocket, ch stays null.
-  void openChannel('term:' + id).then((ch) => (te.ch = ch), () => {})
-  attachTerm(id, te)
-  return te
+  void openChannel('term:' + id).then((ch) => (entry.ch = ch), () => {})
+  term.onData((data) => notifyOn(entry.ch, 'console.input', { id, data }, projectOf(id)))
+  term.onResize(({ cols, rows }) => notifyIn(projectOf(id), 'console.resize', { id, cols, rows }))
+  attachTerm(id, entry)
+  return entry
 }
 
 function disposeTerm(id: string) {
