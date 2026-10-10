@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"net"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -195,7 +196,9 @@ func TestJoin(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer st.Close()
-	turn, err := relay.NewTurn(st, relay.TurnConfig{AdvertiseIP: "127.0.0.1", Port: 0})
+	// A free port: Port 0 would mean 3478, which the relay package tests bind too (packages
+	// run in parallel).
+	turn, err := relay.NewTurn(st, relay.TurnConfig{AdvertiseIP: "127.0.0.1", Port: freeTurnPort(t)})
 	if err != nil {
 		t.Fatal("starting the embedded TURN:", err)
 	}
@@ -302,6 +305,21 @@ func waitCode(t *testing.T, out *bytes.Buffer) string {
 	}
 	t.Fatalf("no pairing code in %q", out.String())
 	return ""
+}
+
+// freeTurnPort asks the kernel for a free UDP port, so the embedded TURN of this test does
+// not collide with the one the relay package tests bind on 3478.
+func freeTurnPort(t *testing.T) int {
+	t.Helper()
+	c, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := c.LocalAddr().(*net.UDPAddr).Port
+	if err := c.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return port
 }
 
 func wsURL(ts *httptest.Server, path string) string {

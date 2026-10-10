@@ -69,6 +69,37 @@ func (s *Store) Pairings(account string) ([]Pairing, error) {
 	return out, rows.Err()
 }
 
+// AttachPairing records the key of the device that opened the invite link for a code. The
+// code is created by the device that shows the QR (a pod, or an admin inviting a phone): the
+// joining device posts its own key there. A code that already holds a key refuses another
+// one — that is the guard against a relay that swaps the key, the fingerprint the device
+// shows must match the key the admin reads.
+func (s *Store) AttachPairing(code, key, name, kind string) (*Pairing, error) {
+	p, err := s.Pairing(code)
+	if err != nil {
+		return nil, err
+	}
+	if p == nil {
+		return nil, fmt.Errorf("relay: no pairing %q", code)
+	}
+	if p.Used {
+		return nil, fmt.Errorf("relay: pairing %q already used", code)
+	}
+	if time.Now().Unix() > p.Expires {
+		return nil, fmt.Errorf("relay: pairing %q expired", code)
+	}
+	if p.Key != "" && p.Key != key {
+		return nil, fmt.Errorf("relay: pairing %q already holds another key", code)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, err := s.db.Exec("UPDATE pairings SET key=?, name=?, kind=? WHERE code=?", key, name, kind, code); err != nil {
+		return nil, err
+	}
+	p.Key, p.Name, p.Kind = key, name, kind
+	return p, nil
+}
+
 // ClaimPairing gives a code to an account: the first admin that reads it becomes the one
 // that can approve it. A code already claimed by another account is refused.
 func (s *Store) ClaimPairing(code, account string) (*Pairing, error) {

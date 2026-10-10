@@ -3,10 +3,18 @@
 // both DTLS fingerprints, so the relay never sees it and cannot swap the SDP), then hands
 // the app to the pod: the Service Worker answers the page's fetches through the tunnel, and
 // the JSON protocol goes through a MessagePort.
+//
+// Identity (milestone 2): a paired device signs the binding string with its device key and
+// checks the pod's certificate against the account key it pinned. An unpaired device falls
+// back to the token mode (M1), which a paired pod refuses. Recent browsers only: WebCrypto
+// Ed25519 and WebAuthn PRF are required, nothing is attempted without them.
+import * as id from './identity.js'
+
 const params = new URLSearchParams(location.hash.slice(1) || location.search.slice(1))
 const pod = params.get('pod')
 const token = params.get('t') || params.get('token') || ''
-const session = rand()
+const join = params.get('join')
+let session = rand()
 
 const fr = (navigator.languages?.[0] ?? navigator.language ?? 'en').startsWith('fr')
 const words = {
@@ -19,6 +27,13 @@ const words = {
   failed: fr ? 'La connexion n’a pas pu être établie.' : 'The connection could not be established.',
   closed: fr ? 'Ce pod a fermé la connexion.' : 'This pod closed the connection.',
   sw: fr ? 'Service Worker : ' : 'Service Worker: ',
+  needs: fr ? 'Ce navigateur manque : ' : 'This browser is missing: ',
+  device: fr ? 'Cet appareil' : 'This device',
+  compare: fr ? 'Comparez cette empreinte avec celle affichée de l’autre côté avant d’approuver.' : 'Compare this fingerprint with the one shown on the other side before approving.',
+  phrase: fr ? 'Phrase de récupération (24 mots), jamais enregistrée.' : 'Recovery phrase (24 words), never stored.',
+  waiting: fr ? 'En attente de l’approbation d’un administrateur…' : 'Waiting for an admin to approve…',
+  paired: fr ? 'Apparié.' : 'Paired.',
+  unlock: fr ? 'Déverrouillage de la clé de l’appareil…' : 'Unlocking the device key…',
 }
 const status = (html) => { const el = document.getElementById('msg'); if (el) el.innerHTML = html }
 const fail = (m) => status('<div class="err">' + m + '</div>')
@@ -57,7 +72,7 @@ function unframe(data, buf) {
 // HMAC-SHA256, the same binding as the pod: role|fpBrowser|fpPod|nonceBrowser|noncePod.
 async function mac(role, fpB, fpP, nonceB, nonceP) {
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(token), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(role + '|' + fpB + '|' + fpP + '|' + nonceB + '|' + nonceP))
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(id.binding(role, fpB, fpP, nonceB, nonceP)))
   return [...new Uint8Array(sig)].map((x) => x.toString(16).padStart(2, '0')).join('')
 }
 const fingerprint = (desc) => {
@@ -76,9 +91,170 @@ function read(dc, e) {
   return r.msg
 }
 
+// --- identity: the device of this origin ---
+
+// The record in IndexedDB, the signing key for the session, the pinned account and the
+// revocation list verified against it.
+let db = null
+let rec = null
+let key = null
+let account = ''
+let revoked = null
+
+const deviceName = () => navigator.userAgentData?.platform || navigator.platform || 'browser'
+
+// What the e2e suite reads (the device id, its fingerprint, the account).
+function show() {
+  window.identity = { device: rec?.key ?? '', account, fingerprint: rec?.fp ?? '', cert: rec?.cert ?? null }
+}
+
+async function wordlist() {
+  const r = await fetch('/_relay/bip39.txt')
+  if (!r.ok) throw new Error('the wordlist is not reachable')
+  return (await r.text()).split('\n').filter(Boolean)
+}
+
+// The pairing, device and revocation link. Messages the relay pushes (a revocation list, an
+// approval) reach the handler; the awaited ones are read one by one.
+function idLink(onPush) {
+  const ws = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/_relay/identity')
+  const waiters = []
+  ws.onmessage = (e) => {
+    const m = JSON.parse(e.data)
+    const w = waiters.shift()
+    if (w) w(m)
+    else if (onPush) onPush(m)
+  }
+  return new Promise((resolve, reject) => {
+    ws.onopen = () => resolve({ send: (m) => ws.send(JSON.stringify(m)), recv: () => new Promise((r) => waiters.push(r)) })
+    ws.onerror = () => reject(new Error('the relay is not reachable'))
+  })
+}
+
+// The day-to-day unlock: the records of this origin, each opened by its own passkey. The salt
+// must be known before the passkey is asked (it is the input of the PRF), so the records are
+// read first.
+async function unlock() {
+  status(words.unlock)
+  for (const r of await id.list(db)) {
+    try {
+      const p = await id.passkey(r, false)
+      const seed = await id.open(p.prf, r.device)
+      rec = r
+      key = await id.keyFromSeed(seed, false)
+      account = r.account ?? ''
+      rec.fp = await id.fingerprint(r.key, await wordlist())
+      show()
+      return rec
+    } catch {
+      // Another device of this profile, or the passkey was dismissed.
+    }
+  }
+  return null
+}
+
+// The revocation list is checked against the pinned account before it is believed: the relay
+// is only the courier, it cannot sign one.
+async function applyRevocations(l) {
+  l.send({ type: 'register', account, name: deviceName(), cert: rec?.cert })
+  const m = await l.recv()
+  if (m.type === 'error') return fail(m.message)
+  if (m.list && !(await id.verifyRevocations(m.list, account))) return fail('the revocation list does not match the account')
+  revoked = m.list ?? null
+  if (revoked) await id.save(db, rec.key, { ...rec, revocations: revoked })
+  return ''
+}
+
+// Pairing with the phrase, on a computer. The phrase is used once here and never stored:
+// only the wrapped device seed, the account id and the certificate the account key signed.
+// A device that knows the phrase is an admin: it holds the account key, wrapped the same way.
+async function pairWithPhrase(phrase) {
+  const wl = await wordlist()
+  const err = await id.validatePhrase(phrase, wl)
+  if (err) return fail(err)
+  const seed = await id.bip39Seed(phrase)
+  const accountSeed = await id.hkdf(seed, id.InfoAccount)
+  const deviceSeed = await id.hkdf(seed, id.InfoDevice)
+  const accountId = await id.publicFromSeed(accountSeed)
+  const deviceId = await id.publicFromSeed(deviceSeed)
+  rec = id.newRecord(deviceId)
+  const p = await id.passkey(rec, true)
+  rec.id = p.id
+  rec.account = accountId
+  rec.fp = await id.fingerprint(deviceId, wl)
+  rec.device = await id.seal(p.prf, deviceSeed)
+  rec.accountSeed = await id.seal(p.prf, accountSeed)
+  rec.cert = await signCert(rec, accountId, deviceId, deviceName(), p.prf)
+  await id.save(db, deviceId, rec)
+  key = await id.keyFromSeed(deviceSeed, false)
+  account = accountId
+  show()
+  status(`${words.paired} <b>${rec.fp}</b>`)
+  return ''
+}
+
+async function signCert(rec, accountId, deviceId, name, prf) {
+  const c = { v: 1, account: accountId, key: deviceId, name, kind: id.KindBrowser, created: Math.floor(Date.now() / 1000), scope: id.ScopeAll }
+  const accountKey = await id.keyFromSeed(await id.open(prf, rec.accountSeed), true)
+  c.sig = await id.sign(accountKey, id.canonicalCert(c))
+  return c
+}
+
+// Joining by an invite link (#join=<code>), usually opened by a phone from the QR. The device
+// makes its own key, shows its fingerprint, posts the key to the code and waits for the
+// approval. The certificate that comes back must verify against the account it names: the
+// relay cannot sign one, so a signature that does not match is a swapped key.
+async function joinFlow(code) {
+  const wl = await wordlist()
+  const deviceSeed = crypto.getRandomValues(new Uint8Array(32))
+  const deviceId = await id.publicFromSeed(deviceSeed)
+  rec = id.newRecord(deviceId)
+  rec.fp = await id.fingerprint(deviceId, wl)
+  show()
+  status(`${words.device} <b>${rec.fp}</b><br><span class="small">${words.compare}</span>`)
+  const l = await idLink()
+  l.send({ type: 'register', account: '', name: deviceName() })
+  const ready = await l.recv()
+  if (ready.type === 'error') return fail(ready.message)
+  l.send({ type: 'pairAttach', code, key: deviceId, name: deviceName(), kind: id.KindBrowser })
+  const p = await l.recv()
+  if (p.type === 'error') return fail(p.message)
+  status(`${words.device} <b>${rec.fp}</b><br><span class="small">${words.waiting}</span>`)
+  const ok = await l.recv()
+  if (ok.type === 'error') return fail(ok.message)
+  const c = ok.pairing?.cert
+  if (!c) return fail('the approval did not come')
+  const err = await id.verifyCert(c, c.account, null)
+  if (err) return fail(err)
+  const p2 = await id.passkey(rec, true)
+  rec.id = p2.id
+  rec.account = c.account
+  rec.cert = c
+  rec.device = await id.seal(p2.prf, deviceSeed)
+  await id.save(db, deviceId, rec)
+  key = await id.keyFromSeed(deviceSeed, false)
+  account = c.account
+  status(words.paired)
+  return ''
+}
+
+function showPhraseForm() {
+  const f = document.getElementById('pair')
+  if (!f) return
+  f.hidden = false
+  const input = document.getElementById('phrase')
+  input.placeholder = words.phrase // the bootstrap page has its own words, not the app catalog
+  f.onkeydown = async (e) => {
+    if (e.key !== 'Enter' || !e.target.value.trim()) return
+    const err = await pairWithPhrase(e.target.value.trim())
+    if (!err) await connect('cert')
+  }
+}
+
 async function main() {
-  if (!pod) return fail(words.nopod)
-  status('<div class="spin"></div>' + words.connecting + ' <b>' + pod + '</b>')
+  const missing = await id.support()
+  if (missing.length) return fail(words.needs + missing.join(', '))
+
   try {
     const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' })
     // The app is loaded through the Service Worker: wait until it controls the page, else
@@ -90,10 +266,33 @@ async function main() {
     fail(words.sw + e.message)
   }
 
+  if (!pod) return fail(words.nopod)
+  status('<div class="spin"></div>' + words.connecting + ' <b>' + pod + '</b>')
+  db = await id.openStore()
+
+  if (join) {
+    const err = await joinFlow(join)
+    if (err) return
+  } else if (!(await unlock())) {
+    // Nothing paired on this origin: the token mode is tried, and a paired pod refuses it.
+    if (!token) return showPhraseForm()
+  }
+
+  const l = await idLink((m) => {
+    if (m.type === 'revocations' && m.list) revoked = m.list
+  })
+  if (account) {
+    const err = await applyRevocations(l)
+    if (err) return
+  }
+  await connect(rec?.cert ? 'cert' : 'token')
+}
+
+async function connect(mode) {
   const sig = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/_relay/signal?pod=' + encodeURIComponent(pod) + '&session=' + session)
   sig.onmessage = (e) => {
     const m = JSON.parse(e.data)
-    if (m.type === 'ice') start(m)
+    if (m.type === 'ice') start(m, mode, sig)
     else if (m.type === 'answer') pc.setRemoteDescription({ type: 'answer', sdp: m.sdp })
     else if (m.type === 'candidate') { try { pc.addIceCandidate(JSON.parse(m.candidate)) } catch {} }
     else if (m.type === 'bye') fail(words.closed)
@@ -106,11 +305,13 @@ async function main() {
     sig.send(JSON.stringify({ type: 'candidate', session, candidate: c }))
   }
 
-  async function start(ice) {
+  async function start(ice, mode, sig) {
     pc = new RTCPeerConnection({ iceServers: [{ urls: ice.urls, username: ice.username, credential: ice.credential }] })
     window.tunnel = { pc, session, pod } // read by the e2e suite (getStats)
     rpc = pc.createDataChannel('rpc', { ordered: true })
-    rpc.onmessage = async (e) => {
+    const nonceB = rand()
+    rpc.onmessage = (e) => handleHello(e).catch((err) => fail(err.message))
+    async function handleHello(e) {
       const m = read(rpc, e)
       if (!m) return
       if (handshakeDone) {
@@ -128,11 +329,29 @@ async function main() {
       if (hello.method !== '$hello') return
       const fpB = fingerprint(pc.localDescription)
       const fpP = fingerprint(pc.remoteDescription)
-      if ((await mac('pod', fpB, fpP, nonceB, hp.nonce)) !== hp.proof) return fail(words.failed)
-      send(rpc, { id: 0, method: '$auth', params: { proof: await mac('browser', fpB, fpP, nonceB, hp.nonce) } })
+      if (hp.error === 'unpaired' && token) {
+        // The pod has no account: fall back to the token mode, on a fresh session.
+        pc.close()
+        session = rand()
+        return connect('token')
+      }
+      if (hp.error) return fail(hp.error)
+      if (mode === 'token') {
+        if ((await mac('pod', fpB, fpP, nonceB, hp.nonce)) !== hp.proof) return fail(words.failed)
+        send(rpc, { id: 0, method: '$auth', params: { proof: await mac('browser', fpB, fpP, nonceB, hp.nonce) } })
+        return
+      }
+      const err = await id.verifyCert(hp.cert, account, revoked)
+      if (err) return fail(err)
+      if (!(await id.verify(hp.cert.account, hp.sig, id.binding('pod', fpB, fpP, nonceB, hp.nonce)))) return fail(words.failed)
+      send(rpc, { id: 0, method: '$auth', params: { sig: await id.sign(key, id.binding('browser', fpB, fpP, nonceB, hp.nonce)) } })
     }
-    const nonceB = rand()
-    rpc.onopen = () => send(rpc, { id: 0, method: '$hello', params: { protocol: 'web-ide-rpc', version: '1', nonce: nonceB } })
+    rpc.onopen = () => {
+      const hello = mode === 'token'
+        ? { id: 0, method: '$hello', params: { protocol: 'web-ide-rpc', version: '1', nonce: nonceB } }
+        : { id: 0, method: '$hello', params: { protocol: 'web-ide-rpc', version: '2', nonce: nonceB, cert: rec.cert } }
+      send(rpc, hello)
+    }
     pc.oniceconnectionstatechange = () => { if (pc.iceConnectionState === 'failed') fail(words.failed) }
     pc.onicecandidate = (e) => sendCandidate(e.candidate)
     const offer = await pc.createOffer()
@@ -215,4 +434,6 @@ function httpFetch(d) {
   dc.onclose = () => d.port.postMessage(null)
 }
 
-main()
+// A rejected flow (a passkey dismissed, the wordlist unreachable) must not leave the page
+// stuck on the spinner: the message names what failed.
+main().catch((e) => fail(e.message))

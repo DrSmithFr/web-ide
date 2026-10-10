@@ -2,6 +2,7 @@ package relay
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/json"
 	"net/http/httptest"
 	"path/filepath"
@@ -183,6 +184,30 @@ func TestStorePairing(t *testing.T) {
 	}
 	if _, err := st.ApprovePairing(expired.Code, a.ID, cert); err == nil {
 		t.Fatal("an expired pairing must be refused")
+	}
+
+	// An invite code is created empty by the admin, then filled by the key of the device that
+	// opens the link. A code that already holds a key refuses another one: that is the guard
+	// against a relay that swaps the key, the fingerprint the device shows must match the key
+	// the admin reads.
+	invite, err := st.CreatePairing("", "pod", identity.KindPod)
+	if err != nil {
+		t.Fatal(err)
+	}
+	phone := identity.KeyFromSeed(identity.Derive(a.Seed, "phone device"))
+	attached, err := st.AttachPairing(invite.Code, identity.KeyID(phone), "phone", identity.KindBrowser)
+	if err != nil {
+		t.Fatalf("the joining device must post its key: %v", err)
+	}
+	if attached.Key != identity.KeyID(phone) {
+		t.Fatalf("the pairing must hold the key of the joining device: %+v", attached)
+	}
+	if _, err := st.AttachPairing(invite.Code, identity.KeyID(dev), "phone", identity.KindBrowser); err == nil {
+		t.Fatal("a code that already holds a key must refuse another")
+	}
+	// The admin approves the key it read, not the one the inviting device showed.
+	if _, err := st.ApprovePairing(invite.Code, a.ID, identity.NewCertForPub(a, phone.Public().(ed25519.PublicKey), "phone", identity.KindBrowser)); err != nil {
+		t.Fatalf("the certificate of the key read must be accepted: %v", err)
 	}
 
 	// An unknown code is not an error but no pairing.

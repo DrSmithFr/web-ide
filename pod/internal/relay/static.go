@@ -13,12 +13,16 @@ var webFS embed.FS
 var (
 	bootstrapHTML []byte
 	bootstrapJS   []byte
+	identityJS    []byte
+	wordlist      []byte
 	swJS          []byte
 )
 
 func init() {
 	bootstrapHTML, _ = io.ReadAll(mustRead("bootstrap.html"))
 	bootstrapJS, _ = io.ReadAll(mustRead("bootstrap.js"))
+	identityJS, _ = io.ReadAll(mustRead("identity.js"))
+	wordlist, _ = io.ReadAll(mustRead("bip39.txt"))
 	swJS, _ = io.ReadAll(mustRead("sw.js"))
 }
 
@@ -40,6 +44,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/_relay/signal", s.serveSignal)
 	mux.HandleFunc("/_relay/identity", s.serveIdentity)
 	mux.HandleFunc("/_relay/bootstrap.js", staticJS(bootstrapJS))
+	// The identity module and the BIP39 wordlist: the bootstrap page and the app import the
+	// same file, so the browser and the pod cannot disagree on a format.
+	mux.HandleFunc("/_relay/identity.js", staticJS(identityJS))
+	mux.HandleFunc("/_relay/bip39.txt", s.serveWordlist)
 	mux.HandleFunc("/sw.js", staticJS(swJS))
 	mux.HandleFunc("/", s.bootstrapPage)
 	return mux
@@ -62,4 +70,11 @@ func staticJS(b []byte) http.HandlerFunc {
 		w.Header().Set("Service-Worker-Allowed", "/")
 		_, _ = w.Write(b)
 	}
+}
+
+// serveWordlist serves the BIP39 English list: the browser validates a phrase with the same
+// 2048 words the pod embeds, so a phrase accepted on one side is accepted on the other.
+func (s *Server) serveWordlist(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = w.Write(wordlist)
 }

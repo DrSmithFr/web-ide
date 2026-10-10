@@ -131,6 +131,16 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 			s.codes[p.Code] = c
 			s.mu.Unlock()
 			_ = c.send(idMsg{Type: "pair", Pairing: p})
+		case "pairAttach":
+			// The device that opened the invite link posts its key to the code shown by the
+			// inviting device. A code that already holds another key is refused: the
+			// fingerprint the joining device shows must match the key the admin reads.
+			p, err := s.store.AttachPairing(m.Code, m.Key, m.Name, m.Kind)
+			if err != nil {
+				_ = c.send(idMsg{Type: "error", Message: err.Error()})
+				continue
+			}
+			_ = c.send(idMsg{Type: "pair", Pairing: p})
 		case "pairGet":
 			p, err := s.store.ClaimPairing(m.Code, c.account)
 			if err != nil {
