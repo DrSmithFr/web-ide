@@ -51,8 +51,8 @@ Tickets move with buttons only (no drag and drop).
 |---|---|---|
 | New | Briefing, Generate the plan; *More actions*: Abandon | — (a plan moves the ticket to *To do* by itself, whoever writes it) |
 | To do | Start development (→ In progress); *More actions*: Back to New, Redo the plan (assistant or Claude Code), Start anyway (blocked), Abandon | — |
-| In progress | Open the worktree, Review, Send to testing; *More actions*: New dev session, Develop with Claude Code, Abandon | move to *To test* (with how to test) |
-| To test | Open the worktree, Review, Add feedback, with open test feedback Fix feedbacks (assistant or Claude Code, all the open feedback), else Validate the step (a ticket with open children) or Validate the ticket (→ Done); Fix session (per open feedback), Create the pull request in their sections; *More actions*: Back to In progress, Develop with Claude Code, Abandon | mark feedback handled |
+| In progress | Review, Send to testing; *More actions*: Open the worktree, New dev session, Develop with Claude Code, Abandon | move to *To test* (with how to test) |
+| To test | Add feedback, Review, with open test feedback Fix feedbacks (assistant or Claude Code, all the open feedback), else Validate the step (a ticket with open children) or Validate the ticket (→ Done); Fix session (per open feedback), Create the pull request in their sections; *More actions*: Open the worktree, Back to In progress, Develop with Claude Code, Abandon | mark feedback handled |
 | Done / Abandoned | Reopen (Done → To test, Abandoned → New) | — |
 
 The header keeps the main actions; *Briefing*, *Generate the plan*, *Start development* and the *Fix session* of a feedback are split buttons: a click starts the integrated assistant, the arrow offers Claude Code instead (in a terminal). *Review* (In progress, To test) is a split button too, with Claude Code only for now: a review of the work whose findings become test feedback, plus a note with the verdict. The other actions are in the *More actions* menu.

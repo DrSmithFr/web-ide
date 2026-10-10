@@ -42,7 +42,7 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
   const here = inWorktreeOf(tk)
   const blocked = tk.blockers?.length ? tk.blockers.map(blockerText).join(', ') : ''
   const openChildren = (tk.children ?? []).filter((c) => c.status !== 'done' && c.status !== 'abandoned')
-  const worktree: ActionButton[] = tk.worktree && !here ? [{ label: t('Open the worktree'), run: () => void openWorktree(tk), testid: 'ticket-open-worktree' }] : []
+  const worktree: ActionButton[] = tk.worktree && !here ? [{ label: t('Open the worktree'), run: () => void openWorktree(tk), more: true }] : []
   const review: ActionButton = {
     label: t('Review'),
     title: t('A review of the work: its findings become test feedback'),
@@ -101,17 +101,16 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
       ]
     case 'in_progress':
       return [
-        ...worktree,
         review,
         { label: t('Send to testing'), primary: true, run: () => void ctx.move('review'), testid: 'ticket-to-review' },
+        ...worktree,
         { label: t('New dev session'), run: () => void startWorkSession(tk, 'dev'), more: true },
         { label: t('Develop with Claude Code'), run: () => runClaude(tk, 'dev'), more: true },
       ]
     case 'review':
       return [
-        ...worktree,
-        review,
         { label: t('Add feedback'), run: ctx.focusFeedback, testid: 'ticket-feedback' },
+        review,
         // Open test feedback first: validating waits for it to be handled.
         ...(tk.feedbackOpen
           ? [
@@ -141,6 +140,7 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
                 ? []
                 : [{ label: t('Validate the ticket'), primary: true, title: t('Closes the ticket: Done'), run: () => void closeTicket(tk, ctx.apply), testid: 'ticket-close' }]),
           ]),
+        ...worktree,
         { label: t('Back to “In progress”'), run: () => void ctx.move('in_progress'), more: true },
         { label: t('Develop with Claude Code'), run: () => runClaude(tk, 'dev'), more: true },
       ]

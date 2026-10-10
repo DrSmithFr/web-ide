@@ -143,7 +143,7 @@ run(async ({ page, ctx }) => {
     (await sections()).join() === 'How to test,Feedback,Git and changes,|,-Description,-Briefing conversations,-Notes,-Plan conversations,-Implementation plan,-Goals · 1/2,-Development conversations',
     'To test: test, feedback and git first, then the earlier sections folded, no pull request without a branch: ' + (await sections()).join(),
   )
-  assert((await header()).join() === 'Review,Add feedback,Validate the ticket', 'To test: Review, Add feedback and Validate the ticket in the header: ' + (await header()).join())
+  assert((await header()).join() === 'Add feedback,Review,Validate the ticket', 'To test: Add feedback, Review and Validate the ticket in the header: ' + (await header()).join())
   await page.click('[data-testid=ticket-feedback]')
   assert(await page.evaluate(() => document.activeElement?.dataset.testid === 'ticket-feedback-input'), 'Add feedback focuses the feedback box')
   await page.selectOption('[data-testid=ticket-feedback-kind]', 'bug')
@@ -151,7 +151,7 @@ run(async ({ page, ctx }) => {
   await page.click('[data-testid=ticket-feedback-add]')
   await page.waitForSelector('[data-testid=ticket-feedback-item].k-bug:has-text("The file is empty")')
   assert((await page.textContent('[data-testid=ticket-status]')).includes('To test'), 'a feedback leaves the ticket in To test')
-  assert((await header()).join() === 'Review,Add feedback,Fix feedbacks', 'an open feedback: Fix feedbacks instead of Validate: ' + (await header()).join())
+  assert((await header()).join() === 'Add feedback,Review,Fix feedbacks', 'an open feedback: Fix feedbacks instead of Validate: ' + (await header()).join())
   assert(await page.isVisible('[data-testid=ticket-feedback-item] [data-testid=ticket-feedback-session]'), 'fix session offered for an open feedback')
   await page.click('[data-testid=ticket-feedback-item] [data-testid=ticket-feedback-session-with]')
   await page.click('.ctx-menu button:has-text("With Claude Code")')
