@@ -133,7 +133,7 @@ function newEntryDir() {
 // Where the keyboard lands in a tool given the focus: its terminal, its prompt, the selected
 // row of its tree, its first field, else its first button.
 // A tool just shown may still be loading: the preferred targets are awaited a few frames.
-const focusTargets = ['.xterm-helper-textarea', '.ai-composer textarea', '[role=tree] [aria-selected=true]', '[role=tree] [tabindex]', '.tree-row.active', '.tree-row', 'input:not([type=checkbox]), textarea']
+const focusTargets = ['.xterm-helper-textarea', '.ai-composer .ed-content', '[role=tree] [aria-selected=true]', '[role=tree] [tabindex]', '.tree-row.active', '.tree-row', 'input:not([type=checkbox]), textarea']
 const fallbackTarget = '.panel-body button:not(:disabled), .tool-body button:not(:disabled), [tabindex="0"]:not(.detach), button:not(:disabled):not(.detach)'
 
 function focusZone(zone: Zone, tries = 10) {
@@ -185,7 +185,7 @@ const menus: [string, string[]][] = [
   ['menu|Edit', ['edit.undo', 'edit.redo', '-', 'edit.pasteHistory', '-', 'edit.duplicateLine', 'edit.deleteLine', 'edit.toggleComment', '-', 'edit.nextOccurrence', 'edit.allOccurrences', '-', 'search.find', 'search.global']],
   ['menu|Navigate', ['search.everywhere', 'nav.recentFiles', '-', 'nav.back', 'nav.forward', '-', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', '-', 'nav.related', 'nav.test']],
   ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover', '-', 'lsp.rename', 'lsp.format', '-', 'edit.fold', 'edit.unfold', 'edit.foldAll', 'edit.unfoldAll']],
-  ['menu|View', ['view.splitRight', 'view.splitDown', '-', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', '-', 'view.visualFocus', 'view.focusOutline', 'view.focusDim', '-', 'view.whitespace', '-', 'console.new', 'palette.open']],
+  ['menu|View', ['view.splitRight', 'view.splitDown', '-', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', '-', 'view.visualFocus', 'view.focusOutline', 'view.focusDim', '-', 'view.whitespace', 'view.wordWrap', '-', 'console.new', 'palette.open']],
   ['menu|Tools', ['tool.explorer', 'tool.search', 'tool.git', 'tool.kanban', '-', 'tool.assistant', 'tool.database', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.console', 'tool.problems', 'tool.docker']],
 ]
 

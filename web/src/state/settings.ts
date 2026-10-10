@@ -22,7 +22,8 @@ export interface Settings {
   focusDimLevel: number
   tokenColors: Record<string, Record<string, string>>
   font: { family: string; size: number; lineHeight: number; ligatures: boolean; uiSize: number }
-  editor: { tabSize: number; insertSpaces: boolean; highlightLine: boolean; indentGuides: boolean; showWhitespace: boolean; clipboardSize: number }
+  /** wordWrap: soft wrap of long lines, for every file or only Markdown and text ones. */
+  editor: { tabSize: number; insertSpaces: boolean; highlightLine: boolean; indentGuides: boolean; showWhitespace: boolean; wordWrap: 'off' | 'on' | 'markdown'; clipboardSize: number }
   keyboard: { layout: 'auto' | 'qwerty' | 'azerty'; overrides: Record<string, string[]> }
   syntax: Record<string, GrammarDef>
   language: LangSetting
@@ -38,7 +39,7 @@ export const defaultSettings: Settings = {
   focusDimLevel: 35,
   tokenColors: {},
   font: { family: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace", size: 13, lineHeight: 1.55, ligatures: true, uiSize: 13 },
-  editor: { tabSize: 4, insertSpaces: true, highlightLine: true, indentGuides: true, showWhitespace: false, clipboardSize: 50 },
+  editor: { tabSize: 4, insertSpaces: true, highlightLine: true, indentGuides: true, showWhitespace: false, wordWrap: 'markdown', clipboardSize: 50 },
   keyboard: { layout: 'auto', overrides: {} },
   syntax: {},
   language: 'auto',

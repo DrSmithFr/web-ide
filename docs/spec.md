@@ -127,6 +127,7 @@ On a screen 720 px wide or less (phones; tablets keep the layout above):
 - The text starts right against the gutter, without a left margin.
 - **Indentation guides** (setting, on by default): a thin vertical line at each indentation level, the step being the most frequent indentation increase of the file (else the tab size); blank lines take the smaller indentation of the lines around them. The guide of the block holding the caret (or opened by the caret line) is brighter.
 - **Whitespace** (setting and *View › Show whitespace*, off by default): a dot for each space, an arrow for each tab, `↵` at each line end, drawn faintly over the text by an overlay copying the visible lines in transparent characters (exact widths, tab stops included).
+- **Word wrap** (setting: Markdown and text files by default, every file, or never; *View › Wrap the long lines* or Alt+Z toggles it for the open document until the page reloads): long lines wrap at the width of the editor, at word boundaries, without horizontal scroll. The gutter shows the number of a line on its first row; the current line, the change marks, the carets and the guides follow the rows; Up/Down and Home/End move by row (Home on the first row keeps the smart Home).
 
 ### 6.5 Folding
 
@@ -191,7 +192,7 @@ On a screen 720 px wide or less (phones; tablets keep the layout above):
 
 ### Settings
 
-Large modal with navigation on the left: themes (with the accent color and the visual focus mode), fonts, editor (tab size, indentation with spaces, current line, indentation guides, whitespace), keyboard shortcuts, syntax highlighting (add, edit, export rules as JSON per language), language of the interface.
+Large modal with navigation on the left: themes (with the accent color and the visual focus mode), fonts, editor (tab size, word wrap, indentation with spaces, current line, indentation guides, whitespace), keyboard shortcuts, syntax highlighting (add, edit, export rules as JSON per language), language of the interface.
 
 ### Home page and projects
 
@@ -266,6 +267,7 @@ Definitions may point outside the project (`lib.es5.d.ts` in `node_modules/types
 
 Right-panel tool talking to a **llama.cpp** or **Ollama** server, or an **OpenAI-compatible provider** (OpenAI, OpenRouter…: address and API key, never sent back to the page; models listed by `/models` or typed by hand with their context and capabilities; only standard fields sent; rate limits retried with `Retry-After`, then the errors explained: refused key, no credit, unknown model). Each server has a number of conversations at once, and may be offered to the sub-agents with a note for the model.
 
+- **Message box**: a Markdown editor (the code editor without gutter: highlighting, soft wrap, multiple carets, Alt+J, undo) growing up to 40 % of the height. Enter adds a line and continues the lists (`- `, `1. ` numbered on, `- [ ] `; Enter on an empty item ends the list); Ctrl+S or Ctrl+Enter sends. `/commands` and `@paths` are completed and highlighted. Bar: mode, dictation, attachments, options, then the context gauge, the model and send. Full screen (button at the top right, `Ctrl+Shift+E`): the box takes the whole tool, the thread hidden; Esc or sending leaves it, the draft, caret and undo kept. A conversation linked to a ticket shows a bar inside the frame of the box, on top: *Ticket #n* (its title in the tooltip, a click opens it), its status, and the role of the conversation on the right. Two LED strips, above and under it, show the mode (Orchestrator green, Build yellow, Briefing orange, Plan blue; violet during a compaction), also the color of the mode button: brighter while the box has the focus, pulsing while the assistant works. Placeholder: *Message…* (*Queued message…* during an answer); else *Link to a ticket…* once it has messages.
 - Markdown answers with highlighted code and Mermaid diagrams, reasoning and tool calls as blocks with their duration (open and following their stream while they run, folded once done), live token counters.
 - Reasoning effort: dynamic (the most after a message of the user, medium after tool results, low after simple edits that succeeded, the most after a failure; optionally chosen by the model with `set_effort`) or fixed by the user; shown on the reasoning block.
 - Statistics (agent.stats, a view in the column of the board): by conversation with its sub-agents, or for the project filtered by model, effort and period; speeds, generation and thinking time, tools (time without the approval waits, failures by kind), calls at once, repeated calls, context by part (estimated), its curve and the compactions.

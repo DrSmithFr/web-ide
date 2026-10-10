@@ -5,10 +5,13 @@
 // and the caret in place. Colors come from the CSS Custom Highlight API: one Highlight per
 // token type, no <span> in the DOM. Only the visible lines (plus a margin) get ranges,
 // rebuilt on the next frame after a change or a scroll. The gutter is virtual too.
+// With soft wrap a line takes several rows: their positions are read from the layout of the
+// browser (rects of characters) instead of being computed, and cached until the next edit.
 import { Highlighter, type Token } from './tokenizer'
 import { grammar } from './languages'
 import { subwordLeft, subwordRight } from './subword'
 import { Folder, type Fold } from './folding'
+import { listBreak } from './lists'
 import { normalize, nextOccurrence, occurrences, selFrom, selTo, wordAt, wordLeft, wordRight } from './carets'
 import type { Change, Doc, Selection } from './doc'
 import type { LineMark } from './linediff'
@@ -27,6 +30,12 @@ export interface ViewOptions {
   highlightLine: boolean
   indentGuides?: boolean
   showWhitespace?: boolean
+  /** Long lines wrap at the width of the view (soft wrap). */
+  wrap?: boolean
+  /** Shown while the document is empty. */
+  placeholder?: string
+  /** Stays editable when the editors of a phone are locked (message box). */
+  free?: boolean
   readOnly?: boolean
   onSelection?: (sel: Selection) => void
   onCtrlClick?: (offset: number) => void
@@ -89,6 +98,8 @@ export class EditorView {
   private gutterMarks: HTMLDivElement
   private gutterFolds: HTMLDivElement
   private placeholders: HTMLDivElement
+  /** Text shown while the document is empty (option placeholder). */
+  private hint: HTMLDivElement
   private folder!: Folder
   /** Folded ranges, by header line. */
   private folds: Fold[] = []
@@ -118,6 +129,9 @@ export class EditorView {
   private spans = new Map<string, Spans>()
   private disposers: (() => void)[] = []
   private frame = 0
+  /** Soft wrap: first and last row of each line, read from the layout (cleared on any change). */
+  private rows = new Map<number, [number, number]>()
+  private gutterWidth = ''
   private composing = false
   private lastSel: Selection = { anchor: 0, head: 0 }
   private diagnostics: Diagnostic[] = []
@@ -158,6 +172,9 @@ export class EditorView {
     this.gutter.append(this.gutterNums, this.gutterMarks, this.gutterFolds)
     this.placeholders = document.createElement('div')
     this.placeholders.className = 'ed-placeholders'
+    this.hint = document.createElement('div')
+    this.hint.className = 'ed-hint'
+    this.hint.setAttribute('aria-hidden', 'true')
     const main = document.createElement('div')
     main.className = 'ed-main'
     this.curLine = document.createElement('div')
@@ -182,11 +199,13 @@ export class EditorView {
     EditorView.all.add(this)
     this.tooltip = document.createElement('div')
     this.tooltip.className = 'ed-tooltip'
-    main.append(this.curLine, this.guides, this.boxes, this.content, this.ws, this.caretLayer, this.placeholders)
+    main.append(this.curLine, this.guides, this.boxes, this.hint, this.content, this.ws, this.caretLayer, this.placeholders)
     inner.append(this.gutter, main)
     this.scroller.append(inner)
     this.root.append(this.scroller, this.tooltip)
     this.root.style.setProperty('--tab-size', String(opts.tabSize))
+    this.root.classList.toggle('wrap', !!opts.wrap)
+    this.updateHint()
     this.buildAll()
 
     this.hl = new Highlighter(grammar(doc.lang), (i) => doc.lineText(i), () => doc.lineCount)
@@ -234,7 +253,10 @@ export class EditorView {
       this.schedule()
       opts.onScroll?.(this.scroller.scrollTop)
     }, { passive: true })
-    const ro = new ResizeObserver(() => this.schedule())
+    const ro = new ResizeObserver(() => {
+      this.rows.clear()
+      this.schedule()
+    })
     ro.observe(this.scroller)
     this.disposers.push(() => ro.disconnect())
     this.schedule()
@@ -360,12 +382,14 @@ export class EditorView {
     const lh = parseFloat(cs.lineHeight)
     if (lh > 0) this.lineHeight = lh
     this.padTop = parseFloat(cs.paddingTop) || 0
+    this.hint.style.top = `${this.padTop}px`
     const probe = document.createElement('span')
     probe.textContent = 'x'.repeat(100)
     probe.style.cssText = `position:absolute;visibility:hidden;white-space:pre;font:${cs.font}`
     this.root.appendChild(probe)
     this.charWidth = probe.getBoundingClientRect().width / 100 || 8
     probe.remove()
+    this.rows.clear()
     this.schedule()
   }
 
@@ -373,7 +397,19 @@ export class EditorView {
     Object.assign(this.opts, o)
     if (o.tabSize) this.root.style.setProperty('--tab-size', String(o.tabSize))
     if (o.readOnly !== undefined) this.setReadOnly(o.readOnly || this.doc.readOnly)
+    if (o.placeholder !== undefined) this.updateHint()
+    if (o.wrap !== undefined && o.wrap !== this.root.classList.contains('wrap')) {
+      this.root.classList.toggle('wrap', o.wrap)
+      this.rows.clear()
+      this.scroller.scrollLeft = 0
+      if (this.hasFocus()) requestAnimationFrame(() => this.scrollToOffset(this.lastSel.head))
+    }
     this.schedule()
+  }
+
+  private updateHint() {
+    this.hint.textContent = this.opts.placeholder ?? ''
+    this.hint.style.display = this.opts.placeholder && !this.doc.text ? 'block' : 'none'
   }
 
   setReadOnly(ro: boolean) {
@@ -383,7 +419,7 @@ export class EditorView {
   }
 
   private applyEditable() {
-    const ro = this.ro || EditorView.lockedAll
+    const ro = this.ro || (EditorView.lockedAll && !this.opts.free)
     this.content.contentEditable = ro ? 'false' : 'plaintext-only'
     if (ro) this.content.tabIndex = 0
   }
@@ -510,6 +546,8 @@ export class EditorView {
     const o = c.origin as any
     const focused = this.hasFocus()
     this.applyToBlocks(c, !!(o && o.view === this && o.domDone))
+    this.rows.clear()
+    this.updateHint()
     // Keep this view's selection and highlighted spans in place when another view or the pod edits.
     const delta = c.text.length - (c.to - c.from)
     const map = (p: number) => (p <= c.from ? p : p >= c.to ? p + delta : c.from + c.text.length)
@@ -692,9 +730,18 @@ export class EditorView {
     this.edit(e.from, e.to, e.text, e.from + e.caret)
   }
 
-  /** Line break with the indentation of the line, one more level after an opening bracket. */
+  /**
+   * Line break with the indentation of the line, one more level after an opening bracket;
+   * in Markdown, the next item of a list (or the end of the list on an empty item).
+   */
   private newlineEdit(from: number, to: number) {
     const line = this.doc.lineAt(from)
+    if (this.doc.lang === 'markdown' && from === to) {
+      const start = this.doc.lineStart(line)
+      const b = listBreak(this.doc.lineText(line), from - start)
+      if (b && 'end' in b) return { from: start, to: start + b.end, text: '', caret: 0 }
+      if (b) return { from, to, text: b.insert, caret: b.insert.length }
+    }
     const lineText = this.doc.text.slice(this.doc.lineStart(line), from)
     let indent = /^[ \t]*/.exec(lineText)![0]
     const prev = lineText.trimEnd()
@@ -774,10 +821,12 @@ export class EditorView {
       return
     }
     if (e.key === 'Home' && !e.ctrlKey && !e.altKey) {
-      // Smart Home: first non blank character, then column 0.
-      e.preventDefault()
       const sel = this.getSelection()
       const line = this.doc.lineAt(sel.head)
+      // On a wrapped row, the browser goes to the start of the row.
+      if (this.opts.wrap && this.rowAt(sel.head) > this.rowOf(line)) return
+      // Smart Home: first non blank character, then column 0.
+      e.preventDefault()
       const start = this.doc.lineStart(line)
       const first = start + /^[ \t]*/.exec(this.doc.lineText(line))![0].length
       const target = sel.head === first ? start : first
@@ -1029,9 +1078,12 @@ export class EditorView {
       case 'ArrowDown':
         if (e.ctrlKey) return false
         to = (x) => {
+          const up = e.key === 'ArrowUp'
+          const row = this.opts.wrap ? this.offsetAtRow(x.head, up ? -1 : 1) : null
+          if (row != null) return row
           const line = d.lineAt(x.head)
-          const next = this.nextLine(line, e.key === 'ArrowUp' ? -1 : 1)
-          if (next < 0) return e.key === 'ArrowUp' ? 0 : text.length
+          const next = this.nextLine(line, up ? -1 : 1)
+          if (next < 0) return up ? 0 : text.length
           return this.offsetAtCol(next, this.visualCol(line, x.head))
         }
         break
@@ -1219,7 +1271,7 @@ export class EditorView {
         this.addOwn('ed-sel2', this.range(Math.max(selFrom(x), from), Math.min(selTo(x), to)))
       }
       if (x.head < from || x.head > to) continue
-      html += `<div class="ed-caret" style="left:${this.xAt(x.head)}px;top:${this.lineTop(this.doc.lineAt(x.head))}px;height:${this.lineHeight}px"></div>`
+      html += `<div class="ed-caret" style="left:${this.xAt(x.head)}px;top:${this.rowTop(x.head)}px;height:${this.lineHeight}px"></div>`
     }
     this.caretLayer.innerHTML = html
   }
@@ -1344,6 +1396,7 @@ export class EditorView {
       else if (r[1] >= r[0]) merged.push([r[0], r[1]])
     }
     this.hidden = merged
+    this.rows.clear()
     let split = false
     for (const [s, e] of merged) {
       split = this.splitAt(s) || split
@@ -1450,10 +1503,19 @@ export class EditorView {
 
     // Gutter: only the numbers of the rendered lines, moved to their place.
     let nums = ''
-    for (const l of vis) nums += l + 1 + '\n'
+    // A wrapped line: its number on the first row, blank rows under it.
+    for (const l of vis) nums += l + 1 + '\n'.repeat(this.rowsOf(l))
     this.gutterNums.textContent = nums
     this.gutterNums.style.transform = `translateY(${this.lineTop(a)}px)`
-    this.gutter.style.width = `calc(${String(n).length}ch + 36px)`
+    const gw = `calc(${String(n).length}ch + 36px)`
+    if (gw !== this.gutterWidth) {
+      // A wider gutter narrows the text: the wrapped rows move.
+      this.gutterWidth = this.gutter.style.width = gw
+      if (this.opts.wrap && this.rows.size) {
+        this.rows.clear()
+        this.schedule()
+      }
+    }
     let marks = ''
     let folds = ''
     let holders = ''
@@ -1461,14 +1523,14 @@ export class EditorView {
     for (const l of vis) {
       const m = this.marks.get(l)
       const top = this.lineTop(l)
-      if (m) marks += `<div class="ed-mark mark-${m}" style="top:${top}px;height:${lh}px"></div>`
+      if (m) marks += `<div class="ed-mark mark-${m}" style="top:${top}px;height:${lh * this.rowsOf(l)}px"></div>`
       const f = this.folds.find((x) => x.line === l)
       if (f) {
         folds += `<div class="ed-fold folded" data-fold="${l}" style="top:${top}px;height:${lh}px"></div>`
         // With brackets, the hidden closing line follows the placeholder: func main() {⋯}
         const close = this.folder.closes ? this.doc.lineText(f.end).trimStart().replace(/[&<>]/g, (c) => `&#${c.charCodeAt(0)};`) : ''
         holders +=
-          `<div class="ed-placeholder" data-fold="${l}" style="left:${this.xAt(this.doc.lineEnd(l))}px;top:${top}px;height:${lh}px;line-height:${lh}px">` +
+          `<div class="ed-placeholder" data-fold="${l}" style="left:${this.xAt(this.doc.lineEnd(l))}px;top:${this.rowTop(this.doc.lineEnd(l))}px;height:${lh}px;line-height:${lh}px">` +
           `<span>\u22ef</span>${close}</div>`
       } else if (this.canFold(l)) folds += `<div class="ed-fold" data-fold="${l}" style="top:${top}px;height:${lh}px"></div>`
     }
@@ -1524,8 +1586,9 @@ export class EditorView {
     return this.lineOfRow(Math.floor((y - this.padTop) / this.lineHeight))
   }
 
-  /** Screen row of a line: its number less the hidden lines above it. */
+  /** Screen row of a line: its number less the hidden lines above it (with wrap, its first row). */
   private rowOf(line: number) {
+    if (this.opts.wrap) return this.wrapRows(line)[0]
     let row = line
     for (const [s, e] of this.hidden) {
       if (s >= line) break
@@ -1536,12 +1599,77 @@ export class EditorView {
 
   /** Line shown at a screen row. */
   private lineOfRow(row: number) {
+    if (this.opts.wrap) {
+      // The first rows only grow with the line (a hidden line takes the row of its header).
+      let lo = 0
+      let hi = this.doc.lineCount - 1
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1
+        if (this.wrapRows(mid)[0] <= row) lo = mid
+        else hi = mid - 1
+      }
+      const h = this.hiddenAt(lo)
+      return h ? h[0] - 1 : lo
+    }
     let line = Math.max(0, row)
     for (const [s, e] of this.hidden) {
       if (s > line) break
       line += e - s + 1
     }
     return Math.min(line, this.doc.lineCount - 1)
+  }
+
+  /** Rows taken by a line: 1 without wrap. */
+  private rowsOf(line: number) {
+    if (!this.opts.wrap) return 1
+    const [first, last] = this.wrapRows(line)
+    return last - first + 1
+  }
+
+  /** First and last row of a line, from the layout (a hidden line: those of its header). */
+  private wrapRows(line: number): [number, number] {
+    const h = this.hiddenAt(line)
+    if (h) line = h[0] - 1
+    let r = this.rows.get(line)
+    if (!r) this.rows.set(line, (r = [this.rowAt(this.doc.lineStart(line)), this.rowAt(this.doc.lineEnd(line))]))
+    return r
+  }
+
+  /** Row of the character at an offset (the newline for a line end), from its rect. */
+  private rowAt(offset: number): number {
+    if (!this.opts.wrap) return this.rowOf(this.doc.lineAt(offset))
+    const rect = this.charRect(offset)
+    if (!rect) {
+      // Not laid out: a folded line takes the last row of its header; a hidden view has none
+      // (the resize when it shows again clears the rows).
+      const h = this.hiddenAt(this.doc.lineAt(offset))
+      return h ? this.rowAt(this.doc.lineEnd(h[0] - 1)) : 0
+    }
+    const top = rect.top + rect.height / 2 - this.content.getBoundingClientRect().top
+    return Math.max(0, Math.floor((top - this.padTop) / this.lineHeight))
+  }
+
+  /** Top of the row holding an offset. */
+  private rowTop(offset: number) {
+    return this.padTop + this.rowAt(offset) * this.lineHeight
+  }
+
+  /** Client rect of the character at an offset, null when it is not laid out (folded). */
+  private charRect(offset: number): DOMRect | null {
+    const [n, o] = this.domAt(offset)
+    const r = document.createRange()
+    r.setStart(n, o)
+    r.setEnd(n, Math.min(o + 1, n.length))
+    const rect = r.getClientRects()[0]
+    return rect && (rect.height || rect.width) ? rect : null
+  }
+
+  /** Offset one row above (-1) or below (1) an offset, at the same x; null when off screen. */
+  private offsetAtRow(offset: number, dir: -1 | 1) {
+    const row = this.rowAt(offset) + dir
+    if (row < 0) return 0
+    const c = this.content.getBoundingClientRect()
+    return this.offsetAt(c.left + this.xAt(offset), c.top + this.padTop + (row + 0.5) * this.lineHeight)
   }
 
   /** Hidden range holding a line, if any. */
@@ -1652,7 +1780,9 @@ export class EditorView {
     let html = ''
     const seg = (col: number, from: number, to: number) => {
       const on = active && active[0] === col && active[1] <= from && active[2] >= to
-      html += `<div class="ed-guide${on ? ' active' : ''}" style="left:${(col + 0.5) * this.charWidth}px;top:${this.lineTop(vis[from])}px;height:${(to - from + 1) * this.lineHeight}px"></div>`
+      const top = this.lineTop(vis[from])
+      const bottom = this.lineTop(vis[to]) + this.rowsOf(vis[to]) * this.lineHeight
+      html += `<div class="ed-guide${on ? ' active' : ''}" style="left:${(col + 0.5) * this.charWidth}px;top:${top}px;height:${bottom - top}px"></div>`
     }
     const max = Math.max(0, ...ind)
     for (let col = 0; col < max; col += step) {
@@ -1677,8 +1807,7 @@ export class EditorView {
     const show = this.opts.highlightLine && this.lastSel.anchor === this.lastSel.head
     this.curLine.style.display = show ? 'block' : 'none'
     if (show) {
-      const line = this.doc.lineAt(this.lastSel.head)
-      this.curLine.style.transform = `translateY(${this.lineTop(line)}px)`
+      this.curLine.style.transform = `translateY(${this.rowTop(this.lastSel.head)}px)`
       this.curLine.style.height = `${this.lineHeight}px`
     }
   }
@@ -1724,8 +1853,9 @@ export class EditorView {
     for (let l = l1; l <= l2; l++) maxCol = Math.max(maxCol, this.visualCol(l, this.doc.lineEnd(l)))
     const box = document.createElement('div')
     box.className = 'ed-statement'
-    box.style.top = `${this.lineTop(l1) - 1}px`
-    box.style.height = `${(l2 - l1 + 1) * this.lineHeight + 2}px`
+    const top = this.lineTop(l1)
+    box.style.top = `${top - 1}px`
+    box.style.height = `${this.lineTop(l2) + this.rowsOf(l2) * this.lineHeight - top + 2}px`
     box.style.width = `${maxCol * this.charWidth + 6}px`
     this.boxes.append(box)
   }
@@ -1739,11 +1869,12 @@ export class EditorView {
 
   scrollToOffset(offset: number, center = false) {
     const line = this.doc.lineAt(offset)
-    const top = this.lineTop(line)
+    const top = this.rowTop(offset)
     const s = this.scroller
     if (center) s.scrollTop = Math.max(0, top - s.clientHeight / 3)
     else if (top < s.scrollTop) s.scrollTop = top - this.lineHeight
     else if (top + this.lineHeight * 2 > s.scrollTop + s.clientHeight) s.scrollTop = top + this.lineHeight * 2 - s.clientHeight
+    if (this.opts.wrap) return this.schedule()
     const gutterW = this.gutter.getBoundingClientRect().width
     const x = this.visualCol(line, offset) * this.charWidth
     const view = s.clientWidth - gutterW

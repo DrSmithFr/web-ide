@@ -9,7 +9,7 @@ import { approval, chat, live, loadConfig, modelsError, prefs, resetChat, savePr
 import { SettingsModal } from './AssistantSettings'
 import { restoreActive } from './agent'
 import { Thread } from './Thread'
-import { addFiles, Composer, focusComposer, suggest } from './Composer'
+import { addFiles, Composer, focusComposer, fullComposer, suggest } from './Composer'
 import { Sidebar } from './Sidebar'
 import { DiagramViewer } from './DiagramViewer'
 import { DoodleHost } from './doodle/DoodleModal'
@@ -54,13 +54,14 @@ function TicketBar() {
     >
       <div class="ai-ticket-bar" data-testid="ai-ticket-bar">
         <Icon name="kanban" size={13} />
-        <button class="link ellipsis" onClick={() => openTicket(chat.ticket!.id)}>
-          #{chat.ticket!.id} {tk()?.title ?? ''}
+        <button class="link" onClick={() => openTicket(chat.ticket!.id)} title={tk()?.title}>
+          {t('Ticket #{n}', { n: chat.ticket!.id })}
         </button>
-        <span class={`kb-role r-${chat.ticket!.role}`}>{roleLabels[chat.ticket!.role]}</span>
         <Show when={tk()}>
           <span class={`kb-status st-${tk()!.status}`}>{statusLabels[tk()!.status]}</span>
         </Show>
+        <span class="grow" />
+        <span class={`kb-role r-${chat.ticket!.role}`}>{roleLabels[chat.ticket!.role]}</span>
       </div>
     </Show>
   )
@@ -180,7 +181,6 @@ export function AssistantTool() {
           <Icon name="gear" size={15} />
         </button>
       </div>
-      <TicketBar />
       <Show when={modelsError()}>
         <div class="ai-banner">
           <Icon name="conflict" size={13} /> {modelsError()}
@@ -197,6 +197,7 @@ export function AssistantTool() {
         </Show>
         <div
           class="ai-main"
+          classList={{ 'composer-full': fullComposer() }}
           ref={mainEl}
           style={{ display: boardShown() && !boardWide() ? 'none' : undefined, flex: boardShown() && boardWide() ? `${prefs.boardSplit} 1 0` : undefined }}
         >
@@ -223,6 +224,7 @@ export function AssistantTool() {
             <Thread onSuggest={suggest} onSettings={() => setSettings(true)} />
           </div>
           <Composer
+            head={<TicketBar />}
             onSettings={() => setSettings(true)}
             onSent={() => {
               stick = true

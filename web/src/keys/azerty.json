@@ -171,6 +171,9 @@
       "Alt+KeyZ",
       "Ctrl+F4"
     ],
+    "view.wordWrap": [
+      "Alt+KeyW"
+    ],
     "view.nextTab": [
       "Alt+PageDown"
     ],
@@ -206,6 +209,9 @@
     ],
     "assistant.doodle": [
       "Ctrl+Shift+KeyD"
+    ],
+    "assistant.fullComposer": [
+      "Ctrl+Shift+KeyE"
     ],
     "tool.database": [
       "Alt+Digit6"

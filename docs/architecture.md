@@ -79,7 +79,7 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 
 | Folder | Role |
 |---|---|
-| `editor/` | `Doc` (buffer, revisions, undo, file format, indentation), `EditorView` (block rendering, Custom Highlight API, indentation guides, whitespace overlay, multiple carets, folding), `carets.ts` (words, occurrences), `folding.ts` (fold ranges), `indent.ts` (indentation detection), tokenizer and grammars, three-way merge, line diff, sub-word moves, find bar |
+| `editor/` | `Doc` (buffer, revisions, undo, file format, indentation), `EditorView` (block rendering, Custom Highlight API, indentation guides, whitespace overlay, multiple carets, folding, soft wrap with rows read from the layout), `carets.ts` (words, occurrences), `folding.ts` (fold ranges), `indent.ts` (indentation detection), tokenizer and grammars, three-way merge, line diff, sub-word moves, find bar |
 | `state/` | Open project and session (tabs, split tree, tool zones), settings, git state, folder marks, the phone layout (`mobile.ts`: the view shown, the keyboard, no zoom) |
 | `keys/` | Binding table and QWERTY / AZERTY presets |
 | `lsp/` | Client, completion, edits, rename and formatting |

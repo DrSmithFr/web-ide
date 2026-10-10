@@ -107,7 +107,7 @@ export function focusEditorQuietly() {
 // Fields that open the keyboard: on a phone they take the focus only when the user touches
 // them, never by themselves (a tool or a conversation shown, a search field focused on open):
 // the keyboard opens when the user means to type.
-const TYPING = 'textarea, input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=range]):not([type=color]):not([type=file])'
+const TYPING = 'textarea, .ai-editor .ed-content, input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=range]):not([type=color]):not([type=file])'
 export const isTyping = (el: Element | null) => !!el?.matches?.(TYPING)
 
 let down: { target: Node | null; at: number } = { target: null, at: 0 }

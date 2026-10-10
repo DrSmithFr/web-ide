@@ -303,6 +303,23 @@ export interface UseViewOptions {
   onFolds?: (v: EditorView) => void
 }
 
+// Soft wrap: the setting, unless Alt+Z toggled it for a document (until the page reloads).
+const wrapToggled = new WeakMap<Doc, boolean>()
+const [wrapGeneration, setWrapGeneration] = createSignal(0)
+
+export function wrapOf(d: Doc) {
+  wrapGeneration()
+  const own = wrapToggled.get(d)
+  if (own !== undefined) return own
+  const w = settings.editor.wordWrap
+  return w === 'on' || (w === 'markdown' && (d.lang === 'markdown' || d.lang === 'plaintext'))
+}
+
+function toggleWrap(d: Doc) {
+  wrapToggled.set(d, !untrack(() => wrapOf(d)))
+  setWrapGeneration((g) => g + 1)
+}
+
 /** Tab size and kind of indentation: those of the file when known, else the settings. */
 function indentOptions(d: Doc) {
   const i = d.indent()
@@ -322,6 +339,7 @@ export function useEditorView(doc: () => Doc | null, host: () => HTMLElement | u
         highlightLine: untrack(() => settings.editor.highlightLine),
         indentGuides: untrack(() => settings.editor.indentGuides),
         showWhitespace: untrack(() => settings.editor.showWhitespace),
+        wrap: untrack(() => wrapOf(d)),
         readOnly: opts.readOnly,
         // Untracked: a callback run inside an effect (setSelection from a jump) must not
         // subscribe that effect to what the callback reads.
@@ -348,6 +366,7 @@ export function useEditorView(doc: () => Doc | null, host: () => HTMLElement | u
       highlightLine: settings.editor.highlightLine,
       indentGuides: settings.editor.indentGuides,
       showWhitespace: settings.editor.showWhitespace,
+      wrap: wrapOf(v.doc),
     })
   })
   createEffect(
@@ -534,6 +553,9 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
     const v = view()
     const d = doc()
     if (!v || !d || !isActive() || (needFocus && !v.hasFocus())) return false
+    // Another editor has the focus (the message box of the assistant): its own actions run.
+    const other = EditorView.of(document.activeElement)
+    if (other && other !== v) return false
     f(v, d)
   }
   const offs: (() => void)[] = [
@@ -550,6 +572,7 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
     registerAction('edit.unfold', when((v) => v.unfold(), true)),
     registerAction('edit.foldAll', when((v) => v.foldAll(), true)),
     registerAction('edit.unfoldAll', when((v) => v.unfoldAll(), true)),
+    registerAction('view.wordWrap', when((_, d) => toggleWrap(d))),
     registerAction('nav.subwordLeft', when((v) => v.moveSubword(-1, false), true)),
     registerAction('nav.subwordRight', when((v) => v.moveSubword(1, false), true)),
     registerAction('nav.subwordLeftSelect', when((v) => v.moveSubword(-1, true), true)),

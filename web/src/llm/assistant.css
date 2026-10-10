@@ -147,13 +147,39 @@
 .ai-att-x:hover { color: var(--danger); }
 
 /* ---------- composer ---------- */
-.ai-composer-wrap { flex: none; padding: 0 12px 12px; }
-.ai-composer { max-width: var(--ai-col); margin: 0 auto; border: 1px solid var(--line); border-radius: 20px; background: var(--bg-2); padding: 10px 10px 8px 14px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 2px 14px rgb(0 0 0 / 0.12); transition: border-color 0.12s; }
-.ai-composer:focus-within { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
-.ai-composer.editing { border-color: var(--warn); }
+/* Docked at the bottom of the tool, like an editor pane: a rule on top colored by the mode. */
+.ai-composer-wrap { --mode: var(--warn); position: relative; flex: none; display: flex; flex-direction: column; background: var(--bg); }
+/* The color of the mode: the LED strip and the mode button. */
+.ai-composer-wrap.orchestrator { --mode: var(--ok); }
+.ai-composer-wrap.build { --mode: var(--warn); }
+.ai-composer-wrap.briefing { --mode: var(--mark-excluded); }
+.ai-composer-wrap.plan { --mode: var(--info); }
+.ai-composer-wrap.compacting { --mode: #b78cff; }
+/* LED strips above and under the ticket bar: a glow of the mode, brighter with the focus, pulsing while the assistant works. */
+.ai-led { flex: none; height: 2px; background: var(--mode); opacity: 0.55; box-shadow: 0 0 4px color-mix(in srgb, var(--mode) 50%, transparent); transition: opacity 0.15s, box-shadow 0.15s, background 0.3s; }
+.ai-led + .ai-led { display: none; }
+.ai-composer-wrap:focus-within .ai-led { opacity: 1; box-shadow: 0 0 6px 1px color-mix(in srgb, var(--mode) 75%, transparent), 0 0 14px color-mix(in srgb, var(--mode) 35%, transparent); }
+.ai-composer-wrap.busy .ai-led { animation: ai-led 1.6s ease-in-out infinite; }
+@keyframes ai-led { 50% { opacity: 0.3; box-shadow: 0 0 2px color-mix(in srgb, var(--mode) 30%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .ai-composer-wrap.busy .ai-led { animation: none; } }
+.ai-composer { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px 6px 14px; }
 .ai-editing { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--warn); }
-.ai-composer textarea { border: 0 !important; background: transparent !important; padding: 4px 0 !important; resize: none; min-height: 24px; max-height: 40vh; font-size: 14px; line-height: 1.5; outline: none; }
-.ai-composer-bar { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.ai-editor { display: flex; min-height: 24px; max-height: 40vh; }
+.ai-editor .ed-scroll { max-height: 40vh; }
+.ai-editor .ed-gutter { display: none; }
+.ai-editor .ed-inner, .ai-editor .ed-content { min-height: 0; }
+.ai-editor .ed-content { padding: 4px 0; }
+.ai-editor .ed.wrap .ed-ws { padding-right: 0; }
+::highlight(ai-ref) { color: var(--accent); }
+.ai-full-btn { position: absolute; top: 8px; right: 8px; z-index: 3; opacity: 0.6; }
+.ai-full-btn:hover, .ai-composer-wrap.full .ai-full-btn { opacity: 1; }
+.ai-editor { padding-right: 22px; }
+/* Full screen: the box takes the whole tool, the thread is hidden. */
+.ai-main.composer-full .ai-messages { display: none; }
+.ai-composer-wrap.full { flex: 1; min-height: 0; }
+.ai-composer-wrap.full .ai-composer { flex: 1; min-height: 0; }
+.ai-composer-wrap.full .ai-editor, .ai-composer-wrap.full .ai-editor .ed-scroll { flex: 1; min-height: 0; max-height: none; }
+.ai-composer-bar { display: flex; align-items: center; gap: 2px; min-width: 0; margin-left: -6px; }
 .ai-icon { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 0; border-radius: 9px; background: none; color: var(--fg-muted); cursor: pointer; flex: none; }
 .ai-icon:hover:not(:disabled), .ai-icon.on { background: var(--bg-hover); color: var(--fg); }
 .ai-icon:disabled { opacity: 0.35; cursor: default; }
@@ -314,13 +340,10 @@
 
 /* Plan / Build */
 .ai-mode { display: inline-flex; align-items: center; gap: 5px; height: 28px; max-width: 200px; padding: 0 9px; margin-right: 4px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--fg-muted); cursor: pointer; font-size: 12px; min-width: 0; }
-.ai-mode:hover { color: var(--fg); background: var(--bg-hover); }
-.ai-mode.plan { color: var(--info); border-color: color-mix(in srgb, var(--info) 55%, var(--line)); background: color-mix(in srgb, var(--info) 12%, transparent); }
+.ai-mode:hover { background: color-mix(in srgb, var(--mode) 22%, transparent); }
+.ai-mode { color: var(--mode); border-color: color-mix(in srgb, var(--mode) 55%, var(--line)); background: color-mix(in srgb, var(--mode) 12%, transparent); }
 .ai-mode-model { color: var(--fg-muted); }
-.ai-composer.plan { border-color: color-mix(in srgb, var(--info) 45%, var(--line)); }
 .ai-plan-badge { background: color-mix(in srgb, var(--info) 18%, transparent); color: var(--info); margin-left: 4px; }
-.ai-mode.briefing { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); background: color-mix(in srgb, var(--warn) 12%, transparent); }
-.ai-composer.briefing { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
 .ai-briefing-badge { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); margin-left: 4px; }
 .ai-plan { border: 1px solid color-mix(in srgb, var(--info) 50%, var(--line)); border-radius: 12px; background: var(--bg-2); padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
 .ai-plan.done { border-color: var(--line); }
@@ -407,9 +430,10 @@
 .ai-ask-situation p { margin: 3px 0 0; font-size: 13px; }
 
 /* ticket linked to the conversation */
-.ai-ticket-bar { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-bottom: 1px solid var(--line); background: var(--bg-2); font-size: 12px; min-width: 0; flex: none; }
+/* On top of the message box, inside its frame: the focus rule spans both. */
+.ai-ticket-bar { display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 14px; background: var(--bg-2); font-size: 12px; min-width: 0; flex: none; }
 .ai-ticket-bar .link { padding: 0; min-width: 0; }
-.ai-ticket-link { align-self: flex-start; margin: 4px 10px 0; border: 0; background: none; color: var(--fg-muted); font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.ai-ticket-link { align-self: flex-start; margin: 6px 14px 0; padding: 0; border: 0; background: none; background: none; color: var(--fg-muted); font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; flex: none; }
 .ai-ticket-link:hover { color: var(--accent); }
 
 /* Doodle sent, in the thread. */
@@ -436,8 +460,6 @@
 .ai-capture { display: flex; align-items: center; gap: 8px; margin: 4px 0 4px 22px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line)); border-radius: 10px; background: var(--bg-2); flex-wrap: wrap; }
 .ai-action { display: flex; align-items: center; gap: 10px; margin: 4px 0 4px 22px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line)); border-radius: 10px; background: var(--bg-2); }
 .ai-action.used { border-color: var(--line); }
-.ai-mode.orchestrator { color: var(--info); border-color: color-mix(in srgb, var(--info) 55%, var(--line)); background: color-mix(in srgb, var(--info) 12%, transparent); }
-.ai-composer.orchestrator { border-color: color-mix(in srgb, var(--info) 45%, var(--line)); }
 .ai-child { display: grid; gap: 4px; margin: 4px 0 4px 22px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-2); }
 .ai-model-conf { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .ai-model-conf input[name=modelId] { flex: 1 1 160px; min-width: 0; }

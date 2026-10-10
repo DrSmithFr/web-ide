@@ -61,6 +61,8 @@ const paths: Record<string, string> = {
   comment: 'M4 5h16v11H10l-6 4z',
   expandAll: 'M7 9l5-5 5 5M7 15l5 5 5-5',
   collapseAll: 'M7 4l5 5 5-5M7 20l5-5 5 5',
+  maximize: 'M14 4h6v6M10 20H4v-6M20 4l-6 6M4 20l6-6',
+  minimize: 'M20 10h-6V4M4 14h6v6M14 10l6-6M10 14l-6 6',
   docker: 'M2 12h18c1 0 2-1 2.2-2.2M2 12c0 4.4 3.6 8 9 8 5 0 8.4-3 9.4-8M5 12V9h3v3M8 12V9h3v3M11 12V9h3v3M8 9V6h3v3',
   branch: 'M6 3v12M6 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9c0 5-6 4-12 6',
   lock: 'M6 11h12v10H6zM8 11V7a4 4 0 0 1 8 0v4',

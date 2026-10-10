@@ -212,6 +212,14 @@ function EditorSettings() {
           <input type="number" min="1" max="8" value={settings.editor.tabSize} onChange={(e) => updateSettings((s) => (s.editor.tabSize = parseInt(e.currentTarget.value, 10) || 4), 'Tab size')} />
         </label>
         <label class="field">
+          <span>{t('Wrap the long lines')}</span>
+          <select value={settings.editor.wordWrap} onChange={(e) => updateSettings((s) => (s.editor.wordWrap = e.currentTarget.value as 'off' | 'on' | 'markdown'), 'Word wrap')} data-testid="opt-wrap">
+            <option value="markdown">{t('Markdown and text files')}</option>
+            <option value="on">{t('Every file')}</option>
+            <option value="off">{t('Never')}</option>
+          </select>
+        </label>
+        <label class="field">
           <span>{t('Clipboard history (entries)')}</span>
           <input type="number" min="5" max="500" value={settings.editor.clipboardSize} onChange={(e) => updateSettings((s) => (s.editor.clipboardSize = Math.min(500, Math.max(5, parseInt(e.currentTarget.value, 10) || 50))), 'Clipboard history')} />
         </label>
