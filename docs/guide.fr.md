@@ -155,7 +155,7 @@ Tous les raccourcis sont dans *Settings → Keyboard*, avec les dispositions QWE
 ## Où sont les données
 
 - `~/.web-ide/` : réglages (avec leur historique), projets, sessions, serveurs de modèles, secrets (mode 0600), jeton d'appairage.
-- `<projet>/.ide/` : conversations (`chats.db`), kanban (`kanban.db`), worktrees des tickets, connexions aux bases, marques de dossiers, icône. Son propre `.gitignore` garde les bases et les worktrees hors de git.
+- `<projet>/.ide/` : conversations (`chats.db`), kanban (`kanban.db`), worktrees des tickets, connexions aux bases, marques de dossiers, icône. Tout le dossier est ignoré par git (son `.gitignore` est `*`) ; les worktrees utilisent le `.ide` du projet principal.
 - L'audio et les clés privées ne quittent jamais votre machine.
 
 Pour travailler sur Web IDE lui-même, `make dev` lance un pod séparé (port 4434, données dans `~/.web-ide-dev`) à côté de celui installé : voir [CONTRIBUTING.md](../CONTRIBUTING.md).

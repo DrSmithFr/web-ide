@@ -159,7 +159,7 @@ All shortcuts are in *Settings → Keyboard*, with QWERTY and AZERTY presets.
 ## Where the data lives
 
 - `~/.web-ide/`: settings (with their history), projects, sessions, model servers, secrets (mode 0600), the pairing token.
-- `<project>/.ide/`: conversations (`chats.db`), kanban (`kanban.db`), worktrees of the tickets, database connections, folder marks, icon. Its own `.gitignore` keeps the bases and the worktrees out of git.
+- `<project>/.ide/`: conversations (`chats.db`), kanban (`kanban.db`), worktrees of the tickets, database connections, folder marks, icon. The whole folder is ignored by git (its `.gitignore` is `*`); the worktrees use the `.ide` of the main project.
 - Audio and private keys never leave your machine.
 
 To work on Web IDE itself, `make dev` runs a separate pod (port 4434, data in `~/.web-ide-dev`) next to the installed one: see [CONTRIBUTING.md](../CONTRIBUTING.md).

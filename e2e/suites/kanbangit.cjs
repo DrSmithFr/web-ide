@@ -11,7 +11,11 @@ const repo = WS + '/demo'
 const env = { ...process.env, GIT_AUTHOR_NAME: 'e2e', GIT_AUTHOR_EMAIL: 'e2e@x', GIT_COMMITTER_NAME: 'e2e', GIT_COMMITTER_EMAIL: 'e2e@x' }
 const git = (cmd, cwd = repo) => execSync(`git ${cmd}`, { cwd, env, encoding: 'utf8' }).trim()
 git('init -q -b main')
+// A .ide file committed before the IDE ignored the folder: offered to untrack at the opening.
+fs.mkdirSync(repo + '/.ide', { recursive: true })
+fs.writeFileSync(repo + '/.ide/folders.json', JSON.stringify({ folders: { src: 'source' } }))
 git('add -A')
+git('add -f .ide/folders.json')
 git('commit -q -m "initial state"')
 
 const requests = []
@@ -54,6 +58,10 @@ run(async ({ page, ctx }) => {
   page.on('dialog', (d) => d.accept())
   try {
     await openProject(page)
+    // The dialog offering to untrack the .ide files is accepted (page.on dialog).
+    for (let i = 0; i < 20 && git('ls-files .ide'); i++) await page.waitForTimeout(200)
+    assert(git('ls-files .ide') === '' && fs.existsSync(repo + '/.ide/folders.json'), '.ide files untracked, kept on disk')
+    git('commit -q -m "untrack .ide"')
     await page.click('.rail-right .rail-btn[title="AI assistant"]')
     await page.click('.ai-empty button:has-text("Add a model server")')
     await page.fill('.ai-servers input[name=url]', `127.0.0.1:${fake.address().port}`)
@@ -85,9 +93,13 @@ run(async ({ page, ctx }) => {
     assert(ctx.pages().length === pages, 'worktree of the ticket shown in the same window')
     assert(fs.existsSync(wt + '/src/main.go'), 'worktree created in .ide/worktrees')
     assert(git('branch --show-current', wt) === 'ticket/1-data-export', 'branch of the ticket')
-    // Only the files of .ide meant to be committed may show up (icon, .gitignore), never the worktree or the bases.
+    // Nothing of .ide shows up: settings, bases and worktrees are ignored.
     const status = git('status --porcelain --untracked-files=all')
-    assert(!/worktrees|\.db/.test(status) && status.split('\n').every((l) => !l || l.startsWith('?? .ide/')), 'the main folder stays clean (worktrees ignored): ' + status)
+    assert(!/\.ide/.test(status), 'the main folder stays clean (.ide ignored): ' + status)
+    // The worktree has no .ide of its own: it shows the folder marks of the main project.
+    assert(!fs.existsSync(wt + '/.ide'), 'no .ide in the worktree')
+    await page.click('.rail-left .rail-btn[title="Explorer"]')
+    await page.waitForSelector(`.explorer .tree-row[data-path="${wt}/src"] .file-icon.mark-source`, { timeout: 5000 })
     await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Fait.")', { timeout: 20000 })
     const r0 = requests[0]
     const bashOut = (requests[1].messages.find((m) => m.tool_call_id === 'b1') ?? {}).content ?? ''

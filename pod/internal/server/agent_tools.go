@@ -612,7 +612,7 @@ func (s *Server) loadSkill(rt *runtime.Runtime, name string) (toolResult, error)
 	if name == "" {
 		return toolResult{}, usagef("name is missing")
 	}
-	sk, err := s.LLM.ReadSkill(llm.Project{Root: rt.Root, FS: rt.FS}, name)
+	sk, err := s.LLM.ReadSkill(llm.Project{Root: rt.Root, FS: rt.FS, IdeDir: rt.IdeDir}, name)
 	if err != nil {
 		return toolResult{}, err
 	}
@@ -630,7 +630,7 @@ func (s *Server) readSkillFile(rt *runtime.Runtime, name, file string) (toolResu
 	if name == "" || file == "" {
 		return toolResult{}, usagef("name and file are required")
 	}
-	text, err := s.LLM.ReadSkillFile(llm.Project{Root: rt.Root, FS: rt.FS}, name, file)
+	text, err := s.LLM.ReadSkillFile(llm.Project{Root: rt.Root, FS: rt.FS, IdeDir: rt.IdeDir}, name, file)
 	if err != nil {
 		return toolResult{}, err
 	}

@@ -19,6 +19,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/fsx"
 	"github.com/DrSmithFr/web-ide/pod/internal/git"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
+	"github.com/DrSmithFr/web-ide/pod/internal/idedir"
 	"github.com/DrSmithFr/web-ide/pod/internal/keeper"
 	"github.com/DrSmithFr/web-ide/pod/internal/lsp"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
@@ -37,6 +38,9 @@ type Deps struct {
 	Store *store.Store
 	// Keeper runs the local terminals (nil: the pod runs them).
 	Keeper *keeper.Client
+	// SettingsRoot is the folder of the main project of a worktree: its .ide holds the
+	// settings ("" for the project itself).
+	SettingsRoot string
 }
 
 type fileState struct {
@@ -57,6 +61,9 @@ type Runtime struct {
 	Runner execx.Runner
 	Local  bool
 	Config ProjectConfig
+	// IdeDir is the .ide folder holding the settings: the one of the main project for the
+	// worktree of a ticket or a branch (.ide is not in git, so not in the worktree).
+	IdeDir string
 
 	Consoles *console.Manager
 	// Keeper runs the processes that survive the pod, else nil; KeeperTarget is where: ""
@@ -113,7 +120,16 @@ func Open(p projects.Project, creds sshx.Creds, d Deps, emit Emit) (*Runtime, er
 		return nil, i18n.New("the project target is not a folder")
 	}
 	r.Root = root
-	if data, err := r.FS.Read(path.Join(root, ".ide", "project.json")); err == nil {
+	r.IdeDir = path.Join(root, ".ide")
+	if d.SettingsRoot != "" {
+		if main, err := r.FS.Abs(d.SettingsRoot); err == nil {
+			r.IdeDir = path.Join(main, ".ide")
+		}
+	}
+	if _, err := r.FS.Stat(r.IdeDir); err == nil {
+		_ = idedir.Ensure(r.FS, r.IdeDir)
+	}
+	if data, err := r.FS.Read(path.Join(r.IdeDir, "project.json")); err == nil {
 		_ = json.Unmarshal(data, &r.Config)
 	}
 	if r.watcher, err = r.FS.NewWatcher(); err != nil {
@@ -152,7 +168,12 @@ func Open(p projects.Project, creds sshx.Creds, d Deps, emit Emit) (*Runtime, er
 	r.LSP = lsp.NewManager(r.Runner, root, r.Local, r.Config.LSP, exists, func(ev string, data any) { r.emit(ev, data, "") })
 	r.Git = git.New(r.Runner, root)
 	r.Docker = docker.New(r.Runner, root, exists)
-	r.DB = db.NewManager(db.Deps{FS: r.FS, Root: root, ProjectID: p.ID, Local: r.Local, Runner: r.Runner, Pool: d.Pool, Store: d.Store})
+	// A worktree shares the connections of its main project, their secrets included.
+	settingsID := p.ID
+	if p.Parent != "" {
+		settingsID = p.Parent
+	}
+	r.DB = db.NewManager(db.Deps{FS: r.FS, Root: root, IdeDir: r.IdeDir, ProjectID: settingsID, Local: r.Local, Runner: r.Runner, Pool: d.Pool, Store: d.Store})
 	return r, nil
 }
 

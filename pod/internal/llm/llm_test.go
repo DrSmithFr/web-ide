@@ -345,7 +345,7 @@ func TestChats(t *testing.T) {
 		t.Fatal("base not in .ide:", err)
 	}
 	gi, _ := os.ReadFile(filepath.Join(root, ".ide/.gitignore"))
-	if !strings.Contains(string(gi), "chats.db") {
+	if !strings.Contains(string(gi), "\n*\n") {
 		t.Fatalf(".gitignore: %q", gi)
 	}
 	if err := m.RenameChat(loc, "c2", " Renamed "); err != nil {
