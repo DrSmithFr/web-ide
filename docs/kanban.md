@@ -15,6 +15,8 @@ Number (#1, #2… per project), title, priority (low, normal, high, critical), l
 
 - **New**: description (Markdown, 1500 characters max: the model tends to be verbose), notes (1000 characters max each, with the conversation that wrote them), briefing conversations.
 - **To do**: implementation plan (Markdown), goals (a title and a description of how to check it, checkable), plan conversations, estimated size (S, M, L, XL: required when a model writes the plan, editable by the user).
+
+The priority and the size are fixed once the development started (*In progress*, *To test*, *Done*, *Abandoned*): the view shows them as badges, the pod refuses a change from the user or a model, and a plan written then keeps the size.
 - **In progress**: development conversations, git and changes, how to test (written by the model when it finishes).
 - **To test**: test feedback (info, bug or new feature; 1000 characters max; checked once handled, by the model or the user; with the conversation handling it), pull request.
 

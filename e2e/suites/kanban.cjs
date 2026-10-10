@@ -123,6 +123,10 @@ run(async ({ page, ctx }) => {
   // Workflow.
   await page.click('[data-testid=ticket-start]')
   await page.waitForSelector('[data-testid=ticket-status]:has-text("In progress")')
+  assert(
+    (await page.isVisible('.tk-meta-row span.badge:has-text("priority")')) && (await page.isVisible('span[data-testid=ticket-size]')) && !(await page.$('.tk-meta-row select')),
+    'In progress: priority and size fixed, shown as badges',
+  )
   await page2.waitForSelector('[data-testid=ticket-status]:has-text("In progress")', { timeout: 5000 })
   assert(true, 'the other window follows the status change')
   await page.click('[data-testid=ticket-to-review]')
@@ -184,7 +188,8 @@ run(async ({ page, ctx }) => {
   await tool('kanban_create', { title: 'Lineage root' })
   await tool('kanban_create', { title: 'Lineage step', parent: 3 })
   await tool('kanban_create', { title: 'Waits for the root', depends_on: [3] })
-  for (const id of [3, 4, 5]) await tool('kanban_set_plan', { id, plan: 'p', goals: [{ title: 'g' }], size: 'm' })
+  // Sizes for the roadmap below: fixed once the development started.
+  for (const [id, size] of [[3, 'xl'], [4, 's'], [5, 'm']]) await tool('kanban_set_plan', { id, plan: 'p', goals: [{ title: 'g' }], size })
   await page.click('.pane.active .tab:has-text("Kanban")')
   await page.waitForSelector('[data-testid=ticket-card-4] [data-testid=card-parent]:has-text("#3")')
   assert((await page.textContent('[data-testid=ticket-card-4] [data-testid=card-blocked]')).includes('#3'), 'card of a step: parent and blocker badges')
@@ -221,8 +226,8 @@ run(async ({ page, ctx }) => {
   assert((await page.textContent('.tk-events')).includes('Started despite: #3 (dependency not merged)'), 'a forced start stays in the history')
 
   // Roadmap: a row per lineage, blocks as wide as their size, what can start stands out.
-  await tool('kanban_update', { id: 3, size: 'xl' })
-  await tool('kanban_update', { id: 4, size: 's' })
+  const refused = await tool('kanban_update', { id: 3, size: 's' })
+  assert(refused.result?.isError && JSON.stringify(refused).includes('fixed once the development started'), 'the size of a ticket in progress is refused')
   await tool('kanban_create', { title: 'Waits for the second ticket', depends_on: [2] })
   await tool('kanban_set_plan', { id: 6, plan: 'p', goals: [{ title: 'g' }], size: 'm' })
   await page.click('.pane.active .tab:has-text("Kanban")')

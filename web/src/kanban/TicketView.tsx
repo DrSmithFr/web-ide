@@ -151,13 +151,28 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
           </span>
         </div>
         <div class="tk-meta-row">
-          <select class="small" value={tk().priority} onChange={(e) => props.apply(updateTicket(tk().id, { priority: e.currentTarget.value as Priority }))} title={t('Priority')}>
-            <For each={Object.entries(priorityLabels)}>{([v, l]) => <option value={v}>{t('{priority} priority', { priority: l })}</option>}</For>
-          </select>
-          <select class="small" value={tk().size ?? ''} onChange={(e) => props.apply(updateTicket(tk().id, { size: e.currentTarget.value as Size | '' }))} title={t('Estimated size, written with the plan')} data-testid="ticket-size">
-            <option value="">{t('Size not estimated')}</option>
-            <For each={Object.entries(sizeNames)}>{([v, l]) => <option value={v}>{t('Size {size}', { size: l })}</option>}</For>
-          </select>
+          <Show
+            when={tk().status === 'new' || tk().status === 'todo'}
+            fallback={
+              // Fixed once the development started (the pod refuses a change too).
+              <>
+                <span class="badge" title={t('Fixed once the development started')}>
+                  {t('{priority} priority', { priority: priorityLabels[tk().priority] })}
+                </span>
+                <span class="badge" title={t('Fixed once the development started')} data-testid="ticket-size">
+                  {tk().size ? t('Size {size}', { size: sizeNames[tk().size!] }) : t('Size not estimated')}
+                </span>
+              </>
+            }
+          >
+            <select class="small" value={tk().priority} onChange={(e) => props.apply(updateTicket(tk().id, { priority: e.currentTarget.value as Priority }))} title={t('Priority')}>
+              <For each={Object.entries(priorityLabels)}>{([v, l]) => <option value={v}>{t('{priority} priority', { priority: l })}</option>}</For>
+            </select>
+            <select class="small" value={tk().size ?? ''} onChange={(e) => props.apply(updateTicket(tk().id, { size: e.currentTarget.value as Size | '' }))} title={t('Estimated size, written with the plan')} data-testid="ticket-size">
+              <option value="">{t('Size not estimated')}</option>
+              <For each={Object.entries(sizeNames)}>{([v, l]) => <option value={v}>{t('Size {size}', { size: l })}</option>}</For>
+            </select>
+          </Show>
           <span class="muted small">{t('created on {date}', { date: fmtDate(tk().created) })}</span>
           <span class="grow" />
           <For each={buttons().filter((b) => !b.more)}>

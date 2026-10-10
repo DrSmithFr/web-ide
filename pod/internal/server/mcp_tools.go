@@ -414,7 +414,7 @@ var mcpTools = []mcpTool{
 			if a.Size == "" {
 				return "", fmt.Errorf("size is required: s, m, l or xl")
 			}
-			if err := s.Kanban.Update(sc.loc, id, kanban.Patch{Size: &a.Size}, kanban.ByClaude); err != nil {
+			if err := s.Kanban.Update(sc.loc, id, kanban.Patch{Size: &a.Size, PlanSize: true}, kanban.ByClaude); err != nil {
 				return "", err
 			}
 			if err := s.Kanban.SetPlan(sc.loc, id, a.Plan, a.Goals, kanban.ByClaude); err != nil {

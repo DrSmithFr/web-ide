@@ -1530,6 +1530,7 @@
   "Board": "Tableau",
   "Roadmap": "Feuille de route",
   "Size {size}": "Taille {size}",
+  "Fixed once the development started": "Figée une fois le développement commencé",
   "Size not estimated": "Taille non estimée",
   "Width: estimated size (S, M, L, XL)": "Largeur : taille estimée (S, M, L, XL)",
   "Nothing to plan: no open ticket.": "Rien à planifier : aucun ticket ouvert.",

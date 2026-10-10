@@ -49,8 +49,18 @@ func TestTicketLifecycle(t *testing.T) {
 	if err := m.Move(loc, id, InProgress, ByUser, ""); err != nil {
 		t.Fatal(err)
 	}
+	// Priority and size are fixed once the development started; a plan keeps the size.
+	if err := m.Update(loc, id, Patch{Priority: ptr("high")}, ByUser); err == nil {
+		t.Fatal("priority changed in progress")
+	}
+	if err := m.Update(loc, id, Patch{Size: ptr("l")}, ByUser); err == nil {
+		t.Fatal("size changed in progress")
+	}
+	if err := m.Update(loc, id, Patch{Size: ptr("l"), PlanSize: true, Title: ptr("Export CSV")}, ByModel); err != nil {
+		t.Fatalf("plan with a size in progress: %v", err)
+	}
 	tk, _ = m.Get(loc, id)
-	if tk.Title != "Export CSV" || len(tk.Files) != 2 {
+	if tk.Title != "Export CSV" || len(tk.Files) != 2 || tk.Size != "" || tk.Priority != "normal" {
 		t.Fatalf("ticket: %+v", tk)
 	}
 	for _, g := range tk.GoalList {

@@ -167,6 +167,7 @@
   "the lineage has no worktree: start #%d first": "la lignée n'a pas de worktree : démarrez d'abord #%d",
   "Steps": "Étapes",
   "unknown size: %s (%s)": "taille inconnue : %s (%s)",
+  "the priority and the size are fixed once the development started": "la priorité et la taille sont figées une fois le développement commencé",
   "Nothing to compact": "Rien à compacter",
   "No model for the compaction": "Aucun modèle pour la compaction",
   "the model returned an empty summary": "le modèle a renvoyé un résumé vide",

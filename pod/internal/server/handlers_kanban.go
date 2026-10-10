@@ -245,7 +245,7 @@ func (s *Server) registerKanban() {
 			return err
 		}
 		if b.Size != nil {
-			if err := s.Kanban.Update(k.loc, a.ID, kanban.Patch{Size: b.Size}, a.By); err != nil {
+			if err := s.Kanban.Update(k.loc, a.ID, kanban.Patch{Size: b.Size, PlanSize: true}, a.By); err != nil {
 				return err
 			}
 		}

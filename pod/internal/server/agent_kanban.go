@@ -274,7 +274,7 @@ func (s *Server) kanbanCall(r *agentRun, name string, a toolArgs, mode string) (
 		if size == "" {
 			return toolResult{}, usagef("size is required: s, m, l or xl")
 		}
-		if err := s.Kanban.Update(loc, id, kanban.Patch{Size: &size}, kanban.ByModel); err != nil {
+		if err := s.Kanban.Update(loc, id, kanban.Patch{Size: &size, PlanSize: true}, kanban.ByModel); err != nil {
 			return toolResult{}, err
 		}
 		if err := s.Kanban.SetPlan(loc, id, plan, kept, kanban.ByModel); err != nil {
