@@ -332,11 +332,28 @@ func (s *Server) kanbanCall(r *agentRun, name string, a toolArgs, mode string) (
 				mark, word = "☐", "unchecked"
 			}
 			return okPlain(fmt.Sprintf("Goal %s: %s. %d goal(s) left.", word, text, left), mark+" "+text), nil
+		case "edit":
+			if err := s.Kanban.GoalEdit(loc, id, int64(a.num("id")), a.str("title"), a.str("description")); err != nil {
+				return toolResult{}, err
+			}
+			return ok("Goal edited.", agent.T("goal edited", nil)), nil
+		case "delete":
+			if err := s.Kanban.Goal(loc, id, kanban.GoalOp{Op: "delete", ID: int64(a.num("id"))}); err != nil {
+				return toolResult{}, err
+			}
+			return ok("Goal deleted.", agent.T("goal deleted", nil)), nil
 		default:
 			return toolResult{}, usagef("unknown action: %s", action)
 		}
 	case "kanban_feedback":
 		action := a.str("action")
+		if action == "add" {
+			fid, err := s.Kanban.Feedback(loc, id, kanban.FeedbackOp{Op: "add", Kind: a.str("kind"), Text: a.str("text"), ChatID: chatID}, kanban.ByModel)
+			if err != nil {
+				return toolResult{}, err
+			}
+			return ok(fmt.Sprintf("Feedback added (id %d).", fid), agent.T("feedback added", nil)), nil
+		}
 		if action != "done" && action != "reopen" {
 			return toolResult{}, usagef("unknown action: %s", action)
 		}

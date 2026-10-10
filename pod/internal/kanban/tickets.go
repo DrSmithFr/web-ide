@@ -690,6 +690,26 @@ type GoalOp struct {
 	Source      string `json:"source"`
 }
 
+// GoalEdit is the edit of a goal by a model: an empty title or description keeps the current one.
+func (m *Manager) GoalEdit(loc Location, id, gid int64, title, description string) error {
+	t, err := m.Get(loc, id)
+	if err != nil {
+		return err
+	}
+	for _, g := range t.GoalList {
+		if g.ID == gid {
+			if strings.TrimSpace(title) == "" {
+				title = g.Text
+			}
+			if strings.TrimSpace(description) == "" {
+				description = g.Description
+			}
+			return m.Goal(loc, id, GoalOp{Op: "edit", ID: gid, Text: title, Description: description})
+		}
+	}
+	return i18n.Errorf("goal %d not found", gid)
+}
+
 func (m *Manager) Goal(loc Location, id int64, op GoalOp) error {
 	return m.tx(loc, id, func(tx *sql.Tx, now int64) error {
 		var res sql.Result

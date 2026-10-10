@@ -77,6 +77,10 @@ const fake = http.createServer(async (req, res) => {
             ['d4', 'kanban_move', { status: 'review', test_summary: 'Open **/export** and check the CSV.' }],
             ['d5', 'kanban_add_note', { text: 'Erratum: '.repeat(120) }],
             ['d6', 'kanban_add_note', { text: 'The CSV uses `;` as separator.' }],
+            ['d7', 'kanban_goal', { action: 'add', title: 'Temporary goal' }],
+            ['d8', 'kanban_goal', { action: 'delete', id: ids[1] + 1 }],
+            ['d9', 'kanban_goal', { action: 'edit', id: ids[1], title: 'The CSV has a header row' }],
+            ['d10', 'kanban_feedback', { action: 'add', kind: 'info', text: 'Exports over 10k rows take 2 s.' }],
           ]),
         }),
         end(res, 'tool_calls')
@@ -318,6 +322,11 @@ run(async ({ page }) => {
     assert(await page.isVisible('[data-testid=ticket-note]:has-text("separator") [data-testid=ticket-chat-link]:has-text("Development")'), 'the note of the model links its conversation')
     assert((await page.$$('[data-testid=ticket-goal].done')).length === 2, 'goals checked by the model')
     assert(await page.isVisible('[data-testid=ticket-test] strong:has-text("/export")'), 'test summary shown')
+    assert(
+      (await page.$$eval('[data-testid=ticket-goal]', (l) => l.map((e) => e.querySelector('.tk-goal-title').textContent))).join('|').endsWith('The CSV has a header row'),
+      'goals edited and deleted by the model',
+    )
+    assert(await page.isVisible('[data-testid=ticket-feedback-item].k-info:has-text("10k rows")'), 'test feedback added by the model')
     assert((await page.$$('[data-testid=ticket-chat]')).length === 2, 'two linked conversations')
     await page.screenshot({ path: OUT + '/kanban-ai.png' })
 
@@ -327,11 +336,11 @@ run(async ({ page }) => {
     await page.click('[data-testid=ticket-feedback-add]')
     await page.waitForSelector('[data-testid=ticket-feedback-item]:has-text("header is missing")')
     const before4 = requests.length
-    await page.click('[data-testid=ticket-feedback-session]')
-    await page.waitForSelector('[data-testid=ticket-feedback-item].done', { timeout: 15000 })
+    await page.click('[data-testid=ticket-feedback-item]:has-text("header is missing") [data-testid=ticket-feedback-session]')
+    await page.waitForSelector('[data-testid=ticket-feedback-item].done:has-text("header is missing")', { timeout: 15000 })
     const rf = requests[before4]
     assert(rf.messages[0].content.includes('**test feedback**') && text(rf.messages[1]).includes('The header is missing'), 'correction role on the feedback')
-    await page.waitForSelector('[data-testid=ticket-feedback-item] [data-testid=ticket-chat-link]', { timeout: 5000 })
+    await page.waitForSelector('[data-testid=ticket-feedback-item]:has-text("header is missing") [data-testid=ticket-chat-link]', { timeout: 5000 })
     assert((await page.textContent('[data-testid=ticket-status]')).includes('To test'), 'the ticket stays in To test')
     assert(true, 'feedback marked done by the model, linked to its conversation')
 

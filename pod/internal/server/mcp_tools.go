@@ -434,13 +434,13 @@ var mcpTools = []mcpTool{
 	},
 	{
 		name:        "kanban_goal",
-		description: "Checks, unchecks or adds a goal of a ticket. Check each goal as soon as it is reached and verified.",
+		description: "Checks, unchecks, adds, edits or deletes a goal of a ticket. Check each goal as soon as it is reached and verified.",
 		props: map[string]any{
 			"id":          ticketID,
-			"action":      enum("What to do", "check", "uncheck", "add"),
-			"goal":        map[string]any{"type": "integer", "description": "Goal id (check / uncheck), see kanban_get"},
-			"title":       str("Title of the goal (add)"),
-			"description": str("How to check it (add, optional)"),
+			"action":      enum("What to do", "check", "uncheck", "add", "edit", "delete"),
+			"goal":        map[string]any{"type": "integer", "description": "Goal id (check, uncheck, edit, delete), see kanban_get"},
+			"title":       str("Title of the goal (add, edit)"),
+			"description": str("How to check it (add, edit; optional)"),
 		},
 		required: []string{"action"},
 		run: ticketTool(func(ctx context.Context, s *Server, sc mcpScope, id int64, a struct {
@@ -452,6 +452,13 @@ var mcpTools = []mcpTool{
 			case "add":
 				op = kanban.GoalOp{Op: "add", Text: a.Title, Description: a.Description, Source: "plan"}
 			case "check", "uncheck":
+			case "edit":
+				if err := s.Kanban.GoalEdit(sc.loc, id, a.Goal, a.Title, a.Description); err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("Goal %d edited.", a.Goal), nil
+			case "delete":
+				op = kanban.GoalOp{Op: "delete", ID: a.Goal}
 			default:
 				return "", fmt.Errorf("unknown action: %s", a.Action)
 			}
@@ -473,17 +480,26 @@ var mcpTools = []mcpTool{
 	},
 	{
 		name:        "kanban_feedback",
-		description: "Marks a test feedback of a ticket as handled (done) once fixed and verified, or as open again (reopen).",
+		description: "Test feedback of a ticket: add one (a bug, a missing feature or an info found while testing), mark one handled (done) once fixed and verified, or open again (reopen).",
 		props: map[string]any{
 			"id":       ticketID,
-			"action":   enum("What to do", "done", "reopen"),
-			"feedback": map[string]any{"type": "integer", "description": "Feedback id, see kanban_get"},
+			"action":   enum("What to do", "add", "done", "reopen"),
+			"feedback": map[string]any{"type": "integer", "description": "Feedback id (done, reopen), see kanban_get"},
+			"kind":     enum("Kind (add)", kanban.FeedbackKinds...),
+			"text":     str(fmt.Sprintf("What was noticed (add, %d characters max)", kanban.MaxNote)),
 		},
-		required: []string{"action", "feedback"},
+		required: []string{"action"},
 		run: ticketTool(func(ctx context.Context, s *Server, sc mcpScope, id int64, a struct {
-			Action   string
-			Feedback int64
+			Action, Kind, Text string
+			Feedback           int64
 		}) (string, error) {
+			if a.Action == "add" {
+				fid, err := s.Kanban.Feedback(sc.loc, id, kanban.FeedbackOp{Op: "add", Kind: a.Kind, Text: a.Text}, kanban.ByClaude)
+				if err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("Feedback %d added to ticket #%d.", fid, id), nil
+			}
 			if a.Action != "done" && a.Action != "reopen" {
 				return "", fmt.Errorf("unknown action: %s", a.Action)
 			}

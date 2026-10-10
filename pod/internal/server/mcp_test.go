@@ -142,6 +142,21 @@ func TestMCPKanban(t *testing.T) {
 	if tk["status"] != "review" || tk["goalsDone"] != float64(1) {
 		t.Fatalf("after dev: %v %v", tk["status"], tk["goalsDone"])
 	}
+	// Claude edits and deletes goals, adds test feedback and marks it handled.
+	m.ok("kanban_goal", map[string]any{"cwd": wt, "action": "add", "title": "extra"})
+	m.ok("kanban_goal", map[string]any{"cwd": wt, "action": "edit", "goal": 1, "title": "exported as CSV"})
+	m.ok("kanban_goal", map[string]any{"cwd": wt, "action": "delete", "goal": 2})
+	if text := m.ok("kanban_feedback", map[string]any{"cwd": wt, "action": "add", "kind": "bug", "text": "no header row"}); !strings.Contains(text, "Feedback 1 added") {
+		t.Fatalf("feedback add: %s", text)
+	}
+	if text, failed := m.tool("kanban_feedback", map[string]any{"cwd": wt, "action": "add", "kind": "nope", "text": "x"}); !failed || !strings.Contains(text, "unknown feedback kind") {
+		t.Fatalf("feedback of an unknown kind: %s", text)
+	}
+	md = m.ok("kanban_get", map[string]any{"cwd": wt})
+	if !strings.Contains(md, "- [x] (id 1) exported as CSV") || strings.Contains(md, "extra") || !strings.Contains(md, "(id 1, Bug, ") {
+		t.Fatalf("goals and feedback of Claude: %s", md)
+	}
+	m.ok("kanban_feedback", map[string]any{"cwd": wt, "action": "done", "feedback": 1})
 
 	// Lineage: a child waits for the step of its parent, then works in its worktree, where
 	// it becomes the default ticket.
