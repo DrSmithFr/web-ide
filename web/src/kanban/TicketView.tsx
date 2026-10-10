@@ -78,10 +78,17 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
   const buttons = () => ticketActions(tk(), { move, apply: props.apply, focusFeedback })
 
   // The sections of the status: a closed ticket keeps those of "To test" that have content.
-  const parts = () => (closed() ? layouts.review.parts.filter((p) => filled[p](tk())) : layouts[tk().status as Stage].parts)
+  const parts = () => {
+    if (!closed()) return layouts[tk().status as Stage].parts
+    const list = layouts.review.parts.filter((p) => filled[p](tk()))
+    // No rule at either end.
+    return list.filter((p, i) => p !== 'sep' || (i > 0 && i < list.length - 1))
+  }
   const folded = (p: Part) => (closed() ? p !== 'description' : !layouts[tk().status as Stage].open.includes(p))
   const part = (p: Part): JSX.Element => {
     switch (p) {
+      case 'sep':
+        return <hr class="tk-sep" />
       case 'description':
         return (
           <Section title={t('Description')} folded={folded(p)}>
@@ -261,25 +268,28 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
 }
 
 /** Sections of the main column of a ticket. */
-type Part = 'description' | 'briefing' | 'notes' | 'planChats' | 'plan' | 'goals' | 'devChats' | 'test' | 'git' | 'feedback' | 'pr'
+type Part = 'sep' | 'description' | 'briefing' | 'notes' | 'planChats' | 'plan' | 'goals' | 'devChats' | 'test' | 'git' | 'feedback' | 'pr'
 type Stage = 'new' | 'todo' | 'in_progress' | 'review'
 
 // The sections each status shows, in order, and those open (the others folded).
+// The sections each status shows, in order, and those open (the others folded). Its own
+// sections come first; a rule ('sep') sets apart the earlier ones, folded.
 const layouts: Record<Stage, { parts: Part[]; open: Part[] }> = {
   new: { parts: ['description', 'briefing', 'notes'], open: ['description', 'briefing', 'notes'] },
-  todo: { parts: ['description', 'briefing', 'notes', 'planChats', 'goals', 'plan'], open: ['description', 'planChats', 'plan', 'goals'] },
+  todo: { parts: ['description', 'notes', 'briefing', 'planChats', 'goals', 'plan'], open: ['description', 'briefing', 'planChats', 'goals', 'plan'] },
   in_progress: {
-    parts: ['description', 'briefing', 'notes', 'planChats', 'plan', 'devChats', 'goals', 'git'],
-    open: ['description', 'goals', 'devChats', 'git'],
+    parts: ['devChats', 'goals', 'git', 'sep', 'description', 'briefing', 'notes', 'planChats', 'plan'],
+    open: ['devChats', 'goals', 'git'],
   },
   review: {
-    parts: ['description', 'briefing', 'notes', 'planChats', 'plan', 'goals', 'devChats', 'test', 'feedback', 'git', 'pr'],
-    open: ['description', 'test', 'git', 'feedback', 'pr'],
+    parts: ['test', 'feedback', 'git', 'pr', 'sep', 'description', 'briefing', 'notes', 'planChats', 'plan', 'goals', 'devChats'],
+    open: ['test', 'feedback', 'git', 'pr'],
   },
 }
 
 const chats = (tk: Ticket, ...roles: string[]) => tk.chatList.some((c) => roles.includes(c.role))
 const filled: Record<Part, (tk: Ticket) => boolean> = {
+  sep: () => true,
   description: () => true,
   briefing: (tk) => chats(tk, 'briefing'),
   notes: (tk) => tk.notes.some((n) => n.kind === 'note'),

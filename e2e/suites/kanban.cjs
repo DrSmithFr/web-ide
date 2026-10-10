@@ -26,7 +26,7 @@ run(async ({ page, ctx }) => {
   assert(await page.isVisible('.pane.active .tab.active:has-text("#1")'), 'title of the tab')
   assert(fs.existsSync(WS + '/demo/.ide/kanban.db'), 'kanban.db base in .ide')
   assert(fs.readFileSync(WS + '/demo/.ide/.gitignore', 'utf8').includes('kanban.db'), 'kanban.db ignored by git')
-  const sections = () => page.$$eval('.tk-main .tk-section', (l) => l.map((e) => (e.classList.contains('folded') ? '-' : '') + e.querySelector('.tk-section-toggle').textContent.trim()))
+  const sections = () => page.$$eval('.tk-main .tk-section, .tk-main .tk-sep', (l) => l.map((e) => (e.matches('.tk-sep') ? '|' : (e.classList.contains('folded') ? '-' : '') + e.querySelector('.tk-section-toggle').textContent.trim())))
   assert((await sections()).join() === 'Description,Briefing conversations,Notes', 'New: description, briefing and notes, open: ' + (await sections()).join())
   assert((await page.textContent('.tk-side')).match(/Lineage[\s\S]*Linked files[\s\S]*Attachments[\s\S]*History/), 'side: lineage, files, attachments, history')
 
@@ -42,8 +42,8 @@ run(async ({ page, ctx }) => {
   await page.waitForSelector('[data-testid=ticket-status]:has-text("To do")')
   await page.waitForSelector('[data-testid=ticket-plan] ol li')
   assert(
-    (await sections()).join() === 'Description,-Briefing conversations,-Notes,Plan conversations,Goals,Implementation plan',
-    'To do: briefing and notes folded, plan and goals open: ' + (await sections()).join(),
+    (await sections()).join() === 'Description,-Notes,Briefing conversations,Plan conversations,Goals,Implementation plan',
+    'To do: notes folded, briefing, plan and goals open: ' + (await sections()).join(),
   )
   for (const [g, d] of [['The /export route answers', 'curl /export'], ['The CSV has a header', '']]) {
     await page.fill('[data-testid=ticket-goal-input]', g)
@@ -118,8 +118,8 @@ run(async ({ page, ctx }) => {
   await page.click('[data-testid=ticket-to-review]')
   await page.waitForSelector('[data-testid=ticket-status]:has-text("To test")')
   assert(
-    (await sections()).join() === 'Description,-Briefing conversations,-Notes,-Plan conversations,-Implementation plan,-Goals · 1/2,-Development conversations,How to test,Feedback,Git and changes',
-    'To test: development folded, test, git and feedback open, no pull request without a branch: ' + (await sections()).join(),
+    (await sections()).join() === 'How to test,Feedback,Git and changes,|,-Description,-Briefing conversations,-Notes,-Plan conversations,-Implementation plan,-Goals · 1/2,-Development conversations',
+    'To test: test, feedback and git first, then the earlier sections folded, no pull request without a branch: ' + (await sections()).join(),
   )
   await page.click('[data-testid=ticket-feedback]')
   assert(await page.evaluate(() => document.activeElement?.dataset.testid === 'ticket-feedback-input'), 'Add feedback focuses the feedback box')
@@ -135,7 +135,7 @@ run(async ({ page, ctx }) => {
   await page.click('[data-testid=ticket-close]')
   await page.waitForSelector('[data-testid=ticket-status]:has-text("Done")')
   assert(true, 'ticket closed')
-  assert((await sections()).join() === 'Description,-Notes,-Implementation plan,-Goals · 1/2,-Feedback · 0 open', 'Done: the sections with content, folded but the description: ' + (await sections()).join())
+  assert((await sections()).join() === '-Feedback · 0 open,|,Description,-Notes,-Implementation plan,-Goals · 1/2', 'Done: the sections with content, folded but the description: ' + (await sections()).join())
   await page.click('.tk-section-toggle:has-text("History")')
   const events = await page.$$eval('.tk-events li', (l) => l.length)
   assert(events >= 5, `history of the changes (${events})`)
