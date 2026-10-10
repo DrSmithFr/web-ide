@@ -242,8 +242,8 @@ run(async ({ page, ctx }) => {
     assert(/Hello/.test(symResult?.content ?? '') && /Greeter/.test(symResult?.content ?? ''), 'lsp_symbols returns the structure (gopls): ' + (symResult?.content ?? '').slice(0, 60).replace(/\n/g, ' | '))
     assert(requests[0].messages[0].role === 'system' && requests[0].tools.length >= 10 && requests[0].stream === true, 'system prompt and tools sent')
     assert(!requests[0].messages.some((m) => 'usage' in m || 'attachments' in m), 'fields of the page removed from the messages')
-    // The reasoning and the four calls form one chain: its first two rows are behind a row.
-    assert(/2 earlier actions/.test((await page.textContent('[data-testid=ai-steps-more]').catch(() => '')) ?? ''), 'the reasoning and the first call behind the "earlier" row')
+    // The reasoning and the four calls form one chain: all but the last call behind a label.
+    assert(/4 earlier actions/.test((await page.textContent('[data-testid=ai-steps-more]').catch(() => '')) ?? ''), 'the reasoning and the first calls behind the "earlier" label')
     await page.click('[data-testid=ai-steps-more]')
     assert(await page.isVisible('.ai-reasoning .ai-tool-head:has-text("Thinking")'), 'reasoning shown as a block')
     assert(!(await page.isVisible('.ai-reasoning-text')) && !(await page.isVisible('.ai-tool-detail')), 'blocks folded once done')

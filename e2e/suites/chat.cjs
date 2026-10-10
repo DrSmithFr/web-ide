@@ -238,8 +238,8 @@ run(async ({ page, ctx }) => {
     assert(full.startsWith('Part 1.') && (full.match(/x/g) ?? []).length === 25 && byScenario.slow === 1, `full answer, without a new request (${byScenario.slow} request)`)
     await page.screenshot({ path: OUT + '/chat-resume.png' })
 
-    // Reasoning and tool calls joined in one block across the answers: past 4 rows, only the
-    // last 3 are shown; a command looks as in a console, with its colors and its exit code.
+    // Reasoning and tool calls joined in one block across the answers: all the rows but the
+    // last folded behind a label; a command looks as in a console, with its colors and its exit code.
     await ask(page, 'steps please', 'Steps done.')
     const block = page.locator('.ai-thread')
     // The blocks of the last turn (the rows after the last message of the user): shown rows, and
@@ -253,18 +253,21 @@ run(async ({ page, ctx }) => {
     })
     const visible = async () => (await lastTurn()).rows
     const joined = async () => { const l = await lastTurn(); return l.boxes > 1 && l.joined }
-    assert((await visible()) === 3, 'the calls of three answers in one chain, the last three rows shown: ' + JSON.stringify(await lastTurn()))
-    assert(/4 earlier actions/.test(await block.locator('[data-testid=ai-steps-more]').textContent()), 'a row tells the earlier actions (the reasoning counts)')
-    assert(await joined(), 'the blocks of the answers touch each other')
+    assert((await visible()) === 1, 'the calls of three answers in one chain, only the last row shown: ' + JSON.stringify(await lastTurn()))
+    const label = await block.locator('[data-testid=ai-steps-more]').textContent()
+    assert(/6 earlier actions/.test(label) && /·\s*\d/.test(label), 'a label tells the earlier actions (the reasoning counts) and the time of the block: ' + label)
     assert((await block.locator('.ai-steps [data-testid=ai-exit]').allTextContents()).slice(-6).join(',') === '0,0,0,0,0,1', 'each command shows its exit code')
     await block.locator('[data-testid=ai-steps-more]').click()
-    assert((await visible()) === 7 && !(await block.locator('[data-testid=ai-steps-more]').count()), 'the earlier rows shown on a click, the reasoning among them: ' + JSON.stringify(await lastTurn()))
-    assert(await joined(), 'still joined once all shown')
+    assert((await visible()) === 7, 'the earlier rows shown on a click, the reasoning among them: ' + JSON.stringify(await lastTurn()))
+    assert(await joined(), 'the blocks of the answers touch each other')
     await block.locator('.ai-tool:has-text("printf") .ai-tool-head').click()
     const red = block.locator('.ai-tool:has-text("printf") .ai-term span[style*="color"]')
     assert((await red.textContent()) === 'red' && /\$\s*printf/.test(await block.locator('.ai-term-prompt').first().textContent()), 'the output keeps its colors, under the command')
     await block.locator('.ai-term-box').scrollIntoViewIfNeeded()
     await page.screenshot({ path: OUT + '/chat-steps.png' })
+    await block.locator('[data-testid=ai-steps-more]').click()
+    assert((await visible()) === 1, 'folded again by the label')
+    await page.screenshot({ path: OUT + '/chat-steps-folded.png' })
 
     // Reload during a tool: the agent runs in the pod, the tool goes on and so does the agent.
     await page.waitForSelector('[data-testid=send]')

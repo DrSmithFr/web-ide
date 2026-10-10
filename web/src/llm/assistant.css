@@ -89,8 +89,9 @@
 /* a block that goes on the one of the answer before: the gap of the thread taken back */
 .ai-steps.join-up { margin-top: calc(-1 * var(--ai-gap)); border-top-left-radius: 0; border-top-right-radius: 0; }
 .ai-steps.join-down { border-bottom-width: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
-.ai-steps-more { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 12px; border: 0; background: none; color: var(--fg-faint); text-align: left; cursor: pointer; font-size: 12px; }
-.ai-steps-more:hover { background: var(--bg-hover); color: var(--fg-muted); }
+.ai-steps-more { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 0 4px; margin-left: -4px; border: 0; border-radius: 6px; background: none; color: var(--fg-faint); cursor: pointer; font-size: 12.5px; line-height: 22px; }
+.ai-steps-more:hover { color: var(--fg-muted); background: var(--bg-hover); }
+.ai-steps-more + .ai-steps { margin-top: -4px; }
 .ai-exit { flex: none; font: 11px/16px var(--font-code); padding: 0 6px; border-radius: 6px; color: var(--fg-faint); background: var(--bg-hover); }
 .ai-exit.fail { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
 .ai-tool { border: 1px solid var(--line); border-radius: 10px; background: var(--ai-softer); min-width: 0; overflow: hidden; }
