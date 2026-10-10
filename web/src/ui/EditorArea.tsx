@@ -553,6 +553,9 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
     const v = view()
     const d = doc()
     if (!v || !d || !isActive() || (needFocus && !v.hasFocus())) return false
+    // Another editor has the focus (the message box of the assistant): its own actions run.
+    const other = EditorView.of(document.activeElement)
+    if (other && other !== v) return false
     f(v, d)
   }
   const offs: (() => void)[] = [

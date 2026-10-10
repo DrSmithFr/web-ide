@@ -71,8 +71,8 @@ run(async ({ page, ctx }) => {
     await page.click('.ai-servers .modal-head button')
     await page.waitForSelector('[data-testid=model-pill]:has-text("fake-model")')
 
-    await page.fill('.ai-composer textarea', 'Let me try the app')
-    await page.keyboard.press('Enter')
+    await page.fill('.ai-composer .ed-content', 'Let me try the app')
+    await page.keyboard.press('Control+Enter')
     await page.waitForSelector('.ai-msg.assistant .md:has-text("Click the card")', { timeout: 20000 })
     await page.waitForSelector('[data-testid=ai-preview]')
     assert((await page.textContent('[data-testid=ai-preview]')).includes('Demo app') && (await page.textContent('[data-testid=ai-preview-open]')).includes('Start and open the app'), 'card of share_preview shown')

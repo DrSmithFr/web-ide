@@ -125,8 +125,8 @@ run(async ({ page }) => {
     await page.waitForSelector('.ai-server-row:has-text("127.0.0.1")')
     await page.click('.ai-servers .modal-head button')
     await page.waitForSelector('[data-testid=model-pill]:has-text("slow-model")', { timeout: 5000 })
-    await page.fill('.ai-composer textarea', 'Write slowly then run the command')
-    await page.keyboard.press('Enter')
+    await page.fill('.ai-composer .ed-content', 'Write slowly then run the command')
+    await page.keyboard.press('Control+Enter')
     await page.waitForFunction(() => /word5 /.test(document.querySelector('.ai-msg.live')?.textContent ?? ''), null, { timeout: 10000 })
     execFileSync('bash', [process.env.E2E_RESTART_POD])
     const whole = await page
@@ -148,8 +148,8 @@ run(async ({ page }) => {
 
     // An update of the keeper while an answer is written waits for its end.
     await page.click('.ai-panel button[title="New conversation"]')
-    await page.fill('.ai-composer textarea', 'Write slowly again')
-    await page.keyboard.press('Enter')
+    await page.fill('.ai-composer .ed-content', 'Write slowly again')
+    await page.keyboard.press('Control+Enter')
     await page.waitForFunction(() => /word3 /.test(document.querySelector('.ai-msg.live')?.textContent ?? ''), null, { timeout: 10000 })
     const waited = await upgrade()
     assert(!waited.err && /waiting for HTTP request/.test(waited.out) && /updated in place/.test(waited.out), 'the update waits for the answer being written: ' + waited.out.trim().split('\n').join(' / '))

@@ -5,7 +5,7 @@
 const fs = require('fs')
 const http = require('http')
 const { execFileSync } = require('child_process')
-const { run, openProject, assert, WS, OUT } = require('../common.cjs')
+const { run, openProject, assert, WS, OUT, composerText } = require('../common.cjs')
 
 const demo = WS + '/demo'
 const data = WS + '/../data'
@@ -80,8 +80,8 @@ const fake = http.createServer(async (req, res) => {
 })
 
 async function ask(page, message, expect) {
-  await page.fill('.ai-composer textarea', message)
-  await page.keyboard.press('Enter')
+  await page.fill('.ai-composer .ed-content', message)
+  await page.keyboard.press('Control+Enter')
   await page.waitForSelector(`.ai-msg.assistant .md:has-text("${expect}")`, { timeout: 20000 })
   await page.waitForSelector('[data-testid=send]', { timeout: 10000 })
 }
@@ -177,21 +177,21 @@ run(async ({ page }) => {
     await page.screenshot({ path: OUT + '/agent-compaction.png' })
 
     // Commands: completion, /help, /model, a skill as a command, /compact with instructions.
-    await page.click('.ai-composer textarea')
+    await page.click('.ai-composer .ed-content')
     await page.keyboard.type('/he')
     await page.waitForSelector('[data-testid=ai-complete] .ai-complete-item.active:has-text("/help")')
     await page.keyboard.press('Enter')
-    assert((await page.inputValue('.ai-composer textarea')) === '/help ', 'command completion')
-    await page.keyboard.press('Enter')
+    assert((await composerText(page)) === '/help ', 'command completion')
+    await page.keyboard.press('Control+Enter')
     await page.waitForSelector('[data-testid=ai-help]')
     const helpText = await page.textContent('[data-testid=ai-help]')
     assert(helpText.includes('/compact') && helpText.includes('/greet'), '/help lists the commands and the skills')
-    await page.fill('.ai-composer textarea', '/model fake-small')
-    await page.keyboard.press('Enter')
+    await page.fill('.ai-composer .ed-content', '/model fake-small')
+    await page.keyboard.press('Control+Enter')
     await page.waitForSelector('[data-testid=model-pill]:has-text("fake-small")')
     assert(true, '/model changes the model')
-    await page.fill('.ai-composer textarea', '/model fake-other')
-    await page.keyboard.press('Enter')
+    await page.fill('.ai-composer .ed-content', '/model fake-other')
+    await page.keyboard.press('Control+Enter')
     await page.waitForSelector('[data-testid=model-pill]:has-text("fake-other")')
     await ask(page, '/greet Marie', 'Answer of fake-other.')
     const skillAsk = requests[requests.length - 1].messages.at(-1)
@@ -199,18 +199,18 @@ run(async ({ page }) => {
     assert(await page.isVisible('.ai-msg.user .ai-mention:has-text("/greet")'), 'the bubble shows the command')
 
     // @ mention with completion: only the path is sent.
-    await page.click('.ai-composer textarea')
+    await page.click('.ai-composer .ed-content')
     await page.keyboard.type('Look at @mai')
     await page.waitForSelector('[data-testid=ai-complete] .ai-complete-item.active:has-text("src/main.go")')
     await page.keyboard.press('Tab')
-    assert((await page.inputValue('.ai-composer textarea')) === 'Look at @src/main.go ', 'path completion')
-    await page.keyboard.press('Enter')
+    assert((await composerText(page)) === 'Look at @src/main.go ', 'path completion')
+    await page.keyboard.press('Control+Enter')
     await page.waitForSelector('.ai-msg.user .ai-mention:has-text("@src/main.go")')
     await page.waitForSelector('[data-testid=send]')
     assert(text(requests[requests.length - 1].messages.at(-1)) === 'Look at @src/main.go', 'the message keeps the path only')
 
-    await page.fill('.ai-composer textarea', '/compact keep the file names')
-    await page.keyboard.press('Enter')
+    await page.fill('.ai-composer .ed-content', '/compact keep the file names')
+    await page.keyboard.press('Control+Enter')
     for (let t = 0; t < 100 && summaries.length < 3; t++) await page.waitForTimeout(100)
     await page.waitForSelector('[data-testid=send]')
     assert(summaries.length === 3 && summaries[2].messages[0].content.includes('keep the file names'), '/compact with instructions')
@@ -239,8 +239,8 @@ run(async ({ page }) => {
     assert((await page.isVisible('[data-testid=ai-sidebar]')) && !(await page.isVisible('.ai-side-wrap.overlay')) && !(await page.isVisible('.ai-panel button[title="Conversations of the project"]')), 'wide detached window: history always shown')
     assert(await page.isVisible('.ai-chat-item.active:has-text("Hello")'), 'the active conversation is selected in the history')
     await page.screenshot({ path: OUT + '/agent-detached.png' })
-    await page.fill('.ai-composer textarea', '/clear')
-    await page.keyboard.press('Enter')
+    await page.fill('.ai-composer .ed-content', '/clear')
+    await page.keyboard.press('Control+Enter')
     await page.waitForSelector('.ai-empty')
     assert(true, '/clear opens a new conversation')
   } finally {

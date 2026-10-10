@@ -92,7 +92,7 @@ function Welcome(props: { onSuggest: (t: string) => void; onSettings: () => void
         </div>
       </Show>
       <p class="ai-hint">
-        {t('Drop or paste images, videos, PDF')} · <kbd>Ctrl</kbd>+<kbd>{t('Space')}</kbd> {t('to dictate')} · <kbd>{t('Shift')}</kbd>+<kbd>{t('Enter')}</kbd> {t('for a new line')}
+        {t('Drop or paste images, videos, PDF')} · <kbd>Ctrl</kbd>+<kbd>{t('Space')}</kbd> {t('to dictate')} · <kbd>Ctrl</kbd>+<kbd>S</kbd> {t('to send')}
       </p>
     </div>
   )

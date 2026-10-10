@@ -152,7 +152,13 @@
 .ai-composer:focus-within { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
 .ai-composer.editing { border-color: var(--warn); }
 .ai-editing { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--warn); }
-.ai-composer textarea { border: 0 !important; background: transparent !important; padding: 4px 0 !important; resize: none; min-height: 24px; max-height: 40vh; font-size: 14px; line-height: 1.5; outline: none; }
+.ai-editor { display: flex; min-height: 24px; max-height: 40vh; }
+.ai-editor .ed-scroll { max-height: 40vh; }
+.ai-editor .ed-gutter { display: none; }
+.ai-editor .ed-inner, .ai-editor .ed-content { min-height: 0; }
+.ai-editor .ed-content { padding: 4px 0; }
+.ai-editor .ed.wrap .ed-ws { padding-right: 0; }
+::highlight(ai-ref) { color: var(--accent); }
 .ai-composer-bar { display: flex; align-items: center; gap: 2px; min-width: 0; }
 .ai-icon { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 0; border-radius: 9px; background: none; color: var(--fg-muted); cursor: pointer; flex: none; }
 .ai-icon:hover:not(:disabled), .ai-icon.on { background: var(--bg-hover); color: var(--fg); }

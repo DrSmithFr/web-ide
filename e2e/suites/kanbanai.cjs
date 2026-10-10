@@ -243,8 +243,8 @@ run(async ({ page }) => {
     await page.click('.ai-servers .modal-head button')
     await page.waitForSelector('[data-testid=model-pill]:has-text("fake-model")')
 
-    await page.fill('.ai-composer textarea', 'Write down a ticket for the export')
-    await page.keyboard.press('Enter')
+    await page.fill('.ai-composer .ed-content', 'Write down a ticket for the export')
+    await page.keyboard.press('Control+Enter')
     await page.waitForSelector('[data-testid=ai-ask-question]', { timeout: 10000 })
     const names = toolNames(requests[0])
     assert(['kanban_list', 'kanban_get', 'kanban_create', 'ask_user'].every((n) => names.includes(n)), 'reading kanban tools and ask_user offered')
@@ -361,8 +361,8 @@ run(async ({ page }) => {
     // The question types: one of each (choice, idea, compare, rank, scenario), a legacy one,
     // a note, "I don't know", and an invalid call (compare with three options) refused.
     await page.click('.ai-panel button[title="New conversation"]')
-    await page.fill('.ai-composer textarea', 'Types: which widgets')
-    await page.keyboard.press('Enter')
+    await page.fill('.ai-composer .ed-content', 'Types: which widgets')
+    await page.keyboard.press('Control+Enter')
     await page.waitForSelector('[data-testid=ai-ask-question]:has-text("Which color?")', { timeout: 10000 })
     // Q1 choice: a note, then the pick (a single choice moves on by itself).
     await page.click('[data-testid=ai-ask-note]')
@@ -413,14 +413,14 @@ run(async ({ page }) => {
 
     // Briefing mode: questions, then tickets created and linked to the conversation.
     await page.click('.ai-panel button[title="New conversation"]')
-    await page.click('.ai-composer textarea')
+    await page.click('.ai-composer .ed-content')
     await page.keyboard.press('Shift+Tab')
     await page.keyboard.press('Shift+Tab')
     await page.waitForSelector('[data-testid=ai-mode].briefing:has-text("Briefing")')
     assert(true, 'Shift+Tab twice: Briefing mode')
     const before3 = requests.length
-    await page.fill('.ai-composer textarea', 'Brief: an export for accounting')
-    await page.keyboard.press('Enter')
+    await page.fill('.ai-composer .ed-content', 'Brief: an export for accounting')
+    await page.keyboard.press('Control+Enter')
     await page.waitForSelector('[data-testid=ai-ask-question]:has-text("Who uses the export")', { timeout: 10000 })
     const rb = requests[before3]
     const bn = toolNames(rb)
@@ -471,8 +471,8 @@ run(async ({ page }) => {
 
     // Mobile: the idea is answered by swiping the card (right = Yes), and the compare stacks.
     await page.click('.ai-panel button[title="New conversation"]')
-    await page.fill('.ai-composer textarea', 'TypesM: swipe')
-    await page.keyboard.press('Enter')
+    await page.fill('.ai-composer .ed-content', 'TypesM: swipe')
+    await page.keyboard.press('Control+Enter')
     await page.waitForSelector('[data-testid=ai-ask-idea]', { timeout: 10000 })
     await page.$eval('[data-testid=ai-ask-idea]', (el) => {
       const target = el.querySelector('.ai-ask-idea-proposal')
@@ -509,8 +509,8 @@ run(async ({ page }) => {
     // A graph of questions: the branch of the answer only, a breadcrumb, Previous + another
     // answer changing the path, invalid graphs refused.
     await page.click('.ai-panel button[title="New conversation"]')
-    await page.fill('.ai-composer textarea', 'Graph: a game')
-    await page.keyboard.press('Enter')
+    await page.fill('.ai-composer .ed-content', 'Graph: a game')
+    await page.keyboard.press('Control+Enter')
     await page.waitForSelector('[data-testid=ai-ask-question]:has-text("Mode?")', { timeout: 10000 })
     await page.click('.ai-ask-option:has-text("Solo")')
     await page.waitForSelector('[data-testid=ai-ask-question]:has-text("Difficulty?")')
@@ -540,8 +540,8 @@ run(async ({ page }) => {
 
     // Leaving the path: a free answer on a question with branches sends the round at once.
     await page.click('.ai-panel button[title="New conversation"]')
-    await page.fill('.ai-composer textarea', 'GraphOff: a game')
-    await page.keyboard.press('Enter')
+    await page.fill('.ai-composer .ed-content', 'GraphOff: a game')
+    await page.keyboard.press('Control+Enter')
     await page.waitForSelector('[data-testid=ai-ask-question]:has-text("Mode?")', { timeout: 10000 })
     await page.click('.ai-ask-option:has-text("Solo")')
     await page.waitForSelector('[data-testid=ai-ask-question]:has-text("Difficulty?")')

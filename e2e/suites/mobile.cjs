@@ -56,7 +56,7 @@ run(
     await page.screenshot({ path: OUT + '/mobile-assistant.png' })
 
     // No field takes the focus by itself (the keyboard would open): the user touches it.
-    const typing = () => page.evaluate(() => !!document.activeElement?.matches('input, textarea'))
+    const typing = () => page.evaluate(() => !!document.activeElement?.matches('input, textarea, .ai-editor .ed-content'))
     await page.tap('[data-testid=mobile-rail] [data-id=search]')
     await page.waitForSelector('.phone-body > .zone[data-tool=search]')
     await page.waitForTimeout(300)
@@ -64,10 +64,10 @@ run(
     await page.tap('.zone[data-tool=search] input')
     assert(await typing(), 'a touch on the search field focuses it')
     await page.tap('[data-testid=mobile-rail] [data-id=assistant]')
-    await page.waitForSelector('.phone-body > .zone[data-tool=assistant] .ai-composer textarea')
+    await page.waitForSelector('.phone-body > .zone[data-tool=assistant] .ai-composer .ed-content')
     await page.waitForTimeout(300)
     assert(!(await typing()), 'the assistant opens without focusing its message box')
-    await page.tap('.ai-composer textarea')
+    await page.tap('.ai-composer .ed-content')
     assert(await typing(), 'a touch on the message box focuses it')
 
     // The icon of a view gives it the focus; the editor without the keyboard.

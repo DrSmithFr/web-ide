@@ -51,6 +51,9 @@ exports.openProject = async (page) => {
 }
 
 /** Opens a file with "go to file". */
+/** Text of the message box of the assistant (an editor: its last block ends with a newline). */
+exports.composerText = (page, scope = '') => page.$eval((scope + ' .ai-composer .ed-content').trim(), (e) => e.textContent.replace(/\n$/, ''))
+
 exports.open = async (page, name) => {
   await page.keyboard.press('Control+Shift+n')
   await page.waitForSelector('.pick-input')

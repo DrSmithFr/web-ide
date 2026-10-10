@@ -11,6 +11,7 @@ import { Highlighter, type Token } from './tokenizer'
 import { grammar } from './languages'
 import { subwordLeft, subwordRight } from './subword'
 import { Folder, type Fold } from './folding'
+import { listBreak } from './lists'
 import { normalize, nextOccurrence, occurrences, selFrom, selTo, wordAt, wordLeft, wordRight } from './carets'
 import type { Change, Doc, Selection } from './doc'
 import type { LineMark } from './linediff'
@@ -31,6 +32,10 @@ export interface ViewOptions {
   showWhitespace?: boolean
   /** Long lines wrap at the width of the view (soft wrap). */
   wrap?: boolean
+  /** Shown while the document is empty. */
+  placeholder?: string
+  /** Stays editable when the editors of a phone are locked (message box). */
+  free?: boolean
   readOnly?: boolean
   onSelection?: (sel: Selection) => void
   onCtrlClick?: (offset: number) => void
@@ -93,6 +98,8 @@ export class EditorView {
   private gutterMarks: HTMLDivElement
   private gutterFolds: HTMLDivElement
   private placeholders: HTMLDivElement
+  /** Text shown while the document is empty (option placeholder). */
+  private hint: HTMLDivElement
   private folder!: Folder
   /** Folded ranges, by header line. */
   private folds: Fold[] = []
@@ -165,6 +172,9 @@ export class EditorView {
     this.gutter.append(this.gutterNums, this.gutterMarks, this.gutterFolds)
     this.placeholders = document.createElement('div')
     this.placeholders.className = 'ed-placeholders'
+    this.hint = document.createElement('div')
+    this.hint.className = 'ed-hint'
+    this.hint.setAttribute('aria-hidden', 'true')
     const main = document.createElement('div')
     main.className = 'ed-main'
     this.curLine = document.createElement('div')
@@ -189,12 +199,13 @@ export class EditorView {
     EditorView.all.add(this)
     this.tooltip = document.createElement('div')
     this.tooltip.className = 'ed-tooltip'
-    main.append(this.curLine, this.guides, this.boxes, this.content, this.ws, this.caretLayer, this.placeholders)
+    main.append(this.curLine, this.guides, this.boxes, this.hint, this.content, this.ws, this.caretLayer, this.placeholders)
     inner.append(this.gutter, main)
     this.scroller.append(inner)
     this.root.append(this.scroller, this.tooltip)
     this.root.style.setProperty('--tab-size', String(opts.tabSize))
     this.root.classList.toggle('wrap', !!opts.wrap)
+    this.updateHint()
     this.buildAll()
 
     this.hl = new Highlighter(grammar(doc.lang), (i) => doc.lineText(i), () => doc.lineCount)
@@ -371,6 +382,7 @@ export class EditorView {
     const lh = parseFloat(cs.lineHeight)
     if (lh > 0) this.lineHeight = lh
     this.padTop = parseFloat(cs.paddingTop) || 0
+    this.hint.style.top = `${this.padTop}px`
     const probe = document.createElement('span')
     probe.textContent = 'x'.repeat(100)
     probe.style.cssText = `position:absolute;visibility:hidden;white-space:pre;font:${cs.font}`
@@ -385,6 +397,7 @@ export class EditorView {
     Object.assign(this.opts, o)
     if (o.tabSize) this.root.style.setProperty('--tab-size', String(o.tabSize))
     if (o.readOnly !== undefined) this.setReadOnly(o.readOnly || this.doc.readOnly)
+    if (o.placeholder !== undefined) this.updateHint()
     if (o.wrap !== undefined && o.wrap !== this.root.classList.contains('wrap')) {
       this.root.classList.toggle('wrap', o.wrap)
       this.rows.clear()
@@ -394,6 +407,11 @@ export class EditorView {
     this.schedule()
   }
 
+  private updateHint() {
+    this.hint.textContent = this.opts.placeholder ?? ''
+    this.hint.style.display = this.opts.placeholder && !this.doc.text ? 'block' : 'none'
+  }
+
   setReadOnly(ro: boolean) {
     this.ro = ro
     this.applyEditable()
@@ -401,7 +419,7 @@ export class EditorView {
   }
 
   private applyEditable() {
-    const ro = this.ro || EditorView.lockedAll
+    const ro = this.ro || (EditorView.lockedAll && !this.opts.free)
     this.content.contentEditable = ro ? 'false' : 'plaintext-only'
     if (ro) this.content.tabIndex = 0
   }
@@ -529,6 +547,7 @@ export class EditorView {
     const focused = this.hasFocus()
     this.applyToBlocks(c, !!(o && o.view === this && o.domDone))
     this.rows.clear()
+    this.updateHint()
     // Keep this view's selection and highlighted spans in place when another view or the pod edits.
     const delta = c.text.length - (c.to - c.from)
     const map = (p: number) => (p <= c.from ? p : p >= c.to ? p + delta : c.from + c.text.length)
@@ -711,9 +730,18 @@ export class EditorView {
     this.edit(e.from, e.to, e.text, e.from + e.caret)
   }
 
-  /** Line break with the indentation of the line, one more level after an opening bracket. */
+  /**
+   * Line break with the indentation of the line, one more level after an opening bracket;
+   * in Markdown, the next item of a list (or the end of the list on an empty item).
+   */
   private newlineEdit(from: number, to: number) {
     const line = this.doc.lineAt(from)
+    if (this.doc.lang === 'markdown' && from === to) {
+      const start = this.doc.lineStart(line)
+      const b = listBreak(this.doc.lineText(line), from - start)
+      if (b && 'end' in b) return { from: start, to: start + b.end, text: '', caret: 0 }
+      if (b) return { from, to, text: b.insert, caret: b.insert.length }
+    }
     const lineText = this.doc.text.slice(this.doc.lineStart(line), from)
     let indent = /^[ \t]*/.exec(lineText)![0]
     const prev = lineText.trimEnd()

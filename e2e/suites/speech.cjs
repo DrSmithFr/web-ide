@@ -2,7 +2,7 @@
 // e2e/audio/jfk.wav. Checks that the page only talks to the pod (the audio stays local) and
 // that the model is cached by the pod.
 const path = require('path')
-const { run, openProject, assert, OUT } = require('../common.cjs')
+const { run, openProject, assert, OUT, composerText } = require('../common.cjs')
 
 const wav = path.join(__dirname, '../audio/jfk.wav')
 const args = ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-audio-capture=${wav}`]
@@ -38,15 +38,15 @@ run(
     await page.waitForSelector('[data-testid=ai-speech]:not(.rec)', { timeout: 5000 }).catch(() => {})
     await page.screenshot({ path: OUT + '/speech-loading.png' })
     const ok = await page
-      .waitForFunction(() => /ask not what.*can do for your country/i.test(document.querySelector('.ai-composer textarea').value), null, { timeout: 180000, polling: 500 })
+      .waitForFunction(() => /ask not what.*can do for your country/i.test(document.querySelector('.ai-composer .ed-content').textContent), null, { timeout: 180000, polling: 500 })
       .then(() => true, () => false)
-    const text = await page.inputValue('.ai-composer textarea')
+    const text = await composerText(page)
     assert(ok, 'dictation transcribed into the message box: ' + text)
     await page.waitForSelector('[data-testid=ai-speech]', { state: 'detached', timeout: 5000 }).catch(() => {})
     assert(!(await page.isVisible('[data-testid=ai-speech]')), 'indicator removed after the transcription')
 
     // Audio file joined: transcribed in the page (the model is already loaded).
-    await page.fill('.ai-composer textarea', '')
+    await page.fill('.ai-composer .ed-content', '')
     await page.setInputFiles('.ai-composer input[type=file]', wav)
     await page.waitForSelector('.ai-composer .ai-att[title*="transcribed locally"]', { timeout: 60000 })
     assert(true, 'attached audio file transcribed locally')

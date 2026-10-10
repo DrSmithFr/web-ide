@@ -83,14 +83,14 @@ run(async ({ page }) => {
     await page.waitForSelector('[data-testid=model-pill]:has-text("fake-model")')
 
     // Shift+Tab: Plan mode.
-    await page.click('.ai-composer textarea')
+    await page.click('.ai-composer .ed-content')
     await page.keyboard.press('Shift+Tab')
     await page.waitForSelector('[data-testid=ai-mode].plan:has-text("fake-plan")')
     assert(true, 'Shift+Tab switches to Plan mode (dedicated model shown)')
     assert(await page.$eval('.ai-composer-bar', (b) => b.firstElementChild.dataset.testid === 'ai-mode'), 'the mode button starts the composer bar')
 
-    await page.fill('.ai-composer textarea', 'Plan the renaming')
-    await page.keyboard.press('Enter')
+    await page.fill('.ai-composer .ed-content', 'Plan the renaming')
+    await page.keyboard.press('Control+Enter')
     // The command that changes something waits for the user.
     await page.waitForSelector('[data-testid=ai-approval]:has-text("rm -rf src")', { timeout: 10000 })
     const r0 = requests[0]

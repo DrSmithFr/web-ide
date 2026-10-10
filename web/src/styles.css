@@ -273,6 +273,7 @@ button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 /* Own width: a longer line elsewhere must not re-layout every block. */
 .ed-block { display: block; width: max-content; }
 .ed.wrap .ed-scroll { overflow-x: hidden; }
+.ed-hint { position: absolute; left: 0; right: 0; top: 0; z-index: 0; pointer-events: none; color: var(--fg-muted); font-family: var(--font-code); font-size: var(--font-size-code); line-height: var(--line-height-code); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ed.wrap .ed-inner { min-width: 0; }
 .ed.wrap .ed-main { min-width: 0; }
 .ed.wrap .ed-block { width: auto; }
