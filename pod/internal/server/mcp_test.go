@@ -137,11 +137,10 @@ func TestMCPKanban(t *testing.T) {
 	gitIn(t, wt, "add", "-A")
 	gitIn(t, wt, "commit", "-q", "-m", "#1 export")
 	m.ok("kanban_goal", map[string]any{"cwd": wt, "action": "check", "goal": 1})
-	m.ok("kanban_link_commit", map[string]any{"cwd": wt, "hash": gitIn(t, wt, "rev-parse", "--short", "HEAD")})
 	m.ok("kanban_move", map[string]any{"cwd": wt, "status": "review", "test_summary": "open the export"})
 	tk = a.call("kanban.get", map[string]any{"id": 1})["result"].(map[string]any)
-	if tk["status"] != "review" || len(tk["commits"].([]any)) != 1 || tk["goalsDone"] != float64(1) {
-		t.Fatalf("after dev: %v %v %v", tk["status"], tk["commits"], tk["goalsDone"])
+	if tk["status"] != "review" || tk["goalsDone"] != float64(1) {
+		t.Fatalf("after dev: %v %v", tk["status"], tk["goalsDone"])
 	}
 
 	// Lineage: a child waits for the step of its parent, then works in its worktree, where

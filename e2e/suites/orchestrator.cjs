@@ -6,7 +6,7 @@
 // started from a card is followed by the orchestrator; another conversation is adopted with
 // agent_adopt: it announces itself with a note, says who follows it and is nested.
 const http = require('http')
-const { run, openProject, assert, OUT } = require('../common.cjs')
+const { run, openProject, assert, mcp, OUT } = require('../common.cjs')
 
 const sse = (res, delta) => res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`)
 function end(res, reason = 'stop') {
@@ -77,15 +77,13 @@ run(
       await openProject(page)
       // Two planned tickets.
       await page.click('.rail-left .rail-btn[title="Kanban"]')
-      for (const title of ['Login page', 'Dark theme']) {
+      for (const [i, title] of ['Login page', 'Dark theme'].entries()) {
         await page.click('[data-testid=kanban-open-board]')
         await page.click('[data-testid=kanban-new]')
         await page.fill('[data-testid=kanban-title]', title)
         await page.click('[data-testid=kanban-create]')
         await page.waitForSelector(`[data-testid=ticket-view]:has-text("${title}")`)
-        await page.click('[data-testid=ticket-plan-edit]')
-        await page.fill('.tk-md-input', 'The plan')
-        await page.click('[data-testid=ticket-plan-save]')
+        await mcp('kanban_set_plan', { id: i + 1, plan: 'The plan', goals: [], size: 's' })
         await page.waitForSelector('[data-testid=ticket-status]:has-text("To do")')
       }
 

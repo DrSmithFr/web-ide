@@ -1,7 +1,8 @@
-// Detail of a ticket (tab of the editor), by stage of the workflow: New (description,
-// notes), To do (plan, goals), In progress (git, how to test), To test (feedback); linked
-// files, attachments and commits aside, and the buttons that move it on (docs/kanban.md).
-import { createResource, createSignal, For, type JSX, Show } from 'solid-js'
+// Detail of a ticket (tab of the editor): the sections of its status, those of the earlier
+// statuses folded (description, briefing and notes; plan and goals; development and git;
+// how to test, feedback and pull request); lineage, linked files, attachments and history
+// aside, and the buttons that move it on (docs/kanban.md).
+import { createEffect, createMemo, createResource, createSignal, For, type JSX, on, Show } from 'solid-js'
 import { Icon } from '../ui/icons'
 import { contextMenu, fuzzy, pick } from '../ui/overlay'
 import { errorToast } from '../ui/toast'
@@ -9,15 +10,15 @@ import { Markdown } from '../llm/parts'
 import { request } from '../pod/rpc'
 import { basename, closeTab, leaves, openFile, relPath, root, type TabState } from '../state/project'
 import {
-  addAttachment, addNote, eventText, attachmentBlob, deleteAttachment, deleteNote, deleteTicket, ensureBoard, feedbackLabels, feedbackOp, getTicket, goalOp, linkCommit,
-  moveTicket, priorityLabels, sizeNames, statusLabels, statusOrder, ticketVersion, unlinkCommit, updateTicket,
+  addAttachment, addNote, eventText, attachmentBlob, deleteAttachment, deleteNote, deleteTicket, ensureBoard, feedbackLabels, feedbackOp, getTicket, goalOp,
+  moveTicket, priorityLabels, sizeNames, statusLabels, ticketVersion, updateTicket,
   MAX_DESCRIPTION, MAX_NOTE, type FeedbackKind, type Goal, type Priority, type Size, type Status, type Ticket,
 } from './state'
 import { abandonTicket, ChatLink, PullRequest, ticketActions, TicketChats, TicketGit } from './actions'
 import { startWorkSession } from './sessions'
 import { LineageSection } from './Lineage'
 import { claudeItems } from './claude'
-import { fmtAgo, fmtDate, fmtSize, t } from '../i18n'
+import { fmtDate, fmtSize, t } from '../i18n'
 import './kanban.css'
 
 export function TicketView(props: { tab: TabState; paneId: string }) {
@@ -76,6 +77,63 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
 
   const buttons = () => ticketActions(tk(), { move, apply: props.apply, focusFeedback })
 
+  // The sections of the status: a closed ticket keeps those of "To test" that have content.
+  const parts = () => (closed() ? layouts.review.parts.filter((p) => filled[p](tk())) : layouts[tk().status as Stage].parts)
+  const folded = (p: Part) => (closed() ? p !== 'description' : !layouts[tk().status as Stage].open.includes(p))
+  const part = (p: Part): JSX.Element => {
+    switch (p) {
+      case 'description':
+        return (
+          <Section title={t('Description')} folded={folded(p)}>
+            <EditableMarkdown
+              value={tk().description}
+              max={MAX_DESCRIPTION}
+              empty={t('No description.')}
+              onSave={(v) => props.apply(updateTicket(tk().id, { description: v }))}
+              testid="ticket-description"
+            />
+          </Section>
+        )
+      case 'briefing':
+        return <TicketChats tk={tk()} roles={['briefing']} title={t('Briefing conversations')} folded={folded(p)} />
+      case 'notes':
+        return <Notes tk={tk()} apply={props.apply} folded={folded(p)} />
+      case 'planChats':
+        return <TicketChats tk={tk()} roles={['plan']} title={t('Plan conversations')} folded={folded(p)} />
+      case 'plan':
+        return (
+          <Section title={t('Implementation plan')} folded={folded(p)}>
+            <EditableMarkdown value={tk().plan} empty={t('No plan yet.')} onSave={(v) => props.apply(updateTicket(tk().id, { plan: v }))} testid="ticket-plan" />
+          </Section>
+        )
+      case 'goals':
+        return (
+          <Section title={`${t('Goals')} ${tk().goals ? `· ${tk().goalsDone}/${tk().goals}` : ''}`} folded={folded(p)}>
+            <Goals tk={tk()} apply={props.apply} />
+          </Section>
+        )
+      case 'devChats':
+        return <TicketChats tk={tk()} roles={['dev', 'resolve']} title={t('Development conversations')} folded={folded(p)} />
+      case 'test':
+        return (
+          <Section title={t('How to test')} folded={folded(p)}>
+            <EditableMarkdown
+              value={tk().testSummary}
+              empty={t('Filled in by the model when it finishes the development.')}
+              onSave={(v) => props.apply(updateTicket(tk().id, { testSummary: v }))}
+              testid="ticket-test"
+            />
+          </Section>
+        )
+      case 'git':
+        return <TicketGit tk={tk()} apply={props.apply} folded={folded(p)} />
+      case 'feedback':
+        return <FeedbackList tk={tk()} apply={props.apply} areaRef={(el) => (feedbackArea = el)} folded={folded(p)} />
+      case 'pr':
+        return <PullRequest tk={tk()} apply={props.apply} folded={folded(p)} />
+    }
+  }
+
   return (
     <div class="tk" data-testid="ticket-view" data-status={tk().status}>
       <header class="tk-head">
@@ -125,62 +183,7 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
 
       <div class="tk-body">
         <div class="tk-main">
-          <Stage tk={tk()} status="new">
-            <Section title={t('Description')}>
-              <EditableMarkdown
-                value={tk().description}
-                max={MAX_DESCRIPTION}
-                empty={t('No description.')}
-                onSave={(v) => props.apply(updateTicket(tk().id, { description: v }))}
-                testid="ticket-description"
-              />
-            </Section>
-            <Notes tk={tk()} apply={props.apply} />
-            <TicketChats tk={tk()} roles={['briefing']} title={t('Briefing conversations')} />
-          </Stage>
-
-          <Stage tk={tk()} status="todo">
-            <Section title={t('Implementation plan')}>
-              <EditableMarkdown value={tk().plan} empty={t('No plan yet.')} onSave={(v) => props.apply(updateTicket(tk().id, { plan: v }))} testid="ticket-plan" />
-            </Section>
-            <Section title={`${t('Goals')} ${tk().goals ? `· ${tk().goalsDone}/${tk().goals}` : ''}`}>
-              <Goals tk={tk()} apply={props.apply} />
-            </Section>
-            <TicketChats tk={tk()} roles={['plan']} title={t('Plan conversations')} />
-          </Stage>
-
-          <Stage tk={tk()} status="in_progress">
-            <TicketChats tk={tk()} roles={['dev', 'resolve']} title={t('Development conversations')} />
-            <TicketGit tk={tk()} apply={props.apply} />
-            <Section title={t('How to test')}>
-              <EditableMarkdown
-                value={tk().testSummary}
-                empty={t('Filled in by the model when it finishes the development.')}
-                onSave={(v) => props.apply(updateTicket(tk().id, { testSummary: v }))}
-                testid="ticket-test"
-              />
-            </Section>
-          </Stage>
-
-          <Stage tk={tk()} status="review">
-            <FeedbackList tk={tk()} apply={props.apply} areaRef={(el) => (feedbackArea = el)} />
-            <PullRequest tk={tk()} apply={props.apply} />
-          </Stage>
-
-          <Section title={t('History ({n})', { n: events().length })} folded>
-            <ul class="tk-events">
-              <For each={events()}>
-                {(n) => (
-                  <li>
-                    <span class="muted small">{fmtDate(n.created)}</span> · {eventText(n.text)}
-                    <Show when={n.author !== 'user'}>
-                      <span class="badge">{n.author === 'claude' ? 'Claude' : t('assistant')}</span>
-                    </Show>
-                  </li>
-                )}
-              </For>
-            </ul>
-          </Section>
+          <For each={parts()}>{(p) => part(p)}</For>
         </div>
 
         <aside class="tk-side">
@@ -237,24 +240,19 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
             </label>
           </Section>
 
-          <Section title={t('Linked commits')}>
-            <For each={tk().commits} fallback={<p class="muted small">{t('No commit.')}</p>}>
-              {(c) => (
-                <div class="tk-row">
-                  <span class="mono small">{c.hash.slice(0, 8)}</span>
-                  <span class="ellipsis small" title={c.subject}>
-                    {c.subject}
-                  </span>
-                  <span class="grow" />
-                  <button class="icon-btn small" title={t('Remove')} onClick={() => props.apply(unlinkCommit(tk().id, c.hash))}>
-                    <Icon name="close" size={11} />
-                  </button>
-                </div>
-              )}
-            </For>
-            <button class="btn small" onClick={() => void addCommit(tk(), props.apply)}>
-              <Icon name="plus" size={12} /> {t('Link a commit')}
-            </button>
+          <Section title={t('History ({n})', { n: events().length })} folded>
+            <ul class="tk-events">
+              <For each={events()}>
+                {(n) => (
+                  <li>
+                    <span class="muted small">{fmtDate(n.created)}</span> · {eventText(n.text)}
+                    <Show when={n.author !== 'user'}>
+                      <span class="badge">{n.author === 'claude' ? 'Claude' : t('assistant')}</span>
+                    </Show>
+                  </li>
+                )}
+              </For>
+            </ul>
           </Section>
         </aside>
       </div>
@@ -262,22 +260,37 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
   )
 }
 
-/** A stage of the workflow: its sections, under the name of the status (the current one marked). */
-function Stage(props: { tk: Ticket; status: Status; children: JSX.Element }) {
-  const rank = (s: Status) => statusOrder.indexOf(s)
-  return (
-    <div
-      class={`tk-stage st-${props.status}`}
-      classList={{ current: props.tk.status === props.status, past: rank(props.tk.status) > rank(props.status) && props.tk.status !== 'abandoned' }}
-      data-stage={props.status}
-    >
-      <h2 class="tk-stage-head">
-        <span class={`kb-dot st-${props.status}`} />
-        {statusLabels[props.status]}
-      </h2>
-      {props.children}
-    </div>
-  )
+/** Sections of the main column of a ticket. */
+type Part = 'description' | 'briefing' | 'notes' | 'planChats' | 'plan' | 'goals' | 'devChats' | 'test' | 'git' | 'feedback' | 'pr'
+type Stage = 'new' | 'todo' | 'in_progress' | 'review'
+
+// The sections each status shows, in order, and those open (the others folded).
+const layouts: Record<Stage, { parts: Part[]; open: Part[] }> = {
+  new: { parts: ['description', 'briefing', 'notes'], open: ['description', 'briefing', 'notes'] },
+  todo: { parts: ['description', 'briefing', 'notes', 'planChats', 'plan', 'goals'], open: ['description', 'planChats', 'plan', 'goals'] },
+  in_progress: {
+    parts: ['description', 'briefing', 'notes', 'planChats', 'plan', 'goals', 'devChats', 'git'],
+    open: ['description', 'goals', 'devChats', 'git'],
+  },
+  review: {
+    parts: ['description', 'briefing', 'notes', 'planChats', 'plan', 'goals', 'devChats', 'test', 'git', 'feedback', 'pr'],
+    open: ['description', 'test', 'git', 'feedback', 'pr'],
+  },
+}
+
+const chats = (tk: Ticket, ...roles: string[]) => tk.chatList.some((c) => roles.includes(c.role))
+const filled: Record<Part, (tk: Ticket) => boolean> = {
+  description: () => true,
+  briefing: (tk) => chats(tk, 'briefing'),
+  notes: (tk) => tk.notes.some((n) => n.kind === 'note'),
+  planChats: (tk) => chats(tk, 'plan'),
+  plan: (tk) => !!tk.plan.trim(),
+  goals: (tk) => tk.goalList.length > 0,
+  devChats: (tk) => chats(tk, 'dev', 'resolve'),
+  test: (tk) => !!tk.testSummary.trim(),
+  git: (tk) => !!(tk.branch || tk.snapshot),
+  feedback: (tk) => tk.feedbackList.length > 0 || chats(tk, 'correction'),
+  pr: (tk) => !!tk.pr,
 }
 
 /** Characters used out of the maximum of a text. */
@@ -292,7 +305,7 @@ function Count(props: { text: string; max: number }) {
 
 const tooLong = (text: string, max: number) => [...text.trim()].length > max
 
-function Notes(props: { tk: Ticket; apply: Apply }) {
+function Notes(props: { tk: Ticket; apply: Apply; folded?: boolean }) {
   const [text, setText] = createSignal('')
   const notes = () => props.tk.notes.filter((n) => n.kind === 'note')
   const add = async () => {
@@ -300,7 +313,7 @@ function Notes(props: { tk: Ticket; apply: Apply }) {
     setText('')
   }
   return (
-    <Section title={t('Notes')}>
+    <Section title={t('Notes')} folded={props.folded}>
       <For each={notes()} fallback={<p class="muted small">{t('No note.')}</p>}>
         {(n) => (
           <div class="tk-note" data-testid="ticket-note">
@@ -332,7 +345,7 @@ function Notes(props: { tk: Ticket; apply: Apply }) {
 }
 
 /** Test feedback: added while the ticket is under test, each one handled by a conversation. */
-function FeedbackList(props: { tk: Ticket; apply: Apply; areaRef: (el: HTMLTextAreaElement) => void }) {
+function FeedbackList(props: { tk: Ticket; apply: Apply; areaRef: (el: HTMLTextAreaElement) => void; folded?: boolean }) {
   const [text, setText] = createSignal('')
   const [kind, setKind] = createSignal<FeedbackKind>('bug')
   const list = () => props.tk.feedbackList
@@ -345,7 +358,7 @@ function FeedbackList(props: { tk: Ticket; apply: Apply; areaRef: (el: HTMLTextA
   const tied = () => new Set(list().map((f) => f.chatId).filter(Boolean))
   return (
     <>
-      <Section title={`${t('Feedback')} ${list().length ? `· ${t('{n} open', { n: open() })}` : ''}`}>
+      <Section title={`${t('Feedback')} ${list().length ? `· ${t('{n} open', { n: open() })}` : ''}`} folded={props.folded}>
         <For each={list()} fallback={<p class="muted small">{t('No feedback.')}</p>}>
           {(f) => (
             <div class={`tk-feedback k-${f.kind}`} classList={{ done: f.done }} data-testid="ticket-feedback-item">
@@ -398,7 +411,7 @@ function FeedbackList(props: { tk: Ticket; apply: Apply; areaRef: (el: HTMLTextA
           </div>
         </Show>
       </Section>
-      <TicketChats tk={props.tk} roles={['correction']} title={t('Other correction conversations')} hideEmpty exclude={tied()} />
+      <TicketChats tk={props.tk} roles={['correction']} title={t('Other correction conversations')} hideEmpty exclude={tied()} folded={props.folded} />
     </>
   )
 }
@@ -430,15 +443,6 @@ async function addFile(tk: Ticket, apply: Apply) {
   if (p) await apply(updateTicket(tk.id, { addFiles: [p] }))
 }
 
-async function addCommit(tk: Ticket, apply: Apply) {
-  const log = await request<{ hash: string; short: string; subject: string; when: number }[]>('git.log', { n: 100 }).catch(() => [])
-  const c = await pick({
-    placeholder: t('Commit to link to the ticket'),
-    items: log.map((c) => ({ label: c.subject, detail: `${c.short} · ${fmtAgo(c.when * 1000)}`, value: c })),
-  })
-  if (c) await apply(linkCommit(tk.id, c.hash, c.subject))
-}
-
 async function openAttachment(id: number, aid: number) {
   try {
     const { name, blob } = await attachmentBlob(id, aid)
@@ -460,6 +464,9 @@ async function openAttachment(id: number, aid: number) {
 
 export function Section(props: { title: string; children: JSX.Element; folded?: boolean; actions?: JSX.Element }) {
   const [open, setOpen] = createSignal(!props.folded)
+  // Folded again or opened when the status of the ticket changes.
+  const folded = createMemo(() => !!props.folded)
+  createEffect(on(folded, (f) => setOpen(!f), { defer: true }))
   return (
     <section class="tk-section" classList={{ folded: !open() }}>
       <header class="tk-section-head">

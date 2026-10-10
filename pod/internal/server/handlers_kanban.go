@@ -290,20 +290,6 @@ func (s *Server) registerKanban() {
 		}
 		return s.Kanban.UnlinkChat(k.loc, a.ID, b.ChatID)
 	}))
-	s.handle("kanban.commit.link", change(func(k kctx, a idArg, p json.RawMessage) error {
-		b, err := bind[struct{ Hash, Subject string }](p)
-		if err != nil {
-			return err
-		}
-		return s.Kanban.LinkCommit(k.loc, a.ID, b.Hash, b.Subject)
-	}))
-	s.handle("kanban.commit.unlink", change(func(k kctx, a idArg, p json.RawMessage) error {
-		b, err := bind[struct{ Hash string }](p)
-		if err != nil {
-			return err
-		}
-		return s.Kanban.UnlinkCommit(k.loc, a.ID, b.Hash)
-	}))
 	s.handle("kanban.attachment.add", change(func(k kctx, a idArg, p json.RawMessage) error {
 		b, err := bind[struct{ Name, Mime, Data string }](p)
 		if err != nil {

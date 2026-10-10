@@ -17,7 +17,7 @@ var efforts = map[string]bool{"xhigh": true, "medium": true, "low": true}
 // mechanicalTools: steps decided before the call, whose success leaves little to think about.
 var mechanicalTools = map[string]bool{
 	"edit_file": true, "write_file": true, "open_file": true, "focus": true,
-	"kanban_add_note": true, "kanban_update": true, "kanban_move": true, "kanban_link_commit": true, "agent_note": true,
+	"kanban_add_note": true, "kanban_update": true, "kanban_move": true, "agent_note": true,
 }
 
 // dynamicEffort: the user lets the agent choose the effort at each step.

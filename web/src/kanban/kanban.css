@@ -88,11 +88,6 @@ input.tk-title { padding: 2px 6px; }
 .tk-count { color: var(--fg-faint); font-variant-numeric: tabular-nums; margin-right: auto; }
 .tk-count.over { color: var(--danger); font-weight: 600; }
 .tk-chat-link { display: inline-flex; align-items: center; gap: 3px; padding: 0; max-width: 260px; }
-/* Stages of the workflow: the current one marked with the color of its status. */
-.tk-stage { border-left: 2px solid var(--line); padding: 0 0 6px 12px; margin-bottom: 10px; }
-.tk-stage.current { border-left-color: var(--st); }
-.tk-stage-head { display: flex; align-items: center; gap: 6px; margin: 0 0 2px; font-size: 13px; font-weight: 600; color: var(--fg-muted); }
-.tk-stage.current .tk-stage-head { color: var(--fg); }
 .tk-feedback { border: 1px solid var(--line); border-left: 3px solid var(--fbk); border-radius: var(--radius); padding: 6px 10px; background: var(--bg-2); --fbk: var(--info); }
 .tk-feedback.k-bug { --fbk: var(--danger); }
 .tk-feedback.k-feature { --fbk: var(--ok); }

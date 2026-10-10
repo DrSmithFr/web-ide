@@ -150,11 +150,11 @@ async function openChatOf(tk: Ticket, chatId: string, role: ChatRole) {
 }
 
 /** Conversations of some roles linked to a ticket (exclude: ids shown elsewhere). */
-export function TicketChats(props: { tk: Ticket; roles: ChatRole[]; title: string; hideEmpty?: boolean; exclude?: Set<string | undefined> }) {
+export function TicketChats(props: { tk: Ticket; roles: ChatRole[]; title: string; hideEmpty?: boolean; exclude?: Set<string | undefined>; folded?: boolean }) {
   const list = () => props.tk.chatList.filter((c) => props.roles.includes(c.role) && !props.exclude?.has(c.chatId))
   return (
     <Show when={!props.hideEmpty || list().length}>
-      <Section title={props.title}>
+      <Section title={props.title} folded={props.folded}>
         <For each={list()} fallback={<p class="muted small">{t('No linked conversation.')}</p>}>
           {(c) => (
             <div class="tk-row">
@@ -188,7 +188,7 @@ export function ChatLink(props: { tk: Ticket; chatId: string }) {
 const statusNames: Record<string, string> = { A: 'added', M: 'modified', D: 'deleted', R: 'renamed', C: 'copied', T: 'type changed', '?': 'untracked' }
 
 /** Branch, base, worktree and the files changed by the ticket, with their diff. */
-export function TicketGit(props: { tk: Ticket; apply: Apply }) {
+export function TicketGit(props: { tk: Ticket; apply: Apply; folded?: boolean }) {
   const tk = () => props.tk
   const [tick, setTick] = createSignal(0)
   const [diff] = createResource(
@@ -211,6 +211,7 @@ export function TicketGit(props: { tk: Ticket; apply: Apply }) {
     <>
       <Section
         title={t('Git and changes')}
+        folded={props.folded}
         actions={
           <button class="icon-btn small" title={t('Refresh')} onClick={() => setTick((n) => n + 1)}>
             <Icon name="refresh" size={12} />
@@ -439,7 +440,7 @@ function GitOps(props: { tk: Ticket; tick: number; behind: number; onDone: () =>
 }
 
 /** Pull request of the ticket: its branch pushed to origin, opened with gh (docs/kanban.md). */
-export function PullRequest(props: { tk: Ticket; apply: Apply }) {
+export function PullRequest(props: { tk: Ticket; apply: Apply; folded?: boolean }) {
   const tk = () => props.tk
   const [busy, setBusy] = createSignal(false)
   const [info] = createResource(
@@ -453,31 +454,28 @@ export function PullRequest(props: { tk: Ticket; apply: Apply }) {
   }
   const openChildren = () => (tk().children ?? []).filter((c) => c.status !== 'done' && c.status !== 'abandoned').map((c) => `#${c.id}`)
   return (
-    <Show when={!tk().parent}>
-      <Section title={t('Pull request')}>
+    // Shown once it exists or can be made: a remote "origin" and the gh command.
+    <Show when={!tk().parent && (tk().pr || info()?.canPR)}>
+      <Section title={t('Pull request')} folded={props.folded}>
         <Show
           when={tk().pr}
           fallback={
-            <Show when={tk().branch} fallback={<p class="muted small">{t('No branch yet: it is created when development starts.')}</p>}>
-              <Show when={info()?.canPR} fallback={<p class="muted small">{t('A pull request needs a remote “origin” and the GitHub command gh.')}</p>}>
-                <div class="tk-git-row">
-                  <button
-                    class="btn small"
-                    classList={{ primary: tk().status === 'review' }}
-                    disabled={busy() || openChildren().length > 0}
-                    title={
-                      openChildren().length
-                        ? t('The lineage is not finished: {ids}', { ids: openChildren().join(', ') })
-                        : t('Pushes the branch {branch} to origin, then opens its pull request with gh', { branch: tk().branch! })
-                    }
-                    onClick={() => void open()}
-                    data-testid="ticket-pr"
-                  >
-                    <Icon name="branch" size={12} /> {busy() ? t('Opening the pull request…') : t('Create the pull request')}
-                  </button>
-                </div>
-              </Show>
-            </Show>
+            <div class="tk-git-row">
+              <button
+                class="btn small"
+                classList={{ primary: tk().status === 'review' }}
+                disabled={busy() || openChildren().length > 0}
+                title={
+                  openChildren().length
+                    ? t('The lineage is not finished: {ids}', { ids: openChildren().join(', ') })
+                    : t('Pushes the branch {branch} to origin, then opens its pull request with gh', { branch: tk().branch! })
+                }
+                onClick={() => void open()}
+                data-testid="ticket-pr"
+              >
+                <Icon name="branch" size={12} /> {busy() ? t('Opening the pull request…') : t('Create the pull request')}
+              </button>
+            </div>
           }
         >
           <div class="tk-git-row">

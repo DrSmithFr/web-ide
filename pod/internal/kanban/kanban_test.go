@@ -185,9 +185,6 @@ func TestLinksAndAttachments(t *testing.T) {
 		t.Fatal("bad role accepted")
 	}
 	m.RenameChat(loc, "c1", "Renamed")
-	if err := m.LinkCommit(loc, id, "abc", "#1 fix"); err != nil {
-		t.Fatal(err)
-	}
 	aid, err := m.AddAttachment(loc, id, "shot.png", "image/png", []byte("png"))
 	if err != nil {
 		t.Fatal(err)
@@ -196,7 +193,7 @@ func TestLinksAndAttachments(t *testing.T) {
 	if len(tk.ChatList) != 1 || tk.ChatList[0].Role != "plan" || tk.ChatList[0].Title != "Renamed" || tk.Chats != 1 {
 		t.Fatalf("chats: %+v", tk.ChatList)
 	}
-	if len(tk.Commits) != 1 || len(tk.Attachments) != 1 {
+	if len(tk.Attachments) != 1 {
 		t.Fatalf("links: %+v", tk)
 	}
 	a, data, err := m.Attachment(loc, id, aid)

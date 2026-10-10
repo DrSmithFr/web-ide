@@ -108,7 +108,6 @@ export interface Ticket extends Summary {
   feedbackList: Feedback[]
   files: string[]
   chatList: { chatId: string; role: ChatRole; title: string; created: number }[]
-  commits: { hash: string; subject: string }[]
   attachments: { id: number; name: string; mime: string; size: number; created: number }[]
   /** Children of the lineage, in order. */
   children: Summary[]
@@ -263,8 +262,6 @@ export const MAX_DESCRIPTION = 1500
 export const MAX_NOTE = 1000
 export const linkChat = (id: number, chatId: string, role: ChatRole, title = '') => request<Ticket>('kanban.chat.link', { id, chatId, role, title })
 export const unlinkChat = (id: number, chatId: string) => request<Ticket>('kanban.chat.unlink', { id, chatId })
-export const linkCommit = (id: number, hash: string, subject = '', by: By = 'user') => request<Ticket>('kanban.commit.link', { id, hash, subject, by })
-export const unlinkCommit = (id: number, hash: string) => request<Ticket>('kanban.commit.unlink', { id, hash })
 export const setMeta = (values: Record<string, string>) => request<Record<string, string>>('kanban.meta.set', { values })
 
 export async function addAttachment(id: number, file: File) {

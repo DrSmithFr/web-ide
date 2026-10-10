@@ -256,7 +256,6 @@ var kanbanWriteDefs = []Def{
 			"test_summary": str("For review: what to test and how (steps, commands, expected results), in Markdown"),
 			"comment":      str("Comment for the history (optional)"),
 		}, "status"),
-	fn("kanban_link_commit", "Links a commit to the linked ticket (after a git commit).", obj{"hash": str("Commit hash (short or full)")}, "hash"),
 }
 
 var (

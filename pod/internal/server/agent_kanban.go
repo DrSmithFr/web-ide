@@ -382,25 +382,6 @@ func (s *Server) kanbanCall(r *agentRun, name string, a toolArgs, mode string) (
 			return toolResult{}, err
 		}
 		return ok(fmt.Sprintf(`Ticket #%d moved to "%s".`, id, kanban.StatusNames[t.Status]), agent.T(kanban.StatusNames[t.Status], nil).With("→ ", "")), nil
-	case "kanban_link_commit":
-		hash := strings.TrimSpace(a.str("hash"))
-		ref, err := s.agentRuntime(r.project)
-		if err != nil {
-			return toolResult{}, err
-		}
-		out, err := runShell(r.ctx, ref.rt, "git log -1 --format='%H%x1f%s' "+shellQuote(hash), "", 20, nil)
-		parts := strings.SplitN(strings.TrimSpace(out.Output), "\x1f", 2)
-		if err != nil || out.Code != 0 || parts[0] == "" {
-			return toolResult{}, failf("commit not found: %s", hash)
-		}
-		subject := ""
-		if len(parts) > 1 {
-			subject = parts[1]
-		}
-		if err := s.Kanban.LinkCommit(loc, id, parts[0], subject); err != nil {
-			return toolResult{}, err
-		}
-		return ok(fmt.Sprintf("Commit %s linked to the ticket.", parts[0][:min(10, len(parts[0]))]), agent.T("commit {hash}", map[string]any{"hash": parts[0][:min(8, len(parts[0]))]})), nil
 	}
 	return toolResult{}, usagef("unknown tool: %s", name)
 }

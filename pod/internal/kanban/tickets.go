@@ -46,11 +46,6 @@ type ChatLink struct {
 	Created int64  `json:"created"`
 }
 
-type CommitLink struct {
-	Hash    string `json:"hash"`
-	Subject string `json:"subject"`
-}
-
 type Attachment struct {
 	ID      int64  `json:"id"`
 	Name    string `json:"name"`
@@ -118,7 +113,6 @@ type Ticket struct {
 	FeedbackList []Feedback   `json:"feedbackList"`
 	Files        []string     `json:"files"`
 	ChatList     []ChatLink   `json:"chatList"`
-	Commits      []CommitLink `json:"commits"`
 	Attachments  []Attachment `json:"attachments"`
 	// Children of the lineage, in order.
 	Children []Summary `json:"children"`
@@ -198,7 +192,7 @@ func (m *Manager) Get(loc Location, id int64) (*Ticket, error) {
 }
 
 func get(db *sql.DB, id int64) (*Ticket, error) {
-	t := &Ticket{GoalList: []Goal{}, Notes: []Note{}, FeedbackList: []Feedback{}, Files: []string{}, ChatList: []ChatLink{}, Commits: []CommitLink{}, Attachments: []Attachment{}}
+	t := &Ticket{GoalList: []Goal{}, Notes: []Note{}, FeedbackList: []Feedback{}, Files: []string{}, ChatList: []ChatLink{}, Attachments: []Attachment{}}
 	var snap string
 	row := db.QueryRow(`SELECT `+summaryCols+`, t.description, t.plan, t.test_summary, t.pr, t.base, t.setup, t.setup_log, t.snapshot FROM tickets t WHERE t.id = ?`, id)
 	err := row.Scan(&t.ID, &t.Title, &t.Priority, &t.Status, &t.Branch, &t.Worktree, &t.Created, &t.Updated, &t.Closed, &t.GoalsDone, &t.Goals, &t.Chats, &t.FeedbackOpen,
@@ -276,14 +270,6 @@ func get(db *sql.DB, id int64) (*Ticket, error) {
 		var c ChatLink
 		err := r.Scan(&c.ChatID, &c.Role, &c.Title, &c.Created)
 		t.ChatList = append(t.ChatList, c)
-		return err
-	}); err != nil {
-		return nil, err
-	}
-	if err := each(`SELECT hash, subject FROM commits WHERE ticket_id = ? ORDER BY created`, func(r *sql.Rows) error {
-		var c CommitLink
-		err := r.Scan(&c.Hash, &c.Subject)
-		t.Commits = append(t.Commits, c)
 		return err
 	}); err != nil {
 		return nil, err
@@ -782,25 +768,6 @@ func (m *Manager) RenameChat(loc Location, chatID, title string) {
 	if db, err := m.db(loc); err == nil {
 		_, _ = db.Exec(`UPDATE chats SET title = ? WHERE chat_id = ?`, title, chatID)
 	}
-}
-
-func (m *Manager) LinkCommit(loc Location, id int64, hash, subject string) error {
-	hash = strings.TrimSpace(hash)
-	if hash == "" {
-		return i18n.New("empty commit")
-	}
-	return m.tx(loc, id, func(tx *sql.Tx, now int64) error {
-		_, err := tx.Exec(`INSERT INTO commits (ticket_id, hash, subject, created) VALUES (?, ?, ?, ?)
-			ON CONFLICT(ticket_id, hash) DO UPDATE SET subject = excluded.subject`, id, hash, subject, now)
-		return err
-	})
-}
-
-func (m *Manager) UnlinkCommit(loc Location, id int64, hash string) error {
-	return m.tx(loc, id, func(tx *sql.Tx, now int64) error {
-		_, err := tx.Exec(`DELETE FROM commits WHERE ticket_id = ? AND hash = ?`, id, hash)
-		return err
-	})
 }
 
 const MaxAttachment = 20 << 20

@@ -30,13 +30,13 @@ var mcpRoles = []mcpRole{
 - Read the ticket (kanban_get). If it has no worktree yet, start it with kanban_start; if it cannot start yet (a previous step or a dependency), tell the user and stop.
 - A child ticket (Lineage in kanban_get) works in the worktree and on the branch of its parent: develop only this step, on top of the previous ones. Then switch this session into the worktree with EnterWorktree (path: the worktree) unless you already work there; if you cannot, work in it with absolute paths (cd <worktree> && … for commands).
 - Follow the plan. Check each goal with kanban_goal as soon as it is reached and verified (tests, build).
-- Commit regularly on the ticket branch; each commit message starts with "#{{id}} ". Link each commit with kanban_link_commit.
+- Commit regularly on the ticket branch; each commit message starts with "#{{id}} ".
 - Do not merge or push the branch: the user does it from the IDE.
 - When all the goals are checked, the tests pass and everything is committed, move the ticket to "To test" with kanban_move (status review) and a test_summary: what the user must test and how.`},
 	{"fix", "Handle the open test feedback of a ticket", `Handle the open **test feedback** of ticket #{{id}}.
 - Read the ticket (kanban_get); switch this session into its worktree with EnterWorktree (path: the worktree) unless you already work there, else work in it with absolute paths.
 - A bug: fix it. A new feature: build it if it fits the ticket, otherwise ask the user. An info: take it into account.
-- Commit on the ticket branch (messages starting with "#{{id}} ") and link the commits with kanban_link_commit. Do not merge or push.
+- Commit on the ticket branch (messages starting with "#{{id}} "). Do not merge or push.
 - Once a feedback is handled, verified and committed, mark it done with kanban_feedback (action done). If how to test the ticket changed, update it with kanban_update (test_summary).`},
 }
 

@@ -30,17 +30,6 @@ func (g Git) git(ctx context.Context, dir string, args ...string) (string, error
 	return string(out), nil
 }
 
-// Commit is the full hash and the subject of a commit of the repository (worktrees share
-// it), for linking it to a ticket.
-func (g Git) Commit(ctx context.Context, ref string) (hash, subject string, err error) {
-	out, err := g.git(ctx, g.Root, "log", "-1", "--format=%H%x1f%s", ref, "--")
-	if err != nil {
-		return "", "", i18n.Errorf("commit not found: %s", ref)
-	}
-	hash, subject, _ = strings.Cut(strings.TrimSpace(out), "\x1f")
-	return hash, subject, nil
-}
-
 // Slug turns a title into a short branch-friendly name.
 func Slug(title string) string {
 	var b strings.Builder

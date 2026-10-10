@@ -5,7 +5,7 @@ const fs = require('fs')
 const path = require('path')
 const http = require('http')
 const { execSync } = require('child_process')
-const { run, openProject, assert, WS, OUT } = require('../common.cjs')
+const { run, openProject, assert, mcp, unfold, WS, OUT } = require('../common.cjs')
 
 const repo = WS + '/demo'
 const env = { ...process.env, GIT_AUTHOR_NAME: 'e2e', GIT_AUTHOR_EMAIL: 'e2e@x', GIT_COMMITTER_NAME: 'e2e', GIT_COMMITTER_EMAIL: 'e2e@x' }
@@ -39,7 +39,6 @@ const fake = http.createServer(async (req, res) => {
       sse(res, {
         tool_calls: calls([
           ['b1', 'bash', { command: "printf 'export\\n' > export.txt && git add -A && git commit -q -m '#1 export' && pwd" }],
-          ['b2', 'kanban_link_commit', { hash: 'HEAD' }],
           ['b3', 'kanban_goal', { action: 'check', id: goal }],
           ['b4', 'kanban_move', { status: 'review', test_summary: 'Read `export.txt`.' }],
         ]),
@@ -74,13 +73,9 @@ run(async ({ page, ctx }) => {
     await page.fill('[data-testid=kanban-title]', 'Data export')
     await page.click('[data-testid=kanban-create]')
     await page.waitForSelector('[data-testid=ticket-view]')
-    await page.fill('[data-testid=ticket-goal-input]', 'export.txt exists')
-    await page.keyboard.press('Enter')
-    await page.waitForSelector('[data-testid=ticket-goal]')
-    await page.click('[data-testid=ticket-plan-edit]')
-    await page.fill('.tk-md-input', 'Write export.txt')
-    await page.click('[data-testid=ticket-plan-save]')
+    await mcp('kanban_set_plan', { id: 1, plan: 'Write export.txt', goals: [{ title: 'export.txt exists' }], size: 's' })
     await page.waitForSelector('[data-testid=ticket-status]:has-text("To do")')
+    await page.waitForSelector('[data-testid=ticket-goal]')
 
     // Start: branch + worktree, shown in the same window, which runs the conversation.
     const pages = ctx.pages().length
@@ -118,14 +113,13 @@ run(async ({ page, ctx }) => {
     await page.click('[data-testid=ticket-diff-file]:has-text("export.txt") .tk-file-head')
     await page.waitForSelector('.tk-patch .add:has-text("+export")')
     assert(true, 'diff of the file shown')
-    assert((await page.textContent('.tk-side')).includes('#1 export'), 'commit linked by the model')
     await page.click('.tk-section-toggle:has-text("History")')
     assert((await page.textContent('.tk-events')).includes('Worktree set up') || (await page.textContent('.tk-events')).includes('Worktree setup finished'), 'setup in the history')
     await page.screenshot({ path: OUT + '/kanban-git.png' })
 
     // No pull request without a remote; with one (and gh), the branch is pushed and the
     // pull request opened.
-    assert(await page.isVisible('.tk-stage[data-stage=review] .tk-section:has-text("Pull request") p:has-text("origin")'), 'no pull request without a remote')
+    assert(!(await page.isVisible('.tk-section-toggle:has-text("Pull request")')), 'no pull request section without a remote')
     const origin = path.join(path.dirname(repo), 'origin.git')
     execSync(`git init -q --bare ${origin}`)
     git(`remote add origin ${origin}`)
@@ -160,6 +154,8 @@ run(async ({ page, ctx }) => {
     await page.waitForSelector('[data-testid=ticket-status]:has-text("Done")', { timeout: 10000 })
     assert(!fs.existsSync(wt), 'worktree removed when closing')
     assert(git('branch --list ticket/1-data-export') !== '', 'branch kept')
+    assert(await page.isVisible('.tk-section.folded .tk-section-toggle:has-text("Pull request")'), 'a closed ticket keeps its pull request, folded')
+    await unfold(page, 'Git and changes')
     await page.waitForSelector('[data-testid=ticket-diff-file]:has-text("export.txt")', { timeout: 10000 })
     assert(true, 'changes still visible after closing')
   } finally {

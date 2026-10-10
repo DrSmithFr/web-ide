@@ -112,16 +112,6 @@ func Markdown(t *Ticket) string {
 			fmt.Fprintf(&b, "- %s: %s (chat %s)\n", RoleNames[c.Role], title, c.ChatID)
 		}
 	}
-	if len(t.Commits) > 0 {
-		b.WriteString("\n## Linked commits\n")
-		for _, c := range t.Commits {
-			h := c.Hash
-			if len(h) > 10 {
-				h = h[:10]
-			}
-			fmt.Fprintf(&b, "- %s %s\n", h, c.Subject)
-		}
-	}
 	return strings.TrimRight(b.String(), "\n")
 }
 

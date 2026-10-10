@@ -2,7 +2,7 @@
 // kanban_create / kanban_list from any conversation, writing tools only when linked,
 // Briefing mode (tickets created and linked to the conversation).
 const http = require('http')
-const { run, openProject, assert, OUT, WS } = require('../common.cjs')
+const { run, openProject, assert, unfold, OUT, WS } = require('../common.cjs')
 
 const requests = []
 const sse = (res, delta) => res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`)
@@ -312,6 +312,7 @@ run(async ({ page }) => {
     const d3 = text(rr.find((m) => m.tool_call_id === 'd3'))
     assert(d3.includes('the model cannot move'), 'the model cannot close the ticket: ' + d3)
     const d5 = text(rr.find((m) => m.tool_call_id === 'd5'))
+    for (const title of ['Notes', 'Goals', 'Plan conversations', 'Development conversations']) await unfold(page, title)
     assert(d5.includes('note too long') && !(await page.isVisible('[data-testid=ticket-note]:has-text("Erratum")')), 'a long note of the model is refused: ' + d5.slice(0, 60))
     await page.waitForSelector('[data-testid=ticket-note]:has-text("separator")')
     assert(await page.isVisible('[data-testid=ticket-note]:has-text("separator") [data-testid=ticket-chat-link]:has-text("Development")'), 'the note of the model links its conversation')

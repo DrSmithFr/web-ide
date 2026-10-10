@@ -131,7 +131,7 @@ func TicketPrompt(id int64, role, branch string, parent, feedback int64, markdow
 	}
 	r := strings.NewReplacer("{{branch}}", b, "{{feedback}}", fb, "{{id}}", itoa(id)).Replace(RoleInstructions[role])
 	return "# Ticket linked to this conversation\nThis conversation works on ticket #" + itoa(id) +
-		" of the kanban of the project. The tools kanban_update, kanban_add_note, kanban_set_plan, kanban_goal, kanban_feedback, kanban_move and kanban_link_commit act on this ticket.\n\n" +
+		" of the kanban of the project. The tools kanban_update, kanban_add_note, kanban_set_plan, kanban_goal, kanban_feedback and kanban_move act on this ticket.\n\n" +
 		r + "\n\n" + markdown
 }
 

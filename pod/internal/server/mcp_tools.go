@@ -527,26 +527,6 @@ var mcpTools = []mcpTool{
 		}),
 	},
 	{
-		name:        "kanban_link_commit",
-		description: "Links a commit to a ticket (after a git commit on its branch).",
-		props:       map[string]any{"id": ticketID, "hash": str("Commit hash (short or full)")},
-		required:    []string{"hash"},
-		run: ticketTool(func(ctx context.Context, s *Server, sc mcpScope, id int64, a struct{ Hash string }) (string, error) {
-			k, err := s.mcpGit(sc)
-			if err != nil {
-				return "", err
-			}
-			hash, subject, err := k.git.Commit(ctx, strings.TrimSpace(a.Hash))
-			if err != nil {
-				return "", err
-			}
-			if err := s.Kanban.LinkCommit(sc.loc, id, hash, subject); err != nil {
-				return "", err
-			}
-			return fmt.Sprintf("Commit %s linked to ticket #%d.", hash[:min(10, len(hash))], id), nil
-		}),
-	},
-	{
 		name:        "kanban_start",
 		description: `Starts the development of a ticket ("To do", or "In progress" / "To test" without a worktree): creates the branch ticket/<n>-<slug> from the base in a worktree of the project, runs the setup command of the kanban there, and moves the ticket to "In progress". Answers the worktree: work there, with absolute paths, and commit on that branch.`,
 		props:       map[string]any{"id": ticketID, "base": str("Base branch (optional: the base of the ticket or of the kanban, else origin/main or main)")},

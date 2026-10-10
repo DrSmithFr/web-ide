@@ -77,12 +77,12 @@ var RoleInstructions = map[string]string{
 - Do not change any file.`,
 	"dev": `You **develop** this ticket{{branch}}.
 - Follow the plan. Check each goal with kanban_goal as soon as it is reached and verified (tests, build).
-- Commit regularly on the ticket branch with bash (git add, git commit); each commit message starts with "#{{id}} ". Link each commit with kanban_link_commit.
+- Commit regularly on the ticket branch with bash (git add, git commit); each commit message starts with "#{{id}} ".
 - Do not merge or push the branch: the user does it.
 - When all the goals are checked, the tests pass and everything is committed, move the ticket to "To test" with kanban_move (status review) and a test_summary: what the user must test and how (steps, commands, expected result).`,
 	"correction": `You handle the **test feedback** of this ticket{{branch}}: {{feedback}}.
 - A bug: fix it. A new feature: build it if it fits the ticket, otherwise ask the user with ask_user. An info: take it into account.
-- Commit on the ticket branch (messages starting with "#{{id}} ") and link the commits with kanban_link_commit.
+- Commit on the ticket branch (messages starting with "#{{id}} ").
 - Do not merge or push the branch.
 - Once a feedback is handled, verified and committed, mark it done with kanban_feedback (action done). If how to test the ticket changed, update it with kanban_update (test_summary).`,
 	"resolve": `You **resolve the git conflicts** of the branch of this ticket{{branch}}: a rebase stopped in the worktree, or a merge stopped in the main folder of the project.

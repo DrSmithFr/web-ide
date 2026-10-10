@@ -164,13 +164,6 @@ CREATE TABLE IF NOT EXISTS chats (
   created INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (ticket_id, chat_id)
 );
-CREATE TABLE IF NOT EXISTS commits (
-  ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
-  hash TEXT NOT NULL,
-  subject TEXT NOT NULL DEFAULT '',
-  created INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (ticket_id, hash)
-);
 CREATE TABLE IF NOT EXISTS attachments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
@@ -224,6 +217,8 @@ CREATE TABLE deps (
 );`,
 	// 4: estimated size of a ticket (S, M, L, XL).
 	`ALTER TABLE tickets ADD COLUMN size TEXT NOT NULL DEFAULT '';`,
+	// 5: no more linked commits (the ticket shows the changes of its branch).
+	`DROP TABLE IF EXISTS commits;`,
 }
 
 func migrate(db *sql.DB) error {

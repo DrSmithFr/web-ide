@@ -93,3 +93,14 @@ exports.run = (body, opts) =>
 
 /** Text of the active editor (without the trailing sentinel newline). */
 exports.text = (page) => page.evaluate(() => document.querySelector('.pane.active .ed-content').textContent.slice(0, -1))
+
+/** Calls a tool of the MCP endpoint of the pod, as Claude Code does (in the demo project by default). */
+exports.mcp = (name, args = {}) =>
+  fetch(process.env.E2E_URL + '/mcp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + process.env.E2E_TOKEN },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: { cwd: exports.WS + '/demo', ...args } } }),
+  }).then((r) => r.json())
+
+/** Opens a folded section of the ticket view by its title. */
+exports.unfold = (page, title) => page.click(`.tk-section.folded .tk-section-toggle:has-text("${title}")`)

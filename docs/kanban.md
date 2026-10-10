@@ -11,14 +11,22 @@ Each project has a kanban, a tool of the IDE that is also where the user and the
 
 ## Ticket
 
-Number (#1, #2… per project), title, priority (low, normal, high, critical), linked files (paths), attachments, linked commits, history, and what each stage adds:
+Number (#1, #2… per project), title, priority (low, normal, high, critical), linked files (paths), attachments, history, and what each stage adds:
 
 - **New**: description (Markdown, 1500 characters max: the model tends to be verbose), notes (1000 characters max each, with the conversation that wrote them), briefing conversations.
 - **To do**: implementation plan (Markdown), goals (a title and a description of how to check it, checkable), plan conversations, estimated size (S, M, L, XL: required when a model writes the plan, editable by the user).
 - **In progress**: development conversations, git and changes, how to test (written by the model when it finishes).
 - **To test**: test feedback (info, bug or new feature; 1000 characters max; checked once handled, by the model or the user; with the conversation handling it), pull request.
 
-The ticket view shows every stage, always open, the current one marked.
+The ticket view lists, in one column, the sections of the status of the ticket; those of the earlier statuses stay, folded (each status change folds and opens them again):
+
+- **New**: description, briefing conversations, notes.
+- **To do**: + plan conversations, implementation plan, goals (briefing and notes folded).
+- **In progress**: + development conversations, git and changes (plan folded; goals open).
+- **To test**: + how to test, feedback, pull request, shown once it exists or can be made (development and goals folded).
+- **Done**, **Abandoned**: the sections of *To test* that have content, all folded but the description.
+
+Aside: lineage, linked files, attachments, history.
 
 ## Lineages and dependencies
 
@@ -78,7 +86,7 @@ The usual path: a briefing makes the tickets, *Generate the plan* writes the pla
 ## Assistant tools
 
 - In every conversation: `kanban_list`, `kanban_get`, `kanban_create` (a new ticket in the backlog, `parent` and `depends_on` included), `ask_user` (1 to 10 questions shown one at a time in the thread, see below).
-- Only in a conversation linked to a ticket, and only on that ticket: `kanban_update` (title, description, priority, how to test, files, parent, dependencies), `kanban_add_note` (1000 characters max: notes are for decisions, not reports), `kanban_set_plan` (plan and goals with their description), `kanban_goal` (check, uncheck, add), `kanban_feedback` (mark a feedback handled or open again), `kanban_move` (*To test* only, with how to test), `kanban_link_commit`.
+- Only in a conversation linked to a ticket, and only on that ticket: `kanban_update` (title, description, priority, how to test, files, parent, dependencies), `kanban_add_note` (1000 characters max: notes are for decisions, not reports), `kanban_set_plan` (plan and goals with their description), `kanban_goal` (check, uncheck, add), `kanban_feedback` (mark a feedback handled or open again), `kanban_move` (*To test* only, with how to test).
 - A description over 1500 characters is refused with advice to shorten it.
 
 Each question of `ask_user` has a type that picks its widget: `choice` (the default: options, with `pros` / `cons` if given), `idea` (one proposal answered No / Yes, but… / Yes / Exactly, or by a swipe on a touch screen), `compare` (exactly two approaches side by side), `rank` (2 to 8 items to order, `top` to keep only the first N) and `scenario` (a `situation`, then options). Any question also takes a free answer, "I don't know" (the model then offers examples), "Up to you" (it decides and says what) and a note. The pod checks the rules of each type: a call breaking one is refused with an error naming the question, so that the model asks again; a question without type works as before.

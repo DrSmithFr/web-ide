@@ -1,7 +1,8 @@
-// Kanban: board, new ticket, ticket view by stage (description, notes, plan, goals, files,
-// attachments), workflow buttons, test feedback, side panel, sync with a second window.
+// Kanban: board, new ticket, ticket view by status (the sections of the status, the earlier
+// ones folded: description, notes, plan, goals, files, attachments), workflow buttons, test
+// feedback, side panel, sync with a second window.
 const fs = require('fs')
-const { run, openProject, assert, WS, OUT } = require('../common.cjs')
+const { run, openProject, assert, mcp, unfold, WS, OUT } = require('../common.cjs')
 
 run(async ({ page, ctx }) => {
   page.on('dialog', (d) => d.accept())
@@ -25,8 +26,9 @@ run(async ({ page, ctx }) => {
   assert(await page.isVisible('.pane.active .tab.active:has-text("#1")'), 'title of the tab')
   assert(fs.existsSync(WS + '/demo/.ide/kanban.db'), 'kanban.db base in .ide')
   assert(fs.readFileSync(WS + '/demo/.ide/.gitignore', 'utf8').includes('kanban.db'), 'kanban.db ignored by git')
-  assert(await page.isVisible('.tk-stage.current[data-stage=new]'), 'the stage New is the current one')
-  assert((await page.$$eval('.tk-stage', (l) => l.map((e) => e.dataset.stage))).join() === 'new,todo,in_progress,review', 'every stage shown')
+  const sections = () => page.$$eval('.tk-main .tk-section', (l) => l.map((e) => (e.classList.contains('folded') ? '-' : '') + e.querySelector('.tk-section-toggle').textContent.trim()))
+  assert((await sections()).join() === 'Description,Briefing conversations,Notes', 'New: description, briefing and notes, open: ' + (await sections()).join())
+  assert((await page.textContent('.tk-side')).match(/Lineage[\s\S]*Linked files[\s\S]*Attachments[\s\S]*History/), 'side: lineage, files, attachments, history')
 
   // Description limited to 1500 characters.
   await page.click('[data-testid=ticket-description-edit]')
@@ -35,13 +37,14 @@ run(async ({ page, ctx }) => {
   assert((await page.textContent('[data-testid=ticket-description] .tk-count.over')).includes('1501/1500'), 'character counter')
   await page.click('[data-testid=ticket-description] .btn:has-text("Cancel")')
 
-  // Plan and goals: the plan moves the ticket to To do.
-  await page.click('[data-testid=ticket-plan-edit]')
-  await page.fill('.tk-md-input', '1. Add the route\n2. Write the CSV')
-  await page.click('[data-testid=ticket-plan-save]')
-  await page.waitForSelector('[data-testid=ticket-plan] ol li')
+  // Plan and goals: the plan moves the ticket to To do, whose sections follow.
+  await mcp('kanban_set_plan', { id: 1, plan: '1. Add the route\n2. Write the CSV', goals: [], size: 's' })
   await page.waitForSelector('[data-testid=ticket-status]:has-text("To do")')
-  assert(await page.isVisible('.tk-stage.current[data-stage=todo]'), 'a plan moves the ticket to To do')
+  await page.waitForSelector('[data-testid=ticket-plan] ol li')
+  assert(
+    (await sections()).join() === 'Description,-Briefing conversations,-Notes,Plan conversations,Implementation plan,Goals',
+    'To do: briefing and notes folded, plan and goals open: ' + (await sections()).join(),
+  )
   for (const [g, d] of [['The /export route answers', 'curl /export'], ['The CSV has a header', '']]) {
     await page.fill('[data-testid=ticket-goal-input]', g)
     await page.fill('[data-testid=ticket-goal-description]', d)
@@ -55,18 +58,15 @@ run(async ({ page, ctx }) => {
   assert(true, 'goal checked')
 
   // Note, linked file, attachment.
+  await unfold(page, 'Notes')
   await page.fill('[data-testid=ticket-note-input]', 'Mind the `;` separator')
   await page.click('[data-testid=ticket-note-add]')
   await page.waitForSelector('[data-testid=ticket-note]:has-text("separator")')
   assert(true, 'note added')
 
   // Claude Code writes through the MCP endpoint of the pod: the window follows, author Claude.
-  const mcp = await fetch(process.env.E2E_URL + '/mcp', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + process.env.E2E_TOKEN },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'kanban_add_note', arguments: { cwd: WS + '/demo', id: 1, text: 'Checked by Claude' } } }),
-  }).then((r) => r.json())
-  assert(mcp.result && !mcp.result.isError, 'note through MCP')
+  const note = await mcp('kanban_add_note', { id: 1, text: 'Checked by Claude' })
+  assert(note.result && !note.result.isError, 'note through MCP')
   await page.waitForSelector('[data-testid=ticket-note]:has-text("Checked by Claude")')
   assert((await page.textContent('[data-testid=ticket-note]:has-text("Checked by Claude") .tk-note-head')).includes('Claude'), 'a note of Claude is shown as written by Claude')
   // A file link of Claude Code opens the file in the window of the project.
@@ -117,6 +117,10 @@ run(async ({ page, ctx }) => {
   assert(true, 'the other window follows the status change')
   await page.click('[data-testid=ticket-to-review]')
   await page.waitForSelector('[data-testid=ticket-status]:has-text("To test")')
+  assert(
+    (await sections()).join() === 'Description,-Briefing conversations,-Notes,-Plan conversations,-Implementation plan,-Goals · 1/2,-Development conversations,How to test,Git and changes,Feedback',
+    'To test: development folded, test, git and feedback open, no pull request without a branch: ' + (await sections()).join(),
+  )
   await page.click('[data-testid=ticket-feedback]')
   assert(await page.evaluate(() => document.activeElement?.dataset.testid === 'ticket-feedback-input'), 'Add feedback focuses the feedback box')
   await page.selectOption('[data-testid=ticket-feedback-kind]', 'bug')
@@ -131,6 +135,7 @@ run(async ({ page, ctx }) => {
   await page.click('[data-testid=ticket-close]')
   await page.waitForSelector('[data-testid=ticket-status]:has-text("Done")')
   assert(true, 'ticket closed')
+  assert((await sections()).join() === 'Description,-Notes,-Implementation plan,-Goals · 1/2,-Feedback · 0 open', 'Done: the sections with content, folded but the description: ' + (await sections()).join())
   await page.click('.tk-section-toggle:has-text("History")')
   const events = await page.$$eval('.tk-events li', (l) => l.length)
   assert(events >= 5, `history of the changes (${events})`)
