@@ -1,4 +1,5 @@
-// Editor: text against the gutter, indentation guides, whitespace, multiple carets, folding.
+// Editor: text against the gutter, indentation guides, whitespace, multiple carets, folding,
+// soft wrap.
 const fs = require('fs')
 const { run, openProject, open, assert, text, WS, OUT } = require('../common.cjs')
 
@@ -6,6 +7,7 @@ run(async ({ page }) => {
   fs.writeFileSync(WS + '/demo/multi.txt', 'foo bar foo\nfoo baz\n    foo qux\n')
   fs.writeFileSync(WS + '/demo/win.txt', 'one\r\ntwo\r\n')
   fs.writeFileSync(WS + '/demo/latin.txt', Buffer.from('caf\xe9\n', 'latin1'))
+  fs.writeFileSync(WS + '/demo/long.md', '# Title\n\n' + Array.from({ length: 90 }, (_, i) => 'word' + i).join(' ') + '\nafter\n')
   fs.writeFileSync(WS + '/demo/conf.yaml', 'server:\n  host: x\n  ports:\n    - 80\n    - 443\nname: demo\n')
   await openProject(page)
   await open(page, 'main.go')
@@ -264,6 +266,64 @@ run(async ({ page }) => {
   assert((await text(page)).includes('\n  }\n'), 'Tab inserts the indentation chosen for the file')
   await page.keyboard.press('Control+z')
   await menuItem('indent', 'Tab')
+
+  // Soft wrap: on for Markdown by default, rows read from the layout, Alt+Z toggles it.
+  await open(page, 'long.md')
+  const geo = () => page.evaluate(() => {
+    const p = '.pane.active '
+    const scroll = document.querySelector(p + '.ed-scroll')
+    const content = document.querySelector(p + '.ed-content')
+    const cs = getComputedStyle(content)
+    const lh = parseFloat(cs.lineHeight)
+    const pad = parseFloat(cs.paddingTop)
+    const t = document.querySelector(p + '.ed-block').firstChild
+    const rowOf = (off) => {
+      const r = document.createRange()
+      r.setStart(t, off)
+      r.setEnd(t, off + 1)
+      const b = r.getClientRects()[0]
+      return Math.floor((b.top + b.height / 2 - content.getBoundingClientRect().top - pad) / lh)
+    }
+    const start = t.data.indexOf('word0')
+    const end = t.data.indexOf('\nafter')
+    const sel = document.getSelection()
+    return {
+      wrap: document.querySelector(p + '.ed').classList.contains('wrap'),
+      overflow: scroll.scrollWidth - scroll.clientWidth,
+      longRows: rowOf(end) - rowOf(start) + 1,
+      afterRow: rowOf(end + 1),
+      nums: document.querySelector(p + '.ed-gutter-nums').textContent.split('\n'),
+      caret: sel.focusNode === t ? sel.focusOffset : -1,
+      start,
+      end,
+      curRow: Math.round((new DOMMatrix(getComputedStyle(t.parentElement.closest('.ed').querySelector('.ed-curline')).transform).m42 - pad) / lh),
+      caretRow: sel.focusNode === t ? rowOf(sel.focusOffset) : -1,
+    }
+  })
+  let g = await geo()
+  assert(g.wrap && g.overflow <= 1 && g.longRows > 2, 'a long Markdown line wraps, no horizontal scroll ' + JSON.stringify({ overflow: g.overflow, rows: g.longRows }))
+  assert(g.nums.indexOf('4') === g.afterRow && g.nums.indexOf('3') === 2, 'one gutter number per line, on its first row')
+  await page.click('.pane.active .ed-content')
+  await page.keyboard.press('Control+Home')
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('ArrowDown')
+  await page.waitForTimeout(200)
+  g = await geo()
+  assert(g.caret > g.start && g.caret < g.end, 'ArrowDown moves to the next row of a wrapped line')
+  assert(g.curRow === g.caretRow && g.caretRow > 2, 'the current line follows the row of the caret ' + JSON.stringify([g.curRow, g.caretRow]))
+  await page.keyboard.press('Home')
+  g = await geo()
+  assert(g.caret > g.start && g.caretRow > 2, 'Home goes to the start of the wrapped row')
+  await page.keyboard.press('Alt+KeyZ')
+  await page.waitForFunction(() => !document.querySelector('.pane.active .ed').classList.contains('wrap'))
+  g = await geo()
+  assert(g.overflow > 100 && g.longRows === 1, 'Alt+Z unwraps the lines')
+  await page.click('.menu-btn:has-text("View")')
+  await page.click('.ctx-menu .ctx-item:has-text("Wrap the long lines")')
+  await page.waitForFunction(() => document.querySelector('.pane.active .ed').classList.contains('wrap'))
+  assert(true, 'the View menu wraps them again')
+  await page.screenshot({ path: OUT + '/editor-wrap.png' })
 
   // CRLF: normalized in the editor, written back with CRLF; LF conversion.
   await open(page, 'win.txt')

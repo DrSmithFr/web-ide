@@ -127,6 +127,7 @@ On a screen 720 px wide or less (phones; tablets keep the layout above):
 - The text starts right against the gutter, without a left margin.
 - **Indentation guides** (setting, on by default): a thin vertical line at each indentation level, the step being the most frequent indentation increase of the file (else the tab size); blank lines take the smaller indentation of the lines around them. The guide of the block holding the caret (or opened by the caret line) is brighter.
 - **Whitespace** (setting and *View › Show whitespace*, off by default): a dot for each space, an arrow for each tab, `↵` at each line end, drawn faintly over the text by an overlay copying the visible lines in transparent characters (exact widths, tab stops included).
+- **Word wrap** (setting: Markdown and text files by default, every file, or never; *View › Wrap the long lines* or Alt+Z toggles it for the open document until the page reloads): long lines wrap at the width of the editor, at word boundaries, without horizontal scroll. The gutter shows the number of a line on its first row; the current line, the change marks, the carets and the guides follow the rows; Up/Down and Home/End move by row (Home on the first row keeps the smart Home).
 
 ### 6.5 Folding
 
@@ -191,7 +192,7 @@ On a screen 720 px wide or less (phones; tablets keep the layout above):
 
 ### Settings
 
-Large modal with navigation on the left: themes (with the accent color and the visual focus mode), fonts, editor (tab size, indentation with spaces, current line, indentation guides, whitespace), keyboard shortcuts, syntax highlighting (add, edit, export rules as JSON per language), language of the interface.
+Large modal with navigation on the left: themes (with the accent color and the visual focus mode), fonts, editor (tab size, word wrap, indentation with spaces, current line, indentation guides, whitespace), keyboard shortcuts, syntax highlighting (add, edit, export rules as JSON per language), language of the interface.
 
 ### Home page and projects
 

@@ -143,6 +143,9 @@
       "Alt+KeyW",
       "Ctrl+F4"
     ],
+    "view.wordWrap": [
+      "Alt+KeyZ"
+    ],
     "view.nextTab": [
       "Alt+PageDown"
     ],

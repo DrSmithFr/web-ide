@@ -272,6 +272,12 @@ button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 .ed-gutter-nums { position: absolute; top: 0; right: 22px; text-align: right; color: var(--gutter); will-change: transform; }
 /* Own width: a longer line elsewhere must not re-layout every block. */
 .ed-block { display: block; width: max-content; }
+.ed.wrap .ed-scroll { overflow-x: hidden; }
+.ed.wrap .ed-inner { min-width: 0; }
+.ed.wrap .ed-main { min-width: 0; }
+.ed.wrap .ed-block { width: auto; }
+.ed.wrap .ed-content, .ed.wrap .ed-ws { white-space: pre-wrap; overflow-wrap: anywhere; }
+.ed.wrap .ed-ws { right: 0; padding-right: 40px; }
 .ed-block.ed-folded { display: none; }
 .ed-folds { position: absolute; top: 0; right: 5px; width: 14px; }
 .ed-fold { position: absolute; left: 0; width: 14px; cursor: pointer; opacity: 0; transition: opacity 0.15s; }
