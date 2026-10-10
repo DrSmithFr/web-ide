@@ -48,8 +48,13 @@ const fake = http.createServer(async (req, res) => {
     return end(res)
   }
   if (scenario === 'steps') {
-    const cmds = ['echo one', 'echo two', 'echo three', 'printf "\\033[31mred\\033[0m plain\\n"', 'echo five', 'false']
-    if (last.role === 'user') return sse(res, { tool_calls: cmds.map((command, index) => ({ ...call('s' + index, 'bash', { command }), index })) }), end(res, 'tool_calls')
+    // Three answers of tool calls (the second one thinks first), then the text.
+    const steps = [['echo one', 'echo two'], ['echo three', 'printf "\\033[31mred\\033[0m plain\\n"'], ['echo five', 'false']]
+    const step = msgs.slice(msgs.lastIndexOf(lastUser)).filter((m) => m.role === 'assistant').length
+    if (step < steps.length) {
+      if (step === 1) sse(res, { reasoning_content: 'Let me look.' })
+      return sse(res, { tool_calls: steps[step].map((command, index) => ({ ...call(`s${step}${index}`, 'bash', { command }), index })) }), end(res, 'tool_calls')
+    }
     sse(res, { content: 'Steps done.' })
     return end(res)
   }
@@ -233,16 +238,28 @@ run(async ({ page, ctx }) => {
     assert(full.startsWith('Part 1.') && (full.match(/x/g) ?? []).length === 25 && byScenario.slow === 1, `full answer, without a new request (${byScenario.slow} request)`)
     await page.screenshot({ path: OUT + '/chat-resume.png' })
 
-    // Tool calls joined in one block: past 4, only the last 3 are shown; a command looks as
-    // in a console, with its colors and its exit code.
+    // Reasoning and tool calls joined in one block across the answers: past 4 rows, only the
+    // last 3 are shown; a command looks as in a console, with its colors and its exit code.
     await ask(page, 'steps please', 'Steps done.')
-    const block = page.locator('.ai-steps').last()
-    const visible = async () => block.locator('.ai-tool:visible').count()
-    assert((await block.locator('.ai-tool').count()) === 6 && (await visible()) === 3, 'six calls in one block, the last three shown')
-    assert(/3 earlier actions/.test(await block.locator('[data-testid=ai-steps-more]').textContent()), 'a row tells the earlier actions')
-    assert((await block.locator('[data-testid=ai-exit]').allTextContents()).join(',') === '0,0,0,0,0,1', 'each command shows its exit code')
+    const block = page.locator('.ai-thread')
+    // The blocks of the last turn (the rows after the last message of the user): shown rows, and
+    // whether the shown blocks touch each other.
+    const lastTurn = () => block.evaluate((th) => {
+      const rows = [...th.querySelectorAll(':scope > .ai-row')]
+      const from = rows.findLastIndex((r) => r.querySelector('.ai-msg.user'))
+      const boxes = rows.slice(from + 1).flatMap((r) => [...r.querySelectorAll('.ai-steps')]).filter((e) => e.offsetParent)
+      const r = boxes.map((e) => e.getBoundingClientRect())
+      return { rows: boxes.flatMap((b) => [...b.querySelectorAll(':scope > :is(.ai-tool, .ai-reasoning)')]).filter((e) => e.offsetParent).length, boxes: r.length, joined: r.every((x, k) => !k || Math.abs(x.top - r[k - 1].bottom) < 1.5) }
+    })
+    const visible = async () => (await lastTurn()).rows
+    const joined = async () => { const l = await lastTurn(); return l.boxes > 1 && l.joined }
+    assert((await visible()) === 3, 'the calls of three answers in one chain, the last three rows shown: ' + JSON.stringify(await lastTurn()))
+    assert(/4 earlier actions/.test(await block.locator('[data-testid=ai-steps-more]').textContent()), 'a row tells the earlier actions (the reasoning counts)')
+    assert(await joined(), 'the blocks of the answers touch each other')
+    assert((await block.locator('.ai-steps [data-testid=ai-exit]').allTextContents()).slice(-6).join(',') === '0,0,0,0,0,1', 'each command shows its exit code')
     await block.locator('[data-testid=ai-steps-more]').click()
-    assert((await visible()) === 6 && !(await block.locator('[data-testid=ai-steps-more]').count()), 'the earlier actions shown on a click')
+    assert((await visible()) === 7 && !(await block.locator('[data-testid=ai-steps-more]').count()), 'the earlier rows shown on a click, the reasoning among them: ' + JSON.stringify(await lastTurn()))
+    assert(await joined(), 'still joined once all shown')
     await block.locator('.ai-tool:has-text("printf") .ai-tool-head').click()
     const red = block.locator('.ai-tool:has-text("printf") .ai-term span[style*="color"]')
     assert((await red.textContent()) === 'red' && /\$\s*printf/.test(await block.locator('.ai-term-prompt').first().textContent()), 'the output keeps its colors, under the command')

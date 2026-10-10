@@ -353,10 +353,10 @@ function follow(el: HTMLElement, streaming: () => boolean, text: () => unknown) 
 
 const effortLabels = { xhigh: () => t('Max'), medium: () => t('Medium'), low: () => t('Low') }
 
-function Reasoning(props: { text: string; live?: boolean; ms?: number; effort?: Effort }) {
+function Reasoning(props: { text: string; live?: boolean; ms?: number; effort?: Effort; hidden?: boolean }) {
   const [open, toggle] = useFold(() => !!props.live)
   return (
-    <div class="ai-reasoning" classList={{ live: !!props.live, open: open() }}>
+    <div class="ai-reasoning" classList={{ live: !!props.live, open: open(), earlier: props.hidden }}>
       <button class="ai-tool-head" onClick={toggle}>
         <span class="ai-tool-icon">
           <Show when={!props.live} fallback={<span class="spinner" />}>
@@ -484,28 +484,71 @@ function Term(props: { command: string; msg: ChatMessage; running: boolean }) {
   )
 }
 
-/** Rows shown in a long series of tool calls: the last ones, the others behind a row. */
+/** Rows shown in a long chain of blocks: the last ones, the others behind a row. */
 const SHOWN_STEPS = 3
 
-/** The tool calls of an answer, joined in one block; past 4 calls, only the last 3 are shown. */
-function ToolSteps(props: { items: { msg: ChatMessage; call?: ToolCall }[] }) {
-  const [all, setAll] = createSignal(false)
-  const hidden = () => (all() || props.items.length <= SHOWN_STEPS + 1 ? 0 : props.items.length - SHOWN_STEPS)
-  const failed = () => props.items.slice(0, hidden()).filter((i) => i.msg.status === 'error').length
+/** Part of a chain of blocks (reasoning, tool calls) joined in one, across the answers of a
+ *  turn until a text or a card: its first rows may be hidden behind the "earlier" row. */
+export interface Seg {
+  key: string
+  joinUp: boolean
+  joinDown: boolean
+  /** Leading rows hidden; all of them: gone. */
+  hidden: number
+  gone: boolean
+  more?: { n: number; failed: number }
+  /** Last block of the chain left open at the end: the reasoning running joins it. */
+  openEnd?: boolean
+}
+
+const [expanded, setExpanded] = createSignal(new Set<string>())
+/** The reasoning running is shown (it joins the chain left open). */
+const liveJoins = () => live.busy && !approval() && !!live.reasoning
+
+/** A block of a chain: the reasoning of an answer and its tool calls, one row each. */
+function Steps(props: { seg?: Seg; reasoning?: ChatMessage; items: { msg: ChatMessage; call?: ToolCall }[] }) {
+  const hidden = () => props.seg?.hidden ?? 0
+  const offset = () => (props.reasoning ? 1 : 0)
   return (
-    <div class="ai-steps">
-      <Show when={hidden()}>
-        <button class="ai-steps-more" onClick={() => setAll(true)} data-testid="ai-steps-more">
-          <Icon name="up" size={12} />
-          <span>{tn(hidden(), '{n} earlier action', '{n} earlier actions')}</span>
-          <Show when={failed()}>
-            <span class="badge danger">{t('{n} failed', { n: failed() })}</span>
-          </Show>
-        </button>
+    <div class="ai-steps" classList={{ 'join-up': props.seg?.joinUp, 'join-down': props.seg?.joinDown || (props.seg?.openEnd && liveJoins()), gone: props.seg?.gone }}>
+      <Show when={props.seg?.more}>
+        {(more) => (
+          <button class="ai-steps-more" onClick={() => setExpanded(new Set([...expanded(), props.seg!.key]))} data-testid="ai-steps-more">
+            <Icon name="up" size={12} />
+            <span>{tn(more().n, '{n} earlier action', '{n} earlier actions')}</span>
+            <Show when={more().failed}>
+              <span class="badge danger">{t('{n} failed', { n: more().failed })}</span>
+            </Show>
+          </button>
+        )}
       </Show>
-      <For each={props.items}>{(i, k) => <ToolRow msg={i.msg} call={i.call} hidden={k() < hidden()} />}</For>
+      <Show when={props.reasoning}>
+        {(m) => <Reasoning text={m().reasoning_content!} ms={m().thinkMs} effort={m().effort} hidden={hidden() > 0} />}
+      </Show>
+      <For each={props.items}>{(i, k) => <ToolRow msg={i.msg} call={i.call} hidden={k() + offset() < hidden()} />}</For>
     </div>
   )
+}
+
+/** Tool results shown as rows under the answer that asked for them (plans and questions are cards). */
+function toolRows(index: number) {
+  const msg = chat.messages[index]
+  const out: { msg: ChatMessage; call?: ToolCall }[] = []
+  for (let i = index + 1; i < chat.messages.length && chat.messages[i].role === 'tool'; i++) {
+    const m = chat.messages[i]
+    if (!m.plan && !m.questions) out.push({ msg: m, call: msg.tool_calls?.find((c) => c.id === m.tool_call_id) })
+  }
+  return out
+}
+
+/** Does an answer show cards after its tool calls (they end a chain of blocks)? */
+function hasCards(index: number) {
+  for (let i = index + 1; i < chat.messages.length && chat.messages[i].role === 'tool'; i++) {
+    const m = chat.messages[i]
+    if (m.plan || m.questions || m.capture === 'pending' || m.card || m.opened || m.preview) return true
+    if ((m.name === 'spawn_agent' || m.name === 'agent_adopt' || m.name === 'agent_resume') && m.child) return true
+  }
+  return false
 }
 
 function Stats(props: { msg: ChatMessage }) {
@@ -536,16 +579,10 @@ function Stats(props: { msg: ChatMessage }) {
   )
 }
 
-function AssistantMessage(props: { msg: ChatMessage; index: number; lastOfTurn: boolean; lastTurn: boolean; turnStart: number }) {
+function AssistantMessage(props: { msg: ChatMessage; index: number; lastOfTurn: boolean; lastTurn: boolean; turnStart: number; head?: Seg; tail?: Seg }) {
   // Tool results follow the message that asked for them.
-  const results = () => {
-    const out: { msg: ChatMessage; call?: ToolCall }[] = []
-    for (let i = props.index + 1; i < chat.messages.length && chat.messages[i].role === 'tool'; i++) {
-      const m = chat.messages[i]
-      if (!m.plan && !m.questions) out.push({ msg: m, call: props.msg.tool_calls?.find((c) => c.id === m.tool_call_id) })
-    }
-    return out
-  }
+  const results = () => toolRows(props.index)
+  const text = () => typeof props.msg.content === 'string' && !!props.msg.content
   const plans = () => {
     const out: number[] = []
     for (let i = props.index + 1; i < chat.messages.length && chat.messages[i].role === 'tool'; i++) if (chat.messages[i].plan) out.push(i)
@@ -591,14 +628,15 @@ function AssistantMessage(props: { msg: ChatMessage; index: number; lastOfTurn: 
       .join('\n\n')
   return (
     <div class="ai-msg assistant" classList={{ 'turn-end': props.lastOfTurn }}>
-      <Show when={props.msg.reasoning_content}>
-        <Reasoning text={props.msg.reasoning_content!} ms={props.msg.thinkMs} effort={props.msg.effort} />
+      {/* Without text, the reasoning and the tool calls form one block. */}
+      <Show when={text() && props.msg.reasoning_content}>
+        <Steps seg={props.head} reasoning={props.msg} items={[]} />
       </Show>
-      <Show when={typeof props.msg.content === 'string' && props.msg.content}>
+      <Show when={text()}>
         <Markdown text={props.msg.content as string} final />
       </Show>
-      <Show when={results().length}>
-        <ToolSteps items={results()} />
+      <Show when={results().length || (!text() && props.msg.reasoning_content)}>
+        <Steps seg={props.tail} reasoning={text() || !props.msg.reasoning_content ? undefined : props.msg} items={results()} />
       </Show>
       <For each={plans()}>{(i) => <PlanCard msg={chat.messages[i]} index={i} />}</For>
       <For each={captures()}>{(i) => <CaptureCard msg={chat.messages[i]} call={props.msg.tool_calls?.find((c) => c.id === chat.messages[i].tool_call_id)} />}</For>
@@ -793,6 +831,65 @@ export function Thread(props: { onSuggest: (t: string) => void; onSettings: () =
     for (let i = chat.messages.length - 1; i >= 0; i--) if (chat.messages[i].role === 'user') return i
     return -1
   })
+  // The chains of blocks: reasoning and tool calls joined across the answers until a text,
+  // a card or the end of the turn; past 4 rows, only the last 3 are shown.
+  const chains = createMemo(() => {
+    const msgs = chat.messages
+    const out: { head?: Seg; tail?: Seg; hide?: boolean }[] = []
+    let chain: { seg: Seg; errors: boolean[] }[] = []
+    const add = (i: number, part: string, errors: boolean[]) => {
+      const seg: Seg = { key: chain.length ? chain[0].seg.key : `${chat.id}:${i}:${part}`, joinUp: false, joinDown: false, hidden: 0, gone: false }
+      chain.push({ seg, errors })
+      return seg
+    }
+    const close = () => {
+      const rows = chain.flatMap((u) => u.errors)
+      const total = rows.length > SHOWN_STEPS + 1 && !expanded().has(chain[0].seg.key) ? rows.length - SHOWN_STEPS : 0
+      const failed = rows.slice(0, total).filter(Boolean).length
+      let left = total
+      let first = true
+      chain.forEach((u, k) => {
+        u.seg.hidden = Math.min(left, u.errors.length)
+        u.seg.gone = u.seg.hidden === u.errors.length
+        left -= u.seg.hidden
+        u.seg.joinDown = k < chain.length - 1
+        if (u.seg.gone) return
+        u.seg.joinUp = !first
+        if (first && total) u.seg.more = { n: total, failed }
+        first = false
+      })
+      chain = []
+    }
+    for (let i = 0; i < msgs.length; i++) {
+      const m = msgs[i]
+      const o: (typeof out)[number] = {}
+      out.push(o)
+      if (m.role === 'tool') continue
+      if (m.role !== 'assistant' || m.kind || (m.compacted && !showCompacted())) {
+        if (chain.length) close()
+        continue
+      }
+      const text = typeof m.content === 'string' && !!m.content
+      const errors = toolRows(i).map((r) => r.msg.status === 'error')
+      if (text) {
+        if (m.reasoning_content) o.head = add(i, 'head', [false])
+        if (chain.length) close()
+        if (errors.length) o.tail = add(i, 'tail', errors)
+      } else if (m.reasoning_content || errors.length) o.tail = add(i, 'tail', m.reasoning_content ? [false, ...errors] : errors)
+      const actions = turns()[i]?.lastOfTurn && !(live.busy && i > lastUser())
+      const ends = hasCards(i) || !!m.error || actions
+      if (ends && chain.length) close()
+      if (!text && !ends && o.tail) o.hide = true
+    }
+    // The reasoning running joins the chain left open.
+    const open = chain.length > 0
+    if (open) {
+      chain[chain.length - 1].seg.openEnd = true
+      close()
+    }
+    for (const o of out) if (o.hide) o.hide = o.tail!.gone
+    return { rows: out, open }
+  })
   const compactedCount = () => chat.messages.filter((m) => m.compacted).length
   // The turn ended without an answer: an error, a stop, or tools interrupted (not a plan
   // or questions waiting for the user).
@@ -820,13 +917,13 @@ export function Thread(props: { onSuggest: (t: string) => void; onSettings: () =
       <For each={chat.messages}>
         {(m, i) => (
           <Show when={m.role !== 'tool' && (!m.compacted || showCompacted())}>
-            <div class="ai-row" classList={{ 'ai-old': !!m.compacted }}>
+            <div class="ai-row" classList={{ 'ai-old': !!m.compacted, 'ai-gone': !!chains().rows[i()]?.hide }}>
               <Show
                 when={m.kind === 'summary' || m.kind?.startsWith('agent_')}
                 fallback={
                   <Show
                     when={m.role === 'user'}
-                    fallback={<AssistantMessage msg={m} index={i()} lastOfTurn={turns()[i()]?.lastOfTurn ?? false} lastTurn={i() > lastUser()} turnStart={turns()[i()]?.turnStart ?? 0} />}
+                    fallback={<AssistantMessage msg={m} index={i()} lastOfTurn={turns()[i()]?.lastOfTurn ?? false} lastTurn={i() > lastUser()} turnStart={turns()[i()]?.turnStart ?? 0} head={chains().rows[i()]?.head} tail={chains().rows[i()]?.tail} />}
                   >
                     <UserMessage msg={m} index={i()} />
                   </Show>
@@ -852,7 +949,9 @@ export function Thread(props: { onSuggest: (t: string) => void; onSettings: () =
       <Show when={live.busy && !approval()}>
         <div class="ai-msg assistant live">
           <Show when={live.reasoning}>
-            <Reasoning text={live.reasoning} live={!live.content && !live.tool} ms={live.thinkEnd ? live.thinkEnd - live.thinkStart : undefined} />
+            <div class="ai-steps" classList={{ 'join-up': chains().open }}>
+              <Reasoning text={live.reasoning} live={!live.content && !live.tool} ms={live.thinkEnd ? live.thinkEnd - live.thinkStart : undefined} />
+            </div>
           </Show>
           <Show when={live.content}>
             <Markdown text={live.content} final={false} />
