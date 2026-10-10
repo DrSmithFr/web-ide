@@ -7,6 +7,7 @@ import { showTool } from '../state/zones'
 import { errorToast } from '../ui/toast'
 import { t } from '../i18n'
 import { consoles, ordered, setConsoles, type ConsoleInfo } from './consoles'
+import { openPreview } from '../llm/previews'
 
 export interface Command {
   id: string
@@ -72,6 +73,24 @@ export async function runCommand(cmd: Command, restart = false) {
     })
     show(info.id)
     return info
+  } catch (e) {
+    errorToast(e)
+  }
+}
+
+/** A serve command with a port: started (unless it runs) and opened as a preview. */
+export const servesApp = (c: Command) => c.flag === 'serve' && !!c.port
+
+/** Start and open the app: the pod runs the command in its console, waits for its port and
+ * serves it on a temporary URL, opened in a new tab (see llm/previews.ts). */
+export async function openApp(cmd: Command) {
+  const p = project()
+  if (!p) return
+  try {
+    const pv = await openPreview({ project: p.id, title: cmd.name, command: cmd.command, cwd: cmd.cwd, port: cmd.port ?? 0, commandId: cmd.id })
+    // The console the pod just created may not be listed here yet.
+    for (let i = 0; i < 20 && pv.console && !consoles().some((c) => c.id === pv.console); i++) await new Promise((r) => setTimeout(r, 100))
+    if (consoles().some((c) => c.id === pv.console)) show(pv.console)
   } catch (e) {
     errorToast(e)
   }

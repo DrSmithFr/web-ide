@@ -109,7 +109,7 @@ Sur le ticket, *Generate the plan* lance une conversation en mode Plan : le mod�
 
 ![Le modèle développe le ticket dans sa propre fenêtre](images/develop.gif)
 
-*Start development* crée la branche `ticket/<n>-<slug>` et son worktree git dans `.ide/worktrees/`, y lance la commande de préparation des réglages du kanban (`npm install`, copie d'un `.env`…) et l'ouvre dans sa propre fenêtre, où le modèle se met au travail :
+*Start development* crée la branche `ticket/<n>-<slug>` et son worktree git dans `.ide/worktrees/`, y lance les commandes de préparation du projet (les commandes de la Console marquées `setup` : `npm install`, copie d'un `.env`…) et l'ouvre dans sa propre fenêtre, où le modèle se met au travail :
 
 - il suit le plan et les instructions du projet (`CLAUDE.md`, `AGENTS.md`, skills) ;
 - il lit, cherche, modifie les fichiers, utilise les serveurs de langage et lance des commandes (build, tests) ;

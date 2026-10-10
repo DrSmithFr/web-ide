@@ -7,7 +7,7 @@ import { Doc } from '../editor/doc'
 import { EditorView } from '../editor/view'
 import { settings } from '../state/settings'
 import { t } from '../i18n'
-import { commands, fileError, flagIcon, flags, loadCommands, runCommand, runningConsole, saveCommands, type Command } from './commands'
+import { commands, fileError, flagIcon, flags, loadCommands, openApp, runCommand, runningConsole, saveCommands, servesApp, type Command } from './commands'
 
 const [request, setRequest] = createSignal<{ select?: string; draft?: Partial<Command> } | null>(null)
 
@@ -108,6 +108,12 @@ function CommandsModal(props: { select?: string; draft?: Partial<Command>; onClo
     if (!c) return
     props.onClose()
     await runCommand(c)
+  }
+  const openTheApp = async () => {
+    const c = dirty() ? await save() : current()
+    if (!c) return
+    props.onClose()
+    await openApp(c)
   }
   const onListKey = (e: KeyboardEvent) => {
     const l = shown()
@@ -231,6 +237,11 @@ function CommandsModal(props: { select?: string; draft?: Partial<Command>; onClo
                     <Icon name="trash" size={13} /> {t('Delete')}
                   </button>
                   <span style={{ flex: 1 }} />
+                  <Show when={servesApp(c())}>
+                    <button class="btn" disabled={busy() || !c().name.trim() || !c().command.trim()} onClick={() => void openTheApp()} title={t('Runs the command unless it runs already, waits for its port, then opens the app on a temporary URL')} data-testid="cmd-open-app">
+                      <Icon name="external" size={13} /> {t('Start and open the app')}
+                    </button>
+                  </Show>
                   <button class="btn" disabled={busy() || !c().name.trim() || !c().command.trim()} onClick={() => void run()} data-testid="cmd-run">
                     <Icon name="play" size={13} /> {dirty() ? t('Save and run') : t('Run')}
                   </button>

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DrSmithFr/web-ide/pod/internal/commands"
 	"github.com/DrSmithFr/web-ide/pod/internal/execx"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
@@ -452,7 +453,7 @@ func (s *Server) removeWorktree(ctx context.Context, loc kanban.Location, root *
 }
 
 // startTicket starts the development of a ticket (Start development, or Claude Code
-// through the MCP endpoint): branch and worktree created from the base, setup command,
+// through the MCP endpoint): branch and worktree created from the base, setup commands,
 // ticket In progress, worktree registered as a child project.
 func (s *Server) startTicket(ctx context.Context, k gctx, id int64, base0, by string, force bool) (*kanban.Ticket, string, error) {
 	t, err := s.Kanban.Get(k.loc, id)
@@ -512,18 +513,28 @@ func (s *Server) startTicket(ctx context.Context, k gctx, id int64, base0, by st
 		if err := k.git.AddWorktree(ctx, dir, branch, base); err != nil {
 			return nil, "", err
 		}
-		setup := strings.TrimSpace(meta["setup"])
+		setup, setupErr := s.setupScript(k.rt)
 		state := ""
 		if setup != "" {
 			state = "running"
+		} else if setupErr != nil {
+			state = "error"
 		}
-		if err := s.Kanban.SetGit(k.loc, t.ID, kanban.GitState{Branch: &branch, Base: &base, Worktree: &dir, Setup: &state}); err != nil {
+		git := kanban.GitState{Branch: &branch, Base: &base, Worktree: &dir, Setup: &state}
+		if setupErr != nil {
+			msg := setupErr.Error()
+			git.SetupLog = &msg
+		}
+		if err := s.Kanban.SetGit(k.loc, t.ID, git); err != nil {
 			return nil, "", err
 		}
 		if fetchErr != nil {
 			_ = s.Kanban.Event(k.loc, t.ID, by, "Worktree created: branch {branch} from {base} (git fetch failed: {error})", kanban.Params{"branch": branch, "base": base, "error": fetchErr.Error()})
 		} else {
 			_ = s.Kanban.Event(k.loc, t.ID, by, "Worktree created: branch {branch} from {base}", kanban.Params{"branch": branch, "base": base})
+		}
+		if setupErr != nil {
+			_ = s.Kanban.Event(k.loc, t.ID, by, "Worktree setup failed: {error}", kanban.Params{"error": setupErr.Error()})
 		}
 		if setup != "" {
 			go s.runSetup(k.loc, k.root.ID, t.ID, dir, setup, k.rt.Runner)
@@ -563,7 +574,16 @@ func (s *Server) ignoreWorktrees(root *projects.Project, rt *runtime.Runtime) er
 	return idedir.Ensure(rt.FS, path.Join(rt.Root, ".ide"))
 }
 
-// runSetup runs the setup command of the kanban in a new worktree (npm install…).
+// setupScript is what sets a new worktree of the project of rt up: its setup commands.
+func (s *Server) setupScript(rt *runtime.Runtime) (string, error) {
+	list, err := s.projectCommands(rt)
+	if err != nil {
+		return "", err
+	}
+	return commands.SetupScript(list), nil
+}
+
+// runSetup runs the setup commands of the project in a new worktree (npm install…).
 func (s *Server) runSetup(loc kanban.Location, rootID string, id int64, dir, cmd string, run execx.Runner) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()

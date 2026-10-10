@@ -13,6 +13,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
+	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
 )
 
@@ -557,7 +558,7 @@ var mcpTools = []mcpTool{
 	},
 	{
 		name:        "kanban_start",
-		description: `Starts the development of a ticket ("To do", or "In progress" / "To test" without a worktree): creates the branch ticket/<n>-<slug> from the base in a worktree of the project, runs the setup command of the kanban there, and moves the ticket to "In progress". Answers the worktree: work there, with absolute paths, and commit on that branch.`,
+		description: `Starts the development of a ticket ("To do", or "In progress" / "To test" without a worktree): creates the branch ticket/<n>-<slug> from the base in a worktree of the project, runs the setup commands of the project there (its saved commands flagged setup), and moves the ticket to "In progress". Answers the worktree: work there, with absolute paths, and commit on that branch.`,
 		props:       map[string]any{"id": ticketID, "base": str("Base branch (optional: the base of the ticket or of the kanban, else origin/main or main)")},
 		run: ticketTool(func(ctx context.Context, s *Server, sc mcpScope, id int64, a struct{ Base string }) (string, error) {
 			k, err := s.mcpGit(sc)
@@ -579,12 +580,61 @@ var mcpTools = []mcpTool{
 				setup = fmt.Sprintf("\nThis ticket is a step of the lineage of #%d: it shares its worktree and branch; commit only this step.", t.Parent)
 			}
 			if t.Setup == "running" {
-				setup += "\nThe setup command of the kanban is running in the worktree; kanban_get shows when it is done (Setup)."
+				setup += "\nThe setup commands of the project are running in the worktree; kanban_get shows when it is done (Setup)."
 			}
 			return fmt.Sprintf("Ticket #%d is %q.\nBranch: %s (base %s)\nWorktree: %s\nWorktree in the IDE: %s\nSwitch this session into the worktree with EnterWorktree (path %s), or work in it with absolute paths (`cd %s && …` for commands); commit messages start with \"#%d \".%s",
 				t.ID, kanban.StatusNames[t.Status], t.Branch, t.Base, t.Worktree, s.projectURL(child), t.Worktree, t.Worktree, t.ID, setup), nil
 		}),
 	},
+	{
+		name:        "list_commands",
+		description: "Lists the saved commands of the project of your folder (Console ▶ menu of the IDE, written by the user): id, flag (serve, build, test, lint, setup, other), name, description, folder, port, whether it runs, and its bash.",
+		run: func(ctx context.Context, s *Server, raw json.RawMessage) (string, error) {
+			_, rt, err := s.mcpRuntime(raw)
+			if err != nil {
+				return "", err
+			}
+			text, _, err := s.commandsText(rt)
+			return text, err
+		},
+	},
+	{
+		name:        "run_saved_command",
+		description: "Runs a saved command of the project (see list_commands) in its console of the IDE, in the worktree of your folder, visible to the user: one console per command, so a command still running is not started again (you get its console and output) unless restart is true. Waits for its end or the timeout, then returns its output; it keeps running afterwards (a development server…).",
+		props: map[string]any{"id": str("Id of the command (list_commands)"), "restart": map[string]any{"type": "boolean", "description": "Restart the command when it is running already (false by default)"},
+			"timeout": map[string]any{"type": "integer", "description": "Seconds to wait before returning (20 by default, 600 max)"}},
+		required: []string{"id"},
+		run: func(ctx context.Context, s *Server, raw json.RawMessage) (string, error) {
+			a, rt, err := s.mcpRuntime(raw)
+			if err != nil {
+				return "", err
+			}
+			return s.mcpRunSaved(ctx, rt, a.ID, a.Restart, a.Timeout)
+		},
+	},
+}
+
+// mcpArgs are the arguments of the tools on the saved commands.
+type mcpArgs struct {
+	Cwd     string `json:"cwd"`
+	ID      string `json:"id"`
+	Restart bool   `json:"restart"`
+	Timeout int    `json:"timeout"`
+}
+
+// mcpRuntime opens the runtime of the project of the folder of the client (a worktree has
+// its own).
+func (s *Server) mcpRuntime(raw json.RawMessage) (mcpArgs, *runtime.Runtime, error) {
+	a, err := bind[mcpArgs](raw)
+	if err != nil {
+		return a, nil, err
+	}
+	sc, err := s.mcpScope(a.Cwd)
+	if err != nil {
+		return a, nil, err
+	}
+	rt, err := s.openRuntime(sc.here.ID, sshx.Creds{})
+	return a, rt, err
 }
 
 func findMCPTool(name string) *mcpTool {

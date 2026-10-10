@@ -179,9 +179,9 @@ func (s *Server) registerWorktrees() {
 			return nil, err
 		}
 		s.emitter(root.ID)("git.changed", nil, "")
-		// The setup command of the kanban (npm install…) runs in the window of the worktree.
-		meta, _ := s.Kanban.Meta(kanbanLoc(root))
-		return map[string]string{"project": v.ID, "setup": strings.TrimSpace(meta["setup"])}, nil
+		// The setup commands of the project (npm install…) run in the window of the worktree.
+		setup, _ := s.setupScript(rt)
+		return map[string]string{"project": v.ID, "setup": setup}, nil
 	})
 	// Removes a worktree opened from the menu bar (a ticket one goes with its ticket) and
 	// its project; the branch is kept. Uncommitted changes need force.

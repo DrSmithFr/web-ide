@@ -79,6 +79,9 @@ var projectDefs = []Def{
 	fn("run_command", "Runs a command in a new console of the IDE, visible to the user (development server, watcher, command they want to follow or use). Waits for its end or the timeout, then returns the start of its output; it keeps running afterwards. For your own operations, use bash.",
 		obj{"command": str(`Command, e.g. "npm run dev"`), "cwd": str("Working directory (project root by default)"), "timeout": integer("Seconds to wait before returning (20 by default, 600 max)")}, "command"),
 	fn("list_consoles", "Lists the open consoles (terminals and commands) with their state.", obj{}),
+	fn("list_commands", "Lists the saved commands of the project (Console ▶ menu, written by the user): id, flag (serve, build, test, lint, setup, other), name, description, folder, port, whether it runs, and its bash.", obj{}),
+	fn("run_saved_command", "Runs a saved command of the project (see list_commands) in its console, visible to the user: one console per command, so a command still running is not started again (you get its console and output) unless restart=true. Waits for its end or the timeout, then returns its output; it keeps running afterwards. Prefer it to run_command when a saved command does the job.",
+		obj{"id": str("Id of the command (list_commands)"), "restart": boolean("Restart the command when it is running already (false by default)"), "timeout": integer("Seconds to wait before returning (20 by default, 600 max)")}, "id"),
 	fn("read_console", "Reads the end of the output of a console.", obj{"console_id": str("Console id"), "lines": integer("Number of lines (200 by default)")}, "console_id"),
 	fn("console_input", "Types text in a console (interactive terminal, program waiting for an answer). A newline is added unless enter=false.",
 		obj{"console_id": str("Console id"), "text": str("Text to type"), "enter": boolean("Press Enter after the text (true by default)")}, "console_id", "text"),
@@ -185,13 +188,14 @@ var boardImageDef = fn("board_draw_image",
 	}, "title", "image")
 
 var sharePreviewDef = fn("share_preview",
-	"Offers the user to try the app: shows a card in the conversation that, on their click, starts the command in a console (unless it runs already), waits for the port, then opens the app on a temporary URL they can reach from any device (phone included). Nothing runs before the click. Use it for a development server rather than run_command when the user should see the app.",
+	"Offers the user to try the app: shows a card in the conversation that, on their click, starts the command in a console (unless it runs already), waits for the port, then opens the app on a temporary URL they can reach from any device (phone included). Nothing runs before the click. Use it for a development server rather than run_command when the user should see the app. When the project has a saved serve command (list_commands), use it: pass its command_id, or no command at all when there is only one with a port.",
 	obj{
-		"title":   str("Short name of what to try, e.g. \"Login page\""),
-		"command": str("Command that starts the app (development server), e.g. \"npm run dev\""),
-		"port":    integer("Port the app listens on, on the machine of the project"),
-		"cwd":     str("Folder to run it in, relative to the project root (default: the root)"),
-	}, "title", "command", "port")
+		"title":      str("Short name of what to try, e.g. \"Login page\""),
+		"command_id": str("Id of a saved serve command of the project (list_commands): it gives the command, the folder and the port"),
+		"command":    str("Command that starts the app (development server), e.g. \"npm run dev\"; omit it to use the saved serve command"),
+		"port":       integer("Port the app listens on, on the machine of the project (default: the one of the saved command)"),
+		"cwd":        str("Folder to run it in, relative to the project root (default: the root)"),
+	}, "title")
 
 var (
 	statuses       = []string{"new", "todo", "in_progress", "review", "done", "abandoned"}

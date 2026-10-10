@@ -127,6 +127,8 @@ export const toolVerbs: Record<string, string> = {
   list_consoles: 'Lists the consoles',
   read_console: 'Reads the console',
   console_input: 'Types in the console',
+  list_commands: 'Lists the project commands',
+  run_saved_command: 'Runs the project command',
   kanban_list: 'Lists the tickets',
   kanban_get: 'Reads the ticket',
   kanban_create: 'Creates the ticket',
@@ -154,6 +156,7 @@ export const toolVerbs: Record<string, string> = {
 export const toolIcons: Record<string, string> = {
   list_dir: 'folder', find_files: 'search', read_file: 'file', search_text: 'search', edit_file: 'edit', write_file: 'edit',
   open_file: 'external', focus: 'locate', run_command: 'terminal', bash: 'terminal', list_consoles: 'terminal', read_console: 'terminal', console_input: 'terminal',
+  list_commands: 'play', run_saved_command: 'play',
   load_skill: 'puzzle', read_skill_file: 'puzzle', lsp_symbols: 'outline', lsp_workspace_symbols: 'outline', lsp_definition: 'outline',
   lsp_references: 'outline', lsp_hover: 'info', lsp_diagnostics: 'conflict',
   kanban_list: 'kanban', kanban_get: 'kanban', kanban_create: 'kanban', kanban_update: 'kanban', kanban_add_note: 'kanban', kanban_set_plan: 'kanban',

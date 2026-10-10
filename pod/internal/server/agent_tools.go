@@ -178,6 +178,15 @@ func (s *Server) agentTool(r *agentRun, ref *runtimeRef, call agent.ToolCall, mo
 			return toolResult{Content: "The user refused this command (" + why + ").", Summary: agent.T("command refused", nil).Raw(), Status: "denied"}
 		}
 	}
+	// A saved command was written by the user: it runs freely in Build mode, and its builds,
+	// tests and lints in the other modes.
+	if name == "run_saved_command" && mode != agent.Build {
+		if cmd, err := s.findCommand(ref.rt, a.str("id")); err == nil && cmd.Flag != "build" && cmd.Flag != "test" && cmd.Flag != "lint" &&
+			!s.confirm(r, root, agent.Approval{Call: call, Kind: "command", Command: cmd.Command}) {
+			why := which + " mode: only the build, test and lint commands of the project run freely"
+			return toolResult{Content: "The user refused this command (" + why + ").", Summary: agent.T("command refused", nil).Raw(), Status: "denied"}
+		}
+	}
 	var err error
 	switch name {
 	case "list_dir":
@@ -223,13 +232,17 @@ func (s *Server) agentTool(r *agentRun, ref *runtimeRef, call agent.ToolCall, mo
 	case "agent_note":
 		res, err = s.agentNote(r, a)
 	case "share_preview":
-		res, err = sharePreview(r, ref.rt, a)
+		res, err = s.sharePreview(r, ref.rt, a)
 	case "bash":
 		res, err = bashTool(r.ctx, ref.rt, a.str("command"), a.str("cwd"), a.num("timeout"), s.toolProgress(r, call.ID), s.keptFor(r))
 	case "run_command":
 		res, err = s.runCommand(r, ref.rt, a.str("command"), a.str("cwd"), a.num("timeout"), s.toolProgress(r, call.ID))
 	case "list_consoles":
 		res = listConsoles(ref.rt)
+	case "list_commands":
+		res, err = s.listCommandsTool(ref.rt)
+	case "run_saved_command":
+		res, err = s.runSavedTool(r, ref.rt, a, s.toolProgress(r, call.ID))
 	case "read_console":
 		res, err = readConsole(ref.rt, a.str("console_id"), a.num("lines"))
 	case "console_input":
@@ -730,37 +743,48 @@ func (s *Server) runCommand(r *agentRun, rt *runtime.Runtime, command, cwd strin
 
 // waitCommand follows the console of run_command until the command ends or its deadline.
 func (s *Server) waitCommand(r *agentRun, rt *runtime.Runtime, command, console string, until time.Time, progress func(string)) (toolResult, error) {
-	info := struct{ ID string }{console}
-	var err error
-	var text, last string
-	var now *consoleInfo
+	text, now, err := followConsole(r.ctx, rt, console, until, progress)
+	if err != nil {
+		return toolResult{}, err
+	}
+	return consoleResult(command, console, text, now), nil
+}
+
+// followConsole waits until the command of a console ends, its deadline or ctx, showing its
+// output meanwhile (progress may be nil); answers its output and state.
+func followConsole(ctx context.Context, rt *runtime.Runtime, id string, until time.Time, progress func(string)) (string, *consoleInfo, error) {
+	var last string
 	shown := time.Now()
 	for {
-		text, now, err = consoleText(rt, info.ID)
+		text, now, err := consoleText(rt, id)
 		if err != nil {
-			return toolResult{}, err
+			return "", nil, err
 		}
-		if now.Exited || time.Now().After(until) || r.ctx.Err() != nil {
-			break
+		if now.Exited || time.Now().After(until) || ctx.Err() != nil {
+			return text, now, nil
 		}
-		if time.Since(shown) >= 500*time.Millisecond && text != last {
+		if progress != nil && time.Since(shown) >= 500*time.Millisecond && text != last {
 			progress(text)
 			shown, last = time.Now(), text
 		}
 		time.Sleep(150 * time.Millisecond)
 	}
+}
+
+// consoleResult is what the model reads of a command followed in a console.
+func consoleResult(command, console, text string, now *consoleInfo) toolResult {
 	out := agent.Tail(text, 300, 12000)
 	if !now.Exited {
-		return ok(fmt.Sprintf("The command is still running (console %s). Output so far:\n%s\n\nFollow it with read_console, interact with console_input.", info.ID, out), agent.T("{command}: still running", map[string]any{"command": command})), nil
+		return ok(fmt.Sprintf("The command is still running (console %s). Output so far:\n%s\n\nFollow it with read_console, interact with console_input.", console, out), agent.T("{command}: still running", map[string]any{"command": command}))
 	}
 	if out == "" {
 		out = "(no output)"
 	}
-	tr := toolResult{Content: fmt.Sprintf("Exit code: %d (console %s)\n%s", now.Code, info.ID, out), Summary: agent.Plain(fmt.Sprintf("code %d", now.Code)), Status: "ok"}
+	tr := toolResult{Content: fmt.Sprintf("Exit code: %d (console %s)\n%s", now.Code, console, out), Summary: agent.Plain(fmt.Sprintf("code %d", now.Code)), Status: "ok"}
 	if now.Code != 0 {
 		tr.Status, tr.Failure = "error", "exit"
 	}
-	return tr, nil
+	return tr
 }
 
 // startCommand runs a command in a new console of a project, shown in its windows.

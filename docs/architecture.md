@@ -44,7 +44,7 @@ The keeper also relays HTTP requests (`keeper/http.go`): the completions of the 
 
 JSON over one WebSocket per window. Request `{id, method, params}` → response `{id, result | error}`; events pushed as `{event, data}` (`fs.changed`, `buffer.synced`, `session.changed`, `console.output`, `lsp.diagnostics`, `git.changed`, `llm.delta`, `agent.update`, `kanban.changed`…). `id: 0` is a notification without answer; `$/cancel` cancels a request. Some methods run in order per group (document changes, terminal input), and a language server request waits for the document changes sent before it (`barrier` in `server.go`).
 
-`POST /mcp` is the MCP endpoint for Claude Code (`server/mcp*.go`, JSON-RPC over HTTP without streaming, the token as a bearer): tools and prompts on the kanban, see [kanban.md](kanban.md#claude-code). `/open?path=&line=` opens a file in the windows of its project (`server/open.go`).
+`POST /mcp` is the MCP endpoint for Claude Code (`server/mcp*.go`, JSON-RPC over HTTP without streaming, the token as a bearer): tools and prompts on the kanban and the saved commands, see [kanban.md](kanban.md#claude-code). `/open?path=&line=` opens a file in the windows of its project (`server/open.go`).
 
 Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a message translated into the language of the window.
 
@@ -58,7 +58,7 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 | `sshx` | SSH agent, keys, passwords, host keys (TOFU), connection pool |
 | `execx` | Local or SSH processes, PTYs |
 | `console` | Terminals and commands with scrollback and output offsets; run by the keeper when there is one, adopted again after a restart of the pod |
-| `commands` | Saved commands of a project (`.ide/commands.json` of the main project): validation, load and save; run by the server (`commands.run`) as tasks tagged with their id (`console.Info.CommandID`), one console per command |
+| `commands` | Saved commands of a project (`.ide/commands.json` of the main project): validation, load and save; run by the server (`commands.run`, `run_saved_command` of the assistant and the MCP, previews of `serve` commands) as tasks tagged with their id (`console.Info.CommandID`), one console per command; the `setup` ones make the setup script of a new worktree (`SetupScript`) |
 | `keeper` | The keeper: protocol (frames of a length, a JSON header and raw bytes), server (processes known by pid and descriptors, output rings, attachments from an offset, GC of ended processes; HTTP relay of the completions; SSH connections; update by re-exec) and the client of the pod (reconnection, attachments resumed from their offset) |
 | `lsp` | Language servers per project and language |
 | `db` | SQLite (modernc), PostgreSQL (pgx), Redis (go-redis), SSH tunnels |

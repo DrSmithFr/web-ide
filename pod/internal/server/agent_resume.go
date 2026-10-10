@@ -207,12 +207,19 @@ func (s *Server) followed(r *agentRun, ref *runtimeRef, call agent.ToolCall, a t
 			return fail(r, err), true
 		}
 		return shellToolResult(res), true
-	case call.Function.Name == "run_command" && f.Console != "":
+	case (call.Function.Name == "run_command" || call.Function.Name == "run_saved_command") && f.Console != "":
 		if _, _, err := consoleText(ref.rt, f.Console); err != nil {
 			return toolResult{}, false // the console is gone: the command runs again
 		}
 		s.toolRunning(r, func(run *agent.Running) { run.Console, run.Until = f.Console, f.Until })
-		res, err := s.waitCommand(r, ref.rt, a.str("command"), f.Console, until, s.toolProgress(r, call.ID))
+		command := a.str("command")
+		if call.Function.Name == "run_saved_command" {
+			command = a.str("id")
+			if cmd, err := s.findCommand(ref.rt, command); err == nil {
+				command = cmd.Name
+			}
+		}
+		res, err := s.waitCommand(r, ref.rt, command, f.Console, until, s.toolProgress(r, call.ID))
 		if err != nil {
 			return fail(r, err), true
 		}

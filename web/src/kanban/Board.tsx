@@ -6,6 +6,8 @@ import { Modal } from '../ui/overlay'
 import { errorToast } from '../ui/toast'
 import { copyText } from '../ui/clipboard'
 import { mcpAddCommand } from './claude'
+import { openCommands } from '../console/CommandsModal'
+import { commands, loadCommands } from '../console/commands'
 import {
   board, createTicket, ensureBoard, setMeta, newTicketOpen, openTicket, priorityLabels, setNewTicketOpen, statusLabels, workTime,
   MAX_DESCRIPTION, type Priority, type Status, type Summary,
@@ -189,11 +191,17 @@ export function Card(props: { tk: Summary; compact?: boolean; closed?: boolean }
 /** Settings of the kanban of the project (kept in its base). */
 function KanbanSettings(props: { onClose: () => void }) {
   const [base, setBase] = createSignal(board.meta.base ?? '')
-  const [setup, setSetup] = createSignal(board.meta.setup ?? '')
   const [mcp] = createResource(mcpAddCommand)
+  // The setup of a new worktree: the project commands flagged setup.
+  onMount(() => void loadCommands())
+  const setupNames = () =>
+    commands()
+      .filter((c) => c.flag === 'setup')
+      .map((c) => c.name)
+      .join(', ')
   const save = async () => {
     try {
-      await setMeta({ base: base().trim(), setup: setup().trim() })
+      await setMeta({ base: base().trim() })
       props.onClose()
     } catch (e) {
       errorToast(e)
@@ -219,10 +227,24 @@ function KanbanSettings(props: { onClose: () => void }) {
           <span>{t('Base of the ticket branches (empty: origin/main, else main)')}</span>
           <input class="mono" placeholder="origin/main" value={base()} onInput={(e) => setBase(e.currentTarget.value)} data-testid="kanban-base" />
         </label>
-        <label class="field">
-          <span>{t('Setup command of a worktree (run in the worktree when it is created)')}</span>
-          <textarea class="mono" rows={3} placeholder="npm install && cp ../../../.env ." value={setup()} onInput={(e) => setSetup(e.currentTarget.value)} data-testid="kanban-setup" />
-        </label>
+        <div class="field">
+          <span>{t('Setup of a worktree')}</span>
+          <div class="field-row">
+            <span class="muted small grow" data-testid="kanban-setup-list">
+              {setupNames() ? t('Run in a new worktree, in this order: {names}.', { names: setupNames() }) : t('No command flagged “setup” yet (npm install, copy a .env…).')}
+            </span>
+            <button
+              class="btn small"
+              onClick={() => {
+                props.onClose()
+                openCommands()
+              }}
+              data-testid="kanban-setup-commands"
+            >
+              {t('Edit commands…')}
+            </button>
+          </div>
+        </div>
         <p class="muted small">{t('Worktrees are created in {dir}, ignored by git.', { dir: '.ide/worktrees/' })}</p>
         <div class="field">
           <span>{t('Claude Code: add the kanban tools of this IDE (once, in a terminal)')}</span>

@@ -10,6 +10,8 @@ export interface PreviewSpec {
   command: string
   cwd?: string
   port: number
+  /** Saved command of the project it starts (its console, one per command). */
+  commandId?: string
 }
 
 export interface Preview extends PreviewSpec {
