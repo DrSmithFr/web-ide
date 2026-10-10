@@ -4,10 +4,26 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-10
+
 ### Added
 
+- Word wrap in the editor (setting: Markdown and text files by default, every file, or never; *View › Wrap the long lines* or `Alt+Z` for the open document): long lines wrap at the width of the editor; the gutter, the carets, the folds and the guides follow the rows.
+- Markdown lists continue on Enter (`- `, `1. ` numbered on, `- [ ] `); Enter on an empty item ends the list.
+- The message box of the assistant is a Markdown editor: the font and the editing of the code editor (highlighting, word wrap, multiple carets, `Alt+J`, undo), Enter adds a line, `Ctrl+S` or `Ctrl+Enter` sends; `@paths` and `/commands` are highlighted. A full screen mode (`Ctrl+Shift+E`, Esc to leave) gives it the whole tool.
+- LED strips around the ticket bar of the message box show the mode (Orchestrator green, Build yellow, Briefing orange, Plan blue, violet during a compaction): brighter with the focus, pulsing while the assistant works.
 - Complexity of a ticket and of a test feedback (low, medium, high), estimated by the model with the plan and the feedback it adds, editable: it routes the sessions. *Briefing*, *Start development*, *Fix session* and *Fix feedbacks* run the integrated assistant with the effort of the complexity (Max, Dynamic, Low) on a click, and list every level with Claude Opus, Sonnet or Haiku; *Review* offers Opus or Sonnet.
 - The cards of the board list the titles of their goals and show the time of the answers of their conversations; the ticket view shows it next to each conversation (sub-agents included, the thinking in the tooltip).
+
+### Changed
+
+- The message box of the assistant is docked at the bottom of the tool like an editor pane, its buttons in the order Mode, Dictate, Attach, Options, with a short placeholder (*Message…*).
+- The ticket bar of a conversation sits on top of the message box: *Ticket #n*, its status, and the role of the conversation on the right.
+- Plan, Briefing and Orchestrator write scratch files in `/tmp` and run the commands confined to it freely; Build changes the project and `/tmp` without asking.
+
+### Fixed
+
+- Build mode: a known program called by its path in a bin folder (`~/sdk/go/bin/go test`, `/usr/bin/env make`) runs freely like the same program called by its name; the prompt asks the model to call the programs by name, a variable such as `$GO` still asking.
 
 ## [1.6.0] - 2026-10-10
 
