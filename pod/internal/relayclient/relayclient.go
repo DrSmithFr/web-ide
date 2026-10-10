@@ -30,16 +30,19 @@ import (
 
 // sigMsg is one signaling message between the relay and the pod (mirrored by the relay).
 type sigMsg struct {
-	Type       string          `json:"type"`
-	Session    string          `json:"session,omitempty"`
-	URLs       []string        `json:"urls,omitempty"`
-	Username   string          `json:"username,omitempty"`
-	Credential string          `json:"credential,omitempty"`
-	SDP        string          `json:"sdp,omitempty"`
-	Candidate  json.RawMessage `json:"candidate,omitempty"`
-	ID         string          `json:"id,omitempty"`
-	Secret     string          `json:"secret,omitempty"`
-	Name       string          `json:"name,omitempty"`
+	Type       string                `json:"type"`
+	Session    string                `json:"session,omitempty"`
+	URLs       []string              `json:"urls,omitempty"`
+	Username   string                `json:"username,omitempty"`
+	Credential string                `json:"credential,omitempty"`
+	SDP        string                `json:"sdp,omitempty"`
+	Candidate  json.RawMessage       `json:"candidate,omitempty"`
+	ID         string                `json:"id,omitempty"`
+	Secret     string                `json:"secret,omitempty"`
+	Name       string                `json:"name,omitempty"`
+	Account    string                `json:"account,omitempty"`
+	Cert       *identity.Cert        `json:"cert,omitempty"`
+	List       *identity.Revocations `json:"list,omitempty"` // pushed to the pods of an account
 }
 
 // Config of a relayclient.
@@ -119,8 +122,16 @@ func (c *Client) runOnce(ctx context.Context) error {
 	link := &podLink{c: conn}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	// Register: the relay stores the secret and marks the pod online.
-	if err := link.send(sigMsg{Type: "register", ID: c.cfg.PodID, Secret: c.cfg.Secret, Name: c.cfg.Name}); err != nil {
+	// Register: the relay stores the secret and marks the pod online. A paired pod also
+	// gives its account and its certificate — the relay can check them but never make one.
+	var reg sigMsg
+	if c.cfg.Identity != nil && c.cfg.Identity.Paired() {
+		reg = sigMsg{Type: "register", ID: c.cfg.PodID, Secret: c.cfg.Secret, Name: c.cfg.Name,
+			Account: c.cfg.Identity.Account, Cert: c.cfg.Identity.Cert}
+	} else {
+		reg = sigMsg{Type: "register", ID: c.cfg.PodID, Secret: c.cfg.Secret, Name: c.cfg.Name}
+	}
+	if err := link.send(reg); err != nil {
 		return err
 	}
 	m, err := link.recv(ctx)
@@ -129,6 +140,11 @@ func (c *Client) runOnce(ctx context.Context) error {
 	}
 	if m.Type != "ready" {
 		return errors.New("relay refused the pod: " + m.Type)
+	}
+	// The revocation list the relay holds: the pod checks it itself and refuses the devices
+	// on it, whatever the relay says.
+	if err := c.applyRevocations(m.List); err != nil {
+		return err
 	}
 	c.tell("connected")
 	for {
@@ -140,6 +156,10 @@ func (c *Client) runOnce(ctx context.Context) error {
 			return err
 		}
 		switch m.Type {
+		case "revocations":
+			if err := c.applyRevocations(m.List); err != nil {
+				return err
+			}
 		case "ice":
 			c.setICE(m.Session, m)
 		case "offer":
@@ -150,6 +170,16 @@ func (c *Client) runOnce(ctx context.Context) error {
 			c.route(m.Session, func(s *session) { s.close() })
 		}
 	}
+}
+
+// applyRevocations takes a revocation list from the relay. The pod checks the signature
+// against the account it pinned — it never trusts the relay to say who is revoked — and
+// keeps only a list with a higher seq.
+func (c *Client) applyRevocations(list *identity.Revocations) error {
+	if c.cfg.Identity == nil || list == nil {
+		return nil
+	}
+	return c.cfg.Identity.ApplyRevocations(list)
 }
 
 // route runs fn on the session of an id, if it is alive.

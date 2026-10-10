@@ -50,7 +50,15 @@ func (c *Cert) Canonical() string {
 
 // NewCert builds and signs a certificate for a device key.
 func NewCert(account *Account, device ed25519.PrivateKey, name, kind string) *Cert {
-	c := &Cert{V: 1, Account: account.ID, Key: KeyID(device), Name: name, Kind: kind, Created: time.Now().Unix(), Scope: ScopeAll}
+	return NewCertForPub(account, device.Public().(ed25519.PublicKey), name, kind)
+}
+
+// NewCertForPub signs a certificate for the public key of a device the admin read: the
+// pairing flow. The admin holds the account key and the key the device posted, never its
+// private key, so it signs for the public half it was shown — the fingerprint the joining
+// device displays is the guard against a relay that swapped it.
+func NewCertForPub(account *Account, pub ed25519.PublicKey, name, kind string) *Cert {
+	c := &Cert{V: 1, Account: account.ID, Key: ID(pub), Name: name, Kind: kind, Created: time.Now().Unix(), Scope: ScopeAll}
 	c.Sig = Sign(account.Priv, []byte(c.Canonical()))
 	return c
 }
