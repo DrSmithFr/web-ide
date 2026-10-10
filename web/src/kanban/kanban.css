@@ -41,7 +41,6 @@
 .kb-card-title { font-weight: 500; overflow-wrap: anywhere; }
 .kb-card-meta { display: flex; gap: 10px; color: var(--fg-muted); font-size: 12px; min-width: 0; }
 .kb-card-meta span { display: inline-flex; align-items: center; gap: 3px; }
-.kb-card-meta .ok { color: var(--ok); }
 .kb-card-meta .warn { color: var(--warn); }
 .kb-card.compact { padding: 6px 8px; gap: 3px; border-radius: 4px; }
 

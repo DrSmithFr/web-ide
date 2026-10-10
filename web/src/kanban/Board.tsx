@@ -157,16 +157,11 @@ export function Card(props: { tk: Summary; compact?: boolean }) {
           </For>
         </ul>
       </Show>
-      <Show when={!props.compact && (tk().goals || tk().chats || tk().branch || tk().feedbackOpen)}>
+      <Show when={!props.compact && (tk().chats || tk().branch || tk().feedbackOpen)}>
         <div class="kb-card-meta">
           <Show when={tk().feedbackOpen}>
             <span class="warn" title={t('Open feedback')} data-testid="card-feedback">
               <Icon name="comment" size={11} /> {tk().feedbackOpen}
-            </span>
-          </Show>
-          <Show when={tk().goals}>
-            <span title={t('Goals reached')} classList={{ ok: tk().goalsDone === tk().goals }}>
-              <Icon name="check" size={11} /> {tk().goalsDone}/{tk().goals}
             </span>
           </Show>
           <Show when={tk().chats}>
