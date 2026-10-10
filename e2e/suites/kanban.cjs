@@ -203,7 +203,7 @@ run(async ({ page, ctx }) => {
   await page.waitForSelector('[data-testid=ticket-status]:has-text("In progress")')
   await page.click('[data-testid=ticket-to-review]')
   await page.waitForSelector('[data-testid=ticket-step]')
-  assert(await page.isDisabled('[data-testid=ticket-close]'), 'a parent is closed after its steps')
+  assert(!(await page.isVisible('[data-testid=ticket-close]')), 'a parent is validated after its steps: only Validate the step shown')
   await page.screenshot({ path: OUT + '/kanban-lineage.png' })
   await page.click('[data-testid=ticket-step]')
   await page.waitForSelector('[data-testid=ticket-step]', { state: 'detached' })

@@ -113,14 +113,10 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
               },
             ]
           : []),
-        {
-          label: t('Validate the ticket'),
-          primary: !openChildren.length,
-          disabled: !!openChildren.length,
-          title: openChildren.length ? t('The lineage is not finished: {ids}', { ids: openChildren.map((c) => `#${c.id}`).join(', ') }) : t('Closes the ticket: Done'),
-          run: () => void closeTicket(tk, ctx.apply),
-          testid: 'ticket-close',
-        },
+        // The ticket is validated once its lineage is finished.
+        ...(openChildren.length
+          ? []
+          : [{ label: t('Validate the ticket'), primary: true, title: t('Closes the ticket: Done'), run: () => void closeTicket(tk, ctx.apply), testid: 'ticket-close' }]),
         { label: t('Back to “In progress”'), run: () => void ctx.move('in_progress'), more: true },
         { label: t('Handle the test feedback with Claude Code'), run: () => runClaude(tk, 'fix'), more: true },
         { label: t('Develop with Claude Code'), run: () => runClaude(tk, 'dev'), more: true },
