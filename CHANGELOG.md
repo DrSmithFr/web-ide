@@ -4,6 +4,30 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-10
+
+### Added
+
+- *Review* of a ticket (*In progress*, *To test*): Claude Code (Opus) reviews the change of its branch, runs the tests, adds each finding as a test feedback and the verdict as a note (MCP prompt `review`). A split button: the integrated assistant will join it.
+- Split buttons: *Briefing*, *Generate the plan*, *Start development* and the *Fix session* of a feedback start the integrated assistant on a click; their arrow offers Claude Code instead, in a terminal. The MCP prompt `fix` takes the id of one feedback.
+- *Fix feedbacks* replaces the validation of a ticket while a test feedback is open (one session for all of them, assistant or Claude Code); the pod refuses to close the ticket or validate its step until they are handled.
+- The model adds test feedback (`kanban_feedback` action `add`) and edits or deletes goals (`kanban_goal` actions `edit`, `delete`), for the assistant and Claude Code.
+
+### Changed
+
+- The ticket view lists the sections of its status first, then, under a rule, those of the earlier statuses, folded; lineage, linked files, attachments and history aside. A closed ticket keeps the sections with content.
+- The header of a ticket keeps its main actions (*To test*: *Add feedback*, *Review*, *Validate*); the others, *Open the worktree* among them, are in *More actions*. The *Claude Code* button is gone: its actions are in the split buttons and *More actions*. *Close the ticket* is now *Validate the ticket*, shown only once its lineage is finished, else *Validate the step*.
+- The priority and the size of a ticket are fixed once its development started: badges in the view, refused by the pod (a plan written later keeps the size).
+- The pull request section shows once a pull request exists or can be made.
+
+### Removed
+
+- Linked commits (the section, `kanban_link_commit`): *Git and changes* shows the commits of the branch.
+
+### Fixed
+
+- The context of the llama-swap models survives a restart of the pod (kept in `llm-contexts.json`).
+
 ## [1.5.0] - 2026-10-09
 
 ### Added
