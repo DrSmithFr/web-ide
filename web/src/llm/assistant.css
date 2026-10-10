@@ -81,15 +81,15 @@
 @keyframes ai-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 
 /* tool steps */
-.ai-steps-flat { display: flex; flex-direction: column; gap: 6px; }
-.ai-steps { border: 1px solid var(--line); border-radius: 12px; background: var(--ai-softer); overflow: hidden; }
-.ai-steps-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 12px; border: 0; background: none; color: var(--fg); text-align: left; cursor: pointer; font-size: 12.5px; user-select: none; }
-.ai-steps-head:hover { background: var(--bg-hover); }
-.ai-steps-head > .icon { color: var(--ok); }
-.ai-steps.open > .ai-steps-head { border-bottom: 1px solid var(--line); }
-.ai-steps:not(.open) > .ai-tool { display: none; }
+/* the tool calls of an answer, joined in one block */
+.ai-steps { border: 1px solid var(--line); border-radius: 10px; background: var(--ai-softer); overflow: hidden; min-width: 0; }
 .ai-steps > .ai-tool { border: 0; border-radius: 0; background: none; }
-.ai-steps > .ai-tool + .ai-tool { border-top: 1px solid var(--line); }
+.ai-steps > .ai-tool.earlier { display: none; }
+.ai-steps > * + .ai-tool { border-top: 1px solid var(--line); }
+.ai-steps-more { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 12px; border: 0; background: none; color: var(--fg-faint); text-align: left; cursor: pointer; font-size: 12px; }
+.ai-steps-more:hover { background: var(--bg-hover); color: var(--fg-muted); }
+.ai-exit { flex: none; font: 11px/16px var(--font-code); padding: 0 6px; border-radius: 6px; color: var(--fg-faint); background: var(--bg-hover); }
+.ai-exit.fail { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
 .ai-tool { border: 1px solid var(--line); border-radius: 10px; background: var(--ai-softer); min-width: 0; overflow: hidden; }
 .ai-tool.error .ai-tool-icon { color: var(--danger); }
 .ai-tool.denied { opacity: 0.65; }
@@ -287,6 +287,16 @@
 /* terminal output of the bash tool */
 .ai-term { margin: 0; width: 100%; max-height: 360px; overflow: auto; font: 12px/1.45 var(--font-code); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg-muted); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 .ai-term-cmd { color: var(--fg); font-weight: 600; }
+/* a command and its output, as in the Console */
+.ai-term-box { width: 100%; background: var(--bg-2); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; font: 12px/1.45 var(--font-code); }
+.ai-term-prompt { display: flex; align-items: flex-start; gap: 8px; padding: 7px 10px 2px; }
+.ai-term-prompt .ai-term-cmd { white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; }
+.ai-term-sign { color: var(--accent); font-weight: 600; flex: none; }
+.ai-term-copy { flex: none; display: inline-flex; padding: 2px; border: 0; border-radius: 4px; background: none; color: var(--fg-faint); cursor: pointer; opacity: 0; }
+.ai-term-box:hover .ai-term-copy, .ai-term-copy:focus-visible { opacity: 1; }
+.ai-term-copy:hover { color: var(--fg); background: var(--bg-hover); }
+.ai-term-box .ai-term { border: 0; border-radius: 0; background: none; color: var(--fg); padding: 2px 10px 8px; }
+.ai-term-box .ai-term:empty { display: none; }
 .ai-mention { font-family: var(--font-code); font-size: max(12px, 0.9em); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); border-radius: 5px; padding: 0 4px; }
 
 /* completion of /commands and @paths, help */

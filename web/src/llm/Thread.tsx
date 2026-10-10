@@ -22,6 +22,7 @@ import { PreviewCard } from './PreviewCard'
 import { ChildCard, ChildHeader, EventCard, TaskCard } from './SubAgents'
 import { ActionCard, OpenedCard } from './Orchestrator'
 import { t, tn } from '../i18n'
+import { parseAnsi } from '../docker/ansi'
 
 const textOf = (m: ChatMessage) =>
   m.display !== undefined
@@ -384,7 +385,7 @@ function Reasoning(props: { text: string; live?: boolean; ms?: number; effort?: 
   )
 }
 
-function ToolRow(props: { msg: ChatMessage; call?: ToolCall }) {
+function ToolRow(props: { msg: ChatMessage; call?: ToolCall; hidden?: boolean }) {
   const label = () => callLabel(props.call, props.msg.name ?? '')
   const pending = () => !props.msg.status
   const [open, toggle] = useFold(pending)
@@ -393,7 +394,7 @@ function ToolRow(props: { msg: ChatMessage; call?: ToolCall }) {
     return typeof a.path === 'string' && props.msg.status === 'ok' && props.msg.name !== 'list_dir' ? absPath(a.path) : ''
   }
   return (
-    <div class={`ai-tool ${props.msg.status ?? 'running'}`}>
+    <div class={`ai-tool ${props.msg.status ?? 'running'}`} classList={{ earlier: props.hidden }}>
       <button class="ai-tool-head" onClick={toggle} title={t('{tool}: show the result', { tool: props.msg.name ?? '' })}>
         <span class="ai-tool-icon">
           <Show when={!pending()} fallback={<span class="spinner" />}>
@@ -406,7 +407,11 @@ function ToolRow(props: { msg: ChatMessage; call?: ToolCall }) {
           {label().extra}
         </span>
         <span class="grow" />
-        <span class="ai-tool-sum ellipsis">{pending() ? '' : summaryText(props.msg.summary)}</span>
+        <Show when={props.msg.exit !== undefined} fallback={<span class="ai-tool-sum ellipsis">{pending() ? '' : summaryText(props.msg.summary)}</span>}>
+          <span class="ai-exit" classList={{ fail: props.msg.exit !== 0 }} title={t('Exit code')} data-testid="ai-exit">
+            {props.msg.exit}
+          </span>
+        </Show>
         {/* elapsedMs is left out when under a millisecond. */}
         <Elapsed running={pending()} start={props.msg.startedAt} ms={props.msg.startedAt ? props.msg.elapsedMs ?? 0 : undefined} />
         <span class="ai-chev" classList={{ open: open() }}>
@@ -447,11 +452,7 @@ function ToolRow(props: { msg: ChatMessage; call?: ToolCall }) {
               </>
             }
           >
-            {/* A terminal-like block: the command, then its output. */}
-            <pre class="ai-term" ref={(el) => follow(el, pending, () => props.msg.content)}>
-              <span class="ai-term-cmd">$ {safeArgs(props.call).command}</span>
-              {'\n' + (typeof props.msg.content === 'string' ? props.msg.content : '')}
-            </pre>
+            <Term command={safeArgs(props.call).command ?? ''} msg={props.msg} running={pending()} />
           </Show>
         </div>
       </Show>
@@ -459,35 +460,51 @@ function ToolRow(props: { msg: ChatMessage; call?: ToolCall }) {
   )
 }
 
-function ToolSteps(props: { items: { msg: ChatMessage; call?: ToolCall }[] }) {
-  const running = () => props.items.some((i) => !i.msg.status)
-  const [open, toggle] = useFold(running)
-  const failed = () => props.items.filter((i) => i.msg.status === 'error').length
-  const names = () => [...new Set(props.items.map((i) => (toolVerbs[i.msg.name ?? ''] ? t(toolVerbs[i.msg.name ?? '']) : i.msg.name)))].slice(0, 3).join(', ')
-  const start = () => props.items.find((i) => i.msg.startedAt)?.msg.startedAt
-  const total = () => props.items.reduce((n, i) => n + (i.msg.elapsedMs ?? 0), 0) || undefined
+/** Output of a command as in a console: the prompt line, then the output with its colors. */
+function Term(props: { command: string; msg: ChatMessage; running: boolean }) {
+  // A finished call starts with its state ("Exit code 0"), shown in the head of the row.
+  const text = () => {
+    if (props.msg.term) return props.msg.term
+    const c = typeof props.msg.content === 'string' ? props.msg.content : ''
+    return props.msg.exit !== undefined ? c.slice(c.indexOf('\n') + 1) : c
+  }
   return (
-    <Show when={props.items.length > 2} fallback={<div class="ai-steps-flat">{<For each={props.items}>{(i) => <ToolRow msg={i.msg} call={i.call} />}</For>}</div>}>
-      <div class="ai-steps" classList={{ open: open() }}>
-        <button class="ai-steps-head" onClick={toggle}>
-          <Show when={running()} fallback={<Icon name="check" size={12} />}>
-            <span class="spinner" />
-          </Show>
-          <span>
-            {tn(props.items.length, '{n} action', '{n} actions')} <span class="muted">· {names()}</span>
-          </span>
+    <div class="ai-term-box">
+      <div class="ai-term-prompt">
+        <span class="ai-term-sign">$</span>
+        <span class="ai-term-cmd grow">{props.command}</span>
+        <button class="ai-term-copy" title={t('Copy the command')} onClick={() => copy(props.command)}>
+          <Icon name="copy" size={12} />
+        </button>
+      </div>
+      <pre class="ai-term" ref={(el) => follow(el, () => props.running, text)}>
+        <For each={parseAnsi(text())}>{(s) => (s.style ? <span style={s.style}>{s.text}</span> : s.text)}</For>
+      </pre>
+    </div>
+  )
+}
+
+/** Rows shown in a long series of tool calls: the last ones, the others behind a row. */
+const SHOWN_STEPS = 3
+
+/** The tool calls of an answer, joined in one block; past 4 calls, only the last 3 are shown. */
+function ToolSteps(props: { items: { msg: ChatMessage; call?: ToolCall }[] }) {
+  const [all, setAll] = createSignal(false)
+  const hidden = () => (all() || props.items.length <= SHOWN_STEPS + 1 ? 0 : props.items.length - SHOWN_STEPS)
+  const failed = () => props.items.slice(0, hidden()).filter((i) => i.msg.status === 'error').length
+  return (
+    <div class="ai-steps">
+      <Show when={hidden()}>
+        <button class="ai-steps-more" onClick={() => setAll(true)} data-testid="ai-steps-more">
+          <Icon name="up" size={12} />
+          <span>{tn(hidden(), '{n} earlier action', '{n} earlier actions')}</span>
           <Show when={failed()}>
             <span class="badge danger">{t('{n} failed', { n: failed() })}</span>
           </Show>
-          <span class="grow" />
-          <Elapsed running={running()} start={start()} ms={total()} />
-          <span class="ai-chev" classList={{ open: open() }}>
-            <Icon name="chevron" size={11} />
-          </span>
         </button>
-        <For each={props.items}>{(i) => <ToolRow msg={i.msg} call={i.call} />}</For>
-      </div>
-    </Show>
+      </Show>
+      <For each={props.items}>{(i, k) => <ToolRow msg={i.msg} call={i.call} hidden={k() < hidden()} />}</For>
+    </div>
   )
 }
 

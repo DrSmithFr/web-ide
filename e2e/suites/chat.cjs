@@ -47,6 +47,12 @@ const fake = http.createServer(async (req, res) => {
     sse(res, { content: `Resumed: ${text(last)}` })
     return end(res)
   }
+  if (scenario === 'steps') {
+    const cmds = ['echo one', 'echo two', 'echo three', 'printf "\\033[31mred\\033[0m plain\\n"', 'echo five', 'false']
+    if (last.role === 'user') return sse(res, { tool_calls: cmds.map((command, index) => ({ ...call('s' + index, 'bash', { command }), index })) }), end(res, 'tool_calls')
+    sse(res, { content: 'Steps done.' })
+    return end(res)
+  }
   if (scenario === 'tool') {
     if (last.role === 'user' && text(last).startsWith('tool')) return sse(res, { tool_calls: [call('q1', 'bash', { command: 'sleep 1; echo ok' })] }), end(res, 'tool_calls')
     sse(res, { content: `Seen: ${text(last)}` })
@@ -226,6 +232,22 @@ run(async ({ page, ctx }) => {
     const full = await page.$$eval('.ai-msg.assistant:not(.live) .md', (e) => e[e.length - 1].textContent)
     assert(full.startsWith('Part 1.') && (full.match(/x/g) ?? []).length === 25 && byScenario.slow === 1, `full answer, without a new request (${byScenario.slow} request)`)
     await page.screenshot({ path: OUT + '/chat-resume.png' })
+
+    // Tool calls joined in one block: past 4, only the last 3 are shown; a command looks as
+    // in a console, with its colors and its exit code.
+    await ask(page, 'steps please', 'Steps done.')
+    const block = page.locator('.ai-steps').last()
+    const visible = async () => block.locator('.ai-tool:visible').count()
+    assert((await block.locator('.ai-tool').count()) === 6 && (await visible()) === 3, 'six calls in one block, the last three shown')
+    assert(/3 earlier actions/.test(await block.locator('[data-testid=ai-steps-more]').textContent()), 'a row tells the earlier actions')
+    assert((await block.locator('[data-testid=ai-exit]').allTextContents()).join(',') === '0,0,0,0,0,1', 'each command shows its exit code')
+    await block.locator('[data-testid=ai-steps-more]').click()
+    assert((await visible()) === 6 && !(await block.locator('[data-testid=ai-steps-more]').count()), 'the earlier actions shown on a click')
+    await block.locator('.ai-tool:has-text("printf") .ai-tool-head').click()
+    const red = block.locator('.ai-tool:has-text("printf") .ai-term span[style*="color"]')
+    assert((await red.textContent()) === 'red' && /\$\s*printf/.test(await block.locator('.ai-term-prompt').first().textContent()), 'the output keeps its colors, under the command')
+    await block.locator('.ai-term-box').scrollIntoViewIfNeeded()
+    await page.screenshot({ path: OUT + '/chat-steps.png' })
 
     // Reload during a tool: the agent runs in the pod, the tool goes on and so does the agent.
     await page.waitForSelector('[data-testid=send]')

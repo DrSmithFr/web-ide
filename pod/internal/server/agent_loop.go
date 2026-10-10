@@ -716,7 +716,7 @@ func (s *Server) runCalls(r *agentRun, ref *runtimeRef, calls []agent.ToolCall, 
 		for i := len(r.chat.Messages) - 1; i >= 0; i-- {
 			if mm := r.chat.Messages[i]; mm.Role == "tool" && mm.ToolCallID == call.ID {
 				mm.Content, mm.Summary, mm.Status, mm.Diff, mm.Page, mm.Preview, mm.Child = agent.String(res.Content), res.Summary, res.Status, res.Diff, res.Page, res.Preview, res.Child
-				mm.Card, mm.Opened = res.Card, res.Opened
+				mm.Card, mm.Opened, mm.Term, mm.Exit = res.Card, res.Opened, res.Term, res.Exit
 				mm.ElapsedMs = time.Since(start).Milliseconds()
 				mm.Failure, mm.WaitMs = res.Failure, r.waited.Milliseconds()
 				r.waited = 0

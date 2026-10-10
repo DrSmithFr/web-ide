@@ -146,7 +146,11 @@ type Message struct {
 	WaitMs int64 `json:"waitMs,omitempty"`
 	// Failure of a tool call in error: usage (the call itself is wrong: a parameter missing or
 	// invalid, an unknown tool…), exit (a command that ended with a code, or timed out), error.
-	Failure   string     `json:"failure,omitempty"`
+	Failure string `json:"failure,omitempty"`
+	// Term: output of a command with its colors, for the page (the model reads Content).
+	// Exit: its exit code.
+	Term      string     `json:"term,omitempty"`
+	Exit      *int       `json:"exit,omitempty"`
 	ElapsedMs int64      `json:"elapsedMs,omitempty"`
 	StartedAt int64      `json:"startedAt,omitempty"` // start of a tool call (Unix ms); its ElapsedMs is set at its end
 	Mode      string     `json:"mode,omitempty"`

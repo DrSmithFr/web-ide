@@ -112,6 +112,9 @@ export interface ChatMessage {
   summary?: string | SummaryText
   /** Diff of a file change, shown under the tool call. */
   diff?: DiffLine[]
+  /** Output of a command with its colors (ANSI), when it has some; and its exit code. */
+  term?: string
+  exit?: number
   /** Model that wrote this answer (the model can change during a conversation). */
   model?: string
   /** Replaced by a summary: kept for display, not sent anymore. */

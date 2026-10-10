@@ -33,6 +33,8 @@ type runtimeRef struct {
 type toolResult struct {
 	Content string
 	Failure string // usage, exit or error (see agent.Message)
+	Term    string // output with its colors (see agent.Message)
+	Exit    *int
 	Summary json.RawMessage
 	Status  string
 	Diff    []agent.DiffLine
@@ -245,13 +247,17 @@ func (s *Server) agentTool(r *agentRun, ref *runtimeRef, call agent.ToolCall, mo
 // block. Not saved (the result replaces it), and only the end of a long output.
 func (s *Server) toolProgress(r *agentRun, callID string) func(string) {
 	return func(text string) {
+		term := agent.ColorOutput(text)
+		if term != "" {
+			term = agent.Tail(term, 400, 16000)
+		}
 		text = agent.Tail(agent.PlainOutput(text), 400, 16000)
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		for i := len(r.chat.Messages) - 1; i >= 0; i-- {
 			if m := r.chat.Messages[i]; m.Role == "tool" && m.ToolCallID == callID {
 				if m.Status == "" {
-					m.Content = agent.String(text)
+					m.Content, m.Term = agent.String(text), term
 					s.emitAgent(r.root, "agent.update", updateOf(r.chat, r.state, r.ahead, i))
 				}
 				return
@@ -671,7 +677,7 @@ func shellToolResult(res shellResult) toolResult {
 	if res.Truncated {
 		state += " (output cut in the middle)"
 	}
-	tr := toolResult{Content: state + "\n" + out, Status: "ok"}
+	tr := toolResult{Content: state + "\n" + out, Status: "ok", Term: agent.TrimEnd(agent.ColorOutput(res.Output))}
 	switch {
 	case res.TimedOut:
 		tr.Summary = agent.T("timeout", nil).Raw()
@@ -679,6 +685,7 @@ func shellToolResult(res shellResult) toolResult {
 		tr.Summary = agent.T("canceled", nil).Raw()
 	default:
 		tr.Summary = agent.Plain(fmt.Sprintf("code %d · %s s", res.Code, secs))
+		tr.Exit = &res.Code
 	}
 	if res.Code != 0 || res.TimedOut || res.Canceled {
 		tr.Status, tr.Failure = "error", "exit"

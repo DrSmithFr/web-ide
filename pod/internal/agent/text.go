@@ -10,12 +10,34 @@ var (
 	csiSeq    = regexp.MustCompile("\x1b\\[[0-?]*[ -/]*[@-~]")
 	escSeq    = regexp.MustCompile("\x1b[()][A-Za-z0-9]|\x1b[=>78NOM]")
 	trailingS = regexp.MustCompile(`\s+$`)
+	sgrSeq    = regexp.MustCompile("^\x1b\\[[0-9;]*m$")
 )
 
 // PlainOutput is a terminal output as plain text: escape sequences removed, carriage returns
 // applied.
 func PlainOutput(raw string) string {
-	text := escSeq.ReplaceAllString(csiSeq.ReplaceAllString(oscSeq.ReplaceAllString(raw, ""), ""), "")
+	return applyCR(escSeq.ReplaceAllString(csiSeq.ReplaceAllString(oscSeq.ReplaceAllString(raw, ""), ""), ""))
+}
+
+// ColorOutput is a terminal output for the page: only its colors (SGR sequences) kept,
+// carriage returns applied. Empty when it has no color: the plain output is enough.
+func ColorOutput(raw string) string {
+	text := oscSeq.ReplaceAllString(raw, "")
+	text = csiSeq.ReplaceAllStringFunc(text, func(seq string) string {
+		if sgrSeq.MatchString(seq) {
+			return seq
+		}
+		return ""
+	})
+	text = escSeq.ReplaceAllString(text, "")
+	if !strings.Contains(text, "\x1b[") {
+		return ""
+	}
+	return applyCR(text)
+}
+
+// applyCR keeps, on each line, what was written after its last carriage return.
+func applyCR(text string) string {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	lines := strings.Split(text, "\n")
 	for i, l := range lines {
