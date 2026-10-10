@@ -25,6 +25,7 @@ const paths: Record<string, string> = {
   locate: 'M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM12 2v4M12 18v4M2 12h4M18 12h4',
   history: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 3',
   check: 'M5 12l5 5 9-10',
+  circle: 'M12 5a7 7 0 1 1 0 14 7 7 0 0 1 0-14z',
   undo: 'M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3',
   redo: 'M15 14l5-5-5-5M20 9H9a5 5 0 0 0 0 10h3',
   pen: 'M4 20l1.5-5L16 4.5a2.1 2.1 0 0 1 3 3L8.5 18zM14 6.5l3 3',

@@ -44,6 +44,17 @@ type ChatLink struct {
 	Role    string `json:"role"`
 	Title   string `json:"title"`
 	Created int64  `json:"created"`
+	// Time of the answers (filled by the server): with the sub-agents, of the conversation
+	// alone, and spent thinking.
+	GenerationMs int64 `json:"generationMs,omitempty"`
+	OwnMs        int64 `json:"ownMs,omitempty"`
+	ThinkMs      int64 `json:"thinkMs,omitempty"`
+}
+
+// GoalTitle is a goal as a card of the board lists it.
+type GoalTitle struct {
+	Text string `json:"text"`
+	Done bool   `json:"done"`
 }
 
 type Attachment struct {
@@ -96,6 +107,11 @@ type Summary struct {
 	// Blockers keep a ticket from starting (filled by the server for the tickets that may
 	// start: it needs git).
 	Blockers []Blocker `json:"blockers,omitempty"`
+	// The board lists the goals; ChatIDs are its linked conversations, whose answers make
+	// GenerationMs (filled by the server).
+	GoalTitles   []GoalTitle `json:"goalTitles,omitempty"`
+	ChatIDs      []string    `json:"-"`
+	GenerationMs int64       `json:"generationMs,omitempty"`
 }
 
 type Ticket struct {
@@ -180,7 +196,54 @@ func (m *Manager) List(loc Location) ([]Summary, error) {
 	if err != nil {
 		return nil, err
 	}
-	return summaries(db, `ORDER BY t.updated DESC`)
+	list, err := summaries(db, `ORDER BY t.updated DESC`)
+	if err != nil {
+		return nil, err
+	}
+	byID := map[int64]*Summary{}
+	for i := range list {
+		byID[list[i].ID] = &list[i]
+	}
+	if err := eachRow(db, `SELECT ticket_id, text, done FROM goals ORDER BY ticket_id, pos, id`, func(r *sql.Rows) error {
+		var id int64
+		var g GoalTitle
+		if err := r.Scan(&id, &g.Text, &g.Done); err != nil {
+			return err
+		}
+		if s := byID[id]; s != nil {
+			s.GoalTitles = append(s.GoalTitles, g)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	err = eachRow(db, `SELECT ticket_id, chat_id FROM chats`, func(r *sql.Rows) error {
+		var id int64
+		var chat string
+		if err := r.Scan(&id, &chat); err != nil {
+			return err
+		}
+		if s := byID[id]; s != nil {
+			s.ChatIDs = append(s.ChatIDs, chat)
+		}
+		return nil
+	})
+	return list, err
+}
+
+// eachRow runs f on each row of a query.
+func eachRow(db *sql.DB, query string, f func(*sql.Rows) error) error {
+	rows, err := db.Query(query)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		if err := f(rows); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
 }
 
 func (m *Manager) Get(loc Location, id int64) (*Ticket, error) {

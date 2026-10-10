@@ -328,6 +328,10 @@ run(async ({ page }) => {
     )
     assert(await page.isVisible('[data-testid=ticket-feedback-item].k-info:has-text("10k rows")'), 'test feedback added by the model')
     assert((await page.$$('[data-testid=ticket-chat]')).length === 2, 'two linked conversations')
+    assert(
+      (await page.$$('[data-testid=ticket-chat-time]')).length === 2 && (await page.getAttribute('[data-testid=ticket-chat-time]', 'title')).includes('Time of the answers'),
+      'each conversation shows the time of its answers',
+    )
     await page.screenshot({ path: OUT + '/kanban-ai.png' })
 
     // Test feedback handled by a fix session: the model marks it done.

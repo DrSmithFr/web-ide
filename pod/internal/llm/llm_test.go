@@ -583,3 +583,30 @@ func TestLlamaSwapThinking(t *testing.T) {
 		ts.Close()
 	}
 }
+
+func TestChatTimes(t *testing.T) {
+	m, _ := newManager(t, "h:1", "llamacpp")
+	loc := ChatLocation{Project: "p1", IdeDir: filepath.Join(t.TempDir(), ".ide")}
+	for _, c := range []string{
+		`{"id":"p","title":"Dev","messages":[{"role":"user","content":"a"},{"role":"assistant","content":"b","elapsedMs":1500,"thinkMs":300},{"role":"assistant","content":"c","elapsedMs":500}]}`,
+		`{"id":"s","title":"Sub","parent":"p","messages":[{"role":"assistant","content":"d","elapsedMs":2000}]}`,
+		`{"id":"e","title":"Empty","messages":[]}`,
+	} {
+		if err := m.SaveChat(loc, json.RawMessage(c)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	times, err := m.ChatTimes(loc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := times["p"]; p.Ms != 2000 || p.ThinkMs != 300 || p.Parent != "" {
+		t.Fatalf("p: %+v", p)
+	}
+	if s := times["s"]; s.Ms != 2000 || s.Parent != "p" {
+		t.Fatalf("s: %+v", s)
+	}
+	if e, ok := times["e"]; !ok || e.Ms != 0 {
+		t.Fatalf("e: %+v %v", e, ok)
+	}
+}

@@ -173,6 +173,40 @@ func (m *Manager) ListChats(loc ChatLocation) ([]ChatInfo, error) {
 	return list, rows.Err()
 }
 
+// ChatTime: the time of the answers of a conversation (generation and thinking), and its
+// parent for a sub-agent.
+type ChatTime struct {
+	Parent      string
+	Ms, ThinkMs int64
+}
+
+// ChatTimes gives the time of the answers of each conversation of a project.
+func (m *Manager) ChatTimes(loc ChatLocation) (map[string]ChatTime, error) {
+	db, err := m.chatDB(loc)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.Query(`SELECT c.id, coalesce(json_extract(c.extra, '$.parent'), ''),
+		coalesce(sum(json_extract(m.data, '$.elapsedMs')), 0), coalesce(sum(json_extract(m.data, '$.thinkMs')), 0)
+		FROM chats c LEFT JOIN messages m ON m.chat_id = c.id AND m.role = 'assistant' GROUP BY c.id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]ChatTime{}
+	for rows.Next() {
+		var id string
+		var t ChatTime
+		var ms, think float64
+		if err := rows.Scan(&id, &t.Parent, &ms, &think); err != nil {
+			return nil, err
+		}
+		t.Ms, t.ThinkMs = int64(ms), int64(think)
+		out[id] = t
+	}
+	return out, rows.Err()
+}
+
 func (m *Manager) GetChat(loc ChatLocation, id string) (json.RawMessage, error) {
 	db, err := m.chatDB(loc)
 	if err != nil {

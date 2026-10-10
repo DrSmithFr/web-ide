@@ -39,6 +39,9 @@ export interface Summary {
   dependsOn: number[]
   /** What keeps a ticket from starting (New or To do only). */
   blockers?: Blocker[]
+  // Board: the goals of the card. Time of the answers of its conversations (sub-agents included).
+  goalTitles?: { text: string; done: boolean }[]
+  generationMs?: number
 }
 
 export type BlockerKind = 'parent' | 'previous' | 'depends' | 'abandoned'
@@ -107,7 +110,8 @@ export interface Ticket extends Summary {
   notes: Note[]
   feedbackList: Feedback[]
   files: string[]
-  chatList: { chatId: string; role: ChatRole; title: string; created: number }[]
+  // Time of the answers: with the sub-agents, of the conversation alone, spent thinking.
+  chatList: { chatId: string; role: ChatRole; title: string; created: number; generationMs?: number; ownMs?: number; thinkMs?: number }[]
   attachments: { id: number; name: string; mime: string; size: number; created: number }[]
   /** Children of the lineage, in order. */
   children: Summary[]
@@ -360,3 +364,13 @@ export function openTicket(id: number) {
 }
 
 export const [newTicketOpen, setNewTicketOpen] = createSignal(false)
+
+/** A time of work, short: <1 s, 45 s, 12 min, 1 h 05. */
+export function workTime(ms: number): string {
+  const s = Math.round(ms / 1000)
+  if (s < 1) return '<1 s'
+  if (s < 60) return `${s} s`
+  const m = Math.round(s / 60)
+  if (m < 60) return `${m} min`
+  return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`
+}

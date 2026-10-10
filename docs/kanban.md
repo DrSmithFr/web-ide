@@ -30,6 +30,8 @@ The ticket view lists, in one column, the sections of the status of the ticket f
 
 Aside: lineage, linked files, attachments, history.
 
+Time of work: each linked conversation shows the time of its answers, its sub-agents included (the tooltip splits the conversation, its sub-agents and the thinking); a card of the board shows the total of its conversations at the top right, and lists the titles of its goals, checked or not. Only the assistant of the IDE is counted: Claude Code runs in a terminal.
+
 ## Lineages and dependencies
 
 Work too big for one ticket is split into a **lineage**: a ticket (the root) and its children, the next steps, in order. A ticket has at most one parent and a child has no children (one level).

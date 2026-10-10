@@ -7,7 +7,7 @@ import { errorToast } from '../ui/toast'
 import { copyText } from '../ui/clipboard'
 import { mcpAddCommand } from './claude'
 import {
-  board, createTicket, ensureBoard, setMeta, newTicketOpen, openTicket, priorityLabels, setNewTicketOpen, statusLabels,
+  board, createTicket, ensureBoard, setMeta, newTicketOpen, openTicket, priorityLabels, setNewTicketOpen, statusLabels, workTime,
   MAX_DESCRIPTION, type Priority, type Status, type Summary,
 } from './state'
 import { blockerText } from './Lineage'
@@ -135,11 +135,28 @@ export function Card(props: { tk: Summary; compact?: boolean }) {
             <Icon name="lock" size={10} /> {tk().blockers!.map((b) => `#${b.id}`).join(' ')}
           </span>
         </Show>
+        <Show when={!props.compact && tk().generationMs}>
+          <span class="kb-time" title={t('Time of the answers of its conversations (sub-agents included)')} data-testid="card-time">
+            <Icon name="clock" size={11} /> {workTime(tk().generationMs!)}
+          </span>
+        </Show>
         <Show when={props.compact}>
           <span class={`kb-status st-${tk().status}`}>{statusLabels[tk().status]}</span>
         </Show>
       </div>
       <div class="kb-card-title">{tk().title}</div>
+      <Show when={!props.compact && tk().goalTitles?.length}>
+        <ul class="kb-goals" data-testid="card-goals">
+          <For each={tk().goalTitles}>
+            {(g) => (
+              <li classList={{ done: g.done }}>
+                <Icon name={g.done ? 'check' : 'circle'} size={10} />
+                <span>{g.text}</span>
+              </li>
+            )}
+          </For>
+        </ul>
+      </Show>
       <Show when={!props.compact && (tk().goals || tk().chats || tk().branch || tk().feedbackOpen)}>
         <div class="kb-card-meta">
           <Show when={tk().feedbackOpen}>

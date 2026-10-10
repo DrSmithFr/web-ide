@@ -8,7 +8,7 @@ import { request } from '../pod/rpc'
 import { openFile, project, root, showWorktree } from '../state/project'
 import {
   abortGit, continueGit, filePatch, finishTicket, gitInfo, inWorktreeOf, mergeTicket, openPR, rebaseTicket, roleLabels, ticketDiff, ticketVersion, unlinkChat, updateTicket,
-  validateStep, worktreeProject, type ChatRole, type Diff, type GitInfo, type GitOpState, type Status, type Ticket,
+  validateStep, workTime, worktreeProject, type ChatRole, type Diff, type GitInfo, type GitOpState, type Status, type Ticket,
 } from './state'
 import { openTicketChat, openWorktree, startTicketChat, startWorkSession } from './sessions'
 import { blockerText } from './Lineage'
@@ -199,6 +199,19 @@ export function TicketChats(props: { tk: Ticket; roles: ChatRole[]; title: strin
                 {c.title || t('Conversation')}
               </button>
               <span class="grow" />
+              <Show when={c.generationMs}>
+                <span
+                  class="tk-chat-time small"
+                  title={[
+                    t('Time of the answers: {time}', { time: workTime(c.ownMs ?? 0) }),
+                    ...(c.generationMs! > (c.ownMs ?? 0) ? [t('Sub-agents: {time}', { time: workTime(c.generationMs! - (c.ownMs ?? 0)) })] : []),
+                    ...(c.thinkMs ? [t('Thinking: {time}', { time: workTime(c.thinkMs) })] : []),
+                  ].join('\n')}
+                  data-testid="ticket-chat-time"
+                >
+                  <Icon name="clock" size={11} /> {workTime(c.generationMs!)}
+                </span>
+              </Show>
               <button class="icon-btn small" title={t('Unlink')} onClick={() => void unlinkChat(props.tk.id, c.chatId).catch(errorToast)}>
                 <Icon name="close" size={11} />
               </button>

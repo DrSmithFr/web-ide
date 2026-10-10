@@ -68,7 +68,7 @@ func (s *Server) registerKanban() {
 			if err != nil {
 				return nil, err
 			}
-			return f(ctx, c, kctx{loc: kanbanLoc(root), root: root}, p)
+			return s.withTimes(root.ID)(f(ctx, c, kctx{loc: kanbanLoc(root), root: root}, p))
 		}
 	}
 	type idArg struct {
@@ -103,6 +103,11 @@ func (s *Server) registerKanban() {
 			return nil, err
 		}
 		s.fillBlockers(ctx, s.clientGit(c, k.root), list)
+		if times := s.chatTimes(k.root.ID); times != nil {
+			for i := range list {
+				list[i].GenerationMs = times.of(list[i].ChatIDs...)
+			}
+		}
 		meta, err := s.Kanban.Meta(k.loc)
 		return map[string]any{"project": k.root.ID, "tickets": list, "meta": meta}, err
 	}))

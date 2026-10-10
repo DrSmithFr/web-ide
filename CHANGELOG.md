@@ -4,6 +4,10 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+### Added
+
+- The cards of the board list the titles of their goals and show the time of the answers of their conversations; the ticket view shows it next to each conversation (sub-agents included, the thinking in the tooltip).
+
 ## [1.6.0] - 2026-10-10
 
 ### Added

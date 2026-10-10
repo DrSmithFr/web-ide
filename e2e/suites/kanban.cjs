@@ -178,6 +178,13 @@ run(async ({ page, ctx }) => {
   await page.click('.kb-toolbar button:has-text("Done and abandoned")')
   await page.waitForSelector('[data-testid=ticket-card-1]')
   assert(true, 'closed ticket in the done column')
+  await page.waitForSelector('[data-testid=ticket-card-1] [data-testid=card-goals]')
+  assert(
+    (await page.$$eval('[data-testid=ticket-card-1] [data-testid=card-goals] li', (l) => l.map((e) => (e.classList.contains('done') ? '✓' : '○') + e.textContent.trim()))).join('|') ===
+      '✓The /export route answers|○The CSV has a header',
+    'the card lists the goals, checked or not',
+  )
+  assert(!(await page.isVisible('[data-testid=ticket-card-1] [data-testid=card-time]')), 'no time without a conversation of the assistant')
   await page.screenshot({ path: OUT + '/kanban-board.png' })
   await page.click('[data-testid=kanban-settings]')
   await page.waitForFunction(() => document.querySelector('[data-testid=kanban-mcp-command]')?.value.includes('/mcp --header'))
