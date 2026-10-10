@@ -1,10 +1,11 @@
 // Saved commands of the project (Console ▶ menu): kept by the pod in .ide/commands.json of
 // the main project, run as tasks in the worktree shown, one console per command.
-import { createSignal } from 'solid-js'
+import { createEffect, createRoot, createSignal } from 'solid-js'
 import { on as onPod, request } from '../pod/rpc'
 import { mutate, project, session } from '../state/project'
 import { showTool } from '../state/zones'
 import { errorToast } from '../ui/toast'
+import { setDynamicActions } from '../keys/bindings'
 import { t } from '../i18n'
 import { consoles, ordered, setConsoles, type ConsoleInfo } from './consoles'
 
@@ -26,6 +27,25 @@ const [commands, setCommands] = createSignal<Command[]>([])
 /** Error of an invalid .ide/commands.json (the file is left as it is). */
 const [fileError, setFileError] = createSignal('')
 export { commands, fileError }
+
+// One action per command (Search Everywhere, shortcuts of the keymap settings), bound by the id
+// of the command: renaming it keeps its shortcut.
+createRoot(() =>
+  createEffect(() =>
+    setDynamicActions(
+      commands().map((c) => ({
+        id: `command.run.${c.id}`,
+        label: 'Run: {name}',
+        params: { name: c.name },
+        category: 'Project commands',
+        inTerminal: true,
+        icon: flagIcon[c.flag],
+        detail: c.description || c.command.split('\n')[0],
+        run: () => void runCommand(c),
+      })),
+    ),
+  ),
+)
 
 export async function loadCommands() {
   try {

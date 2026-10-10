@@ -1772,5 +1772,6 @@
   "Edit commands…": "Modifier les commandes…",
   "No open console. Run a command of the project:": "Aucune console ouverte. Lancez une commande du projet :",
   "Create a command…": "Créer une commande…",
-  "Commands of the project": "Commandes du projet"
+  "Commands of the project": "Commandes du projet",
+  "Run: {name}": "Exécuter : {name}"
 }

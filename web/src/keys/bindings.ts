@@ -18,6 +18,13 @@ export interface ActionDef {
   inTerminal?: boolean
   /** Shortcut outside the binding table, shown when the action has no combo (double Shift). */
   hint?: string
+  /** Parameters of the label (dynamic actions: "Run: {name}"). */
+  params?: Record<string, string>
+  /** Icon and detail shown by Search Everywhere (dynamic actions). */
+  icon?: string
+  detail?: string
+  /** Runs the action when no handler is registered (dynamic actions). */
+  run?: () => void
 }
 
 export const actions: ActionDef[] = [
@@ -104,7 +111,22 @@ export const actions: ActionDef[] = [
   { id: 'sql.execute', label: 'Run the active statement', category: 'Database' },
 ]
 
-export const actionById = new Map(actions.map((a) => [a.id, a]))
+// Dynamic actions: built from data of the project (its saved commands), no default shortcut.
+const [dynamicActions, setDynamicActions] = createSignal<ActionDef[]>([])
+export { setDynamicActions }
+
+/** The static actions, then the dynamic ones. */
+export const allActions = createRoot(() => createMemo(() => [...actions, ...dynamicActions()]))
+const actionIndex = createRoot(() => createMemo(() => new Map(allActions().map((a) => [a.id, a]))))
+
+export function actionOf(id: string): ActionDef | undefined {
+  return actionIndex().get(id)
+}
+
+/** Label of an action in the current language. */
+export function actionLabel(a: ActionDef): string {
+  return t(a.label, a.params)
+}
 
 // ---------- layout ----------
 
@@ -146,7 +168,7 @@ export const effectiveBindings = createRoot(() =>
   createMemo(() => {
     const base = presets[activeLayout()].bindings
     const out: Record<string, string[]> = {}
-    for (const a of actions) out[a.id] = settings.keyboard.overrides[a.id] ?? base[a.id] ?? []
+    for (const a of allActions()) out[a.id] = settings.keyboard.overrides[a.id] ?? base[a.id] ?? []
     return out
   }),
 )
@@ -204,7 +226,7 @@ export function comboLabel(combo: string): string {
 
 export function shortcutOf(action: string): string {
   const c = effectiveBindings()[action]?.[0]
-  const hint = actionById.get(action)?.hint
+  const hint = actionOf(action)?.hint
   return c ? comboLabel(c) : hint ? t(hint) : ''
 }
 
@@ -240,7 +262,9 @@ export function runAction(id: string, event?: KeyboardEvent): boolean {
   for (const h of handlers.get(id) ?? []) {
     if (h({ event: event ?? new KeyboardEvent('keydown'), action: id }) !== false) return true
   }
-  return false
+  const run = actionOf(id)?.run
+  run?.()
+  return !!run
 }
 
 let capturing: ((e: KeyboardEvent) => void) | null = null
@@ -270,13 +294,11 @@ export function installKeyHandler() {
       const target = e.target as HTMLElement | null
       const inTerminal = !!target?.closest?.('.xterm')
       for (const id of list) {
-        if (inTerminal && !actionById.get(id)?.inTerminal) continue
-        for (const h of handlers.get(id) ?? []) {
-          if (h({ event: e, action: id }) !== false) {
-            e.preventDefault()
-            e.stopPropagation()
-            return
-          }
+        if (inTerminal && !actionOf(id)?.inTerminal) continue
+        if (runAction(id, e)) {
+          e.preventDefault()
+          e.stopPropagation()
+          return
         }
       }
     },

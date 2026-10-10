@@ -5,7 +5,7 @@ import { Modal } from '../ui/overlay'
 import { settings, updateSettings, replaceSettings, type Settings } from '../state/settings'
 import { accents, accentOf, themes, themeById, tokenLabels, tokenTypes } from './themes'
 import {
-  actions, actionsFor, activeLayout, captureKeys, comboFromEvent, comboLabel, detectedLayout, effectiveBindings, presets, suggestedLayout, actionById,
+  actionLabel, actionOf, actionsFor, activeLayout, allActions, captureKeys, comboFromEvent, comboLabel, detectedLayout, effectiveBindings, presets, suggestedLayout,
 } from '../keys/bindings'
 import { builtinGrammar, grammarDefs } from '../editor/languages'
 import { Grammar, type GrammarDef, type RuleDef } from '../editor/tokenizer'
@@ -269,7 +269,7 @@ function Keys() {
   const assign = (action: string, combo: string) => {
     const others = actionsFor(combo).filter((a) => a !== action)
     if (others.length) {
-      const names = others.map((a) => t(actionById.get(a)?.label ?? a)).join(', ')
+      const names = others.map((a) => (actionOf(a) ? actionLabel(actionOf(a)!) : a)).join(', ')
       if (!confirm(t('{combo} is already used by: {actions}.\nRemove it from these actions and assign it here?', { combo: comboLabel(combo), actions: names }))) return
     }
     const eff = structuredClone(effectiveBindings())
@@ -287,7 +287,7 @@ function Keys() {
 
   const list = createMemo(() => {
     const f = filter().toLowerCase()
-    return actions.filter((a) => !f || t(a.label).toLowerCase().includes(f) || t(a.category).toLowerCase().includes(f) || (effectiveBindings()[a.id] ?? []).some((c) => comboLabel(c).toLowerCase().includes(f)))
+    return allActions().filter((a) => !f || actionLabel(a).toLowerCase().includes(f) || t(a.category).toLowerCase().includes(f) || (effectiveBindings()[a.id] ?? []).some((c) => comboLabel(c).toLowerCase().includes(f)))
   })
 
   return (
@@ -316,7 +316,7 @@ function Keys() {
             {(a) => (
               <tr classList={{ overridden: !!settings.keyboard.overrides[a.id] }}>
                 <td>
-                  <div>{t(a.label)}</div>
+                  <div>{actionLabel(a)}</div>
                   <div class="muted small">{t(a.category)}</div>
                 </td>
                 <td class="keys-cell">
