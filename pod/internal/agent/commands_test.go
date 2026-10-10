@@ -80,7 +80,13 @@ func TestStaysIn(t *testing.T) {
 		{"sudo make", "/p", false},
 		{"ssh host make", "/p", false},
 		{"echo $(rm -rf /x)", "/p", false},
-		{"/usr/bin/env make", "/p", false},
+		{"/usr/bin/env make", "/p", true},
+		{"/usr/bin/sudo make", "/p", false},
+		{"~/sdk/go/bin/go test ./...", "/p", true},
+		{"cd pod && timeout 120 /home/u/sdk/go/bin/go vet ./internal/x/", "/p", true},
+		{"$GO test ./...", "/p", false},
+		{"~/scripts/deploy.sh", "/p", false},
+		{"/opt/tools/bin/unknown-tool x", "/p", false},
 		{"./run.sh", "/p", true},
 	} {
 		if got := StaysIn(c.cmd, c.cwd, "/p", Scratch); got != c.stay {

@@ -15,7 +15,7 @@ make test    # go vet, go test, tsc
 make e2e     # browser tests (or ./e2e/run.sh <suite>)
 ```
 
-Go is not always in `PATH`: the Makefile falls back to `~/sdk/go/bin/go`.
+Go is in the `PATH` of the pod: the assistant of the IDE calls `go` directly (a `$GO` variable makes every command ask). Other shells may not have it: the Makefile falls back to `~/sdk/go/bin/go`.
 
 ## Conventions
 

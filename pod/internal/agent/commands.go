@@ -287,7 +287,8 @@ func StaysIn(command, cwd string, dirs ...string) bool {
 	})
 }
 
-// unwrap removes assignments and wrappers: `LANG=C timeout 60 nice -n 5 xargs -0 grep x` → `grep x`.
+// unwrap removes assignments and wrappers: `LANG=C timeout 60 nice -n 5 xargs -0 grep x` → `grep x`;
+// a known program called by its path in a bin folder becomes its name: `~/sdk/go/bin/go test` → `go test`.
 func unwrap(words []string) []string {
 	w := append([]string{}, words...)
 	for {
@@ -297,9 +298,11 @@ func unwrap(words []string) []string {
 		if len(w) == 0 {
 			return w
 		}
+		if name := binProgram(w[0]); name != "" {
+			w[0] = name
+		}
 		head := w[0]
-		switch head {
-		case "time", "command", "nice", "timeout", "xargs", "env":
+		if wrappers[head] {
 			w = w[1:]
 			for len(w) > 0 && strings.HasPrefix(w[0], "-") {
 				flag := w[0]
@@ -315,6 +318,24 @@ func unwrap(words []string) []string {
 		}
 		return w
 	}
+}
+
+var wrappers = setOf("time", "command", "nice", "timeout", "xargs", "env")
+
+// binProgram is the name of a known program called by an absolute or home path in a bin
+// folder (`/usr/bin/env`, `~/sdk/go/bin/go`), else "". A variable stays unknown.
+func binProgram(word string) string {
+	if !strings.HasPrefix(word, "/") && !strings.HasPrefix(word, "~/") || strings.Contains(word, "$") {
+		return ""
+	}
+	dir, name := word[:strings.LastIndex(word, "/")], word[strings.LastIndex(word, "/")+1:]
+	if !strings.HasSuffix(dir, "/bin") && !strings.HasSuffix(dir, "/sbin") {
+		return ""
+	}
+	if readCommands[name] || projectSub[name] != nil || escapes[name] || wrappers[name] || interpreters[name] {
+		return name
+	}
+	return ""
 }
 
 // readOnly tells whether a simple command only reads.
