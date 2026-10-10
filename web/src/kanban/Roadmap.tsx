@@ -12,6 +12,8 @@ import { t } from '../i18n'
 /** Pixels of one size unit and of one row. */
 const UNIT = 56
 const ROW = 40
+/** Space between two groups of linked lineages. */
+const GAP = 16
 
 const stateLabels: Record<BlockState, string> = {
   ready: 'Ready to start',
@@ -38,6 +40,15 @@ export function Roadmap(props: { tickets: Summary[]; query: string }) {
   const shown = createMemo(() => layout().rows.map((r, i) => ({ r, i })).filter(({ r }) => r.blocks.some((b) => match(b.ticket))))
   const place = createMemo(() => new Map(shown().map(({ i }, k) => [i, k])))
   const arrows = createMemo(() => layout().arrows.filter((a) => place().has(a.from.row) && place().has(a.to.row)))
+  // Top of each shown row: a gap where a group of linked lineages ends.
+  const tops = createMemo(() => {
+    let y = 0
+    return shown().map(({ r }, k) => {
+      if (k) y += r.group === shown()[k - 1].r.group ? ROW : ROW + GAP
+      return y
+    })
+  })
+  const height = () => (tops().at(-1) ?? 0) + ROW
   const width = () => Math.max(...shown().map(({ r }) => r.blocks[r.blocks.length - 1].x + r.blocks[r.blocks.length - 1].w), 4) * UNIT + 24
 
   // Arrows move between blocks: ←/→ in a row, ↑/↓ to the nearest block of the next row.
@@ -77,8 +88,9 @@ export function Roadmap(props: { tickets: Summary[]; query: string }) {
       <Show when={shown().length} fallback={<EmptyState icon="kanban" text={t('Nothing to plan: no open ticket.')} />}>
         <div class="rm-body">
           <div class="rm-scroll">
-            <div class="rm-tracks" style={{ width: `${width()}px`, height: `${shown().length * ROW}px` }}>
-              <svg class="rm-arrows" width={width()} height={shown().length * ROW}>
+            <div class="rm-tracks" style={{ width: `${width()}px`, height: `${height()}px` }}>
+              <For each={tops()}>{(y) => <div class="rm-track" style={{ top: `${y}px`, height: `${ROW}px` }} />}</For>
+              <svg class="rm-arrows" width={width()} height={height()}>
                 <defs>
                   <marker id="rm-head" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
                     <path d="M0 0L8 4L0 8z" fill="currentColor" />
@@ -87,9 +99,9 @@ export function Roadmap(props: { tickets: Summary[]; query: string }) {
                 <For each={arrows()}>
                   {(a) => {
                     const x1 = a.from.x * UNIT
-                    const y1 = place().get(a.from.row)! * ROW + ROW / 2
+                    const y1 = tops()[place().get(a.from.row)!] + ROW / 2
                     const x2 = a.to.x * UNIT + 2
-                    const y2 = place().get(a.to.row)! * ROW + ROW / 2
+                    const y2 = tops()[place().get(a.to.row)!] + ROW / 2
                     // From the end of the lineage waited for, down (or up) to the start of the block.
                     const ya = y1 + (y2 > y1 ? ROW / 2 - 6 : -ROW / 2 + 6)
                     return <path class="rm-arrow" d={`M${x1 - 6} ${ya}C${x1 - 6} ${y2} ${x1 - 6} ${y2} ${x2} ${y2}`} marker-end="url(#rm-head)" data-testid="roadmap-arrow" />
@@ -103,7 +115,7 @@ export function Roadmap(props: { tickets: Summary[]; query: string }) {
                       <button
                         class={`rm-block ${b.state} st-${b.ticket.status}`}
                         classList={{ dim: !match(b.ticket), unsized: !b.estimated }}
-                        style={{ left: `${b.x * UNIT + 2}px`, top: `${k() * ROW + 4}px`, width: `${b.w * UNIT - 4}px`, height: `${ROW - 8}px` }}
+                        style={{ left: `${b.x * UNIT + 2}px`, top: `${tops()[k()] + 4}px`, width: `${b.w * UNIT - 4}px`, height: `${ROW - 8}px` }}
                         title={tooltip(b)}
                         data-row={k()}
                         data-x={b.x}

@@ -272,6 +272,9 @@ run(async ({ page, ctx }) => {
   assert(b3.width > 4 * b4.width, `widths follow the sizes (XL ${b3.width}, S ${b4.width})`)
   const state = (id) => page.getAttribute(`[data-testid=roadmap-block-${id}]`, 'data-state')
   assert((await state(4)) === 'ready' && (await state(6)) === 'blocked' && (await state(2)) === 'new' && (await state(5)) === 'active', 'ready, blocked, new and active blocks')
+  const [b2, b5, b6] = [await box(2), await box(5), await box(6)]
+  assert(Math.round(b5.y - b3.y) === 40 && Math.round(b6.y - b2.y) === 40, 'a lineage waiting for another one comes right below it')
+  assert(Math.round(b2.y - b5.y) === 56, 'a gap between two groups of linked lineages')
   assert(!(await page.$('[data-testid=roadmap-block-1]')), 'a closed lineage is not on the roadmap')
   assert((await page.$$('[data-testid=roadmap-arrow]')).length === 2, 'arrows for the dependencies')
   await page.focus('[data-testid=roadmap-block-3]')

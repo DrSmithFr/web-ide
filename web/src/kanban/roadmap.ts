@@ -22,6 +22,8 @@ export interface Block {
 export interface Row {
   root: Summary
   blocks: Block[]
+  /** Index of its group: the lineages linked by dependencies, even indirectly. */
+  group: number
 }
 
 export interface Arrow {
@@ -56,7 +58,7 @@ export function layoutRoadmap(tickets: Summary[]): { rows: Row[]; arrows: Arrow[
     // A lineage stays until it is closed with all its steps.
     if (closed(root) && kids.every(closed)) continue
     const blocks = [root, ...kids].map((ticket) => ({ ticket, x: 0, w: ticket.size ? sizeUnits[ticket.size] : DEFAULT_UNITS, state: blockState(ticket), estimated: !!ticket.size }))
-    rows.push({ root, blocks })
+    rows.push({ root, blocks, group: 0 })
   }
   // Sequence axis: a block starts after the previous one of its row and after the end of the
   // lineages it waits for (no loop between lineages: a few passes settle it).
@@ -81,9 +83,28 @@ export function layoutRoadmap(tickets: Summary[]): { rows: Row[]; arrows: Arrow[
     }
     if (!changed) break
   }
-  // Something to start first, then the work in progress, then what waits; by priority.
+  // Groups: the lineages linked by a dependency stay together (union-find over the rows).
+  const parentOf = new Map(rows.map((r) => [r, r]))
+  const find = (r: Row): Row => (parentOf.get(r) === r ? r : find(parentOf.get(r)!))
+  for (const r of rows)
+    for (const b of r.blocks)
+      for (const dep of b.ticket.dependsOn ?? []) {
+        const d = rowOfTicket.get(dep)
+        if (d) parentOf.set(find(d), find(r))
+      }
+  const groups = new Map<Row, Row[]>()
+  for (const r of rows) groups.set(find(r), [...(groups.get(find(r)) ?? []), r])
+  // Groups: something to start first, then the work in progress, then what waits; by priority.
+  // In a group, a staircase: by start, so that the arrows go down and right.
   const rank = (r: Row) => Math.min(...r.blocks.map((b) => stateOrder[b.state]))
-  rows.sort((a, b) => rank(a) - rank(b) || prioOrder[a.root.priority] - prioOrder[b.root.priority] || a.root.id - b.root.id)
+  const key = (g: Row[]) => [Math.min(...g.map(rank)), Math.min(...g.map((r) => prioOrder[r.root.priority])), Math.min(...g.map((r) => r.root.id))]
+  const sorted = [...groups.values()].map((g) => ({ g, k: key(g) }))
+  sorted.sort((a, b) => a.k[0] - b.k[0] || a.k[1] - b.k[1] || a.k[2] - b.k[2])
+  rows.length = 0
+  sorted.forEach(({ g }, i) => {
+    g.sort((a, b) => a.blocks[0].x - b.blocks[0].x || rank(a) - rank(b) || a.root.id - b.root.id)
+    for (const r of g) rows.push({ ...r, group: i })
+  })
   const rowOf = new Map<number, number>()
   rows.forEach((r, i) => r.blocks.forEach((b) => rowOf.set(b.ticket.id, i)))
   const arrows: Arrow[] = []

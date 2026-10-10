@@ -175,7 +175,8 @@ input.tk-title { padding: 2px 6px; }
 .rm-swatch { width: 18px; height: 10px; border-radius: 3px; border: 1px solid var(--line); }
 .rm-body { flex: 1; display: flex; min-height: 0; overflow-y: auto; align-items: flex-start; }
 .rm-scroll { flex: 1; min-width: 0; overflow-x: auto; }
-.rm-tracks { position: relative; background-image: repeating-linear-gradient(to bottom, transparent 0 39px, var(--line) 39px 40px); }
+.rm-tracks { position: relative; }
+.rm-track { position: absolute; left: 0; right: 0; border-bottom: 1px solid var(--line); }
 .rm-arrows { position: absolute; inset: 0; pointer-events: none; color: var(--fg-muted); }
 .rm-arrow { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-dasharray: 4 3; }
 .rm-block { position: absolute; display: flex; align-items: center; gap: 5px; padding: 0 8px; border-radius: 6px; font-size: 12px; text-align: left; cursor: pointer; overflow: hidden;
