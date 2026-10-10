@@ -159,6 +159,14 @@
 .ai-editor .ed-content { padding: 4px 0; }
 .ai-editor .ed.wrap .ed-ws { padding-right: 0; }
 ::highlight(ai-ref) { color: var(--accent); }
+.ai-full-btn { position: absolute; top: 6px; right: 8px; z-index: 3; opacity: 0.6; }
+.ai-full-btn:hover, .ai-composer-wrap.full .ai-full-btn { opacity: 1; }
+.ai-editor { padding-right: 22px; }
+/* Full screen: the box takes the whole tool, the thread is hidden. */
+.ai-main.composer-full .ai-messages { display: none; }
+.ai-composer-wrap.full { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-top: 12px; }
+.ai-composer-wrap.full .ai-composer { flex: 1; min-height: 0; width: 100%; max-width: none; }
+.ai-composer-wrap.full .ai-editor, .ai-composer-wrap.full .ai-editor .ed-scroll { flex: 1; min-height: 0; max-height: none; }
 .ai-composer-bar { display: flex; align-items: center; gap: 2px; min-width: 0; }
 .ai-icon { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 0; border-radius: 9px; background: none; color: var(--fg-muted); cursor: pointer; flex: none; }
 .ai-icon:hover:not(:disabled), .ai-icon.on { background: var(--bg-hover); color: var(--fg); }

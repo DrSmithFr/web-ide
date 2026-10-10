@@ -182,6 +182,9 @@
     "assistant.doodle": [
       "Ctrl+Shift+KeyD"
     ],
+    "assistant.fullComposer": [
+      "Ctrl+Shift+KeyE"
+    ],
     "tool.database": [
       "Alt+Digit6"
     ],

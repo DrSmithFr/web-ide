@@ -9,7 +9,7 @@ import { approval, chat, live, loadConfig, modelsError, prefs, resetChat, savePr
 import { SettingsModal } from './AssistantSettings'
 import { restoreActive } from './agent'
 import { Thread } from './Thread'
-import { addFiles, Composer, focusComposer, suggest } from './Composer'
+import { addFiles, Composer, focusComposer, fullComposer, suggest } from './Composer'
 import { Sidebar } from './Sidebar'
 import { DiagramViewer } from './DiagramViewer'
 import { DoodleHost } from './doodle/DoodleModal'
@@ -197,6 +197,7 @@ export function AssistantTool() {
         </Show>
         <div
           class="ai-main"
+          classList={{ 'composer-full': fullComposer() }}
           ref={mainEl}
           style={{ display: boardShown() && !boardWide() ? 'none' : undefined, flex: boardShown() && boardWide() ? `${prefs.boardSplit} 1 0` : undefined }}
         >

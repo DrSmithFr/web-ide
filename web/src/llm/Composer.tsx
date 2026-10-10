@@ -214,6 +214,8 @@ export async function runCommand(text: string, onSettings: () => void): Promise<
 }
 
 const [help, setHelp] = createSignal(false)
+/** The message box takes the whole assistant tool (the thread hidden) to write a long message. */
+export const [fullComposer, setFullComposer] = createSignal(false)
 
 function HelpCard() {
   return (
@@ -640,6 +642,7 @@ export function Composer(props: {
     setHelp(false)
     setDraft('')
     setPending([])
+    setFullComposer(false)
     props.onSent()
     try {
       await send(
@@ -679,6 +682,10 @@ export function Composer(props: {
     }
     if (e.key === 'Escape' && live.busy) {
       stop()
+      return true
+    }
+    if (e.key === 'Escape' && fullComposer() && !props.inDoodle && !view()?.hasCarets()) {
+      setFullComposer(false)
       return true
     }
     if (e.key === 'Tab' && e.shiftKey && !e.ctrlKey && !e.altKey) {
@@ -743,6 +750,7 @@ export function Composer(props: {
   }
   const offs = [
     registerAction('file.save', own(() => void submit())),
+    ...(props.inDoodle ? [] : [registerAction('assistant.fullComposer', own(() => setFullComposer(!fullComposer())))]),
     registerAction('edit.undo', own((v) => v.undo())),
     registerAction('edit.redo', own((v) => v.redo())),
     registerAction('edit.duplicateLine', own((v) => v.duplicateLine())),
@@ -758,7 +766,7 @@ export function Composer(props: {
   onCleanup(() => offs.forEach((off) => off()))
 
   return (
-    <div class="ai-composer-wrap">
+    <div class="ai-composer-wrap" classList={{ full: fullComposer() && !props.inDoodle }}>
       <div class="ai-composer" classList={{ plan: currentMode() === 'plan', briefing: currentMode() === 'briefing', orchestrator: currentMode() === 'orchestrator' }}>
         <Show when={chat.queue?.length}>
           <div class="ai-queue" data-testid="ai-queue">
@@ -837,6 +845,17 @@ export function Composer(props: {
           </div>
         </Show>
         <div class="ai-editor" ref={host} data-testid="ai-editor" />
+        <Show when={!props.inDoodle}>
+          <button
+            class="ai-act ai-full-btn"
+            title={fullComposer() ? t('Leave the full screen (Esc)') : `${t('Full screen')} (${shortcutOf('assistant.fullComposer')})`}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => (setFullComposer(!fullComposer()), view()?.focus())}
+            data-testid="ai-full"
+          >
+            <Icon name={fullComposer() ? 'minimize' : 'maximize'} size={13} />
+          </button>
+        </Show>
         <div class="ai-composer-bar">
           <button
             class="ai-mode"

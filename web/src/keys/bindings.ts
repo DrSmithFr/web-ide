@@ -88,6 +88,7 @@ export const actions: ActionDef[] = [
   { id: 'tool.kanban', label: 'Kanban', category: 'Tools', inTerminal: true },
   { id: 'tool.assistant', label: 'AI assistant', category: 'Tools', inTerminal: true },
   { id: 'assistant.doodle', label: 'New doodle', category: 'Tools', inTerminal: true },
+  { id: 'assistant.fullComposer', label: 'Message box in full screen', category: 'Tools' },
   { id: 'tool.database', label: 'Database explorer', category: 'Tools', inTerminal: true },
   { id: 'tool.structure', label: 'Structure', category: 'Tools', inTerminal: true },
   { id: 'tool.problems', label: 'Problems', category: 'Tools', inTerminal: true },

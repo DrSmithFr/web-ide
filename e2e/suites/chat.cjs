@@ -120,6 +120,23 @@ run(async ({ page, ctx }) => {
     await page.waitForSelector('[data-testid=send]', { timeout: 10000 })
     assert(text(requests.at(-1).messages.at(-1)) === listed && (await composerText(page)) === '', 'Ctrl+S sends the message, the box is emptied')
 
+    // Full screen: the box takes the whole tool; Esc comes back with the same text, sending leaves it.
+    await page.click('[data-testid=ai-full]')
+    await page.waitForSelector('.ai-messages', { state: 'hidden' })
+    const fill = await page.evaluate(() => document.querySelector('.ai-composer').offsetHeight / document.querySelector('.ai-main').offsetHeight)
+    assert(fill > 0.6, 'full screen: the thread is hidden, the box fills the tool (' + Math.round(fill * 100) + ' %)')
+    await page.keyboard.type('A long message')
+    await page.keyboard.press('Escape')
+    await page.waitForSelector('.ai-messages', { state: 'visible' })
+    assert((await composerText(page)) === 'A long message', 'Esc leaves the full screen, the text kept')
+    await page.keyboard.press('Control+Shift+KeyE')
+    await page.waitForSelector('.ai-messages', { state: 'hidden' })
+    await page.screenshot({ path: OUT + '/chat-composer-full.png' })
+    await page.keyboard.press('Control+Enter')
+    await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Answer to A long message")', { timeout: 20000 })
+    await page.waitForSelector('[data-testid=send]', { timeout: 10000 })
+    assert(await page.isVisible('.ai-messages'), 'the shortcut opens the full screen, sending leaves it')
+
     // Ctrl+click on an @file opens it.
     await ask(page, 'Look at @src/main.go', 'Answer to Look at @src/main.go')
     await page.click('.ai-msg.user .ai-mention:has-text("@src/main.go")', { modifiers: ['Control'] })
