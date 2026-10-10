@@ -53,13 +53,15 @@ function TicketBar() {
       }
     >
       <div class="ai-ticket-bar" data-testid="ai-ticket-bar">
-        <button
-          class="link"
-          onClick={() => openTicket(chat.ticket!.id)}
-          title={[tk()?.title, roleLabels[chat.ticket!.role], tk() ? statusLabels[tk()!.status] : ''].filter(Boolean).join(' · ')}
-        >
-          <Icon name="kanban" size={12} /> {t('Ticket #{n}', { n: chat.ticket!.id })}
+        <Icon name="kanban" size={13} />
+        <button class="link" onClick={() => openTicket(chat.ticket!.id)} title={tk()?.title}>
+          {t('Ticket #{n}', { n: chat.ticket!.id })}
         </button>
+        <Show when={tk()}>
+          <span class={`kb-status st-${tk()!.status}`}>{statusLabels[tk()!.status]}</span>
+        </Show>
+        <span class="grow" />
+        <span class={`kb-role r-${chat.ticket!.role}`}>{roleLabels[chat.ticket!.role]}</span>
       </div>
     </Show>
   )
@@ -221,8 +223,8 @@ export function AssistantTool() {
           >
             <Thread onSuggest={suggest} onSettings={() => setSettings(true)} />
           </div>
-          <TicketBar />
           <Composer
+            head={<TicketBar />}
             onSettings={() => setSettings(true)}
             onSent={() => {
               stick = true

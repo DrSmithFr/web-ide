@@ -148,10 +148,12 @@
 
 /* ---------- composer ---------- */
 /* Docked at the bottom of the tool, like an editor pane: a rule on top colored by the mode. */
-.ai-composer-wrap { flex: none; border-top: 1px solid var(--line); background: var(--bg); }
-.ai-composer { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px 6px 14px; border-top: 2px solid transparent; margin-top: -1px; transition: border-color 0.12s; }
-.ai-composer:focus-within { border-top-color: color-mix(in srgb, var(--accent) 70%, transparent); }
-.ai-composer.editing { border-top-color: var(--warn); }
+.ai-composer-wrap { --rule: transparent; position: relative; flex: none; display: flex; flex-direction: column; border-top: 1px solid var(--line); background: var(--bg); }
+.ai-composer-wrap::before { content: ''; position: absolute; left: 0; right: 0; top: -1px; height: 2px; z-index: 4; background: var(--rule); transition: background 0.12s; pointer-events: none; }
+.ai-composer-wrap.plan, .ai-composer-wrap.orchestrator { --rule: color-mix(in srgb, var(--info) 55%, transparent); }
+.ai-composer-wrap.briefing { --rule: color-mix(in srgb, var(--warn) 55%, transparent); }
+.ai-composer-wrap:focus-within { --rule: color-mix(in srgb, var(--accent) 70%, transparent); }
+.ai-composer { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px 6px 14px; }
 .ai-editing { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--warn); }
 .ai-editor { display: flex; min-height: 24px; max-height: 40vh; }
 .ai-editor .ed-scroll { max-height: 40vh; }
@@ -165,7 +167,7 @@
 .ai-editor { padding-right: 22px; }
 /* Full screen: the box takes the whole tool, the thread is hidden. */
 .ai-main.composer-full .ai-messages { display: none; }
-.ai-composer-wrap.full { flex: 1; min-height: 0; display: flex; flex-direction: column; border-top: 0; }
+.ai-composer-wrap.full { flex: 1; min-height: 0; }
 .ai-composer-wrap.full .ai-composer { flex: 1; min-height: 0; }
 .ai-composer-wrap.full .ai-editor, .ai-composer-wrap.full .ai-editor .ed-scroll { flex: 1; min-height: 0; max-height: none; }
 .ai-composer-bar { display: flex; align-items: center; gap: 2px; min-width: 0; margin-left: -6px; }
@@ -332,10 +334,8 @@
 .ai-mode:hover { color: var(--fg); background: var(--bg-hover); }
 .ai-mode.plan { color: var(--info); border-color: color-mix(in srgb, var(--info) 55%, var(--line)); background: color-mix(in srgb, var(--info) 12%, transparent); }
 .ai-mode-model { color: var(--fg-muted); }
-.ai-composer.plan { border-top-color: color-mix(in srgb, var(--info) 55%, transparent); }
 .ai-plan-badge { background: color-mix(in srgb, var(--info) 18%, transparent); color: var(--info); margin-left: 4px; }
 .ai-mode.briefing { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); background: color-mix(in srgb, var(--warn) 12%, transparent); }
-.ai-composer.briefing { border-top-color: color-mix(in srgb, var(--warn) 55%, transparent); }
 .ai-briefing-badge { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); margin-left: 4px; }
 .ai-plan { border: 1px solid color-mix(in srgb, var(--info) 50%, var(--line)); border-radius: 12px; background: var(--bg-2); padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
 .ai-plan.done { border-color: var(--line); }
@@ -422,12 +422,10 @@
 .ai-ask-situation p { margin: 3px 0 0; font-size: 13px; }
 
 /* ticket linked to the conversation */
-.ai-ticket-bar { display: flex; align-items: center; padding: 4px 14px 0; border-top: 1px solid var(--line); background: var(--bg); font-size: 12px; min-width: 0; flex: none; }
-.ai-ticket-bar .link { display: inline-flex; align-items: center; gap: 5px; padding: 0; color: var(--fg-muted); }
-.ai-ticket-bar .link:hover { color: var(--accent); }
-/* Stuck on top of the message box: one rule for both. */
-.ai-ticket-bar + .ai-composer-wrap, .ai-ticket-link + .ai-composer-wrap { border-top: 0; }
-.ai-ticket-link { align-self: stretch; margin: 0; padding: 4px 14px 0; border: 0; border-top: 1px solid var(--line); background: var(--bg); background: none; color: var(--fg-muted); font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; flex: none; }
+/* On top of the message box, inside its frame: the focus rule spans both. */
+.ai-ticket-bar { display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 14px; background: var(--bg-2); font-size: 12px; min-width: 0; flex: none; }
+.ai-ticket-bar .link { padding: 0; min-width: 0; }
+.ai-ticket-link { align-self: flex-start; margin: 6px 14px 0; padding: 0; border: 0; background: none; background: none; color: var(--fg-muted); font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; flex: none; }
 .ai-ticket-link:hover { color: var(--accent); }
 
 /* Doodle sent, in the thread. */
@@ -455,7 +453,6 @@
 .ai-action { display: flex; align-items: center; gap: 10px; margin: 4px 0 4px 22px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line)); border-radius: 10px; background: var(--bg-2); }
 .ai-action.used { border-color: var(--line); }
 .ai-mode.orchestrator { color: var(--info); border-color: color-mix(in srgb, var(--info) 55%, var(--line)); background: color-mix(in srgb, var(--info) 12%, transparent); }
-.ai-composer.orchestrator { border-top-color: color-mix(in srgb, var(--info) 55%, transparent); }
 .ai-child { display: grid; gap: 4px; margin: 4px 0 4px 22px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-2); }
 .ai-model-conf { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .ai-model-conf input[name=modelId] { flex: 1 1 160px; min-width: 0; }

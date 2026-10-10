@@ -1,7 +1,7 @@
 // Message box of the assistant: a Markdown editor that grows with its content (Enter adds a
 // line, Ctrl+S or Ctrl+Enter sends), attachments, dictation, model picker, options menu,
 // context gauge, send / stop. The draft survives panel switches.
-import { createEffect, createMemo, createResource, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js'
+import { createEffect, createMemo, createResource, createSignal, For, on, onCleanup, onMount, Show, type JSX } from 'solid-js'
 import { Icon } from '../ui/icons'
 import { errorToast, toast } from '../ui/toast'
 import { fuzzy } from '../ui/overlay'
@@ -502,6 +502,8 @@ export function Composer(props: {
   inDoodle?: boolean
   sendable?: () => boolean
   beforeSend?: () => Promise<void>
+  /** Above the box, inside its frame (the bar of the linked ticket). */
+  head?: JSX.Element
 }) {
   let fileInput!: HTMLInputElement
   let host!: HTMLDivElement
@@ -766,8 +768,12 @@ export function Composer(props: {
   onCleanup(() => offs.forEach((off) => off()))
 
   return (
-    <div class="ai-composer-wrap" classList={{ full: fullComposer() && !props.inDoodle }}>
-      <div class="ai-composer" classList={{ plan: currentMode() === 'plan', briefing: currentMode() === 'briefing', orchestrator: currentMode() === 'orchestrator' }}>
+    <div
+      class="ai-composer-wrap"
+      classList={{ full: fullComposer() && !props.inDoodle, plan: currentMode() === 'plan', briefing: currentMode() === 'briefing', orchestrator: currentMode() === 'orchestrator' }}
+    >
+      {props.head}
+      <div class="ai-composer">
         <Show when={chat.queue?.length}>
           <div class="ai-queue" data-testid="ai-queue">
             <div class="ai-queue-title">
