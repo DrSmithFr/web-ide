@@ -4,6 +4,18 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-10-10
+
+### Added
+
+- A shell command of the assistant looks as in the Console: its prompt line with a button to copy the command, its output with its ANSI colors (kept by the pod for the page, the model still reads the plain text), and its exit code in its row (red when it fails).
+
+### Changed
+
+- The reasoning and the tool calls of the assistant are joined in one block across its answers, until a text or a card. The last block of the conversation stays open; each one above it is folded behind a label with its number of actions, its failures and the time spent on it (generation and tool runs), opened and folded back by a click.
+- The summary of a tool call no longer shrinks to nothing next to a long target.
+- Roadmap of the kanban: no more column of row labels; the lineages linked by dependencies are grouped as a staircase (each one right below the one it waits for), with a gap around each group.
+
 ## [1.7.0] - 2026-10-10
 
 ### Added
