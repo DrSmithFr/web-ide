@@ -201,5 +201,12 @@
   "this worktree is not one of the project": "ce worktree n’appartient pas au projet",
   "only an Orchestrator conversation adopts another one": "seule une conversation Orchestrateur adopte une autre conversation",
   "the conversation is running: stop it first": "la conversation tourne : arrêtez-la d’abord",
-  "the command is not reachable anymore": "la commande n'est plus joignable"
+  "the command is not reachable anymore": "la commande n'est plus joignable",
+  "invalid .ide/commands.json: %v": ".ide/commands.json invalide : %v",
+  "a command needs a name": "une commande doit avoir un nom",
+  "the command “%s” is empty": "la commande « %s » est vide",
+  "unknown flag: %s": "type inconnu : %s",
+  "the folder of “%s” must be inside the project": "le dossier de « %s » doit être dans le projet",
+  "invalid port: %d": "port invalide : %d",
+  "command not found": "commande introuvable"
 }

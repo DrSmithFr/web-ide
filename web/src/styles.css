@@ -347,6 +347,38 @@ button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 .sev-2 { color: var(--warn); }
 .sev-3, .sev-4 { color: var(--info); }
 .output-log { height: 100%; margin: 0; overflow: auto; padding: 6px 10px; font-family: var(--font-code); font-size: 12px; color: var(--fg-muted); white-space: pre-wrap; }
+/* Saved commands: quick access of the empty Console, modal list + detail. */
+.quick-cmds { height: 100%; overflow: auto; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px; }
+.quick-cmds > p { margin: 0 0 6px; }
+.quick-cmd { display: flex; align-items: center; gap: 8px; width: min(420px, 100%); padding: 5px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-3); cursor: pointer; text-align: left; }
+.quick-cmd:hover, .quick-cmd:focus-visible { background: var(--bg-hover); border-color: var(--accent); }
+.quick-cmd-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quick-cmds-actions { display: flex; gap: 8px; margin-top: 10px; }
+.cmd-modal .modal-body { padding: 0; display: flex; }
+.cmd-layout { display: flex; flex: 1; min-height: 420px; }
+.cmd-side { width: 260px; flex: none; display: flex; flex-direction: column; gap: 6px; padding: 10px; border-right: 1px solid var(--line); }
+.cmd-side > p { margin: 0; }
+.cmd-side-bar { display: flex; gap: 4px; align-items: center; }
+.cmd-filter { flex: 1; min-width: 0; }
+.cmd-list { flex: 1; overflow: auto; outline: none; }
+.cmd-item { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: var(--radius); cursor: pointer; }
+.cmd-item:hover { background: var(--bg-hover); }
+.cmd-item.selected { background: var(--sel-bg); }
+.cmd-list:focus-visible .cmd-item.selected { outline: 1px solid var(--accent); }
+.cmd-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmd-none { padding: 4px 8px; margin: 0; }
+.cmd-running { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
+.cmd-detail { flex: 1; min-width: 0; padding: 14px 16px; overflow: auto; }
+.cmd-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.cmd-row > .field { min-width: 140px; }
+.cmd-editor { display: flex; min-height: 140px; max-height: 40vh; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); }
+.cmd-editor:focus-within { border-color: var(--accent); }
+.cmd-editor .ed-scroll { max-height: 40vh; }
+.cmd-actions { display: flex; align-items: center; gap: 8px; }
+@media (max-width: 700px) {
+  .cmd-layout { flex-direction: column; }
+  .cmd-side { width: auto; border-right: 0; border-bottom: 1px solid var(--line); max-height: 40vh; }
+}
 
 /* ---------- database ---------- */
 .sql-console, .table-view { flex: 1; display: flex; flex-direction: column; min-height: 0; }

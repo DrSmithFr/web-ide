@@ -27,6 +27,8 @@ type Info struct {
 	Exited  bool     `json:"exited"`
 	Code    int      `json:"code"`
 	Started int64    `json:"started"`
+	// CommandID: the saved command the task runs (package commands), one console each.
+	CommandID string `json:"commandId,omitempty"`
 }
 
 // term is where a console runs: a local PTY, or a process of the keeper.
@@ -93,14 +95,36 @@ type meta struct {
 	Kind    string   `json:"kind"`
 	Command []string `json:"command,omitempty"`
 	Started int64    `json:"started"`
+	// CommandID: see Info.
+	CommandID string `json:"commandId,omitempty"`
 }
 
 func (c *Console) meta() json.RawMessage {
-	data, _ := json.Marshal(meta{Console: c.ID, Title: c.Title, Kind: c.Kind, Command: c.Command, Started: c.Started})
+	data, _ := json.Marshal(meta{Console: c.ID, Title: c.Title, Kind: c.Kind, Command: c.Command, Started: c.Started, CommandID: c.CommandID})
 	return data
 }
 
 func (m *Manager) Create(kind, title string, command []string, cwd string, cols, rows int) (Info, error) {
+	return m.create(kind, title, command, cwd, cols, rows, "")
+}
+
+// RunCommand starts the task of a saved command.
+func (m *Manager) RunCommand(id, title string, command []string, cwd string) (Info, error) {
+	return m.create("task", title, command, cwd, 160, 40, id)
+}
+
+// OfCommand returns the consoles of a saved command, running or ended.
+func (m *Manager) OfCommand(id string) []Info {
+	var out []Info
+	for _, i := range m.List() {
+		if i.CommandID == id {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+func (m *Manager) create(kind, title string, command []string, cwd string, cols, rows int, commandID string) (Info, error) {
 	if cwd == "" {
 		cwd = m.root
 	}
@@ -116,7 +140,7 @@ func (m *Manager) Create(kind, title string, command []string, cwd string, cols,
 			title = execx.Join(command)
 		}
 	}
-	c := &Console{Info: Info{ID: newID(), Title: title, Kind: kind, Command: command, Started: time.Now().UnixMilli()}}
+	c := &Console{Info: Info{ID: newID(), Title: title, Kind: kind, Command: command, Started: time.Now().UnixMilli(), CommandID: commandID}}
 	m.mu.Lock()
 	k := m.keeper
 	m.mu.Unlock()
@@ -231,7 +255,7 @@ func (m *Manager) adopt() {
 		if known {
 			continue
 		}
-		c := &Console{Info: Info{ID: mt.Console, Title: mt.Title, Kind: mt.Kind, Command: mt.Command, Started: mt.Started}, term: &keeperTerm{c: m.keeper, id: p.ID}}
+		c := &Console{Info: Info{ID: mt.Console, Title: mt.Title, Kind: mt.Kind, Command: mt.Command, Started: mt.Started, CommandID: mt.CommandID}, term: &keeperTerm{c: m.keeper, id: p.ID}}
 		c.end = p.Base
 		m.add(c)
 		if err := m.follow(c, p.ID, p.Base); err != nil {

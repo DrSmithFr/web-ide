@@ -12,13 +12,15 @@ import { showTool } from '../state/zones'
 import { dropClasses, dropIndex, moveItem, setDropAt } from '../ui/tabDrop'
 import { settings } from '../state/settings'
 import { accentOf, themeById } from '../settings/themes'
-import { prompt } from '../ui/overlay'
+import { contextMenu, prompt, type MenuItem } from '../ui/overlay'
 import { errorToast } from '../ui/toast'
 import { copyText } from '../ui/clipboard'
 import { Icon } from '../ui/icons'
 import { EmptyState } from '../ui/EmptyState'
 import { shortcutOf } from '../keys/bindings'
 import { t } from '../i18n'
+import { adHocCommand, commands, flagIcon, loadCommands, runCommand, runningConsole } from './commands'
+import { openCommands } from './CommandsModal'
 
 export interface ConsoleInfo {
   id: string
@@ -29,11 +31,13 @@ export interface ConsoleInfo {
   code: number
   /** Worktree the console runs in (set by the page). */
   project?: string
+  /** Saved command the task runs (see commands.ts). */
+  commandId?: string
 }
 
 const [consoles, setConsoles] = createSignal<ConsoleInfo[]>([])
 const [logs, setLogs] = createSignal<string[]>([])
-export { consoles }
+export { consoles, setConsoles }
 
 /** Consoles of a worktree of the window (its project by default). */
 export function setConsoleList(list: ConsoleInfo[], pid = home()?.id) {
@@ -258,6 +262,61 @@ export async function runTask() {
   await newConsole({ kind: 'task', command: ['sh', '-c', cmd], title: cmd })
 }
 
+/** Menu of the ▶ button: the saved commands, an ad hoc command, the modal. */
+async function commandsMenu(button: HTMLElement) {
+  await loadCommands()
+  const r = button.getBoundingClientRect()
+  const at = { clientX: r.left, clientY: r.bottom + 2, preventDefault() {}, stopPropagation() {} } as MouseEvent
+  const adHoc = adHocCommand()
+  const items: MenuItem[] = commands().map((c) => ({ label: c.name, hint: (runningConsole(c.id) ? '● ' : '') + c.flag, action: () => void runCommand(c) }))
+  if (items.length) items.push({ label: '', separator: true })
+  items.push({ label: t('Run a command…'), action: () => void runTask() })
+  if (adHoc) items.push({ label: t('Save “{command}” as a command…', { command: adHoc.length > 40 ? adHoc.slice(0, 40) + '…' : adHoc }), action: () => openCommands({ draft: { name: adHoc.split('\n')[0].slice(0, 40), command: adHoc } }) })
+  items.push({ label: t('Edit commands…'), action: () => openCommands() })
+  contextMenu(at, items)
+}
+
+/** Empty Console: the saved commands at hand (arrows + Enter), a new terminal. */
+function QuickCommands() {
+  onMount(() => void loadCommands())
+  const focusAt = (el: HTMLElement, dir: number) => {
+    const list = [...(el.closest('.quick-cmds')?.querySelectorAll<HTMLButtonElement>('.quick-cmd') ?? [])]
+    list[(list.indexOf(el as HTMLButtonElement) + dir + list.length) % list.length]?.focus()
+  }
+  return (
+    <div class="quick-cmds" data-testid="quick-commands">
+      <Show when={commands().length} fallback={<EmptyState icon="terminal" text={t('No open console.')} action={t('New terminal')} onAction={() => newConsole()} />}>
+        <p class="muted small">{t('No open console. Run a command of the project:')}</p>
+        <For each={commands()}>
+          {(c) => (
+            <button
+              class="quick-cmd"
+              title={c.description || c.command}
+              onClick={() => void runCommand(c)}
+              onKeyDown={(e) => (e.key === 'ArrowDown' || e.key === 'ArrowUp') && (e.preventDefault(), focusAt(e.currentTarget, e.key === 'ArrowDown' ? 1 : -1))}
+              data-testid="quick-command"
+            >
+              <Icon name={flagIcon[c.flag]} size={13} />
+              <span class="quick-cmd-name">{c.name}</span>
+              <span class="muted small">{c.flag}</span>
+            </button>
+          )}
+        </For>
+      </Show>
+      <div class="quick-cmds-actions">
+        <Show when={commands().length}>
+          <button class="btn small" onClick={() => newConsole()}>
+            {t('New terminal')}
+          </button>
+        </Show>
+        <button class="btn small" onClick={() => openCommands(commands().length ? {} : { draft: {} })} data-testid="quick-edit-commands">
+          {commands().length ? t('Edit commands…') : t('Create a command…')}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 async function closeConsole(id: string) {
   try {
     await requestIn(projectOf(id), 'console.close', { id })
@@ -312,7 +371,7 @@ function Output() {
 }
 
 /** Consoles in the order of their tabs (session), the new ones last. */
-function ordered() {
+export function ordered() {
   const rank = (id: string) => {
     const i = session.bottom.order.indexOf(id)
     return i < 0 ? Infinity : i
@@ -380,13 +439,13 @@ export function ConsoleTool() {
         <button class="icon-btn small" title={`${t('New terminal')} (${shortcutOf('console.new')})`} onClick={() => newConsole()}>
           <Icon name="plus" />
         </button>
-        <button class="icon-btn small" title={t('Run a command (build output)')} onClick={runTask}>
+        <button class="icon-btn small" title={t('Commands of the project')} onClick={(e) => void commandsMenu(e.currentTarget)} data-testid="console-commands">
           <Icon name="play" />
         </button>
       </div>
       <div class="tool-body">
         <Show when={consoles().length === 0}>
-          <EmptyState icon="terminal" text={t('No open console.')} action={t('New terminal')} onAction={() => newConsole()} />
+          <QuickCommands />
         </Show>
         <For each={consoles()}>
           {(c) => (

@@ -18,6 +18,7 @@ import { GlobalSearch, focusGlobalSearch } from '../panels/GlobalSearch'
 import { GitPanel } from '../panels/git/GitPanel'
 import { KanbanPanel } from '../kanban/Panel'
 import { NewTicketHost } from '../kanban/Board'
+import { CommandsHost } from '../console/CommandsModal'
 import { board, ensureBoard, openBoard, openTicket, refreshBoard } from '../kanban/state'
 import { refreshGit } from '../state/git'
 import { DatabaseTool } from '../db/DatabaseTool'
@@ -630,6 +631,7 @@ export function ProjectPage(props: { id: string }) {
         <MenuBar />
         <MobileSync />
         <NewTicketHost />
+        <CommandsHost />
         <SearchEverywhereHost />
         <RecentFilesHost tools={switcherTools} onTool={toggleToolFocus} />
         <ClipboardHistoryHost />
