@@ -28,6 +28,14 @@ run(async ({ page, ctx }) => {
   assert(fs.readFileSync(WS + '/demo/.ide/.gitignore', 'utf8').includes('kanban.db'), 'kanban.db ignored by git')
   const sections = () => page.$$eval('.tk-main .tk-section, .tk-main .tk-sep', (l) => l.map((e) => (e.matches('.tk-sep') ? '|' : (e.classList.contains('folded') ? '-' : '') + e.querySelector('.tk-section-toggle').textContent.trim())))
   assert((await sections()).join() === 'Description,Briefing conversations,Notes', 'New: description, briefing and notes, open: ' + (await sections()).join())
+  const header = () => page.$$eval('.tk-meta-row > .btn, .tk-meta-row > .tk-split > .btn:first-child', (l) => l.map((e) => e.textContent.trim()))
+  assert((await header()).join() === 'Briefing,Generate the plan', 'New: Briefing and Generate the plan in the header: ' + (await header()).join())
+  await page.click('[data-testid=ticket-plan-generate-with]')
+  assert(
+    (await page.$$eval('.ctx-menu button', (l) => l.map((e) => e.textContent.trim()))).join() === 'With the integrated AI,With Claude Code (Opus)',
+    'split button: the integrated AI or Claude Code',
+  )
+  await page.keyboard.press('Escape')
   assert((await page.textContent('.tk-side')).match(/Lineage[\s\S]*Linked files[\s\S]*Attachments[\s\S]*History/), 'side: lineage, files, attachments, history')
 
   // Description limited to 1500 characters.
@@ -79,9 +87,11 @@ run(async ({ page, ctx }) => {
   assert(true, 'file link opened in the editor')
   await page.click('.pane .tab:has-text("#1")')
   await page.waitForSelector('[data-testid=ticket-view]')
-  // Claude Code menu: a terminal of the IDE runs claude with the prompt of the endpoint.
-  await page.click('[data-testid=ticket-claude]')
-  await page.click('.ctx-menu button:has-text("Redo the plan (Opus)")')
+  // The other actions in "More actions"; Claude Code: a terminal of the IDE runs claude with
+  // the prompt of the endpoint.
+  await page.click('[data-testid=ticket-more]')
+  assert(await page.isVisible('.ctx-menu button:has-text("Back to “New”")'), 'To do: Back to New in More actions')
+  await page.click('.ctx-menu button:has-text("Redo the plan with Claude Code (Opus)")')
   await page.waitForFunction(() => document.querySelector('.xterm-rows')?.textContent.includes('fake claude: --model opus /mcp__web-ide__plan 1'))
   assert(true, 'Claude Code started on the ticket in a terminal')
   await page.click('[data-testid=ticket-file-add]')
@@ -121,6 +131,7 @@ run(async ({ page, ctx }) => {
     (await sections()).join() === 'How to test,Feedback,Git and changes,|,-Description,-Briefing conversations,-Notes,-Plan conversations,-Implementation plan,-Goals · 1/2,-Development conversations',
     'To test: test, feedback and git first, then the earlier sections folded, no pull request without a branch: ' + (await sections()).join(),
   )
+  assert((await header()).join() === 'Add feedback,Validate the ticket', 'To test: Add feedback and Validate the ticket in the header: ' + (await header()).join())
   await page.click('[data-testid=ticket-feedback]')
   assert(await page.evaluate(() => document.activeElement?.dataset.testid === 'ticket-feedback-input'), 'Add feedback focuses the feedback box')
   await page.selectOption('[data-testid=ticket-feedback-kind]', 'bug')
@@ -182,7 +193,9 @@ run(async ({ page, ctx }) => {
   await page.waitForSelector('[data-testid=ticket-view] [data-testid=ticket-parent]:has-text("#3")')
   assert((await page.textContent('[data-testid=ticket-blockers]')).includes('#3: parent not started'), 'the blockers of a step are shown')
   assert(await page.isDisabled('[data-testid=ticket-start]'), 'a blocked ticket cannot start')
-  assert(await page.isVisible('[data-testid=ticket-start-force]'), 'the user can start it anyway')
+  await page.click('[data-testid=ticket-more]')
+  assert(await page.isVisible('.ctx-menu button:has-text("Start anyway…")'), 'the user can start it anyway, from More actions')
+  await page.keyboard.press('Escape')
   await page.click('[data-testid=ticket-parent] .link')
   await page.waitForSelector('[data-testid=ticket-view] [data-testid=ticket-child]:has-text("Lineage step")')
   assert(true, 'the parent lists its steps')
@@ -201,7 +214,8 @@ run(async ({ page, ctx }) => {
   await page.goto(page.url().replace(/[?#].*$/, '') + '?ticket=5')
   await page.waitForSelector('[data-testid=ticket-view] [data-testid=ticket-title]:has-text("Waits for the root")')
   assert(await page.isVisible('[data-testid=ticket-dep].wait'), 'a dependency not merged is waiting')
-  await page.click('[data-testid=ticket-start-force]')
+  await page.click('[data-testid=ticket-more]')
+  await page.click('.ctx-menu button:has-text("Start anyway…")')
   await page.waitForSelector('[data-testid=ticket-status]:has-text("In progress")')
   await page.click('.tk-section-toggle:has-text("History")')
   assert((await page.textContent('.tk-events')).includes('Started despite: #3 (dependency not merged)'), 'a forced start stays in the history')

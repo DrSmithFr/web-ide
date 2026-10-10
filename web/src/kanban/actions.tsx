@@ -12,6 +12,7 @@ import {
 } from './state'
 import { openTicketChat, openWorktree, startTicketChat, startWorkSession } from './sessions'
 import { blockerText } from './Lineage'
+import { runClaude } from './claude'
 import { Section, type Apply } from './TicketView'
 import { t, tn } from '../i18n'
 
@@ -23,6 +24,10 @@ export interface ActionButton {
   disabled?: boolean
   title?: string
   testid?: string
+  /** In the "More actions" menu rather than in the header. */
+  more?: boolean
+  /** The same action with Claude Code in a terminal: a split button offers both. */
+  claude?: { run: () => void; opus?: boolean }
 }
 
 interface Ctx {
@@ -31,7 +36,7 @@ interface Ctx {
   focusFeedback: () => void
 }
 
-/** Buttons of the header of a ticket for its status. */
+/** Actions of a ticket for its status: the main ones in the header, the others in "More actions". */
 export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
   const here = inWorktreeOf(tk)
   const blocked = tk.blockers?.length ? tk.blockers.map(blockerText).join(', ') : ''
@@ -40,19 +45,24 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
   switch (tk.status) {
     case 'new':
       return [
-        { label: 'Briefing', run: () => void startTicketChat(tk, 'briefing'), title: t('Conversation (Plan mode) to clarify the ticket'), testid: 'ticket-briefing' },
+        {
+          label: 'Briefing',
+          run: () => void startTicketChat(tk, 'briefing'),
+          claude: { run: () => runClaude(tk, 'brief'), opus: true },
+          title: t('Conversation (Plan mode) to clarify the ticket'),
+          testid: 'ticket-briefing',
+        },
         {
           label: t('Generate the plan'),
           primary: true,
           run: () => void startTicketChat(tk, 'plan'),
+          claude: { run: () => runClaude(tk, 'plan'), opus: true },
           title: t('The model writes the plan and the goals; the ticket then moves to “To do”'),
           testid: 'ticket-plan-generate',
         },
       ]
     case 'todo':
       return [
-        { label: t('Back to “New”'), run: () => void ctx.move('new'), testid: 'ticket-to-new' },
-        { label: t('Redo the plan'), run: () => void startTicketChat(tk, 'plan'), testid: 'ticket-plan-generate' },
         {
           label: t('Start development'),
           primary: true,
@@ -63,17 +73,20 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
               ? t('Starts this step in the worktree of #{id}, then a development conversation in its window', { id: tk.parent })
               : t('Creates the branch and the worktree of the ticket, then starts a development conversation in its window'),
           run: () => void startWorkSession(tk, 'dev'),
+          claude: { run: () => runClaude(tk, 'dev') },
           testid: 'ticket-start',
         },
+        { label: t('Back to “New”'), run: () => void ctx.move('new'), more: true },
+        { label: t('Redo the plan'), run: () => void startTicketChat(tk, 'plan'), more: true },
+        { label: t('Redo the plan with Claude Code (Opus)'), run: () => runClaude(tk, 'plan'), more: true },
         ...(blocked
           ? [
               {
                 label: t('Start anyway…'),
-                title: t('Cannot start yet: {blockers}', { blockers: blocked }),
+                more: true,
                 run: () => {
                   if (confirm(t('Ticket #{id} waits for {blockers}. Start it anyway?', { id: tk.id, blockers: blocked }))) void startWorkSession(tk, 'dev', undefined, true)
                 },
-                testid: 'ticket-start-force',
               },
             ]
           : []),
@@ -81,13 +94,13 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
     case 'in_progress':
       return [
         ...worktree,
-        { label: t('New dev session'), run: () => void startWorkSession(tk, 'dev'), testid: 'ticket-session' },
         { label: t('Send to testing'), primary: true, run: () => void ctx.move('review'), testid: 'ticket-to-review' },
+        { label: t('New dev session'), run: () => void startWorkSession(tk, 'dev'), more: true },
+        { label: t('Develop with Claude Code'), run: () => runClaude(tk, 'dev'), more: true },
       ]
     case 'review':
       return [
         ...worktree,
-        { label: t('Back to “In progress”'), run: () => void ctx.move('in_progress'), testid: 'ticket-to-progress' },
         { label: t('Add feedback'), run: ctx.focusFeedback, testid: 'ticket-feedback' },
         ...(openChildren.length && !tk.stepDone
           ? [
@@ -101,13 +114,16 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
             ]
           : []),
         {
-          label: t('Close the ticket'),
+          label: t('Validate the ticket'),
           primary: !openChildren.length,
           disabled: !!openChildren.length,
-          title: openChildren.length ? t('The lineage is not finished: {ids}', { ids: openChildren.map((c) => `#${c.id}`).join(', ') }) : undefined,
+          title: openChildren.length ? t('The lineage is not finished: {ids}', { ids: openChildren.map((c) => `#${c.id}`).join(', ') }) : t('Closes the ticket: Done'),
           run: () => void closeTicket(tk, ctx.apply),
           testid: 'ticket-close',
         },
+        { label: t('Back to “In progress”'), run: () => void ctx.move('in_progress'), more: true },
+        { label: t('Handle the test feedback with Claude Code'), run: () => runClaude(tk, 'fix'), more: true },
+        { label: t('Develop with Claude Code'), run: () => runClaude(tk, 'dev'), more: true },
       ]
     case 'done':
       return [{ label: t('Reopen (→ To test)'), run: () => void ctx.move('review'), testid: 'ticket-reopen' }]

@@ -88,6 +88,11 @@ input.tk-title { padding: 2px 6px; }
 .tk-count { color: var(--fg-faint); font-variant-numeric: tabular-nums; margin-right: auto; }
 .tk-count.over { color: var(--danger); font-weight: 600; }
 .tk-chat-link { display: inline-flex; align-items: center; gap: 3px; padding: 0; max-width: 260px; }
+/* Split button: the action with the integrated assistant, the arrow offers Claude Code. */
+.tk-split { display: inline-flex; }
+.tk-split > .btn:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.tk-split > .btn:last-child { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid color-mix(in srgb, currentColor 25%, transparent); padding-inline: 4px; }
+.tk-split > .btn:last-child svg { transform: rotate(90deg); }
 /* Sets apart the folded sections of the earlier statuses. */
 .tk-sep { border: 0; border-top: 1px solid var(--line); margin: 6px 0 10px; }
 .tk-feedback { border: 1px solid var(--line); border-left: 3px solid var(--fbk); border-radius: var(--radius); padding: 6px 10px; background: var(--bg-2); --fbk: var(--info); }

@@ -4,7 +4,7 @@
 // aside, and the buttons that move it on (docs/kanban.md).
 import { createEffect, createMemo, createResource, createSignal, For, type JSX, on, Show } from 'solid-js'
 import { Icon } from '../ui/icons'
-import { contextMenu, fuzzy, pick } from '../ui/overlay'
+import { contextMenu, fuzzy, pick, type MenuItem } from '../ui/overlay'
 import { errorToast } from '../ui/toast'
 import { Markdown } from '../llm/parts'
 import { request } from '../pod/rpc'
@@ -17,7 +17,6 @@ import {
 import { abandonTicket, ChatLink, PullRequest, ticketActions, TicketChats, TicketGit } from './actions'
 import { startWorkSession } from './sessions'
 import { LineageSection } from './Lineage'
-import { claudeItems } from './claude'
 import { fmtDate, fmtSize, t } from '../i18n'
 import './kanban.css'
 
@@ -161,27 +160,49 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
           </select>
           <span class="muted small">{t('created on {date}', { date: fmtDate(tk().created) })}</span>
           <span class="grow" />
-          <For each={buttons()}>
-            {(b) => (
-              <button class={`btn small ${b.primary ? 'primary' : ''} ${b.danger ? 'danger' : ''}`} disabled={b.disabled} title={b.title} onClick={b.run} data-testid={b.testid}>
-                {b.label}
-              </button>
-            )}
+          <For each={buttons().filter((b) => !b.more)}>
+            {(b) => {
+              const main = (
+                <button class={`btn small ${b.primary ? 'primary' : ''} ${b.danger ? 'danger' : ''}`} disabled={b.disabled} title={b.title} onClick={b.run} data-testid={b.testid}>
+                  {b.label}
+                </button>
+              )
+              if (!b.claude) return main
+              // Split button: the integrated assistant on a click, Claude Code from the arrow.
+              const choices = (): MenuItem[] => [
+                { label: t('With the integrated AI'), action: b.run },
+                { label: b.claude!.opus ? t('With Claude Code (Opus)') : t('With Claude Code'), action: b.claude!.run },
+              ]
+              return (
+                <span class="tk-split" classList={{ primary: !!b.primary }}>
+                  {main}
+                  <button
+                    class={`btn small ${b.primary ? 'primary' : ''}`}
+                    disabled={b.disabled}
+                    title={t('With the integrated AI or Claude Code')}
+                    onClick={(e) => contextMenu(e, choices())}
+                    data-testid={b.testid && `${b.testid}-with`}
+                  >
+                    <Icon name="chevron" size={11} />
+                  </button>
+                </span>
+              )
+            }}
           </For>
-          <Show when={claudeItems(tk()).length}>
-            <button class="btn small" title={t('Run Claude Code on this ticket in a terminal')} onClick={(e) => contextMenu(e, claudeItems(tk()))} data-testid="ticket-claude">
-              Claude Code
-            </button>
-          </Show>
           <button
             class="icon-btn"
             title={t('More actions')}
             onClick={(e) =>
               contextMenu(e, [
+                ...buttons()
+                  .filter((b) => b.more)
+                  .map((b) => ({ label: b.label, action: b.run, disabled: b.disabled })),
+                ...(buttons().some((b) => b.more) ? [{ label: '', separator: true }] : []),
                 ...(!closed() ? [{ label: t('Abandon the ticket'), action: () => void abandonTicket(tk(), props.apply) }] : []),
                 { label: t('Delete the ticket'), action: () => void remove() },
               ])
             }
+            data-testid="ticket-more"
           >
             <Icon name="menu" size={14} />
           </button>
