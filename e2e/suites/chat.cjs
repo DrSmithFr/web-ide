@@ -55,7 +55,7 @@ const fake = http.createServer(async (req, res) => {
       if (step === 1) sse(res, { reasoning_content: 'Let me look.' })
       return sse(res, { tool_calls: steps[step].map((command, index) => ({ ...call(`s${step}${index}`, 'bash', { command }), index })) }), end(res, 'tool_calls')
     }
-    sse(res, { content: 'Steps done.' })
+    sse(res, { content: `Steps done: ${text(lastUser)}` })
     return end(res)
   }
   if (scenario === 'tool') {
@@ -238,36 +238,46 @@ run(async ({ page, ctx }) => {
     assert(full.startsWith('Part 1.') && (full.match(/x/g) ?? []).length === 25 && byScenario.slow === 1, `full answer, without a new request (${byScenario.slow} request)`)
     await page.screenshot({ path: OUT + '/chat-resume.png' })
 
-    // Reasoning and tool calls joined in one block across the answers: all the rows but the
-    // last folded behind a label; a command looks as in a console, with its colors and its exit code.
-    await ask(page, 'steps please', 'Steps done.')
+    // Reasoning and tool calls joined in one block across the answers: the last chain of the
+    // conversation is shown, the others are folded behind a label with their time; a command
+    // looks as in a console, with its colors and its exit code.
+    await ask(page, 'steps please', 'Steps done: steps please')
     const block = page.locator('.ai-thread')
-    // The blocks of the last turn (the rows after the last message of the user): shown rows, and
-    // whether the shown blocks touch each other.
-    const lastTurn = () => block.evaluate((th) => {
+    // The blocks of a turn (the rows after a message of the user, back from the last): rows shown,
+    // whether the blocks shown touch each other, its label.
+    const turnAt = (back) => block.evaluate((th, back) => {
       const rows = [...th.querySelectorAll(':scope > .ai-row')]
-      const from = rows.findLastIndex((r) => r.querySelector('.ai-msg.user'))
-      const boxes = rows.slice(from + 1).flatMap((r) => [...r.querySelectorAll('.ai-steps')]).filter((e) => e.offsetParent)
+      const users = rows.map((r, k) => (r.querySelector('.ai-msg.user') ? k : -1)).filter((k) => k >= 0)
+      const from = users[users.length - 1 - back]
+      const turn = rows.slice(from + 1, users[users.length - back] ?? rows.length)
+      const boxes = turn.flatMap((r) => [...r.querySelectorAll('.ai-steps')]).filter((e) => e.offsetParent)
       const r = boxes.map((e) => e.getBoundingClientRect())
-      return { rows: boxes.flatMap((b) => [...b.querySelectorAll(':scope > :is(.ai-tool, .ai-reasoning)')]).filter((e) => e.offsetParent).length, boxes: r.length, joined: r.every((x, k) => !k || Math.abs(x.top - r[k - 1].bottom) < 1.5) }
-    })
-    const visible = async () => (await lastTurn()).rows
-    const joined = async () => { const l = await lastTurn(); return l.boxes > 1 && l.joined }
-    assert((await visible()) === 1, 'the calls of three answers in one chain, only the last row shown: ' + JSON.stringify(await lastTurn()))
-    const label = await block.locator('[data-testid=ai-steps-more]').textContent()
-    assert(/6 earlier actions/.test(label) && /·\s*\d/.test(label), 'a label tells the earlier actions (the reasoning counts) and the time of the block: ' + label)
+      const label = turn.map((r) => r.querySelector('[data-testid=ai-steps-more]')).find(Boolean)
+      return { rows: boxes.flatMap((b) => [...b.querySelectorAll(':scope > :is(.ai-tool, .ai-reasoning)')]).length, boxes: r.length, joined: r.every((x, k) => !k || Math.abs(x.top - r[k - 1].bottom) < 1.5), label: label?.textContent ?? null }
+    }, back)
+    const clickLabel = (back) => block.evaluate((th, back) => {
+      const rows = [...th.querySelectorAll(':scope > .ai-row')]
+      const users = rows.map((r, k) => (r.querySelector('.ai-msg.user') ? k : -1)).filter((k) => k >= 0)
+      rows.slice(users[users.length - 1 - back] + 1).map((r) => r.querySelector('[data-testid=ai-steps-more]')).find(Boolean).click()
+    }, back)
+    let turn = await turnAt(0)
+    assert(turn.rows === 7 && turn.boxes === 3 && turn.joined && turn.label === null, 'the last chain is shown whole, the blocks of its three answers joined, no label: ' + JSON.stringify(turn))
     assert((await block.locator('.ai-steps [data-testid=ai-exit]').allTextContents()).slice(-6).join(',') === '0,0,0,0,0,1', 'each command shows its exit code')
-    await block.locator('[data-testid=ai-steps-more]').click()
-    assert((await visible()) === 7, 'the earlier rows shown on a click, the reasoning among them: ' + JSON.stringify(await lastTurn()))
-    assert(await joined(), 'the blocks of the answers touch each other')
-    await block.locator('.ai-tool:has-text("printf") .ai-tool-head').click()
+    await block.locator('.ai-tool:has-text("printf") .ai-tool-head').last().click()
     const red = block.locator('.ai-tool:has-text("printf") .ai-term span[style*="color"]')
     assert((await red.textContent()) === 'red' && /\$\s*printf/.test(await block.locator('.ai-term-prompt').first().textContent()), 'the output keeps its colors, under the command')
     await block.locator('.ai-term-box').scrollIntoViewIfNeeded()
     await page.screenshot({ path: OUT + '/chat-steps.png' })
-    await block.locator('[data-testid=ai-steps-more]').click()
-    assert((await visible()) === 1, 'folded again by the label')
+    await ask(page, 'steps again', 'Steps done: steps again')
+    turn = await turnAt(1)
+    assert(turn.rows === 0 && /^7 actions.*1 failed.*·\s*\d/.test(turn.label ?? ''), 'a chain above the last one is folded behind its label (count, failures, time): ' + JSON.stringify(turn))
+    assert((await turnAt(0)).rows === 7, 'the new last chain is shown')
     await page.screenshot({ path: OUT + '/chat-steps-folded.png' })
+    await clickLabel(1)
+    turn = await turnAt(1)
+    assert(turn.rows === 7 && turn.joined && turn.label !== null, 'the label unfolds its chain: ' + JSON.stringify(turn))
+    await clickLabel(1)
+    assert((await turnAt(1)).rows === 0, 'and folds it back')
 
     // Reload during a tool: the agent runs in the pod, the tool goes on and so does the agent.
     await page.waitForSelector('[data-testid=send]')

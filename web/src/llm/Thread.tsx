@@ -353,10 +353,10 @@ function follow(el: HTMLElement, streaming: () => boolean, text: () => unknown) 
 
 const effortLabels = { xhigh: () => t('Max'), medium: () => t('Medium'), low: () => t('Low') }
 
-function Reasoning(props: { text: string; live?: boolean; ms?: number; effort?: Effort; hidden?: boolean }) {
+function Reasoning(props: { text: string; live?: boolean; ms?: number; effort?: Effort }) {
   const [open, toggle] = useFold(() => !!props.live)
   return (
-    <div class="ai-reasoning" classList={{ live: !!props.live, open: open(), earlier: props.hidden }}>
+    <div class="ai-reasoning" classList={{ live: !!props.live, open: open() }}>
       <button class="ai-tool-head" onClick={toggle}>
         <span class="ai-tool-icon">
           <Show when={!props.live} fallback={<span class="spinner" />}>
@@ -385,7 +385,7 @@ function Reasoning(props: { text: string; live?: boolean; ms?: number; effort?: 
   )
 }
 
-function ToolRow(props: { msg: ChatMessage; call?: ToolCall; hidden?: boolean }) {
+function ToolRow(props: { msg: ChatMessage; call?: ToolCall }) {
   const label = () => callLabel(props.call, props.msg.name ?? '')
   const pending = () => !props.msg.status
   const [open, toggle] = useFold(pending)
@@ -394,7 +394,7 @@ function ToolRow(props: { msg: ChatMessage; call?: ToolCall; hidden?: boolean })
     return typeof a.path === 'string' && props.msg.status === 'ok' && props.msg.name !== 'list_dir' ? absPath(a.path) : ''
   }
   return (
-    <div class={`ai-tool ${props.msg.status ?? 'running'}`} classList={{ earlier: props.hidden }}>
+    <div class={`ai-tool ${props.msg.status ?? 'running'}`}>
       <button class="ai-tool-head" onClick={toggle} title={t('{tool}: show the result', { tool: props.msg.name ?? '' })}>
         <span class="ai-tool-icon">
           <Show when={!pending()} fallback={<span class="spinner" />}>
@@ -484,16 +484,16 @@ function Term(props: { command: string; msg: ChatMessage; running: boolean }) {
   )
 }
 
-/** Part of a chain of blocks (reasoning, tool calls) joined in one, across the answers of a
- *  turn until a text or a card: all its rows but the last are folded behind a label. */
+/** Part of a chain of blocks (reasoning, tool calls) joined in one, across the answers until
+ *  a text or a card: the last chain of the conversation is shown, the others are folded
+ *  behind a label. */
 export interface Seg {
   key: string
   joinUp: boolean
   joinDown: boolean
-  /** Leading rows hidden; all of them: gone. */
-  hidden: number
+  /** Folded with its chain. */
   gone: boolean
-  /** The label of the folded rows, on the first block shown. */
+  /** The label of a chain but the last, on its first block. */
   more?: { n: number; failed: number; open: boolean; ms: number }
   /** Last block of the chain left open at the end: the reasoning running joins it. */
   openEnd?: boolean
@@ -505,8 +505,6 @@ const liveJoins = () => live.busy && !approval() && !!live.reasoning
 
 /** A block of a chain: the reasoning of an answer and its tool calls, one row each. */
 function Steps(props: { seg?: Seg; reasoning?: ChatMessage; items: { msg: ChatMessage; call?: ToolCall }[] }) {
-  const hidden = () => props.seg?.hidden ?? 0
-  const offset = () => (props.reasoning ? 1 : 0)
   const toggle = () => {
     const s = new Set(expanded())
     if (!s.delete(props.seg!.key)) s.add(props.seg!.key)
@@ -520,7 +518,7 @@ function Steps(props: { seg?: Seg; reasoning?: ChatMessage; items: { msg: ChatMe
             <span class="ai-chev" classList={{ open: more().open }}>
               <Icon name="chevron" size={11} />
             </span>
-            <span>{tn(more().n, '{n} earlier action', '{n} earlier actions')}</span>
+            <span>{tn(more().n, '{n} action', '{n} actions')}</span>
             <Show when={more().failed}>
               <span class="badge danger">{t('{n} failed', { n: more().failed })}</span>
             </Show>
@@ -532,9 +530,9 @@ function Steps(props: { seg?: Seg; reasoning?: ChatMessage; items: { msg: ChatMe
       </Show>
       <div class="ai-steps" classList={{ 'join-up': props.seg?.joinUp, 'join-down': props.seg?.joinDown || (props.seg?.openEnd && liveJoins()), gone: props.seg?.gone }}>
         <Show when={props.reasoning}>
-          {(m) => <Reasoning text={m().reasoning_content!} ms={m().thinkMs} effort={m().effort} hidden={hidden() > 0} />}
+          {(m) => <Reasoning text={m().reasoning_content!} ms={m().thinkMs} effort={m().effort} />}
         </Show>
-        <For each={props.items}>{(i, k) => <ToolRow msg={i.msg} call={i.call} hidden={k() + offset() < hidden()} />}</For>
+        <For each={props.items}>{(i) => <ToolRow msg={i.msg} call={i.call} />}</For>
       </div>
     </>
   )
@@ -842,33 +840,19 @@ export function Thread(props: { onSuggest: (t: string) => void; onSettings: () =
     return -1
   })
   // The chains of blocks: reasoning and tool calls joined across the answers until a text,
-  // a card or the end of the turn; all their rows but the last folded behind a label.
+  // a card or the end of the turn; all but the last folded behind a label.
   const chains = createMemo(() => {
     const msgs = chat.messages
     const out: { head?: Seg; tail?: Seg; hide?: boolean }[] = []
     let chain: { seg: Seg; errors: boolean[]; ms: number }[] = []
     const add = (i: number, part: string, errors: boolean[], ms: number) => {
-      const seg: Seg = { key: chain.length ? chain[0].seg.key : `${chat.id}:${i}:${part}`, joinUp: false, joinDown: false, hidden: 0, gone: false }
+      const seg: Seg = { key: chain.length ? chain[0].seg.key : `${chat.id}:${i}:${part}`, joinUp: false, joinDown: false, gone: false }
       chain.push({ seg, errors, ms })
       return seg
     }
+    const all: (typeof chain)[] = []
     const close = () => {
-      const rows = chain.flatMap((u) => u.errors)
-      const open = expanded().has(chain[0].seg.key)
-      const total = rows.length > 1 && !open ? rows.length - 1 : 0
-      const failed = rows.slice(0, -1).filter(Boolean).length
-      let left = total
-      let first = true
-      chain.forEach((u, k) => {
-        u.seg.hidden = Math.min(left, u.errors.length)
-        u.seg.gone = u.seg.hidden === u.errors.length
-        left -= u.seg.hidden
-        u.seg.joinDown = k < chain.length - 1
-        if (u.seg.gone) return
-        u.seg.joinUp = !first
-        if (first && rows.length > 1) u.seg.more = { n: rows.length - 1, failed, open, ms: chain.reduce((n, c) => n + c.ms, 0) }
-        first = false
-      })
+      all.push(chain)
       chain = []
     }
     for (let i = 0; i < msgs.length; i++) {
@@ -902,7 +886,22 @@ export function Thread(props: { onSuggest: (t: string) => void; onSettings: () =
       chain[chain.length - 1].seg.openEnd = true
       close()
     }
-    for (const o of out) if (o.hide) o.hide = o.tail!.gone
+    // The last chain is shown; the others are folded behind their label, unless opened.
+    all.forEach((c, k) => {
+      const last = k === all.length - 1
+      const shown = last || expanded().has(c[0].seg.key)
+      c.forEach((u, j) => {
+        u.seg.gone = !shown
+        u.seg.joinUp = j > 0
+        u.seg.joinDown = j < c.length - 1
+      })
+      if (!last) {
+        const rows = c.flatMap((u) => u.errors)
+        c[0].seg.more = { n: rows.length, failed: rows.filter(Boolean).length, open: shown, ms: c.reduce((n, u) => n + u.ms, 0) }
+      }
+    })
+    // An answer of reasoning and tool calls only, folded: its row goes (but the label).
+    for (const o of out) if (o.hide) o.hide = o.tail!.gone && !o.tail!.more
     return { rows: out, open }
   })
   const compactedCount = () => chat.messages.filter((m) => m.compacted).length

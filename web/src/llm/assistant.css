@@ -84,7 +84,7 @@
 /* reasoning and tool calls joined in one block, across the answers of a chain */
 .ai-steps { border: 1px solid var(--line); border-radius: 10px; background: var(--ai-softer); overflow: hidden; min-width: 0; }
 .ai-steps > :is(.ai-tool, .ai-reasoning) { border: 0; border-radius: 0; background: none; }
-.ai-steps > .earlier, .ai-steps.gone, .ai-row.ai-gone { display: none; }
+.ai-steps.gone, .ai-row.ai-gone { display: none; }
 .ai-steps > * + :is(.ai-tool, .ai-reasoning) { border-top: 1px solid var(--line); }
 /* a block that goes on the one of the answer before: the gap of the thread taken back */
 .ai-steps.join-up { margin-top: calc(-1 * var(--ai-gap)); border-top-left-radius: 0; border-top-right-radius: 0; }
