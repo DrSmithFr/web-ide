@@ -103,6 +103,23 @@ func TestStaysIn(t *testing.T) {
 		{`bash -c "rm -rf /x"`, "/p", false},
 		{`sh -ec 'make && rm -rf build'`, "/p", true},
 		{`eval "rm -rf ~"`, "/p", false},
+		// Loops and conditions: the commands inside are checked.
+		{`for f in src/*.go; do echo "== $f"; cat $f; done`, "/p", true},
+		{`for k in "Code" "Name"; do grep -n "\"$k\":" src/fr.json | head -2; done`, "/p", true},
+		{`for d in a b .; do [ -f "$d/package.json" ] && echo "$d"; done`, "/p", true},
+		{`if [ -f x ]; then make; else echo no; fi`, "/p", true},
+		{"for f in /etc/*; do rm $f; done", "/p", false},
+		{"if true; then rm -rf ~/x; fi", "/p", false},
+		{"while true; do rm /x; done", "/p", false},
+		// A variable assigned a literal is that literal; arithmetic is a number.
+		{"PORT=4611 && nohup ./bin/pod -addr 127.0.0.1:$PORT > /tmp/p.log 2>&1 &", "/p", true},
+		{"PORT=$((4500 + RANDOM % 300)) && ./bin/pod -addr 127.0.0.1:${PORT}", "/p", true},
+		{"P=/etc; rm -rf $P/x", "/p", false},
+		{"D=src; cd /; rm -rf $D", "/p", false},
+		{"GO=$(command -v go); $GO test ./...", "/p", false},
+		{"N=$((1 + $(rm -rf /x))); echo $N", "/p", false},
+		{"nohup rm -rf ~/y &", "/p", false},
+		{"kill 4242", "/p", false},
 	} {
 		if got := StaysIn(c.cmd, c.cwd, "/p", Scratch); got != c.stay {
 			t.Errorf("StaysIn(%q, cwd %q) = %v, want %v", c.cmd, c.cwd, got, c.stay)

@@ -142,8 +142,14 @@ const ops = "|;&<>\n \t"
 // redirMark starts the word that replaces an output redirection: the mark, then the target.
 const redirMark = "\ue010"
 
+// substMark ends the word that replaces a substitution: a variable assigned from one is not a
+// literal.
+const substMark = "\ue011"
+
 var (
 	substitution = regexp.MustCompile("\\$\\(([^()`]*)\\)|`([^`]*)`")
+	arithmetic   = regexp.MustCompile("\\$\\(\\((?:[^()$`]|\\$\\w+|\\([^()$`]*\\))*\\)\\)")
+	variable     = regexp.MustCompile(`\$\{(\w+)\}|\$(\w+)`)
 	quoted       = regexp.MustCompile(`'[^']*'|"(?:[^"\\]|\\.)*"`)
 	streamRedir  = regexp.MustCompile(`\d?>&\d`)
 	redirect     = regexp.MustCompile(`(?:\d|&)?>>?\|?\s*([^\s|;&<>]*)`)
@@ -219,6 +225,8 @@ func walk(command, cwd string, each func(words []string, dir string, redirs []st
 		return false
 	}
 	c = strings.ReplaceAll(c, "\\\n", " ")
+	// Arithmetic without a substitution inside: a number.
+	c = arithmetic.ReplaceAllString(c, "0")
 	// Substitutions: walked, then replaced by a plain word.
 	for guard := 0; strings.Contains(c, "$(") || strings.Contains(c, "`"); guard++ {
 		m := substitution.FindStringSubmatchIndex(c)
@@ -234,12 +242,25 @@ func walk(command, cwd string, each func(words []string, dir string, redirs []st
 		if !walk(inner, cwd, each) {
 			return false
 		}
-		c = c[:m[0]] + "x" + c[m[1]:]
+		c = c[:m[0]] + "x" + substMark + c[m[1]:]
 	}
 	masked := quoted.ReplaceAllStringFunc(c, mask)
 	masked = redirect.ReplaceAllString(streamRedir.ReplaceAllString(masked, ""), " "+redirMark+"$1")
 	dir := cwd
+	vars := map[string]string{} // assigned a literal by an earlier command: PORT=4611; … $PORT
 	for _, seg := range separators.Split(masked, -1) {
+		seg = variable.ReplaceAllStringFunc(seg, func(v string) string {
+			m := variable.FindStringSubmatch(v)
+			if val, ok := vars[m[1]+m[2]]; ok {
+				return val
+			}
+			return v
+		})
+		if f := strings.Fields(edges.ReplaceAllString(seg, "")); len(f) == 1 && assignment.MatchString(f[0]) && !strings.ContainsAny(f[0], "$`"+substMark+redirMark) {
+			name, val, _ := strings.Cut(f[0], "=")
+			vars[name] = val
+			continue
+		}
 		var words, redirs []string
 		for _, w := range strings.Fields(edges.ReplaceAllString(seg, "")) {
 			w = unmask(w)
@@ -354,6 +375,13 @@ func unwrap(words []string) []string {
 			w[0] = name
 		}
 		head := w[0]
+		if head == "for" {
+			return nil // for x in <words>: no command
+		}
+		if keywords[head] {
+			w = w[1:]
+			continue
+		}
 		if wrappers[head] {
 			w = w[1:]
 			for len(w) > 0 && strings.HasPrefix(w[0], "-") {
@@ -372,7 +400,10 @@ func unwrap(words []string) []string {
 	}
 }
 
-var wrappers = setOf("time", "command", "nice", "timeout", "xargs", "env")
+var wrappers = setOf("time", "command", "nice", "timeout", "xargs", "env", "nohup", "setsid")
+
+// Shell keywords before a command (`do grep …`, `if [ -f x ]`), or alone (`done`, `fi`).
+var keywords = setOf("do", "done", "then", "else", "elif", "fi", "if", "while", "until", "!")
 
 // binProgram is the name of a known program called by an absolute or home path in a bin
 // folder (`/usr/bin/env`, `~/sdk/go/bin/go`), else "". A variable stays unknown.
