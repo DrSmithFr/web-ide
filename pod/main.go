@@ -54,6 +54,8 @@ func main() {
 	publicURL := flag.String("public-url", "", "address the IDE is opened at, for the links given to Claude Code (default: config.json, else http://<addr>)")
 	static := flag.String("static", "", "serve the front end from this folder instead of the embedded one")
 	keeperPath := flag.String("keeper", "", "socket of the keeper that runs the terminals (default: <data>/keeper.sock when it answers; off: the pod runs them)")
+	name := flag.String("name", "", "name of this pod, shown to the other devices of the account (default: the host name)")
+	mdns := flag.Bool("mdns", true, "find the other pods of the account on the LAN by mDNS (false: the addresses typed in Settings only)")
 	lanAddr := flag.String("lan", "", "listen address of the link to the other pods of the account on the LAN (default: config.json, else "+lan.DefaultAddr+"; off: none)")
 	relay := flag.String("relay", "", "relay URL the pod registers with (wss:// or ws://), or the word relay to enable")
 	forceTurn := flag.Bool("force-turn", false, "force the browser through TURN (no direct or STUN path)")
@@ -62,6 +64,9 @@ func main() {
 	tlsPort := flag.Int("tls-port", 0, "relay: the TLS port shared with HTTPS and TURN over TLS (default 443; below 1024 needs root)")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
+	if *name != "" {
+		podName = *name
+	}
 	if *showVersion {
 		fmt.Println(version)
 		return
@@ -83,9 +88,15 @@ func main() {
 		if *relay != "" && *relay != "relay" {
 			relayURL = strings.TrimSuffix(*relay, "/")
 		}
+		lanListen := cfg.LAN.Addr
+		if *lanAddr != "" {
+			lanListen = *lanAddr
+		}
 		check(pair.Run(&pair.Env{
 			Dir:      st.Dir(),
 			RelayURL: relayURL,
+			LANAddr:  lanListen,
+			MDNS:     *mdns,
 			Name:     hostname(),
 			In:       os.Stdin,
 			Out:      os.Stdout,
@@ -163,7 +174,7 @@ func main() {
 		}
 	}
 	if cfg.LAN.Addr != "off" {
-		if m := startLAN(ctx, st, cfg, srv, podID, pushRevocations); m != nil {
+		if m := startLAN(ctx, st, cfg, srv, podID, *mdns, pushRevocations); m != nil {
 			srv.LAN = m
 		}
 	}
@@ -218,7 +229,7 @@ func main() {
 
 // startLAN runs the link to the other pods of the account on the local network: the LAN
 // port, mDNS, and one gateway port per pod found, on the host of the pod address.
-func startLAN(ctx context.Context, st *store.Store, cfg *config.Config, srv *server.Server, podID *identity.PodIdentity, onRevocations func(*identity.Revocations)) *lan.Manager {
+func startLAN(ctx context.Context, st *store.Store, cfg *config.Config, srv *server.Server, podID *identity.PodIdentity, mdns bool, onRevocations func(*identity.Revocations)) *lan.Manager {
 	host, port, _ := net.SplitHostPort(cfg.Addr)
 	homePort, _ := strconv.Atoi(port)
 	m, err := lan.New(lan.Config{
@@ -236,13 +247,15 @@ func startLAN(ctx context.Context, st *store.Store, cfg *config.Config, srv *ser
 			cfg.LAN.Peers = peers
 			return cfg.Save(st)
 		},
-		Resolver:      lan.MDNS{},
 		OnChange:      srv.LANChanged,
 		OnRevocations: onRevocations,
 	})
 	if err != nil {
 		log.Printf("lan: %v", err)
 		return nil
+	}
+	if mdns {
+		m.SetResolver(lan.MDNS{})
 	}
 	m.Start(ctx)
 	return m
@@ -259,7 +272,13 @@ func relayLink(relayURL, podID, token string) string {
 	return u.String() + "#pod=" + podID + "&t=" + token
 }
 
+// podName is the name of the pod (-name), the host name by default.
+var podName string
+
 func hostname() string {
+	if podName != "" {
+		return podName
+	}
 	h, err := os.Hostname()
 	if err != nil {
 		return ""

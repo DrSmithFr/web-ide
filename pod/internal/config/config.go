@@ -27,7 +27,7 @@ type Config struct {
 
 // LAN configures the LAN link of a paired pod.
 type LAN struct {
-	// Addr is the listen address of the LAN port (default :4434; "off": no LAN link).
+	// Addr is the listen address of the LAN port (default :4436; "off": no LAN link).
 	Addr string `json:"addr,omitempty"`
 	// Peers are addresses (host:port) typed by hand, for a network where mDNS fails.
 	Peers []string `json:"peers,omitempty"`

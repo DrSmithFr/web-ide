@@ -235,5 +235,12 @@
   "WebCrypto Ed25519": "WebCrypto Ed25519",
   "WebAuthn PRF": "WebAuthn PRF",
   "%s is not an address host:port": "%s n'est pas une adresse hôte:port",
-  "the LAN link is off": "le lien réseau local est coupé"
+  "the LAN link is off": "le lien réseau local est coupé",
+  "this pod is not paired: web-ide-pod pair": "ce pod n'est pas appairé : web-ide-pod pair",
+  "this pod belongs to another account": "ce pod appartient à un autre compte",
+  "inviting a phone needs a relay: on the local network, run web-ide-pod pair join on the pod to add": "inviter un téléphone demande un relais : sur le réseau local, lancez web-ide-pod pair join sur le pod à ajouter",
+  "no pairing request with this code": "aucune demande d'appairage avec ce code",
+  "the certificate is not for the device of this request": "le certificat n'est pas pour l'appareil de cette demande",
+  "the joining pod does not answer": "le pod qui rejoint ne répond pas",
+  "the joining pod refused the certificate": "le pod qui rejoint a refusé le certificat"
 }

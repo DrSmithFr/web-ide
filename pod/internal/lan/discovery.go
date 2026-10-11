@@ -22,6 +22,7 @@ const Service = "_web-ide._tcp"
 type Record struct {
 	Pod     string // a short id of the device key
 	Account string // AccountTag of the pinned account
+	Join    string // the code of a pod waiting to be paired (pair join, no relay)
 }
 
 // Found is a pod answering the browse.
@@ -29,6 +30,7 @@ type Found struct {
 	Addr    string // host:port of its LAN port
 	Pod     string
 	Account string
+	Join    string
 }
 
 // Resolver announces the pod and finds the others: mDNS, or a fake in tests.
@@ -57,8 +59,14 @@ var quiet = log.New(io.Discard, "", 0)
 
 // Announce answers the mDNS queries for the pod until stop is called.
 func (MDNS) Announce(port int, r Record) (func(), error) {
-	svc, err := mdns.NewMDNSService("web-ide-"+r.Pod, Service, "", "web-ide-"+r.Pod+".local.", port, localIPs(),
-		[]string{"v=1", "pod=" + r.Pod, "acct=" + r.Account})
+	txt := []string{"v=1", "pod=" + r.Pod}
+	if r.Account != "" {
+		txt = append(txt, "acct="+r.Account)
+	}
+	if r.Join != "" {
+		txt = append(txt, "join="+r.Join)
+	}
+	svc, err := mdns.NewMDNSService("web-ide-"+r.Pod, Service, "", "web-ide-"+r.Pod+".local.", port, localIPs(), txt)
 	if err != nil {
 		return nil, err
 	}
@@ -101,9 +109,11 @@ func parseEntry(e *mdns.ServiceEntry) (Found, bool) {
 			f.Pod = v
 		case "acct":
 			f.Account = v
+		case "join":
+			f.Join = v
 		}
 	}
-	return f, f.Account != ""
+	return f, f.Account != "" || f.Join != ""
 }
 
 // localIPs are the IPv4 addresses of the interfaces that are up, loopback excluded.

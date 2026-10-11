@@ -14,6 +14,8 @@ type LAN interface {
 	// View is the state shown in Settings > Remote access and on the home page.
 	View() any
 	SetManual(addrs []string) error
+	// ServeIdentity answers the Devices panel when the pod has no relay.
+	ServeIdentity(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) registerLAN() {

@@ -40,6 +40,10 @@ type Env struct {
 	Entropy []byte
 	// Timeout bounds the wait for an approval (default 5 min).
 	Timeout time.Duration
+	// LANAddr is the LAN listen address of the pod: join waits there when there is no relay.
+	LANAddr string
+	// MDNS announces the request of join on the LAN (false: its address is typed by hand).
+	MDNS bool
 }
 
 // Run dispatches one call of the subcommand: pair create | restore | join | status.
@@ -120,7 +124,7 @@ func Restore(env *Env) error {
 // it names, as it does for every peer.
 func Join(env *Env) error {
 	if env.RelayURL == "" {
-		return errors.New("pair: join needs a relay (-relay); without one, join --phrase")
+		return JoinLAN(env)
 	}
 	p, err := identity.Open(env.Dir)
 	if err != nil {

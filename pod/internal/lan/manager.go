@@ -23,12 +23,12 @@ import (
 )
 
 // DefaultAddr is the LAN listen address when config.json sets none.
-const DefaultAddr = ":4434"
+const DefaultAddr = ":4436"
 
 // Config of the LAN link of a pod.
 type Config struct {
 	Dir      string // the data folder: lan.crt, lan.key, lan.json
-	Addr     string // the listen address of the LAN port (":4434")
+	Addr     string // the listen address of the LAN port (":4436")
 	Identity *identity.PodIdentity
 	Name     string // told to the peers (the host name)
 	Version  string // the pod version, told to the peers
@@ -70,13 +70,17 @@ type Manager struct {
 	mu        sync.Mutex
 	listen    string // the address actually listened on
 	listenErr string
+	listening bool
 	manual    []string
-	cands     map[string]*candidate // by address
-	peers     map[string]*peer      // by device key
-	trusted   map[string]*trust     // by TLS fingerprint of a peer
-	ports     map[string]int        // gateway port by device key (lan.json)
-	seq       int64                 // the seq of the last revocation list passed on
-	announced string                // the account announced by mDNS
+	cands     map[string]*candidate     // by address
+	peers     map[string]*peer          // by device key
+	trusted   map[string]*trust         // by TLS fingerprint of a peer
+	joins     map[string]*joinReq       // joining pods, by address
+	browsers  map[string]*identity.Cert // certificates of the browsers of the Devices panel
+	idLinks   map[*idLink]bool          // the open links of the Devices panel
+	ports     map[string]int            // gateway port by device key (lan.json)
+	seq       int64                     // the seq of the last revocation list passed on
+	announced string                    // the account announced by mDNS
 	stopAnn   func()
 	// transports reach the peers, by the TLS fingerprint they pin.
 	transports map[string]*http.Transport
@@ -126,7 +130,8 @@ func New(cfg Config) (*Manager, error) {
 	m := &Manager{
 		cfg: cfg, cert: cert, fp: Fingerprint(cert.Certificate[0]),
 		limits: tunnel.NewRateLimiter(20, time.Minute),
-		cands:  map[string]*candidate{}, peers: map[string]*peer{}, trusted: map[string]*trust{},
+		cands:  map[string]*candidate{}, peers: map[string]*peer{}, trusted: map[string]*trust{}, joins: map[string]*joinReq{},
+		browsers: map[string]*identity.Cert{}, idLinks: map[*idLink]bool{},
 		ports: map[string]int{},
 	}
 	m.loadPorts()
@@ -137,11 +142,29 @@ func New(cfg Config) (*Manager, error) {
 	return m, nil
 }
 
-// Start listens on the LAN port and runs the dial loop until ctx ends. A port already taken
-// is reported in Settings and the pod keeps dialing (a pod behind it still reaches us back
-// only through its own port).
+// SetResolver sets the discovery before Start (mDNS on a real network).
+func (m *Manager) SetResolver(r Resolver) { m.cfg.Resolver = r }
+
+// Start runs the LAN link until ctx ends. The LAN port opens once the pod is paired (at
+// once, or when the pair command pairs it later): an unpaired pod has nothing to offer the
+// network. A port already taken is reported in Settings.
 func (m *Manager) Start(ctx context.Context) {
 	m.ctx = ctx
+	if m.cfg.Identity.Paired() {
+		m.listenTLS(ctx)
+	}
+	go m.loop(ctx)
+}
+
+// listenTLS opens the LAN port, once.
+func (m *Manager) listenTLS(ctx context.Context) {
+	m.mu.Lock()
+	if m.listening {
+		m.mu.Unlock()
+		return
+	}
+	m.listening = true
+	m.mu.Unlock()
 	ln, err := tls.Listen("tcp", m.cfg.Addr, &tls.Config{
 		Certificates: []tls.Certificate{m.cert},
 		ClientAuth:   tls.RequireAnyClientCert, // checked by the handshake, not by a CA
@@ -157,16 +180,17 @@ func (m *Manager) Start(ctx context.Context) {
 		m.port = ln.Addr().(*net.TCPAddr).Port
 	}
 	m.mu.Unlock()
-	if ln != nil {
-		// The TLS errors of the pods that dial their own announcement are not worth a log line.
-		srv := &http.Server{Handler: http.HandlerFunc(m.serveHTTP), ReadHeaderTimeout: 10 * time.Second, ErrorLog: quiet}
-		go func() { _ = srv.Serve(ln) }()
-		go func() {
-			<-ctx.Done()
-			_ = srv.Close()
-		}()
+	m.changed()
+	if ln == nil {
+		return
 	}
-	go m.loop(ctx)
+	// The TLS errors of the pods that dial their own announcement are not worth a log line.
+	srv := &http.Server{Handler: http.HandlerFunc(m.serveHTTP), ReadHeaderTimeout: 10 * time.Second, ErrorLog: quiet}
+	go func() { _ = srv.Serve(ln) }()
+	go func() {
+		<-ctx.Done()
+		_ = srv.Close()
+	}()
 }
 
 // Port is the LAN port listened on (0 when the listener failed).
@@ -201,6 +225,9 @@ func (m *Manager) refresh() {
 		log.Printf("lan: identity: %v", err)
 	}
 	account, _, rev := m.cfg.Identity.State()
+	if account != "" {
+		m.listenTLS(m.ctx)
+	}
 	// A newer list, from the pair command, the relay or a peer: drop the devices it names
 	// and pass it on.
 	m.mu.Lock()
@@ -245,7 +272,10 @@ func (m *Manager) browse(ctx context.Context) {
 	}
 	tag := AccountTag(account)
 	for _, f := range found {
-		if f.Account == tag {
+		switch {
+		case f.Join != "":
+			go m.probeJoin(ctx, f.Addr)
+		case f.Account == tag:
 			m.addCandidate(f.Addr, "mdns")
 		}
 	}
@@ -304,7 +334,12 @@ func (m *Manager) connect(ctx context.Context, addr string) {
 		c.fails++
 		c.err = errorCode(err)
 		c.next = time.Now().Add(backoff(c.fails))
+		manual := c.sources["manual"]
 		m.mu.Unlock()
+		// An address typed by hand may be a pod waiting to be paired.
+		if manual && c.err == "unreachable" {
+			m.probeJoin(ctx, addr)
+		}
 		m.changed()
 		return
 	}
@@ -672,6 +707,10 @@ func (m *Manager) Status() Status {
 	st := Status{Listen: m.listen, Error: m.listenErr, Paired: m.cfg.Identity.Paired(),
 		Peers: []PeerView{}, Manual: append([]string{}, m.manual...), Failed: []AddrView{}}
 	for key, p := range m.peers {
+		// A revoked pod is gone, not offline.
+		if m.cfg.Identity.PeerError(p.cert) != nil {
+			continue
+		}
 		v := PeerView{ID: key, Name: p.name, Fingerprint: identity.Fingerprint(key), Version: p.version, Online: p.out != nil, Projects: p.projects}
 		if p.out != nil {
 			v.Addr = p.out.addr
@@ -683,7 +722,7 @@ func (m *Manager) Status() Status {
 	}
 	sort.Slice(st.Peers, func(i, j int) bool { return st.Peers[i].Name < st.Peers[j].Name })
 	for addr, c := range m.cands {
-		if c.err != "" && !c.self {
+		if c.err != "" && !c.self && m.joins[addr] == nil {
 			st.Failed = append(st.Failed, AddrView{Addr: addr, Manual: c.sources["manual"], Error: c.err})
 		}
 	}

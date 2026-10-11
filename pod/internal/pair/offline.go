@@ -11,6 +11,7 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
+	"github.com/DrSmithFr/web-ide/pod/internal/lan"
 )
 
 // The commands that need no admin device: the phrase typed is the authority. It signs, then
@@ -131,4 +132,41 @@ func relayList(ctx context.Context, relayURL, account string, own *identity.Revo
 		return ws, m.List, nil
 	}
 	return ws, own, nil
+}
+
+// JoinLAN waits on the local network for an admin, with no relay: the pod serves its request
+// on its LAN port and announces it by mDNS; a paired pod of the LAN shows it in the Devices
+// panel of its page, where the admin compares the fingerprint and approves.
+func JoinLAN(env *Env) error {
+	if env.LANAddr == "off" {
+		return errors.New("pair: join needs a relay (-relay) or the LAN link; or join --phrase")
+	}
+	p, err := identity.Open(env.Dir)
+	if err != nil {
+		return err
+	}
+	var resolver lan.Resolver
+	if env.MDNS {
+		resolver = lan.MDNS{}
+	}
+	cert, err := lan.WaitJoin(context.Background(), lan.JoinConfig{
+		Dir: env.Dir, Addr: env.LANAddr, Identity: p, Name: env.Name, Resolver: resolver, Timeout: env.timeout(),
+		OnListen: func(code string, port int) {
+			fmt.Fprintf(env.Out, "Pairing code: %s\n", code)
+			fmt.Fprintf(env.Out, "Fingerprint of this device: %s\n", identity.Fingerprint(p.ID()))
+			fmt.Fprintf(env.Out, "Waiting on the local network: open Settings > Remote access > Devices on a paired pod (on localhost).\n")
+			fmt.Fprintf(env.Out, "If it does not show up, type one of these addresses in its Local network settings: %s\n", strings.Join(lan.LocalAddrs(port), ", "))
+		},
+	})
+	if err != nil {
+		return err
+	}
+	if err := p.Pin(cert.Account); err != nil {
+		return err
+	}
+	if err := p.SetCert(cert); err != nil {
+		return err
+	}
+	fmt.Fprintf(env.Out, "Paired with account %s (%s)\n", cert.Account, identity.Fingerprint(cert.Account))
+	return nil
 }

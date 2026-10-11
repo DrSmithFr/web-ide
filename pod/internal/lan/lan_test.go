@@ -191,11 +191,15 @@ func TestTwoPodsReachEachOther(t *testing.T) {
 func TestForeignAndUnpairedPodsAreRefused(t *testing.T) {
 	a := account(t, 1)
 	foreign := startPod(t, account(t, 2), "foreign")
+	// An unpaired pod opens no LAN port at all.
 	unpaired := startPod(t, nil, "unpaired")
-	al := startPod(t, a, "alpha", foreign.addr(), unpaired.addr())
+	if unpaired.addr() != "" {
+		t.Fatalf("an unpaired pod listens on %s", unpaired.addr())
+	}
+	al := startPod(t, a, "alpha", foreign.addr())
 
-	waitFor(t, al, "alpha refuses foreign and unpaired", func(st Status) bool {
-		return failed(st, foreign.addr(), "foreign") && failed(st, unpaired.addr(), "unpaired") && len(st.Peers) == 0
+	waitFor(t, al, "alpha refuses foreign", func(st Status) bool {
+		return failed(st, foreign.addr(), "foreign") && len(st.Peers) == 0
 	})
 	if st := foreign.m.Status(); len(st.Peers) != 0 {
 		t.Fatalf("foreign trusted alpha: %+v", st.Peers)
@@ -237,13 +241,19 @@ func TestRevocationSpreadsOverTheLAN(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	waitFor(t, al, "alpha drops charlie", func(st Status) bool { return online(st, "charlie") == nil })
+	waitFor(t, al, "alpha drops charlie", func(st Status) bool { return len(st.Peers) == 1 })
 	// bravo got the list from alpha, with no relay.
-	waitFor(t, b, "bravo drops charlie", func(st Status) bool { return online(st, "charlie") == nil })
+	waitFor(t, b, "bravo drops charlie", func(st Status) bool { return len(st.Peers) == 1 })
 	if _, _, rev := b.id.State(); rev == nil || rev.Seq != 1 {
 		t.Fatalf("bravo holds %+v", rev)
 	}
 	waitFor(t, al, "charlie refused", func(st Status) bool { return failed(st, c.addr(), "revoked") })
+	// bravo stays reached.
+	time.Sleep(time.Second)
+	if st := al.m.Status(); online(st, "bravo") == nil {
+		b, _ := json.Marshal(st)
+		t.Fatalf("alpha lost bravo: %s", b)
+	}
 }
 
 // A machine in the middle shows its own TLS certificate to both pods and relays the bytes:
@@ -285,6 +295,26 @@ func TestMachineInTheMiddleIsRefused(t *testing.T) {
 	if st := b.m.Status(); len(st.Peers) != 0 {
 		t.Fatalf("bravo trusted the machine in the middle: %+v", st.Peers)
 	}
+}
+
+// A pod paired while it runs (the pair command) opens its LAN port and is reached.
+func TestPairedWhileRunning(t *testing.T) {
+	a := account(t, 1)
+	b := startPod(t, nil, "bravo")
+	cli, err := identity.Open(b.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(20 * time.Millisecond)
+	if err := cli.Pin(a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := cli.SetCert(identity.NewCert(a, cli.Key(), "bravo", identity.KindPod)); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, b, "bravo listens once paired", func(st Status) bool { return st.Listen != "" && st.Paired })
+	al := startPod(t, a, "alpha", b.addr())
+	waitFor(t, al, "alpha reaches bravo", func(st Status) bool { return online(st, "bravo") != nil })
 }
 
 func TestManualAddresses(t *testing.T) {
