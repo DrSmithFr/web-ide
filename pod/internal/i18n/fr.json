@@ -224,6 +224,7 @@
   "revocation list of another account": "liste de révocation d'un autre compte",
   "the revocation list signature does not match": "la signature de la liste de révocation ne correspond pas",
   "%s is not a device seed": "%s n'est pas une clé d'appareil",
+  "not an X25519 key": "pas une clé X25519",
   "entropy must be 16, 20, 24, 28 or 32 bytes, got %d": "l'entropie doit faire 16, 20, 24, 28 ou 32 octets, reçu %d",
   "a phrase is 12, 15, 18, 21 or 24 words, got %d": "une phrase fait 12, 15, 18, 21 ou 24 mots, reçu %d",
   "%q is not a BIP39 word": "%q n'est pas un mot BIP39",

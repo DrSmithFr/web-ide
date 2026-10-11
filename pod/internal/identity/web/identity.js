@@ -18,8 +18,12 @@ export const InfoAccount = 'web-ide account v1'
 export const InfoSync = 'web-ide sync v1'
 export const InfoDevice = 'web-ide device v1'
 export const InfoPasskey = 'web-ide passkey v1'
+export const InfoX25519 = 'web-ide x25519 v1'
+export const InfoWrap = 'web-ide sync wrap v1'
 export const KindBrowser = 'browser'
 export const KindPod = 'pod'
+export const KindSettings = 'settings'
+export const KindVault = 'vault'
 export const ScopeAll = 'all'
 
 const enc = new TextEncoder()
@@ -84,6 +88,67 @@ export async function hkdf(seed, info) {
   const hk = await crypto.subtle.importKey('raw', seed, 'HKDF', false, ['deriveBits'])
   return new Uint8Array(await crypto.subtle.deriveBits(
     { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(32), info: enc.encode(info) }, hk, 256))
+}
+
+// --- the sync key ---
+
+// The key of an epoch comes from the sync seed: HKDF with "web-ide sync epoch <e>", so a
+// device that knows the phrase can always rebuild it and a rotation needs no key to lose.
+// The sub-keys per kind come from the epoch key.
+export function epochKey(syncSeed, epoch) { return hkdf(syncSeed, `web-ide sync epoch ${epoch}`) }
+export function kindKey(key, kind) { return hkdf(key, kind) }
+export function wrapKey(shared) { return hkdf(shared, InfoWrap) }
+
+// X25519. WebCrypto cannot import a private key from a raw seed, so a device keeps its key as a
+// JWK (sealed by the passkey PRF, like the device key); the pod derives its key from its device
+// seed with crypto/ecdh. Both sides must agree on the shared secret, which the test vectors check
+// by importing the pod's JWK here.
+export async function x25519Generate() {
+  const k = await crypto.subtle.generateKey({ name: 'X25519', namedCurve: 'X25519' }, true, ['deriveBits'])
+  return { jwk: await crypto.subtle.exportKey('jwk', k.privateKey), key: b64u(new Uint8Array(await crypto.subtle.exportKey('raw', k.publicKey))) }
+}
+
+export async function x25519Shared(jwk, peerKey) {
+  const priv = await crypto.subtle.importKey('jwk', jwk, { name: 'X25519', namedCurve: 'X25519' }, false, ['deriveBits'])
+  const peer = await crypto.subtle.importKey('jwk', { kty: 'OKP', crv: 'X25519', x: peerKey }, { name: 'X25519', namedCurve: 'X25519' }, false, [])
+  return new Uint8Array(await crypto.subtle.deriveBits({ name: 'X25519', namedCurve: 'X25519', public: peer }, priv, 256))
+}
+
+// AES-GCM with the associated data the write used: account|kind|epoch|seq for a blob,
+// account|device|epoch for a wrap. A blob cannot be moved to another account, kind, epoch or seq.
+export function blobAAD(account, kind, epoch, seq) { return `${account}|${kind}|${epoch}|${seq}` }
+export function wrapAAD(account, device, epoch) { return `${account}|${device}|${epoch}` }
+
+export async function sealWith(key, aad, bytes) {
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  return { iv: b64u(iv), data: await sealWithNonce(key, b64u(iv), aad, bytes) }
+}
+
+// The ciphertext with a given nonce: the test vectors use a fixed one so both sides can check
+// the same bytes.
+export async function sealWithNonce(key, iv, aad, bytes) {
+  const k = await crypto.subtle.importKey('raw', key, { name: 'AES-GCM' }, false, ['encrypt'])
+  return b64u(new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: b64d(iv), additionalData: enc.encode(aad) }, k, bytes)))
+}
+
+export async function openWith(key, aad, blob) {
+  const k = await crypto.subtle.importKey('raw', key, { name: 'AES-GCM' }, false, ['decrypt'])
+  return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64d(blob.iv), additionalData: enc.encode(aad) }, k, b64d(blob.data)))
+}
+
+// The bytes each side signs for the sync (fixed field order, no spaces, like the certificates).
+export function canonicalSyncKey(r) {
+  return `{"account":${JSON.stringify(r.account)},"device":${JSON.stringify(r.device)},"key":${JSON.stringify(r.key)}}`
+}
+
+export function canonicalBlob(r) {
+  return `{"account":${JSON.stringify(r.account)},"kind":${JSON.stringify(r.kind)},` +
+    `"epoch":${r.epoch},"seq":${r.seq},"nonce":${JSON.stringify(r.nonce)},"data":${JSON.stringify(r.data)}}`
+}
+
+export function canonicalWrap(w) {
+  return `{"account":${JSON.stringify(w.account)},"device":${JSON.stringify(w.device)},` +
+    `"epoch":${w.epoch},"key":${JSON.stringify(w.key)},"nonce":${JSON.stringify(w.nonce)},"data":${JSON.stringify(w.data)}}`
 }
 
 // The canonical bytes a signature covers: fixed field order, no spaces. JSON.stringify quotes
