@@ -10,6 +10,11 @@ run(async ({ page }) => {
   fs.writeFileSync(WS + '/demo/long.md', '# Title\n\n' + Array.from({ length: 90 }, (_, i) => 'word' + i).join(' ') + '\nafter\n')
   fs.writeFileSync(WS + '/demo/conf.yaml', 'server:\n  host: x\n  ports:\n    - 80\n    - 443\nname: demo\n')
   fs.mkdirSync(WS + '/demo/img', { recursive: true })
+  for (const d of ['a/x', 'b/x']) {
+    fs.mkdirSync(WS + '/demo/' + d, { recursive: true })
+    fs.writeFileSync(WS + '/demo/' + d + '/util.go', 'package x\n')
+  }
+  fs.writeFileSync(WS + '/demo/src/notes.txt', 'other notes\n')
   fs.writeFileSync(WS + '/demo/img/dot.png', Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==', 'base64'))
   fs.writeFileSync(WS + '/demo/guide.md', '# Guide\n\nSee [the notes](notes.txt#L1) and [the web](https://example.com).\n\n![dot](img/dot.png)\n\n- [x] done\n- [ ] todo\n\n## Second part\n\n```go\nfunc main() {}\n```\n\n[Back up](#second-part)\n' +
     Array.from({ length: 80 }, (_, i) => `\n## Section ${i}\n\nText ${i}.\n`).join(''))
@@ -408,4 +413,20 @@ run(async ({ page }) => {
   await menuItem('encoding', 'UTF-8 BOM')
   await page.waitForTimeout(400)
   assert(fs.readFileSync(WS + '/demo/latin.txt').equals(Buffer.from('\ufeffcafé\n', 'utf8')), 'converted to UTF-8 with a BOM')
+
+  // Tabs of files sharing a name: the end of their folders tells them apart.
+  const openPath = async (p) => {
+    await page.keyboard.press('Control+Shift+n')
+    await page.waitForSelector('.pick-input')
+    await page.keyboard.type(p)
+    await page.waitForFunction((x) => document.querySelector('.pick-item.selected')?.textContent.includes(x), p)
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(400)
+  }
+  for (const p of ['notes.txt', 'src/notes.txt', 'a/x/util.go', 'b/x/util.go']) await openPath(p)
+  const titles = await page.$$eval('.pane.active .tab .tab-title', (l) => l.map((e) => e.textContent.trim()))
+  const dirs = await page.$$eval('.pane.active .tab .tab-dir', (l) => l.map((e) => e.textContent))
+  assert(['notes.txt', 'src/notes.txt', 'a/x/util.go', 'b/x/util.go'].every((x) => titles.includes(x)) && titles.includes('main.go'), 'same names: the folders that tell them apart ' + titles.join(', '))
+  assert(dirs.length === 3 && dirs.includes('src/'), 'the folders in their own style, a unique name alone ' + dirs.join(', '))
+  await page.screenshot({ path: OUT + '/editor-same-names.png' })
 })

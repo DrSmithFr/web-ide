@@ -5,6 +5,7 @@ import {
   activateTab, basename, closeTab, docError, findLeaf, getDoc, loadDoc, moveTab, openFile, relPath, reveal, saveCursor,
   saveDoc, session, setActivePane, setSplitSizes, splitPane, diagnostics, type LayoutNode, type TabState, docsVersion, mutate,
 } from '../state/project'
+import { distinctDirs } from './tabNames'
 import { showTool } from '../state/zones'
 import { revealInExplorer } from '../panels/Explorer'
 import { EditorView, type Diagnostic } from '../editor/view'
@@ -120,6 +121,8 @@ function Pane(props: { id: string }) {
     return l?.active ? session.tabs[l.active] : undefined
   }
   const isActivePane = () => session.activePane === props.id
+  // File tabs of the window sharing a name: their folders (see tabNames.ts).
+  const dirs = createMemo(() => distinctDirs(Object.values(session.tabs).flatMap((x) => (x.kind === 'file' && x.path ? [relPath(x.path)] : []))))
   let tabbar!: HTMLDivElement
   // The active tab stays in sight (a new one, first, when the bar is scrolled).
   createEffect(
@@ -218,7 +221,10 @@ function Pane(props: { id: string }) {
                   onContextMenu={(e) => tabMenu(e, tab())}
                 >
                   <span class={`tab-kind kind-${tab().kind}`} />
-                  <span class="tab-title">{tabTitle(tab())}</span>
+                  <span class="tab-title">
+                    <Show when={tab().kind === 'file' && dirs().get(relPath(tab().path ?? ''))}>{(d) => <span class="tab-dir">{d()}</span>}</Show>
+                    {tabTitle(tab())}
+                  </span>
                   <Show when={tab().kind === 'file'}>
                     <WorktreeChip path={tab().path} />
                   </Show>
