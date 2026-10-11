@@ -35,6 +35,9 @@ stop_relay() {
 # The relay of the relay suite (its own pid, never a pkill: the pod running the assistant
 # has the same name).
 start_relay() {
+  # A fresh relay per suite: a relay kept from the previous suite still holds the pod record
+  # of that run, and a pod with another secret is refused by it.
+  rm -rf "$TMP/relaydata"
   mkdir -p "$TMP/relaydata"
   # TURN on loopback: without -turn-ip the relay advertises the machine IP, and Chromium
   # filters candidates it cannot reach; the suite asserts the pair is a relay one.
@@ -94,6 +97,7 @@ mkdir -p "$E2E_OUT"
 status=0
 for s in "${SUITES[@]}"; do
   if [[ $s == *+ ]]; then s=${s%+}; else
+    stop_relay
     # The relay comes up first for the suites that need it: a pod started before the relay
     # fails its first dial and sits in exponential backoff.
     { [ "$s" = relay ] || [ "$s" = identity ]; } && start_relay

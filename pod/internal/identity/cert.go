@@ -2,19 +2,22 @@ package identity
 
 import (
 	"crypto/ed25519"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
 
 // Errors of a certificate check. The handshake maps them to the codes sent to the browser.
+// They are written with i18n because the page shows them: the browser module of the identity
+// returns exactly the same texts, so one catalog covers both sides.
 var (
-	ErrNoCert         = errors.New("identity: no certificate")
-	ErrForeignAccount = errors.New("identity: certificate of another account")
-	ErrBadSignature   = errors.New("identity: the certificate signature does not match")
-	ErrRevoked        = errors.New("identity: device revoked")
+	ErrNoCert         = i18n.New("no certificate")
+	ErrForeignAccount = i18n.New("certificate of another account")
+	ErrBadSignature   = i18n.New("the certificate signature does not match")
+	ErrRevoked        = i18n.New("device revoked")
 )
 
 // Kinds of device, as written in the certificate.
@@ -71,13 +74,13 @@ func VerifyCert(c *Cert, pinned string, revoked *Revocations) error {
 		return ErrNoCert
 	}
 	if c.V != 1 {
-		return fmt.Errorf("identity: certificate version %d", c.V)
+		return i18n.Errorf("certificate version %d", c.V)
 	}
 	if c.Account != pinned {
 		return ErrForeignAccount
 	}
 	if c.Scope != ScopeAll {
-		return fmt.Errorf("identity: scope %q", c.Scope)
+		return i18n.Errorf("scope %q", c.Scope)
 	}
 	if !Verify(pinned, c.Sig, []byte(c.Canonical())) {
 		return ErrBadSignature
@@ -123,13 +126,13 @@ func SignRevocations(priv ed25519.PrivateKey, r *Revocations) error {
 // VerifyRevocations checks the list against the pinned account key.
 func VerifyRevocations(r *Revocations, pinned string) error {
 	if r == nil {
-		return fmt.Errorf("identity: no revocation list")
+		return i18n.New("no revocation list")
 	}
 	if r.Account != pinned {
-		return fmt.Errorf("identity: revocation list of another account")
+		return i18n.New("revocation list of another account")
 	}
 	if !Verify(pinned, r.Sig, []byte(r.Canonical())) {
-		return fmt.Errorf("identity: the revocation list signature does not match")
+		return i18n.New("the revocation list signature does not match")
 	}
 	return nil
 }

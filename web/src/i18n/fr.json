@@ -1820,5 +1820,18 @@
   "Invite a device": "Inviter un appareil",
   "Fingerprint of this device: {fp}. Compare it with the one the joining device shows.": "Empreinte de cet appareil : {fp}. Comparez-la avec celle affichée par l'appareil qui rejoint.",
   "Copy the invite link": "Copier le lien d'invitation",
-  "The relay only carries the pairing link: it cannot approve a device or sign a revocation list, and it never holds the phrase.": "Le relay ne transporte que le lien d'appariement : il ne peut pas approuver un appareil ni signer une liste de révocation, et il ne détient jamais la phrase."
+  "The relay only carries the pairing link: it cannot approve a device or sign a revocation list, and it never holds the phrase.": "Le relay ne transporte que le lien d'appariement : il ne peut pas approuver un appareil ni signer une liste de révocation, et il ne détient jamais la phrase.",
+  "no certificate": "pas de certificat",
+  "certificate of another account": "certificat d'un autre compte",
+  "the certificate signature does not match": "la signature du certificat ne correspond pas",
+  "device revoked": "appareil révoqué",
+  "no revocation list": "pas de liste de révocation",
+  "revocation list of another account": "liste de révocation d'un autre compte",
+  "the revocation list signature does not match": "la signature de la liste de révocation ne correspond pas",
+  "the relay is not reachable": "le relay est injoignable",
+  "the wordlist is not reachable": "la liste de mots est injoignable",
+  "the approval did not come": "l'approbation n'est pas venue",
+  "the passkey did not give its PRF (WebAuthn PRF is required)": "la clé d'accès n'a pas donné sa PRF (WebAuthn PRF est nécessaire)",
+  "a phrase is 12, 15, 18, 21 or 24 words": "une phrase fait 12, 15, 18, 21 ou 24 mots",
+  "the checksum of the phrase does not match": "la somme de contrôle de la phrase ne correspond pas"
 }

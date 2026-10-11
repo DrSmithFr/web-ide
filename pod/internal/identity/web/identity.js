@@ -295,7 +295,11 @@ export async function passkey(rec, create) {
 // the pod origin (the app, which proxies it). Every message reaches the handler, and a message
 // someone is waiting for resolves that wait too: a panel that asks for the device list and
 // then for a code must not have its answer taken by the list.
-export function link(onPush) {
+//
+// The language is given with the register message, so the relay answers its errors in it. The
+// texts the module itself returns (a certificate that does not verify) are English keys: each
+// page translates them with its own catalog.
+export function link(onPush, lang) {
   const ws = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/_relay/identity')
   const waiters = []
   ws.onmessage = (e) => {
@@ -311,6 +315,7 @@ export function link(onPush) {
       // the device list must not have its answer taken by the list.
       recv: (type) => new Promise((r) => waiters.push({ type: type ?? '', resolve: r })),
       close: () => ws.close(),
+      lang: lang ?? '',
     })
     ws.onerror = () => reject(new Error('the relay is not reachable'))
   })

@@ -5,10 +5,11 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
 
 // PodIdentity is the identity of a pod in its data folder: its own device key (device.key,
@@ -37,7 +38,7 @@ func Open(dir string) (*PodIdentity, error) {
 	case err == nil:
 		s, err := hex.DecodeString(strings.TrimSpace(string(data)))
 		if err != nil || len(s) != 32 {
-			return nil, fmt.Errorf("identity: %s is not a device seed", filepath.Join(dir, "device.key"))
+			return nil, i18n.Errorf("%s is not a device seed", filepath.Join(dir, "device.key"))
 		}
 		p.Seed = s
 	case os.IsNotExist(err):

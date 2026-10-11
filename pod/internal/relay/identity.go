@@ -8,6 +8,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 )
 
@@ -26,6 +27,7 @@ type idMsg struct {
 	Devices  []Device              `json:"devices,omitempty"`
 	Pairing  *Pairing              `json:"pairing,omitempty"`
 	Pairings []Pairing             `json:"pairings,omitempty"`
+	Lang     string                `json:"lang,omitempty"` // language of the link, for the errors it is sent
 	Message  string                `json:"message,omitempty"`
 }
 
@@ -35,6 +37,7 @@ type identityConn struct {
 	ws      *websocket.Conn
 	mu      sync.Mutex
 	account string
+	lang    string
 }
 
 func (c *identityConn) send(m idMsg) error {
@@ -83,31 +86,34 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 			// certificate must verify against the account it claims.
 			if m.Cert != nil {
 				if err := s.store.StoreDevice(m.Cert); err != nil {
-					_ = c.send(idMsg{Type: "error", Message: err.Error()})
+					_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})
 					return
 				}
 			}
 			s.mu.Lock()
 			c.account = m.Account
+			if m.Lang != "" {
+				c.lang = m.Lang
+			}
 			s.links[c] = true
 			s.mu.Unlock()
 			list, err := s.store.Revocations(m.Account)
 			if err != nil {
-				_ = c.send(idMsg{Type: "error", Message: err.Error()})
+				_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})
 				return
 			}
 			_ = c.send(idMsg{Type: "ready", Account: m.Account, List: list})
 		case "devices":
 			devs, err := s.store.Devices(c.account)
 			if err != nil {
-				_ = c.send(idMsg{Type: "error", Message: err.Error()})
+				_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})
 				continue
 			}
 			_ = c.send(idMsg{Type: "devices", Account: c.account, Devices: devs})
 		case "revocations":
 			list, err := s.store.Revocations(c.account)
 			if err != nil {
-				_ = c.send(idMsg{Type: "error", Message: err.Error()})
+				_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})
 				continue
 			}
 			_ = c.send(idMsg{Type: "revocations", Account: c.account, List: list})
@@ -116,7 +122,7 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 			// fingerprint the joining device showed must match the key read here.
 			list, err := s.store.Pairings(c.account)
 			if err != nil {
-				_ = c.send(idMsg{Type: "error", Message: err.Error()})
+				_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})
 				continue
 			}
 			_ = c.send(idMsg{Type: "pairings", Account: c.account, Pairings: list})
@@ -124,7 +130,7 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 			// Only a list signed by the pinned account, with a higher seq, is kept.
 			kept, err := s.store.SaveRevocations(m.List)
 			if err != nil {
-				_ = c.send(idMsg{Type: "error", Message: err.Error()})
+				_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})
 				continue
 			}
 			_ = c.send(idMsg{Type: "revoked", Account: c.account, List: m.List, Message: storedMessage(kept)})
@@ -134,7 +140,7 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 		case "pair":
 			p, err := s.store.CreatePairing(m.Key, m.Name, m.Kind)
 			if err != nil {
-				_ = c.send(idMsg{Type: "error", Message: err.Error()})
+				_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})
 				continue
 			}
 			s.mu.Lock()
@@ -147,7 +153,7 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 			// fingerprint the joining device shows must match the key the admin reads.
 			p, err := s.store.AttachPairing(m.Code, m.Key, m.Name, m.Kind)
 			if err != nil {
-				_ = c.send(idMsg{Type: "error", Message: err.Error()})
+				_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})
 				continue
 			}
 			_ = c.send(idMsg{Type: "pair", Pairing: p})
@@ -163,20 +169,20 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 		case "pairGet":
 			p, err := s.store.ClaimPairing(m.Code, c.account)
 			if err != nil {
-				_ = c.send(idMsg{Type: "error", Message: err.Error()})
+				_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})
 				continue
 			}
 			_ = c.send(idMsg{Type: "pair", Pairing: p})
 		case "pairApprove":
 			p, err := s.store.ApprovePairing(m.Code, c.account, m.Cert)
 			if err != nil {
-				_ = c.send(idMsg{Type: "error", Message: err.Error()})
+				_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})
 				continue
 			}
 			// The certificate the admin signed is stored: the relay lists the devices of an
 			// account from the certificates it can verify.
 			if err := s.store.StoreDevice(m.Cert); err != nil {
-				_ = c.send(idMsg{Type: "error", Message: err.Error()})
+				_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})
 				continue
 			}
 			_ = c.send(idMsg{Type: "pair", Pairing: p})

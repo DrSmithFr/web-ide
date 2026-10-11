@@ -66,6 +66,20 @@ remote : http://127.0.0.1:4430/#pod=<id>&t=<token>
 
 Ouvrez ce lien depuis n'importe quel navigateur d'un autre réseau : une petite page de bootstrap et un Service Worker viennent du relay, l'application elle-même vient de votre pod à travers le tunnel. Le pod garde un seul WebSocket sortant vers son relay (aucun port à ouvrir sur la machine) et se reconnecte seul ; le token est prouvé dans le DataChannel, lié aux empreintes des deux côtés. Si le relay est arrêté, `127.0.0.1` continue de fonctionner comme avant. Les credentials TURN sont de courte durée et donnés seulement à un pod enregistré et en ligne. Voir [relay.md](relay.md).
 
+#### L'appariement : un compte est une clé
+
+Une fois le relay en place, le token peut être remplacé par un **compte** : une phrase de récupération de 24 mots, affichée une seule fois et jamais stockée nulle part.
+
+```sh
+web-ide-pod pair create    # la phrase, puis trois mots demandés en retour
+web-ide-pod pair status    # appareil, compte, certificat, empreintes
+web-ide-pod pair join      # un code, un QR et l'empreinte de 4 mots de sa clé
+```
+
+Le pod stocke seulement sa propre clé (`~/.web-ide/device.key`, 0600) et son certificat (`identity.json`). Chaque navigateur fait sa propre clé et reçoit un certificat signé par la clé du compte ; le pod retient la clé du compte et vérifie chaque pair lui-même, donc un relay ne peut pas usurper un appareil. La phrase est tapée sur un ordinateur, ou un téléphone scanne le QR d'invitation affiché par un appareil administrateur (Réglages > Accès distant > Appareils) ; l'empreinte de 4 mots lue des deux côtés est ce que l'on compare avant d'approuver.
+
+Navigateurs récents seulement : WebCrypto Ed25519 et la PRF de WebAuthn sont nécessaires, sans solution de repli. Une clé d'accès est liée à une origine, donc `localhost`, l'adresse du tailnet et le relay sont des appareils séparés, chacun inscrit une fois avec la phrase — et WebAuthn refuse une adresse IP, donc ouvrez le pod sur `localhost` pour déverrouiller un appareil (le panneau donne le lien). Révoquer un appareil depuis le panneau signe une nouvelle liste : le relay la stocke et la pousse aux pods en ligne, qui refusent l'appareil révoqué à sa prochaine connexion.
+
 ### Depuis les sources
 
 ```sh

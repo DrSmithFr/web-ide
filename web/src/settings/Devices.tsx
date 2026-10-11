@@ -15,7 +15,7 @@ import { createSignal, For, Show, onCleanup, onMount } from 'solid-js'
 import { request } from '../pod/rpc'
 import { errorToast, toast } from '../ui/toast'
 import { copyText } from '../ui/clipboard'
-import { fmtDate, t } from '../i18n'
+import { fmtDate, lang, t } from '../i18n'
 import qrcode from 'qrcode-generator'
 
 type Cert = { v: number; account: string; key: string; name: string; kind: string; created: number; scope: string; sig: string }
@@ -126,17 +126,17 @@ export function Devices() {
   // appears in the list.
   async function startLink() {
     link = await id()!.link((msg: any) => {
-      if (msg.type === 'error') return errorToast(msg.message)
+      if (msg.type === 'error') return errorToast(t(msg.message))
       if (msg.type === 'devices') setDevices(msg.devices ?? [])
       else if (msg.type === 'pairings') setPairings(msg.pairings ?? [])
       else if (msg.type === 'revocations') setRevoked(msg.list)
       else if (msg.type === 'pair' && msg.pairing) setPairings((p) => [...p.filter((x) => x.code !== msg.pairing.code), msg.pairing])
       for (const key of [...devices().map((d) => d.key), ...pairings().map((p) => p.key)]) void showFp(key)
     })
-    link.send({ type: 'register', account: account(), name: deviceName(), cert: own?.cert ?? null })
+    link.send({ type: 'register', account: account(), name: deviceName(), cert: own?.cert ?? null, lang: lang() })
     const ready = await link.recv()
     if (ready.type === 'error') {
-      setError(ready.message)
+      setError(t(ready.message))
       return false
     }
     return true
@@ -171,7 +171,7 @@ export function Devices() {
   async function inviteDevice() {
     link?.send({ type: 'pair', key: '', name: deviceName(), kind: id()!.KindBrowser })
     const m = await link?.recv('pair')
-    if (m?.type === 'error') return errorToast(m.message)
+    if (m?.type === 'error') return errorToast(t(m.message))
     setInvite(m?.pairing ?? null)
   }
 

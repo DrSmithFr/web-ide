@@ -5,6 +5,8 @@ import (
 	_ "embed"
 	"fmt"
 	"strings"
+
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
 
 //go:embed wordlist.txt
@@ -36,7 +38,7 @@ func wordIndex(w string) int {
 // 24 words. The checksum is the first bits of SHA-256 of the entropy, as BIP39 defines it.
 func Generate(entropy []byte) (string, error) {
 	if len(entropy) < 16 || len(entropy) > 32 || len(entropy)%4 != 0 {
-		return "", fmt.Errorf("identity: entropy must be 16, 20, 24, 28 or 32 bytes, got %d", len(entropy))
+		return "", i18n.Errorf("entropy must be 16, 20, 24, 28 or 32 bytes, got %d", len(entropy))
 	}
 	h := sha256.Sum256(entropy)
 	bits := bitString(entropy) + fmt.Sprintf("%08b", h[0])[:len(entropy)*8/32]
@@ -51,14 +53,14 @@ func Generate(entropy []byte) (string, error) {
 func Validate(phrase string) error {
 	words := strings.Fields(phrase)
 	if len(words) != 12 && len(words) != 15 && len(words) != 18 && len(words) != 21 && len(words) != 24 {
-		return fmt.Errorf("identity: a phrase is 12, 15, 18, 21 or 24 words, got %d", len(words))
+		return i18n.Errorf("a phrase is 12, 15, 18, 21 or 24 words, got %d", len(words))
 	}
 	cbits := len(words) * 11 / 32
 	bits := ""
 	for _, w := range words {
 		i := wordIndex(w)
 		if i < 0 {
-			return fmt.Errorf("identity: %q is not a BIP39 word", w)
+			return i18n.Errorf("%q is not a BIP39 word", w)
 		}
 		bits += fmt.Sprintf("%011b", i)
 	}
@@ -67,7 +69,7 @@ func Validate(phrase string) error {
 		entropy[i] = byte(bitsIndex(bits[i*8 : i*8+8]))
 	}
 	if fmt.Sprintf("%08b", sha256.Sum256(entropy)[0])[:cbits] != bits[len(bits)-cbits:] {
-		return fmt.Errorf("identity: the checksum of the phrase does not match")
+		return i18n.New("the checksum of the phrase does not match")
 	}
 	return nil
 }

@@ -32,7 +32,7 @@ The IDE stays free and works without the relay (`127.0.0.1`, LAN, Tailscale). Th
 ## Transport
 
 - WebRTC with ICE: direct paths first (host, then STUN hole punching), TURN relay when they fail (symmetric NAT, mobile CGNAT, UDP blocked). TURN is also offered over TCP/TLS 443 for corporate networks.
-- The DTLS fingerprints of both sides are signed by their device keys in the signaling messages: a relay that swaps the offer is detected and the connection refused.
+- The DTLS fingerprints of both sides are bound to the proofs signed inside the DataChannel (see *Identity*): a relay that swaps the offer changes a fingerprint, so a signature fails and the connection is refused. No extra signaling format is needed for that.
 - TURN credentials are short-lived (HMAC with an expiry) and given by the relay to authenticated devices only, with a quota per account: never an open relay.
 - **DataChannels**: one reliable, ordered channel carries the current JSON protocol unchanged (requests, responses, events); each terminal and each file transfer gets a channel of its own, so a big upload never delays a key stroke.
 - The protocol is versioned: every channel opens with a `hello { protocol, version }`; a pod too old or too new for its gateway is listed with *Update this pod* instead of its projects.
@@ -47,7 +47,7 @@ The IDE stays free and works without the relay (`127.0.0.1`, LAN, Tailscale). Th
 
 ## Identity
 
-No e-mail, no password. An account is a key.
+No e-mail, no password. An account is a key. **Done** (`pod/internal/identity`, `web-ide-pod pair`, Settings > Remote access > Devices): see *Milestone 2* below.
 
 - **Recovery phrase**: 24 BIP39 words, made on the first device and shown **once**, with a check that the user wrote it down (like a hardware wallet). It is never stored by the IDE, on disk or in the relay: storing it would turn the theft of one machine into the theft of the account. The user may keep it in a password manager.
 - From the phrase (HKDF): the **account key** (Ed25519, its public half is the account id) and the **sync key seed**.
@@ -55,17 +55,45 @@ No e-mail, no password. An account is a key.
 - **Admin devices** hold the account key (encrypted at rest; in a browser, unlocked by a passkey through the WebAuthn PRF extension) and can add and revoke devices. The others hold only their own key.
 - **Passkeys** unlock the keys of the current browser day to day. A passkey is tied to a domain: each origin (`antennae.space`, a self-hosted relay, `127.0.0.1`) has its own.
 - Every pod pins the account public key when it is paired and checks the certificate of every peer itself: it never trusts the relay to say who is who.
+- **Recent browsers only** (decided): WebCrypto Ed25519 and the WebAuthn PRF extension are required, there is no fallback for older ones — the bootstrap page names what is missing. Chrome, Edge, Firefox and Safari of 2025 and later.
+- **One origin per relay** (`antennae.space`, or the self-hosted one): accounts are isolated by keys, not by origins. Per-account subdomains would need wildcard DNS and TLS and hurt self-hosting, and a passkey is tied to an origin, so one passkey per origin per account (the user handle is the account id). The app runs on the relay origin, served only by pods paired with the account (trusted code); several accounts in one browser profile share that origin.
+- **Passkeys and IndexedDB are per origin**: the tailnet address, `localhost` and the relay are separate devices, each enrolled once with the phrase. WebAuthn refuses an IP address as a relying-party id, so no passkey can be made on `127.0.0.1`: the Devices panel lives on the relay origin and on `localhost`, and gives a one-click link to `localhost` when opened on `127.0.0.1`.
 
 ### Pairing
 
-- **First pod**: `web-ide-pod pair` creates the account (phrase shown once) or restores it (phrase typed), and registers the pod.
-- **Another pod**: `web-ide-pod pair` prints a code and a QR; an admin device approves it, or the phrase is typed.
-- **A phone or a tablet**: scan the QR shown by an admin device (like WhatsApp Web).
+- **First pod**: `web-ide-pod pair create` makes the account (phrase shown once, three words asked back) or `pair restore` takes the phrase typed; `pair status` shows the device, the account and the fingerprints.
+- **Another pod**: `web-ide-pod pair join` prints a code, a terminal QR and the 4-word fingerprint of its key, and waits for an admin; the phrase is typed instead when no admin is around.
+- **A phone or a tablet**: scan the QR shown by an admin device (like WhatsApp Web) — the invite link `#join=<code>` opens the bootstrap page, which shows its own fingerprint and waits for the approval.
 - **A computer**: the QR, or the phrase, whichever is easier.
+- The code is 8 base32 characters, single use, 10 minutes; the 4-word fingerprint read on both sides is the guard against a relay that swaps the key. A code that already holds a key refuses another one.
 
 ### Revocation
 
 An admin device signs a revocation list, stored by the relay and checked by every pod. Revoking a device also rotates the sync key (next epoch, data encrypted again, new key wrapped for each remaining device) and suggests renewing the API keys of the vault, since a key that leaked stays leaked.
+
+The relay stores the list only when its signature verifies against the account it names and its `seq` is higher than the stored one, and pushes it to the online devices of the account; a relay that replays an older list changes nothing. The panel (Settings > Remote access > Devices) lists the devices of the account with their kind, date and fingerprint, approves a request by its code after comparing the fingerprint, shows the invite QR, and revokes.
+
+### Formats
+
+- **Phrase**: 24 BIP39 words (256-bit entropy, embedded English wordlist, checksum). Seed = BIP39 PBKDF2 seed; HKDF-SHA256 (32-byte zero salt) gives the account Ed25519 seed (`info "web-ide account v1"`), the sync seed (`"web-ide sync v1"`) and the device seed (`"web-ide device v1"`). The account id is the base64url of the account public key.
+- **Certificate**: canonical JSON `{v:1, account, key, name, kind: browser|pod, created, scope: "all"}` + the Ed25519 signature of the account key, base64url. Fixed field order, no spaces: the browser and the pod build the same bytes, checked by the shared test vectors (`pod/internal/identity/vectors.json`, run by `make test` in Go and in JS).
+- **Revocation list**: `{account, seq, epoch, revoked: [keys], created}` signed by the account key; the revoked keys are sorted so both sides build the same bytes; a higher `seq` wins.
+- **Fingerprint**: the 4-word reading of a key id (44 bits of its SHA-256, 11 bits per word), shown on both sides of a pairing.
+
+### Handshake v2 (cert mode)
+
+The same shape as the M1 token handshake, with Ed25519 signatures instead of the HMAC of the token, each side signing `role|fpBrowser|fpPod|nonceBrowser|noncePod` with its device key:
+
+```
+browser → $hello { protocol, version: "2", nonceB, cert }
+pod     → $hello { …, nonceP, cert, sig = Ed25519(podKey, "pod"|fpB|fpP|nB|nP) }
+browser → $auth  { sig = Ed25519(browserKey, "browser"|fpB|fpP|nB|nP) }
+pod     → $ready
+```
+
+Each side checks the other's certificate against the **pinned** account key, the scope `all` and the revocation list. A swapped offer changes a fingerprint, so a signature fails: the connection is refused. The errors are `unpaired`, `cert` (a paired pod refuses the token mode), `foreign`, `revoked`, `proof`; failed proofs are still rate-limited and the handshake keeps its 10 s deadline.
+
+The **token mode** of M1 (`#t=`) stays for unpaired pods, and `127.0.0.1` is unchanged (token cookie). A paired pod refuses the token mode through the relay.
 
 ## Multi-pod
 
@@ -117,7 +145,7 @@ Code and review together:
 ## Milestones
 
 1. **Done** (`web-ide-pod relay`, `-relay`): the relay (signaling, STUN, TURN) and the pod and the browser over WebRTC, the pod token as access control. See *Milestone 1* below.
-2. Identity: phrase, device certificates, pairing, QR, passkeys, revocation.
+2. **Done** (`web-ide-pod pair`, `pod/internal/identity`, Settings > Remote access > Devices): phrase, device certificates, pairing, QR, passkeys, revocation. See *Milestone 2* below.
 3. Multi-pod: gateway, sites, pod to pod, encrypted project lists, versions and updates.
 4. Settings sync, per-device layout, vault.
 5. Hosted relay at `antennae.space`, GitHub Sponsors, quotas, counters.
@@ -147,12 +175,26 @@ browser → $auth  { proof = HMAC(token, "browser"|fpB|fpP|nonceB|nonceP) }
 pod     → $ready
 ```
 
-The fingerprints are read from the `a=fingerprint` line of each SDP; failed proofs are rate-limited per pod, and the handshake has a 10 s deadline. A protocol mismatch answers `$hello { error: "version" }` and the bootstrap page shows *Update this pod*. Identity (phrase, device certificates, pairing) comes with milestone 2.
+The fingerprints are read from the `a=fingerprint` line of each SDP; failed proofs are rate-limited per pod, and the handshake has a 10 s deadline. A protocol mismatch answers `$hello { error: "version" }` and the bootstrap page shows *Update this pod*. Identity (phrase, device certificates, pairing) came with milestone 2: the token mode stays for unpaired pods, and a paired pod refuses it.
 
-What is not in this step: accounts, multi-pod and gateways, encrypted blob storage, push, quotas. A pod with no relay, or whose relay is down, keeps working on `127.0.0.1` (the e2e `relay` suite checks both, with TURN forced and the pair asserted as a relay one).
+What is not in this step: multi-pod and gateways, encrypted blob storage, push, quotas. A pod with no relay, or whose relay is down, keeps working on `127.0.0.1` (the e2e `relay` suite checks both, with TURN forced and the pair asserted as a relay one).
+
+## Milestone 2 (done)
+
+The identity of *Identity* above, in three places:
+
+- **`pod/internal/identity`**: BIP39 (generate, validate, checksum), the derivation, the certificates, the revocation lists, the verification of a peer certificate. The pod identity in the data folder: `device.key` (0600) and `identity.json` (its own certificate, the pinned account key, the last revocation list). The wordlist and the test vectors are embedded; `scripts/identity-vectors.mjs` runs the same vectors in JS, so a signature made in the browser verifies in the pod.
+- **`pod/internal/identity/web/identity.js`**: the same formats in JS, imported at runtime by the bootstrap page and by the app (served under `/_relay/identity.js` by the relay and by the pod — one copy, so the two sides cannot disagree on the bytes a signature covers). The device key is made with WebCrypto Ed25519 and stored wrapped by an AES-GCM key derived from the passkey (WebAuthn PRF), unwrapped as a non-extractable key for the session.
+- **`web-ide-pod pair`**: `create`, `restore`, `join`, `status` (see *Pairing*). The relay keeps the identity tables (`accounts`, `devices`, `pairings`) to list the devices and route pairing; it never holds a private key or the phrase, so it can check a signature against an account id but never make one — only a device holding the account key can approve a pairing or push a revocation list.
+- **Settings > Remote access > Devices**: the admin panel, on the relay origin and on `localhost` (see *Identity*). The pod only carries the frames of the pairing link.
+
+The identity works **without a relay**: `pair create`, `restore` and `status` run offline, `identity.json` and the certificate checks do not depend on `relayclient`, and the handshake v2 proof takes the two peer fingerprints as plain inputs — so LAN discovery (#50) can feed it the TLS certificate fingerprints of a direct WebSocket instead of the DTLS ones.
+
+The e2e `identity` suite pairs a pod with the CLI and two browsers (a virtual authenticator answering the WebAuthn PRF), and checks that an unpaired browser and a revoked one are refused; the swapped-offer refusal is a Go integration test with Pion peers and a relay that rewrites the SDP.
 
 ## Open points
 
 - The name of the product, which `antennae.space` may become.
-- One origin for the application (`antennae.space`) or one per account: decided with milestone 2 (passkeys, storage isolation).
+- ~~One origin for the application (`antennae.space`) or one per account~~ — decided with milestone 2: **one origin per relay**, accounts isolated by keys (see *Identity*).
 - The TURN quota of the free tier, once real usage is measured.
+- Wrapping the sync key for each device and re-encrypting the data on a revocation: nothing is synced yet, this waits for milestone 4.

@@ -35,14 +35,29 @@ const words = {
   paired: fr ? 'Apparié.' : 'Paired.',
   unlock: fr ? 'Déverrouillage de la clé de l’appareil…' : 'Unlocking the device key…',
 }
-// The handshake codes of the pod (tunnel.Code*), read as text by the page.
-const codes = {
+// The texts the page shows for what the pod or the identity module answers: the handshake
+// codes (tunnel.Code*) and the error keys of the identity module, the same words as the pod's
+// catalog (pod/internal/i18n/fr.json). The page has its own words, not the app catalog.
+const texts = {
   unpaired: fr ? 'Le pod n’est pas apparié avec un compte.' : 'The pod is not paired with an account.',
   cert: fr ? 'Ce pod refuse le mode token : un certificat est nécessaire.' : 'This pod refuses the token mode: a certificate is needed.',
   foreign: fr ? 'Certificat d’un autre compte.' : 'Certificate of another account.',
   revoked: fr ? 'Appareil révoqué.' : 'Device revoked.',
   proof: fr ? 'La preuve ne correspond pas.' : 'The proof does not match.',
+  'no certificate': fr ? 'Pas de certificat.' : 'No certificate.',
+  'certificate of another account': fr ? 'Certificat d’un autre compte.' : 'Certificate of another account.',
+  'the certificate signature does not match': fr ? 'La signature du certificat ne correspond pas.' : 'The certificate signature does not match.',
+  'device revoked': fr ? 'Appareil révoqué.' : 'Device revoked.',
+  'no revocation list': fr ? 'Pas de liste de révocation.' : 'No revocation list.',
+  'revocation list of another account': fr ? 'Liste de révocation d’un autre compte.' : 'Revocation list of another account.',
+  'the revocation list signature does not match': fr ? 'La signature de la liste de révocation ne correspond pas.' : 'The revocation list signature does not match.',
+  'the approval did not come': fr ? "L'approbation n'est pas venue." : 'The approval did not come.',
+  'the relay is not reachable': fr ? 'Le relay est injoignable.' : 'The relay is not reachable.',
+  'the wordlist is not reachable': fr ? 'La liste de mots est injoignable.' : 'The wordlist is not reachable.',
+  'the passkey did not give its PRF (WebAuthn PRF is required)': fr ? 'La clé d’accès n’a pas donné sa PRF (WebAuthn PRF est nécessaire).' : 'The passkey did not give its PRF (WebAuthn PRF is required).',
 }
+const lang = fr ? 'fr' : 'en'
+const text = (key) => texts[key] ?? key
 const status = (html) => { const el = document.getElementById('msg'); if (el) el.innerHTML = html }
 let failed = false
 let lastError = null
@@ -120,12 +135,12 @@ function show() {
 // The revocation list is checked against the pinned account before it is believed: the relay
 // is only the courier, it cannot sign one.
 async function applyRevocations(l) {
-  l.send({ type: 'register', account, name: deviceName(), cert: rec?.cert })
+  l.send({ type: 'register', account, name: deviceName(), cert: rec?.cert, lang })
   const m = await l.recv()
-  if (m.type === 'error') return fail(m.message)
+  if (m.type === 'error') return fail(text(m.message))
   if (m.list) {
     const err = await id.verifyRevocations(m.list, account)
-    if (err) return fail(err)
+    if (err) return fail(text(err))
   }
   revoked = m.list ?? null
   if (revoked) await id.save(db, rec.key, { ...rec, revocations: revoked })
@@ -143,20 +158,20 @@ async function joinFlow(code, wl) {
   rec.fp = await id.fingerprint(deviceId, wl)
   show()
   status(`${words.device} <b>${rec.fp}</b><br><span class="small">${words.compare}</span>`)
-  const l = await id.link()
-  l.send({ type: 'register', account: '', name: deviceName() })
+  const l = await id.link(null, lang)
+  l.send({ type: 'register', account: '', name: deviceName(), lang })
   const ready = await l.recv()
-  if (ready.type === 'error') return fail(ready.message)
+  if (ready.type === 'error') return fail(text(ready.message))
   l.send({ type: 'pairAttach', code, key: deviceId, name: deviceName(), kind: id.KindBrowser })
   const p = await l.recv()
-  if (p.type === 'error') return fail(p.message)
+  if (p.type === 'error') return fail(text(p.message))
   status(`${words.device} <b>${rec.fp}</b><br><span class="small">${words.waiting}</span>`)
   const ok = await l.recv()
-  if (ok.type === 'error') return fail(ok.message)
+  if (ok.type === 'error') return fail(text(ok.message))
   const c = ok.pairing?.cert
-  if (!c) return fail('the approval did not come')
+  if (!c) return fail(text('the approval did not come'))
   const err = await id.verifyCert(c, c.account, null)
-  if (err) return fail(err)
+  if (err) return fail(text(err))
   const prf = await id.passkey(rec, true)
   rec.id = prf.id
   rec.account = c.account
@@ -190,7 +205,7 @@ function showPhraseForm() {
       status(`${words.paired} <b>${rec.fp}</b>`)
       await connect('cert')
     } catch (err) {
-      fail(err.message)
+      fail(text(err.message))
     }
   }
 }
@@ -235,7 +250,7 @@ async function main() {
     }
   }
 
-  const l = await id.link((m) => { if (m.type === 'revocations' && m.list) revoked = m.list })
+  const l = await id.link((m) => { if (m.type === 'revocations' && m.list) revoked = m.list }, lang)
   if (account) {
     const err = await applyRevocations(l)
     if (err) return
@@ -296,14 +311,14 @@ async function connect(mode) {
         session = rand()
         return connect('token')
       }
-      if (hp.error) return fail(codes[hp.error] ?? hp.error)
+      if (hp.error) return fail(text(hp.error))
       if (mode === 'token') {
         if ((await mac('pod', fpB, fpP, nonceB, hp.nonce)) !== hp.proof) return fail(words.failed)
         send(rpc, { id: 0, method: '$auth', params: { proof: await mac('browser', fpB, fpP, nonceB, hp.nonce) } })
         return
       }
       const err = await id.verifyCert(hp.cert, account, revoked)
-      if (err) return fail(err)
+      if (err) return fail(text(err))
       // The proof is signed by the device key of the peer, the one its certificate carries.
       if (!(await id.verify(hp.cert.key, hp.sig, id.binding('pod', fpB, fpP, nonceB, hp.nonce)))) return fail(words.failed)
       send(rpc, { id: 0, method: '$auth', params: { sig: await id.sign(key, id.binding('browser', fpB, fpP, nonceB, hp.nonce)) } })
