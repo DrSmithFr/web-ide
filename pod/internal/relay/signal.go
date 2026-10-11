@@ -50,6 +50,7 @@ type Server struct {
 	browsers map[string]*browserConn  // active browsers, by session id
 	links    map[*identityConn]bool   // live pairing/admin links
 	codes    map[string]*identityConn // pairing code → the link that created it
+	joiners  map[string]*identityConn // pairing code → the link that posted its key to it
 }
 
 // podConn is the pod's persistent link: register (pod id + secret), then carry the
@@ -92,6 +93,7 @@ func New(st *Store, turn *Turn) *Server {
 		browsers: map[string]*browserConn{},
 		links:    map[*identityConn]bool{},
 		codes:    map[string]*identityConn{},
+		joiners:  map[string]*identityConn{},
 	}
 }
 

@@ -230,8 +230,8 @@ export async function list(db) {
 // the same bytes must be given on create and on every get: a different salt would derive a
 // different key and the seed could never be unwrapped. Only a device that knows the phrase
 // (an admin) holds its account seed.
-export function newRecord(handle) {
-  return { handle, salt: b64u(crypto.getRandomValues(new Uint8Array(16))) }
+export function newRecord(id) {
+  return { key: id, handle: id, salt: b64u(crypto.getRandomValues(new Uint8Array(16))) }
 }
 
 async function aesKey(prf, usages) {
@@ -256,6 +256,14 @@ export async function open(prf, blob) {
 // One passkey per origin per device, the user handle being the account id (or the device id
 // before an admin has approved it). The PRF output is the same on create and on get, so it
 // derives the key that wraps the seeds; the record is found by the id of the credential.
+// The PRF output is a byte array in Chromium and a base64url string in other engines: both
+// readings give the same bytes.
+function asBytes(v) {
+  if (typeof v === 'string') return b64d(v)
+  if (v instanceof Uint8Array) return v
+  return new Uint8Array(v)
+}
+
 export async function passkey(rec, create) {
   const challenge = crypto.getRandomValues(new Uint8Array(16))
   const prf = { prf: { eval: { first: b64d(rec.salt) } } }
@@ -280,25 +288,28 @@ export async function passkey(rec, create) {
   // The extension outputs come from getClientExtensionResults(), not from cred.extensions.
   const out = cred.getClientExtensionResults?.()?.prf?.results?.first
   if (!out) throw new Error('the passkey did not give its PRF (WebAuthn PRF is required)')
-  return { id: b64u(new Uint8Array(cred.rawId)), prf: new Uint8Array(out) }
+  return { id: b64u(new Uint8Array(cred.rawId)), prf: asBytes(out) }
 }
 
 // The pairing and admin link: the same path on the relay origin (the bootstrap page) and on
-// the pod origin (the app, which proxies it). Messages the relay pushes (a revocation list, an
-// approval, a key posted to a code) reach the handler; the awaited ones are read one by one.
+// the pod origin (the app, which proxies it). Every message reaches the handler, and a message
+// someone is waiting for resolves that wait too: a panel that asks for the device list and
+// then for a code must not have its answer taken by the list.
 export function link(onPush) {
   const ws = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/_relay/identity')
   const waiters = []
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data)
-    const w = waiters.shift()
-    if (w) w(m)
-    else if (onPush) onPush(m)
+    if (onPush) onPush(m)
+    const i = waiters.findIndex((w) => !w.type || w.type === m.type)
+    if (i >= 0) waiters.splice(i, 1)[0].resolve(m)
   }
   return new Promise((resolve, reject) => {
     ws.onopen = () => resolve({
       send: (m) => ws.send(JSON.stringify(m)),
-      recv: () => new Promise((r) => waiters.push(r)),
+      // A wait with a type is resolved only by a message of that type: a panel that asked for
+      // the device list must not have its answer taken by the list.
+      recv: (type) => new Promise((r) => waiters.push({ type: type ?? '', resolve: r })),
       close: () => ws.close(),
     })
     ws.onerror = () => reject(new Error('the relay is not reachable'))

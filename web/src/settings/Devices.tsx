@@ -12,6 +12,7 @@
 // byte a signature covers. The pod only carries the frames of the pairing link: it holds no
 // account key and cannot approve a pairing or sign a revocation list.
 import { createSignal, For, Show, onCleanup, onMount } from 'solid-js'
+import { request } from '../pod/rpc'
 import { errorToast, toast } from '../ui/toast'
 import { copyText } from '../ui/clipboard'
 import { fmtDate, t } from '../i18n'
@@ -34,7 +35,7 @@ interface Identity {
   signRevocations(accountKey: CryptoKey, accountId: string, revoked: string[], seq: number, epoch: number): Promise<Revocations>
   fingerprint(id: string, wordlist: string[]): Promise<string>
   support(): Promise<string[]>
-  link(onPush: (m: any) => void): Promise<{ send: (m: any) => void; recv: () => Promise<any>; close: () => void }>
+  link(onPush: (m: any) => void): Promise<{ send: (m: any) => void; recv: (type?: string) => Promise<any>; close: () => void }>
   wordlist(): Promise<string[]>
   KindBrowser: string
 }
@@ -62,8 +63,10 @@ export function Devices() {
   const [device, setDevice] = createSignal('')
   const [phrase, setPhrase] = createSignal('')
   const [invite, setInvite] = createSignal<Pairing | null>(null)
-  let link: { send: (m: any) => void; recv: () => Promise<any>; close: () => void } | null = null
+  const [podId, setPodId] = createSignal('')
+  let link: { send: (m: any) => void; recv: (type?: string) => Promise<any>; close: () => void } | null = null
   let accountKey: CryptoKey | null = null
+  let own: any = null
   let wordlist: string[] = []
 
   const isLoopback = () => location.hostname === '127.0.0.1' || location.hostname === '[::1]'
@@ -99,34 +102,57 @@ export function Devices() {
       return
     }
     accountKey = await m.accountKey(d.rec, d.prf)
+    own = d.rec
     setDevice(d.rec.key)
     setAccount(d.rec.account ?? '')
     void showFp(d.rec.key)
 
-    link = await m.link((msg: any) => {
+    // The pod id of the relay: the invite link must carry it, else the joined device pairs
+    // without knowing which pod to open.
+    try {
+      const st = await request('relay.status')
+      setPodId(st?.podId ?? '')
+    } catch {
+      setPodId(new URL(location.href).hash.match(/[#&]pod=([^&]+)/)?.[1] ?? '')
+    }
+
+    if (!(await startLink())) return
+    void refresh()
+    onCleanup(() => link?.close())
+  })
+
+  // The pairing and admin link. The own certificate is posted with the account: the relay
+  // lists the devices of an account from the certificates it can verify, so this device
+  // appears in the list.
+  async function startLink() {
+    link = await id()!.link((msg: any) => {
       if (msg.type === 'error') return errorToast(msg.message)
       if (msg.type === 'devices') setDevices(msg.devices ?? [])
       else if (msg.type === 'pairings') setPairings(msg.pairings ?? [])
       else if (msg.type === 'revocations') setRevoked(msg.list)
-      else if (msg.type === 'pair') setPairings((p) => [...p.filter((x) => x.code !== msg.pairing.code), msg.pairing])
+      else if (msg.type === 'pair' && msg.pairing) setPairings((p) => [...p.filter((x) => x.code !== msg.pairing.code), msg.pairing])
       for (const key of [...devices().map((d) => d.key), ...pairings().map((p) => p.key)]) void showFp(key)
     })
-    link.send({ type: 'register', account: account(), name: deviceName(), cert: null })
+    link.send({ type: 'register', account: account(), name: deviceName(), cert: own?.cert ?? null })
     const ready = await link.recv()
-    if (ready.type === 'error') return setError(ready.message)
-    void refresh()
-    onCleanup(() => link?.close())
-  })
+    if (ready.type === 'error') {
+      setError(ready.message)
+      return false
+    }
+    return true
+  }
 
   async function enroll() {
     const m = id()!
     const db = await m.openStore()
     const d = await m.enroll(db, phrase(), wordlist, deviceName(), m.KindBrowser)
     accountKey = d.accountKey
+    own = d.rec
     setDevice(d.rec.key)
     setAccount(d.rec.account)
     setPhrase('')
     toast(t('This device is paired as an admin.'), 'ok')
+    if (!(await startLink())) return
     void refresh()
   }
 
@@ -137,11 +163,14 @@ export function Devices() {
     void refresh()
   }
 
+  // The invite link carries the pod the admin is on: the joining device pairs first, then
+  // opens that pod. The code is created empty, the device that opens the link posts its key
+  // to it, and the fingerprint shown here must match the key read back.
+  const inviteLink = (code: string) => `${location.origin}/#pod=${podId()}&join=${code}`
+
   async function inviteDevice() {
-    // An invite code is created empty: the device that opens the link posts its key to it, and
-    // the fingerprint shown here must match the key read back.
     link?.send({ type: 'pair', key: '', name: deviceName(), kind: id()!.KindBrowser })
-    const m = await link?.recv()
+    const m = await link?.recv('pair')
     if (m?.type === 'error') return errorToast(m.message)
     setInvite(m?.pairing ?? null)
   }
@@ -157,7 +186,7 @@ export function Devices() {
   }
 
   return (
-    <section class="form">
+    <section class="form" data-testid="devices">
       <Show when={error()}>
         <p class="err">{t(error())}</p>
       </Show>
@@ -219,7 +248,7 @@ export function Devices() {
         </Show>
 
         <h3>{t('Devices of the account')}</h3>
-        <table class="rules">
+        <table class="rules" data-testid="device-list">
           <thead>
             <tr>
               <th>{t('Name')}</th>
@@ -257,12 +286,13 @@ export function Devices() {
         <Show when={invite()}>
           <div class="qr">
             <div class="mono">{invite()!.code}</div>
-            <div innerHTML={qrSvg(`${location.origin}/#join=${invite()!.code}`)} />
+            <p class="mono small">{inviteLink(invite()!.code)}</p>
+            <div innerHTML={qrSvg(inviteLink(invite()!.code))} />
             <p class="muted small">
               {t('Fingerprint of this device: {fp}. Compare it with the one the joining device shows.', { fp: fp()[device()] || '' })}
             </p>
             <div class="field-row">
-              <button class="btn small" onClick={() => void copyText(`${location.origin}/#join=${invite()!.code}`)}>{t('Copy the invite link')}</button>
+              <button class="btn small" onClick={() => void copyText(inviteLink(invite()!.code))}>{t('Copy the invite link')}</button>
             </div>
           </div>
         </Show>

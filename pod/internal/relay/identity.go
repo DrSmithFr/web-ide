@@ -155,6 +155,7 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 			// posted to it: the fingerprint it compares is the one of this key.
 			s.mu.Lock()
 			creator := s.codes[p.Code]
+			s.joiners[p.Code] = c
 			s.mu.Unlock()
 			if creator != nil && creator != c {
 				_ = creator.send(idMsg{Type: "pair", Pairing: p})
@@ -172,10 +173,21 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 				_ = c.send(idMsg{Type: "error", Message: err.Error()})
 				continue
 			}
+			// The certificate the admin signed is stored: the relay lists the devices of an
+			// account from the certificates it can verify.
+			if err := s.store.StoreDevice(m.Cert); err != nil {
+				_ = c.send(idMsg{Type: "error", Message: err.Error()})
+				continue
+			}
 			_ = c.send(idMsg{Type: "pair", Pairing: p})
-			// The device that asked for the pairing gets the signed certificate back.
+			// The device that asked for the pairing gets the signed certificate back: the one
+			// that created the code (a pod printing its QR), or the one that opened the invite
+			// link and posted its key to it.
 			s.mu.Lock()
-			joiner := s.codes[p.Code]
+			joiner := s.joiners[p.Code]
+			if joiner == nil {
+				joiner = s.codes[p.Code]
+			}
 			s.mu.Unlock()
 			if joiner != nil && joiner != c {
 				_ = joiner.send(idMsg{Type: "pair", Pairing: p})

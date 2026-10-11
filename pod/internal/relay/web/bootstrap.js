@@ -30,12 +30,23 @@ const words = {
   device: fr ? 'Cet appareil' : 'This device',
   compare: fr ? 'Comparez cette empreinte avec celle affichée de l’autre côté avant d’approuver.' : 'Compare this fingerprint with the one shown on the other side before approving.',
   phrase: fr ? 'Phrase de récupération (24 mots), jamais enregistrée.' : 'Recovery phrase (24 words), never stored.',
+  pair: fr ? 'Aucun appareil sur cette origine : entrez la phrase pour l’apparier.' : 'No device on this origin: type the recovery phrase to pair it.',
   waiting: fr ? 'En attente de l’approbation d’un administrateur…' : 'Waiting for an admin to approve…',
   paired: fr ? 'Apparié.' : 'Paired.',
   unlock: fr ? 'Déverrouillage de la clé de l’appareil…' : 'Unlocking the device key…',
 }
+// The handshake codes of the pod (tunnel.Code*), read as text by the page.
+const codes = {
+  unpaired: fr ? 'Le pod n’est pas apparié avec un compte.' : 'The pod is not paired with an account.',
+  cert: fr ? 'Ce pod refuse le mode token : un certificat est nécessaire.' : 'This pod refuses the token mode: a certificate is needed.',
+  foreign: fr ? 'Certificat d’un autre compte.' : 'Certificate of another account.',
+  revoked: fr ? 'Appareil révoqué.' : 'Device revoked.',
+  proof: fr ? 'La preuve ne correspond pas.' : 'The proof does not match.',
+}
 const status = (html) => { const el = document.getElementById('msg'); if (el) el.innerHTML = html }
-const fail = (m) => status('<div class="err">' + m + '</div>')
+let failed = false
+let lastError = null
+const fail = (m) => { failed = true; lastError = m; status('<div class="err">' + m + '</div>') }
 
 function rand() {
   const b = new Uint8Array(16)
@@ -81,6 +92,7 @@ const fingerprint = (desc) => {
 
 let pc, rpc
 let handshakeDone = false
+let byeTimer = null
 const buffers = new Map()
 let appPort = null
 
@@ -111,7 +123,10 @@ async function applyRevocations(l) {
   l.send({ type: 'register', account, name: deviceName(), cert: rec?.cert })
   const m = await l.recv()
   if (m.type === 'error') return fail(m.message)
-  if (m.list && !(await id.verifyRevocations(m.list, account))) return fail('the revocation list does not match the account')
+  if (m.list) {
+    const err = await id.verifyRevocations(m.list, account)
+    if (err) return fail(err)
+  }
   revoked = m.list ?? null
   if (revoked) await id.save(db, rec.key, { ...rec, revocations: revoked })
   return ''
@@ -157,15 +172,18 @@ async function joinFlow(code, wl) {
 function showPhraseForm() {
   const f = document.getElementById('pair')
   if (!f) return
+  status(words.pair)
   f.hidden = false
   const input = document.getElementById('phrase')
   input.placeholder = words.phrase // the bootstrap page has its own words, not the app catalog
-  f.onkeydown = async (e) => {
-    if (e.key !== 'Enter' || !e.target.value.trim()) return
+  // The form must not submit: that would reload the page and lose the tunnel.
+  f.onsubmit = async (e) => {
+    e.preventDefault()
+    if (!input.value.trim()) return
     try {
-      const d = await id.enroll(db, e.target.value.trim(), await wordlist(), deviceName(), id.KindBrowser)
+      const d = await id.enroll(db, input.value.trim(), await id.wordlist(), deviceName(), id.KindBrowser)
       rec = d.rec
-      rec.fp = await id.fingerprint(rec.key, await wordlist())
+      rec.fp = await id.fingerprint(rec.key, await id.wordlist())
       key = d.key
       account = rec.account
       show()
@@ -192,15 +210,18 @@ async function main() {
     fail(words.sw + e.message)
   }
 
-  if (!pod) return fail(words.nopod)
-  status('<div class="spin"></div>' + words.connecting + ' <b>' + pod + '</b>')
   db = await id.openStore()
-  const wl = await wordlist()
+  const wl = await id.wordlist()
 
+  // An invite link carries the pod its author was on: the joining device pairs first, then
+  // opens that pod. Without a pod it stops at the pairing.
   if (join) {
     const err = await joinFlow(join, wl)
     if (err) return
+    if (!pod) return fail(words.nopod)
   } else {
+    if (!pod) return fail(words.nopod)
+    status('<div class="spin"></div>' + words.connecting + ' <b>' + pod + '</b>')
     const d = await id.unlock(db)
     if (d) {
       rec = d.rec
@@ -229,7 +250,13 @@ async function connect(mode) {
     if (m.type === 'ice') start(m, mode, sig)
     else if (m.type === 'answer') pc.setRemoteDescription({ type: 'answer', sdp: m.sdp })
     else if (m.type === 'candidate') { try { pc.addIceCandidate(JSON.parse(m.candidate)) } catch {} }
-    else if (m.type === 'bye') fail(words.closed)
+    else if (m.type === 'bye') {
+      // The refusal travels on the DataChannel (the handshake error), the bye on the signaling
+      // link: the bye can arrive first. Give the proof a moment before saying the pod closed.
+      if (handshakeDone || failed) return
+      clearTimeout(byeTimer)
+      byeTimer = setTimeout(() => { if (!handshakeDone && !failed) fail(lastError ?? words.closed) }, 600)
+    }
   }
   sig.onerror = () => fail(words.offline)
 
@@ -269,7 +296,7 @@ async function connect(mode) {
         session = rand()
         return connect('token')
       }
-      if (hp.error) return fail(hp.error)
+      if (hp.error) return fail(codes[hp.error] ?? hp.error)
       if (mode === 'token') {
         if ((await mac('pod', fpB, fpP, nonceB, hp.nonce)) !== hp.proof) return fail(words.failed)
         send(rpc, { id: 0, method: '$auth', params: { proof: await mac('browser', fpB, fpP, nonceB, hp.nonce) } })
@@ -277,7 +304,8 @@ async function connect(mode) {
       }
       const err = await id.verifyCert(hp.cert, account, revoked)
       if (err) return fail(err)
-      if (!(await id.verify(hp.cert.account, hp.sig, id.binding('pod', fpB, fpP, nonceB, hp.nonce)))) return fail(words.failed)
+      // The proof is signed by the device key of the peer, the one its certificate carries.
+      if (!(await id.verify(hp.cert.key, hp.sig, id.binding('pod', fpB, fpP, nonceB, hp.nonce)))) return fail(words.failed)
       send(rpc, { id: 0, method: '$auth', params: { sig: await id.sign(key, id.binding('browser', fpB, fpP, nonceB, hp.nonce)) } })
     }
     rpc.onopen = () => {

@@ -6,7 +6,7 @@ set -u
 cd "$(dirname "$0")"
 ROOT=$(cd .. && pwd)
 SUITES=("$@")
-[ ${#SUITES[@]} -eq 0 ] && SUITES=(editing editor features restore+ keyboard mousenav popups commands git projects explorer lsp llm agent chat plan doodle kanban kanbanai kanbangit docker tunnels preview subagents orchestrator mobile i18n speech perf keeper relay)
+[ ${#SUITES[@]} -eq 0 ] && SUITES=(editing editor features restore+ keyboard mousenav popups commands git projects explorer lsp llm agent chat plan doodle kanban kanbanai kanbangit docker tunnels preview subagents orchestrator mobile i18n speech perf keeper relay identity)
 [ -d node_modules/playwright-core ] || npm install --no-audit --no-fund >/dev/null
 PORT=${E2E_PORT:-4519}
 RELAY_PORT=${E2E_RELAY_PORT:-4430}
@@ -47,7 +47,8 @@ trap 'stop_pod; stop_relay; rm -rf "$TMP"' EXIT
 start_pod() {
   rm -rf "$TMP/data" "$TMP/ws"
   EXTRA=()
-  if [ "${1:-}" = relay ]; then EXTRA=(-relay "http://127.0.0.1:$RELAY_PORT" -force-turn); fi
+  # The identity suite pairs the pod with the CLI, so its pod must reach the relay too.
+  if [ "${1:-}" = relay ] || [ "${1:-}" = identity ]; then EXTRA=(-relay "http://127.0.0.1:$RELAY_PORT" -force-turn); fi
   mkdir -p "$TMP/ws" "$TMP/data" "$MODELS"
   # Speech models are kept between runs (downloaded once from Hugging Face).
   ln -s "$MODELS" "$TMP/data/models"
@@ -92,8 +93,12 @@ export E2E_RELAY_URL="http://127.0.0.1:$RELAY_PORT" E2E_RELAY_PORT="$RELAY_PORT"
 mkdir -p "$E2E_OUT"
 status=0
 for s in "${SUITES[@]}"; do
-  if [[ $s == *+ ]]; then s=${s%+}; else stop_pod; start_pod "$s"; fi
-  [ "$s" = relay ] && start_relay
+  if [[ $s == *+ ]]; then s=${s%+}; else
+    # The relay comes up first for the suites that need it: a pod started before the relay
+    # fails its first dial and sits in exponential backoff.
+    { [ "$s" = relay ] || [ "$s" = identity ]; } && start_relay
+    stop_pod; start_pod "$s"
+  fi
   export E2E_TOKEN=$(cat "$TMP/data/token")
   # Pod id of the relay client: the pod id + secret live in relay.json of its data folder.
   export E2E_POD_ID=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["podId"])' "$TMP/data/relay.json" 2>/dev/null)

@@ -375,6 +375,10 @@ func (s *session) serveRPC() {
 	}
 	if err := hs.Run(conn); err != nil {
 		log.Printf("relayclient: handshake: %v (fpB=%s fpP=%s)", err, hs.FPBrowser, hs.FPPod)
+		// The refusal is the message the user reads ("device revoked", "the pod refuses the
+		// token mode"). Closing the channel at once drops the frame still queued in SCTP, and
+		// the browser only sees the close: give the refusal a moment to reach the peer.
+		time.Sleep(300 * time.Millisecond)
 		_ = conn.Close()
 		s.close()
 		return
