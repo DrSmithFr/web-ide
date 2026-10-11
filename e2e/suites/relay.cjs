@@ -134,13 +134,13 @@ run(
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFklEQVR4nGP8z8DwnwEIGBkZGRgYAAAiBgID0ZfYpQAAAABJRU5ErkJggg==', 'base64')
     await app.setInputFiles('.ai-composer input[type=file]', { name: 'p.png', mimeType: 'image/png', buffer: png })
     await app.waitForSelector('.ai-composer .ai-att:has-text("p.png")')
-    await app.fill('.ai-composer textarea', 'What do you see?')
+    await app.fill('.ai-composer .ed-content', 'What do you see?')
     await app.click('[data-testid=send]')
     await app.waitForSelector('.ai-msg.assistant .md:has-text("I see an image.")', { timeout: 20000 })
     assert(await app.isVisible('.ai-msg.user .ai-att img'), 'assistant attachment sent through the tunnel')
 
     // Preview: the app of the pod is reached through the Service Worker of the relay.
-    await app.fill('.ai-composer textarea', 'Attach the app')
+    await app.fill('.ai-composer .ed-content', 'Attach the app')
     await app.click('[data-testid=send]')
     await app.waitForSelector('[data-testid=ai-preview]', { timeout: 20000 })
     const [tab] = await Promise.all([ctx.waitForEvent('page'), app.click('[data-testid=ai-preview-open]')])
