@@ -13,8 +13,10 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -28,6 +30,7 @@ import (
 
 	"github.com/DrSmithFr/web-ide/pod/internal/config"
 	"github.com/DrSmithFr/web-ide/pod/internal/hfcache"
+	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 	"github.com/DrSmithFr/web-ide/pod/internal/relay"
@@ -42,6 +45,9 @@ import (
 const (
 	podToken = "secret-token-0123456789abcdef0123"
 	bigBody  = 2 * 1024 * 1024 // >1 MB, exercises framing and DataChannel back-pressure
+	// The phrase of the shared test vectors (pod/internal/identity/vectors.json), so the
+	// account of this test is the one the browser code checks.
+	vectorsPhrase = "lecture vapor excuse note pledge rough bundle start regular burden reveal theme banana pencil owner cube social job emotion member joy sting dash whisper"
 )
 
 // testEnv is a running relay plus a real pod wired to it.
@@ -53,8 +59,9 @@ type testEnv struct {
 	pod     *server.Server
 }
 
-// startEnv starts a real relay (signaling + embedded TURN) and a real pod wired to it.
-func startEnv(t *testing.T) *testEnv {
+// startEnv starts a real relay (signaling + embedded TURN) and a real pod wired to it. The
+// identity is the pod's own: nil keeps the pod unpaired (token mode).
+func startEnv(t *testing.T, ident *identity.PodIdentity) *testEnv {
 	t.Helper()
 	// A free UDP port for STUN/TURN.
 	u, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
@@ -99,6 +106,7 @@ func startEnv(t *testing.T) *testEnv {
 		Secret:    secret,
 		Server:    s,
 		Token:     podToken,
+		Identity:  ident,
 		Limits:    limits,
 		ForceTurn: true,
 	})
@@ -195,14 +203,20 @@ func (b *browserSig) send(t *testing.T, m sigMsg) {
 	}
 }
 
-// openBrowser plays the browser: it signals through the relay, builds a PeerConnection
-// (TURN forced, like the e2e), creates the "rpc" DataChannel, completes the handshake,
-// and returns the live rpc channel plus the PeerConnection.
-func openBrowser(t *testing.T, env *testEnv, session, token string) (*webrtc.PeerConnection, *tunnel.Framed) {
+// sigURL is the browser's signaling URL of the relay for one session.
+func sigURL(env *testEnv, session string) string {
+	return strings.Replace(env.httpSrv.URL, "http", "ws", 1) + "/_relay/signal?pod=" + env.podID + "&session=" + session
+}
+
+// connectBrowser signals through the relay (through url, so a test can put a rewriting proxy
+// in front of it), builds a PeerConnection (TURN forced, like the e2e) and opens the "rpc"
+// DataChannel. It returns the live framed channel and the two DTLS fingerprints the handshake
+// binds: the browser's own, and the one the relay showed to the pod. A proxy that rewrites the
+// offer makes the two disagree. It answers an error rather than failing the test: a peer whose
+// fingerprint was rewritten may never reach the channel.
+func connectBrowser(t *testing.T, env *testEnv, session, url string) (*webrtc.PeerConnection, *tunnel.Framed, string, string, error) {
 	t.Helper()
-	u := strings.Replace(env.httpSrv.URL, "http", "ws", 1)
-	u += "/_relay/signal?pod=" + env.podID + "&session=" + session
-	c, _, err := websocket.Dial(context.Background(), u, nil)
+	c, _, err := websocket.Dial(context.Background(), url, nil)
 	if err != nil {
 		t.Fatal("dialing the browser link:", err)
 	}
@@ -222,11 +236,20 @@ func openBrowser(t *testing.T, env *testEnv, session, token string) (*webrtc.Pee
 	}
 	t.Cleanup(func() { _ = pc.Close() })
 	opened := make(chan struct{})
+	failed := make(chan string, 1)
 	rpcDC, err := pc.CreateDataChannel("rpc", nil)
 	if err != nil {
 		t.Fatal("browser rpc channel:", err)
 	}
 	rpcDC.OnOpen(func() { close(opened) })
+	pc.OnICEConnectionStateChange(func(s webrtc.ICEConnectionState) {
+		if s == webrtc.ICEConnectionStateFailed {
+			select {
+			case failed <- "the ICE connection failed":
+			default:
+			}
+		}
+	})
 
 	// Non-trickle offer: wait for the browser's candidates, then send the full SDP.
 	offer, err := pc.CreateOffer(nil)
@@ -238,6 +261,7 @@ func openBrowser(t *testing.T, env *testEnv, session, token string) (*webrtc.Pee
 		t.Fatal("browser SetLocal(offer):", err)
 	}
 	<-gather
+	fpB := tunnel.Fingerprint(pc.LocalDescription().SDP)
 	sig.send(t, sigMsg{Type: "offer", Session: session, SDP: pc.LocalDescription().SDP})
 
 	// The pod answers (with its candidates, TURN forced).
@@ -247,19 +271,26 @@ func openBrowser(t *testing.T, env *testEnv, session, token string) (*webrtc.Pee
 	}
 	select {
 	case <-opened:
+	case why := <-failed:
+		return pc, nil, fpB, tunnel.Fingerprint(answer.SDP), errors.New(why)
 	case <-time.After(15 * time.Second):
-		t.Fatal("the rpc DataChannel did not open")
+		return pc, nil, fpB, tunnel.Fingerprint(answer.SDP), errors.New("the rpc DataChannel did not open")
 	}
+	return pc, tunnel.NewFramed(newDataChannelChunk(rpcDC), 8*1024*1024), fpB, tunnel.Fingerprint(answer.SDP), nil
+}
 
-	// The channel-binding handshake: the token is proved here, bound to both DTLS
-	// fingerprints, and never reaches the relay.
-	rpcConn := tunnel.NewFramed(newDataChannelChunk(rpcDC), 8*1024*1024)
-	nonceB := nonceHex()
-	if err := tunnel.RunBrowser(rpcConn, token,
-		tunnel.Fingerprint(pc.LocalDescription().SDP), tunnel.Fingerprint(answer.SDP), nonceB); err != nil {
+// openBrowser plays the browser in the token mode: the token is proved inside the tunnel,
+// bound to both DTLS fingerprints, and never reaches the relay.
+func openBrowser(t *testing.T, env *testEnv, session, token string) (*webrtc.PeerConnection, *tunnel.Framed) {
+	t.Helper()
+	pc, rpc, fpB, fpP, err := connectBrowser(t, env, session, sigURL(env, session))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tunnel.RunBrowser(rpc, token, fpB, fpP, nonceHex()); err != nil {
 		t.Fatalf("handshake over the tunnel: %v", err)
 	}
-	return pc, rpcConn
+	return pc, rpc
 }
 
 // nonceHex returns a random 32-hex-char nonce (the browser nonce of the handshake).
@@ -274,7 +305,7 @@ func nonceHex() string {
 // rpc protocol (workspace.get), a >1 MB request on its own xfer channel, the terminal
 // input and output on its term channel, and an HTTP fetch on an http channel.
 func TestIntegrationRelay(t *testing.T) {
-	env := startEnv(t)
+	env := startEnv(t, nil)
 
 	pc, rpc := openBrowser(t, env, "int-1", env.token)
 
@@ -474,7 +505,7 @@ func readEnvelope(t *testing.T, rpc *tunnel.Framed, d time.Duration) envelope {
 // of the writer's buffer, else the caller (io.Copy, which reuses its buffer) overwrites the
 // chunks still queued on the channel.
 func TestHTTPChannelOrder(t *testing.T) {
-	env := startEnv(t)
+	env := startEnv(t, nil)
 	pc, _ := openBrowser(t, env, "http-order", env.token)
 
 	body := make([]byte, 300*1024)
@@ -520,4 +551,134 @@ func TestHTTPChannelOrder(t *testing.T) {
 			}
 		}
 	}
+}
+
+// swapFingerprint returns the SDP with another DTLS fingerprint: what a relay that rewrites
+// the offer would show to the pod. The value is replaced, the rest of the SDP is untouched.
+func swapFingerprint(sdp string) string {
+	const p = "a=fingerprint:sha-256 "
+	i := strings.Index(sdp, p)
+	if i < 0 {
+		return sdp
+	}
+	b := make([]byte, 32)
+	_, _ = rand.Read(b)
+	hex := strings.ToUpper(fmt.Sprintf("%x", b))
+	var parts []string
+	for j := 0; j < 64; j += 2 {
+		parts = append(parts, hex[j:j+2])
+	}
+	end := strings.Index(sdp[i:], "\n")
+	if end < 0 {
+		end = len(sdp) - i
+	}
+	return sdp[:i] + p + strings.Join(parts, ":") + sdp[i+end:]
+}
+
+// proxySig is a relay that rewrites the browser's offer: the browser and the pod do not see
+// the same DTLS fingerprint. Everything else is carried as it is.
+func proxySig(t *testing.T, env *testEnv, session string) string {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+		if err != nil {
+			return
+		}
+		defer ws.CloseNow()
+		up, _, err := websocket.Dial(ctx, strings.Replace(env.httpSrv.URL, "http", "ws", 1)+"/_relay/signal?pod="+env.podID+"&session="+session, nil)
+		if err != nil {
+			return
+		}
+		defer up.CloseNow()
+		go func() {
+			for {
+				_, b, err := ws.Read(ctx)
+				if err != nil {
+					return
+				}
+				var m sigMsg
+				if err := json.Unmarshal(b, &m); err == nil && m.Type == "offer" {
+					m.SDP = swapFingerprint(m.SDP)
+					b, _ = json.Marshal(m)
+				}
+				if err := up.Write(ctx, websocket.MessageText, b); err != nil {
+					return
+				}
+			}
+		}()
+		for {
+			_, b, err := up.Read(ctx)
+			if err != nil {
+				return
+			}
+			if err := ws.Write(ctx, websocket.MessageText, b); err != nil {
+				return
+			}
+		}
+	})
+	ts := httptest.NewServer(handler)
+	t.Cleanup(ts.Close)
+	return strings.Replace(ts.URL, "http", "ws", 1) + "/?session=" + session
+}
+
+// TestIntegrationSwappedOffer: a paired pod and a paired browser, through a relay that
+// rewrites the browser's offer. The same pair, straight to the relay, completes — so the
+// refusal comes from the swapped offer, not from the certificates. Over real WebRTC the
+// rewritten fingerprint breaks the DTLS association before the handshake can run; the proof
+// itself, bound to the fingerprints, is what refuses when the two sides still agree on the
+// bytes (see TestHandshakeCertSwappedFingerprint). Both are refusals.
+func TestIntegrationSwappedOffer(t *testing.T) {
+	a, err := identity.FromPhrase(vectorsPhrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	podID, err := identity.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := podID.Pin(a.ID); err != nil {
+		t.Fatal(err)
+	}
+	// The certificate must be signed for the key the pod actually uses: its own device.key,
+	// created on first run.
+	if err := podID.SetCert(identity.NewCert(a, podID.Key(), "pod", identity.KindPod)); err != nil {
+		t.Fatal(err)
+	}
+	env := startEnv(t, podID)
+
+	browserKey := identity.KeyFromSeed(identity.Derive(a.Seed, "browser device"))
+	cert := identity.NewCert(a, browserKey, "browser", identity.KindBrowser)
+
+	// The good pair first: the same browser, straight to the relay.
+	pc, rpc, fpB, fpP, err := connectBrowser(t, env, "offer-good", sigURL(env, "offer-good"))
+	if err != nil {
+		t.Fatalf("the good pair must reach the channel: %v", err)
+	}
+	peer, err := tunnel.RunBrowserCert(rpc, browserKey, cert, a.ID, fpB, fpP, nonceHex())
+	if err != nil {
+		t.Fatalf("the good pair must complete: %v", err)
+	}
+	if peer == nil || peer.Key != podID.ID() {
+		t.Fatalf("the pod must show its own certificate, got %+v", peer)
+	}
+	_ = pc.Close()
+
+	// The same browser through a relay that rewrites the offer. The pod signs the binding
+	// string over a fingerprint the browser never bound, so the proof does not match; or the
+	// DTLS association itself breaks before the channel opens. Both are refusals.
+	url := proxySig(t, env, "offer-swapped")
+	_, rpc2, fpB2, fpP2, err := connectBrowser(t, env, "offer-swapped", url)
+	if fpB2 == fpB {
+		t.Fatal("the proxy did not change the fingerprint")
+	}
+	if err != nil {
+		t.Logf("refused before the handshake: %v", err)
+		return
+	}
+	if _, err := tunnel.RunBrowserCert(rpc2, browserKey, cert, a.ID, fpB2, fpP2, nonceHex()); !errors.Is(err, tunnel.ErrProof) {
+		t.Fatalf("a relay that swaps the offer must be refused with %v, got %v", tunnel.ErrProof, err)
+	}
+	t.Log("refused by the proof bound to the fingerprints")
 }
