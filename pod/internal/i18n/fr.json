@@ -233,5 +233,7 @@
   "the approval did not come": "l'approbation n'est pas venue",
   "WebCrypto": "WebCrypto",
   "WebCrypto Ed25519": "WebCrypto Ed25519",
-  "WebAuthn PRF": "WebAuthn PRF"
+  "WebAuthn PRF": "WebAuthn PRF",
+  "%s is not an address host:port": "%s n'est pas une adresse hôte:port",
+  "the LAN link is off": "le lien réseau local est coupé"
 }

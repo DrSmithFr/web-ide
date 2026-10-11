@@ -75,6 +75,8 @@ type Server struct {
 	// RelayStatus reports the state of the remote access (nil: no relay). The page shows it
 	// in Settings > Remote access.
 	RelayStatus func() RelayInfo
+	// LAN is the link to the pods of the account on the local network (nil: off).
+	LAN LAN
 
 	// stopped: the pod stops (Shutdown); the runs are left as they are, to be taken back.
 	stopped atomic.Bool
@@ -136,6 +138,7 @@ func (s *Server) Init() {
 	s.registerKanban()
 	s.registerKanbanGit()
 	s.registerRelay()
+	s.registerLAN()
 }
 
 func (s *Server) handle(name string, h handler) { s.handlers[name] = h }
@@ -259,6 +262,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.URL.Path == "/_relay/identity" {
 		s.serveIdentityLink(w, r)
+		return
+	}
+	// A page served by this pod directly: the gateway port of another pod answers here
+	// instead, with the way back to its home page.
+	if r.URL.Path == "/_lan/gateway" {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("{}"))
 		return
 	}
 	if strings.HasPrefix(r.URL.Path, hfcache.Prefix) && s.Models != nil {

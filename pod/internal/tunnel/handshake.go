@@ -226,8 +226,9 @@ func (h *Handshake) runCert(conn MsgConn, hi helloParams) error {
 	h.PeerCert = hi.Cert
 	nonceP := nonce()
 	sig := identity.Sign(h.Identity.Key(), []byte(Binding(RolePod, h.FPBrowser, h.FPPod, hi.Nonce, nonceP)))
+	_, own, _ := h.Identity.State()
 	// pod -> $hello{protocol, version, nonce, cert, sig}
-	if err := h.send(conn, "$hello", helloParams{Protocol: Protocol, Version: Version, Nonce: nonceP, Cert: h.Identity.Cert, Sig: sig}); err != nil {
+	if err := h.send(conn, "$hello", helloParams{Protocol: Protocol, Version: Version, Nonce: nonceP, Cert: own, Sig: sig}); err != nil {
 		return err
 	}
 	// browser -> $auth{sig}

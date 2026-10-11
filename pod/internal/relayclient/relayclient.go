@@ -69,8 +69,10 @@ type Client struct {
 	limits   *tunnel.RateLimiter
 	mu       sync.Mutex
 	sessions map[string]*session
-	iceMu    sync.Mutex
-	iceFor   map[string]webrtc.ICEServer
+	// link is the link to the relay while it is up (PushRevocations).
+	link   *podLink
+	iceMu  sync.Mutex
+	iceFor map[string]webrtc.ICEServer
 }
 
 // New builds a relayclient Client.
@@ -126,8 +128,9 @@ func (c *Client) runOnce(ctx context.Context) error {
 	// gives its account and its certificate — the relay can check them but never make one.
 	var reg sigMsg
 	if c.cfg.Identity != nil && c.cfg.Identity.Paired() {
+		account, cert, _ := c.cfg.Identity.State()
 		reg = sigMsg{Type: "register", ID: c.cfg.PodID, Secret: c.cfg.Secret, Name: c.cfg.Name,
-			Account: c.cfg.Identity.Account, Cert: c.cfg.Identity.Cert}
+			Account: account, Cert: cert}
 	} else {
 		reg = sigMsg{Type: "register", ID: c.cfg.PodID, Secret: c.cfg.Secret, Name: c.cfg.Name}
 	}
@@ -146,6 +149,21 @@ func (c *Client) runOnce(ctx context.Context) error {
 	if err := c.applyRevocations(m.List); err != nil {
 		return err
 	}
+	// The other way: a newer list the pod holds goes to the relay, so that the next list an
+	// admin signs from the relay's copy keeps its revocations.
+	if c.cfg.Identity != nil {
+		if _, _, own := c.cfg.Identity.State(); own != nil && (m.List == nil || own.Seq > m.List.Seq) {
+			_ = link.send(sigMsg{Type: "revocations", List: own})
+		}
+	}
+	c.mu.Lock()
+	c.link = link
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		c.link = nil
+		c.mu.Unlock()
+	}()
 	c.tell("connected")
 	for {
 		if ctx.Err() != nil {
@@ -169,6 +187,17 @@ func (c *Client) runOnce(ctx context.Context) error {
 		case "bye":
 			c.route(m.Session, func(s *session) { s.close() })
 		}
+	}
+}
+
+// PushRevocations gives the relay a newer revocation list the pod received another way (a
+// pod of the LAN, the pair command). The relay keeps it only if it is newer than its own.
+func (c *Client) PushRevocations(list *identity.Revocations) {
+	c.mu.Lock()
+	link := c.link
+	c.mu.Unlock()
+	if link != nil && list != nil {
+		_ = link.send(sigMsg{Type: "revocations", List: list})
 	}
 }
 

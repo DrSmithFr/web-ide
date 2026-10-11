@@ -45,7 +45,7 @@ type Env struct {
 // Run dispatches one call of the subcommand: pair create | restore | join | status.
 func Run(env *Env, args []string) error {
 	if len(args) == 0 {
-		return errors.New("pair: create, restore, join or status")
+		return errors.New("pair: create, restore, join [--phrase], revoke <key> or status")
 	}
 	switch args[0] {
 	case "create":
@@ -53,7 +53,15 @@ func Run(env *Env, args []string) error {
 	case "restore":
 		return Restore(env)
 	case "join":
+		if len(args) > 1 && args[1] == "--phrase" {
+			return JoinWithPhrase(env)
+		}
 		return Join(env)
+	case "revoke":
+		if len(args) < 2 {
+			return errors.New("pair: revoke <device key>")
+		}
+		return Revoke(env, args[1])
 	case "status":
 		return Status(env)
 	default:
@@ -112,7 +120,7 @@ func Restore(env *Env) error {
 // it names, as it does for every peer.
 func Join(env *Env) error {
 	if env.RelayURL == "" {
-		return errors.New("pair: join needs a relay (-relay)")
+		return errors.New("pair: join needs a relay (-relay); without one, join --phrase")
 	}
 	p, err := identity.Open(env.Dir)
 	if err != nil {
@@ -330,15 +338,16 @@ func (env *Env) timeout() time.Duration {
 
 // msg is one message of the pairing link (the shape the relay reads on /_relay/identity).
 type msg struct {
-	Type    string         `json:"type"`
-	Account string         `json:"account,omitempty"`
-	Key     string         `json:"key,omitempty"`
-	Name    string         `json:"name,omitempty"`
-	Kind    string         `json:"kind,omitempty"`
-	Code    string         `json:"code,omitempty"`
-	Cert    *identity.Cert `json:"cert,omitempty"`
-	Pairing *pairing       `json:"pairing,omitempty"`
-	Message string         `json:"message,omitempty"`
+	Type    string                `json:"type"`
+	Account string                `json:"account,omitempty"`
+	Key     string                `json:"key,omitempty"`
+	Name    string                `json:"name,omitempty"`
+	Kind    string                `json:"kind,omitempty"`
+	Code    string                `json:"code,omitempty"`
+	Cert    *identity.Cert        `json:"cert,omitempty"`
+	Pairing *pairing              `json:"pairing,omitempty"`
+	List    *identity.Revocations `json:"list,omitempty"`
+	Message string                `json:"message,omitempty"`
 }
 
 type pairing struct {
