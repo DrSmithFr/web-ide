@@ -254,6 +254,7 @@ export function setActivePane(id: string) {
 }
 
 export function activateTab(paneId: string, tabId: string) {
+  if (activeTab()?.id !== tabId) record()
   mutate((s) => {
     const l = findLeaf(s.layout, paneId)
     if (l) l.active = tabId
@@ -279,6 +280,7 @@ export function openTab(tab: Omit<TabState, 'id'>, paneId = session.activePane):
     return same
   }
   const id = uid()
+  record()
   mutate((s) => {
     s.tabs[id] = { ...tab, id }
     const l = findLeaf(s.layout, leaf.id)!
@@ -799,8 +801,12 @@ const [reveal, setReveal] = createSignal<{ path: string; target: NavTarget; seq:
 export { reveal }
 let revealSeq = 0
 
-const back: NavTarget[] = []
-const forward: NavTarget[] = []
+/** A place of the history: a position in a file, or another tab (board, table, diff…). */
+type Place = NavTarget | { tab: string }
+
+const back: Place[] = []
+const forward: Place[] = []
+let replaying = false // navigate moves without recording
 
 export function currentPosition(): NavTarget | null {
   const t = activeTab()
@@ -809,16 +815,29 @@ export function currentPosition(): NavTarget | null {
   return { path: t.path, offset: c?.head ?? 0 }
 }
 
+function currentPlace(): Place | null {
+  const t = activeTab()
+  return t ? (currentPosition() ?? { tab: t.id }) : null
+}
+
+const samePlace = (a: Place, b: Place) => ('tab' in a ? 'tab' in b && a.tab === b.tab : !('tab' in b) && a.path === b.path && a.offset === b.offset)
+
+/** Records the place shown before a jump or a change of tab. */
+function record() {
+  const cur = currentPlace()
+  if (replaying || !cur) return
+  const last = back[back.length - 1]
+  if (!last || !samePlace(last, cur)) back.push(cur)
+  if (back.length > 100) back.shift()
+  forward.length = 0
+}
+
 /** Opens a file and moves to a position, recording the jump in the history. */
 export async function openFile(target: NavTarget | string, opts: { pane?: string; record?: boolean } = {}) {
   const t: NavTarget = typeof target === 'string' ? { path: target } : target
   if (opts.record !== false) {
     const cur = currentPosition()
-    if (cur && (cur.path !== t.path || t.offset !== undefined || t.line !== undefined)) {
-      back.push(cur)
-      if (back.length > 100) back.shift()
-      forward.length = 0
-    }
+    if (!cur || cur.path !== t.path || t.offset !== undefined || t.line !== undefined) record()
   }
   const title = basename(t.path)
   batch(() => {
@@ -828,14 +847,26 @@ export async function openFile(target: NavTarget | string, opts: { pane?: string
   await loadDoc(t.path)
 }
 
+/** Moves back (-1) or forward (1) in the history of the editor: positions and tabs. */
 export function navigate(dir: -1 | 1) {
   const from = dir < 0 ? back : forward
   const to = dir < 0 ? forward : back
-  const t = from.pop()
+  let t = from.pop()
+  while (t && 'tab' in t && !session.tabs[t.tab]) t = from.pop() // a tab closed since
   if (!t) return
-  const cur = currentPosition()
+  const cur = currentPlace()
   if (cur) to.push(cur)
-  openFile(t, { record: false })
+  replaying = true
+  try {
+    if (!('tab' in t)) void openFile(t, { record: false })
+    else {
+      const id = t.tab
+      const l = leaves().find((x) => x.tabs.includes(id))
+      if (l) activateTab(l.id, id)
+    }
+  } finally {
+    replaying = false
+  }
 }
 
 // ---------- project lifecycle ----------

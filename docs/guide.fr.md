@@ -143,7 +143,7 @@ Tout ce que fait le modèle, vous pouvez le faire vous-même, dans les mêmes fe
 
 ![L'éditeur avec la complétion de gopls, et un terminal](images/editor.png)
 
-- **Éditeur** : découpages, multi-curseur (Alt+J occurrence suivante, Alt+Maj+glisser ou bouton du milieu pour les colonnes), repli, recherche et remplacement, Search Everywhere (Maj deux fois), Recent Files (Ctrl+E), le switcher (Ctrl+Tab), historique du presse-papier (Ctrl+Maj+V).
+- **Éditeur** : découpages, multi-curseur (Alt+J occurrence suivante, Alt+Maj+glisser ou bouton du milieu pour les colonnes), repli, recherche et remplacement, Search Everywhere (Maj deux fois), Recent Files (Ctrl+E), le switcher (Ctrl+Tab), historique du presse-papier (Ctrl+Maj+V). Les boutons précédent et suivant de la souris se déplacent dans l'historique de la partie active : positions et onglets de l'éditeur (comme Ctrl+Alt+Gauche/Droite), onglets de la console, conversations de l'assistant ; ils ne quittent jamais le projet.
 - **Serveurs de langage** (gopls, typescript-language-server, pyright, intelephense…, dans le `PATH` du pod) : définition, références, complétion, renommage, formatage, diagnostics.
 - **Terminaux** dans le panneau du bas (Ctrl+Maj+`), détachables dans leur propre fenêtre.
 - **Git** : modifications, index, commits, branches, graphe de l'historique, diffs côte à côte, autres worktrees.

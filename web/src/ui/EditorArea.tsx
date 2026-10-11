@@ -147,7 +147,7 @@ function Pane(props: { id: string }) {
     ])
 
   return (
-    <div class="pane" classList={{ active: isActivePane(), focused: isActivePane() && focusPart() === 'editor' }} onMouseDown={() => setActivePane(props.id)}>
+    <div class="pane" classList={{ active: isActivePane(), focused: isActivePane() && focusPart() === 'editor' }} onMouseDown={(e) => e.button < 3 && setActivePane(props.id)}>
       <div
         ref={tabbar}
         class="tabbar"

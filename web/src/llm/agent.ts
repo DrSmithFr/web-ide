@@ -6,7 +6,7 @@ import { produce, reconcile } from 'solid-js/store'
 import { createSignal } from 'solid-js'
 import { on, request } from '../pod/rpc'
 import { activeTab, attachWorktree, home, relPath, session } from '../state/project'
-import { approval, chat, config, emptyChat, live, loadModels, newId, prefs, refreshChats, setApproval, setChat, setIncomingDraft, setLive, type Chat, type ChatMessage, type Mode, type Part } from './state'
+import { approval, chat, chatTrail, config, emptyChat, leaveChat, live, loadModels, newId, prefs, refreshChats, setApproval, setChat, setIncomingDraft, setLive, type Chat, type ChatMessage, type Mode, type Part } from './state'
 import { runUiTool } from './uiTools'
 import { entryToString, type AnswerEntry } from './ask'
 import { toast } from '../ui/toast'
@@ -230,8 +230,9 @@ function rememberActive() {
 }
 
 /** Shows a conversation: its messages and its state, then follows it. */
-export async function openChat(id: string) {
+export async function openChat(id: string, record = true) {
   const r = await request<{ chat: Chat; state: RunState; ahead: number }>('agent.open', { id })
+  if (record) leaveChat(id)
   setChat(reconcile({ ...r.chat, queue: r.chat.queue ?? [] }))
   setApproval(r.chat.approval ?? null)
   // A first message prepared for the user goes to the message box, once.
@@ -242,6 +243,23 @@ export async function openChat(id: string) {
   applyState(r.state, r.ahead)
   attach(r.state === 'idle' ? undefined : r.chat.running?.stream)
   rememberActive()
+}
+
+/** Shows the conversation shown before (-1) or after (1); one deleted since is skipped. */
+export async function navigateChats(dir: -1 | 1) {
+  const from = dir < 0 ? 'back' : 'forward'
+  const to = dir < 0 ? 'forward' : 'back'
+  const cur = chat.messages.length ? chat.id : null
+  for (let id = chatTrail[from].pop(); id; id = chatTrail[from].pop()) {
+    if (id === cur) continue
+    try {
+      await openChat(id, false)
+    } catch {
+      continue
+    }
+    if (cur) chatTrail[to].push(cur)
+    return
+  }
 }
 
 let chatProject = ''
@@ -255,7 +273,11 @@ export async function restoreActive() {
   if (!pid || pid === chatProject) return
   const changed = chatProject !== ''
   chatProject = pid
-  if (changed) setChat(reconcile(emptyChat()))
+  if (changed) {
+    setChat(reconcile(emptyChat()))
+    chatTrail.back = []
+    chatTrail.forward = []
+  }
   loadStates()
   let id: string | null = null
   try {

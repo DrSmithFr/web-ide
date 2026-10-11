@@ -11,6 +11,7 @@ export { focusPart, setFocusPart }
 
 /** Pointer down or focus in the workbench: the part around the target gets the focus. */
 export function trackFocus(e: Event) {
+  if ((e as PointerEvent).button > 2) return // the side buttons act on the focused part
   const part = (e.target as HTMLElement).closest?.('[data-focus]')?.getAttribute('data-focus')
   if (part) setFocusPart(part as FocusPart)
 }

@@ -147,7 +147,7 @@ Everything the model does, you can do yourself, in the same windows:
 
 ![The editor with completion by gopls, and a terminal](images/editor.png)
 
-- **Editor**: splits, multiple carets (Alt+J next occurrence, Alt+Shift+drag or middle button for columns), folding, find and replace, Search Everywhere (Shift twice), Recent Files (Ctrl+E), the switcher (Ctrl+Tab), clipboard history (Ctrl+Shift+V).
+- **Editor**: splits, multiple carets (Alt+J next occurrence, Alt+Shift+drag or middle button for columns), folding, find and replace, Search Everywhere (Shift twice), Recent Files (Ctrl+E), the switcher (Ctrl+Tab), clipboard history (Ctrl+Shift+V). The back and forward buttons of the mouse move in the history of the focused part: positions and tabs of the editor (like Ctrl+Alt+Left/Right), console tabs, conversations of the assistant; they never leave the project.
 - **Language servers** (gopls, typescript-language-server, pyright, intelephense…, from the pod's `PATH`): go to definition, references, completion, rename, formatting, diagnostics.
 - **Terminals** in the bottom panel (Ctrl+Shift+`), detachable in their own window.
 - **Git**: changes, staging, commits, branches, history graph, side-by-side diffs, other worktrees.

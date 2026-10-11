@@ -12,7 +12,7 @@ import { focusEditorQuietly, isTyping, lockEditor, mobileView, phone, revealCare
 import { settings, updateSettings } from '../state/settings'
 import { navigate } from '../app/router'
 import { EditorArea } from '../ui/EditorArea'
-import { ConsoleTool, ProblemsTool, newConsole, problemCount, refreshConsoles, setConsoleList } from '../console/consoles'
+import { ConsoleTool, ProblemsTool, navigateConsoles, newConsole, problemCount, refreshConsoles, setConsoleList } from '../console/consoles'
 import { loadCommands } from '../console/commands'
 import { createIn, Explorer } from '../panels/Explorer'
 import { GlobalSearch, focusGlobalSearch } from '../panels/GlobalSearch'
@@ -30,6 +30,8 @@ import { DockerTool } from '../docker/DockerTool'
 import { openConflict } from '../conflict/ConflictDialog'
 import { openSettings } from '../settings/SettingsModal'
 import { actions, registerAction, runAction, shortcutOf } from '../keys/bindings'
+import { onMouseNav } from '../keys/mouse'
+import { navigateChats } from '../llm/agent'
 import { contextMenu, focusBeforeMenus, prompt, type MenuItem } from '../ui/overlay'
 import { Icon } from '../ui/icons'
 import { refreshConnections } from '../db/api'
@@ -107,6 +109,18 @@ export function useProjectActions() {
     registerAction('view.prevTab', () => cycleTab(-1)),
     registerAction('nav.back', () => navHistory(-1)),
     registerAction('nav.forward', () => navHistory(1)),
+    registerAction('nav.previousConversation', () => void navigateChats(-1)),
+    registerAction('nav.nextConversation', () => void navigateChats(1)),
+    registerAction('nav.previousConsole', () => navigateConsoles(-1)),
+    registerAction('nav.nextConsole', () => navigateConsoles(1)),
+    // The side buttons of the mouse move in the history of the focused part.
+    onMouseNav((dir) => {
+      const part = focusPart()
+      const tool = part === 'editor' ? 'editor' : shownIn(session, part)
+      if (tool === 'editor') navHistory(dir)
+      else if (tool === 'assistant') void navigateChats(dir)
+      else if (tool === 'console') navigateConsoles(dir)
+    }),
     registerAction('settings.open', () => openSettings()),
     registerAction('kanban.open', () => openBoard()),
     registerAction('search.everywhere', () => searchEverywhere('all')),

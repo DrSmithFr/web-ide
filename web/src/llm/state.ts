@@ -546,8 +546,23 @@ export async function refreshChats() {
   }
 }
 
+// ---------- history of the conversations shown ----------
+
+/** Conversations shown before (back) and after (forward) the one shown, for the mouse buttons. */
+export const chatTrail = { back: [] as string[], forward: [] as string[] }
+
+/** Remembers the conversation shown before another one; a new one never sent is not kept. */
+export function leaveChat(next?: string) {
+  if (!chat.messages.length || chat.id === next) return
+  const b = chatTrail.back
+  if (b[b.length - 1] !== chat.id) b.push(chat.id)
+  if (b.length > 50) b.shift()
+  chatTrail.forward.length = 0
+}
+
 /** The window shows a new conversation (nothing in the pod until its first message). */
 export function resetChat() {
+  leaveChat()
   setChat(reconcile(emptyChat()))
   setApproval(null)
   request('agent.watch', { id: chat.id }).catch(() => {})
@@ -561,6 +576,8 @@ export async function renameChat(id: string, title: string) {
 
 export async function deleteChat(id: string) {
   await request('llm.chats.delete', { id })
+  chatTrail.back = chatTrail.back.filter((x) => x !== id)
+  chatTrail.forward = chatTrail.forward.filter((x) => x !== id)
   if (chat.id === id) resetChat()
   refreshChats()
 }

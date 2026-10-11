@@ -381,6 +381,41 @@ export function ordered() {
   return [...consoles()].sort((a, b) => rank(a.id) - rank(b.id))
 }
 
+// Console tabs shown before (back) and after (forward) the active one, for the mouse buttons:
+// every change of the active console is recorded, but the moves of navigateConsoles.
+const consoleTrail = { back: [] as string[], forward: [] as string[] }
+let replayed: string | null = null
+createRoot(() =>
+  createEffect(
+    on(
+      () => session.bottom.active,
+      (cur, prev) => {
+        if (cur === replayed) return void (replayed = null)
+        if (!prev || prev === cur) return
+        const b = consoleTrail.back
+        if (b[b.length - 1] !== prev) b.push(prev)
+        if (b.length > 50) b.shift()
+        consoleTrail.forward.length = 0
+      },
+      { defer: true },
+    ),
+  ),
+)
+
+/** Shows the console tab shown before (-1) or after (1); one closed since is skipped. */
+export function navigateConsoles(dir: -1 | 1) {
+  const from = consoleTrail[dir < 0 ? 'back' : 'forward']
+  const to = consoleTrail[dir < 0 ? 'forward' : 'back']
+  const cur = session.bottom.active
+  for (let id = from.pop(); id; id = from.pop()) {
+    if (id === cur || !consoles().some((c) => c.id === id)) continue
+    if (cur) to.push(cur)
+    replayed = id
+    mutate((s) => (s.bottom.active = id))
+    return
+  }
+}
+
 function moveConsole(id: string, index: number) {
   const ids = ordered().map((c) => c.id)
   mutate((s) => (s.bottom.order = moveItem(ids, ids.indexOf(id), index)))
