@@ -1,10 +1,10 @@
 // Checks the shared test vectors (pod/internal/identity/vectors.json) with the browser code
-// (pod/internal/relay/web/identity.js): the same phrase must give the same seed, the same
+// (pod/internal/identity/web/identity.js): the same phrase must give the same seed, the same
 // ids, the same canonical bytes and the same signatures in Go and in the browser. Run by
 // make test; the e2e identity suite runs the same module in Chromium.
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import * as identity from '../pod/internal/relay/web/identity.js'
+import * as identity from '../pod/internal/identity/web/identity.js'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const v = JSON.parse(readFileSync(root + 'pod/internal/identity/vectors.json', 'utf8'))

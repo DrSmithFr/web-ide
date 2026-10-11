@@ -15,6 +15,7 @@ import { copyText } from '../ui/clipboard'
 import { Doc } from '../editor/doc'
 import { EditorView } from '../editor/view'
 import { samples } from './samples'
+import { Devices } from './Devices'
 import { browserLang, fmtDate, languages, t, tn, type LangSetting } from '../i18n'
 
 const sections = [
@@ -72,6 +73,7 @@ export function SettingsHost() {
             </Show>
             <Show when={open() === 'remote'}>
               <RemoteAccess />
+              <Devices />
             </Show>
             <Show when={open() === 'history'}>
               <History />

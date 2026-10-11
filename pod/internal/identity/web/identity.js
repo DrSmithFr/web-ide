@@ -4,7 +4,8 @@
 // The pure part (formats, derivation, canonical bytes) is shared with pod/internal/identity
 // and checked against the test vectors by scripts/identity-vectors.mjs, so a signature made
 // in the browser verifies in the pod and the other way round. The browser part (IndexedDB,
-// passkey) is used by the bootstrap page and by the app, which import this same file.
+// passkey, pairing) is used by the bootstrap page and by the app, which import this same
+// file — served by the relay and by the pod under /_relay/identity.js.
 //
 // Recent browsers only: WebCrypto Ed25519 and WebAuthn PRF are required, there is no
 // fallback for older ones — support() names what is missing.
@@ -152,6 +153,15 @@ export async function verifyCert(c, pinned, revoked) {
   return ''
 }
 
+// The signed revocation list an admin posts: the device keys it revoked and the epoch of the
+// sync key rotated at the same time. Only a device holding the account key can sign one, so
+// the relay can store it but never make one.
+export async function signRevocations(accountKey, accountId, revoked, seq, epoch) {
+  const r = { account: accountId, seq, epoch, revoked: [...revoked].sort(), created: Math.floor(Date.now() / 1000) }
+  r.sig = await sign(accountKey, canonicalRevocations(r))
+  return r
+}
+
 export async function verifyRevocations(r, pinned) {
   if (!r) return 'no revocation list'
   if (r.account !== pinned) return 'revocation list of another account'
@@ -174,7 +184,7 @@ export async function support() {
   return missing
 }
 
-// --- the record of a device (IndexedDB, on the relay origin) ---
+// --- the record of a device (IndexedDB, per origin) ---
 
 const DB = 'webide-identity'
 
@@ -205,8 +215,7 @@ export async function save(db, key, rec) {
 }
 
 // Every record of this origin. The salt must be known before the passkey is asked (it is the
-// input of the PRF), so the day-to-day unlock reads the records first, then unlocks each one
-// with its own passkey.
+// input of the PRF), so the day-to-day unlock reads the records first.
 export async function list(db) {
   return new Promise((resolve, reject) => {
     const q = db.transaction('device').objectStore('device').getAll()
@@ -272,4 +281,88 @@ export async function passkey(rec, create) {
   const out = cred.getClientExtensionResults?.()?.prf?.results?.first
   if (!out) throw new Error('the passkey did not give its PRF (WebAuthn PRF is required)')
   return { id: b64u(new Uint8Array(cred.rawId)), prf: new Uint8Array(out) }
+}
+
+// The pairing and admin link: the same path on the relay origin (the bootstrap page) and on
+// the pod origin (the app, which proxies it). Messages the relay pushes (a revocation list, an
+// approval, a key posted to a code) reach the handler; the awaited ones are read one by one.
+export function link(onPush) {
+  const ws = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/_relay/identity')
+  const waiters = []
+  ws.onmessage = (e) => {
+    const m = JSON.parse(e.data)
+    const w = waiters.shift()
+    if (w) w(m)
+    else if (onPush) onPush(m)
+  }
+  return new Promise((resolve, reject) => {
+    ws.onopen = () => resolve({
+      send: (m) => ws.send(JSON.stringify(m)),
+      recv: () => new Promise((r) => waiters.push(r)),
+      close: () => ws.close(),
+    })
+    ws.onerror = () => reject(new Error('the relay is not reachable'))
+  })
+}
+
+// The BIP39 wordlist, the same 2048 words the pod embeds.
+export async function wordlist() {
+  const r = await fetch('/_relay/bip39.txt')
+  if (!r.ok) throw new Error('the wordlist is not reachable')
+  return (await r.text()).split('\n').filter(Boolean)
+}
+
+// The device of this origin, unlocked by its passkey: the record, its signing key for the
+// session and the PRF that opened it. Null when this origin holds no device, or when the
+// passkey was dismissed.
+export async function unlock(db) {
+  for (const r of await list(db)) {
+    try {
+      const p = await passkey(r, false)
+      const seed = await open(p.prf, r.device)
+      return { rec: r, key: await keyFromSeed(seed, false), prf: p.prf }
+    } catch {
+      // Another device of this profile, or the passkey was dismissed.
+    }
+  }
+  return null
+}
+
+// The account key of an admin device, unwrapped for the session: the only key that can sign a
+// certificate or a revocation list.
+export async function accountKey(rec, prf) {
+  if (!rec?.accountSeed) return null
+  return keyFromSeed(await open(prf, rec.accountSeed), true)
+}
+
+// A certificate signed by the account key for a device. The admin signs for the public key it
+// read, never for a private key it was shown.
+export async function signCert(accountKey, accountId, deviceId, name, kind) {
+  const c = { v: 1, account: accountId, key: deviceId, name, kind, created: Math.floor(Date.now() / 1000), scope: ScopeAll }
+  c.sig = await sign(accountKey, canonicalCert(c))
+  return c
+}
+
+// Pairing with the phrase, on a computer: the phrase is used once here and never stored. Only
+// the wrapped seeds, the account id and the certificate the account key signed are kept. A
+// device that knows the phrase is an admin.
+export async function enroll(db, phrase, wordlist, name, kind) {
+  const err = await validatePhrase(phrase, wordlist)
+  if (err) throw new Error(err)
+  const seed = await bip39Seed(phrase)
+  const accountSeed = await hkdf(seed, InfoAccount)
+  const deviceSeed = await hkdf(seed, InfoDevice)
+  const accountId = await publicFromSeed(accountSeed)
+  const deviceId = await publicFromSeed(deviceSeed)
+  const rec = newRecord(deviceId)
+  const p = await passkey(rec, true)
+  rec.id = p.id
+  rec.account = accountId
+  rec.device = await seal(p.prf, deviceSeed)
+  rec.accountSeed = await seal(p.prf, accountSeed)
+  const key = await keyFromSeed(deviceSeed, false)
+  const accountSigningKey = await keyFromSeed(accountSeed, true)
+  rec.cert = await signCert(accountSigningKey, accountId, deviceId, name, kind)
+  await save(db, deviceId, rec)
+  return { rec, key, prf: p.prf, accountKey: accountSigningKey }
 }

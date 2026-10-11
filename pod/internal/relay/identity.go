@@ -15,17 +15,18 @@ import (
 // private key: it can check a signature against an account id but never make one, so only a
 // device that holds the account key can approve a pairing or push a revocation list.
 type idMsg struct {
-	Type    string                `json:"type"`
-	Account string                `json:"account,omitempty"`
-	Key     string                `json:"key,omitempty"`
-	Name    string                `json:"name,omitempty"`
-	Kind    string                `json:"kind,omitempty"`
-	Code    string                `json:"code,omitempty"`
-	Cert    *identity.Cert        `json:"cert,omitempty"`
-	List    *identity.Revocations `json:"list,omitempty"`
-	Devices []Device              `json:"devices,omitempty"`
-	Pairing *Pairing              `json:"pairing,omitempty"`
-	Message string                `json:"message,omitempty"`
+	Type     string                `json:"type"`
+	Account  string                `json:"account,omitempty"`
+	Key      string                `json:"key,omitempty"`
+	Name     string                `json:"name,omitempty"`
+	Kind     string                `json:"kind,omitempty"`
+	Code     string                `json:"code,omitempty"`
+	Cert     *identity.Cert        `json:"cert,omitempty"`
+	List     *identity.Revocations `json:"list,omitempty"`
+	Devices  []Device              `json:"devices,omitempty"`
+	Pairing  *Pairing              `json:"pairing,omitempty"`
+	Pairings []Pairing             `json:"pairings,omitempty"`
+	Message  string                `json:"message,omitempty"`
 }
 
 // identityConn is one live pairing/admin link: a browser (or the pod CLI) that pairs a
@@ -110,6 +111,15 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			_ = c.send(idMsg{Type: "revocations", Account: c.account, List: list})
+		case "pairings":
+			// The open requests an admin must approve, with the key the device posted: the
+			// fingerprint the joining device showed must match the key read here.
+			list, err := s.store.Pairings(c.account)
+			if err != nil {
+				_ = c.send(idMsg{Type: "error", Message: err.Error()})
+				continue
+			}
+			_ = c.send(idMsg{Type: "pairings", Account: c.account, Pairings: list})
 		case "revoke":
 			// Only a list signed by the pinned account, with a higher seq, is kept.
 			kept, err := s.store.SaveRevocations(m.List)
@@ -141,6 +151,14 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			_ = c.send(idMsg{Type: "pair", Pairing: p})
+			// The admin that showed the code (or the device that printed the QR) sees the key
+			// posted to it: the fingerprint it compares is the one of this key.
+			s.mu.Lock()
+			creator := s.codes[p.Code]
+			s.mu.Unlock()
+			if creator != nil && creator != c {
+				_ = creator.send(idMsg{Type: "pair", Pairing: p})
+			}
 		case "pairGet":
 			p, err := s.store.ClaimPairing(m.Code, c.account)
 			if err != nil {

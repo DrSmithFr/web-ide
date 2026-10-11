@@ -1,13 +1,13 @@
 // Bootstrap page of the relay. It opens the WebRTC tunnel to the pod (chosen by #pod=),
-// proves the token INSIDE the tunnel (the channel-binding handshake: the token is bound to
-// both DTLS fingerprints, so the relay never sees it and cannot swap the SDP), then hands
-// the app to the pod: the Service Worker answers the page's fetches through the tunnel, and
-// the JSON protocol goes through a MessagePort.
+// proves the identity INSIDE the tunnel (the channel-binding handshake: the proof is bound to
+// both DTLS fingerprints, so the relay never sees the token and cannot swap the SDP), then
+// hands the app to the pod: the Service Worker answers the page's fetches through the tunnel,
+// and the JSON protocol goes through a MessagePort.
 //
-// Identity (milestone 2): a paired device signs the binding string with its device key and
-// checks the pod's certificate against the account key it pinned. An unpaired device falls
-// back to the token mode (M1), which a paired pod refuses. Recent browsers only: WebCrypto
-// Ed25519 and WebAuthn PRF are required, nothing is attempted without them.
+// A paired device signs the binding string with its device key and checks the pod's
+// certificate against the account key it pinned. An unpaired device falls back to the token
+// mode (M1), which a paired pod refuses. Recent browsers only: WebCrypto Ed25519 and WebAuthn
+// PRF are required, nothing is attempted without them.
 import * as id from './identity.js'
 
 const params = new URLSearchParams(location.hash.slice(1) || location.search.slice(1))
@@ -21,7 +21,6 @@ const words = {
   connecting: fr ? 'Connexion…' : 'Connecting…',
   nopod: fr ? 'Aucun pod indiqué. Ouvrez <relay>/#pod=<id>&t=<token>.' : 'No pod given. Open <relay>/#pod=<id>&t=<token>.',
   offline: fr ? 'Ce pod n’est pas en ligne sur le relay.' : 'This pod is not online at the relay.',
-  connected: fr ? 'Connecté.' : 'Connected.',
   loading: fr ? 'Chargement de l’IDE…' : 'Loading the IDE…',
   update: fr ? 'Mettez ce pod à jour : les versions ne correspondent pas.' : 'Update this pod: the versions do not match.',
   failed: fr ? 'La connexion n’a pas pu être établie.' : 'The connection could not be established.',
@@ -91,10 +90,8 @@ function read(dc, e) {
   return r.msg
 }
 
-// --- identity: the device of this origin ---
+// --- the device of this origin ---
 
-// The record in IndexedDB, the signing key for the session, the pinned account and the
-// revocation list verified against it.
 let db = null
 let rec = null
 let key = null
@@ -106,51 +103,6 @@ const deviceName = () => navigator.userAgentData?.platform || navigator.platform
 // What the e2e suite reads (the device id, its fingerprint, the account).
 function show() {
   window.identity = { device: rec?.key ?? '', account, fingerprint: rec?.fp ?? '', cert: rec?.cert ?? null }
-}
-
-async function wordlist() {
-  const r = await fetch('/_relay/bip39.txt')
-  if (!r.ok) throw new Error('the wordlist is not reachable')
-  return (await r.text()).split('\n').filter(Boolean)
-}
-
-// The pairing, device and revocation link. Messages the relay pushes (a revocation list, an
-// approval) reach the handler; the awaited ones are read one by one.
-function idLink(onPush) {
-  const ws = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/_relay/identity')
-  const waiters = []
-  ws.onmessage = (e) => {
-    const m = JSON.parse(e.data)
-    const w = waiters.shift()
-    if (w) w(m)
-    else if (onPush) onPush(m)
-  }
-  return new Promise((resolve, reject) => {
-    ws.onopen = () => resolve({ send: (m) => ws.send(JSON.stringify(m)), recv: () => new Promise((r) => waiters.push(r)) })
-    ws.onerror = () => reject(new Error('the relay is not reachable'))
-  })
-}
-
-// The day-to-day unlock: the records of this origin, each opened by its own passkey. The salt
-// must be known before the passkey is asked (it is the input of the PRF), so the records are
-// read first.
-async function unlock() {
-  status(words.unlock)
-  for (const r of await id.list(db)) {
-    try {
-      const p = await id.passkey(r, false)
-      const seed = await id.open(p.prf, r.device)
-      rec = r
-      key = await id.keyFromSeed(seed, false)
-      account = r.account ?? ''
-      rec.fp = await id.fingerprint(r.key, await wordlist())
-      show()
-      return rec
-    } catch {
-      // Another device of this profile, or the passkey was dismissed.
-    }
-  }
-  return null
 }
 
 // The revocation list is checked against the pinned account before it is believed: the relay
@@ -165,54 +117,18 @@ async function applyRevocations(l) {
   return ''
 }
 
-// Pairing with the phrase, on a computer. The phrase is used once here and never stored:
-// only the wrapped device seed, the account id and the certificate the account key signed.
-// A device that knows the phrase is an admin: it holds the account key, wrapped the same way.
-async function pairWithPhrase(phrase) {
-  const wl = await wordlist()
-  const err = await id.validatePhrase(phrase, wl)
-  if (err) return fail(err)
-  const seed = await id.bip39Seed(phrase)
-  const accountSeed = await id.hkdf(seed, id.InfoAccount)
-  const deviceSeed = await id.hkdf(seed, id.InfoDevice)
-  const accountId = await id.publicFromSeed(accountSeed)
-  const deviceId = await id.publicFromSeed(deviceSeed)
-  rec = id.newRecord(deviceId)
-  const p = await id.passkey(rec, true)
-  rec.id = p.id
-  rec.account = accountId
-  rec.fp = await id.fingerprint(deviceId, wl)
-  rec.device = await id.seal(p.prf, deviceSeed)
-  rec.accountSeed = await id.seal(p.prf, accountSeed)
-  rec.cert = await signCert(rec, accountId, deviceId, deviceName(), p.prf)
-  await id.save(db, deviceId, rec)
-  key = await id.keyFromSeed(deviceSeed, false)
-  account = accountId
-  show()
-  status(`${words.paired} <b>${rec.fp}</b>`)
-  return ''
-}
-
-async function signCert(rec, accountId, deviceId, name, prf) {
-  const c = { v: 1, account: accountId, key: deviceId, name, kind: id.KindBrowser, created: Math.floor(Date.now() / 1000), scope: id.ScopeAll }
-  const accountKey = await id.keyFromSeed(await id.open(prf, rec.accountSeed), true)
-  c.sig = await id.sign(accountKey, id.canonicalCert(c))
-  return c
-}
-
 // Joining by an invite link (#join=<code>), usually opened by a phone from the QR. The device
 // makes its own key, shows its fingerprint, posts the key to the code and waits for the
 // approval. The certificate that comes back must verify against the account it names: the
 // relay cannot sign one, so a signature that does not match is a swapped key.
-async function joinFlow(code) {
-  const wl = await wordlist()
+async function joinFlow(code, wl) {
   const deviceSeed = crypto.getRandomValues(new Uint8Array(32))
   const deviceId = await id.publicFromSeed(deviceSeed)
   rec = id.newRecord(deviceId)
   rec.fp = await id.fingerprint(deviceId, wl)
   show()
   status(`${words.device} <b>${rec.fp}</b><br><span class="small">${words.compare}</span>`)
-  const l = await idLink()
+  const l = await id.link()
   l.send({ type: 'register', account: '', name: deviceName() })
   const ready = await l.recv()
   if (ready.type === 'error') return fail(ready.message)
@@ -226,11 +142,11 @@ async function joinFlow(code) {
   if (!c) return fail('the approval did not come')
   const err = await id.verifyCert(c, c.account, null)
   if (err) return fail(err)
-  const p2 = await id.passkey(rec, true)
-  rec.id = p2.id
+  const prf = await id.passkey(rec, true)
+  rec.id = prf.id
   rec.account = c.account
   rec.cert = c
-  rec.device = await id.seal(p2.prf, deviceSeed)
+  rec.device = await id.seal(prf.prf, deviceSeed)
   await id.save(db, deviceId, rec)
   key = await id.keyFromSeed(deviceSeed, false)
   account = c.account
@@ -246,8 +162,18 @@ function showPhraseForm() {
   input.placeholder = words.phrase // the bootstrap page has its own words, not the app catalog
   f.onkeydown = async (e) => {
     if (e.key !== 'Enter' || !e.target.value.trim()) return
-    const err = await pairWithPhrase(e.target.value.trim())
-    if (!err) await connect('cert')
+    try {
+      const d = await id.enroll(db, e.target.value.trim(), await wordlist(), deviceName(), id.KindBrowser)
+      rec = d.rec
+      rec.fp = await id.fingerprint(rec.key, await wordlist())
+      key = d.key
+      account = rec.account
+      show()
+      status(`${words.paired} <b>${rec.fp}</b>`)
+      await connect('cert')
+    } catch (err) {
+      fail(err.message)
+    }
   }
 }
 
@@ -269,18 +195,26 @@ async function main() {
   if (!pod) return fail(words.nopod)
   status('<div class="spin"></div>' + words.connecting + ' <b>' + pod + '</b>')
   db = await id.openStore()
+  const wl = await wordlist()
 
   if (join) {
-    const err = await joinFlow(join)
+    const err = await joinFlow(join, wl)
     if (err) return
-  } else if (!(await unlock())) {
-    // Nothing paired on this origin: the token mode is tried, and a paired pod refuses it.
-    if (!token) return showPhraseForm()
+  } else {
+    const d = await id.unlock(db)
+    if (d) {
+      rec = d.rec
+      rec.fp = await id.fingerprint(rec.key, wl)
+      key = d.key
+      account = rec.account ?? ''
+      show()
+    } else if (!token) {
+      // Nothing paired on this origin and no token: the phrase form is the only way in.
+      return showPhraseForm()
+    }
   }
 
-  const l = await idLink((m) => {
-    if (m.type === 'revocations' && m.list) revoked = m.list
-  })
+  const l = await id.link((m) => { if (m.type === 'revocations' && m.list) revoked = m.list })
   if (account) {
     const err = await applyRevocations(l)
     if (err) return

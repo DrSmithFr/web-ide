@@ -247,6 +247,20 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.serveWS(w, r)
 		return
 	}
+	// The identity module, the wordlist and the pairing link: the app runs on the pod origin
+	// and imports the same file the bootstrap page loads from the relay.
+	if r.URL.Path == "/_relay/identity.js" {
+		s.serveIdentityModule(w, r)
+		return
+	}
+	if r.URL.Path == "/_relay/bip39.txt" {
+		s.serveWordlist(w, r)
+		return
+	}
+	if r.URL.Path == "/_relay/identity" {
+		s.serveIdentityLink(w, r)
+		return
+	}
 	if strings.HasPrefix(r.URL.Path, hfcache.Prefix) && s.Models != nil {
 		s.Models.ServeHTTP(w, r)
 		return
