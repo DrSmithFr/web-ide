@@ -127,6 +127,7 @@ func (s *Store) SaveRevocations(r *identity.Revocations) (bool, error) {
 		if _, err := s.db.Exec("INSERT INTO accounts (id, revocations, seq) VALUES (?,?,?)", r.Account, jsonQuote(r), r.Seq); err != nil {
 			return false, err
 		}
+		s.dropRevokedPush(r.Account, r.Revoked)
 		return true, nil
 	}
 	if err != nil {
@@ -138,6 +139,7 @@ func (s *Store) SaveRevocations(r *identity.Revocations) (bool, error) {
 	if _, err := s.db.Exec("UPDATE accounts SET revocations=?, seq=? WHERE id=?", jsonQuote(r), r.Seq, r.Account); err != nil {
 		return false, err
 	}
+	s.dropRevokedPush(r.Account, r.Revoked)
 	return true, nil
 }
 

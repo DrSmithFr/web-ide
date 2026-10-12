@@ -63,6 +63,8 @@ func main() {
 	turnPort := flag.Int("turn-port", 0, "relay: the STUN/TURN control port (default 3478)")
 	turnIP := flag.String("turn-ip", "", "relay: the STUN/TURN IP given to clients (default: the machine IP)")
 	tlsPort := flag.Int("tls-port", 0, "relay: the TLS port shared with HTTPS and TURN over TLS (default 443; below 1024 needs root)")
+	pushSubject := flag.String("push-subject", "", "relay: the contact of the Web Push (VAPID) claims, mailto: or https:")
+	pushTest := flag.String("push-test-endpoint", "", "relay: also allow the push endpoints under this prefix (tests only)")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 	if *name != "" {
@@ -81,7 +83,7 @@ func main() {
 		if *static != "" {
 			app = os.DirFS(*static)
 		}
-		runRelayCmd(flagValue(flag.CommandLine, "data", ""), *addr, *turnPort, *turnIP, *tlsPort, app)
+		runRelayCmd(flagValue(flag.CommandLine, "data", ""), *addr, *turnPort, *turnIP, *tlsPort, app, *pushSubject, *pushTest)
 		return
 	}
 	if len(flag.Args()) > 0 && flag.Arg(0) == "pair" {
@@ -424,8 +426,9 @@ func flagValue(fs *flag.FlagSet, name, def string) string {
 }
 
 // runRelayCmd runs the relay server subcommand until interrupted.
-func runRelayCmd(dataDir string, addr string, turnPort int, turnIP string, tlsPort int, app fs.FS) {
+func runRelayCmd(dataDir string, addr string, turnPort int, turnIP string, tlsPort int, app fs.FS, pushSubject, pushTest string) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	check(relay.Run(ctx, relay.RelayConfig{DataDir: dataDir, Addr: addr, TurnPort: turnPort, AdvertiseIP: turnIP, TLSPort: tlsPort, App: app}))
+	check(relay.Run(ctx, relay.RelayConfig{DataDir: dataDir, Addr: addr, TurnPort: turnPort, AdvertiseIP: turnIP, TLSPort: tlsPort, App: app,
+		PushSubject: pushSubject, PushTestEndpoint: pushTest}))
 }

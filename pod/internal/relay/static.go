@@ -48,6 +48,9 @@ func (s *Server) Handler() http.Handler {
 	// format.
 	mux.HandleFunc("/_relay/identity.js", staticJS(identity.ModuleJS()))
 	mux.HandleFunc("/_relay/bip39.txt", s.serveWordlist)
+	mux.HandleFunc("/_relay/push/key", s.servePushKey)
+	mux.HandleFunc("/_relay/push/subscribe", s.servePushSubscribe)
+	mux.HandleFunc("/_relay/push/unsubscribe", s.servePushUnsubscribe)
 	mux.HandleFunc("/sw.js", staticJS(swJS))
 	for p := range appFiles {
 		mux.HandleFunc(p, s.serveAppFile)

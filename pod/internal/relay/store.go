@@ -18,8 +18,8 @@ import (
 
 // dbVersion 2 adds the identity tables (accounts, devices, pairings), see accounts.go and
 // pairing.go. The relay stores certificates and signed revocation lists, never a private key
-// or the phrase.
-const dbVersion = 2
+// or the phrase. Version 3 adds the push subscriptions (push_store.go).
+const dbVersion = 3
 
 type Pod struct {
 	ID       string
@@ -92,6 +92,9 @@ func migrate(db *sql.DB) error {
 			return err
 		}
 		if err := migrateIdentity(db); err != nil {
+			return err
+		}
+		if err := migratePush(db); err != nil {
 			return err
 		}
 		if _, err := db.Exec(fmt.Sprintf("PRAGMA user_version = %d", dbVersion)); err != nil {

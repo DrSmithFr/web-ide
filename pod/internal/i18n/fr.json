@@ -242,5 +242,9 @@
   "no pairing request with this code": "aucune demande d'appairage avec ce code",
   "the certificate is not for the device of this request": "le certificat n'est pas pour l'appareil de cette demande",
   "the joining pod does not answer": "le pod qui rejoint ne répond pas",
-  "the joining pod refused the certificate": "le pod qui rejoint a refusé le certificat"
+  "the joining pod refused the certificate": "le pod qui rejoint a refusé le certificat",
+  "push notifications are off on this relay": "les notifications push sont désactivées sur ce relay",
+  "this push service is not allowed": "ce service de push n'est pas autorisé",
+  "the request is too old": "la requête est trop ancienne",
+  "the signature does not match": "la signature ne correspond pas"
 }
