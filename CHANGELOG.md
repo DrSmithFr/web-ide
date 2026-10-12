@@ -4,8 +4,15 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-10-12
+
 ### Added
 
+- Remote access through a relay (`web-ide-pod relay`, open source and self-hostable): signaling, STUN and TURN (also over TLS on 443), a bootstrap page and a Service Worker. A pod started with `-relay` keeps one outbound WebSocket to it, with no port to open; from any browser on another network, the app, its terminals, its file transfers and the app previews come from the pod over WebRTC DataChannels, end to end encrypted. The token is proved inside the tunnel, bound to both DTLS fingerprints, and never reaches the relay. Settings > Remote access shows the link and its state.
+- Accounts without e-mail or password: `web-ide-pod pair create` makes a 24-word recovery phrase, shown once (numbered) and never stored, with three words asked back; `pair restore`, `pair join` (a code, a terminal QR and a 4-word fingerprint), `pair status`. Each pod and each browser has its own device key and a certificate signed by the account key; every connection is a mutual proof between two certificates, so a relay that swaps an offer is refused.
+- Settings > Remote access > Devices: pair a browser with the phrase (its keys unlocked by a passkey, WebAuthn PRF; recent browsers only), list the devices of the account with their fingerprint, approve a pairing request, invite a phone by QR, revoke a device (a signed list, checked by every pod).
+- The pods of one account find each other on the local network with no relay: mDNS, or an address typed in Settings > Remote access > Local network. The home page shows one Projects block per pod of the account; its projects open through this pod, their page and terminals coming from the pod that holds them. A paired pod opens a LAN port (`:4436`, `-lan`); only the pods of the account are listed, each one proving its certificate bound to the TLS link.
+- Pairing and revocation without a relay: `pair join` waits on the LAN and is approved in Devices on `localhost`, `pair join --phrase` joins under its own key, `pair revoke <key>` signs a list from the phrase typed. A revocation spreads from pod to pod and reaches the relay as soon as a pod of the account does.
 - Markdown files open rendered in the editor: a floating button at the top right (or Alt+M) shows the source and back at about the same place, a double-click on a block shows its line in the source. Links open the files of the project, anchors scroll to their heading, images of the project are shown.
 
 ### Changed

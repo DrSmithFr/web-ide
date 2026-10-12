@@ -167,6 +167,16 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			pc.send(sigMsg{Type: "ready", Account: m.Account, List: list})
+		case "revocations":
+			// A pod holds a newer list than the relay (made offline by the pair command, or
+			// received from a pod of the LAN): kept only when signed by the account of the pod
+			// with a higher seq, then pushed to the other devices.
+			if m.List == nil || pc.account == "" || m.List.Account != pc.account {
+				continue
+			}
+			if kept, err := s.store.SaveRevocations(m.List); err == nil && kept {
+				s.pushRevocations(pc.account, m.List, nil)
+			}
 		case "answer":
 			if bc := s.browserOf(m.Session); bc != nil {
 				bc.send(sigMsg{Type: "answer", Session: m.Session, SDP: m.SDP})

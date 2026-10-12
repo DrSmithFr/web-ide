@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -22,6 +23,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/hfcache"
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 	"github.com/DrSmithFr/web-ide/pod/internal/keeper"
+	"github.com/DrSmithFr/web-ide/pod/internal/lan"
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 	"github.com/DrSmithFr/web-ide/pod/internal/pair"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
@@ -53,6 +55,9 @@ func main() {
 	publicURL := flag.String("public-url", "", "address the IDE is opened at, for the links given to Claude Code (default: config.json, else http://<addr>)")
 	static := flag.String("static", "", "serve the front end from this folder instead of the embedded one")
 	keeperPath := flag.String("keeper", "", "socket of the keeper that runs the terminals (default: <data>/keeper.sock when it answers; off: the pod runs them)")
+	name := flag.String("name", "", "name of this pod, shown to the other devices of the account (default: the host name)")
+	mdns := flag.Bool("mdns", true, "find the other pods of the account on the LAN by mDNS (false: the addresses typed in Settings only)")
+	lanAddr := flag.String("lan", "", "listen address of the link to the other pods of the account on the LAN (default: config.json, else "+lan.DefaultAddr+"; off: none)")
 	relay := flag.String("relay", "", "relay URL the pod registers with (wss:// or ws://), or the word relay to enable")
 	forceTurn := flag.Bool("force-turn", false, "force the browser through TURN (no direct or STUN path)")
 	turnPort := flag.Int("turn-port", 0, "relay: the STUN/TURN control port (default 3478)")
@@ -60,6 +65,9 @@ func main() {
 	tlsPort := flag.Int("tls-port", 0, "relay: the TLS port shared with HTTPS and TURN over TLS (default 443; below 1024 needs root)")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
+	if *name != "" {
+		podName = *name
+	}
 	if *showVersion {
 		fmt.Println(version)
 		return
@@ -81,9 +89,15 @@ func main() {
 		if *relay != "" && *relay != "relay" {
 			relayURL = strings.TrimSuffix(*relay, "/")
 		}
+		lanListen := cfg.LAN.Addr
+		if *lanAddr != "" {
+			lanListen = *lanAddr
+		}
 		check(pair.Run(&pair.Env{
 			Dir:      st.Dir(),
 			RelayURL: relayURL,
+			LANAddr:  lanListen,
+			MDNS:     *mdns,
 			Name:     hostname(),
 			In:       os.Stdin,
 			Out:      os.Stdout,
@@ -147,6 +161,25 @@ func main() {
 	// relay.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	// The pod identity: its device key and the account it pinned. An unpaired pod has a key
+	// but no account and stays in token mode. The relay link and the LAN link share it.
+	podID, err := identity.Open(st.Dir())
+	check(err)
+	if *lanAddr != "" {
+		cfg.LAN.Addr = *lanAddr
+	}
+	// A newer revocation list reached over the LAN goes on to the relay.
+	var relayCli atomic.Pointer[relayclient.Client]
+	pushRevocations := func(r *identity.Revocations) {
+		if c := relayCli.Load(); c != nil {
+			c.PushRevocations(r)
+		}
+	}
+	if cfg.LAN.Addr != "off" {
+		if m := startLAN(ctx, st, cfg, srv, podID, *mdns, pushRevocations); m != nil {
+			srv.LAN = m
+		}
+	}
 	remote := ""
 	if cfg.RelayURL != "" {
 		ids, err := config.Relay(st)
@@ -156,11 +189,6 @@ func main() {
 		srv.RelayStatus = func() server.RelayInfo {
 			return server.RelayInfo{URL: cfg.RelayURL, PodID: ids.PodID, Link: relayLink(cfg.RelayURL, ids.PodID, token), State: state.Load().(string)}
 		}
-		// The pod identity: its device key and the account it pinned. An unpaired pod has a
-		// key but no account and stays in token mode.
-		podID, err := identity.Open(st.Dir())
-		check(err)
-
 		// The sync loop: the settings of the pods of one account, and the vault when it is
 		// switched on. Only a paired pod syncs — it needs an account, a device key to sign its
 		// writes, and the wrap an admin made for it. The sources read the files the pod already
@@ -192,6 +220,7 @@ func main() {
 				srv.Broadcast("relay.changed", srv.RelayStatus())
 			},
 		})
+		relayCli.Store(cli)
 		go func() { _ = cli.Run(ctx) }()
 		remote = relayLink(cfg.RelayURL, ids.PodID, token)
 	}
@@ -217,6 +246,40 @@ func main() {
 	}
 }
 
+// startLAN runs the link to the other pods of the account on the local network: the LAN
+// port, mDNS, and one gateway port per pod found, on the host of the pod address.
+func startLAN(ctx context.Context, st *store.Store, cfg *config.Config, srv *server.Server, podID *identity.PodIdentity, mdns bool, onRevocations func(*identity.Revocations)) *lan.Manager {
+	host, port, _ := net.SplitHostPort(cfg.Addr)
+	homePort, _ := strconv.Atoi(port)
+	m, err := lan.New(lan.Config{
+		Dir:         st.Dir(),
+		Addr:        cfg.LAN.Addr,
+		Identity:    podID,
+		Name:        hostname(),
+		Version:     version,
+		Handler:     http.HandlerFunc(srv.ServeTrusted),
+		Allow:       srv.LANAllowed,
+		GatewayHost: host,
+		HomePort:    homePort,
+		Peers:       cfg.LAN.Peers,
+		SavePeers: func(peers []string) error {
+			cfg.LAN.Peers = peers
+			return cfg.Save(st)
+		},
+		OnChange:      srv.LANChanged,
+		OnRevocations: onRevocations,
+	})
+	if err != nil {
+		log.Printf("lan: %v", err)
+		return nil
+	}
+	if mdns {
+		m.SetResolver(lan.MDNS{})
+	}
+	m.Start(ctx)
+	return m
+}
+
 // relayLink is the address the user opens from another network: the relay, the pod, the
 // token. The token is in the hash so it is not sent to the relay.
 func relayLink(relayURL, podID, token string) string {
@@ -228,7 +291,13 @@ func relayLink(relayURL, podID, token string) string {
 	return u.String() + "#pod=" + podID + "&t=" + token
 }
 
+// podName is the name of the pod (-name), the host name by default.
+var podName string
+
 func hostname() string {
+	if podName != "" {
+		return podName
+	}
 	h, err := os.Hostname()
 	if err != nil {
 		return ""

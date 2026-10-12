@@ -80,6 +80,20 @@ Le pod stocke seulement sa propre clé (`~/.web-ide/device.key`, 0600) et son ce
 
 Navigateurs récents seulement : WebCrypto Ed25519 et la PRF de WebAuthn sont nécessaires, sans solution de repli. Une clé d'accès est liée à une origine, donc `localhost`, l'adresse du tailnet et le relay sont des appareils séparés, chacun inscrit une fois avec la phrase — et WebAuthn refuse une adresse IP, donc ouvrez le pod sur `localhost` pour déverrouiller un appareil (le panneau donne le lien). Révoquer un appareil depuis le panneau signe une nouvelle liste : le relay la stocke et la pousse aux pods en ligne, qui refusent l'appareil révoqué à sa prochaine connexion.
 
+#### Les autres pods du même réseau, sans relay
+
+Les pods appariés à un même compte se trouvent seuls sur le réseau local, sans relay ni internet : chaque pod apparié ouvre un port réseau local (`:4436`, `-lan` ou `lan.addr` dans `config.json`, `-lan off` pour le fermer) et s'annonce par mDNS. La page d'accueil montre alors un bloc *Projets* par pod du compte ; un projet d'un autre pod s'ouvre par un port que ce pod lui réserve, donc sa page et ses terminaux viennent du pod qui le détient (*← Retour à …* ramène à l'accueil). Seuls les pods du compte sont listés : chacun prouve son certificat, lié aux certificats TLS du lien, et un pod révoqué est refusé et retiré. Un pod non apparié n'ouvre aucun port réseau local.
+
+Quand mDNS ne trouve pas un pod (autre sous-réseau, multicast bloqué), tapez son adresse (`192.168.1.20:4436`) dans Réglages > Accès distant > Réseau local ; la raison de l'échec d'une adresse s'affiche à côté.
+
+```sh
+web-ide-pod pair join            # sans relay : attend sur le réseau local, approuvez-le dans Appareils sur localhost
+web-ide-pod pair join --phrase   # pas d'administrateur sous la main : la phrase tapée, le pod garde sa propre clé
+web-ide-pod pair revoke <clé>    # la phrase tapée : la liste passe de pod en pod
+```
+
+Sans relay, le panneau Appareils (sur `localhost`) est servi par le pod lui-même : il liste les appareils qu'il connaît, montre les pods qui attendent sur le réseau local avec leur empreinte, et transmet une révocation aux autres pods. Une liste faite hors ligne part vers le relay dès qu'un pod du compte l'atteint, donc une révocation plus tardive ne l'annule jamais. Inviter un téléphone par QR demande toujours le relay.
+
 ### Depuis les sources
 
 ```sh

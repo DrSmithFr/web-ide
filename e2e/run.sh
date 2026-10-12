@@ -1,15 +1,88 @@
 #!/usr/bin/env bash
 # Browser tests: builds nothing, uses ../bin/web-ide-pod and the front in ../pod/webdist/dist.
 # Each suite gets a fresh pod (temporary data and workspace); suites ending with "+" reuse
-# the pod of the previous one (session restore tests). Usage: ./run.sh [suite...]
+# the pod of the previous one (session restore tests). Usage: ./run.sh [-j N] [suite...]
+# -j N (or E2E_JOBS): N workers run the suites in parallel, each one with its own temporary
+# folder and block of ports (default: a quarter of the CPUs, 8 at most; -j 1: one by one).
 set -u
 cd "$(dirname "$0")"
 ROOT=$(cd .. && pwd)
-SUITES=("$@")
-[ ${#SUITES[@]} -eq 0 ] && SUITES=(editing editor features restore+ keyboard mousenav popups commands git projects explorer lsp llm agent chat plan doodle kanban kanbanai kanbangit docker tunnels preview subagents orchestrator mobile i18n speech perf keeper relay identity)
+SUITES=()
+JOBS=${E2E_JOBS:-}
+while [ $# -gt 0 ]; do
+  case $1 in
+    -j) JOBS=$2; shift 2 ;;
+    -j*) JOBS=${1#-j}; shift ;;
+    *) SUITES+=("$1"); shift ;;
+  esac
+done
+# The longest first: the workers end together.
+[ ${#SUITES[@]} -eq 0 ] && SUITES=(kanban chat features restore+ docker lan identity keeper doodle speech relay preview git editor agent llm subagents orchestrator kanbanai editing lsp mousenav kanbangit commands projects popups keyboard mobile tunnels explorer plan i18n perf)
 [ -d node_modules/playwright-core ] || npm install --no-audit --no-fund >/dev/null
+if [ -z "$JOBS" ]; then JOBS=$(($(nproc) / 4)); [ "$JOBS" -gt 8 ] && JOBS=8; [ "$JOBS" -lt 1 ] && JOBS=1; fi
+# wait -n -p needs bash 5.1.
+((BASH_VERSINFO[0] * 100 + BASH_VERSINFO[1] >= 501)) || JOBS=1
+
+# Parallel: the suites are cut into chains (a suite and the "+" ones following it), each chain
+# runs as ./run.sh -j 1 in a worker; perf runs alone at the end, its measures need a quiet machine.
+if [ "$JOBS" -gt 1 ]; then
+  CHAINS=() SOLO=()
+  for s in "${SUITES[@]}"; do
+    if [[ $s == *+ ]] && [ ${#CHAINS[@]} -gt 0 ]; then CHAINS[-1]+=" $s"
+    elif [ "$s" = perf ]; then SOLO+=("$s")
+    else CHAINS+=("$s"); fi
+  done
+fi
+if [ "$JOBS" -gt 1 ] && [ $((${#CHAINS[@]} + ${#SOLO[@]})) -gt 1 ]; then
+  OUTS=$(mktemp -d)
+  # Ports of worker k: E2E_PORT_BASE + 100k (pod), +1 (relay), +2 (TURN), +20 (LAN; the lan
+  # suite takes up to +60 for its other pods). Below the ephemeral range of the listen(0).
+  BASE=${E2E_PORT_BASE:-21000}
+  declare -A SLOT NAME START
+  FREE=($(seq 0 $((JOBS - 1))))
+  FAILED=()
+  T0=$SECONDS
+  # Each worker in its own process group: an interrupt stops its pods, browsers and suites.
+  set -m
+  stop_all() { for p in "${!SLOT[@]}"; do kill -TERM -- "-$p" 2>/dev/null; done; wait; rm -rf "$OUTS"; exit 130; }
+  trap stop_all INT TERM
+  launch() {
+    local slot=${FREE[0]} name=${1%% *} port
+    FREE=("${FREE[@]:1}")
+    port=$((BASE + 100 * slot))
+    E2E_PORT=$port E2E_RELAY_PORT=$((port + 1)) E2E_TURN_PORT=$((port + 2)) E2E_LAN_PORT=$((port + 20)) \
+      E2E_POD_LOG="/tmp/web-ide-e2e-$name.pod.log" ./run.sh -j 1 $1 >"$OUTS/$name.log" 2>&1 </dev/null &
+    SLOT[$!]=$slot NAME[$!]=$1 START[$!]=$SECONDS
+  }
+  reap() {
+    local pid st
+    wait -n -p pid; st=$?
+    FREE+=("${SLOT[$pid]}")
+    if [ $st -eq 0 ]; then printf '  ok    %3ds  %s\n' $((SECONDS - START[$pid])) "${NAME[$pid]}"
+    else printf '  FAIL  %3ds  %s\n' $((SECONDS - START[$pid])) "${NAME[$pid]}"; FAILED+=("${NAME[$pid]%% *}"); fi
+    unset "SLOT[$pid]" "NAME[$pid]" "START[$pid]"
+  }
+  echo "e2e: ${#CHAINS[@]} chains on $JOBS workers${SOLO[*]:+, then ${SOLO[*]} alone}"
+  for c in "${CHAINS[@]}"; do
+    [ ${#FREE[@]} -eq 0 ] && reap
+    launch "$c"
+  done
+  while [ ${#SLOT[@]} -gt 0 ]; do reap; done
+  for c in ${SOLO[@]+"${SOLO[@]}"}; do launch "$c"; reap; done
+  for f in ${FAILED[@]+"${FAILED[@]}"}; do
+    echo; echo "======== $f"; cat "$OUTS/$f.log"
+  done
+  rm -rf "$OUTS"
+  echo "e2e: $((SECONDS - T0))s"
+  [ ${#FAILED[@]} -eq 0 ] && { echo "e2e: all passed"; exit 0; }
+  echo "e2e: failures: ${FAILED[*]}"; exit 1
+fi
+
 PORT=${E2E_PORT:-4519}
 RELAY_PORT=${E2E_RELAY_PORT:-4430}
+LAN_PORT=${E2E_LAN_PORT:-4520}
+# Not the default 3478: the Go tests of the relay bind that one, and may run meanwhile.
+TURN_PORT=${E2E_TURN_PORT:-3479}
 MODELS=${E2E_MODELS:-$HOME/.cache/web-ide-e2e/models}
 TMP=$(mktemp -d)
 KEEPER_PID=
@@ -41,7 +114,7 @@ start_relay() {
   mkdir -p "$TMP/relaydata"
   # TURN on loopback: without -turn-ip the relay advertises the machine IP, and Chromium
   # filters candidates it cannot reach; the suite asserts the pair is a relay one.
-  "$ROOT/bin/web-ide-pod" -data "$TMP/relaydata" -addr "127.0.0.1:$RELAY_PORT" -turn-ip 127.0.0.1 relay >"$TMP/relay.log" 2>&1 </dev/null &
+  "$ROOT/bin/web-ide-pod" -data "$TMP/relaydata" -addr "127.0.0.1:$RELAY_PORT" -turn-ip 127.0.0.1 -turn-port "$TURN_PORT" relay >"$TMP/relay.log" 2>&1 </dev/null &
   RELAY_PID=$!
   export E2E_RELAY_PID=$RELAY_PID
   for _ in $(seq 50); do curl -s -o /dev/null "http://127.0.0.1:$RELAY_PORT/" && break; sleep 0.1; done
@@ -52,6 +125,9 @@ start_pod() {
   EXTRA=()
   # The identity suite pairs the pod with the CLI, so its pod must reach the relay too.
   if [ "${1:-}" = relay ] || [ "${1:-}" = identity ]; then EXTRA=(-relay "http://127.0.0.1:$RELAY_PORT" -force-turn); fi
+  # The LAN link only in its suite, on loopback and with the addresses typed (no mDNS): a
+  # paired pod of another suite must not take the port of the IDE's own pod.
+  if [ "${1:-}" = lan ]; then EXTRA+=(-lan "127.0.0.1:$LAN_PORT" -mdns=false -name alpha); else EXTRA+=(-lan off); fi
   mkdir -p "$TMP/ws" "$TMP/data" "$MODELS"
   # Speech models are kept between runs (downloaded once from Hugging Face).
   ln -s "$MODELS" "$TMP/data/models"
@@ -92,6 +168,7 @@ EOF
   bash "$TMP/launch-pod.sh"
 }
 export E2E_URL="http://127.0.0.1:$PORT" E2E_WS="$TMP/ws" E2E_OUT="${E2E_OUT:-$TMP}" E2E_RESTART_POD="$TMP/restart-pod.sh" E2E_DATA="$TMP/data"
+export E2E_LAN_PORT="$LAN_PORT" E2E_TURN_PORT="$TURN_PORT" E2E_TMP="$TMP"
 export E2E_RELAY_URL="http://127.0.0.1:$RELAY_PORT" E2E_RELAY_PORT="$RELAY_PORT" E2E_RELAY_DATA="$TMP/relaydata" E2E_BIN="$ROOT/bin/web-ide-pod"
 mkdir -p "$E2E_OUT"
 status=0
@@ -109,5 +186,6 @@ for s in "${SUITES[@]}"; do
   echo "== $s"
   node "suites/$s.cjs" || status=1
 done
-[ $status -eq 0 ] && echo "e2e: all passed" || { echo "e2e: failures (pod log: /tmp/web-ide-e2e-pod.log)"; cp "$TMP/pod.log" /tmp/web-ide-e2e-pod.log 2>/dev/null; }
+POD_LOG=${E2E_POD_LOG:-/tmp/web-ide-e2e-pod.log}
+[ $status -eq 0 ] && echo "e2e: all passed" || { echo "e2e: failures (pod log: $POD_LOG)"; cp "$TMP/pod.log" "$POD_LOG" 2>/dev/null; }
 exit $status

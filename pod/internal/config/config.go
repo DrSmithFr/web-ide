@@ -21,6 +21,16 @@ type Config struct {
 	PublicURL string `json:"publicUrl,omitempty"`
 	// RelayURL is the relay the pod registers with (a ws:// or wss:// URL); empty: no relay.
 	RelayURL string `json:"relayUrl,omitempty"`
+	// LAN is the link to the other pods of the account on the local network.
+	LAN LAN `json:"lan,omitzero"`
+}
+
+// LAN configures the LAN link of a paired pod.
+type LAN struct {
+	// Addr is the listen address of the LAN port (default :4436; "off": no LAN link).
+	Addr string `json:"addr,omitempty"`
+	// Peers are addresses (host:port) typed by hand, for a network where mDNS fails.
+	Peers []string `json:"peers,omitempty"`
 }
 
 func Load(st *store.Store) (*Config, error) {

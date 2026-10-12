@@ -80,6 +80,20 @@ The pod stores only its own key (`~/.web-ide/device.key`, 0600) and its certific
 
 Recent browsers only: WebCrypto Ed25519 and the WebAuthn PRF are required, with no fallback. A passkey is tied to an origin, so `localhost`, the tailnet address and the relay are separate devices, each enrolled once with the phrase — and WebAuthn refuses an IP address, so open the pod on `localhost` to unlock a device (the panel gives the link). Revoking a device from the panel signs a new list: the relay stores it and pushes it to the online pods, which refuse the revoked device at its next connection.
 
+#### Other pods on the same network, with no relay
+
+The pods paired with one account find each other on the local network by themselves, with no relay and no internet: each paired pod opens a LAN port (`:4436`, `-lan` or `lan.addr` in `config.json`, `-lan off` to close it) and announces itself by mDNS. The home page then shows one *Projects* block per pod of the account; a project of another pod opens through a port this pod keeps for it, so its page and its terminals come from the pod that holds it (*← Back to …* leads home). Only the pods of the account are listed: each one proves its certificate, bound to the TLS certificates of the link, and a revoked pod is refused and dropped. An unpaired pod opens no LAN port at all.
+
+When mDNS does not find a pod (another subnet, multicast blocked), type its address (`192.168.1.20:4436`) in Settings > Remote access > Local network; the reason an address fails is shown next to it.
+
+```sh
+web-ide-pod pair join            # no relay: waits on the LAN, approve it in Devices on localhost
+web-ide-pod pair join --phrase   # no admin around: the phrase typed, the pod keeps its own key
+web-ide-pod pair revoke <key>    # the phrase typed: the list spreads from pod to pod
+```
+
+With no relay, the Devices panel (on `localhost`) is answered by the pod itself: it lists the devices it knows, shows the pods waiting to join on the LAN with their fingerprint, and passes a revocation on to the other pods. A list made offline goes to the relay as soon as a pod of the account reaches it, so a later revocation never undoes it. Inviting a phone by QR still needs the relay.
+
 ### From the sources
 
 ```sh

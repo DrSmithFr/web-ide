@@ -16,6 +16,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -39,12 +40,16 @@ type Env struct {
 	Entropy []byte
 	// Timeout bounds the wait for an approval (default 5 min).
 	Timeout time.Duration
+	// LANAddr is the LAN listen address of the pod: join waits there when there is no relay.
+	LANAddr string
+	// MDNS announces the request of join on the LAN (false: its address is typed by hand).
+	MDNS bool
 }
 
 // Run dispatches one call of the subcommand: pair create | restore | join | status.
 func Run(env *Env, args []string) error {
 	if len(args) == 0 {
-		return errors.New("pair: create, restore, join or status")
+		return errors.New("pair: create, restore, join [--phrase], revoke <key> or status")
 	}
 	switch args[0] {
 	case "create":
@@ -52,7 +57,15 @@ func Run(env *Env, args []string) error {
 	case "restore":
 		return Restore(env)
 	case "join":
+		if len(args) > 1 && args[1] == "--phrase" {
+			return JoinWithPhrase(env)
+		}
 		return Join(env)
+	case "revoke":
+		if len(args) < 2 {
+			return errors.New("pair: revoke <device key>")
+		}
+		return Revoke(env, args[1])
 	case "status":
 		return Status(env)
 	default:
@@ -76,7 +89,7 @@ func Create(env *Env) error {
 		return err
 	}
 	fmt.Fprintln(env.Out, "Account phrase — shown once, never stored. Write it down:")
-	fmt.Fprintln(env.Out, phrase)
+	printPhrase(env.Out, phrase)
 	if err := confirm(env, phrase); err != nil {
 		return err
 	}
@@ -111,7 +124,7 @@ func Restore(env *Env) error {
 // it names, as it does for every peer.
 func Join(env *Env) error {
 	if env.RelayURL == "" {
-		return errors.New("pair: join needs a relay (-relay)")
+		return JoinLAN(env)
 	}
 	p, err := identity.Open(env.Dir)
 	if err != nil {
@@ -227,8 +240,21 @@ func (env *Env) positions() ([]int, error) {
 	return pos, nil
 }
 
+// printPhrase shows the words numbered, eight rows of three, so the user can write them down
+// and find the ones the check asks for.
+func printPhrase(w io.Writer, phrase string) {
+	words := strings.Fields(phrase)
+	for i := 0; i < len(words); i += 3 {
+		for j := i; j < i+3 && j < len(words); j++ {
+			fmt.Fprintf(w, "%2d) %-9s", j+1, words[j])
+		}
+		fmt.Fprintln(w)
+	}
+}
+
 // confirm asks three words of the phrase back. A wrong answer means the phrase was not
-// written down: nothing is stored.
+// written down: nothing is stored. The positions are sorted, so the words are typed in the
+// order they are numbered on the screen.
 func confirm(env *Env, phrase string) error {
 	words := strings.Fields(phrase)
 	pos, err := env.positions()
@@ -238,6 +264,7 @@ func confirm(env *Env, phrase string) error {
 	if len(pos) != 3 {
 		return errors.New("pair: the check asks three words")
 	}
+	sort.Ints(pos)
 	fmt.Fprint(env.Out, "Confirm — type word ")
 	for i, p := range pos {
 		if i > 0 {
@@ -315,15 +342,16 @@ func (env *Env) timeout() time.Duration {
 
 // msg is one message of the pairing link (the shape the relay reads on /_relay/identity).
 type msg struct {
-	Type    string         `json:"type"`
-	Account string         `json:"account,omitempty"`
-	Key     string         `json:"key,omitempty"`
-	Name    string         `json:"name,omitempty"`
-	Kind    string         `json:"kind,omitempty"`
-	Code    string         `json:"code,omitempty"`
-	Cert    *identity.Cert `json:"cert,omitempty"`
-	Pairing *pairing       `json:"pairing,omitempty"`
-	Message string         `json:"message,omitempty"`
+	Type    string                `json:"type"`
+	Account string                `json:"account,omitempty"`
+	Key     string                `json:"key,omitempty"`
+	Name    string                `json:"name,omitempty"`
+	Kind    string                `json:"kind,omitempty"`
+	Code    string                `json:"code,omitempty"`
+	Cert    *identity.Cert        `json:"cert,omitempty"`
+	Pairing *pairing              `json:"pairing,omitempty"`
+	List    *identity.Revocations `json:"list,omitempty"`
+	Message string                `json:"message,omitempty"`
 }
 
 type pairing struct {

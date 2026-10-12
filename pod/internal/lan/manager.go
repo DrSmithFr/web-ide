@@ -1,0 +1,790 @@
+package lan
+
+import (
+	"context"
+	"crypto/tls"
+	"encoding/json"
+	"errors"
+	"log"
+	"net"
+	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"sync"
+	"time"
+
+	"github.com/coder/websocket"
+
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
+	"github.com/DrSmithFr/web-ide/pod/internal/identity"
+	"github.com/DrSmithFr/web-ide/pod/internal/tunnel"
+)
+
+// DefaultAddr is the LAN listen address when config.json sets none.
+const DefaultAddr = ":4436"
+
+// Config of the LAN link of a pod.
+type Config struct {
+	Dir      string // the data folder: lan.crt, lan.key, lan.json
+	Addr     string // the listen address of the LAN port (":4436")
+	Identity *identity.PodIdentity
+	Name     string // told to the peers (the host name)
+	Version  string // the pod version, told to the peers
+	// Handler serves a request of a trusted peer as a request of the machine itself
+	// (server.ServeTrusted): the peer proved it is a device of the account.
+	Handler http.Handler
+	// Allow checks a request on a gateway port the way the pod checks its own page (the
+	// token cookie, which a browser sends to every port of the host).
+	Allow func(*http.Request) bool
+	// GatewayHost is the host the gateway ports listen on: the host of the pod address.
+	GatewayHost string
+	// HomePort is the port of the pod page, for the link back from a peer's page.
+	HomePort int
+	// Peers are the addresses typed by hand (host:port), for a network where mDNS fails.
+	Peers []string
+	// SavePeers stores the addresses typed by hand (config.json).
+	SavePeers func([]string) error
+	// Resolver finds and announces the pods by mDNS; nil: the addresses typed only.
+	Resolver Resolver
+	// OnChange is called when the peers change (the page refreshes its blocks).
+	OnChange func()
+	// OnRevocations is called with each newer revocation list the pod holds, whatever
+	// brought it (the relay link passes it on).
+	OnRevocations func(*identity.Revocations)
+	// Tick is the pace of the dial loop (default 2 s); Browse runs every 5 ticks.
+	Tick time.Duration
+}
+
+// Manager runs the LAN link of a pod: its listener, the control links with the peers, the
+// discovery and the gateway ports.
+type Manager struct {
+	cfg    Config
+	cert   tls.Certificate
+	fp     string // the fingerprint of our TLS certificate
+	limits *tunnel.RateLimiter
+	ctx    context.Context
+	port   int
+
+	mu        sync.Mutex
+	listen    string // the address actually listened on
+	listenErr string
+	listening bool
+	manual    []string
+	cands     map[string]*candidate     // by address
+	peers     map[string]*peer          // by device key
+	trusted   map[string]*trust         // by TLS fingerprint of a peer
+	joins     map[string]*joinReq       // joining pods, by address
+	browsers  map[string]*identity.Cert // certificates of the browsers of the Devices panel
+	idLinks   map[*idLink]bool          // the open links of the Devices panel
+	ports     map[string]int            // gateway port by device key (lan.json)
+	seq       int64                     // the seq of the last revocation list passed on
+	announced string                    // the account announced by mDNS
+	stopAnn   func()
+	// transports reach the peers, by the TLS fingerprint they pin.
+	transports map[string]*http.Transport
+}
+
+// candidate is an address a pod may answer at: typed by hand, found by mDNS, or given by a
+// pod that dialed us.
+type candidate struct {
+	sources map[string]bool // manual, mdns, inbound
+	next    time.Time
+	fails   int
+	err     string
+	self    bool
+	dialing bool
+	key     string // the device key of the pod that answered there
+}
+
+// peer is a pod of the account seen on the LAN during this run.
+type peer struct {
+	cert     *identity.Cert
+	name     string
+	version  string
+	links    map[*link]bool
+	out      *link // the link we dialed: the gateway goes through it
+	gw       *gateway
+	projects json.RawMessage
+}
+
+// trust counts the control links up with a peer TLS certificate.
+type trust struct {
+	cert  *identity.Cert
+	links int
+}
+
+// New prepares the LAN link; Start runs it.
+func New(cfg Config) (*Manager, error) {
+	if cfg.Addr == "" {
+		cfg.Addr = DefaultAddr
+	}
+	if cfg.Tick == 0 {
+		cfg.Tick = 2 * time.Second
+	}
+	cert, err := LoadCert(cfg.Dir)
+	if err != nil {
+		return nil, err
+	}
+	m := &Manager{
+		cfg: cfg, cert: cert, fp: Fingerprint(cert.Certificate[0]),
+		limits: tunnel.NewRateLimiter(20, time.Minute),
+		cands:  map[string]*candidate{}, peers: map[string]*peer{}, trusted: map[string]*trust{}, joins: map[string]*joinReq{},
+		browsers: map[string]*identity.Cert{}, idLinks: map[*idLink]bool{},
+		ports: map[string]int{},
+	}
+	m.loadPorts()
+	for _, a := range cfg.Peers {
+		m.addCandidate(a, "manual")
+	}
+	m.manual = append([]string{}, cfg.Peers...)
+	return m, nil
+}
+
+// SetResolver sets the discovery before Start (mDNS on a real network).
+func (m *Manager) SetResolver(r Resolver) { m.cfg.Resolver = r }
+
+// Start runs the LAN link until ctx ends. The LAN port opens once the pod is paired (at
+// once, or when the pair command pairs it later): an unpaired pod has nothing to offer the
+// network. A port already taken is reported in Settings.
+func (m *Manager) Start(ctx context.Context) {
+	m.ctx = ctx
+	if m.cfg.Identity.Paired() {
+		m.listenTLS(ctx)
+	}
+	go m.loop(ctx)
+}
+
+// listenTLS opens the LAN port, once.
+func (m *Manager) listenTLS(ctx context.Context) {
+	m.mu.Lock()
+	if m.listening {
+		m.mu.Unlock()
+		return
+	}
+	m.listening = true
+	m.mu.Unlock()
+	ln, err := tls.Listen("tcp", m.cfg.Addr, &tls.Config{
+		Certificates: []tls.Certificate{m.cert},
+		ClientAuth:   tls.RequireAnyClientCert, // checked by the handshake, not by a CA
+		MinVersion:   tls.VersionTLS13,
+		NextProtos:   []string{"http/1.1"}, // WebSockets need HTTP/1.1
+	})
+	m.mu.Lock()
+	if err != nil {
+		m.listenErr = err.Error()
+		log.Printf("lan: %v", err)
+	} else {
+		m.listen = ln.Addr().String()
+		m.port = ln.Addr().(*net.TCPAddr).Port
+	}
+	m.mu.Unlock()
+	m.changed()
+	if ln == nil {
+		return
+	}
+	// The TLS errors of the pods that dial their own announcement are not worth a log line.
+	srv := &http.Server{Handler: http.HandlerFunc(m.serveHTTP), ReadHeaderTimeout: 10 * time.Second, ErrorLog: quiet}
+	go func() { _ = srv.Serve(ln) }()
+	go func() {
+		<-ctx.Done()
+		_ = srv.Close()
+	}()
+}
+
+// Port is the LAN port listened on (0 when the listener failed).
+func (m *Manager) Port() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.port
+}
+
+func (m *Manager) loop(ctx context.Context) {
+	t := time.NewTicker(m.cfg.Tick)
+	defer t.Stop()
+	for n := 0; ; n++ {
+		m.refresh()
+		if m.cfg.Resolver != nil && n%5 == 0 && m.cfg.Identity.Paired() {
+			go m.browse(ctx)
+		}
+		m.dialDue(ctx)
+		select {
+		case <-ctx.Done():
+			m.closeAll()
+			return
+		case <-t.C:
+		}
+	}
+}
+
+// refresh reads the identity again when the pair command changed it, announces the pod
+// once it is paired, and drops the peers a new revocation list names.
+func (m *Manager) refresh() {
+	if _, err := m.cfg.Identity.Refresh(); err != nil {
+		log.Printf("lan: identity: %v", err)
+	}
+	account, _, rev := m.cfg.Identity.State()
+	if account != "" {
+		m.listenTLS(m.ctx)
+	}
+	// A newer list, from the pair command, the relay or a peer: drop the devices it names
+	// and pass it on.
+	m.mu.Lock()
+	newer := rev != nil && rev.Seq > m.seq
+	if newer {
+		m.seq = rev.Seq
+	}
+	m.mu.Unlock()
+	if newer {
+		m.recheck()
+		m.spread(rev, nil)
+		if m.cfg.OnRevocations != nil {
+			m.cfg.OnRevocations(rev)
+		}
+	}
+	m.mu.Lock()
+	port := m.port
+	announce := m.cfg.Resolver != nil && account != "" && port != 0 && m.announced != account
+	m.mu.Unlock()
+	if !announce {
+		return
+	}
+	stop, err := m.cfg.Resolver.Announce(port, Record{Pod: shortID(m.cfg.Identity.ID()), Account: AccountTag(account)})
+	if err != nil {
+		log.Printf("lan: mDNS: %v", err)
+		return
+	}
+	m.mu.Lock()
+	if m.stopAnn != nil {
+		m.stopAnn()
+	}
+	m.stopAnn, m.announced = stop, account
+	m.mu.Unlock()
+}
+
+// browse asks mDNS for the pods of the account and adds them as candidates.
+func (m *Manager) browse(ctx context.Context) {
+	account, _, _ := m.cfg.Identity.State()
+	found, err := m.cfg.Resolver.Browse(ctx)
+	if err != nil {
+		return
+	}
+	tag := AccountTag(account)
+	for _, f := range found {
+		switch {
+		case f.Join != "":
+			go m.probeJoin(ctx, f.Addr)
+		case f.Account == tag:
+			m.addCandidate(f.Addr, "mdns")
+		}
+	}
+}
+
+func (m *Manager) addCandidate(addr, source string) {
+	if _, _, err := net.SplitHostPort(addr); err != nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c := m.cands[addr]
+	if c == nil {
+		c = &candidate{sources: map[string]bool{}}
+		m.cands[addr] = c
+	}
+	c.sources[source] = true
+}
+
+// dialDue dials the candidates that are due: not this pod, not a peer already reached, and
+// past their backoff.
+func (m *Manager) dialDue(ctx context.Context) {
+	if !m.cfg.Identity.Paired() {
+		return
+	}
+	now := time.Now()
+	m.mu.Lock()
+	var due []string
+	for addr, c := range m.cands {
+		if c.self || c.dialing || now.Before(c.next) {
+			continue
+		}
+		if p := m.peers[c.key]; c.key != "" && p != nil && p.out != nil {
+			continue
+		}
+		c.dialing = true
+		due = append(due, addr)
+	}
+	m.mu.Unlock()
+	for _, addr := range due {
+		go m.connect(ctx, addr)
+	}
+}
+
+// connect dials one address and runs the link until it ends.
+func (m *Manager) connect(ctx context.Context, addr string) {
+	l, err := m.dial(ctx, addr)
+	m.mu.Lock()
+	c := m.cands[addr]
+	if c == nil {
+		c = &candidate{sources: map[string]bool{}}
+	}
+	c.dialing = false
+	if err != nil {
+		c.self = errors.Is(err, errSelf)
+		c.fails++
+		c.err = errorCode(err)
+		c.next = time.Now().Add(backoff(c.fails))
+		manual := c.sources["manual"]
+		m.mu.Unlock()
+		// An address typed by hand may be a pod waiting to be paired.
+		if manual && c.err == "unreachable" {
+			m.probeJoin(ctx, addr)
+		}
+		m.changed()
+		return
+	}
+	c.fails, c.err, c.key = 0, "", l.peer.Key
+	if p := m.peers[l.peer.Key]; p != nil && p.out != nil {
+		// Another address of a pod already reached (mDNS gives each of its IPs).
+		m.mu.Unlock()
+		l.close()
+		return
+	}
+	m.mu.Unlock()
+	m.run(l, l.serverFP)
+	m.mu.Lock()
+	if c := m.cands[addr]; c != nil {
+		c.next = time.Now().Add(m.cfg.Tick)
+	}
+	m.mu.Unlock()
+}
+
+// backoff is the wait before dialing again an address that failed.
+func backoff(fails int) time.Duration {
+	d := time.Second << min(fails, 6)
+	return min(d, time.Minute)
+}
+
+// errorCode is the short reason shown in Settings for an address that failed.
+func errorCode(err error) string {
+	switch {
+	case errors.Is(err, tunnel.ErrVersion):
+		return tunnel.CodeVersion
+	case errors.Is(err, tunnel.ErrProof):
+		return tunnel.CodeProof
+	case errors.Is(err, identity.ErrForeignAccount):
+		return tunnel.CodeForeign
+	case errors.Is(err, identity.ErrRevoked):
+		return tunnel.CodeRevoked
+	case errors.Is(err, errSelf):
+		return "self"
+	}
+	var ne net.Error
+	if errors.As(err, &ne) || errors.Is(err, os.ErrDeadlineExceeded) {
+		return "unreachable"
+	}
+	if s := err.Error(); len(s) > 0 {
+		for _, code := range []string{tunnel.CodeUnpaired, tunnel.CodeForeign, tunnel.CodeRevoked, tunnel.CodeProof, tunnel.CodeCert, tunnel.CodeVersion} {
+			if s == "tunnel: "+code {
+				return code
+			}
+		}
+	}
+	return "unreachable"
+}
+
+// serveHTTP is the LAN port: the control link, and the requests of the trusted peers.
+func (m *Manager) serveHTTP(w http.ResponseWriter, r *http.Request) {
+	fp := leafFingerprint(r.TLS)
+	if r.URL.Path == helloPath {
+		m.serveHello(w, r, fp)
+		return
+	}
+	m.mu.Lock()
+	t := m.trusted[fp]
+	m.mu.Unlock()
+	if t == nil || m.cfg.Identity.PeerError(t.cert) != nil {
+		http.Error(w, "not a device of this account", http.StatusForbidden)
+		return
+	}
+	m.cfg.Handler.ServeHTTP(w, r)
+}
+
+// serveHello runs the pod side of the handshake for a pod that dialed us.
+func (m *Manager) serveHello(w http.ResponseWriter, r *http.Request, clientFP string) {
+	c, err := websocket.Accept(w, r, nil)
+	if err != nil {
+		return
+	}
+	h := &tunnel.Handshake{
+		Identity: m.cfg.Identity,
+		// The token mode is not for pods: an unguessable token makes it fail.
+		Token:     nonce() + nonce(),
+		FPBrowser: clientFP,
+		FPPod:     m.fp,
+		Limits:    m.limits,
+	}
+	if err := h.Run(&wsConn{c: c, ctx: r.Context()}); err != nil || h.PeerCert == nil {
+		c.CloseNow()
+		return
+	}
+	_, own, _ := m.cfg.Identity.State()
+	if h.PeerCert.Kind != identity.KindPod || own == nil || h.PeerCert.Key == own.Key {
+		c.CloseNow()
+		return
+	}
+	l := newLink(c, h.PeerCert)
+	l.inbound = true
+	l.remoteHost, _, _ = net.SplitHostPort(r.RemoteAddr)
+	m.run(l, clientFP)
+}
+
+// dial reaches a pod at addr and runs the browser side of the handshake: the TLS
+// fingerprints of both sides are bound to the signatures, so a machine in the middle that
+// shows its own certificate makes a signature fail.
+func (m *Manager) dial(ctx context.Context, addr string) (*link, error) {
+	var serverFP string
+	tr := &http.Transport{TLSClientConfig: &tls.Config{
+		Certificates:       []tls.Certificate{m.cert},
+		InsecureSkipVerify: true, // trust comes from the handshake
+		MinVersion:         tls.VersionTLS13,
+		VerifyConnection: func(cs tls.ConnectionState) error {
+			serverFP = leafFingerprint(&cs)
+			if serverFP == m.fp {
+				return errSelf
+			}
+			return nil
+		},
+	}}
+	defer tr.CloseIdleConnections()
+	dctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	c, _, err := websocket.Dial(dctx, "wss://"+addr+helloPath, &websocket.DialOptions{HTTPClient: &http.Client{Transport: tr}})
+	if err != nil {
+		return nil, err
+	}
+	account, own, _ := m.cfg.Identity.State()
+	timer := time.AfterFunc(10*time.Second, func() { c.CloseNow() })
+	peerCert, err := tunnel.RunBrowserCert(&wsConn{c: c, ctx: context.Background()}, m.cfg.Identity.Key(), own, account, m.fp, serverFP, nonce())
+	timer.Stop()
+	if err == nil {
+		err = m.cfg.Identity.PeerError(peerCert) // the revocation list
+	}
+	if err == nil && (peerCert.Kind != identity.KindPod || peerCert.Key == own.Key) {
+		err = errSelf
+	}
+	if err != nil {
+		c.CloseNow()
+		return nil, err
+	}
+	l := newLink(c, peerCert)
+	l.addr, l.serverFP = addr, serverFP
+	return l, nil
+}
+
+// run keeps a control link up: it trusts the peer certificate meanwhile, tells who we are,
+// passes the revocation lists on and drops the link when the peer stops answering.
+func (m *Manager) run(l *link, peerFP string) {
+	m.attach(l, peerFP)
+	defer m.detach(l, peerFP)
+	_, _, rev := m.cfg.Identity.State()
+	_ = l.send("$info", info{Name: m.cfg.Name, Version: m.cfg.Version, Port: m.Port()})
+	if rev != nil {
+		_ = l.send("$revocations", rev)
+	}
+	go func() {
+		t := time.NewTicker(15 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-l.done:
+				return
+			case <-t.C:
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				err := l.conn.c.Ping(ctx)
+				cancel()
+				if err != nil {
+					l.close()
+					return
+				}
+			}
+		}
+	}()
+	for {
+		b, err := l.conn.Read()
+		if err != nil {
+			l.close()
+			return
+		}
+		var msg message
+		if json.Unmarshal(b, &msg) != nil {
+			continue
+		}
+		switch msg.Method {
+		case "$info":
+			var i info
+			if json.Unmarshal(msg.Params, &i) == nil {
+				m.setInfo(l, i)
+			}
+		case "$revocations":
+			var r identity.Revocations
+			if json.Unmarshal(msg.Params, &r) != nil {
+				continue
+			}
+			if newer, err := m.cfg.Identity.Apply(&r); err == nil && newer {
+				m.recheck()
+				m.spread(&r, l)
+			}
+		}
+	}
+}
+
+// attach records a link that passed the handshake.
+func (m *Manager) attach(l *link, peerFP string) {
+	m.mu.Lock()
+	t := m.trusted[peerFP]
+	if t == nil {
+		t = &trust{cert: l.peer}
+		m.trusted[peerFP] = t
+	}
+	t.links++
+	p := m.peers[l.peer.Key]
+	if p == nil {
+		p = &peer{links: map[*link]bool{}}
+		m.peers[l.peer.Key] = p
+	}
+	p.cert = l.peer
+	if p.name == "" {
+		p.name = l.peer.Name
+	}
+	p.links[l] = true
+	start := false
+	if !l.inbound && p.out == nil {
+		p.out = l
+		start = true
+	}
+	m.mu.Unlock()
+	if start {
+		m.startGateway(l.peer.Key)
+		go m.watchProjects(l)
+	}
+	m.changed()
+}
+
+// detach forgets a link that ended.
+func (m *Manager) detach(l *link, peerFP string) {
+	m.mu.Lock()
+	if t := m.trusted[peerFP]; t != nil {
+		if t.links--; t.links <= 0 {
+			delete(m.trusted, peerFP)
+		}
+	}
+	if p := m.peers[l.peer.Key]; p != nil {
+		delete(p.links, l)
+		if p.out == l {
+			p.out = nil
+		}
+	}
+	m.mu.Unlock()
+	m.changed()
+}
+
+// setInfo records what a peer told about itself; a peer that dialed us gives the port to
+// dial it back.
+func (m *Manager) setInfo(l *link, i info) {
+	m.mu.Lock()
+	if p := m.peers[l.peer.Key]; p != nil {
+		if i.Name != "" {
+			p.name = i.Name
+		}
+		p.version = i.Version
+	}
+	m.mu.Unlock()
+	if l.inbound && i.Port > 0 && l.remoteHost != "" {
+		m.addCandidate(net.JoinHostPort(l.remoteHost, strconv.Itoa(i.Port)), "inbound")
+	}
+	m.changed()
+}
+
+// recheck drops the links of the peers that are no longer devices of the account (a new
+// revocation list, or the pod paired with another account).
+func (m *Manager) recheck() {
+	m.mu.Lock()
+	var drop []*link
+	for _, p := range m.peers {
+		if m.cfg.Identity.PeerError(p.cert) == nil {
+			continue
+		}
+		for l := range p.links {
+			drop = append(drop, l)
+		}
+	}
+	m.mu.Unlock()
+	for _, l := range drop {
+		l.close()
+	}
+}
+
+// spread passes a newer revocation list on to the other peers.
+func (m *Manager) spread(r *identity.Revocations, from *link) {
+	m.mu.Lock()
+	var links []*link
+	for _, p := range m.peers {
+		for l := range p.links {
+			if l != from {
+				links = append(links, l)
+			}
+		}
+	}
+	m.mu.Unlock()
+	for _, l := range links {
+		_ = l.send("$revocations", r)
+	}
+}
+
+func (m *Manager) closeAll() {
+	m.mu.Lock()
+	var links []*link
+	for _, p := range m.peers {
+		for l := range p.links {
+			links = append(links, l)
+		}
+		if p.gw != nil {
+			p.gw.close()
+		}
+	}
+	if m.stopAnn != nil {
+		m.stopAnn()
+	}
+	m.mu.Unlock()
+	for _, l := range links {
+		l.close()
+	}
+}
+
+func (m *Manager) changed() {
+	if m.cfg.OnChange != nil {
+		m.cfg.OnChange()
+	}
+}
+
+// ---------- the view of the page ----------
+
+// PeerView is a pod of the account on the LAN, as Settings and the home page show it.
+type PeerView struct {
+	ID          string `json:"id"` // the device key
+	Name        string `json:"name"`
+	Fingerprint string `json:"fingerprint"`
+	Version     string `json:"version"`
+	Addr        string `json:"addr"`
+	Online      bool   `json:"online"`
+	// Port is the gateway port of the peer on this pod: its page, served through us.
+	Port     int             `json:"port"`
+	Projects json.RawMessage `json:"projects,omitempty"`
+}
+
+// AddrView is an address that did not lead to a pod of the account.
+type AddrView struct {
+	Addr   string `json:"addr"`
+	Manual bool   `json:"manual"`
+	Error  string `json:"error"`
+}
+
+// Status is the state of the LAN link, for Settings > Remote access and the home page.
+type Status struct {
+	Listen string     `json:"listen"`
+	Error  string     `json:"error,omitempty"`
+	Paired bool       `json:"paired"`
+	Peers  []PeerView `json:"peers"`
+	Manual []string   `json:"manual"`
+	Failed []AddrView `json:"failed"`
+}
+
+// Status returns the state of the LAN link.
+func (m *Manager) Status() Status {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	st := Status{Listen: m.listen, Error: m.listenErr, Paired: m.cfg.Identity.Paired(),
+		Peers: []PeerView{}, Manual: append([]string{}, m.manual...), Failed: []AddrView{}}
+	for key, p := range m.peers {
+		// A revoked pod is gone, not offline.
+		if m.cfg.Identity.PeerError(p.cert) != nil {
+			continue
+		}
+		v := PeerView{ID: key, Name: p.name, Fingerprint: identity.Fingerprint(key), Version: p.version, Online: p.out != nil, Projects: p.projects}
+		if p.out != nil {
+			v.Addr = p.out.addr
+		}
+		if p.gw != nil {
+			v.Port = p.gw.port
+		}
+		st.Peers = append(st.Peers, v)
+	}
+	sort.Slice(st.Peers, func(i, j int) bool { return st.Peers[i].Name < st.Peers[j].Name })
+	for addr, c := range m.cands {
+		if c.err != "" && !c.self && m.joins[addr] == nil {
+			st.Failed = append(st.Failed, AddrView{Addr: addr, Manual: c.sources["manual"], Error: c.err})
+		}
+	}
+	sort.Slice(st.Failed, func(i, j int) bool { return st.Failed[i].Addr < st.Failed[j].Addr })
+	return st
+}
+
+// SetManual replaces the addresses typed by hand and stores them.
+func (m *Manager) SetManual(addrs []string) error {
+	clean := []string{}
+	for _, a := range addrs {
+		if a == "" {
+			continue
+		}
+		if _, _, err := net.SplitHostPort(a); err != nil {
+			return i18n.Errorf("%s is not an address host:port", a)
+		}
+		clean = append(clean, a)
+	}
+	if m.cfg.SavePeers != nil {
+		if err := m.cfg.SavePeers(clean); err != nil {
+			return err
+		}
+	}
+	m.mu.Lock()
+	for addr, c := range m.cands {
+		delete(c.sources, "manual")
+		if len(c.sources) == 0 && !c.dialing {
+			delete(m.cands, addr)
+		}
+	}
+	m.manual = clean
+	m.mu.Unlock()
+	for _, a := range clean {
+		m.addCandidate(a, "manual")
+	}
+	m.changed()
+	return nil
+}
+
+// ---------- gateway ports, kept from one run to the next ----------
+
+type portsFile struct {
+	Ports map[string]int `json:"ports"`
+}
+
+func (m *Manager) loadPorts() {
+	data, err := os.ReadFile(filepath.Join(m.cfg.Dir, "lan.json"))
+	if err != nil {
+		return
+	}
+	var f portsFile
+	if json.Unmarshal(data, &f) == nil && f.Ports != nil {
+		m.ports = f.Ports
+	}
+}
+
+// savePorts writes lan.json; m.mu is held.
+func (m *Manager) savePorts() {
+	data, _ := json.MarshalIndent(portsFile{Ports: m.ports}, "", "  ")
+	_ = os.WriteFile(filepath.Join(m.cfg.Dir, "lan.json"), data, 0o600)
+}
+
+// View is Status for the page (server.LAN).
+func (m *Manager) View() any { return m.Status() }

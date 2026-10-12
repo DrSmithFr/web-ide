@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http/httptest"
 	"os"
@@ -22,6 +23,17 @@ import (
 
 // The phrase of the shared vectors, so the ids checked here are the ones of vectors.json.
 const phrase = "lecture vapor excuse note pledge rough bundle start regular burden reveal theme banana pencil owner cube social job emotion member joy sting dash whisper"
+
+// wordsOf reads the words of the numbered rows, without their numbers.
+func wordsOf(shown string) []string {
+	var w []string
+	for _, f := range strings.Fields(shown) {
+		if !strings.HasSuffix(f, ")") {
+			w = append(w, f)
+		}
+	}
+	return w
+}
 
 func env(t *testing.T) (*Env, *bytes.Buffer) {
 	t.Helper()
@@ -41,12 +53,13 @@ func TestCreate(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
-	if len(lines) < 2 {
+	if len(lines) < 9 {
 		t.Fatalf("unexpected output: %q", out.String())
 	}
-	shown := strings.Fields(lines[1])
+	// The phrase is shown as eight numbered rows of three words.
+	shown := wordsOf(strings.Join(lines[1:9], " "))
 	if strings.Join(shown, " ") != phrase {
-		t.Fatalf("the phrase shown must be the one of the entropy, got %q", lines[1])
+		t.Fatalf("the phrase shown must be the one of the entropy, got %q", strings.Join(lines[1:9], " | "))
 	}
 	if err := identity.Validate(strings.Join(shown, " ")); err != nil {
 		t.Fatalf("the shown phrase must validate: %v", err)
@@ -87,6 +100,35 @@ func TestCreate(t *testing.T) {
 	}
 	if p.Cert == nil || p.Cert.Kind != identity.KindPod || identity.VerifyCert(p.Cert, p.Account, nil) != nil {
 		t.Fatalf("the certificate of the pod must verify: %+v", p.Cert)
+	}
+}
+
+// TestCreateNumbered: the phrase is shown with each word numbered, eight rows of three, and the
+// check asks its three words back in the order they are numbered (the positions given by the
+// test are not sorted).
+func TestCreateNumbered(t *testing.T) {
+	e, out := env(t)
+	e.Entropy, _ = hex.DecodeString("7f1e2d3c4b5a69788796a5b4c3d2e1f00123456789abcdef0123456789abcdef") // the phrase of the vectors
+	e.Positions = func() []int { return []int{22, 5, 14} }
+	e.In = strings.NewReader("pledge\npencil\nsting\n") // words 5, 14, 22 of the vectors phrase, typed in order
+	if err := Create(e); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	shown := strings.Join(wordsOf(strings.Join(lines[1:9], " ")), " ")
+	if shown != phrase {
+		t.Fatalf("the numbered rows must hold the whole phrase, got %q", strings.Join(lines[1:9], " | "))
+	}
+	for i, l := range lines[1:9] {
+		for j := 0; j < 3; j++ {
+			want := fmt.Sprintf("%2d) %-9s", i*3+j+1, strings.Fields(phrase)[i*3+j])
+			if !strings.Contains(l, want) {
+				t.Fatalf("row %d must show word %d numbered (%q in %q)", i+1, i*3+j+1, want, l)
+			}
+		}
+	}
+	if !strings.Contains(out.String(), "Confirm — type word 5, 14, 22:") {
+		t.Fatalf("the check must list its words in order: %q", out.String())
 	}
 }
 

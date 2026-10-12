@@ -350,7 +350,9 @@ export async function passkey(rec, create) {
         challenge,
         rp: { name: 'Web IDE', id: location.hostname },
         user: { id: enc.encode(rec.handle), name: rec.handle, displayName: rec.handle },
-        pubKeyCredParams: [{ type: 'public-key', alg: -8 }], // Ed25519
+        // Only the PRF is used, never the signature of the passkey: any algorithm will do, and
+        // Google Password Manager, iCloud Keychain and Windows Hello refuse Ed25519 alone.
+        pubKeyCredParams: [-8, -7, -257].map((alg) => ({ type: 'public-key', alg })), // Ed25519, ES256, RS256
         authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
         extensions: prf,
       } })

@@ -18,6 +18,7 @@ import { EditorView } from '../editor/view'
 import { samples } from './samples'
 import { Devices } from './Devices'
 import { SyncPanel } from './Sync'
+import { LanSection } from './Lan'
 import { browserLang, fmtDate, languages, t, tn, type LangSetting } from '../i18n'
 
 const sections = [
@@ -600,13 +601,13 @@ function RemoteAccess() {
   const [info, setInfo] = createSignal<RelayInfo | null>(null)
   const [error, setError] = createSignal('')
   onMount(() => {
-    request<RelayInfo>('relay.status').then(setInfo, setError)
+    request<RelayInfo>('relay.status').then(setInfo, (e) => setError(e instanceof Error ? e.message : String(e)))
     onPod('relay.changed', (d: RelayInfo) => setInfo(d))
   })
   return (
     <section class="form">
       <Show when={error()}>
-        <p class="err">{t(error())}</p>
+        <p class="muted small">{error()}</p>
       </Show>
       <Show when={info()}>
         <dl class="props">
@@ -626,6 +627,8 @@ function RemoteAccess() {
         </div>
         <p class="muted small">{t('The relay only introduces the browser and the pod; the traffic between them is encrypted and the token is proved inside the tunnel.')}</p>
       </Show>
+      <h3>{t('Local network')}</h3>
+      <LanSection />
     </section>
   )
 }

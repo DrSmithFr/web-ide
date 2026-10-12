@@ -12,6 +12,7 @@ import { t } from '../i18n'
 import { iconOf, iconURL, type IconSpec, loadIcon, loadIcons, setFavicon } from '../ui/projectIcon'
 import { IconEditor } from '../ui/IconEditor'
 import { OpenTunnels } from '../docker/OpenTunnels'
+import { gateway, gatewayHome, peerURL, useLan, type LanPeer } from '../state/lan'
 
 interface Project {
   id: string
@@ -79,6 +80,13 @@ export function Home() {
       <header class="home-head">
         <h1>Web IDE</h1>
         <span class="muted small mono" data-testid="pod-version">{ws()?.version}</span>
+        <Show when={gateway()}>
+          {(g) => (
+            <a class="btn small" href={gatewayHome(g())} data-testid="lan-back">
+              {t('← Back to {name}', { name: g().name })}
+            </a>
+          )}
+        </Show>
         <span class="grow" />
         <button class="icon-btn" title={t('Settings')} onClick={() => openSettings('workspace')}>
           <Icon name="gear" />
@@ -137,6 +145,9 @@ export function Home() {
             )}
           </For>
         </div>
+        <Show when={!gateway()}>
+          <LanPods />
+        </Show>
         <OpenTunnels />
         <Show when={available().length}>
           <h3 class="home-sub">{t('In the workspace')}</h3>
@@ -170,6 +181,64 @@ export function Home() {
         />
       </Show>
     </div>
+  )
+}
+
+/** One Projects block per pod of the account on the LAN: its page opens through the gateway
+ * port this pod keeps for it. */
+function LanPods() {
+  const [lan] = useLan()
+  const outdated = () => (lan()?.failed ?? []).filter((f) => f.error === 'version')
+  return (
+    <>
+      <For each={lan()?.peers ?? []}>{(peer) => <LanPodBlock peer={peer} />}</For>
+      <For each={outdated()}>
+        {(f) => (
+          <p class="muted small" data-testid="lan-outdated">
+            {t('The pod at {addr} runs another version: update this pod.', { addr: f.addr })}
+          </p>
+        )}
+      </For>
+    </>
+  )
+}
+
+function LanPodBlock(props: { peer: LanPeer }) {
+  const p = () => props.peer
+  return (
+    <section class="lan-pod" classList={{ offline: !p().online }} data-testid="lan-pod" data-name={p().name}>
+      <div class="home-bar">
+        <h2>{t('Projects of {name}', { name: p().name })}</h2>
+        <span class="muted small" title={t('Fingerprint of the pod')}>
+          {p().fingerprint}
+        </span>
+        <Show when={!p().online}>
+          <span class="badge">{t('offline')}</span>
+        </Show>
+        <span class="grow" />
+        <span class="muted small mono">{p().version}</span>
+      </div>
+      <div class="project-list">
+        <For each={p().projects ?? []} fallback={<p class="muted">{p().online ? t('Loading…') : t('This pod is offline.')}</p>}>
+          {(pr) => (
+            <article class="project-card">
+              <a class="project-open" href={p().online ? peerURL(p(), `/project/${pr.id}`) : undefined} data-testid="lan-project">
+                <span class="project-icon" />
+                <div class="project-info">
+                  <div class="project-title">
+                    {pr.name} <span class="badge">{pr.type === 'ssh' ? 'SSH' : 'local'}</span>
+                  </div>
+                  <Show when={pr.description}>
+                    <div class="project-desc">{pr.description}</div>
+                  </Show>
+                  <div class="muted small mono ellipsis">{pr.path}</div>
+                </div>
+              </a>
+            </article>
+          )}
+        </For>
+      </div>
+    </section>
   )
 }
 
