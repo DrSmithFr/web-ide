@@ -8,6 +8,8 @@ const pending = new Map()
 // its assets there, even with an absolute path.
 const owners = new Map()
 
+const appFiles = new Set(['/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png'])
+
 self.addEventListener('install', (e) => self.skipWaiting())
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()))
 
@@ -21,7 +23,8 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url)
   // The bootstrap page and the Service Worker itself come from the relay: the tunnel is not
   // open yet when the bootstrap page is loaded, so answering it from the pod would hang.
-  if (url.pathname.startsWith('/_relay') || url.pathname === '/sw.js' || url.pathname === '/' || url.pathname === '/index.html') return
+  // The manifest and the icons of the installable app come from the relay as well.
+  if (url.pathname.startsWith('/_relay') || url.pathname === '/sw.js' || url.pathname === '/' || url.pathname === '/index.html' || appFiles.has(url.pathname)) return
   event.respondWith(handle(req, url, event.clientId))
 })
 
@@ -89,4 +92,43 @@ async function handle(req, url, clientId) {
 
 function bytes(d) {
   return d instanceof Uint8Array ? d : new TextEncoder().encode(String(d))
+}
+
+// Push notifications: the pod encrypts the payload for this browser (RFC 8291), the relay only
+// forwards the ciphertext, and the browser hands the decrypted JSON here: {title, body, url,
+// tag}. The url is a bootstrap link (/#pod=<id>&open=<path of the app>).
+self.addEventListener('push', (e) => {
+  let d = {}
+  try {
+    d = e.data ? e.data.json() : {}
+  } catch {}
+  e.waitUntil(self.registration.showNotification(d.title || 'Web IDE', {
+    body: d.body || '', tag: d.tag || undefined, icon: '/icon-192.png', data: { url: d.url || '/' },
+  }))
+})
+
+// A click opens the conversation or the ticket: in the bootstrap window of that pod when one is
+// open (it moves its app there), else in a new window.
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close()
+  const done = openFrom(e.notification.data?.url || '/')
+  try {
+    e.waitUntil(done)
+  } catch {} // a click dispatched by the tests has no waitUntil
+})
+
+async function openFrom(link) {
+  const u = new URL(link, self.location.origin)
+  const params = new URLSearchParams(u.hash.slice(1))
+  const pod = params.get('pod')
+  const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+  const win = pod && all.find((c) => new URLSearchParams(new URL(c.url).hash.slice(1)).get('pod') === pod)
+  if (win) {
+    win.postMessage({ kind: 'open', url: params.get('open') || '/app' })
+    try {
+      await win.focus()
+    } catch {} // focus needs the click of the user
+    return
+  }
+  await self.clients.openWindow(u.href)
 }

@@ -1,9 +1,9 @@
 // Relay (milestone 1): a browser on another network opens a project of a pod through the
-// relay. run.sh starts the relay and the pod with -relay and -force-turn, so the selected
-// candidate pair is a TURN relay one. The app is loaded from the pod through the tunnel
-// (Service Worker), the token is proved inside the DataChannel, terminals and big transfers
-// have their own channel, previews are served through the Service Worker; a wrong token is
-// refused; 127.0.0.1 still works with the same pod.
+// relay, and installs as an app (PWA). run.sh starts the relay and the pod with -relay and
+// -force-turn, so the selected candidate pair is a TURN relay one. The app is loaded from the
+// pod through the tunnel (Service Worker), the token is proved inside the DataChannel,
+// terminals and big transfers have their own channel, previews are served through the Service
+// Worker; a wrong token is refused; 127.0.0.1 still works with the same pod.
 const fs = require('fs')
 const http = require('http')
 const net = require('net')
@@ -65,6 +65,12 @@ run(
         .join(' ')
     })
     assert(stats.includes('relay'), 'the app is loaded through the tunnel, TURN pair: ' + stats)
+    // The bootstrap page is an installable app (PWA): the manifest and the icons come from the
+    // relay. Chromium reports nothing but the incognito context of the tests.
+    const cdp = await ctx.newCDPSession(page)
+    const { installabilityErrors } = await cdp.send('Page.getInstallabilityErrors')
+    const pwa = installabilityErrors.map((e) => e.errorId).filter((id) => id !== 'in-incognito')
+    assert(pwa.length === 0, 'the bootstrap page is installable: ' + pwa.join(', '))
 
     // The app window is the iframe of the bootstrap page; the keyboard of the page types
     // into the element focused inside it.

@@ -3,6 +3,7 @@ package relay
 import (
 	"context"
 	"encoding/json"
+	"io/fs"
 	"net/http"
 	"sync"
 	"time"
@@ -51,6 +52,8 @@ type Server struct {
 	links    map[*identityConn]bool   // live pairing/admin links
 	codes    map[string]*identityConn // pairing code → the link that created it
 	joiners  map[string]*identityConn // pairing code → the link that posted its key to it
+	// App is the front end of the pod: the relay serves its manifest and icons (static.go).
+	App fs.FS
 }
 
 // podConn is the pod's persistent link: register (pod id + secret), then carry the
