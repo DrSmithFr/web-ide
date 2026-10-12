@@ -1,6 +1,10 @@
 package agent
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestRunsFreely(t *testing.T) {
 	const root = "/p"
@@ -127,5 +131,27 @@ func TestStaysIn(t *testing.T) {
 	}
 	if !StaysIn("cd /tmp && rm -rf x && python3 /tmp/s.py", "/p", Scratch) || StaysIn("rm x", "/p", Scratch) {
 		t.Error("the scratch folder alone: the project stays out")
+	}
+}
+
+// TestStaysInSymlink: a project opened through a symlink is the same folder under its real path.
+func TestStaysInSymlink(t *testing.T) {
+	real := t.TempDir()
+	link := t.TempDir() + "/link"
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		cmd, root string
+		stay      bool
+	}{
+		{"cd " + real + " && gofmt -w pod/*.go && go test ./...", link, true},
+		{"cd " + link + " && go test ./...", real, true},
+		{"touch " + real + "/new/file.go", link, true},
+		{"rm -rf " + filepath.Dir(real), link, false},
+	} {
+		if got := StaysIn(c.cmd, c.root, c.root); got != c.stay {
+			t.Errorf("StaysIn(%q) in %s = %v, want %v", c.cmd, c.root, got, c.stay)
+		}
 	}
 }

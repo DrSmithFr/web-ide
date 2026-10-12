@@ -2,6 +2,7 @@ package agent
 
 import (
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -99,12 +100,31 @@ func resolvePath(dir, p string) string {
 	return "/" + strings.Join(out, "/")
 }
 
+// inside tells whether p is root or under it, as written or once symlinks are resolved: a
+// project opened through a symlink (~/Apps → /data/apps) is the same folder under both paths.
 func inside(root, p string) bool {
+	return under(root, p) || under(realPath(root), realPath(p))
+}
+
+func under(root, p string) bool {
 	r := root
 	if !strings.HasSuffix(r, "/") {
 		r += "/"
 	}
 	return p == root || strings.HasPrefix(p, r)
+}
+
+// realPath is the absolute path p with the symlinks of its longest existing part resolved;
+// the part that does not exist yet (a file to create) is kept as written.
+func realPath(p string) string {
+	rest := ""
+	for d := p; d != "/" && d != "."; d = filepath.Dir(d) {
+		if r, err := filepath.EvalSymlinks(d); err == nil {
+			return r + rest
+		}
+		rest = "/" + filepath.Base(d) + rest
+	}
+	return p
 }
 
 // Scratch is the folder the assistant uses freely in every mode, besides the project.
