@@ -627,7 +627,7 @@ func (s *Server) registerAgent() {
 			s.publish(r, -1)
 			r.mu.Unlock()
 		}()
-		return nil, s.compact(r, compactAll, a.Instructions)
+		return nil, s.compact(r, true, a.Instructions)
 	}))
 	// agent.set: the mode, the options or the ticket of a conversation.
 	s.handle("agent.set", withChat(func(ctx context.Context, c *Client, cc chatCtx, p json.RawMessage) (any, error) {

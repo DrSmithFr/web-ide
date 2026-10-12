@@ -476,7 +476,7 @@ func (s *Server) loop(r *agentRun) {
 			needs := boolOr(o.AutoCompact, true) && info.context > 0 && contextUsed(r.chat) > info.context*max(o.CompactAt, 75)/100
 			r.mu.Unlock()
 			if needs {
-				if err := s.compact(r, compactAuto, ""); err == nil {
+				if err := s.compact(r, false, ""); err == nil {
 					from = 0
 				}
 			}
@@ -535,7 +535,7 @@ func (s *Server) loop(r *agentRun) {
 			r.mu.Unlock()
 			if !canceled && !compactedForError && ans.content == "" && contextError.MatchString(err.Error()) {
 				compactedForError = true
-				if s.compact(r, compactAuto, "") == nil {
+				if s.compact(r, false, "") == nil {
 					continue
 				}
 			}
@@ -724,10 +724,10 @@ func (s *Server) runCalls(r *agentRun, ref *runtimeRef, calls []agent.ToolCall, 
 			m.Effort = level
 			r.mu.Unlock()
 		} else if name == "compact_conversation" {
-			// Asked by the model: everything but the last exchange is summarized.
+			// Asked by the model: everything but the last steps is summarized.
 			var instructions string
 			_ = json.Unmarshal(args["instructions"], &instructions)
-			if err := s.compact(r, compactByModel, instructions); err != nil {
+			if err := s.compact(r, true, instructions); err != nil {
 				res = toolResult{Content: "Error: " + i18n.Translate("en", err), Summary: agent.Plain(i18n.Translate(r.lang, err)), Status: "error"}
 			} else {
 				res = toolResult{Content: "Conversation compacted: the older messages are replaced by a summary.", Summary: agent.T("conversation compacted", nil).Raw(), Status: "ok"}
@@ -827,76 +827,27 @@ func transcriptOf(m *agent.Message, budget int) string {
 
 var errNothingToCompact = i18n.New("Nothing to compact")
 
-// What a compaction keeps.
-type compactMode int
-
-const (
-	compactAuto    compactMode = iota // about a quarter of the context
-	compactByModel                    // asked by the model: all but the last exchange
-	compactAll                        // asked by the user: the last keepSteps steps
-)
-
-// keepSteps: the steps (an answer, its reasoning and tool calls) a compaction asked by the
-// user keeps.
+// keepSteps: the steps (an answer, its reasoning and tool calls) a compaction keeps.
 const keepSteps = 10
 
-// compactCut is the first message a compaction keeps: about a quarter of the context, or all
-// but the last exchange when that is too little or asked by the model (one long turn alone
-// loses its oldest steps), or the last steps when asked by the user.
-func compactCut(msgs []*agent.Message, start, ctxSize int, mode compactMode) int {
-	if mode == compactAll {
-		from, steps := len(msgs), 0
-		for i := len(msgs) - 1; i > start && steps < keepSteps; i-- {
-			if msgs[i].Role == "assistant" {
-				from, steps = i, steps+1
-			}
-		}
-		if steps < keepSteps {
-			return start // all kept: nothing to compact
-		}
-		return from
-	}
-	manual := mode == compactByModel
-	// The kept tail starts at a user or assistant message (never at a tool result).
-	tail := func(budget int) int {
-		from, tokens := len(msgs), 0
-		for i := len(msgs) - 1; i > start; i-- {
-			tokens += estimateTokens(msgs[i])
-			if tokens > budget && from < len(msgs) {
-				break
-			}
-			if msgs[i].Role != "tool" {
-				from = i
-			}
-		}
-		return from
-	}
-	from := len(msgs)
-	if !manual {
-		from = tail(ctxSize / 4)
-	}
-	if manual || from-start < 2 {
-		from = len(msgs)
-		for i := len(msgs) - 1; i > start; i-- {
-			if msgs[i].Role == "user" && msgs[i].Kind != "summary" {
-				from = i
-				break
-			}
-		}
-		if from == len(msgs) {
-			from = len(msgs) - 1
+// compactCut is the first message a compaction keeps: the last keepSteps steps, start when
+// there are no more (nothing to compact).
+func compactCut(msgs []*agent.Message, start int) int {
+	from, steps := len(msgs), 0
+	for i := len(msgs) - 1; i > start && steps < keepSteps; i-- {
+		if msgs[i].Role == "assistant" {
+			from, steps = i, steps+1
 		}
 	}
-	if from-start < 2 {
-		from = tail(ctxSize / 4)
+	if steps < keepSteps {
+		return start
 	}
 	return from
 }
 
-// compact replaces the oldest messages by a summary, keeping the recent ones (about a
-// quarter of the context). Asked by the user or the model, it compacts even a short
-// conversation.
-func (s *Server) compact(r *agentRun, mode compactMode, instructions string) error {
+// compact replaces the oldest messages by a summary, keeping the last steps. manual (asked
+// by the user or the model): a conversation too short says so.
+func (s *Server) compact(r *agentRun, manual bool, instructions string) error {
 	r.mu.Lock()
 	msgs := r.chat.Messages
 	start := 0
@@ -910,9 +861,9 @@ func (s *Server) compact(r *agentRun, mode compactMode, instructions string) err
 	if ctxSize == 0 {
 		ctxSize = 16384
 	}
-	keepFrom := compactCut(msgs, start, ctxSize, mode)
+	keepFrom := compactCut(msgs, start)
 	if keepFrom-start < 2 {
-		if mode != compactAuto {
+		if manual {
 			return errNothingToCompact
 		}
 		return nil

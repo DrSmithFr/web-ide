@@ -109,10 +109,14 @@ const fake = http.createServer(async (req, res) => {
   end(res, 'stop', { prompt_tokens: 500, completion_tokens: 5 })
 })
 
+// Sends a message and waits for its answer: the last one of the thread (an older answer may
+// have the same text).
 async function ask(page, message, expect) {
+  const before = requests.length
   await page.fill('.ai-composer .ed-content', message)
   await page.keyboard.press('Control+Enter')
-  await page.waitForSelector(`.ai-msg.assistant .md:has-text("${expect}")`, { timeout: 20000 })
+  for (let t = 0; t < 200 && requests.length === before; t++) await page.waitForTimeout(100)
+  await page.waitForFunction((e) => [...document.querySelectorAll('.ai-msg.assistant .md')].at(-1)?.textContent.includes(e), expect, { timeout: 20000 })
   await page.waitForSelector('[data-testid=send]', { timeout: 10000 })
 }
 
