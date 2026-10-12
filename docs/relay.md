@@ -116,7 +116,7 @@ Code and review together:
 
 ## Milestones
 
-1. Tunnel: the relay (signaling, STUN, TURN) and the pod and the browser over WebRTC, the pod token as access control.
+1. **Done** (`web-ide-pod relay`, `-relay`): the relay (signaling, STUN, TURN) and the pod and the browser over WebRTC, the pod token as access control. See *Milestone 1* below.
 2. Identity: phrase, device certificates, pairing, QR, passkeys, revocation.
 3. Multi-pod: gateway, sites, pod to pod, encrypted project lists, versions and updates.
 4. Settings sync, per-device layout, vault.
@@ -127,6 +127,29 @@ Code and review together:
 9. Shared sessions and voice.
 
 The full IDE on a phone goes on alongside, from the phone layout (#22).
+
+## Milestone 1 (done)
+
+Three pieces, one binary:
+
+- **`web-ide-pod relay`** (`pod/internal/relay`): signaling over WebSocket, STUN and TURN (Pion TURN, UDP and TCP, and TURN over TLS on 443 shared with HTTPS through an ALPN demux, `stun.turn`), the bootstrap page and the Service Worker, a SQLite base (`pods`, `usage`, `PRAGMA user_version`). Short-lived HMAC-SHA1 TURN credentials (12 h), given only to a registered, online pod.
+- **The pod** (`pod/internal/relayclient`): one outbound WebSocket to its relay (`-relay` flag or `relay` in `config.json`), pod id and secret in `relay.json` (0600) of the data folder, backoff reconnect, one PeerConnection per offer, trickle ICE with the ICE servers announced by the relay. The remote link is printed at startup and shown in Settings > Remote access with its state.
+- **The browser**: the bootstrap page and the Service Worker come from the relay; the app, its assets and the previews come from the pod through the tunnel. The front end talks to a `Transport` (`web/src/pod/transport.ts`): a WebSocket on `127.0.0.1`, or a MessagePort to the bootstrap page. Each project window gets its own connection.
+
+**Channels** (`pod/internal/tunnel`): the JSON protocol is unchanged on the `rpc` channel; `term:<id>` carries the input and output of one terminal, `xfer:<n>` one big message, `http:<n>` one HTTP request of the Service Worker. Every message is framed into 16 KB fragments (1-byte header: 1 = more, 0 = last) so a 2 MB transfer stays under the DataChannel cap, with back-pressure.
+
+**Access control in this step** is the pod token, and the relay never sees it. The token is proved inside the DataChannel and bound to both DTLS fingerprints (channel binding), so a relay that swaps the SDP cannot MITM:
+
+```
+browser → $hello { protocol, version, nonceB }
+pod     → $hello { protocol, version, nonceP, proof = HMAC(token, "pod"|fpB|fpP|nonceB|nonceP) }
+browser → $auth  { proof = HMAC(token, "browser"|fpB|fpP|nonceB|nonceP) }
+pod     → $ready
+```
+
+The fingerprints are read from the `a=fingerprint` line of each SDP; failed proofs are rate-limited per pod, and the handshake has a 10 s deadline. A protocol mismatch answers `$hello { error: "version" }` and the bootstrap page shows *Update this pod*. Identity (phrase, device certificates, pairing) comes with milestone 2.
+
+What is not in this step: accounts, multi-pod and gateways, encrypted blob storage, push, quotas. A pod with no relay, or whose relay is down, keeps working on `127.0.0.1` (the e2e `relay` suite checks both, with TURN forced and the pair asserted as a relay one).
 
 ## Open points
 

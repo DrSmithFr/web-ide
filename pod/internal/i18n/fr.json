@@ -211,5 +211,6 @@
   "command not found: %s": "commande introuvable : %s",
   "the command “%s” has no port": "la commande « %s » n’a pas de port",
   "not an image": "ce n'est pas une image",
-  "image too large": "image trop grande"
+  "image too large": "image trop grande",
+  "this pod has no relay": "ce pod n'a pas de relay"
 }

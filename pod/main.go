@@ -9,10 +9,12 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -21,6 +23,8 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/keeper"
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
+	"github.com/DrSmithFr/web-ide/pod/internal/relay"
+	"github.com/DrSmithFr/web-ide/pod/internal/relayclient"
 	"github.com/DrSmithFr/web-ide/pod/internal/server"
 	"github.com/DrSmithFr/web-ide/pod/internal/sessions"
 	"github.com/DrSmithFr/web-ide/pod/internal/settings"
@@ -38,17 +42,29 @@ func main() {
 		return
 	}
 	home, _ := os.UserHomeDir()
-	dataDir := flag.String("data", filepath.Join(home, ".web-ide"), "folder of the settings, projects and sessions")
+	defaultData := filepath.Join(home, ".web-ide")
+	dataDir := flag.String("data", defaultData, "folder of the settings, projects and sessions")
 	addr := flag.String("addr", "", "listen address (default: config.json, else "+config.DefaultAddr+")")
 	workspace := flag.String("workspace", "", "default workspace (default: ~/Apps)")
 	allowRemote := flag.Bool("allow-remote", false, "accept connections from other machines (protected by the token only)")
 	publicURL := flag.String("public-url", "", "address the IDE is opened at, for the links given to Claude Code (default: config.json, else http://<addr>)")
 	static := flag.String("static", "", "serve the front end from this folder instead of the embedded one")
 	keeperPath := flag.String("keeper", "", "socket of the keeper that runs the terminals (default: <data>/keeper.sock when it answers; off: the pod runs them)")
+	relay := flag.String("relay", "", "relay URL the pod registers with (wss:// or ws://), or the word relay to enable")
+	forceTurn := flag.Bool("force-turn", false, "force the browser through TURN (no direct or STUN path)")
+	turnPort := flag.Int("turn-port", 0, "relay: the STUN/TURN control port (default 3478)")
+	turnIP := flag.String("turn-ip", "", "relay: the STUN/TURN IP given to clients (default: the machine IP)")
+	tlsPort := flag.Int("tls-port", 0, "relay: the TLS port shared with HTTPS and TURN over TLS (default 443; below 1024 needs root)")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 	if *showVersion {
 		fmt.Println(version)
+		return
+	}
+	if len(flag.Args()) > 0 && flag.Arg(0) == "relay" {
+		// The relay has its own data folder (~/.web-ide-relay): pass "" when -data was not
+		// set explicitly, else the pod's default would hold relay.db.
+		runRelayCmd(flagValue(flag.CommandLine, "data", ""), *addr, *turnPort, *turnIP, *tlsPort)
 		return
 	}
 
@@ -64,6 +80,9 @@ func main() {
 	}
 	if *publicURL != "" {
 		cfg.PublicURL = strings.TrimSuffix(*publicURL, "/")
+	}
+	if *relay != "" && *relay != "relay" {
+		cfg.RelayURL = strings.TrimSuffix(*relay, "/")
 	}
 	check(cfg.Save(st))
 	token, err := config.Token(st)
@@ -86,6 +105,8 @@ func main() {
 		Static:      webdist.FS(),
 		AllowRemote: *allowRemote,
 		Version:     version,
+		RelayURL:    cfg.RelayURL,
+		ForceTurn:   *forceTurn,
 	}
 	if *static != "" {
 		srv.Static = os.DirFS(*static)
@@ -97,6 +118,37 @@ func main() {
 	srv.Init()
 	srv.ResumeRuns()
 
+	// Remote access: one outbound link to the relay (no port to open). The pod id and its
+	// secret live in relay.json (0600); the token is proved inside the tunnel, never to the
+	// relay.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	remote := ""
+	if cfg.RelayURL != "" {
+		ids, err := config.Relay(st)
+		check(err)
+		var state atomic.Value
+		state.Store("connecting")
+		srv.RelayStatus = func() server.RelayInfo {
+			return server.RelayInfo{URL: cfg.RelayURL, PodID: ids.PodID, Link: relayLink(cfg.RelayURL, ids.PodID, token), State: state.Load().(string)}
+		}
+		cli := relayclient.New(relayclient.Config{
+			RelayURL:  cfg.RelayURL,
+			PodID:     ids.PodID,
+			Secret:    ids.Secret,
+			Name:      hostname(),
+			Server:    srv,
+			Token:     token,
+			ForceTurn: *forceTurn,
+			OnState: func(s string) {
+				state.Store(s)
+				srv.Broadcast("relay.changed", srv.RelayStatus())
+			},
+		})
+		go func() { _ = cli.Run(ctx) }()
+		remote = relayLink(cfg.RelayURL, ids.PodID, token)
+	}
+
 	httpSrv := &http.Server{Addr: cfg.Addr, Handler: srv, ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		sig := make(chan os.Signal, 1)
@@ -104,15 +156,37 @@ func main() {
 		<-sig
 		log.Print("stopping the pod…")
 		srv.Shutdown()
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		cctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		_ = httpSrv.Shutdown(ctx)
+		_ = httpSrv.Shutdown(cctx)
 	}()
 
 	fmt.Printf("Web IDE pod %s\n  data      : %s\n  workspace : %s\n  open      : http://%s/?token=%s\n", version, st.Dir(), cfg.Workspace, cfg.Addr, token)
+	if remote != "" {
+		fmt.Printf("  remote    : %s\n", remote)
+	}
 	if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
+}
+
+// relayLink is the address the user opens from another network: the relay, the pod, the
+// token. The token is in the hash so it is not sent to the relay.
+func relayLink(relayURL, podID, token string) string {
+	u, err := url.Parse(relayURL)
+	if err != nil {
+		return relayURL + "/?pod=" + podID + "&t=" + token
+	}
+	u.Path = "/"
+	return u.String() + "#pod=" + podID + "&t=" + token
+}
+
+func hostname() string {
+	h, err := os.Hostname()
+	if err != nil {
+		return ""
+	}
+	return h
 }
 
 // dialKeeper connects to the keeper, or returns nil: the pod then runs the terminals itself.
@@ -231,4 +305,23 @@ func check(err error) {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+// flagValue returns the value of a flag only when it was set on the command line
+// (else def): the relay keeps its own default data folder.
+func flagValue(fs *flag.FlagSet, name, def string) string {
+	v := def
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			v = f.Value.String()
+		}
+	})
+	return v
+}
+
+// runRelayCmd runs the relay server subcommand until interrupted.
+func runRelayCmd(dataDir string, addr string, turnPort int, turnIP string, tlsPort int) {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	check(relay.Run(ctx, relay.RelayConfig{DataDir: dataDir, Addr: addr, TurnPort: turnPort, AdvertiseIP: turnIP, TLSPort: tlsPort}))
 }

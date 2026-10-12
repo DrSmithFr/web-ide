@@ -74,6 +74,20 @@ type Tailscale interface {
 // Dialer reaches the app (through SSH for a remote project).
 type Dialer func(ctx context.Context, network, addr string) (net.Conn, error)
 
+// Handler is the HTTP handler of a preview (the IDE cookie, or the token of a public one).
+// The relay tunnel serves a fetch through an http:<n> channel with this handler, so a
+// preview opened from another network goes through the tunnel instead of the URL of the
+// pod (the Service Worker of the relay forwards the request).
+func (m *Manager) Handler(id string) (http.Handler, bool) {
+	m.mu.Lock()
+	p := m.previews[id]
+	m.mu.Unlock()
+	if p == nil {
+		return nil, false
+	}
+	return m.handler(p, nil), true
+}
+
 type preview struct {
 	State
 	token  string

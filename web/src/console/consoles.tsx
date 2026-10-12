@@ -5,7 +5,8 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
-import { notifyIn, on as onPod, request, requestIn } from '../pod/rpc'
+import { notifyIn, notifyOn, on as onPod, openChannel, request, requestIn } from '../pod/rpc'
+import type { Channel } from '../pod/rpc'
 import { attached, diagnostics, home, mutate, openFile, project, relPath, root, session } from '../state/project'
 import { WorktreeChip } from '../ui/WorktreeChip'
 import { showTool } from '../state/zones'
@@ -111,6 +112,9 @@ interface TermEntry {
   next: number
   /** The end of the process is written. */
   exited?: boolean
+  // Channel of the tunnel for this terminal (its own input and output), null on a
+  // WebSocket.
+  ch: Channel | null
 }
 const terms = new Map<string, TermEntry>()
 
@@ -176,12 +180,15 @@ function getTerm(id: string): TermEntry {
     return false
   })
   term.open(el)
-  term.onData((data) => notifyIn(projectOf(id), 'console.input', { id, data }))
+  const entry: TermEntry = { term, fit, el, ready: false, queue: [], next: 0, ch: null }
+  terms.set(id, entry)
+  // In the tunnel, each terminal has its own channel: its input and its output go on it,
+  // so a long scrollback never delays the rpc channel. On a WebSocket, ch stays null.
+  void openChannel('term:' + id).then((ch) => (entry.ch = ch), () => {})
+  term.onData((data) => notifyOn(entry.ch, 'console.input', { id, data }, projectOf(id)))
   term.onResize(({ cols, rows }) => notifyIn(projectOf(id), 'console.resize', { id, cols, rows }))
-  te = { term, fit, el, ready: false, queue: [], next: 0 }
-  terms.set(id, te)
-  attachTerm(id, te)
-  return te
+  attachTerm(id, entry)
+  return entry
 }
 
 function disposeTerm(id: string) {

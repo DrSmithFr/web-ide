@@ -6,12 +6,14 @@ set -u
 cd "$(dirname "$0")"
 ROOT=$(cd .. && pwd)
 SUITES=("$@")
-[ ${#SUITES[@]} -eq 0 ] && SUITES=(editing editor features restore+ keyboard mousenav popups commands git projects explorer lsp llm agent chat plan doodle kanban kanbanai kanbangit docker tunnels preview subagents orchestrator mobile i18n speech perf keeper)
+[ ${#SUITES[@]} -eq 0 ] && SUITES=(editing editor features restore+ keyboard mousenav popups commands git projects explorer lsp llm agent chat plan doodle kanban kanbanai kanbangit docker tunnels preview subagents orchestrator mobile i18n speech perf keeper relay)
 [ -d node_modules/playwright-core ] || npm install --no-audit --no-fund >/dev/null
 PORT=${E2E_PORT:-4519}
+RELAY_PORT=${E2E_RELAY_PORT:-4430}
 MODELS=${E2E_MODELS:-$HOME/.cache/web-ide-e2e/models}
 TMP=$(mktemp -d)
 KEEPER_PID=
+RELAY_PID=
 stop_pod() {
   # The pod may have been restarted by its suite (keeper): its pid is in pod.pid.
   local pid
@@ -24,9 +26,28 @@ stop_pod() {
   while kill -0 "$KEEPER_PID" 2>/dev/null; do sleep 0.1; done
   KEEPER_PID=
 }
-trap 'stop_pod; rm -rf "$TMP"' EXIT
+stop_relay() {
+  [ -n "$RELAY_PID" ] || return
+  kill "$RELAY_PID" 2>/dev/null
+  while kill -0 "$RELAY_PID" 2>/dev/null; do sleep 0.1; done
+  RELAY_PID=
+}
+# The relay of the relay suite (its own pid, never a pkill: the pod running the assistant
+# has the same name).
+start_relay() {
+  mkdir -p "$TMP/relaydata"
+  # TURN on loopback: without -turn-ip the relay advertises the machine IP, and Chromium
+  # filters candidates it cannot reach; the suite asserts the pair is a relay one.
+  "$ROOT/bin/web-ide-pod" -data "$TMP/relaydata" -addr "127.0.0.1:$RELAY_PORT" -turn-ip 127.0.0.1 relay >"$TMP/relay.log" 2>&1 </dev/null &
+  RELAY_PID=$!
+  export E2E_RELAY_PID=$RELAY_PID
+  for _ in $(seq 50); do curl -s -o /dev/null "http://127.0.0.1:$RELAY_PORT/" && break; sleep 0.1; done
+}
+trap 'stop_pod; stop_relay; rm -rf "$TMP"' EXIT
 start_pod() {
   rm -rf "$TMP/data" "$TMP/ws"
+  EXTRA=()
+  if [ "${1:-}" = relay ]; then EXTRA=(-relay "http://127.0.0.1:$RELAY_PORT" -force-turn); fi
   mkdir -p "$TMP/ws" "$TMP/data" "$MODELS"
   # Speech models are kept between runs (downloaded once from Hugging Face).
   ln -s "$MODELS" "$TMP/data/models"
@@ -53,7 +74,7 @@ PY
   cat >"$TMP/launch-pod.sh" <<EOF
 GIT_AUTHOR_NAME=e2e GIT_AUTHOR_EMAIL=e2e@x GIT_COMMITTER_NAME=e2e GIT_COMMITTER_EMAIL=e2e@x \\
 WEBIDE_INSTRUCTIONS_HOME="$TMP/home" WEBIDE_SCRATCH="$TMP/scratch" WEBIDE_CLAUDE="$ROOT/e2e/bin/claude" PATH="$ROOT/e2e/bin:$HOME/go/bin:$HOME/sdk/go/bin:$PATH" "$ROOT/bin/web-ide-pod" -addr "127.0.0.1:$PORT" -data "$TMP/data" -workspace "$TMP/ws" \\
-  -static "$ROOT/pod/webdist/dist" >>"$TMP/pod.log" 2>&1 </dev/null &
+  -static "$ROOT/pod/webdist/dist" ${EXTRA[@]+"${EXTRA[@]}"} >>"$TMP/pod.log" 2>&1 </dev/null &
 echo \$! >"$TMP/pod.pid"
 for _ in \$(seq 50); do [ -s "$TMP/data/token" ] && curl -s -o /dev/null "http://127.0.0.1:$PORT/" && break; sleep 0.1; done
 EOF
@@ -67,11 +88,15 @@ EOF
   bash "$TMP/launch-pod.sh"
 }
 export E2E_URL="http://127.0.0.1:$PORT" E2E_WS="$TMP/ws" E2E_OUT="${E2E_OUT:-$TMP}" E2E_RESTART_POD="$TMP/restart-pod.sh" E2E_DATA="$TMP/data"
+export E2E_RELAY_URL="http://127.0.0.1:$RELAY_PORT" E2E_RELAY_PORT="$RELAY_PORT" E2E_RELAY_DATA="$TMP/relaydata" E2E_BIN="$ROOT/bin/web-ide-pod"
 mkdir -p "$E2E_OUT"
 status=0
 for s in "${SUITES[@]}"; do
   if [[ $s == *+ ]]; then s=${s%+}; else stop_pod; start_pod "$s"; fi
+  [ "$s" = relay ] && start_relay
   export E2E_TOKEN=$(cat "$TMP/data/token")
+  # Pod id of the relay client: the pod id + secret live in relay.json of its data folder.
+  export E2E_POD_ID=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["podId"])' "$TMP/data/relay.json" 2>/dev/null)
   echo "== $s"
   node "suites/$s.cjs" || status=1
 done

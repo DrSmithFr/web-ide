@@ -48,6 +48,24 @@ The pod only answers the local machine. To use it from your laptop, phone or tab
 
 This runs `tailscale serve`, which gives the pod an HTTPS address with a real certificate, such as `https://my-desktop.my-tailnet.ts.net/?token=…`, reachable from every device of your tailnet, at home and away. HTTPS matters: browsers only give the microphone (dictation) and the clipboard to secure pages. If `tailscale serve` is refused, allow your user once with `sudo tailscale set --operator=$USER`.
 
+### From another network: the relay
+
+The relay is an optional piece: it only introduces the browser and the pod, the traffic between them is encrypted and the relay never sees your token. Run your own:
+
+```sh
+web-ide-pod relay            # signaling + STUN/TURN + bootstrap page, SQLite in ~/.web-ide-relay
+```
+
+Its own data folder (`~/.web-ide-relay`, `-data` only when given explicitly), so it does not share the pod's. Options: `-addr` (`127.0.0.1:4430`), `-turn-port` (3478), `-turn-ip` (the IP announced to clients), `-tls-port` (443, shared with HTTPS and TURN over TLS; a port below 1024 needs root, and TURN over TLS is simply off when it cannot be bound). Open the link the pod prints — `#pod=<id>&t=<token>`, the token stays in the hash and never reaches the relay.
+
+Then start a pod with `-relay http://127.0.0.1:4430` (or `relay` in `config.json`). The pod prints its remote link, also shown in Settings > Remote access:
+
+```
+remote : http://127.0.0.1:4430/#pod=<id>&t=<token>
+```
+
+Open that link from any browser on another network: a small bootstrap page and a Service Worker come from the relay, the app itself comes from your pod through the tunnel. The pod keeps one outbound WebSocket to its relay (no port to open on the machine) and reconnects by itself; the token is proved inside the DataChannel, bound to the fingerprints of both sides. If the relay is down, `127.0.0.1` keeps working as before. TURN credentials are short-lived and given only to a registered, online pod. See [relay.md](relay.md).
+
 ### From the sources
 
 ```sh
