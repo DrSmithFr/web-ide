@@ -17,6 +17,7 @@ import { Doc } from '../editor/doc'
 import { EditorView } from '../editor/view'
 import { samples } from './samples'
 import { Devices } from './Devices'
+import { SyncPanel } from './Sync'
 import { browserLang, fmtDate, languages, t, tn, type LangSetting } from '../i18n'
 
 const sections = [
@@ -74,6 +75,7 @@ export function SettingsHost() {
             </Show>
             <Show when={open() === 'remote'}>
               <RemoteAccess />
+              <SyncPanel />
               <Devices />
             </Show>
             <Show when={open() === 'history'}>

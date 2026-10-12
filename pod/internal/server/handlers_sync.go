@@ -44,9 +44,9 @@ func (s *Server) registerSync() {
 		return src.Status(), nil
 	})
 
-	// The vault switch. Switching it off deletes the blob: the pod that was keeping it stops
-	// sharing its keys, and the other pods keep what they already have.
-	s.handle("sync.vault", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+	// A sync switch (settings or vault). Switching one off deletes its blob: the pod stops sharing
+	// what it holds, and the other pods keep what they already read.
+	s.handle("sync.switch", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 		a, err := bind[struct {
 			Kind string
 			On   bool
@@ -54,15 +54,12 @@ func (s *Server) registerSync() {
 		if err != nil {
 			return nil, err
 		}
-		if a.Kind != "vault" {
-			return nil, i18n.Errorf("nothing to switch under %q", a.Kind)
-		}
 		if err := s.Sync.Flags().Set(a.Kind, a.On); err != nil {
 			return nil, err
 		}
 		src := s.Sync.Source(a.Kind)
 		if src == nil {
-			return nil, i18n.New("the vault is not synced by this pod")
+			return nil, i18n.Errorf("nothing synced under %q", a.Kind)
 		}
 		if !a.On {
 			if err := src.Delete(); err != nil {
