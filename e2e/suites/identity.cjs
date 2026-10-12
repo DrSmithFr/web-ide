@@ -32,8 +32,9 @@ async function authenticator(page) {
   await cdp.send('WebAuthn.addVirtualAuthenticator', { options: VA })
 }
 
-/** Runs "pair create" to the end: reads the phrase and the positions asked back, answers
- * them with answer(positions, phrase), and returns the phrase and what came after. */
+/** Runs "pair create" to the end: reads the phrase (eight numbered rows of three words), the
+ * positions asked back, answers them with answer(positions, phrase), and returns the phrase
+ * and what came after. */
 async function pairCreate(answer) {
   const p = spawn(BIN, ['-data', DATA, 'pair', 'create'], { stdio: ['pipe', 'pipe', 'pipe'] })
   const rl = readline.createInterface({ input: p.stdout })
@@ -56,7 +57,10 @@ async function pairCreate(answer) {
   }
 
   await line() // the header
-  const phrase = ((await line()) ?? '').trim()
+  // Eight rows of three numbered words: the numbers are dropped, the words joined.
+  let rows = ''
+  for (let i = 0; i < 8; i++) rows += (await line()) ?? ''
+  const phrase = rows.split(/\s+/).filter((w) => w && !w.endsWith(')')).join(' ')
   const pos = (((await line()) ?? '').match(/\d+/g) ?? []).map(Number)
   for (const w of answer(pos, phrase)) p.stdin.write(w + '\n')
   const rest = []

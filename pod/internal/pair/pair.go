@@ -16,6 +16,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -76,7 +77,7 @@ func Create(env *Env) error {
 		return err
 	}
 	fmt.Fprintln(env.Out, "Account phrase — shown once, never stored. Write it down:")
-	fmt.Fprintln(env.Out, phrase)
+	printPhrase(env.Out, phrase)
 	if err := confirm(env, phrase); err != nil {
 		return err
 	}
@@ -227,8 +228,21 @@ func (env *Env) positions() ([]int, error) {
 	return pos, nil
 }
 
+// printPhrase shows the words numbered, eight rows of three, so the user can write them down
+// and find the ones the check asks for.
+func printPhrase(w io.Writer, phrase string) {
+	words := strings.Fields(phrase)
+	for i := 0; i < len(words); i += 3 {
+		for j := i; j < i+3 && j < len(words); j++ {
+			fmt.Fprintf(w, "%2d) %-9s", j+1, words[j])
+		}
+		fmt.Fprintln(w)
+	}
+}
+
 // confirm asks three words of the phrase back. A wrong answer means the phrase was not
-// written down: nothing is stored.
+// written down: nothing is stored. The positions are sorted, so the words are typed in the
+// order they are numbered on the screen.
 func confirm(env *Env, phrase string) error {
 	words := strings.Fields(phrase)
 	pos, err := env.positions()
@@ -238,6 +252,7 @@ func confirm(env *Env, phrase string) error {
 	if len(pos) != 3 {
 		return errors.New("pair: the check asks three words")
 	}
+	sort.Ints(pos)
 	fmt.Fprint(env.Out, "Confirm — type word ")
 	for i, p := range pos {
 		if i > 0 {
