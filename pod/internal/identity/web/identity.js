@@ -108,6 +108,18 @@ export async function x25519Generate() {
   return { jwk: await crypto.subtle.exportKey('jwk', k.privateKey), key: b64u(new Uint8Array(await crypto.subtle.exportKey('raw', k.publicKey))) }
 }
 
+// The X25519 key of a device from its 32-byte seed. WebCrypto refuses a raw seed here too, so the
+// PKCS#8 DER is built by hand with the X25519 algorithm id (1.3.101.110): the same seed gives the
+// same key as the pod's crypto/ecdh, which the test vectors check.
+const PKCS8_X25519_PREFIX = [0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x6e, 0x04, 0x22, 0x04, 0x20]
+
+export async function x25519FromSeed(seed) {
+  const der = new Uint8Array([...PKCS8_X25519_PREFIX, ...seed])
+  const k = await crypto.subtle.importKey('pkcs8', der, { name: 'X25519', namedCurve: 'X25519' }, true, ['deriveBits'])
+  const jwk = await crypto.subtle.exportKey('jwk', k)
+  return { jwk, key: jwk.x }
+}
+
 export async function x25519Shared(jwk, peerKey) {
   const priv = await crypto.subtle.importKey('jwk', jwk, { name: 'X25519', namedCurve: 'X25519' }, false, ['deriveBits'])
   const peer = await crypto.subtle.importKey('jwk', { kty: 'OKP', crv: 'X25519', x: peerKey }, { name: 'X25519', namedCurve: 'X25519' }, false, [])
@@ -402,7 +414,7 @@ export async function unlock(db) {
     try {
       const p = await passkey(r, false)
       const seed = await open(p.prf, r.device)
-      return { rec: r, key: await keyFromSeed(seed, false), prf: p.prf }
+      return { rec: r, key: await keyFromSeed(seed, false), prf: p.prf, seed }
     } catch {
       // Another device of this profile, or the passkey was dismissed.
     }
@@ -415,6 +427,26 @@ export async function unlock(db) {
 export async function accountKey(rec, prf) {
   if (!rec?.accountSeed) return null
   return keyFromSeed(await open(prf, rec.accountSeed), true)
+}
+
+// The sync seed of an admin device, unwrapped for the session: what lets it wrap the key of an
+// epoch for a device that does not know the phrase.
+export async function syncSeed(rec, prf) {
+  if (!rec?.syncSeed) return null
+  return open(prf, rec.syncSeed)
+}
+
+// The wrap of the key of an epoch for a device: X25519 with the key it published, HKDF, AES-GCM.
+// Only a device holding the account key signs it, so the relay stores a wrap but cannot make one.
+export async function wrapFor(accountKey, accountId, device, peerKey, seed, syncSeed, epoch) {
+  const { jwk, key } = await x25519FromSeed(seed)
+  const shared = await x25519Shared(jwk, peerKey)
+  const wk = await wrapKey(shared)
+  const ekey = await epochKey(syncSeed, epoch)
+  const s = await sealWith(wk, wrapAAD(accountId, device, epoch), ekey)
+  const w = { account: accountId, device, epoch, key, nonce: s.iv, data: s.data }
+  w.sig = await sign(accountKey, canonicalWrap(w))
+  return w
 }
 
 // A certificate signed by the account key for a device. The admin signs for the public key it
@@ -442,9 +474,10 @@ export async function enroll(db, phrase, wordlist, name, kind) {
   rec.account = accountId
   rec.device = await seal(p.prf, deviceSeed)
   rec.accountSeed = await seal(p.prf, accountSeed)
+  rec.syncSeed = await seal(p.prf, await hkdf(seed, InfoSync))
   const key = await keyFromSeed(deviceSeed, false)
   const accountSigningKey = await keyFromSeed(accountSeed, true)
   rec.cert = await signCert(accountSigningKey, accountId, deviceId, name, kind)
   await save(db, deviceId, rec)
-  return { rec, key, prf: p.prf, accountKey: accountSigningKey }
+  return { rec, key, prf: p.prf, accountKey: accountSigningKey, seed: deviceSeed }
 }
