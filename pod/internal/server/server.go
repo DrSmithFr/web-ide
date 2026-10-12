@@ -236,6 +236,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
+	// The browser fetches the manifest of the installable app without cookies: it and its
+	// icons are served before the pairing check (nothing private in them).
+	if appFiles[r.URL.Path] {
+		s.serveStatic(w, r)
+		return
+	}
 	if !s.authorized(r) {
 		if r.URL.Path == "/ws" {
 			http.Error(w, "not paired", http.StatusUnauthorized)
@@ -278,8 +284,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.serveStatic(w, r)
 }
 
+// appFiles are the manifest of the installable app (PWA) and its icons (web/public).
+var appFiles = map[string]bool{"/manifest.webmanifest": true, "/icon.svg": true, "/icon-192.png": true, "/icon-512.png": true}
+
 func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request) {
 	p := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
+	if p == "manifest.webmanifest" {
+		w.Header().Set("Content-Type", "application/manifest+json")
+	}
 	if p != "" {
 		if f, err := s.Static.Open(p); err == nil {
 			st, _ := f.Stat()

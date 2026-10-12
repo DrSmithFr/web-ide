@@ -34,6 +34,7 @@ Technical points:
 - **Mixed content**: the front end is embedded in the pod binary and served from the same origin, so there is no HTTPS page talking to `ws://localhost`.
 - **Pairing**: without a check, any website open in the browser could talk to the pod. The pod prints a token once; opening the URL with `?token=…` stores it in an HTTP-only cookie.
 - **Persistence**: a systemd user service (`make service`) or a one-off run (`make run`). No tray icon.
+- **Installable app** (PWA): a manifest and its icons (`web/public`) let Chromium browsers install the IDE in its own window (*Install* in the address bar), where shortcuts such as `Ctrl+Tab`, `Ctrl+W` or `Ctrl+N` reach the IDE. The browser fetches the manifest without cookies: it and its icons are served before the pairing check. Installing needs a secure context: `localhost`, or HTTPS (relay, Tailscale); not plain HTTP with `-allow-remote`.
 
 ## 4. Browser file access (fallback notes)
 

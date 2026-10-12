@@ -4,6 +4,10 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+### Added
+
+- The IDE installs as an app (PWA) from Chromium browsers: its own window, where shortcuts such as `Ctrl+Tab`, `Ctrl+W` or `Ctrl+N` reach the IDE.
+
 ## [1.9.0] - 2026-10-12
 
 ### Added

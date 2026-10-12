@@ -40,7 +40,7 @@ func newServer(t *testing.T) (*Server, *httptest.Server) {
 	sets, _ := settings.Load(st)
 	s := &Server{Cfg: cfg, Store: st, Token: "secret-token-0123456789abcdef0123", Projects: reg, Settings: sets,
 		Sessions: sessions.New(st), LLM: llm.New(st), Models: hfcache.New(st.Path("models", "hf")), Pool: sshx.NewPool(sshx.NewHostKeys(st.Path("known_hosts"))),
-		Static: fstest.MapFS{"index.html": {Data: []byte("<html>app</html>")}}}
+		Static: fstest.MapFS{"index.html": {Data: []byte("<html>app</html>")}, "manifest.webmanifest": {Data: []byte(`{"name":"Web IDE"}`)}}}
 	s.Init()
 	ts := httptest.NewServer(s)
 	t.Cleanup(func() {
@@ -136,6 +136,11 @@ func TestPairing(t *testing.T) {
 	res, _ := http.Get(ts.URL + "/project/x")
 	if res.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("page served without pairing: %d", res.StatusCode)
+	}
+	// The manifest of the installable app is fetched by the browser without cookies.
+	res, _ = http.Get(ts.URL + "/manifest.webmanifest")
+	if res.StatusCode != http.StatusOK || res.Header.Get("Content-Type") != "application/manifest+json" {
+		t.Fatalf("manifest without pairing: %d %s", res.StatusCode, res.Header.Get("Content-Type"))
 	}
 	jar := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	res, _ = jar.Get(ts.URL + "/?token=secret-token-0123456789abcdef0123")

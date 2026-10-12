@@ -1,4 +1,4 @@
-// Projects: generated icon (home page, favicon), icon editor; menu bar with the selector of
+// Projects: installable app, generated icon (home page, favicon), icon editor; menu bar with the selector of
 // the worktrees, a branch opened in its own worktree and window.
 const fs = require('fs')
 const { execSync } = require('child_process')
@@ -14,6 +14,11 @@ run(async ({ page, ctx }) => {
   await page.waitForFunction(() => document.querySelector('[data-testid=pod-version]')?.textContent)
   const version = execSync(`${__dirname}/../../bin/web-ide-pod -version`, { encoding: 'utf8' }).trim()
   assert((await page.textContent('[data-testid=pod-version]')) === version, 'home page: version of the pod')
+  // Installable app (PWA): Chromium sees no error but the incognito context of the tests.
+  const cdp = await ctx.newCDPSession(page)
+  const { installabilityErrors } = await cdp.send('Page.getInstallabilityErrors')
+  const errors = installabilityErrors.map((e) => e.errorId).filter((id) => id !== 'in-incognito')
+  assert(errors.length === 0, 'installable app: ' + errors.join(', '))
   await openProject(page)
   // A project without an icon gets one generated: initials of its name, saved in .ide.
   await page.waitForFunction(() => decodeURIComponent(document.querySelector('link[rel="icon"]').href).includes('>DE</text>'), null, { timeout: 5000 }).catch(() => {})
