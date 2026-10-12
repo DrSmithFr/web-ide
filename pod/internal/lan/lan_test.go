@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"sync"
@@ -59,7 +60,7 @@ func podIdentity(t *testing.T, a *identity.Account, name string) (*identity.PodI
 func podHandler(name string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/ws" {
-			_, _ = io.WriteString(w, "pod "+name)
+			_, _ = io.WriteString(w, "pod "+name+" "+r.URL.Path+" "+r.Header.Get(BaseHeader))
 			return
 		}
 		c, err := websocket.Accept(w, r, nil)
@@ -146,26 +147,28 @@ func TestTwoPodsReachEachOther(t *testing.T) {
 
 	st := waitFor(t, al, "alpha sees bravo with its projects", func(st Status) bool {
 		p := online(st, "bravo")
-		return p != nil && p.Port != 0 && strings.Contains(string(p.Projects), "project of bravo")
+		return p != nil && p.Path != "" && strings.Contains(string(p.Projects), "project of bravo")
 	})
 	// bravo was dialed: it dials back on the port alpha told.
 	waitFor(t, b, "bravo sees alpha", func(st Status) bool { return online(st, "alpha") != nil })
 
-	// The gateway port serves bravo, WebSocket included.
-	port := online(st, "bravo").Port
-	res, err := http.Get("http://127.0.0.1:" + itoa(port) + "/anything")
+	// alpha serves bravo under its path, WebSocket included.
+	base := online(st, "bravo").Path
+	gw := httptest.NewServer(http.HandlerFunc(al.m.ServeGateway))
+	defer gw.Close()
+	res, err := http.Get(gw.URL + base + "/project/x")
 	if err != nil {
 		t.Fatal(err)
 	}
 	body, _ := io.ReadAll(res.Body)
 	res.Body.Close()
-	if string(body) != "pod bravo" {
+	if string(body) != "pod bravo /project/x "+base {
 		t.Fatalf("gateway answered %q", body)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	c, _, err := websocket.Dial(ctx, "ws://127.0.0.1:"+itoa(port)+"/ws", &websocket.DialOptions{
-		HTTPHeader: http.Header{"Origin": {"http://127.0.0.1:" + itoa(port)}}})
+	c, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(gw.URL, "http")+base+"/ws", &websocket.DialOptions{
+		HTTPHeader: http.Header{"Origin": {gw.URL}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +180,7 @@ func TestTwoPodsReachEachOther(t *testing.T) {
 	c.CloseNow()
 
 	// The page of bravo asks who serves it.
-	res, err = http.Get("http://127.0.0.1:" + itoa(port) + GatewayPath)
+	res, err = http.Get(gw.URL + base + GatewayPath)
 	if err != nil {
 		t.Fatal(err)
 	}

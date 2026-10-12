@@ -40,7 +40,7 @@ func newServer(t *testing.T) (*Server, *httptest.Server) {
 	sets, _ := settings.Load(st)
 	s := &Server{Cfg: cfg, Store: st, Token: "secret-token-0123456789abcdef0123", Projects: reg, Settings: sets,
 		Sessions: sessions.New(st), LLM: llm.New(st), Models: hfcache.New(st.Path("models", "hf")), Pool: sshx.NewPool(sshx.NewHostKeys(st.Path("known_hosts"))),
-		Static: fstest.MapFS{"index.html": {Data: []byte("<html>app</html>")}, "manifest.webmanifest": {Data: []byte(`{"name":"Web IDE"}`)}}}
+		Static: fstest.MapFS{"index.html": {Data: []byte(`<html><link rel="manifest" href="./manifest.webmanifest"><script src="./assets/app.js"></script>app</html>`)}, "manifest.webmanifest": {Data: []byte(`{"name":"Web IDE"}`)}}}
 	s.Init()
 	ts := httptest.NewServer(s)
 	t.Cleanup(func() {
@@ -146,6 +146,30 @@ func TestPairing(t *testing.T) {
 	res, _ = jar.Get(ts.URL + "/?token=secret-token-0123456789abcdef0123")
 	if res.StatusCode != http.StatusFound || !strings.Contains(res.Header.Get("Set-Cookie"), cookieName) {
 		t.Fatalf("pairing by URL failed: %d", res.StatusCode)
+	}
+}
+
+// The paths of the page start from the root, or from the path a gateway pod serves this
+// pod under when the request comes from it.
+func TestPageBase(t *testing.T) {
+	s, ts := newServer(t)
+	page := func(serve http.HandlerFunc, base string) string {
+		req := httptest.NewRequest("GET", ts.URL+"/project/x", nil)
+		req.Header.Set("Cookie", cookieName+"="+s.Token)
+		req.RemoteAddr = "127.0.0.1:1"
+		req.Header.Set("X-Webide-Base", base)
+		rec := httptest.NewRecorder()
+		serve(rec, req)
+		return rec.Body.String()
+	}
+	if got := page(s.ServeHTTP, "/_lan/pod/abc"); !strings.Contains(got, `src="/assets/app.js"`) {
+		t.Fatalf("own page: %s", got)
+	}
+	if got := page(s.ServeTrusted, "/_lan/pod/abc"); !strings.Contains(got, `src="/_lan/pod/abc/assets/app.js"`) || !strings.Contains(got, `href="/manifest.webmanifest"`) {
+		t.Fatalf("page of a peer: %s", got)
+	}
+	if got := page(s.ServeTrusted, "/elsewhere"); !strings.Contains(got, `src="/assets/app.js"`) {
+		t.Fatalf("base out of the peer paths: %s", got)
 	}
 }
 

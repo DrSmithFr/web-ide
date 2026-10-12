@@ -1,16 +1,18 @@
 // Minimal router: /, /project/:id, and the detached panels
-// /project/:id/editor, /project/:id/tool/:toolId.
+// /project/:id/editor, /project/:id/tool/:toolId; under the base path of the page.
 import { createSignal } from 'solid-js'
+import { base, podPath } from './base'
 
-const [path, setPath] = createSignal(location.pathname)
+const current = () => location.pathname.slice(base.length) || '/'
+const [path, setPath] = createSignal(current())
 export { path }
 
-window.addEventListener('popstate', () => setPath(location.pathname))
+window.addEventListener('popstate', () => setPath(current()))
 
 export function navigate(to: string, replace = false) {
-  if (to === location.pathname) return
-  if (replace) history.replaceState(null, '', to)
-  else history.pushState(null, '', to)
+  if (to === current()) return
+  if (replace) history.replaceState(null, '', podPath(to))
+  else history.pushState(null, '', podPath(to))
   setPath(to)
 }
 

@@ -2,6 +2,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/subtle"
 	"encoding/json"
@@ -256,6 +257,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.serveWS(w, r)
 		return
 	}
+	if strings.HasPrefix(r.URL.Path, peerPrefix) && s.LAN != nil {
+		s.LAN.ServeGateway(w, r)
+		return
+	}
 	// The identity module, the wordlist and the pairing link: the app runs on the pod origin
 	// and imports the same file the bootstrap page loads from the relay.
 	if r.URL.Path == "/_relay/identity.js" {
@@ -311,6 +316,12 @@ func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "front end not built: run `make build`", http.StatusInternalServerError)
 		return
 	}
+	// The front end is built with relative paths (base ./ of Vite): its assets start from
+	// the root, or from the path of a peer served through its gateway pod. The rest (the
+	// manifest of the installed app) stays at the root of the origin.
+	base, _ := r.Context().Value(baseKey{}).(string)
+	data = bytes.ReplaceAll(data, []byte(`="./assets/`), []byte(`="`+base+`/assets/`))
+	data = bytes.ReplaceAll(data, []byte(`="./`), []byte(`="/`))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	_, _ = w.Write(data)
