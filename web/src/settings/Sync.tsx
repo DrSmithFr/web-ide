@@ -24,7 +24,7 @@ interface SyncStatus {
   lastSync: number
   device: string
   error?: string
-  conflicts: Conflict[]
+  conflicts: Conflict[] | null
 }
 
 /** A value of a conflict, shown as the user reads it. */
@@ -100,7 +100,7 @@ export function SyncPanel() {
               <dd class="mono small">{s.seq}</dd>
             </dl>
 
-            <Show when={s.conflicts.length}>
+            <Show when={(s.conflicts ?? []).length}>
               <h3>{t('Conflicts')}</h3>
               <table class="rules">
                 <thead>

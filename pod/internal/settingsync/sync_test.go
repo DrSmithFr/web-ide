@@ -168,7 +168,7 @@ func newPod(t *testing.T, f *fakeRelay, name string) *pod {
 	}
 	flags := NewFlags(sets)
 	h := NewHub(st, &testTransport{f, p.ID()}, p, flags)
-	if _, err := h.AddSource(NewSettingsSource(sets, func() bool { return flags.On(identity.KindSettings) })); err != nil {
+	if _, err := h.AddSource(NewSettingsSource(sets, func() bool { return flags.On(identity.KindSettings) }, nil)); err != nil {
 		t.Fatal(err)
 	}
 	f.pods[p.ID()] = h
@@ -421,7 +421,7 @@ func TestSyncVault(t *testing.T) {
 	}
 
 	on := false
-	vaultA := NewVaultSource(podA.store, llmA, func() bool { return on })
+	vaultA := NewVaultSource(podA.store, llmA, func() bool { return on }, nil)
 	if _, err := podA.hub.AddSource(vaultA); err != nil {
 		t.Fatal(err)
 	}
@@ -448,7 +448,7 @@ func TestSyncVault(t *testing.T) {
 	}
 
 	// The other pod reads it and applies the key to its own server.
-	vaultB := NewVaultSource(podB.store, llmB, func() bool { return true })
+	vaultB := NewVaultSource(podB.store, llmB, func() bool { return true }, nil)
 	if _, err := podB.hub.AddSource(vaultB); err != nil {
 		t.Fatal(err)
 	}

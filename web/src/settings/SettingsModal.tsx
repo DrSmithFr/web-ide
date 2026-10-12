@@ -197,7 +197,7 @@ function Fonts() {
       <div class="field-row">
         <label class="field">
           <span>{t('Code size (px)')}</span>
-          <input type="number" min="8" max="32" value={f.size} onChange={(e) => num('size', e.currentTarget.value)} />
+          <input type="number" min="8" max="32" value={f.size} onChange={(e) => num('size', e.currentTarget.value)} data-testid="font-size" />
         </label>
         <label class="field">
           <span>{t('Line height')}</span>

@@ -67,6 +67,7 @@ type Server struct {
 type podConn struct {
 	id, name string
 	account  string // the account the pod is paired with (empty: token mode)
+	device   string // the device id the pod published its sync key under (empty: not published yet)
 	ws       *websocket.Conn
 	mu       sync.Mutex
 }

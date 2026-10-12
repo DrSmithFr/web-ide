@@ -24,17 +24,20 @@ type Source interface {
 
 // SettingsSource syncs the settings of the pod. Every applied change goes through Settings.Save
 // with a label, so the history and the rollback keep working with the changes of the other pods.
+// The notify hook tells the page that a change came from another pod: without it the settings of the
+// window would stay on the values it read at open.
 type SettingsSource struct {
-	s  *settings.Settings
-	on func() bool
+	s      *settings.Settings
+	on     func() bool
+	notify func(settings.Entry)
 }
 
 // Map fields of the settings: their entries merge per key. The per-device layout and the sync
 // switches are maps too, so the entry of a device does not overwrite the entry of another.
 var settingsMaps = []string{"tokenColors", "syntax", "keyboard/overrides", "devices", "sync"}
 
-func NewSettingsSource(s *settings.Settings, on func() bool) *SettingsSource {
-	return &SettingsSource{s: s, on: on}
+func NewSettingsSource(s *settings.Settings, on func() bool, notify func(settings.Entry)) *SettingsSource {
+	return &SettingsSource{s: s, on: on, notify: notify}
 }
 
 func (s *SettingsSource) Kind() string          { return identity.KindSettings }
@@ -43,12 +46,18 @@ func (s *SettingsSource) Enabled() bool         { return s.on() }
 func (s *SettingsSource) Read() json.RawMessage { return s.s.Current().Settings }
 
 func (s *SettingsSource) Write(content json.RawMessage, label string) error {
-	_, err := s.s.Save(content, label)
+	e, err := s.s.Save(content, label)
+	if err == nil && s.notify != nil {
+		s.notify(e)
+	}
 	return err
 }
 
 func (s *SettingsSource) Clear(label string) error {
-	_, err := s.s.Save(json.RawMessage(`{}`), label)
+	e, err := s.s.Save(json.RawMessage(`{}`), label)
+	if err == nil && s.notify != nil {
+		s.notify(e)
+	}
 	return err
 }
 
@@ -56,15 +65,16 @@ func (s *SettingsSource) Clear(label string) error {
 // database secrets. It is opt-in; off, nothing is put and the blob is deleted. Its content is not a
 // whole document but a set of entries, so it merges per entry.
 type VaultSource struct {
-	st  *store.Store
-	llm *llm.Manager
-	on  func() bool
+	st     *store.Store
+	llm    *llm.Manager
+	on     func() bool
+	notify func()
 }
 
 var vaultMaps = []string{"llm", "secrets"}
 
-func NewVaultSource(st *store.Store, m *llm.Manager, on func() bool) *VaultSource {
-	return &VaultSource{st: st, llm: m, on: on}
+func NewVaultSource(st *store.Store, m *llm.Manager, on func() bool, notify func()) *VaultSource {
+	return &VaultSource{st: st, llm: m, on: on, notify: notify}
 }
 
 func (v *VaultSource) Kind() string        { return identity.KindVault }
@@ -115,6 +125,9 @@ func (v *VaultSource) Write(content json.RawMessage, label string) error {
 		if err := v.st.WriteJSON("secrets.json", all); err != nil {
 			return err
 		}
+	}
+	if v.notify != nil {
+		v.notify()
 	}
 	_ = label
 	return nil

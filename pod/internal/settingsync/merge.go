@@ -148,7 +148,10 @@ func Merge(base, local, remote State) (State, []Conflict) {
 	var conflicts []Conflict
 	for _, p := range paths {
 		b, l, r := base.Fields[p], local.Fields[p], remote.Fields[p]
-		lc, rc := !sameValue(l, b), !sameValue(r, b)
+		// An entry a side never saw (clock 0) is not a change on that side: only a value it wrote,
+		// or a deletion it recorded, counts. A pod that writes a state where a field is simply
+		// missing has not deleted it, it has never seen it.
+		lc, rc := l.Rev > 0 && !sameValue(l, b), r.Rev > 0 && !sameValue(r, b)
 		keep := l
 		switch {
 		case lc && rc && !sameValue(l, r):

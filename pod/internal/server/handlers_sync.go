@@ -5,21 +5,17 @@ import (
 	"encoding/json"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
-	"github.com/DrSmithFr/web-ide/pod/internal/settingsync"
 )
 
 // Settings sync: what the page shows in Settings > Remote access > Sync — the state of each kind,
 // the conflicts it must resolve, and the vault switch. The pods do the merge; the relay only stores
 // ciphertext, so a conflict is answered by the pod that owns the setting.
 func (s *Server) registerSync() {
-	if s.Sync == nil {
-		return
-	}
-	s.Sync.SetEmitter(func(st settingsync.Status, name string, payload any) {
-		s.broadcast("sync."+name, map[string]any{"status": st, "payload": payload}, nil)
-	})
-
+	// The hub is built after the handlers, in main: check it at call time, like the LAN handlers.
 	s.handle("sync.status", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		if s.Sync == nil {
+			return nil, i18n.New("the pod is not paired")
+		}
 		return s.Sync.Status(), nil
 	})
 
@@ -33,6 +29,9 @@ func (s *Server) registerSync() {
 		}](p)
 		if err != nil {
 			return nil, err
+		}
+		if s.Sync == nil {
+			return nil, i18n.New("the pod is not paired")
 		}
 		src := s.Sync.Source(a.Kind)
 		if src == nil {
@@ -53,6 +52,9 @@ func (s *Server) registerSync() {
 		}](p)
 		if err != nil {
 			return nil, err
+		}
+		if s.Sync == nil {
+			return nil, i18n.New("the pod is not paired")
 		}
 		if err := s.Sync.Flags().Set(a.Kind, a.On); err != nil {
 			return nil, err

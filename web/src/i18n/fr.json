@@ -1802,6 +1802,8 @@
   "This device is paired as an admin.": "Cet appareil est apparié comme administrateur.",
   "Device approved.": "Appareil approuvé.",
   "Device revoked. The sync key epoch moved to {n}.": "Appareil révoqué. L'époque de la clé de synchronisation est passée à {n}.",
+  "Device revoked. The sync key epoch moved to {n}. Renew the API keys shared with the other pods: {servers}.": "Appareil révoqué. L'époque de la clé de synchronisation est passée à {n}. Renouvelez les clés d'API partagées avec les autres pods : {servers}.",
+  "A device was revoked: the API keys the vault shares with the other pods must be renewed — {servers}.": "Un appareil a été révoqué : les clés d'API que le coffre partage avec les autres pods doivent être renouvelées — {servers}.",
   "Sync key": "Clé de synchronisation",
   "wrapped": "enveloppée",
   "Wrap": "Envelopper",

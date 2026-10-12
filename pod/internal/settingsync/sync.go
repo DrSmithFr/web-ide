@@ -183,7 +183,12 @@ func (s *Sync) apply(rec *identity.BlobRecord, updated int64) error {
 		return s.Push()
 	}
 	if rec.Epoch != s.hub.currentEpoch() {
-		return i18n.Errorf("the blob is for epoch %d, this pod is at epoch %d", rec.Epoch, s.hub.currentEpoch())
+		// A blob of an older epoch cannot be read with the key of this one: the pod keeps its own
+		// view and writes it back under the current key, so the other pods can read it again.
+		s.mu.Lock()
+		own := copyOf(s.local, s.hub.ident.ID())
+		s.mu.Unlock()
+		return s.push(own)
 	}
 	key := s.hub.kindKey(s.src.Kind())
 	if key == nil {
@@ -269,18 +274,19 @@ func (s *Sync) Project() json.RawMessage {
 	return s.local.Project(s.src.MapFields())
 }
 
-// Conflicts lists the entries changed on both sides that the user has not chosen yet.
+// Conflicts lists the entries changed on both sides that the user has not chosen yet. A nil slice
+// would reach the page as null, so it always returns at least an empty one.
 func (s *Sync) Conflicts() []Conflict {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([]Conflict(nil), s.conflicts...)
+	return append([]Conflict{}, s.conflicts...)
 }
 
 func (s *Sync) Status() Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return Status{Kind: s.src.Kind(), Enabled: s.src.Enabled(), HasKey: s.hub.hasKey(), Epoch: s.hub.currentEpoch(),
-		Seq: s.seq, LastSync: s.lastSync, Conflicts: append([]Conflict(nil), s.conflicts...),
+		Seq: s.seq, LastSync: s.lastSync, Conflicts: append([]Conflict{}, s.conflicts...),
 		Device: s.hub.ident.ID(), Error: s.hub.lastError()}
 }
 

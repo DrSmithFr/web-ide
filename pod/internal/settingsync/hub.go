@@ -63,7 +63,9 @@ func (h *Hub) SetError(err error) {
 	}
 	h.mu.Unlock()
 	for _, s := range h.sources {
-		s.event("error", err)
+		// The payload goes to the page as JSON: an error value would be marshalled as its struct,
+		// so the text is sent, not the error.
+		s.event("error", err.Error())
 	}
 }
 
@@ -122,6 +124,10 @@ func (h *Hub) Publish() error {
 	if err := h.tr.Send(Msg{Type: "wrapGet", Account: h.ident.Account, Device: h.ident.ID()}); err != nil {
 		return err
 	}
+	// A pod paired by an admin has no key until the wrap arrives: the pull is made when it does.
+	if !h.hasKey() {
+		return nil
+	}
 	return h.PullAll()
 }
 
@@ -164,12 +170,21 @@ func (h *Hub) SetWrap(w *identity.WrapRecord) error {
 		return i18n.New("the wrap does not open with the key of this device")
 	}
 	h.mu.Lock()
+	hadKey := h.key != nil
 	rotated := h.epoch != w.Epoch
 	h.key, h.epoch = plain, w.Epoch
+	// The wrap answers the request that failed before it existed: the page must not keep showing
+	// "no wrap" once the key is here.
+	h.lastErr = ""
 	h.mu.Unlock()
-	// A rotation moves the epoch: the stored blobs are encrypted with the new key, so every source
-	// must be read again.
-	if rotated {
+	// The page shows the state of each source: a wrap that arrives after it was opened must refresh
+	// it, else the panel keeps saying "no sync key yet".
+	for _, s := range h.sources {
+		s.event("changed", nil)
+	}
+	// A pod that just got its key, or that moved to a new epoch, cannot read the stored state
+	// before: it reads it now, otherwise its own changes would overwrite the other pods.
+	if !hadKey || rotated {
 		return h.PullAll()
 	}
 	return nil

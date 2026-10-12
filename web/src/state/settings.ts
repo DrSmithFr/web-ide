@@ -84,9 +84,16 @@ export function fontFor(device = deviceId): Settings['font'] {
   return { ...settings.font, ...(layoutFor(settings, device).font ?? {}) }
 }
 
-/** Records a value of this device (a font size, a panel size) as a normal settings change. */
+/** Records a value of this device (a font size, a panel size) as a normal settings change. The
+ * entry of a device that never chose anything is created with its two parts, so the caller can set
+ * one of them. */
 export function updateDeviceLayout(fn: (d: DeviceLayout) => void, label = 'Layout') {
-  updateSettings((s) => fn(s.devices[deviceId] ?? (s.devices[deviceId] = {})), label)
+  updateSettings((s) => {
+    const d = s.devices[deviceId] ?? (s.devices[deviceId] = {})
+    if (!d.font) d.font = {}
+    if (!d.panels) d.panels = {}
+    fn(d)
+  }, label)
 }
 
 /** Saves the layout of this device as the one new devices start from. */
@@ -99,6 +106,10 @@ export function saveFallbackLayout() {
 
 let saveTimer: number | undefined
 let pendingLabel = ''
+// The edit the user made, kept until the debounced save runs. A change that arrives from another
+// pod replaces the store while the save is pending; the edit must still reach the pod, on top of
+// what the merge brought in.
+let pendingFn: ((s: Settings) => void) | null = null
 
 /** Applies a change and records a new snapshot in the pod a moment later. */
 export function updateSettings(fn: (s: Settings) => void, label = '') {
@@ -106,11 +117,15 @@ export function updateSettings(fn: (s: Settings) => void, label = '') {
   fn(next)
   setSettingsStore(reconcile(next))
   if (label) pendingLabel = label
+  pendingFn = fn
   clearTimeout(saveTimer)
   saveTimer = window.setTimeout(() => {
     const l = pendingLabel
     pendingLabel = ''
-    request('settings.save', { settings: unwrap(settings), label: l }).catch((e) => console.error(e))
+    const out = structuredClone(unwrap(settings)) as Settings
+    if (pendingFn) pendingFn(out)
+    pendingFn = null
+    request('settings.save', { settings: out, label: l }).catch((e) => console.error(e))
   }, 600)
 }
 

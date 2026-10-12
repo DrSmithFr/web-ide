@@ -242,13 +242,34 @@ export function Devices() {
     setInvite(m?.pairing ?? null)
   }
 
+  // The servers whose API key the vault shares with the other pods. A revocation moves the epoch:
+  // the key of a device that can still read the vault is no longer private, so the panel lists the
+  // servers whose key must be renewed.
+  const [keyServers, setKeyServers] = createSignal<{ id: string; name: string; hasKey: boolean }[]>([])
+
+  async function loadKeys() {
+    try {
+      const c = await request('llm.config')
+      setKeyServers(((c?.servers ?? []) as any[]).filter((s) => s.hasKey))
+    } catch {
+      setKeyServers([])
+    }
+  }
+
   async function revoke(device: Device) {
     const list = await id()!.signRevocations(
       accountKey!, account(), [...(revoked()?.revoked ?? []), device.key],
       (revoked()?.seq ?? 0) + 1, (revoked()?.epoch ?? 0) + 1,
     )
     link?.send({ type: 'revoke', list })
-    toast(t('Device revoked. The sync key epoch moved to {n}.', { n: list.epoch }), 'ok')
+    await loadKeys()
+    const names = keyServers().map((s) => s.name || s.id)
+    toast(
+      names.length
+        ? t('Device revoked. The sync key epoch moved to {n}. Renew the API keys shared with the other pods: {servers}.', { n: list.epoch, servers: names.join(', ') })
+        : t('Device revoked. The sync key epoch moved to {n}.', { n: list.epoch }),
+      'ok',
+    )
     void refresh()
   }
 
@@ -367,6 +388,14 @@ export function Devices() {
             </For>
           </tbody>
         </table>
+
+        <Show when={revoked()?.revoked.length && keyServers().length}>
+          <div class="field-row" data-testid="renew-keys">
+            <p class="muted small">
+              {t('A device was revoked: the API keys the vault shares with the other pods must be renewed — {servers}.', { servers: keyServers().map((s) => s.name || s.id).join(', ') })}
+            </p>
+          </div>
+        </Show>
 
         <div class="field-row">
           <button class="btn" onClick={() => void inviteDevice()}>{t('Invite a device')}</button>

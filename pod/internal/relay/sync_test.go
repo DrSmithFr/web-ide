@@ -2,6 +2,7 @@ package relay
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/json"
 	"path/filepath"
 	"testing"
@@ -663,5 +664,103 @@ func TestSyncStoreMigration(t *testing.T) {
 	var ver int
 	if err := st.db.QueryRow("PRAGMA user_version").Scan(&ver); err != nil || ver != dbVersion {
 		t.Fatalf("the database must be at version %d, got %d (%v)", dbVersion, ver, err)
+	}
+}
+
+// A wrap opens only for the device it names, so the relay pushes it to that device. A pod must not
+// be handed the wrap made for another one: it could not open it, and it would learn which devices
+// the account has. A link that never published a sync key is an admin panel: it reads the wraps of
+// the whole account, so it still gets the push.
+func TestWrapPushedToItsDeviceOnly(t *testing.T) {
+	ts := newRelay(t)
+	a := testAccount(t)
+
+	podA := connectIdentity(t, ts, a.ID, identity.NewCert(a, identity.KeyFromSeed(identity.Derive(a.Seed, "pod a")), "pod a", identity.KindPod))
+	defer podA.close()
+	podB := connectIdentity(t, ts, a.ID, identity.NewCert(a, identity.KeyFromSeed(identity.Derive(a.Seed, "pod b")), "pod b", identity.KindPod))
+	defer podB.close()
+	admin := connectIdentity(t, ts, a.ID, nil)
+	defer admin.close()
+	panel := connectIdentity(t, ts, a.ID, nil)
+	defer panel.close()
+	for _, c := range []*wsClient{podA, podB, admin, panel} {
+		if m := c.nextId(t); m.Type != "ready" {
+			t.Fatalf("the link must be ready, got %q", m.Type)
+		}
+	}
+
+	xkey := func(seed []byte) string {
+		x, err := identity.X25519FromSeed(seed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return identity.X25519ID(x.PublicKey())
+	}
+	pa := identity.KeyFromSeed(identity.Derive(a.Seed, "pod a"))
+	pb := identity.KeyFromSeed(identity.Derive(a.Seed, "pod b"))
+	devA, keyA := identity.KeyID(pa), xkey(identity.Derive(identity.DeviceSeed(a.Seed), "x25519 pod a"))
+	keyB := xkey(identity.Derive(identity.DeviceSeed(a.Seed), "x25519 pod b"))
+	post := func(c *wsClient, priv ed25519.PrivateKey, key string) {
+		rec := &identity.SyncKeyRecord{Account: a.ID, Device: identity.KeyID(priv), Key: key}
+		rec.Sig = identity.Sign(priv, []byte(rec.Canonical()))
+		c.sendId(t, idMsg{Type: "syncKey", SyncKey: rec})
+	}
+
+	// The published key is answered to its author and pushed to the other links of the account.
+	post(podA, pa, keyA)
+	if m := podA.nextId(t); m.Type != "syncKey" || m.Message != "stored" {
+		t.Fatalf("the published key must be stored, got %q %q", m.Type, m.Message)
+	}
+	post(podB, pb, keyB)
+	// pod A reads the key pushed by pod B.
+	if m := podA.nextId(t); m.Type != "syncKey" || m.Message == "stored" {
+		t.Fatalf("pod A must read the key pushed by pod B, got %q", m.Type)
+	}
+	// pod B reads the key pushed by pod A, then the answer to its own.
+	for i := 0; i < 2; i++ {
+		m := podB.nextId(t)
+		if m.Type != "syncKey" {
+			t.Fatalf("pod B must read the published keys, got %q", m.Type)
+		}
+	}
+	for _, c := range []*wsClient{admin, panel} {
+		for i := 0; i < 2; i++ {
+			if m := c.nextId(t); m.Type != "syncKey" {
+				t.Fatalf("the panels must read the published keys, got %q", m.Type)
+			}
+		}
+	}
+
+	// The admin wraps the key of the epoch for pod A only.
+	ak, err := identity.X25519FromSeed(make([]byte, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	shared, err := identity.Shared(ak, keyA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ekey := identity.EpochKey(a.SyncSeed(), 0)
+	nonce, data, err := identity.Seal(identity.WrapKey(shared), identity.WrapAAD(a.ID, devA, 0), ekey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrap := &identity.WrapRecord{Account: a.ID, Device: devA, Epoch: 0, Key: identity.X25519ID(ak.PublicKey()), Nonce: nonce, Data: data}
+	wrap.Sig = identity.Sign(a.Priv, []byte(wrap.Canonical()))
+	admin.sendId(t, idMsg{Type: "wrap", Wrap: wrap})
+	if m := admin.nextId(t); m.Type != "wrap" || m.Message != "stored" {
+		t.Fatalf("the wrap must be stored, got %q %q", m.Type, m.Message)
+	}
+
+	// The device the wrap is for gets it, and a panel that is not a device reads the wraps of the
+	// whole account, so it gets the push too.
+	for _, c := range []*wsClient{podA, panel} {
+		if m, err := c.readId(t, 2*time.Second); err != nil || m.Type != "wrap" || m.Wrap == nil {
+			t.Fatalf("the wrap must be pushed to the device it names, got %q (%v)", m.Type, err)
+		}
+	}
+	// pod B cannot open a wrap made for another device: it must not be sent to it.
+	if m, err := podB.readId(t, 500*time.Millisecond); err == nil {
+		t.Fatalf("pod B must not get a wrap made for another device, got %q %+v", m.Type, m)
 	}
 }

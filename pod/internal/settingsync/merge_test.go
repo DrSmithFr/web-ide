@@ -162,6 +162,18 @@ func TestMergeDeletions(t *testing.T) {
 	if len(project(t, got)["tokenColors"].(map[string]any)) != 1 {
 		t.Fatalf("only the surviving key must be there: %v", project(t, got))
 	}
+
+	// A field the other side never saw is not a deletion: a state that does not hold it simply
+	// never read it, so the value on the side that has it survives.
+	never := NewState("b")
+	never.Fields["language"] = Field{Value: marshal("fr"), Rev: 1, Dev: "b"}
+	got, conflicts = Merge(base, copyOf(base, "a"), never)
+	if len(conflicts) != 0 {
+		t.Fatalf("a field never seen must not ask: %+v", conflicts)
+	}
+	if len(project(t, got)["tokenColors"].(map[string]any)) != 2 || project(t, got)["language"] != "fr" {
+		t.Fatalf("the field never seen on the other side must survive: %v", project(t, got))
+	}
 }
 
 // A field an older pod does not know must survive the merge: unknown paths are kept as they are.

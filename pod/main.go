@@ -196,13 +196,20 @@ func main() {
 		if podID.Paired() {
 			flags := settingsync.NewFlags(sets)
 			hub := settingsync.NewHub(st, nil, podID, flags)
-			if _, err := hub.AddSource(settingsync.NewSettingsSource(sets, func() bool { return flags.On(identity.KindSettings) })); err != nil {
+			if _, err := hub.AddSource(settingsync.NewSettingsSource(sets, func() bool { return flags.On(identity.KindSettings) },
+				func(e settings.Entry) { srv.Broadcast("settings.changed", e) })); err != nil {
 				check(err)
 			}
-			if _, err := hub.AddSource(settingsync.NewVaultSource(st, srv.LLM, func() bool { return flags.On(identity.KindVault) })); err != nil {
+			if _, err := hub.AddSource(settingsync.NewVaultSource(st, srv.LLM, func() bool { return flags.On(identity.KindVault) },
+				func() { srv.Broadcast("llm.config", srv.LLM.View()) })); err != nil {
 				check(err)
 			}
 			srv.Sync = hub
+			// The handlers are registered before the hub exists, so the emitter is set here:
+			// the page listens to sync.changed, sync.conflict and sync.error.
+			hub.SetEmitter(func(st settingsync.Status, name string, payload any) {
+				srv.Broadcast("sync."+name, map[string]any{"status": st, "payload": payload})
+			})
 		}
 
 		cli := relayclient.New(relayclient.Config{

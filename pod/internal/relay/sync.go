@@ -31,6 +31,9 @@ func (s *Server) handleSync(c *identityConn, m idMsg) {
 			_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})
 			return
 		}
+		s.mu.Lock()
+		c.device = m.SyncKey.Device
+		s.mu.Unlock()
 		_ = c.send(idMsg{Type: "syncKey", Account: c.account, SyncKey: m.SyncKey, Message: "stored"})
 		s.pushSyncKey(c.account, m.SyncKey, c)
 	case "syncKeys":
@@ -90,6 +93,9 @@ func (s *Server) handlePodSync(pc *podConn, m sigMsg) {
 			pc.send(sigMsg{Type: "error", Message: err.Error()})
 			return
 		}
+		s.mu.Lock()
+		pc.device = m.SyncKey.Device
+		s.mu.Unlock()
 		pc.send(sigMsg{Type: "syncKey", Account: pc.account, SyncKey: m.SyncKey, Message: "stored"})
 		s.pushSyncKey(pc.account, m.SyncKey, nil)
 	case "wrapGet":
@@ -138,18 +144,20 @@ func (s *Server) pushSyncKey(account string, rec *identity.SyncKeyRecord, from a
 	}
 }
 
-// pushWrap tells the device a wrap was made for it (the pod reads it and gets the epoch key).
+// pushWrap tells the device a wrap was made for it (the pod reads it and gets the epoch key). A
+// wrap is only read by the device it names, so it is sent to that link or pod; a link that never
+// published a sync key is an admin panel, which shows the wraps of the whole account.
 func (s *Server) pushWrap(account string, w *identity.WrapRecord, from any) {
 	s.mu.Lock()
 	var links []*identityConn
 	for c := range s.links {
-		if c.account == account && c != from {
+		if c.account == account && c != from && (c.device == "" || c.device == w.Device) {
 			links = append(links, c)
 		}
 	}
 	var pods []*podConn
 	for _, p := range s.pods {
-		if p.account == account && p != from {
+		if p.account == account && p != from && p.device == w.Device {
 			pods = append(pods, p)
 		}
 	}

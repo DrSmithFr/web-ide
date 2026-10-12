@@ -47,6 +47,9 @@ type identityConn struct {
 	mu      sync.Mutex
 	account string
 	lang    string
+	// The device id this link published a sync key under: an admin panel never publishes one, so
+	// an empty device means a panel, which reads the wraps of the whole account.
+	device string
 }
 
 func (c *identityConn) send(m idMsg) error {
