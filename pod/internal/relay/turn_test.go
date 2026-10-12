@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"net"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,7 +11,7 @@ import (
 func TestTurnCreds(t *testing.T) {
 	st, _ := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
 	defer st.Close()
-	turn, err := NewTurn(st, TurnConfig{AdvertiseIP: "127.0.0.1", Port: 0})
+	turn, err := NewTurn(st, TurnConfig{AdvertiseIP: "127.0.0.1", Port: freeTurnPort(t)})
 	if err != nil {
 		t.Fatal("starting the embedded TURN:", err)
 	}
@@ -46,4 +47,19 @@ func TestTurnCreds(t *testing.T) {
 			t.Fatalf("first ICE URL must be STUN, got %q", u)
 		}
 	}
+}
+
+// freeTurnPort asks the kernel for a free UDP port: the default 3478 may be taken by a relay
+// running on the machine, or by the tests of another worktree.
+func freeTurnPort(t *testing.T) int {
+	t.Helper()
+	c, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := c.LocalAddr().(*net.UDPAddr).Port
+	if err := c.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return port
 }

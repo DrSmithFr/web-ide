@@ -41,7 +41,7 @@ func newRelay(t *testing.T) *httptest.Server {
 	t.Helper()
 	st, _ := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
 	t.Cleanup(func() { st.Close() })
-	turn, err := NewTurn(st, TurnConfig{AdvertiseIP: "127.0.0.1", Port: 0})
+	turn, err := NewTurn(st, TurnConfig{AdvertiseIP: "127.0.0.1", Port: freeTurnPort(t)})
 	if err != nil {
 		t.Fatal("starting the embedded TURN:", err)
 	}
