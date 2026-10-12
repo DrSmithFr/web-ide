@@ -119,10 +119,14 @@ The **token mode** of M1 (`#t=`) stays for unpaired pods, and `127.0.0.1` is unc
 
 ## Settings sync
 
-- Today the settings live in each pod (`settings.json`), shared by its browsers. With an account, the pods sync them through the relay, encrypted with the sync key.
-- Merge field by field; the user is asked only when the same setting changed on two devices.
-- **Per device**: the layout and the sizes (fonts, panels). A device without its own uses a *fallback layout* the user saves for new devices.
-- **Vault** (opt-in, separate from the rest): API keys of the model providers and remembered passwords (`secrets.json`).
+**Done** (#28, `pod/internal/settingsync`, Settings > Remote access > Sync). The settings live in each pod (`settings.json`, shared by its browsers), so **the pods sync**, the browsers don't. The relay stores one encrypted blob per account and kind (`settings`, `vault`) and never sees a value; the pods do the merge.
+
+- **Sync key**: the key of an epoch is `HKDF(syncSeed, "web-ide sync epoch <e>")`, so a device that knows the phrase can always rebuild it, nothing random to lose; each kind takes a sub-key of it. Every blob is AES-256-GCM with a random nonce per write and the associated data `account|kind|epoch|seq`: a blob cannot be moved to another account, kind, epoch or seq.
+- **Wrap**: a pod paired by an admin does not know the phrase, so it cannot derive the key. Each pod makes an X25519 key from its device seed and publishes `{device, x25519, sig}` signed by its device key; the admin browser (Devices panel) wraps the epoch key for it (X25519 + HKDF + AES-GCM) and posts the wrap. A pod with no wrap has no key and never writes. The wrap is made at approval and at each rotation. Go and JS read the same test vectors (`pod/internal/identity/vectors.json`, run by `make test` in both languages).
+- **Storage**: the `blobs`, `wraps` and `synckeys` tables (`PRAGMA user_version` migration), and on the pod link `syncKey`, `wrapGet`, `blobGet`, `blobPut` with compare-and-swap on `seq` (a write is refused when it is not `stored + 1`), a size cap per blob, and the stored write pushed to the online pods of the account. Every write is signed by the device key and checked against the account and the revocation list: a revoked device cannot write.
+- **Merge**: each entry carries its value, the hybrid logical clock of the change that wrote it and the device that made it; a pod keeps the last state it synced (its base, `sync/base-<kind>.json`). An entry changed on the other side and untouched here is taken, an entry changed here and untouched there stays, and only an entry changed on both sides to different values asks the user: the page shows both values and which device, and the choice is a normal write. Maps (`tokenColors`, `syntax`, `keyboard.overrides`, `devices`, the vault entries) merge per key, and paths unknown to the pod are kept. Every applied change goes through `Settings.Save` with a label (`sync from <device>`), so the history and the rollback keep working. A pod writes on each local save and catches up at reconnect.
+- **Per device**: the fonts and the panel sizes belong to a device (`devices[<id>]` in the settings, `sizes[<id>]` in the sessions), so a phone keeps its layout on any pod of the account. A device without its own entry uses the *fallback layout* the user saves in Settings.
+- **Vault** (opt-in, its own blob kind and its own key): the API keys of the model servers (by server id) and the remembered passwords (`secrets.json`), merged per entry. Off, nothing is put and the blob is deleted. After a revocation the Devices panel suggests renewing the API keys and lists the servers that hold one: a revoked device could still read the vault until the epoch moves.
 
 ## Push notifications
 
@@ -159,7 +163,7 @@ Code and review together:
 1. **Done** (`web-ide-pod relay`, `-relay`): the relay (signaling, STUN, TURN) and the pod and the browser over WebRTC, the pod token as access control. See *Milestone 1* below.
 2. **Done** (`web-ide-pod pair`, `pod/internal/identity`, Settings > Remote access > Devices): phrase, device certificates, pairing, QR, passkeys, revocation. See *Milestone 2* below.
 3. Multi-pod: gateway, sites, pod to pod, encrypted project lists, versions and updates.
-4. Settings sync, per-device layout, vault.
+4. **Done** (`pod/internal/settingsync`, Settings > Remote access > Sync): encrypted blobs, field-by-field merge, per-device layout, vault. See *Settings sync* above.
 5. Hosted relay at `antennae.space`, GitHub Sponsors, quotas, counters.
 6. Push notifications.
 7. Wake-on-LAN and shutdown.
@@ -209,4 +213,4 @@ The e2e `identity` suite pairs a pod with the CLI and two browsers (a virtual au
 - The name of the product, which `antennae.space` may become.
 - ~~One origin for the application (`antennae.space`) or one per account~~ — decided with milestone 2: **one origin per relay**, accounts isolated by keys (see *Identity*).
 - The TURN quota of the free tier, once real usage is measured.
-- Wrapping the sync key for each device and re-encrypting the data on a revocation: nothing is synced yet, this waits for milestone 4.
+- ~~Wrapping the sync key for each device and re-encrypting the data on a revocation~~ — done with milestone 4 (see *Settings sync*): the wrap is made by the admin browser at approval and at each rotation, and a blob of an older epoch is refused by the pods.

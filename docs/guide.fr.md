@@ -80,6 +80,14 @@ Le pod stocke seulement sa propre clé (`~/.web-ide/device.key`, 0600) et son ce
 
 Navigateurs récents seulement : WebCrypto Ed25519 et la PRF de WebAuthn sont nécessaires, sans solution de repli. Une clé d'accès est liée à une origine, donc `localhost`, l'adresse du tailnet et le relay sont des appareils séparés, chacun inscrit une fois avec la phrase — et WebAuthn refuse une adresse IP, donc ouvrez le pod sur `localhost` pour déverrouiller un appareil (le panneau donne le lien). Révoquer un appareil depuis le panneau signe une nouvelle liste : le relay la stocke et la pousse aux pods en ligne, qui refusent l'appareil révoqué à sa prochaine connexion.
 
+#### Les réglages suivent le compte
+
+Les pods d'un même compte partagent leurs réglages par le relay : un thème, un raccourci ou une couleur changé sur un pod atteint les autres. Le relay ne porte que du chiffré — il stocke un blob chiffré par compte et ne voit jamais une valeur. Chaque réglage fusionne seul, donc deux appareils qui changent des choses différentes ne se gênent pas ; on ne vous demande rien que lorsque le **même** réglage a changé sur deux pods, et le panneau montre les deux valeurs et l'appareil qui les a écrites (Réglages > Accès distant).
+
+La disposition reste par appareil : la taille du code, celle de l'interface et les tailles des panneaux appartiennent au navigateur, donc un téléphone garde sa disposition sur tous les pods du compte. Un appareil qui n'a rien de son propre utilise la disposition enregistrée avec *Utiliser comme défaut pour les nouveaux appareils* (Réglages > Polices).
+
+Le **coffre** est séparé et désactivé par défaut : les clés d'API des serveurs de modèles et les mots de passe de bases mémorisés. L'activer les envoie aux autres pods, le désactiver les supprime du relay. Après une révocation, le panneau Appareils demande de renouveler les clés d'API partagées avec les autres appareils.
+
 #### Les autres pods du même réseau, sans relay
 
 Les pods appariés à un même compte se trouvent seuls sur le réseau local, sans relay ni internet : chaque pod apparié ouvre un port réseau local (`:4436`, `-lan` ou `lan.addr` dans `config.json`, `-lan off` pour le fermer) et s'annonce par mDNS. La page d'accueil montre alors un bloc *Projets* par pod du compte ; un projet d'un autre pod s'ouvre par un port que ce pod lui réserve, donc sa page et ses terminaux viennent du pod qui le détient (*← Retour à …* ramène à l'accueil). Seuls les pods du compte sont listés : chacun prouve son certificat, lié aux certificats TLS du lien, et un pod révoqué est refusé et retiré. Un pod non apparié n'ouvre aucun port réseau local.
