@@ -4,9 +4,21 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-10-12
+
 ### Added
 
 - The IDE installs as an app (PWA) from Chromium browsers: its own window, where shortcuts such as `Ctrl+Tab`, `Ctrl+W` or `Ctrl+N` reach the IDE.
+
+### Changed
+
+- Assistant: a compaction (automatic, `/compact` or asked by the model) summarizes all but the last 10 steps; one long turn alone can be cut. Every compaction keeps its card in the conversation, the last one open on its summary.
+- Assistant: the reasoning of the current turn goes back to the model; an answer without text nor tool call ends the turn with an error.
+- e2e: `run.sh -j N` runs the suites in parallel workers.
+
+### Fixed
+
+- Passkeys also offer ES256 and RS256: Google Password Manager, iCloud Keychain and Windows Hello refused an Ed25519-only passkey.
 
 ## [1.9.0] - 2026-10-12
 
