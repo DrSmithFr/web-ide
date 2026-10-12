@@ -29,9 +29,19 @@ type Revocations = { account: string; seq: number; epoch: number; revoked: strin
 interface Identity {
   openStore(): Promise<IDBDatabase>
   list(db: IDBDatabase): Promise<any[]>
-  unlock(db: IDBDatabase): Promise<{ rec: any; key: CryptoKey; prf: Uint8Array } | null>
+  unlock(db: IDBDatabase): Promise<{ rec: any; key: CryptoKey; prf: Uint8Array; seed: Uint8Array } | null>
   enroll(db: IDBDatabase, phrase: string, wordlist: string[], name: string, kind: string): Promise<{ rec: any; accountKey: CryptoKey }>
   accountKey(rec: any, prf: Uint8Array): Promise<CryptoKey>
+  syncSeed(rec: any, prf: Uint8Array): Promise<Uint8Array | null>
+  x25519FromSeed(seed: Uint8Array): Promise<{ jwk: any; key: string }>
+  x25519Shared(jwk: any, peerKey: string): Promise<Uint8Array>
+  wrapKey(shared: Uint8Array): Promise<Uint8Array>
+  epochKey(syncSeed: Uint8Array, epoch: number): Promise<Uint8Array>
+  wrapAAD(account: string, device: string, epoch: number): string
+  sealWith(key: Uint8Array, aad: string, bytes: Uint8Array): Promise<{ iv: string; data: string }>
+  sign(key: CryptoKey, msg: string): Promise<string>
+  canonicalWrap(w: Wrap): string
+  wrapFor(accountKey: CryptoKey, accountId: string, device: string, peerKey: string, seed: Uint8Array, syncSeed: Uint8Array, epoch: number): Promise<Wrap>
   signCert(accountKey: CryptoKey, accountId: string, deviceId: string, name: string, kind: string): Promise<Cert>
   signRevocations(accountKey: CryptoKey, accountId: string, revoked: string[], seq: number, epoch: number): Promise<Revocations>
   fingerprint(id: string, wordlist: string[]): Promise<string>
@@ -40,6 +50,9 @@ interface Identity {
   wordlist(): Promise<string[]>
   KindBrowser: string
 }
+
+type SyncKey = { account: string; device: string; key: string; sig: string }
+type Wrap = { account: string; device: string; epoch: number; key: string; nonce: string; data: string; sig: string }
 
 const IDENTITY_PATH = podPath('/_relay/identity.js')
 
@@ -65,10 +78,20 @@ export function Devices() {
   const [phrase, setPhrase] = createSignal('')
   const [invite, setInvite] = createSignal<Pairing | null>(null)
   const [podId, setPodId] = createSignal('')
+  const [keys, setKeys] = createSignal<SyncKey[]>([])
+  const [wraps, setWraps] = createSignal<Wrap[]>([])
   let link: { send: (m: any) => void; recv: (type?: string) => Promise<any>; close: () => void } | null = null
   let accountKey: CryptoKey | null = null
   let own: any = null
   let wordlist: string[] = []
+  // The seeds of this device, kept for the session: the X25519 key it signs its wraps with, and the
+  // sync key of the epoch it derives. A device that does not hold the account key cannot wrap.
+  let seed: Uint8Array | null = null
+  let syncSeed: Uint8Array | null = null
+
+  // The epoch of the sync key is the epoch of the revocation list the admin signs.
+  const epoch = () => revoked()?.epoch ?? 0
+  const wrapOf = (key: string) => wraps().find((w) => w.device === key)
 
   const isLoopback = () => location.hostname === '127.0.0.1' || location.hostname === '[::1]'
   const localhostLink = () => `${location.protocol}//localhost:${location.port || (location.protocol === 'https:' ? 443 : 80)}`
@@ -84,6 +107,30 @@ export function Devices() {
     link.send({ type: 'devices' })
     link.send({ type: 'pairings' })
     link.send({ type: 'revocations' })
+    link.send({ type: 'syncKeys' })
+    link.send({ type: 'wraps' })
+  }
+
+  // The wrap of the key of the epoch for a device: the only way a pod paired without the phrase gets
+  // the key. The relay stores the wrap but cannot open it, so it cannot read a blob either.
+  async function wrapDevice(k: SyncKey) {
+    if (!accountKey || !syncSeed || !seed) return
+    const w = await id()!.wrapFor(accountKey, account(), k.device, k.key, seed, syncSeed, epoch())
+    link?.send({ type: 'wrap', wrap: w })
+    setWraps((ws) => [...ws.filter((x) => x.device !== k.device), w])
+    toast(t('Sync key wrapped for {device}.', { device: fp()[k.device] || k.device }), 'ok')
+  }
+
+  // Wraps for every device that published a key and has none for the current epoch: a device paired
+  // before this panel was open, and every device left after a rotation.
+  async function wrapMissing() {
+    if (!accountKey || !syncSeed || !seed) return
+    for (const k of keys()) {
+      if (revoked()?.revoked.includes(k.device)) continue
+      const w = wrapOf(k.device)
+      if (w && w.epoch === epoch()) continue
+      await wrapDevice(k)
+    }
   }
 
   onMount(async () => {
@@ -103,6 +150,8 @@ export function Devices() {
       return
     }
     accountKey = await m.accountKey(d.rec, d.prf)
+    syncSeed = await m.syncSeed(d.rec, d.prf)
+    seed = d.seed
     own = d.rec
     setDevice(d.rec.key)
     setAccount(d.rec.account ?? '')
@@ -130,7 +179,21 @@ export function Devices() {
       if (msg.type === 'error') return errorToast(t(msg.message))
       if (msg.type === 'devices') setDevices(msg.devices ?? [])
       else if (msg.type === 'pairings') setPairings(msg.pairings ?? [])
-      else if (msg.type === 'revocations') setRevoked(msg.list)
+      else if (msg.type === 'revocations') {
+        setRevoked(msg.list)
+        // The epoch moved: the wraps of the old epoch no longer open, so the remaining devices
+        // must be wrapped again for the new one.
+        void wrapMissing()
+      } else if (msg.type === 'syncKeys') {
+        setKeys(msg.syncKeys ?? [])
+        void wrapMissing()
+      } else if (msg.type === 'syncKey' && msg.syncKey) {
+        // A device published its X25519 key: wrap the key of the epoch for it, else it has no key
+        // and cannot read or write a blob.
+        setKeys((k) => [...k.filter((x) => x.device !== msg.syncKey.device), msg.syncKey])
+        void wrapDevice(msg.syncKey)
+      } else if (msg.type === 'wraps') setWraps(msg.wraps ?? [])
+      else if (msg.type === 'wrap' && msg.wrap) setWraps((w) => [...w.filter((x) => x.device !== msg.wrap.device), msg.wrap])
       else if (msg.type === 'pair' && msg.pairing) setPairings((p) => [...p.filter((x) => x.code !== msg.pairing.code), msg.pairing])
       for (const key of [...devices().map((d) => d.key), ...pairings().map((p) => p.key)]) void showFp(key)
     })
@@ -162,6 +225,10 @@ export function Devices() {
     link?.send({ type: 'pairApprove', code: p.code, cert })
     toast(t('Device approved.'), 'ok')
     void refresh()
+    // The wrap is made at approval when the device already published its X25519 key; a device that
+    // pairs first gets it when it publishes, on its first connection.
+    const k = keys().find((x) => x.device === p.key)
+    if (k) void wrapDevice(k)
   }
 
   // The invite link carries the pod the admin is on: the joining device pairs first, then
@@ -176,13 +243,34 @@ export function Devices() {
     setInvite(m?.pairing ?? null)
   }
 
+  // The servers whose API key the vault shares with the other pods. A revocation moves the epoch:
+  // the key of a device that can still read the vault is no longer private, so the panel lists the
+  // servers whose key must be renewed.
+  const [keyServers, setKeyServers] = createSignal<{ id: string; name: string; hasKey: boolean }[]>([])
+
+  async function loadKeys() {
+    try {
+      const c = await request('llm.config')
+      setKeyServers(((c?.servers ?? []) as any[]).filter((s) => s.hasKey))
+    } catch {
+      setKeyServers([])
+    }
+  }
+
   async function revoke(device: Device) {
     const list = await id()!.signRevocations(
       accountKey!, account(), [...(revoked()?.revoked ?? []), device.key],
       (revoked()?.seq ?? 0) + 1, (revoked()?.epoch ?? 0) + 1,
     )
     link?.send({ type: 'revoke', list })
-    toast(t('Device revoked. The sync key epoch moved to {n}.', { n: list.epoch }), 'ok')
+    await loadKeys()
+    const names = keyServers().map((s) => s.name || s.id)
+    toast(
+      names.length
+        ? t('Device revoked. The sync key epoch moved to {n}. Renew the API keys shared with the other pods: {servers}.', { n: list.epoch, servers: names.join(', ') })
+        : t('Device revoked. The sync key epoch moved to {n}.', { n: list.epoch }),
+      'ok',
+    )
     void refresh()
   }
 
@@ -256,6 +344,7 @@ export function Devices() {
               <th>{t('Kind')}</th>
               <th>{t('Fingerprint')}</th>
               <th>{t('Created')}</th>
+              <th>{t('Sync key')}</th>
               <th></th>
             </tr>
           </thead>
@@ -269,6 +358,26 @@ export function Devices() {
                   <td class="small">{fmtDate(d.cert?.created * 1000)}</td>
                   <td>
                     <Show when={revoked()?.revoked.includes(d.key)}>
+                      <span class="muted small">—</span>
+                    </Show>
+                    <Show when={!revoked()?.revoked.includes(d.key)}>
+                      <Show when={wrapOf(d.key)?.epoch === epoch()}>
+                        <span class="muted small">{t('wrapped')}</span>
+                      </Show>
+                      <Show when={!wrapOf(d.key) || wrapOf(d.key)?.epoch !== epoch()}>
+                        <Show when={keys().some((k) => k.device === d.key)}>
+                          <button class="btn small" onClick={() => void wrapDevice(keys().find((k) => k.device === d.key)!)}>
+                            {t('Wrap')}
+                          </button>
+                        </Show>
+                        <Show when={!keys().some((k) => k.device === d.key)}>
+                          <span class="muted small">{t('no key published')}</span>
+                        </Show>
+                      </Show>
+                    </Show>
+                  </td>
+                  <td>
+                    <Show when={revoked()?.revoked.includes(d.key)}>
                       <span class="muted small">{t('revoked')}</span>
                     </Show>
                     <Show when={!revoked()?.revoked.includes(d.key) && d.key !== device()}>
@@ -280,6 +389,14 @@ export function Devices() {
             </For>
           </tbody>
         </table>
+
+        <Show when={revoked()?.revoked.length && keyServers().length}>
+          <div class="field-row" data-testid="renew-keys">
+            <p class="muted small">
+              {t('A device was revoked: the API keys the vault shares with the other pods must be renewed — {servers}.', { servers: keyServers().map((s) => s.name || s.id).join(', ') })}
+            </p>
+          </div>
+        </Show>
 
         <div class="field-row">
           <button class="btn" onClick={() => void inviteDevice()}>{t('Invite a device')}</button>

@@ -7,6 +7,7 @@ import { accentOf, monoOf, themeById, tokenTypes, toneVars, unfocusedParts } fro
 import { setGrammarOverrides } from '../editor/languages'
 import type { GrammarDef } from '../editor/tokenizer'
 import { setLang, type LangSetting } from '../i18n'
+import { deviceId, FALLBACK, layoutFor, type DeviceLayout } from './device'
 
 export interface Settings {
   theme: string
@@ -27,6 +28,11 @@ export interface Settings {
   keyboard: { layout: 'auto' | 'qwerty' | 'azerty'; overrides: Record<string, string[]> }
   syntax: Record<string, GrammarDef>
   language: LangSetting
+  /** Layout per device (state/device.ts): the fonts and the panel sizes it chose. "fallback" holds
+   * the layout saved for the devices that have none of their own. */
+  devices: Record<string, DeviceLayout>
+  /** Settings sync: the switches, read by the pod. The vault is opt-in. */
+  sync: { settings: boolean; vault: boolean }
 }
 
 export const defaultSettings: Settings = {
@@ -43,6 +49,8 @@ export const defaultSettings: Settings = {
   keyboard: { layout: 'auto', overrides: {} },
   syntax: {},
   language: 'auto',
+  devices: {},
+  sync: { settings: true, vault: false },
 }
 
 function merge(raw: any): Settings {
@@ -62,6 +70,8 @@ function merge(raw: any): Settings {
     keyboard: { ...d.keyboard, ...(raw.keyboard ?? {}), overrides: raw.keyboard?.overrides ?? {} },
     syntax: raw.syntax ?? {},
     language: raw.language === 'en' || raw.language === 'fr' ? raw.language : 'auto',
+    devices: raw.devices ?? {},
+    sync: { settings: raw.sync?.settings !== false, vault: raw.sync?.vault === true },
   }
 }
 
@@ -69,20 +79,92 @@ const [settings, setSettingsStore] = createStore<Settings>(structuredClone(defau
 const [loaded, setLoaded] = createSignal(false)
 export { settings, loaded as settingsLoaded }
 
+/** The font in effect for a device: its own entry, else the layout saved for new devices. */
+export function fontFor(device = deviceId): Settings['font'] {
+  return { ...settings.font, ...(layoutFor(settings, device).font ?? {}) }
+}
+
+/** Records a value of this device (a font size, a panel size) as a normal settings change. The
+ * entry of a device that never chose anything is created with its two parts, so the caller can set
+ * one of them. */
+export function updateDeviceLayout(fn: (d: DeviceLayout) => void, label = 'Layout') {
+  updateSettings((s) => {
+    const d = s.devices[deviceId] ?? (s.devices[deviceId] = {})
+    if (!d.font) d.font = {}
+    if (!d.panels) d.panels = {}
+    fn(d)
+  }, label)
+}
+
+/** Saves the layout of this device as the one new devices start from. */
+export function saveFallbackLayout() {
+  updateSettings((s) => {
+    const own = layoutFor(s, deviceId)
+    s.devices[FALLBACK] = { font: { ...own.font }, panels: { ...own.panels } }
+  }, 'Fallback layout')
+}
+
 let saveTimer: number | undefined
 let pendingLabel = ''
+// The edit the user made, kept until the debounced save runs, as the leaves it changed (a path and
+// its value, undefined for a removal). The edit is not kept as the function that made it: a handler
+// reads the DOM event it was called with, which is gone when the timer runs. A change that arrives
+// from another pod replaces the store while the save is pending; the edit must still reach the pod,
+// on top of what the merge brought in.
+let pendingEdit: Record<string, any> | null = null
+
+const leafSep = '/'
+
+const isObj = (v: any) => v !== null && typeof v === 'object' && !Array.isArray(v)
+
+/** What an edit changed, path by path: the new value (a whole subtree when it appeared or moved),
+ * undefined for a removal. `path` is the path of the node being compared ("" for the root). */
+function editOf(before: any, after: any, path: string, out: Record<string, any>) {
+  if (!isObj(before) || !isObj(after)) {
+    if (JSON.stringify(before) !== JSON.stringify(after)) out[path] = after
+    return
+  }
+  const child = (k: string) => (path ? path + leafSep + k : k)
+  for (const [k, v] of Object.entries(after)) {
+    if (!(k in before)) out[child(k)] = v
+    else editOf(before[k], v, child(k), out)
+  }
+  for (const k of Object.keys(before)) if (!(k in after)) out[child(k)] = undefined
+}
+
+/** Applies the paths of an edit to a document read again after a merge. */
+function applyEdit(target: any, edit: Record<string, any>) {
+  for (const [path, value] of Object.entries(edit)) {
+    const parts = path.split(leafSep)
+    let node = target
+    for (const p of parts.slice(0, -1)) {
+      if (!isObj(node[p])) node[p] = {}
+      node = node[p]
+    }
+    const last = parts[parts.length - 1]
+    if (value === undefined) delete node[last]
+    else node[last] = value
+  }
+}
 
 /** Applies a change and records a new snapshot in the pod a moment later. */
 export function updateSettings(fn: (s: Settings) => void, label = '') {
-  const next = structuredClone(unwrap(settings)) as Settings
+  const before = structuredClone(unwrap(settings)) as Settings
+  const next = structuredClone(before) as Settings
   fn(next)
   setSettingsStore(reconcile(next))
   if (label) pendingLabel = label
+  const edit: Record<string, any> = {}
+  editOf(before, next, '', edit)
+  pendingEdit = { ...(pendingEdit ?? {}), ...edit }
   clearTimeout(saveTimer)
   saveTimer = window.setTimeout(() => {
     const l = pendingLabel
     pendingLabel = ''
-    request('settings.save', { settings: unwrap(settings), label: l }).catch((e) => console.error(e))
+    const out = structuredClone(unwrap(settings)) as Settings
+    if (pendingEdit) applyEdit(out, pendingEdit)
+    pendingEdit = null
+    request('settings.save', { settings: out, label: l }).catch((e) => console.error(e))
   }, 600)
 }
 
@@ -116,10 +198,13 @@ createRoot(() => {
     root.style.setProperty('--accent-fg', accentFg)
     root.dataset.theme = t.dark ? 'dark' : 'light'
     root.style.colorScheme = t.dark ? 'dark' : 'light'
+    // The sizes are per device: the family and the ligatures stay shared, the sizes a device
+    // chose for itself do not move the other ones.
+    const f = fontFor()
     root.style.setProperty('--font-code', settings.font.family)
-    root.style.setProperty('--font-size-code', `${settings.font.size}px`)
-    root.style.setProperty('--line-height-code', String(settings.font.lineHeight))
-    root.style.setProperty('--font-size-ui', `${settings.font.uiSize}px`)
+    root.style.setProperty('--font-size-code', `${f.size}px`)
+    root.style.setProperty('--line-height-code', String(f.lineHeight))
+    root.style.setProperty('--font-size-ui', `${f.uiSize}px`)
     root.style.setProperty('--ligatures', settings.font.ligatures ? 'normal' : 'none')
     root.style.setProperty('--focus-outline-width', `${settings.focusOutlineWidth}px`)
     root.style.setProperty('--focus-dim', String(1 - settings.focusDimLevel / 100))

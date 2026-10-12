@@ -18,8 +18,12 @@ export const InfoAccount = 'web-ide account v1'
 export const InfoSync = 'web-ide sync v1'
 export const InfoDevice = 'web-ide device v1'
 export const InfoPasskey = 'web-ide passkey v1'
+export const InfoX25519 = 'web-ide x25519 v1'
+export const InfoWrap = 'web-ide sync wrap v1'
 export const KindBrowser = 'browser'
 export const KindPod = 'pod'
+export const KindSettings = 'settings'
+export const KindVault = 'vault'
 export const ScopeAll = 'all'
 
 const enc = new TextEncoder()
@@ -84,6 +88,80 @@ export async function hkdf(seed, info) {
   const hk = await crypto.subtle.importKey('raw', seed, 'HKDF', false, ['deriveBits'])
   return new Uint8Array(await crypto.subtle.deriveBits(
     { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(32), info: enc.encode(info) }, hk, 256))
+}
+
+// --- the sync key ---
+
+// The key of an epoch comes from the sync seed: HKDF with "web-ide sync epoch <e>", so a
+// device that knows the phrase can always rebuild it and a rotation needs no key to lose.
+// The sub-keys per kind come from the epoch key.
+export function epochKey(syncSeed, epoch) { return hkdf(syncSeed, `web-ide sync epoch ${epoch}`) }
+export function kindKey(key, kind) { return hkdf(key, kind) }
+export function wrapKey(shared) { return hkdf(shared, InfoWrap) }
+
+// X25519. WebCrypto cannot import a private key from a raw seed, so a device keeps its key as a
+// JWK (sealed by the passkey PRF, like the device key); the pod derives its key from its device
+// seed with crypto/ecdh. Both sides must agree on the shared secret, which the test vectors check
+// by importing the pod's JWK here.
+export async function x25519Generate() {
+  const k = await crypto.subtle.generateKey({ name: 'X25519', namedCurve: 'X25519' }, true, ['deriveBits'])
+  return { jwk: await crypto.subtle.exportKey('jwk', k.privateKey), key: b64u(new Uint8Array(await crypto.subtle.exportKey('raw', k.publicKey))) }
+}
+
+// The X25519 key of a device from its 32-byte seed. WebCrypto refuses a raw seed here too, so the
+// PKCS#8 DER is built by hand with the X25519 algorithm id (1.3.101.110): the same seed gives the
+// same key as the pod's crypto/ecdh, which the test vectors check.
+const PKCS8_X25519_PREFIX = [0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x6e, 0x04, 0x22, 0x04, 0x20]
+
+export async function x25519FromSeed(seed) {
+  const der = new Uint8Array([...PKCS8_X25519_PREFIX, ...seed])
+  const k = await crypto.subtle.importKey('pkcs8', der, { name: 'X25519', namedCurve: 'X25519' }, true, ['deriveBits'])
+  const jwk = await crypto.subtle.exportKey('jwk', k)
+  return { jwk, key: jwk.x }
+}
+
+export async function x25519Shared(jwk, peerKey) {
+  const priv = await crypto.subtle.importKey('jwk', jwk, { name: 'X25519', namedCurve: 'X25519' }, false, ['deriveBits'])
+  const peer = await crypto.subtle.importKey('jwk', { kty: 'OKP', crv: 'X25519', x: peerKey }, { name: 'X25519', namedCurve: 'X25519' }, false, [])
+  return new Uint8Array(await crypto.subtle.deriveBits({ name: 'X25519', namedCurve: 'X25519', public: peer }, priv, 256))
+}
+
+// AES-GCM with the associated data the write used: account|kind|epoch|seq for a blob,
+// account|device|epoch for a wrap. A blob cannot be moved to another account, kind, epoch or seq.
+export function blobAAD(account, kind, epoch, seq) { return `${account}|${kind}|${epoch}|${seq}` }
+export function wrapAAD(account, device, epoch) { return `${account}|${device}|${epoch}` }
+
+export async function sealWith(key, aad, bytes) {
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  return { iv: b64u(iv), data: await sealWithNonce(key, b64u(iv), aad, bytes) }
+}
+
+// The ciphertext with a given nonce: the test vectors use a fixed one so both sides can check
+// the same bytes.
+export async function sealWithNonce(key, iv, aad, bytes) {
+  const k = await crypto.subtle.importKey('raw', key, { name: 'AES-GCM' }, false, ['encrypt'])
+  return b64u(new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: b64d(iv), additionalData: enc.encode(aad) }, k, bytes)))
+}
+
+export async function openWith(key, aad, blob) {
+  const k = await crypto.subtle.importKey('raw', key, { name: 'AES-GCM' }, false, ['decrypt'])
+  return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64d(blob.iv), additionalData: enc.encode(aad) }, k, b64d(blob.data)))
+}
+
+// The bytes each side signs for the sync (fixed field order, no spaces, like the certificates).
+export function canonicalSyncKey(r) {
+  return `{"account":${JSON.stringify(r.account)},"device":${JSON.stringify(r.device)},"key":${JSON.stringify(r.key)}}`
+}
+
+export function canonicalBlob(r) {
+  return `{"account":${JSON.stringify(r.account)},"kind":${JSON.stringify(r.kind)},` +
+    `"epoch":${r.epoch},"seq":${r.seq},"device":${JSON.stringify(r.device)},"op":${JSON.stringify(r.op)},` +
+    `"nonce":${JSON.stringify(r.nonce)},"data":${JSON.stringify(r.data)}}`
+}
+
+export function canonicalWrap(w) {
+  return `{"account":${JSON.stringify(w.account)},"device":${JSON.stringify(w.device)},` +
+    `"epoch":${w.epoch},"key":${JSON.stringify(w.key)},"nonce":${JSON.stringify(w.nonce)},"data":${JSON.stringify(w.data)}}`
 }
 
 // The canonical bytes a signature covers: fixed field order, no spaces. JSON.stringify quotes
@@ -338,7 +416,7 @@ export async function unlock(db) {
     try {
       const p = await passkey(r, false)
       const seed = await open(p.prf, r.device)
-      return { rec: r, key: await keyFromSeed(seed, false), prf: p.prf }
+      return { rec: r, key: await keyFromSeed(seed, false), prf: p.prf, seed }
     } catch {
       // Another device of this profile, or the passkey was dismissed.
     }
@@ -351,6 +429,26 @@ export async function unlock(db) {
 export async function accountKey(rec, prf) {
   if (!rec?.accountSeed) return null
   return keyFromSeed(await open(prf, rec.accountSeed), true)
+}
+
+// The sync seed of an admin device, unwrapped for the session: what lets it wrap the key of an
+// epoch for a device that does not know the phrase.
+export async function syncSeed(rec, prf) {
+  if (!rec?.syncSeed) return null
+  return open(prf, rec.syncSeed)
+}
+
+// The wrap of the key of an epoch for a device: X25519 with the key it published, HKDF, AES-GCM.
+// Only a device holding the account key signs it, so the relay stores a wrap but cannot make one.
+export async function wrapFor(accountKey, accountId, device, peerKey, seed, syncSeed, epoch) {
+  const { jwk, key } = await x25519FromSeed(seed)
+  const shared = await x25519Shared(jwk, peerKey)
+  const wk = await wrapKey(shared)
+  const ekey = await epochKey(syncSeed, epoch)
+  const s = await sealWith(wk, wrapAAD(accountId, device, epoch), ekey)
+  const w = { account: accountId, device, epoch, key, nonce: s.iv, data: s.data }
+  w.sig = await sign(accountKey, canonicalWrap(w))
+  return w
 }
 
 // A certificate signed by the account key for a device. The admin signs for the public key it
@@ -378,9 +476,10 @@ export async function enroll(db, phrase, wordlist, name, kind) {
   rec.account = accountId
   rec.device = await seal(p.prf, deviceSeed)
   rec.accountSeed = await seal(p.prf, accountSeed)
+  rec.syncSeed = await seal(p.prf, await hkdf(seed, InfoSync))
   const key = await keyFromSeed(deviceSeed, false)
   const accountSigningKey = await keyFromSeed(accountSeed, true)
   rec.cert = await signCert(accountSigningKey, accountId, deviceId, name, kind)
   await save(db, deviceId, rec)
-  return { rec, key, prf: p.prf, accountKey: accountSigningKey }
+  return { rec, key, prf: p.prf, accountKey: accountSigningKey, seed: deviceSeed }
 }

@@ -11,7 +11,7 @@ import { attached, diagnostics, home, mutate, openFile, project, relPath, root, 
 import { WorktreeChip } from '../ui/WorktreeChip'
 import { showTool } from '../state/zones'
 import { dropClasses, dropIndex, moveItem, setDropAt } from '../ui/tabDrop'
-import { settings } from '../state/settings'
+import { fontFor, settings } from '../state/settings'
 import { accentOf, themeById } from '../settings/themes'
 import { contextMenu, prompt, type MenuItem } from '../ui/overlay'
 import { errorToast } from '../ui/toast'
@@ -158,7 +158,7 @@ function getTerm(id: string): TermEntry {
   el.className = 'term-host'
   const term = new Terminal({
     fontFamily: settings.font.family,
-    fontSize: settings.font.size,
+    fontSize: fontFor().size,
     theme: xtermTheme(),
     scrollback: 10000,
     allowProposedApi: true,
@@ -201,12 +201,13 @@ function disposeTerm(id: string) {
 
 createEffect(
   on(
-    () => [settings.theme, settings.accent, settings.font.family, settings.font.size],
+    () => [settings.theme, settings.accent, settings.font.family, fontFor().size],
     () => {
+      const size = fontFor().size
       for (const t of terms.values()) {
         t.term.options.theme = xtermTheme()
         t.term.options.fontFamily = settings.font.family
-        t.term.options.fontSize = settings.font.size
+        t.term.options.fontSize = size
         try {
           t.fit.fit()
         } catch {

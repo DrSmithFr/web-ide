@@ -5,7 +5,7 @@ import { Dynamic } from 'solid-js/web'
 import { RpcError, formatRate, on as onPod, podRates, podState } from '../pod/rpc'
 import {
   activeLeaf, activeTab, closeTab, conflictedDocs, cycleTab, docsVersion, home, mutate, navigate as navHistory, openProject, project, relPath, reopenProject, root,
-  openFile, saveAll, session, setConflictOpener, splitPane, closeProject,
+  openFile, saveAll, session, setConflictOpener, setSize, sizesFor, splitPane, closeProject,
 } from '../state/project'
 import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, toggleTool, toolsIn, zoneOf, zones, type Zone } from '../state/zones'
 import { focusEditor, focusPart, setFocusPart, trackFocus } from '../state/focus'
@@ -544,13 +544,13 @@ function BottomStrip() {
   const both = () => !!left() && !!right()
   return (
     <>
-      <Resizer dir="y" onDrag={(d) => mutate((s) => (s.bottom.height = Math.max(100, Math.min(innerHeight - 200, s.bottom.height - d))))} />
-      <div class="bottom" ref={el} style={{ height: `${session.bottom.height}px` }}>
+      <Resizer dir="y" onDrag={(d) => setSize('bottom', Math.max(100, Math.min(innerHeight - 200, sizesFor().bottom - d)))} />
+      <div class="bottom" ref={el} style={{ height: `${sizesFor().bottom}px` }}>
         <Show when={left()}>
-          <ZonePanel zone="bottomLeft" style={{ flex: both() ? `0 0 ${session.bottom.split * 100}%` : '1 1 0' }} />
+          <ZonePanel zone="bottomLeft" style={{ flex: both() ? `0 0 ${sizesFor().split * 100}%` : '1 1 0' }} />
         </Show>
         <Show when={both()}>
-          <Resizer dir="x" onDrag={(d) => mutate((s) => (s.bottom.split = Math.max(0.15, Math.min(0.85, s.bottom.split + d / el.offsetWidth))))} />
+          <Resizer dir="x" onDrag={(d) => setSize('split', Math.max(0.15, Math.min(0.85, sizesFor().split + d / el.offsetWidth)))} />
         </Show>
         <Show when={right()}>
           <ZonePanel zone="bottomRight" style={{ flex: '1 1 0' }} />
@@ -670,15 +670,15 @@ export function ProjectPage(props: { id: string }) {
           <div class="work">
             <div class="work-top">
               <Show when={shownIn(session, 'left')}>
-                <ZonePanel zone="left" width={session.left.width} />
-                <Resizer dir="x" onDrag={(d) => mutate((s) => (s.left.width = Math.max(160, Math.min(700, s.left.width + d))))} />
+                <ZonePanel zone="left" width={sizesFor().left} />
+                <Resizer dir="x" onDrag={(d) => setSize('left', Math.max(160, Math.min(700, sizesFor().left + d)))} />
               </Show>
               <main class="center" data-focus="editor">
                 <EditorArea />
               </main>
               <Show when={shownIn(session, 'right')}>
-                <Resizer dir="x" onDrag={(d) => mutate((s) => (s.right.width = Math.max(200, Math.min(800, s.right.width - d))))} />
-                <ZonePanel zone="right" width={session.right.width} />
+                <Resizer dir="x" onDrag={(d) => setSize('right', Math.max(200, Math.min(800, sizesFor().right - d)))} />
+                <ZonePanel zone="right" width={sizesFor().right} />
               </Show>
             </div>
             <Show when={shownIn(session, 'bottomLeft') || shownIn(session, 'bottomRight')}>

@@ -258,7 +258,7 @@ func TestJoin(t *testing.T) {
 	e.Name = "laptop"
 
 	done := make(chan error, 1)
-	go func() { done <- Join(e) }()
+	go func() { done <- Join(e, "") }()
 
 	code := waitCode(t, out)
 	if len(code) != 8 {
@@ -328,7 +328,7 @@ func TestJoin(t *testing.T) {
 // offline (LAN discovery, ticket #50, builds on that).
 func TestJoinOffline(t *testing.T) {
 	e, _ := env(t)
-	if err := Join(e); err == nil {
+	if err := Join(e, ""); err == nil {
 		t.Fatal("join without a relay must be refused")
 	}
 	if err := Restore(e); err == nil {

@@ -80,6 +80,14 @@ The pod stores only its own key (`~/.web-ide/device.key`, 0600) and its certific
 
 Recent browsers only: WebCrypto Ed25519 and the WebAuthn PRF are required, with no fallback. A passkey is tied to an origin, so `localhost`, the tailnet address and the relay are separate devices, each enrolled once with the phrase — and WebAuthn refuses an IP address, so open the pod on `localhost` to unlock a device (the panel gives the link). Revoking a device from the panel signs a new list: the relay stores it and pushes it to the online pods, which refuse the revoked device at its next connection.
 
+#### The settings follow the account
+
+The pods of one account share their settings through the relay: a theme, a shortcut or a colour changed on one pod reaches the other ones. The relay only carries ciphertext — it stores one encrypted blob per account and never sees a value. Each setting merges on its own, so two devices changing different things do not disturb each other; you are asked only when the **same** setting changed on two pods, and the panel shows both values and which device made them (Settings > Remote access).
+
+The layout stays per device: the code size, the interface size and the panel sizes belong to the browser, so a phone keeps its layout on every pod of the account. A device that has nothing of its own uses the layout saved with *Use as default for new devices* (Settings > Fonts).
+
+The **vault** is separate and off by default: the API keys of the model servers and the remembered database passwords. Switching it on sends them to the other pods, switching it off deletes them from the relay. After a revocation, the Devices panel asks to renew the API keys shared with the other devices.
+
 #### Other pods on the same network, with no relay
 
 The pods paired with one account find each other on the local network by themselves, with no relay and no internet: each paired pod opens a LAN port (`:4436`, `-lan` or `lan.addr` in `config.json`, `-lan off` to close it) and announces itself by mDNS. The home page then shows one *Projects* block per pod of the account; a project of another pod opens through a port this pod keeps for it, so its page and its terminals come from the pod that holds it (*← Back to …* leads home). Only the pods of the account are listed: each one proves its certificate, bound to the TLS certificates of the link, and a revoked pod is refused and dropped. An unpaired pod opens no LAN port at all.

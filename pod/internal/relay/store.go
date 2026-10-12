@@ -17,9 +17,10 @@ import (
 )
 
 // dbVersion 2 adds the identity tables (accounts, devices, pairings), see accounts.go and
-// pairing.go. The relay stores certificates and signed revocation lists, never a private key
-// or the phrase.
-const dbVersion = 2
+// pairing.go; dbVersion 3 adds the sync tables (blobs, wraps, published X25519 keys), see
+// syncstore.go. The relay stores certificates, signed revocation lists and encrypted blobs,
+// never a private key, a phrase or a sync key.
+const dbVersion = 3
 
 type Pod struct {
 	ID       string
@@ -69,31 +70,37 @@ func OpenStore(path string) (*Store, error) {
 // DBPath is the path of the relay database file.
 func (s *Store) DBPath() string { return s.path }
 
+// migrate runs on every open. Each migration is idempotent (CREATE TABLE IF NOT EXISTS,
+// addColumn), so a database left by an older version is brought up to date; the version is only
+// written when it moved.
 func migrate(db *sql.DB) error {
 	var ver int
 	if err := db.QueryRow("PRAGMA user_version").Scan(&ver); err != nil {
 		return err
 	}
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS pods (
+			id TEXT PRIMARY KEY,
+			secret TEXT NOT NULL,
+			name TEXT NOT NULL DEFAULT '',
+			online INTEGER NOT NULL DEFAULT 0,
+			last_seen INTEGER NOT NULL DEFAULT 0)`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS usage (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			pod_id TEXT NOT NULL,
+			ts INTEGER NOT NULL,
+			in_bytes INTEGER NOT NULL DEFAULT 0,
+			out_bytes INTEGER NOT NULL DEFAULT 0)`); err != nil {
+		return err
+	}
+	if err := migrateIdentity(db); err != nil {
+		return err
+	}
+	if err := migrateSync(db); err != nil {
+		return err
+	}
 	if ver < dbVersion {
-		if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS pods (
-				id TEXT PRIMARY KEY,
-				secret TEXT NOT NULL,
-				name TEXT NOT NULL DEFAULT '',
-				online INTEGER NOT NULL DEFAULT 0,
-				last_seen INTEGER NOT NULL DEFAULT 0)`); err != nil {
-			return err
-		}
-		if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS usage (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				pod_id TEXT NOT NULL,
-				ts INTEGER NOT NULL,
-				in_bytes INTEGER NOT NULL DEFAULT 0,
-				out_bytes INTEGER NOT NULL DEFAULT 0)`); err != nil {
-			return err
-		}
-		if err := migrateIdentity(db); err != nil {
-			return err
-		}
 		if _, err := db.Exec(fmt.Sprintf("PRAGMA user_version = %d", dbVersion)); err != nil {
 			return err
 		}

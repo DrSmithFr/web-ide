@@ -60,7 +60,11 @@ func Run(env *Env, args []string) error {
 		if len(args) > 1 && args[1] == "--phrase" {
 			return JoinWithPhrase(env)
 		}
-		return Join(env)
+		code := ""
+		if len(args) > 1 {
+			code = args[1]
+		}
+		return Join(env, code)
 	case "revoke":
 		if len(args) < 2 {
 			return errors.New("pair: revoke <device key>")
@@ -120,9 +124,11 @@ func Restore(env *Env) error {
 
 // Join posts the public key of this device to the relay, prints the code an admin reads, the
 // QR of the invite link and the 4-word fingerprint of the key, then waits for the approval.
+// With a code, the key is posted to the code an admin already showed: the fingerprint the admin
+// reads is the one of this key, and the code stays the one the panel displays.
 // The certificate comes back signed by the account key: the pod checks it against the account
 // it names, as it does for every peer.
-func Join(env *Env) error {
+func Join(env *Env, code string) error {
 	if env.RelayURL == "" {
 		return JoinLAN(env)
 	}
@@ -151,7 +157,11 @@ func Join(env *Env) error {
 	if m.Type == "error" {
 		return errors.New("relay: " + m.Message)
 	}
-	if err := send(ctx, ws, msg{Type: "pair", Key: p.ID(), Name: env.Name, Kind: identity.KindPod}); err != nil {
+	t := msg{Type: "pair", Key: p.ID(), Name: env.Name, Kind: identity.KindPod}
+	if code != "" {
+		t.Type, t.Code = "pairAttach", code
+	}
+	if err := send(ctx, ws, t); err != nil {
 		return err
 	}
 	if m, err = recv(ctx, ws); err != nil {
@@ -160,7 +170,7 @@ func Join(env *Env) error {
 	if m.Type != "pair" || m.Pairing == nil || m.Pairing.Code == "" {
 		return errors.New("relay: no code (" + m.Type + ")")
 	}
-	code := m.Pairing.Code
+	code = m.Pairing.Code
 
 	fmt.Fprintf(env.Out, "Pairing code: %s\n", code)
 	fmt.Fprintf(env.Out, "Invite link:  %s\n", inviteLink(env.RelayURL, code))

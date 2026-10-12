@@ -11,6 +11,8 @@ import { merge3 } from '../editor/merge'
 import { toast } from '../ui/toast'
 import { t, tn } from '../i18n'
 import { normalizePlacement, type Zone } from './zones'
+import { deviceId, layoutFor } from './device'
+import { settings } from './settings'
 
 export type TabKind = 'file' | 'sql' | 'table' | 'text' | 'diff' | 'kanban' | 'ticket'
 
@@ -71,7 +73,18 @@ export interface SessionData {
   /** Other worktrees of the repository open in the window, and the one shown (none: the project of the window). */
   attached: string[]
   worktree?: string
+  /** Panel sizes per device (state/device.ts): each device keeps its own, the others are not moved. */
+  sizes: Record<string, PanelSizes>
 }
+
+export interface PanelSizes {
+  left: number
+  right: number
+  bottom: number
+  split: number
+}
+
+const defaultSizes: PanelSizes = { left: 260, right: 300, bottom: 240, split: 0.5 }
 
 export interface ProjectInfo {
   id: string
@@ -109,6 +122,7 @@ function emptySession(): SessionData {
     git: { tab: 'commit', form: 150, detail: 260 },
     docker: { tab: 'project', profiles: [], detail: 'infos' },
     attached: [],
+    sizes: {},
   }
 }
 
@@ -166,6 +180,19 @@ export function mutate(fn: (s: SessionData) => void) {
   pushSession()
 }
 
+/** The panel sizes in effect for a device: its own entry, else the layout saved for new devices. */
+export function sizesFor(device = deviceId): PanelSizes {
+  return { ...defaultSizes, ...(session.sizes[device] ?? layoutFor(settings, device).panels ?? {}) }
+}
+
+/** Records a panel size for this device: a size moved here does not move the other devices. */
+export function setSize(part: keyof PanelSizes, value: number) {
+  mutate((s) => {
+    const d = s.sizes[deviceId] ?? (s.sizes[deviceId] = { ...defaultSizes })
+    d[part] = value
+  })
+}
+
 on('session.changed', (data: SessionData, from?: string) => {
   if (!data || !project() || (from && from !== home()?.id)) return
   applyingRemote = true
@@ -177,7 +204,7 @@ on('session.changed', (data: SessionData, from?: string) => {
 function normalize(raw: any): SessionData {
   const d = emptySession()
   if (!raw || typeof raw !== 'object' || !raw.layout) return d
-  const s: SessionData = { ...d, ...raw, left: { ...d.left, ...raw.left }, right: { ...d.right, ...raw.right }, bottom: { ...d.bottom, ...raw.bottom }, explorer: { ...d.explorer, ...raw.explorer }, git: { ...d.git, ...raw.git }, docker: { ...d.docker, ...raw.docker } }
+  const s: SessionData = { ...d, ...raw, left: { ...d.left, ...raw.left }, right: { ...d.right, ...raw.right }, bottom: { ...d.bottom, ...raw.bottom }, explorer: { ...d.explorer, ...raw.explorer }, git: { ...d.git, ...raw.git }, docker: { ...d.docker, ...raw.docker }, sizes: { ...raw.sizes } }
   if (s.left.panel && panelAliases[s.left.panel]) {
     s.right.panel = panelAliases[s.left.panel]
     s.left.panel = null

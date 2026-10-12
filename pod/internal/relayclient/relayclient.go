@@ -25,6 +25,7 @@ import (
 
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 	"github.com/DrSmithFr/web-ide/pod/internal/server"
+	"github.com/DrSmithFr/web-ide/pod/internal/settingsync"
 	"github.com/DrSmithFr/web-ide/pod/internal/tunnel"
 )
 
@@ -43,6 +44,22 @@ type sigMsg struct {
 	Account    string                `json:"account,omitempty"`
 	Cert       *identity.Cert        `json:"cert,omitempty"`
 	List       *identity.Revocations `json:"list,omitempty"` // pushed to the pods of an account
+	// Sync (milestone 4): the pod publishes its X25519 key, reads the wrap of the epoch key made
+	// for it, and exchanges encrypted blobs. The relay cannot read a blob, it only checks the
+	// signature against the device that wrote it.
+	SyncKey *identity.SyncKeyRecord `json:"syncKey,omitempty"`
+	Wrap    *identity.WrapRecord    `json:"wrap,omitempty"`
+	Blob    *identity.BlobRecord    `json:"blob,omitempty"`
+	Device  string                  `json:"device,omitempty"`
+	Kind    string                  `json:"kind,omitempty"`
+	Updated int64                   `json:"updated,omitempty"`
+	Message string                  `json:"message,omitempty"`
+}
+
+// toSync turns the sync part of a signaling message into the message the sync loop reads.
+func toSync(m sigMsg) settingsync.Msg {
+	return settingsync.Msg{Type: m.Type, Account: m.Account, Device: m.Device, Kind: m.Kind,
+		SyncKey: m.SyncKey, Wrap: m.Wrap, Blob: m.Blob, Updated: m.Updated, Message: m.Message}
 }
 
 // Config of a relayclient.
@@ -54,7 +71,10 @@ type Config struct {
 	Server   *server.Server
 	Token    string                // the pod token, proved inside the tunnel (token mode)
 	Identity *identity.PodIdentity // the paired pod: its device key and its pinned account
-	Limits   *tunnel.RateLimiter
+	// Sync is the settings sync loop of the pod: it sends its messages on this link and receives
+	// the answers and the pushes of the relay (nil: the pod does not sync).
+	Sync   *settingsync.Hub
+	Limits *tunnel.RateLimiter
 	// ForceTurn only advertises relay (TURN) candidates (e2e).
 	ForceTurn bool
 	// OnState is called with the state of the link to the relay (connecting, connected,
@@ -165,6 +185,15 @@ func (c *Client) runOnce(ctx context.Context) error {
 		c.mu.Unlock()
 	}()
 	c.tell("connected")
+	// The sync loop publishes the X25519 key of this device, reads the wrap an admin made for it
+	// and the state the relay holds: a pod that comes back online catches up here.
+	if c.cfg.Sync != nil {
+		c.cfg.Sync.SetTransport(&syncLink{c, link})
+		if err := c.cfg.Sync.Publish(); err != nil {
+			log.Printf("relayclient: sync: %v", err)
+			c.cfg.Sync.SetError(err)
+		}
+	}
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -186,8 +215,28 @@ func (c *Client) runOnce(ctx context.Context) error {
 			c.route(m.Session, func(s *session) { s.addBrowserCandidate(m.Candidate) })
 		case "bye":
 			c.route(m.Session, func(s *session) { s.close() })
+		case "wrap", "blob":
+			if c.cfg.Sync == nil {
+				continue
+			}
+			if err := c.cfg.Sync.Handle(toSync(m)); err != nil {
+				log.Printf("relayclient: sync: %v", err)
+				c.cfg.Sync.SetError(err)
+			}
 		}
 	}
+}
+
+// syncLink is the transport the sync loop sends its messages on: the same link, so a write and its
+// answer stay in order.
+type syncLink struct {
+	c    *Client
+	link *podLink
+}
+
+func (l *syncLink) Send(m settingsync.Msg) error {
+	return l.link.send(sigMsg{Type: m.Type, Account: m.Account, Device: m.Device, Kind: m.Kind,
+		SyncKey: m.SyncKey, Wrap: m.Wrap, Blob: m.Blob, Updated: m.Updated, Message: m.Message})
 }
 
 // PushRevocations gives the relay a newer revocation list the pod received another way (a

@@ -31,6 +31,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/server"
 	"github.com/DrSmithFr/web-ide/pod/internal/sessions"
 	"github.com/DrSmithFr/web-ide/pod/internal/settings"
+	"github.com/DrSmithFr/web-ide/pod/internal/settingsync"
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
 	"github.com/DrSmithFr/web-ide/pod/internal/store"
 	"github.com/DrSmithFr/web-ide/pod/webdist"
@@ -143,6 +144,7 @@ func main() {
 		RelayURL:    cfg.RelayURL,
 		ForceTurn:   *forceTurn,
 	}
+
 	if *static != "" {
 		srv.Static = os.DirFS(*static)
 	}
@@ -186,6 +188,29 @@ func main() {
 		srv.RelayStatus = func() server.RelayInfo {
 			return server.RelayInfo{URL: cfg.RelayURL, PodID: ids.PodID, Link: relayLink(cfg.RelayURL, ids.PodID, token), State: state.Load().(string)}
 		}
+		// The sync loop: the settings of the pods of one account, and the vault when it is
+		// switched on. Only a paired pod syncs — it needs an account, a device key to sign its
+		// writes, and the wrap an admin made for it. The sources read the files the pod already
+		// keeps; the hub sends its messages on the link below.
+		if podID.Paired() {
+			flags := settingsync.NewFlags(sets)
+			hub := settingsync.NewHub(st, nil, podID, flags)
+			if _, err := hub.AddSource(settingsync.NewSettingsSource(sets, func() bool { return flags.On(identity.KindSettings) },
+				func(e settings.Entry) { srv.Broadcast("settings.changed", e) })); err != nil {
+				check(err)
+			}
+			if _, err := hub.AddSource(settingsync.NewVaultSource(st, srv.LLM, func() bool { return flags.On(identity.KindVault) },
+				func() { srv.Broadcast("llm.config", srv.LLM.View()) })); err != nil {
+				check(err)
+			}
+			srv.Sync = hub
+			// The handlers are registered before the hub exists, so the emitter is set here:
+			// the page listens to sync.changed, sync.conflict and sync.error.
+			hub.SetEmitter(func(st settingsync.Status, name string, payload any) {
+				srv.Broadcast("sync."+name, map[string]any{"status": st, "payload": payload})
+			})
+		}
+
 		cli := relayclient.New(relayclient.Config{
 			RelayURL:  cfg.RelayURL,
 			PodID:     ids.PodID,
@@ -194,6 +219,7 @@ func main() {
 			Server:    srv,
 			Token:     token,
 			Identity:  podID,
+			Sync:      srv.Sync,
 			ForceTurn: *forceTurn,
 			OnState: func(s string) {
 				state.Store(s)
