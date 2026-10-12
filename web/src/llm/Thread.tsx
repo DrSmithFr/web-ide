@@ -904,7 +904,10 @@ export function Thread(props: { onSuggest: (t: string) => void; onSettings: () =
     for (const o of out) if (o.hide) o.hide = o.tail!.gone && !o.tail!.more
     return { rows: out, open }
   })
-  const compactedCount = () => chat.messages.filter((m) => m.compacted).length
+  // Shown: the messages of the context; every compaction stays as its card, the compacted
+  // messages behind the toggle.
+  const shown = (m: ChatMessage) => !m.compacted || m.kind === 'summary' || showCompacted()
+  const compactedCount = () => chat.messages.filter((m) => m.compacted && m.kind !== 'summary').length
   // The turn ended without an answer: an error, a stop, or tools interrupted (not a plan
   // or questions waiting for the user).
   const lastFailed = () => {
@@ -930,7 +933,7 @@ export function Thread(props: { onSuggest: (t: string) => void; onSettings: () =
       </Show>
       <For each={chat.messages}>
         {(m, i) => (
-          <Show when={m.role !== 'tool' && (!m.compacted || showCompacted())}>
+          <Show when={m.role !== 'tool' && shown(m)}>
             <div class="ai-row" classList={{ 'ai-old': !!m.compacted, 'ai-gone': !!chains().rows[i()]?.hide }}>
               <Show
                 when={m.kind === 'summary' || m.kind?.startsWith('agent_')}

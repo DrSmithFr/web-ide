@@ -283,9 +283,11 @@ run(async ({ page }) => {
     await page.waitForSelector('.menubar')
     await page.waitForSelector('.ai-summary', { timeout: 10000 })
     const visible = (await page.$$('[data-testid=ai-summary]')).length
+    const old = (await page.$$('.ai-row.ai-old [data-testid=ai-summary]')).length
+    const rows = (await page.$$('.ai-row')).length
     await page.click('.ai-compacted-toggle')
-    const all = (await page.$$('[data-testid=ai-summary]')).length
-    assert(visible === 1 && all === 3, `active conversation reloaded from SQLite, older summaries folded (${visible}/${all})`)
+    const all = (await page.$$('.ai-row')).length
+    assert(visible === 3 && old === 2 && all > rows, `active conversation reloaded from SQLite, every compaction shown, the older ones dimmed, compacted messages behind the toggle (${visible}/${old}, ${rows}/${all})`)
 
     // Detached window, wide: the history is always shown.
     const projectPath = new URL(page.url()).pathname
