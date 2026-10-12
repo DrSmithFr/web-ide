@@ -80,6 +80,9 @@ type Config struct {
 	// OnState is called with the state of the link to the relay (connecting, connected,
 	// disconnected); the page shows it in Settings > Remote access.
 	OnState func(state string)
+	// OnPushGone is called with a push subscription the relay dropped (the push service said
+	// 410, or the subscription is not of this account).
+	OnPushGone func(sub string)
 }
 
 // Client is one pod's relay client: one outbound link to the relay and one
@@ -223,6 +226,10 @@ func (c *Client) runOnce(ctx context.Context) error {
 				log.Printf("relayclient: sync: %v", err)
 				c.cfg.Sync.SetError(err)
 			}
+		case "push.gone":
+			if c.cfg.OnPushGone != nil {
+				c.cfg.OnPushGone(m.ID)
+			}
 		}
 	}
 }
@@ -237,6 +244,18 @@ type syncLink struct {
 func (l *syncLink) Send(m settingsync.Msg) error {
 	return l.link.send(sigMsg{Type: m.Type, Account: m.Account, Device: m.Device, Kind: m.Kind,
 		SyncKey: m.SyncKey, Wrap: m.Wrap, Blob: m.Blob, Updated: m.Updated, Message: m.Message})
+}
+
+// Push gives the relay a Web Push message for a subscription of the account: the payload is
+// already encrypted for the browser (package push), the relay signs and forwards it.
+func (c *Client) Push(sub string, body []byte, ttl int, urgency, topic string) error {
+	c.mu.Lock()
+	link := c.link
+	c.mu.Unlock()
+	if link == nil {
+		return errors.New("relay: not connected")
+	}
+	return link.sendAny(map[string]any{"type": "push.send", "sub": sub, "body": body, "ttl": ttl, "urgency": urgency, "topic": topic})
 }
 
 // PushRevocations gives the relay a newer revocation list the pod received another way (a
@@ -321,7 +340,9 @@ type podLink struct {
 	mu sync.Mutex
 }
 
-func (l *podLink) send(m sigMsg) error {
+func (l *podLink) send(m sigMsg) error { return l.sendAny(m) }
+
+func (l *podLink) sendAny(m any) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	b, _ := json.Marshal(m)

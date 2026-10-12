@@ -362,6 +362,7 @@ func (s *Server) kanbanCall(r *agentRun, name string, a toolArgs, mode string) (
 			if err != nil {
 				return toolResult{}, err
 			}
+			s.notifyFeedback(loc, id, a.str("text"))
 			return ok(fmt.Sprintf("Feedback added (id %d).", fid), agent.T("feedback added", nil)), nil
 		}
 		if action != "done" && action != "reopen" {

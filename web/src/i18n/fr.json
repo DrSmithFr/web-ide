@@ -1879,5 +1879,21 @@
   "Pair this pod (web-ide-pod pair) to find the other pods of the account on the local network.": "Appairez ce pod (web-ide-pod pair) pour trouver les autres pods du compte sur le réseau local.",
   "Addresses of pods typed by hand (host:port, one per line), when mDNS does not find them": "Adresses de pods saisies à la main (hôte:port, une par ligne), quand mDNS ne les trouve pas",
   "Only the pods of this account are listed: each one proves its certificate, and the traffic between pods is encrypted.": "Seuls les pods de ce compte sont listés : chacun prouve son certificat, et le trafic entre pods est chiffré.",
-  "Local network": "Réseau local"
+  "Local network": "Réseau local",
+  "Notifications": "Notifications",
+  "The pod notifies this device when it shows no window of the pod. The notifications are encrypted by the pod: the relay forwards them without reading them.": "Le pod notifie cet appareil quand il n’affiche aucune fenêtre du pod. Les notifications sont chiffrées par le pod : le relay les transmet sans les lire.",
+  "This pod has no relay: push notifications go through it.": "Ce pod n’a pas de relay : les notifications push passent par lui.",
+  "Enable on this device": "Activer sur cet appareil",
+  "Send a test": "Envoyer un test",
+  "Disable on this device": "Désactiver sur cet appareil",
+  "The agent finished a turn": "L’agent a terminé un tour",
+  "The agent asks for an approval or an answer": "L’agent demande une approbation ou une réponse",
+  "Tests failed (a saved command flagged test)": "Les tests ont échoué (une commande enregistrée marquée test)",
+  "Feedback on a ticket from the assistant or Claude Code": "Un retour sur un ticket de l’assistant ou de Claude Code",
+  "Notifications enabled on this device.": "Notifications activées sur cet appareil.",
+  "Notifications disabled on this device.": "Notifications désactivées sur cet appareil.",
+  "Test notification sent.": "Notification de test envoyée.",
+  "Notifications are blocked for this site.": "Les notifications sont bloquées pour ce site.",
+  "This browser shows notifications only from the installed app: add the page to the home screen, then open it from there.": "Ce navigateur n’affiche les notifications que depuis l’app installée : ajoutez la page à l’écran d’accueil, puis ouvrez-la depuis là.",
+  "push notifications are off on this relay": "les notifications push sont désactivées sur ce relay"
 }

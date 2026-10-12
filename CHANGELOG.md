@@ -4,6 +4,11 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+### Added
+
+- Push notifications through the relay (Settings > Notifications, on the relay origin): the agent finished or asks for you, tests failed, feedback on a ticket; a switch per kind and per device, nothing while the device shows a window of the pod, a click opens the conversation or the ticket. The pod encrypts each notification for the browser (RFC 8291): the relay signs (VAPID) and forwards ciphertext only, to the registered endpoints of signed, non-revoked browsers of the same account.
+- The bootstrap page of the relay installs as an app (PWA) and remembers the last pod.
+
 ### Changed
 
 - A project of another pod of the LAN opens under `/_lan/pod/<key>/` of the local pod, not on a port of its own: it stays in the window of the installed app, with no warning bar of an outside site.

@@ -19,8 +19,9 @@ import (
 // dbVersion 2 adds the identity tables (accounts, devices, pairings), see accounts.go and
 // pairing.go; dbVersion 3 adds the sync tables (blobs, wraps, published X25519 keys), see
 // syncstore.go. The relay stores certificates, signed revocation lists and encrypted blobs,
-// never a private key, a phrase or a sync key.
-const dbVersion = 3
+// never a private key, a phrase or a sync key; dbVersion 4 adds the push subscriptions
+// (push_store.go).
+const dbVersion = 4
 
 type Pod struct {
 	ID       string
@@ -98,6 +99,9 @@ func migrate(db *sql.DB) error {
 		return err
 	}
 	if err := migrateSync(db); err != nil {
+		return err
+	}
+	if err := migratePush(db); err != nil {
 		return err
 	}
 	if ver < dbVersion {

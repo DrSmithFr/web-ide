@@ -32,7 +32,7 @@ import { openConflict } from '../conflict/ConflictDialog'
 import { openSettings } from '../settings/SettingsModal'
 import { actions, registerAction, runAction, shortcutOf } from '../keys/bindings'
 import { onMouseNav } from '../keys/mouse'
-import { navigateChats } from '../llm/agent'
+import { navigateChats, openChat } from '../llm/agent'
 import { contextMenu, focusBeforeMenus, prompt, type MenuItem } from '../ui/overlay'
 import { Icon } from '../ui/icons'
 import { refreshConnections } from '../db/api'
@@ -577,6 +577,13 @@ export function ProjectPage(props: { id: string }) {
       if (ticket > 0) {
         history.replaceState(null, '', location.pathname)
         openTicket(ticket)
+      }
+      // A push notification of a conversation: /project/<id>?chat=<id> shows it in the assistant.
+      const chatId = new URLSearchParams(location.search).get('chat')
+      if (chatId) {
+        history.replaceState(null, '', location.pathname)
+        mutate((s) => (s.right.panel = 'assistant'))
+        void openChat(chatId).catch(() => {})
       }
       // Opened from a file link of Claude Code while no window had the project.
       const open = new URLSearchParams(location.search).get('open')

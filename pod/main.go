@@ -6,6 +6,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
@@ -26,6 +27,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 	"github.com/DrSmithFr/web-ide/pod/internal/pair"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
+	"github.com/DrSmithFr/web-ide/pod/internal/push"
 	"github.com/DrSmithFr/web-ide/pod/internal/relay"
 	"github.com/DrSmithFr/web-ide/pod/internal/relayclient"
 	"github.com/DrSmithFr/web-ide/pod/internal/server"
@@ -62,6 +64,8 @@ func main() {
 	turnPort := flag.Int("turn-port", 0, "relay: the STUN/TURN control port (default 3478)")
 	turnIP := flag.String("turn-ip", "", "relay: the STUN/TURN IP given to clients (default: the machine IP)")
 	tlsPort := flag.Int("tls-port", 0, "relay: the TLS port shared with HTTPS and TURN over TLS (default 443; below 1024 needs root)")
+	pushSubject := flag.String("push-subject", "", "relay: the contact of the Web Push (VAPID) claims, mailto: or https:")
+	pushTest := flag.String("push-test-endpoint", "", "relay: also allow the push endpoints under this prefix (tests only)")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 	if *name != "" {
@@ -74,7 +78,13 @@ func main() {
 	if len(flag.Args()) > 0 && flag.Arg(0) == "relay" {
 		// The relay has its own data folder (~/.web-ide-relay): pass "" when -data was not
 		// set explicitly, else the pod's default would hold relay.db.
-		runRelayCmd(flagValue(flag.CommandLine, "data", ""), *addr, *turnPort, *turnIP, *tlsPort)
+		// The relay serves the manifest and the icons of the installable app (PWA) from the
+		// front end of the pod: one copy of them.
+		var app fs.FS = webdist.FS()
+		if *static != "" {
+			app = os.DirFS(*static)
+		}
+		runRelayCmd(flagValue(flag.CommandLine, "data", ""), *addr, *turnPort, *turnIP, *tlsPort, app, *pushSubject, *pushTest)
 		return
 	}
 	if len(flag.Args()) > 0 && flag.Arg(0) == "pair" {
@@ -225,7 +235,18 @@ func main() {
 				state.Store(s)
 				srv.Broadcast("relay.changed", srv.RelayStatus())
 			},
+			OnPushGone: func(sub string) {
+				if srv.Push != nil {
+					srv.Push.Gone(sub)
+				}
+			},
 		})
+		// Push notifications go through the relay, encrypted by the pod for each browser.
+		if subs, err := push.Open(st.Dir()); err != nil {
+			log.Printf("push: %v", err)
+		} else {
+			srv.Push, srv.PushSend = subs, cli.Push
+		}
 		relayCli.Store(cli)
 		go func() { _ = cli.Run(ctx) }()
 		remote = relayLink(cfg.RelayURL, ids.PodID, token)
@@ -437,8 +458,9 @@ func flagValue(fs *flag.FlagSet, name, def string) string {
 }
 
 // runRelayCmd runs the relay server subcommand until interrupted.
-func runRelayCmd(dataDir string, addr string, turnPort int, turnIP string, tlsPort int) {
+func runRelayCmd(dataDir string, addr string, turnPort int, turnIP string, tlsPort int, app fs.FS, pushSubject, pushTest string) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	check(relay.Run(ctx, relay.RelayConfig{DataDir: dataDir, Addr: addr, TurnPort: turnPort, AdvertiseIP: turnIP, TLSPort: tlsPort}))
+	check(relay.Run(ctx, relay.RelayConfig{DataDir: dataDir, Addr: addr, TurnPort: turnPort, AdvertiseIP: turnIP, TLSPort: tlsPort, App: app,
+		PushSubject: pushSubject, PushTestEndpoint: pushTest}))
 }

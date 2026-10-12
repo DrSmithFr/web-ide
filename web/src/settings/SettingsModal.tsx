@@ -19,6 +19,8 @@ import { samples } from './samples'
 import { Devices } from './Devices'
 import { SyncPanel } from './Sync'
 import { LanSection } from './Lan'
+import { Notifications } from './Notifications'
+import { relayDevice } from '../pod/push'
 import { browserLang, fmtDate, languages, t, tn, type LangSetting } from '../i18n'
 
 const sections = [
@@ -30,6 +32,7 @@ const sections = [
   ['syntax', 'Syntax highlighting'],
   ['workspace', 'Workspace and pod'],
   ['remote', 'Remote access'],
+  ['notifications', 'Notifications'],
   ['history', 'Settings history'],
 ] as const
 
@@ -44,7 +47,7 @@ export function SettingsHost() {
       <Modal title={t('Settings')} onClose={() => setOpen(null)} class="modal-settings">
         <div class="settings">
           <nav class="settings-nav" role="tablist" aria-orientation="vertical">
-            <For each={sections}>
+            <For each={sections.filter(([id]) => id !== 'notifications' || relayDevice())}>
               {([id, label]) => (
                 <button classList={{ active: open() === id }} onClick={() => setOpen(id)}>
                   {t(label)}
@@ -78,6 +81,9 @@ export function SettingsHost() {
               <RemoteAccess />
               <SyncPanel />
               <Devices />
+            </Show>
+            <Show when={open() === 'notifications'}>
+              <Notifications />
             </Show>
             <Show when={open() === 'history'}>
               <History />

@@ -17,7 +17,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 # The longest first: the workers end together.
-[ ${#SUITES[@]} -eq 0 ] && SUITES=(kanban chat features restore+ docker lan identity sync keeper doodle speech relay preview git editor agent llm subagents orchestrator kanbanai editing lsp mousenav kanbangit commands projects popups keyboard mobile tunnels explorer plan i18n perf)
+[ ${#SUITES[@]} -eq 0 ] && SUITES=(kanban chat features restore+ docker lan identity sync push keeper doodle speech relay preview git editor agent llm subagents orchestrator kanbanai editing lsp mousenav kanbangit commands projects popups keyboard mobile tunnels explorer plan i18n perf)
 [ -d node_modules/playwright-core ] || npm install --no-audit --no-fund >/dev/null
 if [ -z "$JOBS" ]; then JOBS=$(($(nproc) / 4)); [ "$JOBS" -gt 8 ] && JOBS=8; [ "$JOBS" -lt 1 ] && JOBS=1; fi
 # wait -n -p needs bash 5.1.
@@ -35,7 +35,8 @@ if [ "$JOBS" -gt 1 ]; then
 fi
 if [ "$JOBS" -gt 1 ] && [ $((${#CHAINS[@]} + ${#SOLO[@]})) -gt 1 ]; then
   OUTS=$(mktemp -d)
-  # Ports of worker k: E2E_PORT_BASE + 100k (pod), +1 (relay), +2 (TURN), +20 (LAN; the lan
+  # Ports of worker k: E2E_PORT_BASE + 100k (pod), +1 (relay), +2 (TURN), +3 (fake push
+  # service of the push suite), +20 (LAN; the lan
   # suite takes up to +60 for its other pods). Below the ephemeral range of the listen(0).
   BASE=${E2E_PORT_BASE:-21000}
   declare -A SLOT NAME START
@@ -50,7 +51,7 @@ if [ "$JOBS" -gt 1 ] && [ $((${#CHAINS[@]} + ${#SOLO[@]})) -gt 1 ]; then
     local slot=${FREE[0]} name=${1%% *} port
     FREE=("${FREE[@]:1}")
     port=$((BASE + 100 * slot))
-    E2E_PORT=$port E2E_RELAY_PORT=$((port + 1)) E2E_TURN_PORT=$((port + 2)) E2E_LAN_PORT=$((port + 20)) \
+    E2E_PORT=$port E2E_RELAY_PORT=$((port + 1)) E2E_TURN_PORT=$((port + 2)) E2E_PUSH_PORT=$((port + 3)) E2E_LAN_PORT=$((port + 20)) \
       E2E_POD_LOG="/tmp/web-ide-e2e-$name.pod.log" ./run.sh -j 1 $1 >"$OUTS/$name.log" 2>&1 </dev/null &
     SLOT[$!]=$slot NAME[$!]=$1 START[$!]=$SECONDS
   }
@@ -83,6 +84,7 @@ RELAY_PORT=${E2E_RELAY_PORT:-4430}
 LAN_PORT=${E2E_LAN_PORT:-4520}
 # Not the default 3478: the Go tests of the relay bind that one, and may run meanwhile.
 TURN_PORT=${E2E_TURN_PORT:-3479}
+PUSH_PORT=${E2E_PUSH_PORT:-4432}
 MODELS=${E2E_MODELS:-$HOME/.cache/web-ide-e2e/models}
 TMP=$(mktemp -d)
 KEEPER_PID=
@@ -114,7 +116,9 @@ start_relay() {
   mkdir -p "$TMP/relaydata"
   # TURN on loopback: without -turn-ip the relay advertises the machine IP, and Chromium
   # filters candidates it cannot reach; the suite asserts the pair is a relay one.
-  "$ROOT/bin/web-ide-pod" -data "$TMP/relaydata" -addr "127.0.0.1:$RELAY_PORT" -turn-ip 127.0.0.1 -turn-port "$TURN_PORT" relay >"$TMP/relay.log" 2>&1 </dev/null &
+  # The push suite runs a fake push service: the relay lets its endpoints through.
+  "$ROOT/bin/web-ide-pod" -data "$TMP/relaydata" -addr "127.0.0.1:$RELAY_PORT" -turn-ip 127.0.0.1 -turn-port "$TURN_PORT" \
+    -push-test-endpoint "http://127.0.0.1:$PUSH_PORT/push/" relay >"$TMP/relay.log" 2>&1 </dev/null &
   RELAY_PID=$!
   export E2E_RELAY_PID=$RELAY_PID
   for _ in $(seq 50); do curl -s -o /dev/null "http://127.0.0.1:$RELAY_PORT/" && break; sleep 0.1; done
@@ -123,8 +127,8 @@ trap 'stop_pod; stop_relay; rm -rf "$TMP"' EXIT
 start_pod() {
   rm -rf "$TMP/data" "$TMP/ws"
   EXTRA=()
-  # The identity and sync suites pair the pod with the CLI, so its pod must reach the relay too.
-  if [ "${1:-}" = relay ] || [ "${1:-}" = identity ] || [ "${1:-}" = sync ]; then EXTRA=(-relay "http://127.0.0.1:$RELAY_PORT" -force-turn); fi
+  # The identity, sync and push suites pair the pod with the CLI, so its pod must reach the relay too.
+  if [ "${1:-}" = relay ] || [ "${1:-}" = identity ] || [ "${1:-}" = sync ] || [ "${1:-}" = push ]; then EXTRA=(-relay "http://127.0.0.1:$RELAY_PORT" -force-turn); fi
   # The LAN link only in its suite, on loopback and with the addresses typed (no mDNS): a
   # paired pod of another suite must not take the port of the IDE's own pod.
   if [ "${1:-}" = lan ]; then EXTRA+=(-lan "127.0.0.1:$LAN_PORT" -mdns=false -name alpha); else EXTRA+=(-lan off); fi
@@ -168,8 +172,8 @@ EOF
   bash "$TMP/launch-pod.sh"
 }
 export E2E_URL="http://127.0.0.1:$PORT" E2E_PORT="$PORT" E2E_WS="$TMP/ws" E2E_OUT="${E2E_OUT:-$TMP}" E2E_RESTART_POD="$TMP/restart-pod.sh" E2E_DATA="$TMP/data"
-export E2E_LAN_PORT="$LAN_PORT" E2E_TURN_PORT="$TURN_PORT" E2E_TMP="$TMP"
-export E2E_RELAY_URL="http://127.0.0.1:$RELAY_PORT" E2E_RELAY_PORT="$RELAY_PORT" E2E_RELAY_DATA="$TMP/relaydata" E2E_BIN="$ROOT/bin/web-ide-pod"
+export E2E_LAN_PORT="$LAN_PORT" E2E_TURN_PORT="$TURN_PORT" E2E_PUSH_PORT="$PUSH_PORT" E2E_TMP="$TMP"
+export E2E_RELAY_URL="http://127.0.0.1:$RELAY_PORT" E2E_RELAY_PORT="$RELAY_PORT" E2E_RELAY_DATA="$TMP/relaydata" E2E_RELAY_LOG="$TMP/relay.log" E2E_BIN="$ROOT/bin/web-ide-pod"
 mkdir -p "$E2E_OUT"
 status=0
 for s in "${SUITES[@]}"; do
@@ -177,7 +181,7 @@ for s in "${SUITES[@]}"; do
     stop_relay
     # The relay comes up first for the suites that need it: a pod started before the relay
     # fails its first dial and sits in exponential backoff.
-    { [ "$s" = relay ] || [ "$s" = identity ] || [ "$s" = sync ]; } && start_relay
+    { [ "$s" = relay ] || [ "$s" = identity ] || [ "$s" = sync ] || [ "$s" = push ]; } && start_relay
     stop_pod; start_pod "$s"
   fi
   export E2E_TOKEN=$(cat "$TMP/data/token")

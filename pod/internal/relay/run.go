@@ -3,6 +3,7 @@ package relay
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
@@ -21,6 +22,11 @@ type RelayConfig struct {
 	TLSPort     int    // TLS port shared with HTTPS and TURN over TLS (0 → 443)
 	CertFile    string // certificate for TLS (a self-signed one is created on first run)
 	KeyFile     string
+	App         fs.FS // the front end of the pod: the manifest and the icons of the installable app
+	// PushSubject is the contact of the VAPID claims (mailto: or https:); PushTestEndpoint lets
+	// the endpoints under this prefix through, for the e2e fake push service.
+	PushSubject      string
+	PushTestEndpoint string
 }
 
 // Run starts the relay server (the "relay" subcommand) until ctx is cancelled.
@@ -76,6 +82,14 @@ func Run(ctx context.Context, cfg RelayConfig) error {
 	defer turn.Close()
 
 	srv := New(st, turn)
+	srv.App = cfg.App
+	// Web Push: the VAPID key of the relay, made once in its data folder.
+	if push, err := LoadPush(dataDir, cfg.PushSubject); err != nil {
+		log.Printf("relay: push notifications are off: %v", err)
+	} else {
+		push.TestEndpoint = cfg.PushTestEndpoint
+		srv.Push = push
+	}
 	httpSrv := &http.Server{Addr: cfg.Addr, Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		<-ctx.Done()

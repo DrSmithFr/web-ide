@@ -260,5 +260,18 @@
   "no pairing request with this code": "aucune demande d'appairage avec ce code",
   "the certificate is not for the device of this request": "le certificat n'est pas pour l'appareil de cette demande",
   "the joining pod does not answer": "le pod qui rejoint ne répond pas",
-  "the joining pod refused the certificate": "le pod qui rejoint a refusé le certificat"
+  "the joining pod refused the certificate": "le pod qui rejoint a refusé le certificat",
+  "push notifications are off on this relay": "les notifications push sont désactivées sur ce relay",
+  "this push service is not allowed": "ce service de push n'est pas autorisé",
+  "the request is too old": "la requête est trop ancienne",
+  "the signature does not match": "la signature ne correspond pas",
+  "incomplete push subscription": "abonnement push incomplet",
+  "notifications are not enabled on this device": "les notifications ne sont pas activées sur cet appareil",
+  "Notifications work": "Les notifications fonctionnent",
+  "A test sent by %s": "Un test envoyé par %s",
+  "The agent finished": "L'agent a terminé",
+  "The agent needs you": "L'agent a besoin de vous",
+  "Tests failed": "Les tests ont échoué",
+  "%s · %s ended with code %d": "%s · %s s'est terminé avec le code %d",
+  "Feedback on #%d %s": "Retour sur #%d %s"
 }

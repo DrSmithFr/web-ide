@@ -3,6 +3,7 @@ package relay
 import (
 	"context"
 	"encoding/json"
+	"io/fs"
 	"net/http"
 	"sync"
 	"time"
@@ -60,6 +61,10 @@ type Server struct {
 	links    map[*identityConn]bool   // live pairing/admin links
 	codes    map[string]*identityConn // pairing code → the link that created it
 	joiners  map[string]*identityConn // pairing code → the link that posted its key to it
+	// App is the front end of the pod: the relay serves its manifest and icons (static.go).
+	App fs.FS
+	// Push sends the Web Push notifications of the pods (push.go); nil: off.
+	Push *Push
 }
 
 // podConn is the pod's persistent link: register (pod id + secret), then carry the
@@ -68,8 +73,11 @@ type podConn struct {
 	id, name string
 	account  string // the account the pod is paired with (empty: token mode)
 	device   string // the device id the pod published its sync key under (empty: not published yet)
-	ws       *websocket.Conn
-	mu       sync.Mutex
+	// certified is the account when the pod registered with a certificate of it that the relay
+	// checked, not revoked: the only account it may send push notifications to.
+	certified string
+	ws        *websocket.Conn
+	mu        sync.Mutex
 }
 
 func (pc *podConn) send(m sigMsg) error {
@@ -157,6 +165,9 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 					pc.send(sigMsg{Type: "error", Message: err.Error()})
 					return
 				}
+				if list, err := s.store.Revocations(m.Account); err == nil && m.Cert.Account == m.Account && m.Cert.Kind == identity.KindPod && !list.Has(m.Cert.Key) {
+					pc.certified = m.Account
+				}
 			}
 			s.mu.Lock()
 			s.pods[m.ID] = pc
@@ -178,6 +189,8 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 			if kept, err := s.store.SaveRevocations(m.List); err == nil && kept {
 				s.pushRevocations(pc.account, m.List, nil)
 			}
+		case "push.send":
+			s.pushFromPod(pc, b)
 		case "answer":
 			if bc := s.browserOf(m.Session); bc != nil {
 				bc.send(sigMsg{Type: "answer", Session: m.Session, SDP: m.SDP})

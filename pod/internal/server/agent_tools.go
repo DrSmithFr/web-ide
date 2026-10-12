@@ -296,6 +296,7 @@ func (s *Server) confirm(r *agentRun, root string, req agent.Approval) bool {
 	r.state = "waiting_user"
 	s.publish(r, -1)
 	s.emitAgent(r.root, "agent.attention", map[string]any{"id": r.id, "title": r.chat.Title, "kind": req.Kind, "sub": r.chat.Parent != ""})
+	s.notifyAgent(true, r.root, r.id, r.chat.Title)
 	r.mu.Unlock()
 	asked := time.Now()
 	var allowed bool

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -39,7 +40,7 @@ func (c *wsClient) close() { _ = c.c.CloseNow() }
 
 func newRelay(t *testing.T) *httptest.Server {
 	t.Helper()
-	st, _ := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
+	st, _ := OpenStore(filepath.Join(relayDir(t), "relay.db"))
 	t.Cleanup(func() { st.Close() })
 	turn, err := NewTurn(st, TurnConfig{AdvertiseIP: "127.0.0.1", Port: freeTurnPort(t)})
 	if err != nil {
@@ -155,4 +156,17 @@ func TestSignalingWrongSecret(t *testing.T) {
 	if m.Type != "error" {
 		t.Fatalf("a wrong secret must give an error, got %q", m.Type)
 	}
+}
+
+// relayDir is a data folder for a test relay. Not t.TempDir: the handler of a pod link may still
+// write to the base (the pod offline) as the test ends, and the cleanup of t.TempDir then fails
+// on the journal file it finds.
+func relayDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "relay-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
 }

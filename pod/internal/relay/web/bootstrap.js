@@ -11,9 +11,12 @@
 import * as id from './identity.js'
 
 const params = new URLSearchParams(location.hash.slice(1) || location.search.slice(1))
-const pod = params.get('pod')
+// The pod of the link, else the last one opened here: the installed app (PWA) starts at /.
+const pod = params.get('pod') || (params.get('join') ? null : remembered())
 const token = params.get('t') || params.get('token') || ''
 const join = params.get('join')
+// A path of the app to open instead of its home page (the link of a notification).
+const openPath = safePath(params.get('open'))
 let session = rand()
 
 const fr = (navigator.languages?.[0] ?? navigator.language ?? 'en').startsWith('fr')
@@ -62,6 +65,23 @@ const status = (html) => { const el = document.getElementById('msg'); if (el) el
 let failed = false
 let lastError = null
 const fail = (m) => { failed = true; lastError = m; status('<div class="err">' + m + '</div>') }
+
+function remembered() {
+  try {
+    return localStorage.getItem('webide.relay.pod')
+  } catch {
+    return null
+  }
+}
+function remember(id) {
+  try {
+    localStorage.setItem('webide.relay.pod', id)
+  } catch {}
+}
+// Only a path of this origin: a link must not turn the frame into another site.
+function safePath(p) {
+  return p && p.startsWith('/') && !p.startsWith('//') && !p.startsWith('/\\') ? p : null
+}
 
 function rand() {
   const b = new Uint8Array(16)
@@ -343,8 +363,9 @@ async function connect(mode) {
     status(words.loading)
     const f = document.getElementById('frame')
     f.style.display = 'block'
-    f.src = '/app'
+    f.src = openPath ?? '/app'
     document.getElementById('status').style.display = 'none'
+    remember(pod)
   }
 }
 
@@ -354,6 +375,12 @@ function send(dc, obj) { frame(dc, new TextEncoder().encode(JSON.stringify(obj))
 // bootstrap owns the PeerConnection. The app posts on the parent window; the messages of
 // the Service Worker arrive on navigator.serviceWorker, not on window.
 function onMessage(d) {
+  // A notification clicked: the Service Worker moves the app of this window to its path.
+  if (d?.kind === 'open' && handshakeDone) {
+    const p = safePath(d.url)
+    if (p) document.getElementById('frame').src = p
+    return
+  }
   if (!d || !pc) return
   if (d.kind === 'port') bridge(d.label, d.port)
   else if (d.kind === 'http') httpFetch(d)

@@ -3,6 +3,7 @@ package relay
 import (
 	"embed"
 	"io"
+	"io/fs"
 	"net/http"
 	"strings"
 
@@ -47,7 +48,13 @@ func (s *Server) Handler() http.Handler {
 	// format.
 	mux.HandleFunc("/_relay/identity.js", staticJS(identity.ModuleJS()))
 	mux.HandleFunc("/_relay/bip39.txt", s.serveWordlist)
+	mux.HandleFunc("/_relay/push/key", s.servePushKey)
+	mux.HandleFunc("/_relay/push/subscribe", s.servePushSubscribe)
+	mux.HandleFunc("/_relay/push/unsubscribe", s.servePushUnsubscribe)
 	mux.HandleFunc("/sw.js", staticJS(swJS))
+	for p := range appFiles {
+		mux.HandleFunc(p, s.serveAppFile)
+	}
 	mux.HandleFunc("/", s.bootstrapPage)
 	return mux
 }
@@ -61,6 +68,29 @@ func (s *Server) bootstrapPage(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = io.Copy(w, strings.NewReader(string(bootstrapHTML)))
+}
+
+// appFiles are the manifest of the installable app (PWA) and its icons: the same files as the
+// pod's (web/public), taken from its front end, so the bootstrap page installs as the app.
+var appFiles = map[string]string{
+	"/manifest.webmanifest": "application/manifest+json",
+	"/icon.svg":             "image/svg+xml",
+	"/icon-192.png":         "image/png",
+	"/icon-512.png":         "image/png",
+}
+
+func (s *Server) serveAppFile(w http.ResponseWriter, r *http.Request) {
+	if s.App == nil {
+		http.NotFound(w, r)
+		return
+	}
+	b, err := fs.ReadFile(s.App, strings.TrimPrefix(r.URL.Path, "/"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", appFiles[r.URL.Path])
+	_, _ = w.Write(b)
 }
 
 func staticJS(b []byte) http.HandlerFunc {
