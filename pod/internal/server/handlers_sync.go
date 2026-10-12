@@ -1,0 +1,76 @@
+package server
+
+import (
+	"context"
+	"encoding/json"
+
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
+	"github.com/DrSmithFr/web-ide/pod/internal/settingsync"
+)
+
+// Settings sync: what the page shows in Settings > Remote access > Sync — the state of each kind,
+// the conflicts it must resolve, and the vault switch. The pods do the merge; the relay only stores
+// ciphertext, so a conflict is answered by the pod that owns the setting.
+func (s *Server) registerSync() {
+	if s.Sync == nil {
+		return
+	}
+	s.Sync.SetEmitter(func(st settingsync.Status, name string, payload any) {
+		s.broadcast("sync."+name, map[string]any{"status": st, "payload": payload}, nil)
+	})
+
+	s.handle("sync.status", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		return s.Sync.Status(), nil
+	})
+
+	// The choice the user made for a conflict: a normal write, recorded in the history like any
+	// other change, and sent to the other pods.
+	s.handle("sync.resolve", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		a, err := bind[struct {
+			Kind  string
+			Path  string
+			Value json.RawMessage
+		}](p)
+		if err != nil {
+			return nil, err
+		}
+		src := s.Sync.Source(a.Kind)
+		if src == nil {
+			return nil, i18n.Errorf("nothing synced under %q", a.Kind)
+		}
+		if err := src.Resolve(a.Path, a.Value); err != nil {
+			return nil, err
+		}
+		return src.Status(), nil
+	})
+
+	// The vault switch. Switching it off deletes the blob: the pod that was keeping it stops
+	// sharing its keys, and the other pods keep what they already have.
+	s.handle("sync.vault", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		a, err := bind[struct {
+			Kind string
+			On   bool
+		}](p)
+		if err != nil {
+			return nil, err
+		}
+		if a.Kind != "vault" {
+			return nil, i18n.Errorf("nothing to switch under %q", a.Kind)
+		}
+		if err := s.Sync.Flags().Set(a.Kind, a.On); err != nil {
+			return nil, err
+		}
+		src := s.Sync.Source(a.Kind)
+		if src == nil {
+			return nil, i18n.New("the vault is not synced by this pod")
+		}
+		if !a.On {
+			if err := src.Delete(); err != nil {
+				return nil, err
+			}
+		} else if err := src.Push(); err != nil {
+			return nil, err
+		}
+		return src.Status(), nil
+	})
+}

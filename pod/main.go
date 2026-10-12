@@ -30,6 +30,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/server"
 	"github.com/DrSmithFr/web-ide/pod/internal/sessions"
 	"github.com/DrSmithFr/web-ide/pod/internal/settings"
+	"github.com/DrSmithFr/web-ide/pod/internal/settingsync"
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
 	"github.com/DrSmithFr/web-ide/pod/internal/store"
 	"github.com/DrSmithFr/web-ide/pod/webdist"
@@ -130,6 +131,7 @@ func main() {
 		RelayURL:    cfg.RelayURL,
 		ForceTurn:   *forceTurn,
 	}
+
 	if *static != "" {
 		srv.Static = os.DirFS(*static)
 	}
@@ -158,6 +160,23 @@ func main() {
 		// key but no account and stays in token mode.
 		podID, err := identity.Open(st.Dir())
 		check(err)
+
+		// The sync loop: the settings of the pods of one account, and the vault when it is
+		// switched on. Only a paired pod syncs — it needs an account, a device key to sign its
+		// writes, and the wrap an admin made for it. The sources read the files the pod already
+		// keeps; the hub sends its messages on the link below.
+		if podID.Paired() {
+			flags := settingsync.NewFlags(sets)
+			hub := settingsync.NewHub(st, nil, podID, flags)
+			if _, err := hub.AddSource(settingsync.NewSettingsSource(sets, func() bool { return flags.On(identity.KindSettings) })); err != nil {
+				check(err)
+			}
+			if _, err := hub.AddSource(settingsync.NewVaultSource(st, srv.LLM, func() bool { return flags.On(identity.KindVault) })); err != nil {
+				check(err)
+			}
+			srv.Sync = hub
+		}
+
 		cli := relayclient.New(relayclient.Config{
 			RelayURL:  cfg.RelayURL,
 			PodID:     ids.PodID,
@@ -166,6 +185,7 @@ func main() {
 			Server:    srv,
 			Token:     token,
 			Identity:  podID,
+			Sync:      srv.Sync,
 			ForceTurn: *forceTurn,
 			OnState: func(s string) {
 				state.Store(s)

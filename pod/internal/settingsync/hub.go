@@ -20,7 +20,9 @@ type Hub struct {
 	key     []byte
 	epoch   int64
 	sources map[string]*Sync
+	flags   *Flags
 	emit    func(s Status, name string, payload any)
+	lastErr string
 }
 
 // Status is what the page shows for one kind.
@@ -32,16 +34,38 @@ type Status struct {
 	Seq       int64      `json:"seq"`
 	LastSync  int64      `json:"lastSync"`
 	Conflicts []Conflict `json:"conflicts"`
+	// The last error the relay answered for this pod (a revoked device, a blob of another epoch).
+	Error string `json:"error,omitempty"`
+	// The device id of this pod, so the page can tell its own changes from the other ones.
+	Device string `json:"device"`
 }
 
 // NewHub makes the sync identity of a paired pod.
-func NewHub(st *store.Store, tr Transport, ident *identity.PodIdentity) *Hub {
-	return &Hub{st: st, tr: tr, ident: ident, sources: map[string]*Sync{}}
+func NewHub(st *store.Store, tr Transport, ident *identity.PodIdentity, flags *Flags) *Hub {
+	return &Hub{st: st, tr: tr, ident: ident, flags: flags, sources: map[string]*Sync{}}
 }
 
 // SetEmitter is called with the events of the loop: a change applied from another pod, a conflict,
 // the state of a source. The page shows them.
 func (h *Hub) SetEmitter(fn func(s Status, name string, payload any)) { h.emit = fn }
+
+// SetTransport gives the hub the link it sends its sync messages on. The link comes up later than
+// the hub (the pod dials the relay), so the transport is set after the hub is built.
+func (h *Hub) SetTransport(tr Transport) { h.tr = tr }
+
+// SetError keeps the last error the relay answered for this pod (a revoked device, a blob of
+// another epoch): the page shows it next to the state of the sync.
+func (h *Hub) SetError(err error) {
+	h.mu.Lock()
+	h.lastErr = ""
+	if err != nil {
+		h.lastErr = err.Error()
+	}
+	h.mu.Unlock()
+	for _, s := range h.sources {
+		s.event("error", err)
+	}
+}
 
 // AddSource registers one kind of data to sync.
 func (h *Hub) AddSource(src Source) (*Sync, error) {
@@ -55,6 +79,10 @@ func (h *Hub) AddSource(src Source) (*Sync, error) {
 
 // Source returns the loop of a kind (nil when the pod does not sync it).
 func (h *Hub) Source(kind string) *Sync { return h.sources[kind] }
+
+// Flags gives the sync switches (the "sync" object of the settings): settings sync is on by
+// default, the vault is opt-in.
+func (h *Hub) Flags() *Flags { return h.flags }
 
 // Status lists the sources of the pod.
 func (h *Hub) Status() []Status {
@@ -159,6 +187,28 @@ func (h *Hub) Handle(m Msg) error {
 		return s.Handle(m)
 	}
 	return nil
+}
+
+// PushAll writes every source that has something to send: what the pod does after a local change.
+func (h *Hub) PushAll() error {
+	for _, s := range h.sources {
+		if err := s.Push(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// revoked reports whether this pod is on the revocation list it checked itself. A revoked device
+// cannot write: the relay refuses it, and the pod does not try.
+func (h *Hub) revoked() bool {
+	return h.ident.Revocations != nil && h.ident.Revocations.Has(h.ident.ID())
+}
+
+func (h *Hub) lastError() string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.lastErr
 }
 
 func (h *Hub) hasKey() bool {

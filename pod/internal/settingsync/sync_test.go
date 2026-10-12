@@ -166,8 +166,9 @@ func newPod(t *testing.T, f *fakeRelay, name string) *pod {
 	if err := f.st.StoreDevice(cert); err != nil {
 		t.Fatal(err)
 	}
-	h := NewHub(st, &testTransport{f, p.ID()}, p)
-	if _, err := h.AddSource(NewSettingsSource(sets, func() bool { return true })); err != nil {
+	flags := NewFlags(sets)
+	h := NewHub(st, &testTransport{f, p.ID()}, p, flags)
+	if _, err := h.AddSource(NewSettingsSource(sets, func() bool { return flags.On(identity.KindSettings) })); err != nil {
 		t.Fatal(err)
 	}
 	f.pods[p.ID()] = h

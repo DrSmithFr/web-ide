@@ -33,6 +33,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
 	"github.com/DrSmithFr/web-ide/pod/internal/sessions"
 	"github.com/DrSmithFr/web-ide/pod/internal/settings"
+	"github.com/DrSmithFr/web-ide/pod/internal/settingsync"
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
 	"github.com/DrSmithFr/web-ide/pod/internal/store"
 	"github.com/DrSmithFr/web-ide/pod/internal/tunnel"
@@ -58,6 +59,8 @@ type Server struct {
 	Kanban *kanban.Manager
 	// Models caches the speech recognition models downloaded for the page.
 	Models *hfcache.Cache
+	// Sync is the settings sync loop of the pod (nil: the pod has no relay, so nothing is synced).
+	Sync *settingsync.Hub
 	// Tunnels are the port forwardings of the SSH projects.
 	Tunnels *tunnels.Manager
 	// Previews serve the apps of the projects on temporary URLs (Tailscale by default).
@@ -136,6 +139,7 @@ func (s *Server) Init() {
 	s.registerKanban()
 	s.registerKanbanGit()
 	s.registerRelay()
+	s.registerSync()
 }
 
 func (s *Server) handle(name string, h handler) { s.handlers[name] = h }

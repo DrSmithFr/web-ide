@@ -280,7 +280,8 @@ func (s *Sync) Status() Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return Status{Kind: s.src.Kind(), Enabled: s.src.Enabled(), HasKey: s.hub.hasKey(), Epoch: s.hub.currentEpoch(),
-		Seq: s.seq, LastSync: s.lastSync, Conflicts: append([]Conflict(nil), s.conflicts...)}
+		Seq: s.seq, LastSync: s.lastSync, Conflicts: append([]Conflict(nil), s.conflicts...),
+		Device: s.hub.ident.ID(), Error: s.hub.lastError()}
 }
 
 func (s *Sync) persist() {

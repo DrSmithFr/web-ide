@@ -182,6 +182,13 @@ func (s *Server) registerGlobal() {
 		e, err := s.Settings.Save(a.Settings, a.Label)
 		if err == nil {
 			s.broadcast("settings.changed", e, c)
+			// The change is written to the other pods of the account (the merge keeps the fields
+			// the other side changed).
+			if s.Sync != nil {
+				if err := s.Sync.PushAll(); err != nil {
+					log.Printf("settings sync: %v", err)
+				}
+			}
 		}
 		return e, err
 	})
