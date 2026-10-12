@@ -50,6 +50,7 @@ func migrateSync(db *sql.DB) error {
 			key TEXT NOT NULL,
 			nonce TEXT NOT NULL,
 			data TEXT NOT NULL,
+			sig TEXT NOT NULL,
 			updated INTEGER NOT NULL,
 			PRIMARY KEY (account, device))`); err != nil {
 		return err
@@ -233,8 +234,8 @@ func (s *Store) PutWrap(w *identity.WrapRecord) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err := s.db.Exec("INSERT INTO wraps (account, device, epoch, key, nonce, data, updated) VALUES (?,?,?,?,?,?,?) ON CONFLICT (account, device) DO UPDATE SET epoch=excluded.epoch, key=excluded.key, nonce=excluded.nonce, data=excluded.data, updated=excluded.updated",
-		w.Account, w.Device, w.Epoch, w.Key, w.Nonce, w.Data, time.Now().Unix())
+	_, err := s.db.Exec("INSERT INTO wraps (account, device, epoch, key, nonce, data, sig, updated) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT (account, device) DO UPDATE SET epoch=excluded.epoch, key=excluded.key, nonce=excluded.nonce, data=excluded.data, sig=excluded.sig, updated=excluded.updated",
+		w.Account, w.Device, w.Epoch, w.Key, w.Nonce, w.Data, w.Sig, time.Now().Unix())
 	return err
 }
 
@@ -242,8 +243,8 @@ func (s *Store) PutWrap(w *identity.WrapRecord) error {
 func (s *Store) Wrap(account, device string) (*identity.WrapRecord, int64, error) {
 	var w identity.WrapRecord
 	var updated int64
-	err := s.db.QueryRow("SELECT account, device, epoch, key, nonce, data, updated FROM wraps WHERE account=? AND device=?", account, device).
-		Scan(&w.Account, &w.Device, &w.Epoch, &w.Key, &w.Nonce, &w.Data, &updated)
+	err := s.db.QueryRow("SELECT account, device, epoch, key, nonce, data, sig, updated FROM wraps WHERE account=? AND device=?", account, device).
+		Scan(&w.Account, &w.Device, &w.Epoch, &w.Key, &w.Nonce, &w.Data, &w.Sig, &updated)
 	if err == sql.ErrNoRows {
 		return nil, 0, nil
 	}
@@ -255,7 +256,7 @@ func (s *Store) Wrap(account, device string) (*identity.WrapRecord, int64, error
 
 // Wraps lists the wraps of an account.
 func (s *Store) Wraps(account string) ([]identity.WrapRecord, error) {
-	rows, err := s.db.Query("SELECT account, device, epoch, key, nonce, data FROM wraps WHERE account=? ORDER BY device", account)
+	rows, err := s.db.Query("SELECT account, device, epoch, key, nonce, data, sig FROM wraps WHERE account=? ORDER BY device", account)
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +264,7 @@ func (s *Store) Wraps(account string) ([]identity.WrapRecord, error) {
 	var out []identity.WrapRecord
 	for rows.Next() {
 		var w identity.WrapRecord
-		if err := rows.Scan(&w.Account, &w.Device, &w.Epoch, &w.Key, &w.Nonce, &w.Data); err != nil {
+		if err := rows.Scan(&w.Account, &w.Device, &w.Epoch, &w.Key, &w.Nonce, &w.Data, &w.Sig); err != nil {
 			return nil, err
 		}
 		out = append(out, w)

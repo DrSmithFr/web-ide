@@ -156,6 +156,43 @@ func (m *Manager) ForChildren() []ServerView {
 	return out
 }
 
+// Keys returns the API keys of the servers, by server id: what the vault syncs. A server with no
+// key is not listed.
+func (m *Manager) Keys() map[string]string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := map[string]string{}
+	for _, s := range m.cfg.Servers {
+		if s.APIKey != "" {
+			out[s.ID] = s.APIKey
+		}
+	}
+	return out
+}
+
+// ApplyKeys stores the keys the vault gave for the servers this pod knows. A key for a server the
+// pod does not know stays in the vault blob: it cannot be applied here, but it is not lost.
+func (m *Manager) ApplyKeys(keys map[string]string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	changed := false
+	for _, s := range m.cfg.Servers {
+		if k, ok := keys[s.ID]; ok && k != "" && s.APIKey != k {
+			for i := range m.cfg.Servers {
+				if m.cfg.Servers[i].ID == s.ID {
+					m.cfg.Servers[i].APIKey = k
+					break
+				}
+			}
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
+	}
+	return m.st.WriteJSON(configFile, m.cfg)
+}
+
 // ServerName is the name of a server ("" when unknown).
 func (m *Manager) ServerName(id string) string {
 	s, err := m.server(id)
