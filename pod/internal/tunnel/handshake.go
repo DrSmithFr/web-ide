@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"crypto/ed25519"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -11,21 +12,41 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 )
 
-// The tunnel protocol of the rpc channel: the browser and the pod prove the pod token to
-// each other, bound to both DTLS fingerprints and two nonces, so a relay that swaps the
-// SDP cannot forge the proof. The token itself never travels over the wire.
+// The tunnel protocol of the rpc channel. Both sides prove who they are by signing a
+// binding string built from both DTLS fingerprints and two nonces, so a relay that swaps
+// the SDP cannot forge the proof. Two modes:
+//   - version 2 (cert mode): each side signs with its device key and checks the other's
+//     certificate against the pinned account key and the revocation list;
+//   - version 1 (token mode): the M1 HMAC of the pod token, kept for a pod that is not
+//     paired. A paired pod refuses it.
 const (
-	Protocol = "web-ide-rpc"
-	Version  = "1"
+	Protocol     = "web-ide-rpc"
+	Version      = "2"
+	VersionToken = "1"
+)
+
+// Codes of the handshake errors, sent as $hello{error}. The page shows its own text for
+// each one.
+const (
+	CodeVersion  = "version"
+	CodeUnpaired = "unpaired" // the pod has no account: the browser falls back to the token
+	CodeCert     = "cert"     // a paired pod refuses the token mode, or the peer gave no cert
+	CodeForeign  = "foreign"  // the certificate was not signed by the pinned account
+	CodeRevoked  = "revoked"
+	CodeProof    = "proof"
 )
 
 // Errors of the handshake.
 var (
-	ErrVersion = errors.New("tunnel: protocol or version mismatch")
-	ErrProof   = errors.New("tunnel: the token proof does not match")
-	ErrLimit   = errors.New("tunnel: too many failed proofs, try later")
+	ErrVersion      = errors.New("tunnel: protocol or version mismatch")
+	ErrProof        = errors.New("tunnel: the proof does not match")
+	ErrLimit        = errors.New("tunnel: too many failed proofs, try later")
+	ErrUnpaired     = errors.New("tunnel: the pod is not paired with an account")
+	ErrCertRequired = errors.New("tunnel: a paired pod refuses the token mode")
 )
 
 // Role names used in the binding string.
@@ -34,13 +55,17 @@ const (
 	RoleBrowser = "browser"
 )
 
+// Binding returns the bytes each side signs: role|fpBrowser|fpPod|nonceBrowser|noncePod.
+// The canonical order is always browser, then pod, so both sides bind the same bytes.
+func Binding(role, fpBrowser, fpPod, nonceBrowser, noncePod string) string {
+	return role + "|" + fpBrowser + "|" + fpPod + "|" + nonceBrowser + "|" + noncePod
+}
+
 // MAC returns the hex HMAC-SHA256 that binds the token to both DTLS fingerprints and the
-// two nonces, for the given role. The canonical order is always browser, then pod, so both
-// sides bind the same bytes:  role|fpBrowser|fpPod|nonceBrowser|noncePod.
+// two nonces, for the given role (the token mode).
 func MAC(role, token, fpBrowser, fpPod, nonceBrowser, noncePod string) string {
-	msg := role + "|" + fpBrowser + "|" + fpPod + "|" + nonceBrowser + "|" + noncePod
 	m := hmac.New(sha256.New, []byte(token))
-	m.Write([]byte(msg))
+	m.Write([]byte(Binding(role, fpBrowser, fpPod, nonceBrowser, noncePod)))
 	return hex.EncodeToString(m.Sum(nil))
 }
 
@@ -69,15 +94,18 @@ type envelope struct {
 }
 
 type helloParams struct {
-	Protocol string `json:"protocol"`
-	Version  string `json:"version"`
-	Nonce    string `json:"nonce,omitempty"`
-	Proof    string `json:"proof,omitempty"`
-	Error    string `json:"error,omitempty"`
+	Protocol string         `json:"protocol"`
+	Version  string         `json:"version"`
+	Nonce    string         `json:"nonce,omitempty"`
+	Proof    string         `json:"proof,omitempty"` // token mode
+	Cert     *identity.Cert `json:"cert,omitempty"`  // cert mode
+	Sig      string         `json:"sig,omitempty"`   // cert mode
+	Error    string         `json:"error,omitempty"`
 }
 
 type authParams struct {
-	Proof string `json:"proof"`
+	Proof string `json:"proof,omitempty"` // token mode
+	Sig   string `json:"sig,omitempty"`   // cert mode
 }
 
 func nonce() string {
@@ -90,12 +118,15 @@ func nonce() string {
 // builds it with the DTLS fingerprints from the SDP, runs it over the DataChannel, then
 // hands the channel to the pod to serve the normal protocol.
 type Handshake struct {
-	Token     string
+	Token     string                // the pod token, for the token mode
+	Identity  *identity.PodIdentity // the paired pod: its device key, its pinned account
 	FPBrowser string
 	FPPod     string
 	Limits    *RateLimiter
 	// Deadline bounds the $hello/$auth reads; 0 = 10 s.
 	Deadline time.Duration
+	// PeerCert is the certificate the peer showed (nil in token mode), set by Run.
+	PeerCert *identity.Cert
 }
 
 // deadline returns the bounded window for the handshake reads.
@@ -106,16 +137,16 @@ func (h *Handshake) deadline() time.Duration {
 	return 10 * time.Second
 }
 
-// Run performs: read the browser $hello, answer with the pod proof, read the browser
-// $auth, verify it, answer $ready. The whole exchange has a 10 s deadline: a browser
-// that stalls it is dropped. On a bad proof it rate-limits and returns ErrProof (or
-// ErrLimit once the limit is reached); once the limit is reached it refuses before
+// Run performs the exchange: read the browser $hello, answer with the pod proof, read the
+// browser $auth, verify it, answer $ready. The whole exchange has a 10 s deadline: a
+// browser that stalls it is dropped. On a bad proof it rate-limits and returns ErrProof
+// (or ErrLimit once the limit is reached); once the limit is reached it refuses before
 // verifying any proof at all.
 func (h *Handshake) Run(conn MsgConn) error {
 	if h.Limits != nil && h.Limits.Locked() {
 		return ErrLimit
 	}
-	// 1. browser -> $hello{protocol, version, nonce}
+	// 1. browser -> $hello{protocol, version, nonce, [cert]}
 	var e envelope
 	b, err := h.read(conn)
 	if err != nil {
@@ -126,18 +157,33 @@ func (h *Handshake) Run(conn MsgConn) error {
 	}
 	var hi helloParams
 	_ = json.Unmarshal(e.Params, &hi)
-	if hi.Protocol != Protocol || hi.Version != Version {
-		_ = h.send(conn, "$hello", helloParams{Error: "version"})
+	switch hi.Version {
+	case VersionToken:
+		return h.runToken(conn, hi)
+	case Version:
+		return h.runCert(conn, hi)
+	default:
+		_ = h.sendError(conn, CodeVersion)
 		return ErrVersion
+	}
+}
+
+// runToken is the M1 mode: the browser proves the pod token with an HMAC bound to both
+// fingerprints. A paired pod refuses it — its peers must show a certificate.
+func (h *Handshake) runToken(conn MsgConn, hi helloParams) error {
+	if h.Identity != nil && h.Identity.Paired() {
+		_ = h.sendError(conn, CodeCert)
+		return ErrCertRequired
 	}
 	nonceP := nonce()
 	proof := MAC(RolePod, h.Token, h.FPBrowser, h.FPPod, hi.Nonce, nonceP)
-	// 2. pod -> $hello{protocol, version, nonce, proof}
-	_ = h.send(conn, "$hello", helloParams{Protocol: Protocol, Version: Version, Nonce: nonceP, Proof: proof})
-
-	// 3. browser -> $auth{proof}
+	// pod -> $hello{protocol, version, nonce, proof}
+	if err := h.send(conn, "$hello", helloParams{Protocol: Protocol, Version: VersionToken, Nonce: nonceP, Proof: proof}); err != nil {
+		return err
+	}
+	// browser -> $auth{proof}
 	var a envelope
-	b, err = h.read(conn)
+	b, err := h.read(conn)
 	if err != nil {
 		return err
 	}
@@ -148,12 +194,61 @@ func (h *Handshake) Run(conn MsgConn) error {
 	_ = json.Unmarshal(a.Params, &ai)
 	expected := MAC(RoleBrowser, h.Token, h.FPBrowser, h.FPPod, hi.Nonce, nonceP)
 	if !equalMac(ai.Proof, expected) {
-		if h.Limits != nil && !h.Limits.Allow() {
+		if !h.count() {
 			return ErrLimit
 		}
 		return ErrProof
 	}
-	// 4. pod -> $ready
+	// pod -> $ready
+	return h.send(conn, "$ready", map[string]any{"ok": true})
+}
+
+// runCert is the identity mode: each side signs the binding string with its device key and
+// checks the other's certificate against the pinned account key and the revocation list.
+// The pod never trusts the relay to say who is who.
+func (h *Handshake) runCert(conn MsgConn, hi helloParams) error {
+	if h.Identity == nil || !h.Identity.Paired() {
+		// The browser is paired but this pod is not: it falls back to the token mode.
+		_ = h.sendError(conn, CodeUnpaired)
+		return ErrUnpaired
+	}
+	if hi.Cert == nil {
+		_ = h.sendError(conn, CodeCert)
+		return identity.ErrNoCert
+	}
+	if err := h.Identity.PeerError(hi.Cert); err != nil {
+		if !h.count() {
+			return ErrLimit
+		}
+		_ = h.sendError(conn, code(err))
+		return err
+	}
+	h.PeerCert = hi.Cert
+	nonceP := nonce()
+	sig := identity.Sign(h.Identity.Key(), []byte(Binding(RolePod, h.FPBrowser, h.FPPod, hi.Nonce, nonceP)))
+	// pod -> $hello{protocol, version, nonce, cert, sig}
+	if err := h.send(conn, "$hello", helloParams{Protocol: Protocol, Version: Version, Nonce: nonceP, Cert: h.Identity.Cert, Sig: sig}); err != nil {
+		return err
+	}
+	// browser -> $auth{sig}
+	var a envelope
+	b, err := h.read(conn)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(b, &a); err != nil || a.Method != "$auth" {
+		return ErrProof
+	}
+	var ai authParams
+	_ = json.Unmarshal(a.Params, &ai)
+	if !identity.Verify(hi.Cert.Key, ai.Sig, []byte(Binding(RoleBrowser, h.FPBrowser, h.FPPod, hi.Nonce, nonceP))) {
+		if !h.count() {
+			return ErrLimit
+		}
+		_ = h.sendError(conn, CodeProof)
+		return ErrProof
+	}
+	// pod -> $ready
 	return h.send(conn, "$ready", map[string]any{"ok": true})
 }
 
@@ -185,11 +280,32 @@ func (h *Handshake) send(conn MsgConn, method string, params any) error {
 	return sendMsg(conn, method, params)
 }
 
+func (h *Handshake) sendError(conn MsgConn, code string) error {
+	return h.send(conn, "$hello", helloParams{Protocol: Protocol, Version: Version, Error: code})
+}
+
+// count records a failed proof and reports whether the peer is still within the limit.
+func (h *Handshake) count() bool { return h.Limits == nil || h.Limits.Allow() }
+
+// code maps an identity error to the code sent to the browser.
+func code(err error) string {
+	switch {
+	case errors.Is(err, identity.ErrForeignAccount):
+		return CodeForeign
+	case errors.Is(err, identity.ErrRevoked):
+		return CodeRevoked
+	case errors.Is(err, identity.ErrNoCert):
+		return CodeCert
+	}
+	return CodeProof
+}
+
 // sendMsg writes one envelope to the transport (shared by both sides).
 func sendMsg(conn MsgConn, method string, params any) error {
 	data, _ := json.Marshal(envelope{Method: method, Params: mustMarshal(params)})
 	return conn.Write(data)
 }
+
 func mustMarshal(v any) json.RawMessage {
 	b, _ := json.Marshal(v)
 	return b
@@ -260,11 +376,11 @@ func (r *RateLimiter) Locked() bool {
 	return n >= r.limit
 }
 
-// RunBrowser is the browser side of the handshake: it sends $hello{protocol, version,
+// RunBrowser is the browser side of the token mode: it sends $hello{protocol, version,
 // nonce}, reads the pod's $hello (verifying its proof and the protocol), sends
 // $auth{proof}, and waits for $ready. It returns ErrProof on a bad pod proof.
-func RunBrowser(conn MsgConn, token, fpBrowser, fPPod, nonceB string) error {
-	if err := sendMsg(conn, "$hello", helloParams{Protocol: Protocol, Version: Version, Nonce: nonceB}); err != nil {
+func RunBrowser(conn MsgConn, token, fpBrowser, fpPod, nonceB string) error {
+	if err := sendMsg(conn, "$hello", helloParams{Protocol: Protocol, Version: VersionToken, Nonce: nonceB}); err != nil {
 		return err
 	}
 	// pod -> $hello{protocol, version, nonce, proof}
@@ -278,13 +394,16 @@ func RunBrowser(conn MsgConn, token, fpBrowser, fPPod, nonceB string) error {
 	}
 	var hi helloParams
 	_ = json.Unmarshal(e.Params, &hi)
-	if hi.Protocol != Protocol || hi.Version != Version {
+	if hi.Protocol != Protocol || hi.Version != VersionToken {
 		return ErrVersion
 	}
-	if !equalMac(hi.Proof, MAC(RolePod, token, fpBrowser, fPPod, nonceB, hi.Nonce)) {
+	if hi.Error != "" {
+		return errors.New("tunnel: " + hi.Error)
+	}
+	if !equalMac(hi.Proof, MAC(RolePod, token, fpBrowser, fpPod, nonceB, hi.Nonce)) {
 		return ErrProof
 	}
-	if err := sendMsg(conn, "$auth", authParams{Proof: MAC(RoleBrowser, token, fpBrowser, fPPod, nonceB, hi.Nonce)}); err != nil {
+	if err := sendMsg(conn, "$auth", authParams{Proof: MAC(RoleBrowser, token, fpBrowser, fpPod, nonceB, hi.Nonce)}); err != nil {
 		return err
 	}
 	// pod -> $ready
@@ -297,4 +416,49 @@ func RunBrowser(conn MsgConn, token, fpBrowser, fPPod, nonceB string) error {
 		return ErrProof
 	}
 	return nil
+}
+
+// RunBrowserCert is the browser side of the cert mode: it shows its certificate, checks the
+// pod's certificate against the pinned account, signs the binding string with its device
+// key and checks the pod's signature. It returns the pod's certificate.
+func RunBrowserCert(conn MsgConn, key ed25519.PrivateKey, cert *identity.Cert, account, fpBrowser, fpPod, nonceB string) (*identity.Cert, error) {
+	if err := sendMsg(conn, "$hello", helloParams{Protocol: Protocol, Version: Version, Nonce: nonceB, Cert: cert}); err != nil {
+		return nil, err
+	}
+	// pod -> $hello{protocol, version, nonce, cert, sig}
+	var e envelope
+	b, err := conn.Read()
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(b, &e); err != nil || e.Method != "$hello" {
+		return nil, ErrProof
+	}
+	var hi helloParams
+	_ = json.Unmarshal(e.Params, &hi)
+	if hi.Protocol != Protocol || hi.Version != Version {
+		return nil, ErrVersion
+	}
+	if hi.Error != "" {
+		return nil, errors.New("tunnel: " + hi.Error)
+	}
+	if err := identity.VerifyCert(hi.Cert, account, nil); err != nil {
+		return nil, err
+	}
+	if !identity.Verify(hi.Cert.Key, hi.Sig, []byte(Binding(RolePod, fpBrowser, fpPod, nonceB, hi.Nonce))) {
+		return nil, ErrProof
+	}
+	if err := sendMsg(conn, "$auth", authParams{Sig: identity.Sign(key, []byte(Binding(RoleBrowser, fpBrowser, fpPod, nonceB, hi.Nonce)))}); err != nil {
+		return nil, err
+	}
+	// pod -> $ready
+	var r envelope
+	b, err = conn.Read()
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(b, &r); err != nil || r.Method != "$ready" {
+		return nil, ErrProof
+	}
+	return hi.Cert, nil
 }

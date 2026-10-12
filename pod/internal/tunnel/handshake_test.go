@@ -1,12 +1,15 @@
 package tunnel
 
 import (
+	"crypto/ed25519"
 	"encoding/json"
 	"errors"
 	"io"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 )
 
 // pipe is an in-memory whole-message MsgConn for both ends of a tunnel.
@@ -79,7 +82,7 @@ func mustEnveloped(m string, raw json.RawMessage) []byte {
 	return b
 }
 
-// browser performs the browser side of the handshake and reports the outcome.
+// browser performs the browser side of the token mode and reports the outcome.
 func (p *pipe) browser(t *testing.T, token, version, fpB, fpP string) (nonceB, nonceP, podProof string, ready, versionErr bool) {
 	t.Helper()
 	nonceB = nonce()
@@ -109,6 +112,44 @@ func (p *pipe) browser(t *testing.T, token, version, fpB, fpP string) (nonceB, n
 	return
 }
 
+// certBrowser performs the browser side of the cert mode: it shows its certificate, reads
+// the pod's hello (its nonce, its certificate and its signature), checks that signature
+// against the pinned account, then signs the binding string with its device key. It reports
+// the error code the pod answered, the pod certificate and whether $ready came.
+func (p *pipe) certBrowser(t *testing.T, key ed25519.PrivateKey, cert *identity.Cert, account, fpB, fpP string) (code string, podCert *identity.Cert, ready bool) {
+	t.Helper()
+	nonceB := nonce()
+	p.send("$hello", helloParams{Protocol: Protocol, Version: Version, Nonce: nonceB, Cert: cert})
+
+	b := p.b.read(2 * time.Second)
+	var env testEnv
+	if b == nil {
+		return
+	}
+	_ = json.Unmarshal(b, &env)
+	var pod helloParams
+	_ = json.Unmarshal(env.Params, &pod)
+	if pod.Error != "" {
+		return pod.Error, nil, false
+	}
+	podCert = pod.Cert
+	// The browser checks the pod certificate against the pinned account, then its
+	// signature against the key that certificate names.
+	if err := identity.VerifyCert(podCert, account, nil); err != nil {
+		return "pod certificate: " + err.Error(), nil, false
+	}
+	if !identity.Verify(podCert.Key, pod.Sig, []byte(Binding(RolePod, fpB, fpP, nonceB, pod.Nonce))) {
+		return "pod signature does not match", nil, false
+	}
+	p.send("$auth", authParams{Sig: identity.Sign(key, []byte(Binding(RoleBrowser, fpB, fpP, nonceB, pod.Nonce)))})
+	if b = p.b.read(2 * time.Second); b != nil {
+		var readyEnv testEnv
+		_ = json.Unmarshal(b, &readyEnv)
+		ready = readyEnv.Method == "$ready"
+	}
+	return "", podCert, ready
+}
+
 func TestHandshakeGood(t *testing.T) {
 	token, fpB, fpP := "tok-0123456789abcdef", "AABBCCDD", "11223344"
 	p := newPipe()
@@ -116,7 +157,7 @@ func TestHandshakeGood(t *testing.T) {
 	errCh := make(chan error, 1)
 	go func() { errCh <- h.Run(p.a) }()
 
-	nonceB, nonceP, proof, ready, versionErr := p.browser(t, token, Version, fpB, fpP)
+	nonceB, nonceP, proof, ready, versionErr := p.browser(t, token, VersionToken, fpB, fpP)
 	if versionErr || !ready {
 		t.Fatalf("handshake not ready (versionErr=%v ready=%v)", versionErr, ready)
 	}
@@ -133,7 +174,7 @@ func TestHandshakeWrongToken(t *testing.T) {
 	p := newPipe()
 	errCh := make(chan error, 1)
 	go func() { errCh <- (&Handshake{Token: token, FPBrowser: fpB, FPPod: fpP}).Run(p.a) }()
-	p.browser(t, "WRONG-TOKEN", Version, fpB, fpP)
+	p.browser(t, "WRONG-TOKEN", VersionToken, fpB, fpP)
 	if err := <-errCh; !errors.Is(err, ErrProof) {
 		t.Fatalf("wrong token must give ErrProof, got %v", err)
 	}
@@ -145,7 +186,7 @@ func TestHandshakeSwappedFingerprint(t *testing.T) {
 	errCh := make(chan error, 1)
 	go func() { errCh <- (&Handshake{Token: token, FPBrowser: fpB, FPPod: fpP}).Run(p.a) }()
 	// The relay swapped the SDP: the browser binds a fingerprint the pod does not see.
-	p.browser(t, token, Version, "DEADBEEF", fpP)
+	p.browser(t, token, VersionToken, "DEADBEEF", fpP)
 	if err := <-errCh; !errors.Is(err, ErrProof) {
 		t.Fatalf("a swapped fingerprint must give ErrProof, got %v", err)
 	}
@@ -227,5 +268,208 @@ func TestHandshakeLockedRefusesBefore(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("Run must return ErrLimit at once, not block")
+	}
+}
+
+// pairedPod is a pod identity with an account pinned and its own certificate, for the cert
+// mode. The phrase is the one of the shared vectors.
+func pairedPod(t *testing.T) (*identity.PodIdentity, *identity.Account) {
+	t.Helper()
+	a, err := identity.FromPhrase("lecture vapor excuse note pledge rough bundle start regular burden reveal theme banana pencil owner cube social job emotion member joy sting dash whisper")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := identity.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Pin(a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.SetCert(identity.NewCert(a, p.Key(), "test pod", identity.KindPod)); err != nil {
+		t.Fatal(err)
+	}
+	return p, a
+}
+
+// browserDevice is a browser device key and the certificate the account signed for it.
+func browserDevice(t *testing.T, a *identity.Account) (ed25519.PrivateKey, *identity.Cert) {
+	t.Helper()
+	key := identity.KeyFromSeed(identity.Derive(a.Seed, identity.InfoDevice))
+	return key, identity.NewCert(a, key, "test browser", identity.KindBrowser)
+}
+
+// TestHandshakeCertGood: both sides prove their device certificate signed by the pinned
+// account key, and sign the binding string with their device key.
+func TestHandshakeCertGood(t *testing.T) {
+	pod, account := pairedPod(t)
+	key, cert := browserDevice(t, account)
+	fpB, fpP := "AABBCCDD", "11223344"
+	p := newPipe()
+	h := &Handshake{Identity: pod, FPBrowser: fpB, FPPod: fpP}
+	errCh := make(chan error, 1)
+	go func() { errCh <- h.Run(p.a) }()
+
+	code, podCert, ready := p.certBrowser(t, key, cert, account.ID, fpB, fpP)
+	if code != "" || !ready {
+		t.Fatalf("the cert handshake must complete (code=%q ready=%v)", code, ready)
+	}
+	if podCert == nil || podCert.Key != pod.ID() {
+		t.Fatalf("the pod must answer with its own certificate: %+v", podCert)
+	}
+	if h.PeerCert == nil || h.PeerCert.Key != identity.KeyID(key) {
+		t.Fatalf("the pod must have read the browser certificate: %+v", h.PeerCert)
+	}
+	if err := <-errCh; err != nil {
+		t.Fatalf("handshake returned %v", err)
+	}
+}
+
+// TestHandshakeCertUnpaired: a paired browser meets a pod that has no account. The pod
+// answers "unpaired" so the browser can fall back to the token mode.
+func TestHandshakeCertUnpaired(t *testing.T) {
+	a, err := identity.FromPhrase("lecture vapor excuse note pledge rough bundle start regular burden reveal theme banana pencil owner cube social job emotion member joy sting dash whisper")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pod, err := identity.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, cert := browserDevice(t, a)
+	p := newPipe()
+	h := &Handshake{Identity: pod, FPBrowser: "A", FPPod: "B"}
+	errCh := make(chan error, 1)
+	go func() { errCh <- h.Run(p.a) }()
+	code, _, ready := p.certBrowser(t, key, cert, a.ID, "A", "B")
+	if code != CodeUnpaired || ready {
+		t.Fatalf("an unpaired pod must answer %q, got %q (ready=%v)", CodeUnpaired, code, ready)
+	}
+	if err := <-errCh; !errors.Is(err, ErrUnpaired) {
+		t.Fatalf("unpaired must give ErrUnpaired, got %v", err)
+	}
+}
+
+// TestHandshakeCertForeignAccount: a browser of another account, with a certificate signed
+// by its own account key, is refused — the pinned key is the only guard.
+func TestHandshakeCertForeignAccount(t *testing.T) {
+	pod, _ := pairedPod(t)
+	other, err := identity.FromPhrase("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about")
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := identity.KeyFromSeed(identity.Derive(other.Seed, identity.InfoDevice))
+	foreign := identity.NewCert(other, key, "other browser", identity.KindBrowser)
+	p := newPipe()
+	h := &Handshake{Identity: pod, FPBrowser: "A", FPPod: "B"}
+	errCh := make(chan error, 1)
+	go func() { errCh <- h.Run(p.a) }()
+	code, _, _ := p.certBrowser(t, key, foreign, other.ID, "A", "B")
+	if code != CodeForeign {
+		t.Fatalf("a certificate of another account must answer %q, got %q", CodeForeign, code)
+	}
+	if err := <-errCh; !errors.Is(err, identity.ErrForeignAccount) {
+		t.Fatalf("foreign account must give ErrForeignAccount, got %v", err)
+	}
+}
+
+// TestHandshakeCertRevoked: a device on the signed revocation list is refused.
+func TestHandshakeCertRevoked(t *testing.T) {
+	pod, account := pairedPod(t)
+	key, cert := browserDevice(t, account)
+	r := &identity.Revocations{Account: account.ID, Seq: 1, Epoch: 1, Revoked: []string{cert.Key}, Created: 1766721600}
+	if err := identity.SignRevocations(account.Priv, r); err != nil {
+		t.Fatal(err)
+	}
+	if err := pod.ApplyRevocations(r); err != nil {
+		t.Fatal(err)
+	}
+	p := newPipe()
+	h := &Handshake{Identity: pod, FPBrowser: "A", FPPod: "B"}
+	errCh := make(chan error, 1)
+	go func() { errCh <- h.Run(p.a) }()
+	code, _, _ := p.certBrowser(t, key, cert, account.ID, "A", "B")
+	if code != CodeRevoked {
+		t.Fatalf("a revoked device must answer %q, got %q", CodeRevoked, code)
+	}
+	if err := <-errCh; !errors.Is(err, identity.ErrRevoked) {
+		t.Fatalf("a revoked device must give ErrRevoked, got %v", err)
+	}
+}
+
+// TestHandshakeCertSwappedFingerprint: a relay that swaps the offer changes the fingerprint
+// the browser binds, so the signature the pod checks no longer matches.
+func TestHandshakeCertSwappedFingerprint(t *testing.T) {
+	pod, account := pairedPod(t)
+	key, cert := browserDevice(t, account)
+	p := newPipe()
+	h := &Handshake{Identity: pod, FPBrowser: "AABBCCDD", FPPod: "11223344"}
+	errCh := make(chan error, 1)
+	go func() { errCh <- h.Run(p.a) }()
+	// The browser signs with the fingerprint the relay gave it, not the one the pod sees.
+	nonceB := nonce()
+	p.send("$hello", helloParams{Protocol: Protocol, Version: Version, Nonce: nonceB, Cert: cert})
+	b := p.b.read(2 * time.Second)
+	var env testEnv
+	if b == nil {
+		t.Fatal("the pod must answer the hello")
+	}
+	_ = json.Unmarshal(b, &env)
+	var podHello helloParams
+	_ = json.Unmarshal(env.Params, &podHello)
+	if podHello.Error != "" {
+		t.Fatalf("the pod must accept the certificate, got %q", podHello.Error)
+	}
+	p.send("$auth", authParams{Sig: identity.Sign(key, []byte(Binding(RoleBrowser, "DEADBEEF", "11223344", nonceB, podHello.Nonce)))})
+	if err := <-errCh; !errors.Is(err, ErrProof) {
+		t.Fatalf("a swapped fingerprint must give ErrProof, got %v", err)
+	}
+}
+
+// TestHandshakeTokenRefusedOncePaired: a paired pod refuses the M1 token proof through the
+// relay — its peers must show a certificate.
+func TestHandshakeTokenRefusedOncePaired(t *testing.T) {
+	pod, _ := pairedPod(t)
+	p := newPipe()
+	h := &Handshake{Identity: pod, Token: "tok-0123456789abcdef", FPBrowser: "A", FPPod: "B"}
+	errCh := make(chan error, 1)
+	go func() { errCh <- h.Run(p.a) }()
+
+	nonceB := nonce()
+	p.send("$hello", helloParams{Protocol: Protocol, Version: VersionToken, Nonce: nonceB})
+	b := p.b.read(2 * time.Second)
+	var env testEnv
+	if b == nil {
+		t.Fatal("the pod must answer the hello")
+	}
+	_ = json.Unmarshal(b, &env)
+	var podHello helloParams
+	_ = json.Unmarshal(env.Params, &podHello)
+	if podHello.Error != CodeCert {
+		t.Fatalf("a paired pod must answer %q to the token mode, got %q", CodeCert, podHello.Error)
+	}
+	if err := <-errCh; !errors.Is(err, ErrCertRequired) {
+		t.Fatalf("the token mode on a paired pod must give ErrCertRequired, got %v", err)
+	}
+}
+
+// TestHandshakeCertBothSides: Run and RunBrowserCert complete the exchange together.
+func TestHandshakeCertBothSides(t *testing.T) {
+	pod, account := pairedPod(t)
+	key, cert := browserDevice(t, account)
+	p := newPipe()
+	go func() {
+		podCert, err := RunBrowserCert(p.b, key, cert, account.ID, "BROWSER-FP", "POD-FP", "NONCE-B")
+		if err != nil {
+			t.Errorf("RunBrowserCert: %v", err)
+			return
+		}
+		if podCert == nil || podCert.Key != pod.ID() {
+			t.Errorf("the browser must read the pod certificate: %+v", podCert)
+		}
+	}()
+	h := &Handshake{Identity: pod, FPBrowser: "BROWSER-FP", FPPod: "POD-FP"}
+	if err := h.Run(p.a); err != nil {
+		t.Fatal("the cert handshake must complete:", err)
 	}
 }

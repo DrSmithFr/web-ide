@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+
+	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 )
 
 // turnTTL is the validity of a short-lived TURN credential: long enough for a whole
@@ -19,17 +21,20 @@ const turnTTL = 12 * time.Hour
 // Every message carries the session id: a pod may serve several browsers at once, each
 // in its own session.
 type sigMsg struct {
-	Type       string          `json:"type"`
-	Session    string          `json:"session,omitempty"`
-	URLs       []string        `json:"urls,omitempty"`
-	Username   string          `json:"username,omitempty"`
-	Credential string          `json:"credential,omitempty"`
-	SDP        string          `json:"sdp,omitempty"`
-	Candidate  json.RawMessage `json:"candidate,omitempty"`
-	ID         string          `json:"id,omitempty"`
-	Secret     string          `json:"secret,omitempty"`
-	Name       string          `json:"name,omitempty"`
-	Message    string          `json:"message,omitempty"`
+	Type       string                `json:"type"`
+	Session    string                `json:"session,omitempty"`
+	URLs       []string              `json:"urls,omitempty"`
+	Username   string                `json:"username,omitempty"`
+	Credential string                `json:"credential,omitempty"`
+	SDP        string                `json:"sdp,omitempty"`
+	Candidate  json.RawMessage       `json:"candidate,omitempty"`
+	ID         string                `json:"id,omitempty"`
+	Secret     string                `json:"secret,omitempty"`
+	Name       string                `json:"name,omitempty"`
+	Account    string                `json:"account,omitempty"`
+	Cert       *identity.Cert        `json:"cert,omitempty"`
+	List       *identity.Revocations `json:"list,omitempty"` // pushed to the pods of an account
+	Message    string                `json:"message,omitempty"`
 }
 
 // Server routes signaling between the pods (one persistent link each) and the browsers
@@ -41,14 +46,18 @@ type Server struct {
 	store    *Store
 	turn     *Turn
 	mu       sync.Mutex
-	pods     map[string]*podConn     // online pods, by pod id
-	browsers map[string]*browserConn // active browsers, by session id
+	pods     map[string]*podConn      // online pods, by pod id
+	browsers map[string]*browserConn  // active browsers, by session id
+	links    map[*identityConn]bool   // live pairing/admin links
+	codes    map[string]*identityConn // pairing code → the link that created it
+	joiners  map[string]*identityConn // pairing code → the link that posted its key to it
 }
 
 // podConn is the pod's persistent link: register (pod id + secret), then carry the
 // WebRTC signaling of all its sessions (answer, candidates, bye), tagged by session.
 type podConn struct {
 	id, name string
+	account  string // the account the pod is paired with (empty: token mode)
 	ws       *websocket.Conn
 	mu       sync.Mutex
 }
@@ -82,6 +91,9 @@ func New(st *Store, turn *Turn) *Server {
 		turn:     turn,
 		pods:     map[string]*podConn{},
 		browsers: map[string]*browserConn{},
+		links:    map[*identityConn]bool{},
+		codes:    map[string]*identityConn{},
+		joiners:  map[string]*identityConn{},
 	}
 }
 
@@ -127,12 +139,25 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 				pc.send(sigMsg{Type: "error", Message: err.Error()})
 				return
 			}
-			pc.id, pc.name = m.ID, m.Name
+			pc.id, pc.name, pc.account = m.ID, m.Name, m.Account
+			// A paired pod sends its certificate: it must verify against the account it
+			// claims, which only a device holding the account key can sign.
+			if m.Cert != nil {
+				if err := s.store.StoreDevice(m.Cert); err != nil {
+					pc.send(sigMsg{Type: "error", Message: err.Error()})
+					return
+				}
+			}
 			s.mu.Lock()
 			s.pods[m.ID] = pc
 			s.mu.Unlock()
 			s.store.Online(m.ID)
-			pc.send(sigMsg{Type: "ready"})
+			list, err := s.store.Revocations(m.Account)
+			if err != nil {
+				pc.send(sigMsg{Type: "error", Message: err.Error()})
+				return
+			}
+			pc.send(sigMsg{Type: "ready", Account: m.Account, List: list})
 		case "answer":
 			if bc := s.browserOf(m.Session); bc != nil {
 				bc.send(sigMsg{Type: "answer", Session: m.Session, SDP: m.SDP})

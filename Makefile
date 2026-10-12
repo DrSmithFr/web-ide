@@ -41,6 +41,7 @@ test: pod/webdist/dist
 	@unformatted="$$($(dir $(GO))gofmt -l pod)"; test -z "$$unformatted" || (echo "gofmt needed:"; echo "$$unformatted"; exit 1)
 	cd pod && $(GO) vet ./... && $(GO) test ./...
 	cd web && npm run check
+	node scripts/identity-vectors.mjs
 
 # Browser tests (headless Chromium from the Playwright cache, or CHROME=/path/to/chrome).
 e2e: build

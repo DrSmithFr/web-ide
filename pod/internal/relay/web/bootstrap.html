@@ -12,11 +12,15 @@
   #msg{max-width:420px;text-align:center;color:#aeb4bc}
   #msg .err{color:#e5a1a1}
   .spin{width:22px;height:22px;margin:0 auto 12px;border:2px solid #3a4048;border-top-color:#8aa;border-radius:50%;animation:s .9s linear infinite}
+  #pair{margin-top:14px}
+  #pair input{width:100%;padding:8px 10px;border:1px solid #3a4048;border-radius:6px;background:#171a20;color:#d7dbe0;font:14px/1.4 ui-monospace,monospace}
+  .small{color:#8b9199}
   @keyframes s{to{transform:rotate(1turn)}}
 </style>
 </head>
 <body>
 <div id="status"><div id="msg"><div class="spin"></div>Connecting…</div></div>
+<form id="pair" hidden><input id="phrase" autocomplete="off" spellcheck="false" placeholder="Recovery phrase (24 words), never stored"></form>
 <iframe id="frame" title="Web IDE"></iframe>
 <script type="module" src="/_relay/bootstrap.js"></script>
 </body>

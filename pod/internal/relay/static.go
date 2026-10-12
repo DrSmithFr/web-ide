@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 )
 
 //go:embed all:web
@@ -38,7 +40,13 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/_relay/pod", s.servePod)
 	mux.HandleFunc("/_relay/signal", s.serveSignal)
+	mux.HandleFunc("/_relay/identity", s.serveIdentity)
 	mux.HandleFunc("/_relay/bootstrap.js", staticJS(bootstrapJS))
+	// The identity module and the BIP39 wordlist come from the identity package: the bootstrap
+	// page and the app import the same file, so the browser and the pod cannot disagree on a
+	// format.
+	mux.HandleFunc("/_relay/identity.js", staticJS(identity.ModuleJS()))
+	mux.HandleFunc("/_relay/bip39.txt", s.serveWordlist)
 	mux.HandleFunc("/sw.js", staticJS(swJS))
 	mux.HandleFunc("/", s.bootstrapPage)
 	return mux
@@ -61,4 +69,11 @@ func staticJS(b []byte) http.HandlerFunc {
 		w.Header().Set("Service-Worker-Allowed", "/")
 		_, _ = w.Write(b)
 	}
+}
+
+// serveWordlist serves the BIP39 English list: the browser validates a phrase with the same
+// 2048 words the pod embeds, so a phrase accepted on one side is accepted on the other.
+func (s *Server) serveWordlist(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = w.Write(identity.WordlistBytes())
 }

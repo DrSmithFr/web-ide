@@ -1,0 +1,18 @@
+{
+  "phrase": "lecture vapor excuse note pledge rough bundle start regular burden reveal theme banana pencil owner cube social job emotion member joy sting dash whisper",
+  "seed": "bef3db7af09861839c336e33be87c753babe9fd4a4d0fb6dc7475ac864a8d0f76aaadacbc47d9396407b5b3a85a8bebdba95b7c349098223cb6253ab93c16357",
+  "accountSeed": "26d6a993cfc02b30eb1002942e9fe0cb9148af032a08f914609c54936a6a203e",
+  "syncSeed": "51270e06b1e7e1127c9afa983a27689fce008453e259e3d975b23006ac25cde3",
+  "accountId": "zTFqKvpAtSeuHqtYNDGohuqw5giUVa4Zx0uHH0wYrFY",
+  "accountFingerprint": "frog mass clean vital",
+  "deviceSeed": "a2762b46d03642fbd86da31d9d9d68c1d6b6718009dd44367f155bcac8c016cf",
+  "deviceId": "S6ZXtI0OcDa4t1QXvRf_DWwpA2DJKuRqdJKGe8UveQs",
+  "deviceFingerprint": "develop limit unlock zebra",
+  "message": "web-ide|test vector",
+  "messageSig": "XlmVOl64SZxJ70fA2c0207laeZeM8i48QW62grl1jnb4bENrz_ToG32BpxfowudzgDp5DRtpU1idSzWLlHWGAg",
+  "deviceMessageSig": "fntpLQ9e9fVJSlXflWhFl_ps5-sluJVYNa2_qbRc3P_BbD-AM0Urool_yLEnndS9EvO4CdgM6U39IWmWh6fsAw",
+  "certCanonical": "{\"v\":1,\"account\":\"zTFqKvpAtSeuHqtYNDGohuqw5giUVa4Zx0uHH0wYrFY\",\"key\":\"S6ZXtI0OcDa4t1QXvRf_DWwpA2DJKuRqdJKGe8UveQs\",\"name\":\"test pod\",\"kind\":\"pod\",\"created\":1766721600,\"scope\":\"all\"}",
+  "certSig": "KsJFQRSX0wf-UCrHdIGEOmtJ24CxtQMvffV3JkXeCpE7Y5vano7Qp0epZsims2VONExV9teDZ5SI6-Z99md1Cg",
+  "revocationCanonical": "{\"account\":\"zTFqKvpAtSeuHqtYNDGohuqw5giUVa4Zx0uHH0wYrFY\",\"seq\":2,\"epoch\":1,\"revoked\":[\"S6ZXtI0OcDa4t1QXvRf_DWwpA2DJKuRqdJKGe8UveQs\"],\"created\":1766721600}",
+  "revocationSig": "6BM1akzrbs5J03XmDXOqbGTfmO-bkF1OXkGg1stv-Da_QIEWB3UoVyG5417sIgly5tyATGYjU9-rCRNToDZjDA"
+}

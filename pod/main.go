@@ -20,8 +20,10 @@ import (
 
 	"github.com/DrSmithFr/web-ide/pod/internal/config"
 	"github.com/DrSmithFr/web-ide/pod/internal/hfcache"
+	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 	"github.com/DrSmithFr/web-ide/pod/internal/keeper"
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
+	"github.com/DrSmithFr/web-ide/pod/internal/pair"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 	"github.com/DrSmithFr/web-ide/pod/internal/relay"
 	"github.com/DrSmithFr/web-ide/pod/internal/relayclient"
@@ -65,6 +67,26 @@ func main() {
 		// The relay has its own data folder (~/.web-ide-relay): pass "" when -data was not
 		// set explicitly, else the pod's default would hold relay.db.
 		runRelayCmd(flagValue(flag.CommandLine, "data", ""), *addr, *turnPort, *turnIP, *tlsPort)
+		return
+	}
+	if len(flag.Args()) > 0 && flag.Arg(0) == "pair" {
+		// Identity of the pod: create, restore, join or status. create, restore and status
+		// work without a relay; join needs one.
+		st, err := store.Open(config.ExpandHome(*dataDir))
+		check(err)
+		cfg, err := config.Load(st)
+		check(err)
+		relayURL := cfg.RelayURL
+		if *relay != "" && *relay != "relay" {
+			relayURL = strings.TrimSuffix(*relay, "/")
+		}
+		check(pair.Run(&pair.Env{
+			Dir:      st.Dir(),
+			RelayURL: relayURL,
+			Name:     hostname(),
+			In:       os.Stdin,
+			Out:      os.Stdout,
+		}, flag.Args()[1:]))
 		return
 	}
 
@@ -132,6 +154,10 @@ func main() {
 		srv.RelayStatus = func() server.RelayInfo {
 			return server.RelayInfo{URL: cfg.RelayURL, PodID: ids.PodID, Link: relayLink(cfg.RelayURL, ids.PodID, token), State: state.Load().(string)}
 		}
+		// The pod identity: its device key and the account it pinned. An unpaired pod has a
+		// key but no account and stays in token mode.
+		podID, err := identity.Open(st.Dir())
+		check(err)
 		cli := relayclient.New(relayclient.Config{
 			RelayURL:  cfg.RelayURL,
 			PodID:     ids.PodID,
@@ -139,6 +165,7 @@ func main() {
 			Name:      hostname(),
 			Server:    srv,
 			Token:     token,
+			Identity:  podID,
 			ForceTurn: *forceTurn,
 			OnState: func(s string) {
 				state.Store(s)
