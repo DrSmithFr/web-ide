@@ -124,6 +124,16 @@ const current = (dir) => {
   const h = history(dir)
   return (h.entries.find((e) => e.id === h.current) ?? h.entries[h.entries.length - 1]).settings
 }
+/** Waits until the current settings of a pod answer a test: a change applied from the other pod
+ * goes through Settings.Save, so the file on disk is what the test reads. */
+async function waitCurrent(dir, test, label) {
+  for (let i = 0; i < 40; i++) {
+    if (test(current(dir))) return
+    await sleep(500)
+  }
+  assert(false, label + ': ' + JSON.stringify(current(dir)))
+}
+
 // Appends an entry to the settings of a stopped pod, leaving its sync base untouched: the pod
 // comes back with a local change the relay has never seen.
 function appendSettings(dir, patch, label) {
@@ -226,6 +236,8 @@ run(
       const tokenB = fs.readFileSync(path.join(DATA_B, 'token'), 'utf8').trim()
       const ctxB = await ctx.browser().newContext({ locale: process.env.E2E_LOCALE ?? 'en-US' })
       const pageB = await ctxB.newPage()
+      // The window of pod B is another context: its errors join the ones of the suite.
+      pageB.on('pageerror', (e) => errors.push('pageerror B: ' + e.message))
       await pageB.goto(`http://127.0.0.1:${PORT_B}/?token=${tokenB}`)
       const appB = pageB
       await openProject(appB)
@@ -242,10 +254,22 @@ run(
       await appB.waitForSelector('.theme-card.active:has-text("Day")', { timeout: 20000 })
       assert(current(DATA_B).theme === 'jour', 'the theme of A is applied on B: ' + JSON.stringify(current(DATA_B)))
 
-      // 6. Only a true conflict asks. B is stopped first, so A's change is the remote one and B's
+      // 6. Two different fields merge without asking: a change made on B reaches A, and no
+      // conflict row appears for it.
+      await section(appB, 'Fonts')
+      const cb = appB.locator('.check:has-text("Ligatures") input')
+      assert(await cb.isChecked(), 'the ligatures are on by default')
+      await cb.click()   // off: a field B changes while A changes none of the same ones
+      await waitCurrent(DATA_B, (s) => s.font?.ligatures === false, 'the ligatures are off on B')
+      await section(appA, 'Remote access')
+      await waitCurrent(DATA, (s) => s.font?.ligatures === false, 'the ligatures switched off on B reach A')
+      assert(!(await appA.locator('[data-testid=sync] .rules tr').count()), 'no conflict for two different fields')
+
+      // 7. Only a true conflict asks. B is stopped first, so A's change is the remote one and B's
       // change is its own: at its next pull B finds the same field changed on both sides.
       await stopPodB()
       appendSettings(DATA_B, { theme: 'contraste' }, 'Theme on B while offline')
+      await section(appA, 'Themes')
       await appA.click('.theme-card:has-text("Solarized dark")')
       await sleep(2000)
       startPodB()
@@ -262,9 +286,10 @@ run(
       await section(appB2, 'Themes')
       await appB2.waitForSelector('.theme-card.active:has-text("Solarized dark")', { timeout: 20000 })
       await appA.waitForSelector('.theme-card.active:has-text("Solarized dark")', { timeout: 20000 })
-      assert(true, 'the choice made on B is a normal write, taken by A too')
+      assert(current(DATA).theme === 'solarized' && current(DATA_B).theme === 'solarized',
+        'the choice made on B is a normal write, taken by A too: ' + current(DATA).theme + ' / ' + current(DATA_B).theme)
 
-      // 7. The layout stays per device: a size chosen on one device never moves the other. The
+      // 8. The layout stays per device: a size chosen on one device never moves the other. The
       // change is recorded on blur, so the input is left before the pod saves it.
       await section(appA, 'Fonts')
       await appA.fill('[data-testid=font-size]', '15')
@@ -286,7 +311,7 @@ run(
       assert(dB[devB]?.font?.size === 11 && dB[devA]?.font?.size === 15, 'and in those of B: ' + JSON.stringify(dB))
       assert(dB.fallback?.font?.size === 15, 'the fallback layout is saved for new devices: ' + JSON.stringify(dB.fallback))
 
-      // 8. The vault: nothing is put while it is off; the key reaches B once it is on; the relay
+      // 9. The vault: nothing is put while it is off; the key reaches B once it is on; the relay
       // base holds no clear text; switching off deletes the blob.
       assert(!py("select kind from blobs").includes('vault'), 'no vault blob while the vault is off')
       await section(appA, 'Remote access')
@@ -300,7 +325,7 @@ run(
       await sleep(3000)
       assert(!py("select kind from blobs").includes('vault'), 'switching the vault off deletes the blob')
 
-      // 9. A revocation moves to a new epoch and the data is encrypted again.
+      // 10. A revocation moves to a new epoch and the data is encrypted again.
       await section(appA, 'Remote access')
       await appA.click('[data-testid=device-list] tr:has-text("phone") button:has-text("Revoke")')
       await appA.waitForSelector('.toast', { timeout: 20000 })

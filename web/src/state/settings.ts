@@ -106,25 +106,64 @@ export function saveFallbackLayout() {
 
 let saveTimer: number | undefined
 let pendingLabel = ''
-// The edit the user made, kept until the debounced save runs. A change that arrives from another
-// pod replaces the store while the save is pending; the edit must still reach the pod, on top of
-// what the merge brought in.
-let pendingFn: ((s: Settings) => void) | null = null
+// The edit the user made, kept until the debounced save runs, as the leaves it changed (a path and
+// its value, undefined for a removal). The edit is not kept as the function that made it: a handler
+// reads the DOM event it was called with, which is gone when the timer runs. A change that arrives
+// from another pod replaces the store while the save is pending; the edit must still reach the pod,
+// on top of what the merge brought in.
+let pendingEdit: Record<string, any> | null = null
+
+const leafSep = '/'
+
+const isObj = (v: any) => v !== null && typeof v === 'object' && !Array.isArray(v)
+
+/** What an edit changed, path by path: the new value (a whole subtree when it appeared or moved),
+ * undefined for a removal. `path` is the path of the node being compared ("" for the root). */
+function editOf(before: any, after: any, path: string, out: Record<string, any>) {
+  if (!isObj(before) || !isObj(after)) {
+    if (JSON.stringify(before) !== JSON.stringify(after)) out[path] = after
+    return
+  }
+  const child = (k: string) => (path ? path + leafSep + k : k)
+  for (const [k, v] of Object.entries(after)) {
+    if (!(k in before)) out[child(k)] = v
+    else editOf(before[k], v, child(k), out)
+  }
+  for (const k of Object.keys(before)) if (!(k in after)) out[child(k)] = undefined
+}
+
+/** Applies the paths of an edit to a document read again after a merge. */
+function applyEdit(target: any, edit: Record<string, any>) {
+  for (const [path, value] of Object.entries(edit)) {
+    const parts = path.split(leafSep)
+    let node = target
+    for (const p of parts.slice(0, -1)) {
+      if (!isObj(node[p])) node[p] = {}
+      node = node[p]
+    }
+    const last = parts[parts.length - 1]
+    if (value === undefined) delete node[last]
+    else node[last] = value
+  }
+}
 
 /** Applies a change and records a new snapshot in the pod a moment later. */
 export function updateSettings(fn: (s: Settings) => void, label = '') {
-  const next = structuredClone(unwrap(settings)) as Settings
+  const before = structuredClone(unwrap(settings)) as Settings
+  const next = structuredClone(before) as Settings
   fn(next)
   setSettingsStore(reconcile(next))
   if (label) pendingLabel = label
-  pendingFn = fn
+  const edit: Record<string, any> = {}
+  editOf(before, next, '', edit)
+  pendingEdit = { ...(pendingEdit ?? {}), ...edit }
   clearTimeout(saveTimer)
   saveTimer = window.setTimeout(() => {
     const l = pendingLabel
     pendingLabel = ''
     const out = structuredClone(unwrap(settings)) as Settings
-    if (pendingFn) pendingFn(out)
-    pendingFn = null
+    if (pendingEdit) applyEdit(out, pendingEdit)
+    pendingEdit = null
     request('settings.save', { settings: out, label: l }).catch((e) => console.error(e))
   }, 600)
 }
