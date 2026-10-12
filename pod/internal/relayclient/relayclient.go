@@ -107,6 +107,9 @@ type Config struct {
 	// a site (multipod.Directory).
 	OnPods    func([]PodInfo)
 	OnGateway func(site, key string)
+	// OnForeignWrap is called with a wrap the relay pushed for another device: this pod passes it
+	// on over its LAN links, which is how a pod with no link of its own gets its key back.
+	OnForeignWrap func(*identity.WrapRecord)
 	// ForceTurn only advertises relay (TURN) candidates (e2e).
 	ForceTurn bool
 	// OnState is called with the state of the link to the relay (connecting, connected,
@@ -274,6 +277,13 @@ func (c *Client) runOnce(ctx context.Context) error {
 		case "bye":
 			c.route(m.Session, func(s *session) { s.close() })
 		case "wrap", "blob":
+			if m.Type == "wrap" && m.Wrap != nil && c.cfg.Identity != nil && m.Wrap.Device != c.cfg.Identity.ID() {
+				// Not for this pod: it is for a pod of its site that has no link of its own.
+				if c.cfg.OnForeignWrap != nil {
+					c.cfg.OnForeignWrap(m.Wrap)
+				}
+				continue
+			}
 			if c.cfg.Sync == nil {
 				continue
 			}
@@ -334,6 +344,19 @@ func (c *Client) ReportSite(peers []string) {
 		return
 	}
 	_ = link.send(sigMsg{Type: "site", Peers: peers})
+}
+
+// PutBlob stores a blob a peer of the site handed over: a pod with no link to the relay publishes
+// its project list through this pod. The record is forwarded unchanged — the relay checks the
+// signature of the device that wrote it, so the hop adds no trust.
+func (c *Client) PutBlob(rec *identity.BlobRecord) error {
+	c.mu.Lock()
+	link := c.link
+	c.mu.Unlock()
+	if link == nil {
+		return errors.New("relay: not connected")
+	}
+	return link.send(sigMsg{Type: "blobPut", Account: rec.Account, Device: rec.Device, Kind: rec.Kind, Blob: rec})
 }
 
 // SetPreferred marks this pod as the entry point of its site (Settings > Remote access), and tells

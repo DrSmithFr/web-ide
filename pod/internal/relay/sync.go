@@ -1,6 +1,8 @@
 package relay
 
 import (
+	"strings"
+
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 )
@@ -65,6 +67,10 @@ func (s *Server) handleSync(c *identityConn, m idMsg) {
 		}
 		_ = c.send(idMsg{Type: "wrap", Account: c.account, Device: m.Device, Wrap: w, Updated: updated})
 	case "blobGet":
+		if isKindPrefix(m.Kind) {
+			s.sendBlobs(c, nil, c.account, m.Kind)
+			return
+		}
 		b, updated, err := s.store.Blob(c.account, m.Kind)
 		if err != nil {
 			_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})
@@ -106,6 +112,10 @@ func (s *Server) handlePodSync(pc *podConn, m sigMsg) {
 		}
 		pc.send(sigMsg{Type: "wrap", Account: pc.account, Device: m.Device, Wrap: w, Updated: updated})
 	case "blobGet":
+		if isKindPrefix(m.Kind) {
+			s.sendBlobs(nil, pc, pc.account, m.Kind)
+			return
+		}
 		b, updated, err := s.store.Blob(pc.account, m.Kind)
 		if err != nil {
 			pc.send(sigMsg{Type: "error", Message: err.Error()})
@@ -121,6 +131,33 @@ func (s *Server) handlePodSync(pc *podConn, m sigMsg) {
 		pc.send(sigMsg{Type: "blob", Account: pc.account, Kind: m.Kind, Blob: m.Blob, Message: s.syncReply(kept)})
 		if kept {
 			s.pushBlob(pc.account, m.Blob, nil)
+		}
+	}
+}
+
+// isKindPrefix reports whether a blobGet asks for a family of kinds ("projects:") rather than one
+// kind: the project lists of every pod of the account.
+func isKindPrefix(kind string) bool { return strings.HasSuffix(kind, ":") }
+
+// sendBlobs answers a request for a family of kinds, one blob message per stored write. The relay
+// still only passes ciphertext.
+func (s *Server) sendBlobs(c *identityConn, pc *podConn, account, prefix string) {
+	recs, updated, err := s.store.Blobs(account, prefix)
+	if err != nil {
+		if c != nil {
+			_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})
+		}
+		if pc != nil {
+			pc.send(sigMsg{Type: "error", Message: err.Error()})
+		}
+		return
+	}
+	for _, r := range recs {
+		if c != nil {
+			_ = c.send(idMsg{Type: "blob", Account: account, Kind: r.Kind, Blob: r, Updated: updated[r.Kind]})
+		}
+		if pc != nil {
+			pc.send(sigMsg{Type: "blob", Account: account, Kind: r.Kind, Blob: r, Updated: updated[r.Kind]})
 		}
 	}
 }
@@ -146,7 +183,10 @@ func (s *Server) pushSyncKey(account string, rec *identity.SyncKeyRecord, from a
 
 // pushWrap tells the device a wrap was made for it (the pod reads it and gets the epoch key). A
 // wrap is only read by the device it names, so it is sent to that link or pod; a link that never
-// published a sync key is an admin panel, which shows the wraps of the whole account.
+// published a sync key is an admin panel, which shows the wraps of the whole account. It also goes
+// to every pod of the account: a pod with no link to the relay gets its wrap through a peer of its
+// site, which passes it on over the LAN. The wrap is sealed for its device, so the others learn
+// nothing from it.
 func (s *Server) pushWrap(account string, w *identity.WrapRecord, from any) {
 	s.mu.Lock()
 	var links []*identityConn
@@ -157,7 +197,7 @@ func (s *Server) pushWrap(account string, w *identity.WrapRecord, from any) {
 	}
 	var pods []*podConn
 	for _, p := range s.pods {
-		if p.account == account && p != from && p.device == w.Device {
+		if p.account == account && p != from {
 			pods = append(pods, p)
 		}
 	}

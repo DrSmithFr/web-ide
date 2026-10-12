@@ -22,6 +22,9 @@ type Hub struct {
 	sources map[string]*Sync
 	flags   *Flags
 	emit    func(s Status, name string, payload any)
+	// other is called with a blob of a kind this pod does not sync (the project lists of the
+	// other pods).
+	other   func(Msg)
 	lastErr string
 }
 
@@ -52,6 +55,33 @@ func (h *Hub) SetEmitter(fn func(s Status, name string, payload any)) { h.emit =
 // SetTransport gives the hub the link it sends its sync messages on. The link comes up later than
 // the hub (the pod dials the relay), so the transport is set after the hub is built.
 func (h *Hub) SetTransport(tr Transport) { h.tr = tr }
+
+// Send sends one sync message on the link of the pod (nil transport: the link is down).
+func (h *Hub) Send(m Msg) error {
+	if h.tr == nil {
+		return i18n.New("no link to the relay")
+	}
+	return h.tr.Send(m)
+}
+
+// SetOther is called with a blob the relay pushed for a kind this pod does not sync: the project
+// lists of the other pods are read that way.
+func (h *Hub) SetOther(fn func(Msg)) { h.other = fn }
+
+// KeyFor is the sub-key of a kind under the epoch key this pod holds (nil: no wrap yet).
+func (h *Hub) KeyFor(kind string) []byte { return h.kindKey(kind) }
+
+// Epoch is the epoch of the key this pod holds.
+func (h *Hub) Epoch() int64 { return h.currentEpoch() }
+
+// HasKey reports whether this pod holds the key of the epoch (its own wrap arrived).
+func (h *Hub) HasKey() bool { return h.hasKey() }
+
+// Account is the account this pod is paired with.
+func (h *Hub) Account() string { return h.ident.Account }
+
+// Device is the device id of this pod.
+func (h *Hub) Device() string { return h.ident.ID() }
 
 // SetError keeps the last error the relay answered for this pod (a revoked device, a blob of
 // another epoch): the page shows it next to the state of the sync.
@@ -200,6 +230,9 @@ func (h *Hub) Handle(m Msg) error {
 	}
 	if s := h.sources[m.Kind]; s != nil {
 		return s.Handle(m)
+	}
+	if h.other != nil {
+		h.other(m)
 	}
 	return nil
 }

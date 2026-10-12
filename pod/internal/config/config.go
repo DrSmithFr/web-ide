@@ -23,6 +23,15 @@ type Config struct {
 	RelayURL string `json:"relayUrl,omitempty"`
 	// LAN is the link to the other pods of the account on the local network.
 	LAN LAN `json:"lan,omitzero"`
+	// Gateway is the place of this pod among the pods of the account (Settings > Remote access).
+	Gateway Gateway `json:"gateway,omitzero"`
+}
+
+// Gateway configures how this pod takes part in the multi-pod home page.
+type Gateway struct {
+	// Preferred marks this pod as the entry point of its site: the browser opens it first, and it
+	// reaches the other pods of the site over the LAN.
+	Preferred bool `json:"preferred,omitempty"`
 }
 
 // LAN configures the LAN link of a paired pod.

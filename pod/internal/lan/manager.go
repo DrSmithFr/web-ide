@@ -45,6 +45,13 @@ type Config struct {
 	// OnRevocations is called with each newer revocation list the pod holds, whatever
 	// brought it (the relay link passes it on).
 	OnRevocations func(*identity.Revocations)
+	// OnBlob, OnWrap and OnSyncKey are called with a sync record a peer passed on: a pod with no
+	// link to the relay publishes its project list and reads its wrap through a peer of its site,
+	// which forwards them on its own link. The relay checks the original signature, so this adds
+	// no trust.
+	OnBlob func(*identity.BlobRecord)
+	OnWrap func(*identity.WrapRecord)
+	OnSync func(*identity.SyncKeyRecord)
 	// Tick is the pace of the dial loop (default 2 s); Browse runs every 5 ticks.
 	Tick time.Duration
 }
@@ -523,6 +530,28 @@ func (m *Manager) run(l *link, peerFP string) {
 				m.recheck()
 				m.spread(&r, l)
 			}
+		case "$blob":
+			var b identity.BlobRecord
+			if json.Unmarshal(msg.Params, &b) == nil && m.cfg.OnBlob != nil {
+				m.cfg.OnBlob(&b)
+			}
+		case "$wrap":
+			var w identity.WrapRecord
+			if json.Unmarshal(msg.Params, &w) == nil {
+				// The wrap is sealed for its device: a peer that is not it only passes it on.
+				if w.Device == m.cfg.Identity.ID() {
+					if m.cfg.OnWrap != nil {
+						m.cfg.OnWrap(&w)
+					}
+					continue
+				}
+				m.spreadWrap(&w, l)
+			}
+		case "$syncKey":
+			var k identity.SyncKeyRecord
+			if json.Unmarshal(msg.Params, &k) == nil && m.cfg.OnSync != nil {
+				m.cfg.OnSync(&k)
+			}
 		}
 	}
 }
@@ -609,6 +638,88 @@ func (m *Manager) recheck() {
 	m.mu.Unlock()
 	for _, l := range drop {
 		l.close()
+	}
+}
+
+// PublishBlob hands a sealed blob to a peer of the site: a pod with no link to the relay publishes
+// its project list this way, and the peer puts it on its own link unchanged. The relay checks the
+// signature of the device that wrote it, so the hop adds no trust.
+func (m *Manager) PublishBlob(b *identity.BlobRecord) error {
+	l := m.publishLink()
+	if l == nil {
+		return errors.New("lan: no peer of the account to publish through")
+	}
+	return l.send("$blob", b)
+}
+
+// PublishSyncKey hands the X25519 key of this device to a peer, so an admin can wrap the epoch key
+// for a pod that has no link of its own.
+func (m *Manager) PublishSyncKey(k *identity.SyncKeyRecord) error {
+	l := m.publishLink()
+	if l == nil {
+		return errors.New("lan: no peer of the account to publish through")
+	}
+	return l.send("$syncKey", k)
+}
+
+// PassWrap forwards a wrap the relay pushed for a pod of this site that has no link of its own: it
+// is the only way that pod can read the epoch key.
+func (m *Manager) PassWrap(w *identity.WrapRecord) error {
+	m.mu.Lock()
+	var links []*link
+	for _, p := range m.peers {
+		for l := range p.links {
+			links = append(links, l)
+		}
+	}
+	m.mu.Unlock()
+	if len(links) == 0 {
+		return errors.New("lan: no peer of the account to pass a wrap to")
+	}
+	var err error
+	for _, l := range links {
+		if e := l.send("$wrap", w); e != nil {
+			err = e
+		}
+	}
+	return err
+}
+
+// publishLink is a link we dialed (the one the gateway would use for the peer's page), or any open
+// control link.
+func (m *Manager) publishLink() *link {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, p := range m.peers {
+		if p.out != nil && !p.out.closed() {
+			return p.out
+		}
+	}
+	for _, p := range m.peers {
+		for l := range p.links {
+			if !l.closed() {
+				return l
+			}
+		}
+	}
+	return nil
+}
+
+// spreadWrap passes a wrap for another device on to the other peers: the pod it is for reaches the
+// relay through one of them, so the key comes back the same way.
+func (m *Manager) spreadWrap(w *identity.WrapRecord, from *link) {
+	m.mu.Lock()
+	var links []*link
+	for _, p := range m.peers {
+		for l := range p.links {
+			if l != from {
+				links = append(links, l)
+			}
+		}
+	}
+	m.mu.Unlock()
+	for _, l := range links {
+		_ = l.send("$wrap", w)
 	}
 }
 

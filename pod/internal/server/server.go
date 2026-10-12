@@ -82,6 +82,12 @@ type Server struct {
 	RelayStatus func() RelayInfo
 	// LAN is the link to the pods of the account on the local network (nil: off).
 	LAN LAN
+	// Pods is the view of the other pods of the account (nil: the pod is not paired): the home page
+	// shows one Projects block per pod (pod/internal/multipod).
+	Pods Pods
+	// ProjectsChanged is called when the projects of this pod changed: the debounced publish of
+	// its list to the other pods.
+	ProjectsChanged func()
 	// Push holds the push subscriptions of the browsers, PushSend gives an encrypted
 	// notification to the relay (both nil: no push, push.go).
 	Push     *push.Store
@@ -149,6 +155,7 @@ func (s *Server) Init() {
 	s.registerRelay()
 	s.registerLAN()
 	s.registerSync()
+	s.registerPods()
 	s.registerPush()
 }
 
@@ -1008,6 +1015,10 @@ func (s *Server) broadcast(name string, data any, except *Client) {
 	s.mu.Unlock()
 	for _, c := range targets {
 		c.push(name, data)
+	}
+	// The project list of the pod is published to the other pods: the hook debounces it.
+	if s.ProjectsChanged != nil && (name == "projects.changed" || name == "projects.iconChanged") {
+		s.ProjectsChanged()
 	}
 }
 

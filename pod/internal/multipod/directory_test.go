@@ -1,0 +1,182 @@
+package multipod
+
+import (
+	"encoding/json"
+	"path/filepath"
+	"testing"
+
+	"github.com/DrSmithFr/web-ide/pod/internal/identity"
+	"github.com/DrSmithFr/web-ide/pod/internal/lan"
+	"github.com/DrSmithFr/web-ide/pod/internal/relayclient"
+	"github.com/DrSmithFr/web-ide/pod/internal/settings"
+	"github.com/DrSmithFr/web-ide/pod/internal/settingsync"
+	"github.com/DrSmithFr/web-ide/pod/internal/store"
+)
+
+// The directory of the pods: what the home page shows. The relay reports who is online and in which
+// site; the lists come as sealed blobs; the LAN peers come first, since their page is reachable even
+// with the relay down.
+
+const testPhrase = "lecture vapor excuse note pledge rough bundle start regular burden reveal theme banana pencil owner cube social job emotion member joy sting dash whisper"
+
+// fakeLAN is a stand for the LAN link of the pod.
+type fakeLAN struct{ st lan.Status }
+
+func (f fakeLAN) Status() lan.Status { return f.st }
+
+// hubOf makes a paired pod with its hub, and the account it is paired with.
+func hubOf(t *testing.T) (*settingsync.Hub, *identity.PodIdentity, *identity.Account) {
+	t.Helper()
+	a, err := identity.FromPhrase(testPhrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(t.TempDir(), "pod")
+	p, err := identity.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sets, err := settings.Load(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Pin(a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.SetCert(identity.NewCert(a, p.Key(), "this pod", identity.KindPod)); err != nil {
+		t.Fatal(err)
+	}
+	return settingsync.NewHub(st, nil, p, settingsync.NewFlags(sets)), p, a
+}
+
+// wrapFor is the wrap an admin made for this device: it gives the hub the key of the epoch, the one
+// with which the other pods sealed their lists.
+func wrapFor(t *testing.T, a *identity.Account, p *identity.PodIdentity, epoch int64) *identity.WrapRecord {
+	t.Helper()
+	x, err := identity.X25519FromSeed(identity.Derive(p.Seed, identity.InfoX25519))
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin, err := identity.X25519FromSeed(make([]byte, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	shared, err := identity.Shared(admin, identity.X25519ID(x.PublicKey()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	nonce, data, err := identity.Seal(identity.WrapKey(shared), identity.WrapAAD(a.ID, p.ID(), epoch), identity.EpochKey(a.SyncSeed(), epoch))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := &identity.WrapRecord{Account: a.ID, Device: p.ID(), Epoch: epoch, Key: identity.X25519ID(admin.PublicKey()), Nonce: nonce, Data: data}
+	w.Sig = identity.Sign(a.Priv, []byte(w.Canonical()))
+	return w
+}
+
+// blobOf is the list a pod published under its own kind, sealed with the key of the epoch.
+func blobOf(t *testing.T, a *identity.Account, device string, epoch int64, seq int64, name string, titles ...string) *identity.BlobRecord {
+	t.Helper()
+	kind := identity.ProjectsKind(device)
+	plain, err := json.Marshal(List{V: 1, Name: name, Version: "1.0", Projects: projects(titles...)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nonce, data, err := identity.Seal(identity.KindKey(identity.EpochKey(a.SyncSeed(), epoch), kind),
+		identity.BlobAAD(a.ID, kind, epoch, seq), plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &identity.BlobRecord{Account: a.ID, Kind: kind, Epoch: epoch, Seq: seq, Device: device,
+		Op: identity.OpPut, Nonce: nonce, Data: data}
+}
+
+func projects(titles ...string) []Project {
+	out := []Project{}
+	for i, s := range titles {
+		out = append(out, Project{ID: string(rune('a'+i)), Title: s})
+	}
+	return out
+}
+
+// TestDirectoryNoKeyYet: before the wrap arrived, a pod online is listed without its list — the page
+// says "waiting for the sync key", it is not an error.
+func TestDirectoryNoKeyYet(t *testing.T) {
+	hub, p, a := hubOf(t)
+	d := New(hub, fakeLAN{})
+	d.HandleBlob(settingsync.Msg{Type: "blob", Blob: blobOf(t, a, "devB", 0, 1, "bravo", "quiet reader")})
+	d.RelayPods([]relayclient.PodInfo{{Key: "devB", Name: "bravo", Site: "devA"}, {Key: p.ID(), Name: "this pod", Site: "devA", Gateway: true}})
+
+	out := d.List()
+	if len(out) != 1 {
+		t.Fatalf("this pod is not listed among the others: %+v", out)
+	}
+	if !out[0].NoKey || out[0].Name != "bravo" || !out[0].Online {
+		t.Fatalf("a pod online without a readable list must be greyed as waiting for the key: %+v", out[0])
+	}
+	if !out[0].Gateway && out[0].Site == "" {
+		t.Fatalf("the site and the gateway come from the relay: %+v", out[0])
+	}
+}
+
+// TestDirectoryMergesSources: the LAN peers first (their page is reachable through this pod), then
+// the pods the relay reports online, then the pods whose only trace is a cached list — offline, with
+// the time they published it.
+func TestDirectoryMergesSources(t *testing.T) {
+	hub, p, a := hubOf(t)
+	d := New(hub, fakeLAN{st: lan.Status{Peers: []lan.PeerView{{ID: "devL", Name: "lantern", Fingerprint: "a b c d", Online: true,
+		Path: "/_lan/pod/devL", Projects: json.RawMessage(`[{"name":"seen live"}]`)}}}})
+	if err := hub.SetWrap(wrapFor(t, a, p, 0)); err != nil {
+		t.Fatal(err)
+	}
+	hub.SetOther(func(m settingsync.Msg) { d.HandleBlob(m) })
+
+	d.HandleBlob(settingsync.Msg{Type: "blob", Blob: blobOf(t, a, "devB", 0, 1, "bravo", "quiet reader", "other"), Updated: 111})
+	d.HandleBlob(settingsync.Msg{Type: "blob", Blob: blobOf(t, a, "devO", 0, 2, "offline pod", "kept"), Updated: 222})
+	d.RelayPods([]relayclient.PodInfo{{Key: "devB", Name: "bravo", Site: "devL"}, {Key: p.ID(), Name: "this pod", Site: "devL", Gateway: true}})
+
+	out := d.List()
+	by := map[string]PodView{}
+	for _, v := range out {
+		by[v.Key] = v
+	}
+	if len(out) != 3 {
+		t.Fatalf("three pods expected: %+v", out)
+	}
+	if out[0].Key != "devL" || out[0].Path != "/_lan/pod/devL" {
+		t.Fatalf("the LAN peer comes first, with its path: %+v", out[0])
+	}
+	b := by["devB"]
+	if !b.Online || b.Site != "devL" || b.Seen != 111 {
+		t.Fatalf("the pod the relay reports online: %+v", b)
+	}
+	var got []Project
+	_ = json.Unmarshal(b.Projects, &got)
+	if len(got) != 2 || got[0].Title != "quiet reader" {
+		t.Fatalf("the cached list must be shown: %s", b.Projects)
+	}
+	o := by["devO"]
+	if o.Online || o.Seen != 222 || o.Name != "offline pod" || o.NoKey {
+		t.Fatalf("a pod only in a cached list is greyed with its list: %+v", o)
+	}
+	if by[p.ID()].Key != "" {
+		t.Fatal("this pod is not among the others")
+	}
+	if d.Gateway() == "" {
+		t.Fatal("the gateway of the site of this pod must be known")
+	}
+
+	// A list deleted by its pod: the block keeps its name, without projects.
+	d.HandleBlob(settingsync.Msg{Type: "blob", Blob: &identity.BlobRecord{Account: a.ID, Kind: identity.ProjectsKind("devO"),
+		Device: "devO", Epoch: 0, Seq: 3, Op: identity.OpDel}})
+	after := d.List()
+	for _, v := range after {
+		if v.Key == "devO" && !v.NoKey {
+			t.Fatalf("a deleted list must leave the pod without projects: %+v", v)
+		}
+	}
+}

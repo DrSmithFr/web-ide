@@ -214,6 +214,7 @@
   "image too large": "image trop grande",
   "this pod has no relay": "ce pod n'a pas de relay",
   "the relay is not reachable": "le relay est injoignable",
+  "no link to the relay": "pas de lien vers le relay",
   "no certificate": "pas de certificat",
   "certificate of another account": "certificat d'un autre compte",
   "the certificate signature does not match": "la signature du certificat ne correspond pas",
