@@ -678,11 +678,14 @@ function AssistantMessage(props: { msg: ChatMessage; index: number; lastOfTurn: 
 
 function SummaryCard(props: { msg: ChatMessage }) {
   return (
-    <details class="ai-summary" data-testid="ai-summary">
+    <details class="ai-summary" data-testid="ai-summary" open={!props.msg.compacted}>
       <summary>
         <Icon name="history" size={13} />
         <span>
           {props.msg.model ? t('Conversation compacted: {n} messages summarized by {model}', { n: props.msg.summarized ?? 0, model: props.msg.model }) : t('Conversation compacted: {n} messages summarized', { n: props.msg.summarized ?? 0 })}
+        </span>
+        <span class="ai-summary-chevron">
+          <Icon name="chevron" size={12} />
         </span>
       </summary>
       <Markdown text={typeof props.msg.content === 'string' ? props.msg.content : ''} final />
@@ -916,7 +919,7 @@ export function Thread(props: { onSuggest: (t: string) => void; onSettings: () =
     // A sub-agent waiting for its parent, or ended, did not fail.
     if (chat.agent && chat.agent.status !== 'running') return false
     if (m.role === 'tool') return !m.plan && !m.questions && m.capture !== 'pending' && m.wait !== 'parent'
-    return (m.role === 'user' && m.kind !== 'agent_event') || (m.role === 'assistant' && !!m.error && !m.tool_calls?.length)
+    return (m.role === 'user' && m.kind !== 'agent_event' && m.kind !== 'summary') || (m.role === 'assistant' && !!m.error && !m.tool_calls?.length)
   }
   return (
     <div class="ai-thread">

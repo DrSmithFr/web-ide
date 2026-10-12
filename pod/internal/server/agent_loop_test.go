@@ -42,18 +42,25 @@ func TestCompactCut(t *testing.T) {
 			{Role: "tool", ToolCallID: "1", Content: agent.String("ok")},
 		}
 	}
-	// A summary, then one long turn: a manual compaction summarizes its oldest steps.
+	// A summary, then one long turn: a compaction asked by the model summarizes its oldest steps.
 	msgs := []*agent.Message{{Role: "user", Kind: "summary"}, {Role: "user", Content: agent.String("go")}}
 	for range 10 {
 		msgs = append(msgs, step()...)
 	}
-	cut := compactCut(msgs, 0, 16000, true)
+	cut := compactCut(msgs, 0, 16000, compactByModel)
 	if cut < 4 || cut >= len(msgs) || msgs[cut].Role != "assistant" {
 		t.Fatalf("one turn: cut at %d of %d", cut, len(msgs))
 	}
 	// Several turns: all but the last exchange.
 	msgs = append(msgs, &agent.Message{Role: "user", Content: agent.String("next")}, &agent.Message{Role: "assistant", Content: agent.String("ok")})
-	if cut := compactCut(msgs, 0, 16000, true); cut != len(msgs)-2 {
+	if cut := compactCut(msgs, 0, 16000, compactByModel); cut != len(msgs)-2 {
 		t.Fatalf("last exchange kept: cut at %d of %d", cut, len(msgs))
+	}
+	// Asked by the user: the last 10 steps (the answer "ok" and 9 steps of the turn).
+	if cut := compactCut(msgs, 0, 16000, compactAll); cut != 4 {
+		t.Fatalf("last steps kept: cut at %d of %d", cut, len(msgs))
+	}
+	if cut := compactCut(msgs[:8], 0, 16000, compactAll); cut != 0 {
+		t.Fatalf("3 steps: nothing to compact, cut at %d", cut)
 	}
 }

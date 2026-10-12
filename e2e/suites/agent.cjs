@@ -92,6 +92,13 @@ const fake = http.createServer(async (req, res) => {
     sse(res, { reasoning_content: 'THINK-2 and then?' })
     return end(res, 'stop')
   }
+  if (ask.includes('steps')) {
+    // Ten steps of one tool call each, then the answer.
+    const done = msgs.length - 1 - msgs.lastIndexOf(lastUser)
+    if (done < 20) return sse(res, { reasoning_content: 'Step ' + done / 2 }), sse(res, { tool_calls: calls([['w' + done, 'list_dir', { path: '.' }]]) }), end(res, 'tool_calls')
+    sse(res, { content: 'Steps walked.' })
+    return end(res, 'stop', { prompt_tokens: 900, completion_tokens: 5 })
+  }
   if (ask.includes('long')) {
     // Big usage: the next step must be preceded by an automatic compaction.
     if (last.role === 'user') return sse(res, { tool_calls: calls([['l1', 'list_dir', { path: '.' }]]) }), end(res, 'tool_calls', { prompt_tokens: 7000, completion_tokens: 20 })
@@ -174,7 +181,9 @@ run(async ({ page }) => {
     assert(await page.isVisible('.bottom .console-tabs .tab.active:has-text("echo hello-console")'), 'console of the command in front')
     await page.screenshot({ path: OUT + '/agent-tools.png' })
 
-    // Manual compaction by a different model.
+    await ask(page, 'Walk ten steps', 'Steps walked.')
+
+    // Manual compaction by a different model: the last 10 steps stay.
     await page.click('.ai-panel button[title^="Settings"]')
     await page.click('.ai-tab:has-text("Compaction")')
     await page.selectOption('[data-testid=compaction-settings] select[name=compactServer]', { index: 1 })
@@ -186,11 +195,13 @@ run(async ({ page }) => {
     assert((await page.textContent('[data-testid=ai-context-menu]')).includes('Messages sent to the model'), 'context menu open')
     await page.click('[data-testid=ai-context-menu] button:has-text("Compact now")')
     await page.waitForSelector('[data-testid=ai-summary]:has-text("fake-small")', { timeout: 10000 })
-    assert(summaries.length === 1 && summaries[0].model === 'fake-small' && text(summaries[0].messages[1]).includes('And you?') && !text(summaries[0].messages[1]).includes('Try the tools'), 'summary asked to the compaction model (all but the last exchange)')
-    assert(await page.isVisible('.ai-compacted-toggle'), 'compacted messages folded')
+    assert(summaries.length === 1 && summaries[0].model === 'fake-small' && text(summaries[0].messages[1]).includes('And you?') && text(summaries[0].messages[1]).includes('Try the tools'), 'summary asked to the compaction model (all but the last 10 steps)')
+    assert((await page.isVisible('.ai-compacted-toggle')) && !(await page.isVisible('.ai-msg.user')) && !(await page.isVisible('.ai-retry')), 'after the compaction: the card and the last steps, no retry')
+    assert(await page.isVisible('[data-testid=ai-summary][open] .md:has-text("SUMMARY-1")'), 'the summary written by the model shown in the card')
     await ask(page, 'Again', 'Answer of fake-other.')
     const r3 = requests[requests.length - 1]
-    assert(text(r3.messages[1]).includes('SUMMARY-1') && text(r3.messages[2]).includes('Try the tools') && !r3.messages.some((m) => text(m).includes('And you')), 'after compaction: summary + last exchange only')
+    const kept = r3.messages.filter((m) => m.role === 'assistant')
+    assert(text(r3.messages[1]).includes('SUMMARY-1') && kept.length === 10 && !r3.messages.some((m) => /And you|Try the tools|Walk ten/.test(text(m))) && text(r3.messages.at(-1)) === 'Again', 'after compaction: the summary, the last 10 steps and the new message: ' + kept.length)
 
     // Automatic compaction when the usage passes 75 % of the context.
     await ask(page, 'A long task', 'After compaction.')
@@ -265,6 +276,7 @@ run(async ({ page }) => {
     await page.waitForSelector('[data-testid=send]')
     assert(text(requests[requests.length - 1].messages.at(-1)) === 'Look at @src/main.go', 'the message keeps the path only')
 
+    await ask(page, 'Walk ten steps again', 'Steps walked.')
     await page.fill('.ai-composer .ed-content', '/compact keep the file names')
     await page.keyboard.press('Control+Enter')
     for (let t = 0; t < 100 && summaries.length < 3; t++) await page.waitForTimeout(100)
