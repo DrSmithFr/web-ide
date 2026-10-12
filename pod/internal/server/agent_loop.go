@@ -123,7 +123,7 @@ func apiMessages(system string, msgs []*agent.Message, vision bool) []llm.Messag
 		if vision && m.Role == "tool" && !m.Compacted && m.Page != nil && m.Page.PNG != "" {
 			images = append(images, m)
 		}
-		if m.Compacted || m.Error != "" && m.Role == "assistant" && emptyAnswer(m) {
+		if m.Compacted || unsent(m) {
 			continue
 		}
 		msg := llm.Message{Role: m.Role, ToolCallID: m.ToolCallID, Name: m.Name}
@@ -186,6 +186,9 @@ func contextUsed(c *agent.Chat) int {
 		m := c.Messages[i]
 		if m.Compacted {
 			break
+		}
+		if unsent(m) {
+			continue
 		}
 		if m.Role == "assistant" && len(m.Usage) > 0 && i >= c.ResetAt {
 			var u llm.Usage
@@ -621,6 +624,11 @@ func (s *Server) loop(r *agentRun) {
 // emptyAnswer: an answer without text nor tool call.
 func emptyAnswer(m *agent.Message) bool {
 	return strings.TrimSpace(agent.ContentText(m.Content)) == "" && len(m.ToolCalls) == 0
+}
+
+// unsent: a failed answer the model does not read again (empty, or set aside by a resume).
+func unsent(m *agent.Message) bool {
+	return m.Role == "assistant" && m.Error != "" && (m.Resumed || emptyAnswer(m))
 }
 
 // runCalls runs the tool calls of an answer; true when the turn ends (questions, a plan).

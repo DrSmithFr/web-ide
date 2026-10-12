@@ -898,6 +898,7 @@
   "Stop": "Arrêter",
   "Stop (Esc)": "Arrêter (Échap)",
   "Stopped.": "Arrêté.",
+  "Resumed from the previous step: this answer is not sent back.": "Repris à l'étape précédente : cette réponse n'est pas renvoyée au modèle.",
   "String": "Chaîne",
   "Struct": "Struct",
   "Structure": "Structure",

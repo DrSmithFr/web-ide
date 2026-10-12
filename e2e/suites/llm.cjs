@@ -372,6 +372,9 @@ run(async ({ page, ctx }) => {
     assert(cut && (await page.isVisible('.ai-error:has-text("closed the answer before its end")')), 'a cut stream shown as an error')
     await page.click('[data-testid=ai-resume]')
     await page.waitForSelector('.ai-msg.assistant .md:has-text("Resumed after the cut.")', { timeout: 10000 })
+    assert(await page.isVisible('.ai-error:has-text("closed the answer before its end") .ai-resumed'), 'the cut answer stays shown, set aside by the resume')
+    const afterCut = requests[requests.length - 1].messages
+    assert(afterCut[afterCut.length - 1].role === 'tool', 'the cut answer is not sent back')
 
     // A crash, then another model chosen: offered to resume with it, under the two buttons.
     const beforeOther = requests.length

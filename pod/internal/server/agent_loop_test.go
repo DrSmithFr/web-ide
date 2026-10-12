@@ -54,3 +54,21 @@ func TestCompactCut(t *testing.T) {
 		t.Fatalf("3 steps: nothing to compact, cut at %d", cut)
 	}
 }
+
+func TestResumeKeepsTheFailedAnswer(t *testing.T) {
+	failed := &agent.Message{Role: "assistant", Content: agent.String("half"), Reasoning: "long", Error: "cut", Usage: []byte(`{"prompt":100,"completion":90000}`)}
+	chat := &agent.Chat{Messages: []*agent.Message{
+		{Role: "user", Content: agent.String("go")},
+		{Role: "assistant", Content: agent.String("ok"), Usage: []byte(`{"prompt":50,"completion":10}`)},
+		failed,
+	}}
+	if from := resumeFrom(chat); from != 2 || len(chat.Messages) != 3 || !failed.Resumed {
+		t.Fatalf("kept and set aside: from %d, %d messages, resumed %v", from, len(chat.Messages), failed.Resumed)
+	}
+	if out := apiMessages("sys", chat.Messages, false); len(out) != 3 {
+		t.Fatalf("not sent back: %+v", out)
+	}
+	if used := contextUsed(chat); used != 60 {
+		t.Fatalf("its usage is not the context: %d", used)
+	}
+}

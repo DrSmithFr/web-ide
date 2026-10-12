@@ -106,6 +106,8 @@ export interface ChatMessage {
   attachments?: Attachment[]
   usage?: Usage
   error?: string
+  /** A failed answer a resume went on from: shown, not sent back to the model. */
+  resumed?: boolean
   /** Tool result: ok, error, or refused by the user. */
   status?: 'ok' | 'error' | 'denied'
   /** Short summary of a tool result shown folded: a text, or a text of the pod to translate. */

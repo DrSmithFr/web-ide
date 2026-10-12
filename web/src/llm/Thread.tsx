@@ -655,6 +655,9 @@ function AssistantMessage(props: { msg: ChatMessage; index: number; lastOfTurn: 
       <Show when={props.msg.error}>
         <div class="ai-error">
           <Icon name="conflict" size={13} /> {t(props.msg.error!)}
+          <Show when={props.msg.resumed}>
+            <span class="ai-resumed">{t('Resumed from the previous step: this answer is not sent back.')}</span>
+          </Show>
         </div>
       </Show>
       <Show when={props.lastOfTurn && !(live.busy && props.lastTurn)}>

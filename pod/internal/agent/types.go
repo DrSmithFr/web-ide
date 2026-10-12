@@ -136,8 +136,10 @@ type Message struct {
 	Diff    []DiffLine      `json:"diff,omitempty"`
 	Model   string          `json:"model,omitempty"`
 	// Finish: why the server ended the answer (stop, length, tool_calls…), for diagnosis.
-	Finish     string `json:"finish,omitempty"`
-	Compacted  bool   `json:"compacted,omitempty"`
+	Finish    string `json:"finish,omitempty"`
+	Compacted bool   `json:"compacted,omitempty"`
+	// Resumed: a failed answer a resume went on from; shown, not sent back to the model.
+	Resumed    bool   `json:"resumed,omitempty"`
 	Kind       string `json:"kind,omitempty"`
 	Summarized int    `json:"summarized,omitempty"`
 	ThinkMs    int64  `json:"thinkMs,omitempty"`

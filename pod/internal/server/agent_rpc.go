@@ -70,13 +70,13 @@ func (s *Server) adoptedBy(cc chatCtx, parent string, chat *agent.Chat) error {
 	return nil
 }
 
-// resumeFrom drops the failed answer of a conversation and closes the tool calls left
-// open: it goes on from its last completed step. Returns the first message changed.
+// resumeFrom sets aside the failed answer of a conversation (kept on screen, not sent back)
+// and closes the tool calls left open: it goes on from its last completed step. Returns the first message changed.
 func resumeFrom(chat *agent.Chat) int {
 	n := len(chat.Messages)
 	if n > 0 {
 		if last := chat.Messages[n-1]; last.Role == "assistant" && last.Error != "" && len(last.ToolCalls) == 0 {
-			chat.Messages = chat.Messages[:n-1]
+			last.Resumed = true
 		}
 	}
 	closeToolCalls(chat, "Interrupted: the run stopped before this tool ended.")
