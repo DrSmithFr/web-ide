@@ -91,8 +91,17 @@ const summaryPrefix = "Summary of the earlier conversation (automatic compaction
 // A page drawn by the model reaches a model reading images as an image: in a user message
 // right after the tool results of its step, since servers often take only text in a tool
 // result.
+//
+// The reasoning goes back for the answers of the current turn (after the last user
+// message): models thinking between their tool calls need it, older turns drop it.
 func apiMessages(system string, msgs []*agent.Message, vision bool) []llm.Message {
 	out := []llm.Message{{Role: "system", Content: agent.String(system)}}
+	turn := 0
+	for i, m := range msgs {
+		if m.Role == "user" {
+			turn = i
+		}
+	}
 	var images []*agent.Message
 	flush := func() {
 		if len(images) == 0 {
@@ -107,17 +116,20 @@ func apiMessages(system string, msgs []*agent.Message, vision bool) []llm.Messag
 		out = append(out, llm.Message{Role: "user", Content: data})
 		images = nil
 	}
-	for _, m := range msgs {
+	for i, m := range msgs {
 		if m.Role != "tool" {
 			flush()
 		}
 		if vision && m.Role == "tool" && !m.Compacted && m.Page != nil && m.Page.PNG != "" {
 			images = append(images, m)
 		}
-		if m.Compacted || m.Error != "" && m.Role == "assistant" && len(m.Content) == 0 && len(m.ToolCalls) == 0 {
+		if m.Compacted || m.Error != "" && m.Role == "assistant" && emptyAnswer(m) {
 			continue
 		}
-		msg := llm.Message{Role: m.Role, Reasoning: "", ToolCallID: m.ToolCallID, Name: m.Name}
+		msg := llm.Message{Role: m.Role, ToolCallID: m.ToolCallID, Name: m.Name}
+		if m.Role == "assistant" && i > turn {
+			msg.Reasoning = m.Reasoning
+		}
 		switch {
 		case m.Kind == "summary":
 			msg.Content = agent.String(summaryPrefix + agent.ContentText(m.Content))
@@ -161,6 +173,8 @@ func estimateTokens(m *agent.Message) int {
 	for _, c := range m.ToolCalls {
 		chars += len(c.Function.Name) + len(c.Function.Arguments)
 	}
+	// The reasoning goes back within the turn: counted, an older turn is overestimated.
+	chars += len(m.Reasoning)
 	return (chars*2+6)/7 + media*800 + 8
 }
 
@@ -557,8 +571,16 @@ func (s *Server) loop(r *agentRun) {
 				sa.Cost += res.Usage.Cost
 			}
 		}
+		msg.Finish = res.Finish
 		if res.Finish == "length" {
 			msg.Error = "Answer cut: length limit reached."
+		} else if emptyAnswer(msg) {
+			// Said, not taken for the end of the turn.
+			if msg.Reasoning != "" {
+				msg.Error = "Answer ended in its reasoning, without text or action."
+			} else {
+				msg.Error = "Empty answer from the model."
+			}
 		}
 		ans.timing(msg)
 		r.chat.Messages = append(r.chat.Messages, msg)
@@ -594,6 +616,11 @@ func (s *Server) loop(r *agentRun) {
 			return
 		}
 	}
+}
+
+// emptyAnswer: an answer without text nor tool call.
+func emptyAnswer(m *agent.Message) bool {
+	return strings.TrimSpace(agent.ContentText(m.Content)) == "" && len(m.ToolCalls) == 0
 }
 
 // runCalls runs the tool calls of an answer; true when the turn ends (questions, a plan).
@@ -697,7 +724,7 @@ func (s *Server) runCalls(r *agentRun, ref *runtimeRef, calls []agent.ToolCall, 
 			m.Effort = level
 			r.mu.Unlock()
 		} else if name == "compact_conversation" {
-			// Asked by the model: everything but the last exchange is summarized.
+			// Asked by the model: everything but the last steps is summarized.
 			var instructions string
 			_ = json.Unmarshal(args["instructions"], &instructions)
 			if err := s.compact(r, true, instructions); err != nil {
@@ -800,9 +827,26 @@ func transcriptOf(m *agent.Message, budget int) string {
 
 var errNothingToCompact = i18n.New("Nothing to compact")
 
-// compact replaces the oldest messages by a summary, keeping the recent ones (about a
-// quarter of the context). manual: compact even a short conversation (all but the last
-// exchange).
+// keepSteps: the steps (an answer, its reasoning and tool calls) a compaction keeps.
+const keepSteps = 10
+
+// compactCut is the first message a compaction keeps: the last keepSteps steps, start when
+// there are no more (nothing to compact).
+func compactCut(msgs []*agent.Message, start int) int {
+	from, steps := len(msgs), 0
+	for i := len(msgs) - 1; i > start && steps < keepSteps; i-- {
+		if msgs[i].Role == "assistant" {
+			from, steps = i, steps+1
+		}
+	}
+	if steps < keepSteps {
+		return start
+	}
+	return from
+}
+
+// compact replaces the oldest messages by a summary, keeping the last steps. manual (asked
+// by the user or the model): a conversation too short says so.
 func (s *Server) compact(r *agentRun, manual bool, instructions string) error {
 	r.mu.Lock()
 	msgs := r.chat.Messages
@@ -817,33 +861,7 @@ func (s *Server) compact(r *agentRun, manual bool, instructions string) error {
 	if ctxSize == 0 {
 		ctxSize = 16384
 	}
-	keepBudget := ctxSize / 4
-	if manual {
-		keepBudget = 0
-	}
-	// The kept tail starts at a user or assistant message (never at a tool result).
-	keepFrom, tokens := len(msgs), 0
-	for i := len(msgs) - 1; i > start; i-- {
-		tokens += estimateTokens(msgs[i])
-		if tokens > keepBudget && keepFrom < len(msgs) {
-			break
-		}
-		if msgs[i].Role != "tool" {
-			keepFrom = i
-		}
-	}
-	if manual || keepFrom-start < 2 {
-		keepFrom = len(msgs)
-		for i := len(msgs) - 1; i > start; i-- {
-			if msgs[i].Role == "user" && msgs[i].Kind != "summary" {
-				keepFrom = i
-				break
-			}
-		}
-		if keepFrom == len(msgs) {
-			keepFrom = len(msgs) - 1
-		}
-	}
+	keepFrom := compactCut(msgs, start)
 	if keepFrom-start < 2 {
 		if manual {
 			return errNothingToCompact

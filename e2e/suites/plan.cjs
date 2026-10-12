@@ -37,7 +37,9 @@ const fake = http.createServer(async (req, res) => {
   const msgs = r.messages
   const last = msgs[msgs.length - 1]
   const lastUser = [...msgs].reverse().find((m) => m.role === 'user' && !text(m).startsWith('Summary'))
-  const ask = text(lastUser)
+  // After the compaction asked by the model, its user message is in the summary.
+  if (last.role === 'tool' && last.tool_call_id === 'c1') return sse(res, { content: 'Plan carried out.' }), end(res)
+  const ask = text(lastUser ?? { content: '' })
   const tools = msgs.filter((m) => m.role === 'tool')
   if (ask.startsWith('Plan the')) {
     if (last.role === 'user')
@@ -56,7 +58,10 @@ const fake = http.createServer(async (req, res) => {
   }
   if (ask.startsWith('The plan is accepted')) {
     if (last.role === 'user') return sse(res, { tool_calls: calls([['e1', 'edit_file', { path: 'src/main.go', old_string: '"Bonjour %s"', new_string: '"Salut %s"' }]]) }), end(res, 'tool_calls')
-    if (last.role === 'tool' && last.tool_call_id === 'e1') return sse(res, { tool_calls: calls([['c1', 'compact_conversation', { instructions: 'keep the plan' }]]) }), end(res, 'tool_calls')
+    // Steps after the edit, then the compaction (it keeps the last 10 steps).
+    const done = msgs.length - 1 - msgs.lastIndexOf(lastUser)
+    if (last.role === 'tool' && done < 20) return sse(res, { tool_calls: calls([['w' + done, 'list_dir', { path: '.' }]]) }), end(res, 'tool_calls')
+    if (last.role === 'tool' && done === 20) return sse(res, { tool_calls: calls([['c1', 'compact_conversation', { instructions: 'keep the plan' }]]) }), end(res, 'tool_calls')
     sse(res, { content: 'Plan carried out.' })
     return end(res)
   }

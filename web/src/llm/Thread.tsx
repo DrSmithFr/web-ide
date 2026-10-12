@@ -678,11 +678,14 @@ function AssistantMessage(props: { msg: ChatMessage; index: number; lastOfTurn: 
 
 function SummaryCard(props: { msg: ChatMessage }) {
   return (
-    <details class="ai-summary" data-testid="ai-summary">
+    <details class="ai-summary" data-testid="ai-summary" open={!props.msg.compacted}>
       <summary>
         <Icon name="history" size={13} />
         <span>
           {props.msg.model ? t('Conversation compacted: {n} messages summarized by {model}', { n: props.msg.summarized ?? 0, model: props.msg.model }) : t('Conversation compacted: {n} messages summarized', { n: props.msg.summarized ?? 0 })}
+        </span>
+        <span class="ai-summary-chevron">
+          <Icon name="chevron" size={12} />
         </span>
       </summary>
       <Markdown text={typeof props.msg.content === 'string' ? props.msg.content : ''} final />
@@ -904,7 +907,10 @@ export function Thread(props: { onSuggest: (t: string) => void; onSettings: () =
     for (const o of out) if (o.hide) o.hide = o.tail!.gone && !o.tail!.more
     return { rows: out, open }
   })
-  const compactedCount = () => chat.messages.filter((m) => m.compacted).length
+  // Shown: the messages of the context; every compaction stays as its card, the compacted
+  // messages behind the toggle.
+  const shown = (m: ChatMessage) => !m.compacted || m.kind === 'summary' || showCompacted()
+  const compactedCount = () => chat.messages.filter((m) => m.compacted && m.kind !== 'summary').length
   // The turn ended without an answer: an error, a stop, or tools interrupted (not a plan
   // or questions waiting for the user).
   const lastFailed = () => {
@@ -913,7 +919,7 @@ export function Thread(props: { onSuggest: (t: string) => void; onSettings: () =
     // A sub-agent waiting for its parent, or ended, did not fail.
     if (chat.agent && chat.agent.status !== 'running') return false
     if (m.role === 'tool') return !m.plan && !m.questions && m.capture !== 'pending' && m.wait !== 'parent'
-    return (m.role === 'user' && m.kind !== 'agent_event') || (m.role === 'assistant' && !!m.error && !m.tool_calls?.length)
+    return (m.role === 'user' && m.kind !== 'agent_event' && m.kind !== 'summary') || (m.role === 'assistant' && !!m.error && !m.tool_calls?.length)
   }
   return (
     <div class="ai-thread">
@@ -930,7 +936,7 @@ export function Thread(props: { onSuggest: (t: string) => void; onSettings: () =
       </Show>
       <For each={chat.messages}>
         {(m, i) => (
-          <Show when={m.role !== 'tool' && (!m.compacted || showCompacted())}>
+          <Show when={m.role !== 'tool' && shown(m)}>
             <div class="ai-row" classList={{ 'ai-old': !!m.compacted, 'ai-gone': !!chains().rows[i()]?.hide }}>
               <Show
                 when={m.kind === 'summary' || m.kind?.startsWith('agent_')}

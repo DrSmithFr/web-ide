@@ -122,6 +122,8 @@
 .ai-summary > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--fg-muted); list-style: none; }
 .ai-summary > summary::-webkit-details-marker { display: none; }
 .ai-summary .md { margin-top: 8px; }
+.ai-summary-chevron { display: inline-flex; margin-left: auto; transition: transform 0.15s; }
+.ai-summary[open] .ai-summary-chevron { transform: rotate(90deg); }
 
 /* live answer */
 .ai-live-stats { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--fg-muted); font-variant-numeric: tabular-nums; }
