@@ -30,6 +30,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 	"github.com/DrSmithFr/web-ide/pod/internal/preview"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
+	"github.com/DrSmithFr/web-ide/pod/internal/push"
 	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
 	"github.com/DrSmithFr/web-ide/pod/internal/sessions"
 	"github.com/DrSmithFr/web-ide/pod/internal/settings"
@@ -77,6 +78,10 @@ type Server struct {
 	RelayStatus func() RelayInfo
 	// LAN is the link to the pods of the account on the local network (nil: off).
 	LAN LAN
+	// Push holds the push subscriptions of the browsers, PushSend gives an encrypted
+	// notification to the relay (both nil: no push, push.go).
+	Push     *push.Store
+	PushSend func(sub string, body []byte, ttl int, urgency, topic string) error
 
 	// stopped: the pod stops (Shutdown); the runs are left as they are, to be taken back.
 	stopped atomic.Bool
@@ -139,6 +144,7 @@ func (s *Server) Init() {
 	s.registerKanbanGit()
 	s.registerRelay()
 	s.registerLAN()
+	s.registerPush()
 }
 
 func (s *Server) handle(name string, h handler) { s.handlers[name] = h }
@@ -351,6 +357,10 @@ type window struct {
 	channels map[string]*transport
 	// queues are the sequential groups of the window (see sequential).
 	queues map[string]*queue
+	// pushDevice is the browser device of the window and visible whether it is shown: a device
+	// with a visible window gets no push notification (push.go).
+	pushDevice atomic.Value
+	visible    atomic.Bool
 }
 
 // transport is one whole-message connection of a window: the rpc channel, or an extra
@@ -956,6 +966,13 @@ func (s *Server) emitter(projectID string) runtime.Emit {
 		s.mu.Unlock()
 		for _, c := range targets {
 			c.pushIn(name, data, projectID)
+		}
+		// A saved command flagged test that fails is a push notification.
+		if ev, ok := data.(map[string]any); ok && name == "console.exit" {
+			if code, _ := ev["code"].(int); code != 0 {
+				id, _ := ev["id"].(string)
+				go s.notifyTests(projectID, id, code)
+			}
 		}
 	}
 }

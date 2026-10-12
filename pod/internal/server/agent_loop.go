@@ -447,6 +447,11 @@ func (s *Server) loop(r *agentRun) {
 		// Messages queued as the run ended start it again (unless stopped, or waiting for
 		// the user).
 		again := r.ctx.Err() == nil && len(r.chat.Queue) > 0 && !waitsForUser(r.chat)
+		// A turn of a root conversation that ends by itself is a push notification: the agent
+		// finished, or asks the user (a question, a plan).
+		if parent == "" && !again && r.ctx.Err() == nil {
+			s.notifyAgent(waitsForUser(r.chat), r.root, r.id, r.chat.Title)
+		}
 		from := -1
 		if again && r.chat.Agent != nil {
 			from = skipParentWait(r.chat)

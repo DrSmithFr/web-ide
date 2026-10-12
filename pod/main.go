@@ -28,6 +28,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 	"github.com/DrSmithFr/web-ide/pod/internal/pair"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
+	"github.com/DrSmithFr/web-ide/pod/internal/push"
 	"github.com/DrSmithFr/web-ide/pod/internal/relay"
 	"github.com/DrSmithFr/web-ide/pod/internal/relayclient"
 	"github.com/DrSmithFr/web-ide/pod/internal/server"
@@ -209,7 +210,18 @@ func main() {
 				state.Store(s)
 				srv.Broadcast("relay.changed", srv.RelayStatus())
 			},
+			OnPushGone: func(sub string) {
+				if srv.Push != nil {
+					srv.Push.Gone(sub)
+				}
+			},
 		})
+		// Push notifications go through the relay, encrypted by the pod for each browser.
+		if subs, err := push.Open(st.Dir()); err != nil {
+			log.Printf("push: %v", err)
+		} else {
+			srv.Push, srv.PushSend = subs, cli.Push
+		}
 		relayCli.Store(cli)
 		go func() { _ = cli.Run(ctx) }()
 		remote = relayLink(cfg.RelayURL, ids.PodID, token)

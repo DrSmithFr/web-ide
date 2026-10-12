@@ -512,6 +512,7 @@ var mcpTools = []mcpTool{
 				if err != nil {
 					return "", err
 				}
+				s.notifyFeedback(sc.loc, id, a.Text)
 				return fmt.Sprintf("Feedback %d added to ticket #%d.", fid, id), nil
 			}
 			if a.Action != "done" && a.Action != "reopen" {
