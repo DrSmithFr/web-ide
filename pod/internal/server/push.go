@@ -44,6 +44,7 @@ func (s *Server) registerPush() {
 			if d, ok := s.Push.Get(a.Device); ok {
 				out["subscribed"] = true
 				out["choices"] = d.Kinds
+				out["sub"] = d.Sub // the id at the relay, to drop it there
 			}
 		}
 		return out, nil

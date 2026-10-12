@@ -2,6 +2,7 @@ import { render } from 'solid-js/web'
 import { Match, onMount, Switch } from 'solid-js'
 import './styles.css'
 import { startPod } from './pod/rpc'
+import { installVisibility } from './pod/push'
 import { loadSettings } from './state/settings'
 import { detectLayout, installKeyHandler } from './keys/bindings'
 import { installMouseNav } from './keys/mouse'
@@ -17,6 +18,7 @@ import { ConflictHost } from './conflict/ConflictDialog'
 
 function App() {
   onMount(() => {
+    installVisibility() // its first report waits for the connection
     startPod()
     loadSettings()
     detectLayout()
