@@ -91,6 +91,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .props { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; }
 .props dt { color: var(--fg-muted); }
 .props dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.lan-peers { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 4px; }
 .card { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 10px; }
 .card h3 { margin: 0 0 8px; font-size: 1em; }
 .info-section + .info-section { margin-top: 18px; }
@@ -543,6 +544,8 @@ button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 .home-tunnels .home-bar { margin-bottom: 6px; }
 .home-tunnels .home-sub { margin: 0; }
 .home-tunnel { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; margin-bottom: 6px; background: var(--bg-2); }
+.lan-pod { margin-top: 28px; }
+.lan-pod.offline .project-card { opacity: 0.55; }
 .project-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .project-card { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-2); min-width: 0; }
 .project-card:hover { border-color: var(--accent); }

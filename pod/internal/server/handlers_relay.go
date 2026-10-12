@@ -49,6 +49,11 @@ func (s *Server) serveWordlist(w http.ResponseWriter, r *http.Request) {
 // reaches it through the pod, as it reaches everything else. The pod only carries the frames,
 // it cannot approve a pairing or sign a revocation list — it does not hold the account key.
 func (s *Server) serveIdentityLink(w http.ResponseWriter, r *http.Request) {
+	// Without a relay, the pod answers the panel itself from what it knows on the LAN.
+	if s.RelayURL == "" && s.LAN != nil {
+		s.LAN.ServeIdentity(w, r)
+		return
+	}
 	if s.RelayURL == "" {
 		http.Error(w, i18n.T("en", "this pod has no relay"), http.StatusNotFound)
 		return

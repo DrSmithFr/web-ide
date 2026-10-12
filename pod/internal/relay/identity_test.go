@@ -406,3 +406,43 @@ func (c *wsClient) nextId(t *testing.T) idMsg {
 	}
 	return m
 }
+
+// TestPodPushesNewerRevocations: a pod gives the relay a newer list it got another way (the
+// pair command offline, a pod of the LAN); the relay keeps it and pushes it to the admin
+// links. A list of another account is ignored.
+func TestPodPushesNewerRevocations(t *testing.T) {
+	ts := newRelay(t)
+	a := testAccount(t)
+	podKey := identity.KeyFromSeed(identity.Derive(a.Seed, "the pod key"))
+	pod, _, err := websocket.Dial(context.Background(), wsURL(ts, "/_relay/pod"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pc := &wsClient{pod}
+	defer pc.close()
+	pc.send(t, sigMsg{Type: "register", ID: "laptop", Secret: "s3cret", Account: a.ID, Cert: identity.NewCert(a, podKey, "laptop", identity.KindPod)})
+	if m := pc.next(t); m.Type != "ready" {
+		t.Fatalf("the pod must be ready, got %q %q", m.Type, m.Message)
+	}
+	admin := connectIdentity(t, ts, a.ID, nil)
+	defer admin.close()
+	if m := admin.nextId(t); m.Type != "ready" {
+		t.Fatalf("the admin must be ready, got %q", m.Type)
+	}
+
+	other, _ := identity.FromPhrase("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art")
+	foreign := &identity.Revocations{Seq: 5, Revoked: []string{"x"}, Created: time.Now().Unix()}
+	_ = identity.SignRevocations(other.Priv, foreign)
+	pc.send(t, sigMsg{Type: "revocations", List: foreign})
+
+	r := &identity.Revocations{Seq: 3, Epoch: 3, Revoked: []string{"gone"}, Created: time.Now().Unix()}
+	_ = identity.SignRevocations(a.Priv, r)
+	pc.send(t, sigMsg{Type: "revocations", List: r})
+	if m := admin.nextId(t); m.Type != "revocations" || m.List == nil || m.List.Seq != 3 {
+		t.Fatalf("the admin must get the pod's list, got %q %+v", m.Type, m.List)
+	}
+	admin.sendId(t, idMsg{Type: "revocations"})
+	if m := admin.nextId(t); m.List == nil || m.List.Seq != 3 || m.List.Account != a.ID {
+		t.Fatalf("the relay must hold the pod's list, got %+v", m.List)
+	}
+}

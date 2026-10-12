@@ -62,14 +62,14 @@ No e-mail, no password. An account is a key. **Done** (`pod/internal/identity`, 
 ### Pairing
 
 - **First pod**: `web-ide-pod pair create` makes the account (phrase shown once, three words asked back) or `pair restore` takes the phrase typed; `pair status` shows the device, the account and the fingerprints.
-- **Another pod**: `web-ide-pod pair join` prints a code, a terminal QR and the 4-word fingerprint of its key, and waits for an admin; the phrase is typed instead when no admin is around.
+- **Another pod**: `web-ide-pod pair join` prints a code, a terminal QR and the 4-word fingerprint of its key, and waits for an admin — through the relay, or on the LAN when the pod has none (see *Local network*); `pair join --phrase` takes the phrase instead when no admin is around, and the pod keeps its own key (unlike `restore`, which gives it the admin key of the phrase).
 - **A phone or a tablet**: scan the QR shown by an admin device (like WhatsApp Web) — the invite link `#join=<code>` opens the bootstrap page, which shows its own fingerprint and waits for the approval.
 - **A computer**: the QR, or the phrase, whichever is easier.
 - The code is 8 base32 characters, single use, 10 minutes; the 4-word fingerprint read on both sides is the guard against a relay that swaps the key. A code that already holds a key refuses another one.
 
 ### Revocation
 
-An admin device signs a revocation list, stored by the relay and checked by every pod. Revoking a device also rotates the sync key (next epoch, data encrypted again, new key wrapped for each remaining device) and suggests renewing the API keys of the vault, since a key that leaked stays leaked.
+An admin device signs a revocation list, stored by the relay and checked by every pod. `web-ide-pod pair revoke <key>` signs one from the phrase typed, offline; the pods pass a newer list on to each other over the LAN and to the relay. Revoking a device also rotates the sync key (next epoch, data encrypted again, new key wrapped for each remaining device) and suggests renewing the API keys of the vault, since a key that leaked stays leaked.
 
 The relay stores the list only when its signature verifies against the account it names and its `seq` is higher than the stored one, and pushes it to the online devices of the account; a relay that replays an older list changes nothing. The panel (Settings > Remote access > Devices) lists the devices of the account with their kind, date and fingerprint, approves a request by its code after comparing the fingerprint, shows the invite QR, and revokes.
 
@@ -99,11 +99,23 @@ The **token mode** of M1 (`#t=`) stays for unpaired pods, and `127.0.0.1` is unc
 
 - **Unified home page**: one *Projects* block per pod, online or not.
 - Each pod publishes its project list (names, paths, icons, branches) **encrypted** with the sync key; the relay caches the blobs, so the home page shows at once, offline pods included (greyed). The connection to a pod is made when one of its projects opens.
-- **Sites**: pods that share a public address and see each other on the LAN form a site. The relay elects one **gateway** per site (the pod online for the longest; a pod may be marked *preferred*) and moves the role to another pod when it goes offline.
+- **Sites**: the pods that see each other on the LAN (see *Local network*) form a site. The relay elects one **gateway** per site (the pod online for the longest; a pod may be marked *preferred*) and moves the role to another pod when it goes offline.
 - The browser opens one tunnel to a gateway; the gateway reaches the pods of its site directly over the LAN and the pods of other sites pod to pod over WebRTC. Every hop checks the certificates: a pod not paired with the account is invisible, even on the same LAN.
 - A pod may set its LAN address by hand when discovery gets it wrong.
 - **Updates**: the home page shows outdated pods; the gateway asks a pod to update itself (with the keeper, #19, an update keeps terminals and streams).
 - **Wake-on-LAN**: a pod records the MAC addresses of its machine; an online pod of the same site sends the magic packet (a machine cannot be woken from the internet without a device awake on its LAN). **Shutdown** is off by default; `sudo web-ide-pod allow-shutdown` installs the rule that lets the pod power the machine off.
+
+## Local network
+
+**Done** (#50, `pod/internal/lan`). The pods of one account reach each other on the LAN with no relay at all — no internet, no relay configured, or the relay down.
+
+- **LAN port**: a paired pod opens a TLS port of its own (`:4436`; `-lan`, `lan.addr` in `config.json`, `off`). An unpaired pod opens none. The certificate is self-signed (`lan.crt`, `lan.key`) and serves as both the server and the client certificate: TLS only encrypts, trust comes from the handshake.
+- **Handshake**: the handshake v2 of the tunnel on `/_lan/hello`, the dialing pod in the browser role, bound to the two TLS leaf fingerprints instead of the DTLS ones. A machine in the middle that shows its own certificate makes a signature fail. The peer must be a `pod` certificate of the pinned account, not revoked; the token mode is refused.
+- **Control link**: the hello WebSocket stays open (pings every 15 s). Both pods tell their name, version and LAN port (a pod that was dialed dials back) and pass their revocation lists on: a newer list spreads from pod to pod and goes to the relay as soon as a pod of the account reaches it (pod link `revocations`), so a list signed offline is never undone by the next one an admin signs from the relay's copy. While the link is up, the LAN port serves the HTTP and WebSocket requests that carry the peer's TLS certificate as requests of the machine itself.
+- **Discovery**: mDNS / DNS-SD `_web-ide._tcp` with `pod` (a hash of the device key) and `acct` (a hash of the account id, not the id: the announcement cannot be followed from one network to the next); nothing secret. Only the announcements of the account's tag are dialed. Addresses typed by hand (`lan.peers`, Settings > Remote access > Local network) for another subnet or a network without multicast; the reason an address fails is shown (no answer, another account, revoked, proof, another version).
+- **Gateway**: the local pod opens one port per peer on its own host (kept in `lan.json`), a reverse proxy pinned to the peer's TLS certificate. The page of the peer runs at the root of its own origin, so its paths need no prefix, and the browser sends it the token cookie of the local pod (a cookie belongs to a host, not a port); the proxy drops it and the peer trusts the certificate instead. `/_lan/gateway` tells the page of a peer which pod serves it: its home page shows *← Back to …* and no LAN blocks of its own. The home page of the local pod shows one *Projects* block per peer (its `projects.list`, kept fresh over a WebSocket of the protocol).
+- **Pairing without a relay**: `pair join` serves its request on its LAN port (`/_lan/join`, announced by mDNS with a `join` code, or its address typed by hand). A paired pod that finds it shows it in the Devices panel: with no relay, the pod answers the panel's link (`/_relay/identity`) itself, with the same messages — the devices it knows, the joining pods, revocations passed on. The admin browser signs the certificate, the pod posts it to the joining pod (pinned to the TLS certificate it read), which checks it is for its own key.
+- Limits: the gateway ports are on the host of the pod address, so they work where the pod is reached directly (`127.0.0.1`, or the LAN with `-allow-remote`), not through `tailscale serve`, which maps one port. Inviting a phone by QR needs the relay.
 
 ## Settings sync
 
@@ -188,7 +200,7 @@ The identity of *Identity* above, in three places:
 - **`web-ide-pod pair`**: `create`, `restore`, `join`, `status` (see *Pairing*). The relay keeps the identity tables (`accounts`, `devices`, `pairings`) to list the devices and route pairing; it never holds a private key or the phrase, so it can check a signature against an account id but never make one — only a device holding the account key can approve a pairing or push a revocation list.
 - **Settings > Remote access > Devices**: the admin panel, on the relay origin and on `localhost` (see *Identity*). The pod only carries the frames of the pairing link.
 
-The identity works **without a relay**: `pair create`, `restore` and `status` run offline, `identity.json` and the certificate checks do not depend on `relayclient`, and the handshake v2 proof takes the two peer fingerprints as plain inputs — so LAN discovery (#50) can feed it the TLS certificate fingerprints of a direct WebSocket instead of the DTLS ones.
+The identity works **without a relay**: `pair create`, `restore` and `status` run offline, `identity.json` and the certificate checks do not depend on `relayclient`, and the handshake v2 proof takes the two peer fingerprints as plain inputs — so the LAN link (#50, *Local network*) feeds it the TLS certificate fingerprints of a direct WebSocket instead of the DTLS ones.
 
 The e2e `identity` suite pairs a pod with the CLI and two browsers (a virtual authenticator answering the WebAuthn PRF), and checks that an unpaired browser and a revoked one are refused; the swapped-offer refusal is a Go integration test with Pion peers and a relay that rewrites the SDP.
 

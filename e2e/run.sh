@@ -6,10 +6,11 @@ set -u
 cd "$(dirname "$0")"
 ROOT=$(cd .. && pwd)
 SUITES=("$@")
-[ ${#SUITES[@]} -eq 0 ] && SUITES=(editing editor features restore+ keyboard mousenav popups commands git projects explorer lsp llm agent chat plan doodle kanban kanbanai kanbangit docker tunnels preview subagents orchestrator mobile i18n speech perf keeper relay identity)
+[ ${#SUITES[@]} -eq 0 ] && SUITES=(editing editor features restore+ keyboard mousenav popups commands git projects explorer lsp llm agent chat plan doodle kanban kanbanai kanbangit docker tunnels preview subagents orchestrator mobile i18n speech perf keeper relay identity lan)
 [ -d node_modules/playwright-core ] || npm install --no-audit --no-fund >/dev/null
 PORT=${E2E_PORT:-4519}
 RELAY_PORT=${E2E_RELAY_PORT:-4430}
+LAN_PORT=${E2E_LAN_PORT:-4520}
 MODELS=${E2E_MODELS:-$HOME/.cache/web-ide-e2e/models}
 TMP=$(mktemp -d)
 KEEPER_PID=
@@ -52,6 +53,9 @@ start_pod() {
   EXTRA=()
   # The identity suite pairs the pod with the CLI, so its pod must reach the relay too.
   if [ "${1:-}" = relay ] || [ "${1:-}" = identity ]; then EXTRA=(-relay "http://127.0.0.1:$RELAY_PORT" -force-turn); fi
+  # The LAN link only in its suite, on loopback and with the addresses typed (no mDNS): a
+  # paired pod of another suite must not take the port of the IDE's own pod.
+  if [ "${1:-}" = lan ]; then EXTRA+=(-lan "127.0.0.1:$LAN_PORT" -mdns=false -name alpha); else EXTRA+=(-lan off); fi
   mkdir -p "$TMP/ws" "$TMP/data" "$MODELS"
   # Speech models are kept between runs (downloaded once from Hugging Face).
   ln -s "$MODELS" "$TMP/data/models"
@@ -92,6 +96,7 @@ EOF
   bash "$TMP/launch-pod.sh"
 }
 export E2E_URL="http://127.0.0.1:$PORT" E2E_WS="$TMP/ws" E2E_OUT="${E2E_OUT:-$TMP}" E2E_RESTART_POD="$TMP/restart-pod.sh" E2E_DATA="$TMP/data"
+export E2E_LAN_PORT="$LAN_PORT" E2E_TMP="$TMP"
 export E2E_RELAY_URL="http://127.0.0.1:$RELAY_PORT" E2E_RELAY_PORT="$RELAY_PORT" E2E_RELAY_DATA="$TMP/relaydata" E2E_BIN="$ROOT/bin/web-ide-pod"
 mkdir -p "$E2E_OUT"
 status=0
