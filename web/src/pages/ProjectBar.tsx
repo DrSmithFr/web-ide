@@ -1,5 +1,6 @@
 // Project part of the menu bar: icon, title, and the selector of the worktrees of the
 // repository (main folder, tickets, other branches), shown in the same window or in a new one.
+import { podPath } from '../app/base'
 import { createEffect, createSignal, Show } from 'solid-js'
 import { RpcError, request } from '../pod/rpc'
 import { home, project, showWorktree } from '../state/project'
@@ -151,7 +152,7 @@ export function ProjectBar() {
     }
     toast(t('Worktree removed'), 'ok')
     // A window opened on it goes back to the main folder (one showing it does by itself).
-    if (w.project && w.project === home()?.id) location.assign(`/project/${encodeURIComponent(root)}`)
+    if (w.project && w.project === home()?.id) location.assign(podPath(`/project/${encodeURIComponent(root)}`))
   }
 
   return (

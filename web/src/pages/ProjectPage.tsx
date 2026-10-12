@@ -1,4 +1,5 @@
 // Main window of a project: menu bar, icon rails, side panels, editor area, bottom tools.
+import { podPath } from '../app/base'
 import { createEffect, createSignal, For, type JSX, onCleanup, onMount, Show } from 'solid-js'
 import { Dynamic } from 'solid-js/web'
 import { RpcError, formatRate, on as onPod, podRates, podState } from '../pod/rpc'
@@ -522,7 +523,7 @@ function Resizer(props: { onDrag: (delta: number) => void; dir: 'x' | 'y' }) {
 /** One zone with its tool, a side panel when `width` is given. */
 function ZonePanel(props: { zone: Zone; width?: number; style?: JSX.CSSProperties }) {
   const id = () => shownIn(session, props.zone)!
-  const detach = () => window.open(`/project/${project()!.id}/tool/${id()}`, `tool-${id()}`, id() === 'assistant' ? 'popup,width=1100,height=820' : 'popup,width=420,height=760')
+  const detach = () => window.open(podPath(`/project/${project()!.id}/tool/${id()}`), `tool-${id()}`, id() === 'assistant' ? 'popup,width=1100,height=820' : 'popup,width=420,height=760')
   const side = props.zone === 'left' || props.zone === 'right'
   return (
     <aside class={`zone zone-${props.zone}`} classList={{ side, [`side-${props.zone}`]: side, focused: focusPart() === props.zone }} data-tool={id()} data-focus={props.zone} tabIndex={phone() ? -1 : undefined} style={props.width ? { width: `${props.width}px` } : props.style}>

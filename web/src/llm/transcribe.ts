@@ -1,6 +1,7 @@
 // Speech to text in the browser (Whisper in a worker). Recording, decoding and recognition
 // all happen in the page: the audio is never sent anywhere. The model files are downloaded
 // once through the pod (cache in ~/.web-ide/models).
+import { podPath } from '../app/base'
 import { createStore } from 'solid-js/store'
 // By path: the package exports do not list these files.
 import ortMjs from '../../node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.asyncify.mjs?url'
@@ -81,7 +82,7 @@ function getWorker() {
   if (worker) return worker
   worker = new Worker(new URL('./whisper.worker.ts', import.meta.url), { type: 'module' })
   const abs = (u: string) => new URL(u, location.href).href
-  worker.postMessage({ type: 'config', remoteHost: `${location.origin}/models/hf/`, wasm: { mjs: abs(ortMjs), wasm: abs(ortWasm) } })
+  worker.postMessage({ type: 'config', remoteHost: `${location.origin}${podPath('/models/hf/')}`, wasm: { mjs: abs(ortMjs), wasm: abs(ortWasm) } })
   worker.onmessage = (e) => {
     const m = e.data
     if (m.type === 'progress') setSpeech({ loaded: m.loaded, total: m.total })

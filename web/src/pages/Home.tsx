@@ -1,4 +1,5 @@
 // Home page: project list, creation of local or SSH projects, workspace folders not yet added.
+import { podPath } from '../app/base'
 import { createEffect, createResource, createSignal, For, onCleanup, onMount, Show } from 'solid-js'
 import { createStore } from 'solid-js/store'
 import { on as onPod, request } from '../pod/rpc'
@@ -82,7 +83,7 @@ export function Home() {
         <span class="muted small mono" data-testid="pod-version">{ws()?.version}</span>
         <Show when={gateway()}>
           {(g) => (
-            <a class="btn small" href={gatewayHome(g())} data-testid="lan-back">
+            <a class="btn small" href={gatewayHome} data-testid="lan-back">
               {t('← Back to {name}', { name: g().name })}
             </a>
           )}
@@ -110,7 +111,7 @@ export function Home() {
               <article class="project-card">
                 <a
                   class="project-open"
-                  href={`/project/${p.id}`}
+                  href={podPath(`/project/${p.id}`)}
                   onClick={(e) => {
                     e.preventDefault()
                     navigate(`/project/${p.id}`)

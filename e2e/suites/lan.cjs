@@ -159,12 +159,14 @@ run(async ({ page }) => {
     assert(pair(fox.data, ['status']).includes('certificate : foxtrot, pod'), 'foxtrot holds its certificate')
     await admin.close()
 
-    // 6. A project of bravo opens through the gateway port: its page comes from bravo.
+    // 6. A project of bravo opens through alpha, under /_lan/pod/<key>/ of its origin: its
+    // page comes from bravo.
     const home = page.url()
     await page.click('[data-testid=lan-pod][data-name=bravo] [data-testid=lan-project]')
     await page.waitForSelector('.menubar', { timeout: 20000 })
     const url = new URL(page.url())
-    assert(url.port !== new URL(home).port && url.pathname === '/project/bravo-app', 'the project opens on the gateway port of bravo: ' + page.url())
+    const prefix = url.pathname.match(/^\/_lan\/pod\/[\w-]+/)?.[0]
+    assert(url.origin === new URL(home).origin && prefix && url.pathname === prefix + '/project/bravo-app', 'the project opens under the path of bravo on alpha: ' + page.url())
     await open(page, 'hello.txt')
     assert((await text(page)).startsWith('hello from bravo'), 'the file comes from bravo: ' + (await text(page)))
     await page.click('.pane.active .ed-content')
@@ -187,13 +189,13 @@ run(async ({ page }) => {
     assert(true, 'a terminal runs in the folder of bravo')
 
     // 7. The home page of bravo, through the gateway, leads back to alpha.
-    await page.goto(`${url.origin}/`)
+    await page.goto(`${url.origin}${prefix}/`)
     await page.waitForSelector('[data-testid=lan-back]')
     assert((await page.textContent('[data-testid=lan-back]')).includes('alpha'), 'the page of bravo links back to alpha')
     assert(!(await page.$('[data-testid=lan-pod]')), 'the page of bravo shows no LAN blocks of its own')
     await page.click('[data-testid=lan-back]')
     await page.waitForSelector('[data-testid=lan-pod][data-name=bravo]')
-    assert(new URL(page.url()).port === new URL(home).port, 'back on the home page of alpha')
+    assert(new URL(page.url()).pathname === '/', 'back on the home page of alpha')
   } finally {
     for (const p of pods) p.kill()
     // The logs of the extra pods, next to the screenshot of a failure.

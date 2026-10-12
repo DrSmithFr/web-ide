@@ -5,112 +5,71 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
-	"log"
-	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strconv"
+	"strings"
 	"time"
 
 	"github.com/coder/websocket"
 )
 
-// GatewayPath answers, on a gateway port, which pod serves it: the page of a peer shows a
-// link back to the home page of the gateway. The pod itself answers {} there.
+// GatewayPath answers, under the path of a peer, which pod serves it: the page of a peer
+// shows a link back to the home page of the gateway. The pod itself answers {} there.
 const GatewayPath = "/_lan/gateway"
 
-// gateway is the local port of one peer: a reverse proxy to its LAN port. The page of the
-// peer is served at the root of its own origin, so its paths need no prefix, and the
-// browser sends it the token cookie of the pod (a cookie belongs to a host, not a port).
-type gateway struct {
-	port int
-	srv  *http.Server
-}
+// PeerPrefix is the start of the path of a peer on its gateway pod: /_lan/pod/<device key>.
+// The page of a peer runs under it, on the origin of the gateway: one origin for the
+// installed app, and the browser sends the token cookie of the gateway, which checks it.
+const PeerPrefix = "/_lan/pod/"
 
-func (g *gateway) close() { _ = g.srv.Close() }
+// BaseHeader tells a peer the path its page runs under (server.ServeTrusted).
+const BaseHeader = "X-Webide-Base"
 
-// startGateway opens the gateway port of a peer, the same port as in the last run when it
-// is free.
-func (m *Manager) startGateway(key string) {
+// ServeGateway forwards a request under the path of a peer to that peer, over the link we
+// dialed, with our TLS certificate, which the peer trusts. The server checked the token.
+func (m *Manager) ServeGateway(w http.ResponseWriter, r *http.Request) {
+	key, rest, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, PeerPrefix), "/")
+	base := PeerPrefix + key
+	if rest == "" && !strings.HasSuffix(r.URL.Path, "/") {
+		http.Redirect(w, r, base+"/", http.StatusFound)
+		return
+	}
+	if "/"+rest == GatewayPath {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"name": m.cfg.Name})
+		return
+	}
 	m.mu.Lock()
-	p := m.peers[key]
-	if p == nil || p.gw != nil {
-		m.mu.Unlock()
-		return
-	}
-	port := m.ports[key]
-	m.mu.Unlock()
-
-	// The host of the pod address: loopback, or every interface when the pod is open to
-	// the network (the token cookie still guards the port).
-	host := m.cfg.GatewayHost
-	ln, err := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(port)))
-	if err != nil && port != 0 {
-		ln, err = net.Listen("tcp", net.JoinHostPort(host, "0"))
-	}
-	if err != nil {
-		log.Printf("lan: gateway of %s: %v", key, err)
-		return
-	}
-	g := &gateway{port: ln.Addr().(*net.TCPAddr).Port}
-	g.srv = &http.Server{Handler: m.gatewayHandler(key), ReadHeaderTimeout: 10 * time.Second}
-	m.mu.Lock()
-	if p.gw != nil {
-		m.mu.Unlock()
-		_ = ln.Close()
-		return
-	}
-	p.gw = g
-	if m.ports[key] != g.port {
-		m.ports[key] = g.port
-		m.savePorts()
+	var addr, fp string
+	if p := m.peers[key]; p != nil && p.out != nil {
+		addr, fp = p.out.addr, p.out.serverFP
 	}
 	m.mu.Unlock()
-	go func() { _ = g.srv.Serve(ln) }()
-}
-
-// gatewayHandler checks the request as the pod checks its own page, then forwards it to the
-// peer over the link we dialed, with our TLS certificate, which the peer trusts.
-func (m *Manager) gatewayHandler(key string) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if m.cfg.Allow != nil && !m.cfg.Allow(r) {
-			http.Error(w, "open the IDE on its own address first: this port serves another pod through it", http.StatusUnauthorized)
-			return
-		}
-		if r.URL.Path == GatewayPath {
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{"name": m.cfg.Name, "port": m.cfg.HomePort})
-			return
-		}
-		m.mu.Lock()
-		var addr, fp string
-		if p := m.peers[key]; p != nil && p.out != nil {
-			addr, fp = p.out.addr, p.out.serverFP
-		}
-		m.mu.Unlock()
-		if addr == "" {
-			http.Error(w, "this pod is offline", http.StatusBadGateway)
-			return
-		}
-		target := &url.URL{Scheme: "https", Host: addr}
-		rp := &httputil.ReverseProxy{
-			Rewrite: func(pr *httputil.ProxyRequest) {
-				pr.SetURL(target)
-				// The peer checks the WebSocket origin against the host the browser used.
-				pr.Out.Host = pr.In.Host
-				// The token of this pod is not the peer's business: the peer trusts our
-				// certificate instead.
-				pr.Out.Header.Del("Cookie")
-			},
-			Transport:     m.transport(fp),
-			FlushInterval: -1,
-			ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
-				http.Error(w, "this pod does not answer", http.StatusBadGateway)
-			},
-		}
-		rp.ServeHTTP(w, r)
-	})
+	if addr == "" {
+		http.Error(w, "this pod is offline", http.StatusBadGateway)
+		return
+	}
+	target := &url.URL{Scheme: "https", Host: addr}
+	rp := &httputil.ReverseProxy{
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			pr.SetURL(target)
+			pr.Out.URL.Path = "/" + rest
+			pr.Out.URL.RawPath = ""
+			// The peer checks the WebSocket origin against the host the browser used.
+			pr.Out.Host = pr.In.Host
+			pr.Out.Header.Set(BaseHeader, base)
+			// The token of this pod is not the peer's business: the peer trusts our
+			// certificate instead.
+			pr.Out.Header.Del("Cookie")
+		},
+		Transport:     m.transport(fp),
+		FlushInterval: -1,
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, "this pod does not answer", http.StatusBadGateway)
+		},
+	}
+	rp.ServeHTTP(w, r)
 }
 
 // transport reaches a peer with our TLS certificate, and accepts only the certificate the

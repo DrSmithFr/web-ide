@@ -1,6 +1,7 @@
 // Kanban of the project: tickets kept by the pod in SQLite (see docs/kanban.md). The list
 // is shared by the board, the side panel and the ticket tabs, and follows the changes
 // made by other windows and by the assistant (event kanban.changed).
+import { podPath } from '../app/base'
 import { createSignal } from 'solid-js'
 import { createStore, reconcile } from 'solid-js/store'
 import { on, request } from '../pod/rpc'
@@ -355,7 +356,7 @@ export function childProject(ticket: number) {
  */
 export function openWorktreeWindow(projectId: string, assistant = false) {
   const query = assistant ? '?assistant=1' : ''
-  const url = `/project/${encodeURIComponent(projectId)}${query}`
+  const url = podPath(`/project/${encodeURIComponent(projectId)}${query}`)
   const w = window.open('', `project-${projectId}`)
   if (!w) return
   if (query || w.location.href === 'about:blank') w.location.href = url

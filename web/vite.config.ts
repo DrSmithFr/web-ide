@@ -5,6 +5,9 @@ const pod = process.env.POD ?? 'http://127.0.0.1:4433'
 
 export default defineConfig({
   plugins: [solid()],
+  // Relative paths: the page also runs under /_lan/pod/<key>/ of a gateway pod, which
+  // serves index.html with its paths starting there (pod/internal/server).
+  base: './',
   build: {
     outDir: '../pod/webdist/dist',
     emptyOutDir: true,

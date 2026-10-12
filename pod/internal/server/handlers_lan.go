@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"regexp"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
@@ -16,7 +17,18 @@ type LAN interface {
 	SetManual(addrs []string) error
 	// ServeIdentity answers the Devices panel when the pod has no relay.
 	ServeIdentity(w http.ResponseWriter, r *http.Request)
+	// ServeGateway serves the page of a peer under peerPrefix.
+	ServeGateway(w http.ResponseWriter, r *http.Request)
 }
+
+// peerPrefix is the path of the pages of the peers on this pod (lan.PeerPrefix).
+const peerPrefix = "/_lan/pod/"
+
+// baseKey holds, in the context of a request of a peer, the path its page runs under on
+// the gateway pod (lan.BaseHeader).
+type baseKey struct{}
+
+var basePattern = regexp.MustCompile(`^/_lan/pod/[A-Za-z0-9_-]+$`)
 
 func (s *Server) registerLAN() {
 	s.handle("lan.status", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
@@ -50,14 +62,13 @@ func (s *Server) LANChanged() {
 }
 
 // ServeTrusted serves a request of a pod of the account that proved who it is on the LAN:
-// as a request of this machine, like a window that came through the tunnel.
+// as a request of this machine, like a window that came through the tunnel. Its page runs
+// under the path the gateway tells.
 func (s *Server) ServeTrusted(w http.ResponseWriter, r *http.Request) {
 	r.Header.Set("Cookie", cookieName+"="+s.Token)
 	r.RemoteAddr = "127.0.0.1:0"
+	if base := r.Header.Get("X-Webide-Base"); basePattern.MatchString(base) {
+		r = r.WithContext(context.WithValue(r.Context(), baseKey{}, base))
+	}
 	s.ServeHTTP(w, r)
-}
-
-// LANAllowed checks a request on a gateway port of the LAN as the pod checks its own page.
-func (s *Server) LANAllowed(r *http.Request) bool {
-	return (s.AllowRemote || loopback(r)) && s.authorized(r)
 }

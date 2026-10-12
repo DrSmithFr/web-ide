@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -228,21 +227,16 @@ func main() {
 }
 
 // startLAN runs the link to the other pods of the account on the local network: the LAN
-// port, mDNS, and one gateway port per pod found, on the host of the pod address.
+// port, mDNS, and the page of each pod found, served under /_lan/pod/<key>/.
 func startLAN(ctx context.Context, st *store.Store, cfg *config.Config, srv *server.Server, podID *identity.PodIdentity, mdns bool, onRevocations func(*identity.Revocations)) *lan.Manager {
-	host, port, _ := net.SplitHostPort(cfg.Addr)
-	homePort, _ := strconv.Atoi(port)
 	m, err := lan.New(lan.Config{
-		Dir:         st.Dir(),
-		Addr:        cfg.LAN.Addr,
-		Identity:    podID,
-		Name:        hostname(),
-		Version:     version,
-		Handler:     http.HandlerFunc(srv.ServeTrusted),
-		Allow:       srv.LANAllowed,
-		GatewayHost: host,
-		HomePort:    homePort,
-		Peers:       cfg.LAN.Peers,
+		Dir:      st.Dir(),
+		Addr:     cfg.LAN.Addr,
+		Identity: podID,
+		Name:     hostname(),
+		Version:  version,
+		Handler:  http.HandlerFunc(srv.ServeTrusted),
+		Peers:    cfg.LAN.Peers,
 		SavePeers: func(peers []string) error {
 			cfg.LAN.Peers = peers
 			return cfg.Save(st)

@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"sync"
@@ -27,7 +26,7 @@ const DefaultAddr = ":4436"
 
 // Config of the LAN link of a pod.
 type Config struct {
-	Dir      string // the data folder: lan.crt, lan.key, lan.json
+	Dir      string // the data folder: lan.crt, lan.key
 	Addr     string // the listen address of the LAN port (":4436")
 	Identity *identity.PodIdentity
 	Name     string // told to the peers (the host name)
@@ -35,13 +34,6 @@ type Config struct {
 	// Handler serves a request of a trusted peer as a request of the machine itself
 	// (server.ServeTrusted): the peer proved it is a device of the account.
 	Handler http.Handler
-	// Allow checks a request on a gateway port the way the pod checks its own page (the
-	// token cookie, which a browser sends to every port of the host).
-	Allow func(*http.Request) bool
-	// GatewayHost is the host the gateway ports listen on: the host of the pod address.
-	GatewayHost string
-	// HomePort is the port of the pod page, for the link back from a peer's page.
-	HomePort int
 	// Peers are the addresses typed by hand (host:port), for a network where mDNS fails.
 	Peers []string
 	// SavePeers stores the addresses typed by hand (config.json).
@@ -58,7 +50,7 @@ type Config struct {
 }
 
 // Manager runs the LAN link of a pod: its listener, the control links with the peers, the
-// discovery and the gateway ports.
+// discovery and the gateway to the peers (ServeGateway).
 type Manager struct {
 	cfg    Config
 	cert   tls.Certificate
@@ -78,7 +70,6 @@ type Manager struct {
 	joins     map[string]*joinReq       // joining pods, by address
 	browsers  map[string]*identity.Cert // certificates of the browsers of the Devices panel
 	idLinks   map[*idLink]bool          // the open links of the Devices panel
-	ports     map[string]int            // gateway port by device key (lan.json)
 	seq       int64                     // the seq of the last revocation list passed on
 	announced string                    // the account announced by mDNS
 	stopAnn   func()
@@ -105,7 +96,6 @@ type peer struct {
 	version  string
 	links    map[*link]bool
 	out      *link // the link we dialed: the gateway goes through it
-	gw       *gateway
 	projects json.RawMessage
 }
 
@@ -132,9 +122,7 @@ func New(cfg Config) (*Manager, error) {
 		limits: tunnel.NewRateLimiter(20, time.Minute),
 		cands:  map[string]*candidate{}, peers: map[string]*peer{}, trusted: map[string]*trust{}, joins: map[string]*joinReq{},
 		browsers: map[string]*identity.Cert{}, idLinks: map[*idLink]bool{},
-		ports: map[string]int{},
 	}
-	m.loadPorts()
 	for _, a := range cfg.Peers {
 		m.addCandidate(a, "manual")
 	}
@@ -565,7 +553,6 @@ func (m *Manager) attach(l *link, peerFP string) {
 	}
 	m.mu.Unlock()
 	if start {
-		m.startGateway(l.peer.Key)
 		go m.watchProjects(l)
 	}
 	m.changed()
@@ -649,9 +636,6 @@ func (m *Manager) closeAll() {
 		for l := range p.links {
 			links = append(links, l)
 		}
-		if p.gw != nil {
-			p.gw.close()
-		}
 	}
 	if m.stopAnn != nil {
 		m.stopAnn()
@@ -678,8 +662,8 @@ type PeerView struct {
 	Version     string `json:"version"`
 	Addr        string `json:"addr"`
 	Online      bool   `json:"online"`
-	// Port is the gateway port of the peer on this pod: its page, served through us.
-	Port     int             `json:"port"`
+	// Path is where the page of the peer is served through this pod (empty: offline).
+	Path     string          `json:"path"`
 	Projects json.RawMessage `json:"projects,omitempty"`
 }
 
@@ -715,8 +699,8 @@ func (m *Manager) Status() Status {
 		if p.out != nil {
 			v.Addr = p.out.addr
 		}
-		if p.gw != nil {
-			v.Port = p.gw.port
+		if p.out != nil {
+			v.Path = PeerPrefix + key
 		}
 		st.Peers = append(st.Peers, v)
 	}
@@ -761,29 +745,6 @@ func (m *Manager) SetManual(addrs []string) error {
 	}
 	m.changed()
 	return nil
-}
-
-// ---------- gateway ports, kept from one run to the next ----------
-
-type portsFile struct {
-	Ports map[string]int `json:"ports"`
-}
-
-func (m *Manager) loadPorts() {
-	data, err := os.ReadFile(filepath.Join(m.cfg.Dir, "lan.json"))
-	if err != nil {
-		return
-	}
-	var f portsFile
-	if json.Unmarshal(data, &f) == nil && f.Ports != nil {
-		m.ports = f.Ports
-	}
-}
-
-// savePorts writes lan.json; m.mu is held.
-func (m *Manager) savePorts() {
-	data, _ := json.MarshalIndent(portsFile{Ports: m.ports}, "", "  ")
-	_ = os.WriteFile(filepath.Join(m.cfg.Dir, "lan.json"), data, 0o600)
 }
 
 // View is Status for the page (server.LAN).

@@ -11,6 +11,7 @@
 // /_relay/identity.js by the relay and by the pod), so the browser and the pod agree on every
 // byte a signature covers. The pod only carries the frames of the pairing link: it holds no
 // account key and cannot approve a pairing or sign a revocation list.
+import { podPath } from '../app/base'
 import { createSignal, For, Show, onCleanup, onMount } from 'solid-js'
 import { request } from '../pod/rpc'
 import { errorToast, toast } from '../ui/toast'
@@ -40,7 +41,7 @@ interface Identity {
   KindBrowser: string
 }
 
-const IDENTITY_PATH = '/_relay/identity.js'
+const IDENTITY_PATH = podPath('/_relay/identity.js')
 
 const deviceName = () => (navigator as any).userAgentData?.platform || navigator.platform || 'browser'
 

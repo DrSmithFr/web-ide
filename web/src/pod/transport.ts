@@ -1,6 +1,8 @@
 // Transport of the front end to the pod: a WebSocket on 127.0.0.1, or a MessagePort to the
 // bootstrap page of the relay (which owns the WebRTC connection). Both carry the same JSON
 // protocol, one whole message at a time.
+import { base } from '../app/base'
+
 export interface Channel {
   send(text: string): void
   onMessage(cb: (text: string) => void): void
@@ -15,7 +17,7 @@ export function wsChannel(): Channel {
   const handlers = { open: () => {}, close: () => {}, message: (_: string) => {} }
   let sock: WebSocket | null = null
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  sock = new WebSocket(`${proto}//${location.host}/ws`)
+  sock = new WebSocket(`${proto}//${location.host}${base}/ws`)
   sock.onopen = () => handlers.open()
   sock.onmessage = (ev) => handlers.message(ev.data as string)
   sock.onclose = () => handlers.close()

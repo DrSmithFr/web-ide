@@ -4,6 +4,10 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+### Changed
+
+- A project of another pod of the LAN opens under `/_lan/pod/<key>/` of the local pod, not on a port of its own: it stays in the window of the installed app, with no warning bar of an outside site.
+
 ## [1.10.0] - 2026-10-12
 
 ### Added
