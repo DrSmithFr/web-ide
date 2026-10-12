@@ -32,9 +32,18 @@ type sigMsg struct {
 	Secret     string                `json:"secret,omitempty"`
 	Name       string                `json:"name,omitempty"`
 	Account    string                `json:"account,omitempty"`
+	Device     string                `json:"device,omitempty"`
 	Cert       *identity.Cert        `json:"cert,omitempty"`
 	List       *identity.Revocations `json:"list,omitempty"` // pushed to the pods of an account
-	Message    string                `json:"message,omitempty"`
+	// Sync (milestone 4): the pod publishes its X25519 key, reads the wrap of the epoch key made
+	// for it, and exchanges encrypted blobs. The relay cannot read a blob, it only checks the
+	// signature against the device that wrote it.
+	SyncKey *identity.SyncKeyRecord `json:"syncKey,omitempty"`
+	Wrap    *identity.WrapRecord    `json:"wrap,omitempty"`
+	Blob    *identity.BlobRecord    `json:"blob,omitempty"`
+	Kind    string                  `json:"kind,omitempty"`
+	Updated int64                   `json:"updated,omitempty"` // time the stored blob or wrap was written
+	Message string                  `json:"message,omitempty"`
 }
 
 // Server routes signaling between the pods (one persistent link each) and the browsers
@@ -173,6 +182,14 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 			s.mu.Lock()
 			delete(s.browsers, m.Session)
 			s.mu.Unlock()
+		case "syncKey", "wrapGet", "blobGet", "blobPut":
+			// The sync messages of a paired pod. The relay stores ciphertext only: it checks the
+			// signature against the device that wrote it, it cannot read a value.
+			if pc.account == "" {
+				pc.send(sigMsg{Type: "error", Message: "the pod is not paired"})
+				continue
+			}
+			s.handlePodSync(pc, m)
 		}
 	}
 }

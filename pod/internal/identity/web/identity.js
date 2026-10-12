@@ -143,7 +143,8 @@ export function canonicalSyncKey(r) {
 
 export function canonicalBlob(r) {
   return `{"account":${JSON.stringify(r.account)},"kind":${JSON.stringify(r.kind)},` +
-    `"epoch":${r.epoch},"seq":${r.seq},"nonce":${JSON.stringify(r.nonce)},"data":${JSON.stringify(r.data)}}`
+    `"epoch":${r.epoch},"seq":${r.seq},"device":${JSON.stringify(r.device)},"op":${JSON.stringify(r.op)},` +
+    `"nonce":${JSON.stringify(r.nonce)},"data":${JSON.stringify(r.data)}}`
 }
 
 export function canonicalWrap(w) {

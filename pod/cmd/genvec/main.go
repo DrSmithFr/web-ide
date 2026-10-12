@@ -130,7 +130,7 @@ func main() {
 	v.SyncKeyCanonical = rec.Canonical()
 	v.SyncKeySig = identity.Sign(podkey, []byte(rec.Canonical()))
 
-	blob := identity.BlobRecord{Account: a.ID, Kind: identity.KindSettings, Epoch: 1, Seq: 1, Nonce: v.BlobNonce, Data: v.BlobData}
+	blob := identity.BlobRecord{Account: a.ID, Kind: identity.KindSettings, Epoch: 1, Seq: 1, Device: v.DeviceID, Op: identity.OpPut, Nonce: v.BlobNonce, Data: v.BlobData}
 	v.BlobCanonical = blob.Canonical()
 	v.BlobSig = identity.Sign(podkey, []byte(blob.Canonical()))
 

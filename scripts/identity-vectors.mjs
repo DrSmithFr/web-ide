@@ -83,7 +83,7 @@ async function main() {
     failed++
   } catch { console.log('identity vectors: blob aad OK') }
 
-  const blob = { account: v.accountId, kind: identity.KindSettings, epoch: 1, seq: 1, nonce: v.blobNonce, data: v.blobData }
+  const blob = { account: v.accountId, kind: identity.KindSettings, epoch: 1, seq: 1, device: v.deviceId, op: 'put', nonce: v.blobNonce, data: v.blobData }
   check('blobCanonical', identity.canonicalBlob(blob), v.blobCanonical)
   check('blobSig', await identity.sign(deviceKey, identity.canonicalBlob(blob)), v.blobSig)
   const wrap = { account: v.accountId, device: v.deviceId, epoch: 1, key: v.adminXPub, nonce: v.wrapNonce, data: v.wrapData }

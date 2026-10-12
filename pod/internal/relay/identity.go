@@ -25,10 +25,19 @@ type idMsg struct {
 	Cert     *identity.Cert        `json:"cert,omitempty"`
 	List     *identity.Revocations `json:"list,omitempty"`
 	Devices  []Device              `json:"devices,omitempty"`
+	Device   string                `json:"device,omitempty"` // the device a wrap was made for
 	Pairing  *Pairing              `json:"pairing,omitempty"`
 	Pairings []Pairing             `json:"pairings,omitempty"`
-	Lang     string                `json:"lang,omitempty"` // language of the link, for the errors it is sent
-	Message  string                `json:"message,omitempty"`
+	// Sync (milestone 4): the published X25519 key of a device, the wrap of the epoch key for
+	// it, and the encrypted blobs. The relay cannot read a blob, it only checks the signature.
+	SyncKey  *identity.SyncKeyRecord  `json:"syncKey,omitempty"`
+	SyncKeys []identity.SyncKeyRecord `json:"syncKeys,omitempty"`
+	Wrap     *identity.WrapRecord     `json:"wrap,omitempty"`
+	Wraps    []identity.WrapRecord    `json:"wraps,omitempty"`
+	Blob     *identity.BlobRecord     `json:"blob,omitempty"`
+	Updated  int64                    `json:"updated,omitempty"` // time the stored blob or wrap was written
+	Lang     string                   `json:"lang,omitempty"`    // language of the link, for the errors it is sent
+	Message  string                   `json:"message,omitempty"`
 }
 
 // identityConn is one live pairing/admin link: a browser (or the pod CLI) that pairs a
@@ -173,6 +182,8 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			_ = c.send(idMsg{Type: "pair", Pairing: p})
+		case "syncKey", "syncKeys", "wrap", "wraps", "wrapGet", "blobGet", "blobPut":
+			s.handleSync(c, m)
 		case "pairApprove":
 			p, err := s.store.ApprovePairing(m.Code, c.account, m.Cert)
 			if err != nil {

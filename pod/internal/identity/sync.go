@@ -117,6 +117,19 @@ func WrapAAD(account, device string, epoch int64) string {
 	return fmt.Sprintf("%s|%s|%d", account, device, epoch)
 }
 
+// VerifySig checks a signature over a canonical form. The relay has no private key: it can only
+// check that a record was signed by the key it names, which is what makes a wrap, a blob write or
+// a published X25519 key trustworthy.
+func VerifySig(id, sig, canonical string) error {
+	if sig == "" {
+		return i18n.New("no signature")
+	}
+	if !Verify(id, sig, []byte(canonical)) {
+		return i18n.New("the signature does not match")
+	}
+	return nil
+}
+
 // SyncKeyRecord is the X25519 public key a device published, signed by its device key: the
 // guard against a relay that swaps it, the same role the certificate plays for a pairing.
 type SyncKeyRecord struct {
@@ -130,21 +143,30 @@ func (s *SyncKeyRecord) Canonical() string {
 	return fmt.Sprintf(`{"account":%s,"device":%s,"key":%s}`, jstr(s.Account), jstr(s.Device), jstr(s.Key))
 }
 
-// BlobRecord is one write of a blob: the bytes the device key signs.
+// Ops of a blob write.
+const (
+	OpPut = "put"
+	OpDel = "del"
+)
+
+// BlobRecord is one write (or deletion) of a blob: the bytes the device key signs. The device is
+// part of the canonical form, so a signature cannot be attributed to another device; the op is
+// part of it too, so a write cannot be replayed as a deletion.
 type BlobRecord struct {
 	Account string `json:"account"`
 	Kind    string `json:"kind"`
 	Epoch   int64  `json:"epoch"`
 	Seq     int64  `json:"seq"`
 	Device  string `json:"device"`
+	Op      string `json:"op"`
 	Nonce   string `json:"nonce"`
 	Data    string `json:"data"`
 	Sig     string `json:"sig"`
 }
 
 func (b *BlobRecord) Canonical() string {
-	return fmt.Sprintf(`{"account":%s,"kind":%s,"epoch":%d,"seq":%d,"nonce":%s,"data":%s}`,
-		jstr(b.Account), jstr(b.Kind), b.Epoch, b.Seq, jstr(b.Nonce), jstr(b.Data))
+	return fmt.Sprintf(`{"account":%s,"kind":%s,"epoch":%d,"seq":%d,"device":%s,"op":%s,"nonce":%s,"data":%s}`,
+		jstr(b.Account), jstr(b.Kind), b.Epoch, b.Seq, jstr(b.Device), jstr(b.Op), jstr(b.Nonce), jstr(b.Data))
 }
 
 // WrapRecord is the key of an epoch wrapped for a device.

@@ -231,7 +231,7 @@ func TestSyncVectors(t *testing.T) {
 	if Sign(podkey, []byte(rec.Canonical())) != v.SyncKeySig {
 		t.Errorf("sync key signature: got %s want %s", Sign(podkey, []byte(rec.Canonical())), v.SyncKeySig)
 	}
-	blob := &BlobRecord{Account: v.AccountID, Kind: KindSettings, Epoch: 1, Seq: 1, Nonce: v.BlobNonce, Data: v.BlobData}
+	blob := &BlobRecord{Account: v.AccountID, Kind: KindSettings, Epoch: 1, Seq: 1, Device: v.DeviceID, Op: OpPut, Nonce: v.BlobNonce, Data: v.BlobData}
 	if blob.Canonical() != v.BlobCanonical {
 		t.Errorf("blob canonical:\n got %s\nwant %s", blob.Canonical(), v.BlobCanonical)
 	}

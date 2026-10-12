@@ -114,7 +114,8 @@ func (s *Store) Devices(account string) ([]Device, error) {
 
 // SaveRevocations stores a revocation list only when it verifies against the account and its
 // seq is higher than the stored one: a relay that replays an older list changes nothing. It
-// reports whether the list was kept.
+// reports whether the list was kept. The epoch of the stored list is the epoch of the sync key, so
+// a revocation moves it and the pods re-encrypt for the new epoch.
 func (s *Store) SaveRevocations(r *identity.Revocations) (bool, error) {
 	if err := identity.VerifyRevocations(r, r.Account); err != nil {
 		return false, err
@@ -124,7 +125,7 @@ func (s *Store) SaveRevocations(r *identity.Revocations) (bool, error) {
 	var seq int64
 	err := s.db.QueryRow("SELECT seq FROM accounts WHERE id=?", r.Account).Scan(&seq)
 	if err == sql.ErrNoRows {
-		if _, err := s.db.Exec("INSERT INTO accounts (id, revocations, seq) VALUES (?,?,?)", r.Account, jsonQuote(r), r.Seq); err != nil {
+		if _, err := s.db.Exec("INSERT INTO accounts (id, revocations, seq, epoch) VALUES (?,?,?,?)", r.Account, jsonQuote(r), r.Seq, r.Epoch); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -135,7 +136,7 @@ func (s *Store) SaveRevocations(r *identity.Revocations) (bool, error) {
 	if r.Seq <= seq {
 		return false, nil
 	}
-	if _, err := s.db.Exec("UPDATE accounts SET revocations=?, seq=? WHERE id=?", jsonQuote(r), r.Seq, r.Account); err != nil {
+	if _, err := s.db.Exec("UPDATE accounts SET revocations=?, seq=?, epoch=? WHERE id=?", jsonQuote(r), r.Seq, r.Epoch, r.Account); err != nil {
 		return false, err
 	}
 	return true, nil
