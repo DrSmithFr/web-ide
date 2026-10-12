@@ -190,7 +190,7 @@ run(
     // The relay comes back: the pod reconnects by itself (backoff), and the link shows
     // connected again.
     const { spawn } = require('child_process')
-    const relay = spawn(process.env.E2E_BIN, ['-data', process.env.E2E_RELAY_DATA, '-addr', '127.0.0.1:' + process.env.E2E_RELAY_PORT, '-turn-ip', '127.0.0.1', 'relay'], { stdio: 'ignore' })
+    const relay = spawn(process.env.E2E_BIN, ['-data', process.env.E2E_RELAY_DATA, '-addr', '127.0.0.1:' + process.env.E2E_RELAY_PORT, '-turn-ip', '127.0.0.1', '-turn-port', process.env.E2E_TURN_PORT, 'relay'], { stdio: 'ignore' })
     await local.click('.home-head button[title="Settings"]')
     await local.waitForSelector('.settings')
     await local.click('.settings-nav button:has-text("Remote access")')
@@ -202,6 +202,9 @@ run(
 
     assert(!errors.some((e) => e.includes('404')), 'no missing asset through the Service Worker')
     await page.screenshot({ path: OUT + '/relay-home.png' })
+    // The fake model server keeps node alive otherwise: the suite would never end.
+    fake.closeAllConnections()
+    fake.close()
   },
   { url: link(TOKEN) },
 )

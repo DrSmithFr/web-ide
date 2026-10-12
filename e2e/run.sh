@@ -11,6 +11,8 @@ SUITES=("$@")
 PORT=${E2E_PORT:-4519}
 RELAY_PORT=${E2E_RELAY_PORT:-4430}
 LAN_PORT=${E2E_LAN_PORT:-4520}
+# Not the default 3478: the Go tests of the relay bind that one, and may run meanwhile.
+TURN_PORT=${E2E_TURN_PORT:-3479}
 MODELS=${E2E_MODELS:-$HOME/.cache/web-ide-e2e/models}
 TMP=$(mktemp -d)
 KEEPER_PID=
@@ -42,7 +44,7 @@ start_relay() {
   mkdir -p "$TMP/relaydata"
   # TURN on loopback: without -turn-ip the relay advertises the machine IP, and Chromium
   # filters candidates it cannot reach; the suite asserts the pair is a relay one.
-  "$ROOT/bin/web-ide-pod" -data "$TMP/relaydata" -addr "127.0.0.1:$RELAY_PORT" -turn-ip 127.0.0.1 relay >"$TMP/relay.log" 2>&1 </dev/null &
+  "$ROOT/bin/web-ide-pod" -data "$TMP/relaydata" -addr "127.0.0.1:$RELAY_PORT" -turn-ip 127.0.0.1 -turn-port "$TURN_PORT" relay >"$TMP/relay.log" 2>&1 </dev/null &
   RELAY_PID=$!
   export E2E_RELAY_PID=$RELAY_PID
   for _ in $(seq 50); do curl -s -o /dev/null "http://127.0.0.1:$RELAY_PORT/" && break; sleep 0.1; done
@@ -96,7 +98,7 @@ EOF
   bash "$TMP/launch-pod.sh"
 }
 export E2E_URL="http://127.0.0.1:$PORT" E2E_WS="$TMP/ws" E2E_OUT="${E2E_OUT:-$TMP}" E2E_RESTART_POD="$TMP/restart-pod.sh" E2E_DATA="$TMP/data"
-export E2E_LAN_PORT="$LAN_PORT" E2E_TMP="$TMP"
+export E2E_LAN_PORT="$LAN_PORT" E2E_TURN_PORT="$TURN_PORT" E2E_TMP="$TMP"
 export E2E_RELAY_URL="http://127.0.0.1:$RELAY_PORT" E2E_RELAY_PORT="$RELAY_PORT" E2E_RELAY_DATA="$TMP/relaydata" E2E_BIN="$ROOT/bin/web-ide-pod"
 mkdir -p "$E2E_OUT"
 status=0
