@@ -132,14 +132,16 @@ type Message struct {
 	// Status of a tool result: ok, error, denied.
 	Status string `json:"status,omitempty"`
 	// Summary shown folded: a text, or a Text to translate in the page.
-	Summary    json.RawMessage `json:"summary,omitempty"`
-	Diff       []DiffLine      `json:"diff,omitempty"`
-	Model      string          `json:"model,omitempty"`
-	Compacted  bool            `json:"compacted,omitempty"`
-	Kind       string          `json:"kind,omitempty"`
-	Summarized int             `json:"summarized,omitempty"`
-	ThinkMs    int64           `json:"thinkMs,omitempty"`
-	Effort     string          `json:"effort,omitempty"` // reasoning effort of the answer
+	Summary json.RawMessage `json:"summary,omitempty"`
+	Diff    []DiffLine      `json:"diff,omitempty"`
+	Model   string          `json:"model,omitempty"`
+	// Finish: why the server ended the answer (stop, length, tool_calls…), for diagnosis.
+	Finish     string `json:"finish,omitempty"`
+	Compacted  bool   `json:"compacted,omitempty"`
+	Kind       string `json:"kind,omitempty"`
+	Summarized int    `json:"summarized,omitempty"`
+	ThinkMs    int64  `json:"thinkMs,omitempty"`
+	Effort     string `json:"effort,omitempty"` // reasoning effort of the answer
 	// At: when the message was added (Unix ms; for an answer, the end of its generation).
 	At int64 `json:"at,omitempty"`
 	// WaitMs: time a tool call waited for the approval of the user (within its ElapsedMs).

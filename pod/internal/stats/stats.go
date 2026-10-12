@@ -313,7 +313,7 @@ func contextOf(c *agent.Chat) *Context {
 		return ctx
 	}
 	u := usageOf(last)
-	// The reasoning is not sent back to the model: the answer keeps its text and its calls.
+	// The reasoning of an ended turn is not sent back: the answer keeps its text and its calls.
 	ctx.Tokens = u.Prompt + u.Completion - reasoningTokens(last, u.Completion)
 	parts := map[[2]string]int{}
 	total := 0

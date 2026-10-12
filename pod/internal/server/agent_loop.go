@@ -91,8 +91,17 @@ const summaryPrefix = "Summary of the earlier conversation (automatic compaction
 // A page drawn by the model reaches a model reading images as an image: in a user message
 // right after the tool results of its step, since servers often take only text in a tool
 // result.
+//
+// The reasoning goes back for the answers of the current turn (after the last user
+// message): models thinking between their tool calls need it, older turns drop it.
 func apiMessages(system string, msgs []*agent.Message, vision bool) []llm.Message {
 	out := []llm.Message{{Role: "system", Content: agent.String(system)}}
+	turn := 0
+	for i, m := range msgs {
+		if m.Role == "user" {
+			turn = i
+		}
+	}
 	var images []*agent.Message
 	flush := func() {
 		if len(images) == 0 {
@@ -107,17 +116,20 @@ func apiMessages(system string, msgs []*agent.Message, vision bool) []llm.Messag
 		out = append(out, llm.Message{Role: "user", Content: data})
 		images = nil
 	}
-	for _, m := range msgs {
+	for i, m := range msgs {
 		if m.Role != "tool" {
 			flush()
 		}
 		if vision && m.Role == "tool" && !m.Compacted && m.Page != nil && m.Page.PNG != "" {
 			images = append(images, m)
 		}
-		if m.Compacted || m.Error != "" && m.Role == "assistant" && len(m.Content) == 0 && len(m.ToolCalls) == 0 {
+		if m.Compacted || m.Error != "" && m.Role == "assistant" && emptyAnswer(m) {
 			continue
 		}
-		msg := llm.Message{Role: m.Role, Reasoning: "", ToolCallID: m.ToolCallID, Name: m.Name}
+		msg := llm.Message{Role: m.Role, ToolCallID: m.ToolCallID, Name: m.Name}
+		if m.Role == "assistant" && i > turn {
+			msg.Reasoning = m.Reasoning
+		}
 		switch {
 		case m.Kind == "summary":
 			msg.Content = agent.String(summaryPrefix + agent.ContentText(m.Content))
@@ -557,8 +569,16 @@ func (s *Server) loop(r *agentRun) {
 				sa.Cost += res.Usage.Cost
 			}
 		}
+		msg.Finish = res.Finish
 		if res.Finish == "length" {
 			msg.Error = "Answer cut: length limit reached."
+		} else if emptyAnswer(msg) {
+			// Said, not taken for the end of the turn.
+			if msg.Reasoning != "" {
+				msg.Error = "Answer ended in its reasoning, without text or action."
+			} else {
+				msg.Error = "Empty answer from the model."
+			}
 		}
 		ans.timing(msg)
 		r.chat.Messages = append(r.chat.Messages, msg)
@@ -594,6 +614,11 @@ func (s *Server) loop(r *agentRun) {
 			return
 		}
 	}
+}
+
+// emptyAnswer: an answer without text nor tool call.
+func emptyAnswer(m *agent.Message) bool {
+	return strings.TrimSpace(agent.ContentText(m.Content)) == "" && len(m.ToolCalls) == 0
 }
 
 // runCalls runs the tool calls of an answer; true when the turn ends (questions, a plan).

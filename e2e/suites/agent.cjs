@@ -86,6 +86,12 @@ const fake = http.createServer(async (req, res) => {
     sse(res, { content: 'Commands tried.' })
     return end(res, 'stop', { prompt_tokens: 600, completion_tokens: 5 })
   }
+  if (ask.includes('think')) {
+    // Reasoning and a call, then reasoning only: the first goes back, the second is an error.
+    if (last.role === 'user') return sse(res, { reasoning_content: 'THINK-1 list first' }), sse(res, { tool_calls: calls([['t1', 'list_dir', { path: '.' }]]) }), end(res, 'tool_calls')
+    sse(res, { reasoning_content: 'THINK-2 and then?' })
+    return end(res, 'stop')
+  }
   if (ask.includes('long')) {
     // Big usage: the next step must be preceded by an automatic compaction.
     if (last.role === 'user') return sse(res, { tool_calls: calls([['l1', 'list_dir', { path: '.' }]]) }), end(res, 'tool_calls', { prompt_tokens: 7000, completion_tokens: 20 })
@@ -236,6 +242,17 @@ run(async ({ page }) => {
     await page.waitForSelector('.bottom .console-tabs .tab:has-text("Dev server")')
     const devTabs = await page.$$eval('.bottom .console-tabs .tab', (e) => e.filter((x) => x.textContent.includes('Dev server')).length)
     assert(devTabs === 1 && (await page.isVisible('.bottom .console-tabs .tab:has-text("Unit tests")')), 'the commands run in their consoles, one per command')
+
+    // Reasoning sent back within the turn; an answer without text nor call is an error.
+    await page.fill('.ai-composer .ed-content', 'Just think')
+    await page.keyboard.press('Control+Enter')
+    await page.waitForSelector('.ai-error:has-text("Answer ended in its reasoning")', { timeout: 20000 })
+    await page.waitForSelector('[data-testid=send]')
+    const think = requests[requests.length - 1].messages
+    assert(think.some((m) => m.role === 'assistant' && m.reasoning_content === 'THINK-1 list first') && !think.some((m) => m.role === 'assistant' && m.reasoning_content && m.tool_calls === undefined), 'reasoning of the turn sent back, not the one of older turns')
+    await ask(page, 'After the thought', 'Answer of fake-other.')
+    const after = requests[requests.length - 1].messages
+    assert(!after.some((m) => m.reasoning_content) && !after.some((m) => m.role === 'assistant' && text(m) === '' && !m.tool_calls), 'next turn: no reasoning, the empty answer left out: ' + JSON.stringify(after.filter((m) => m.role === 'assistant').map((m) => [m.content, m.reasoning_content, !!m.tool_calls])))
 
     // @ mention with completion: only the path is sent.
     await page.click('.ai-composer .ed-content')
