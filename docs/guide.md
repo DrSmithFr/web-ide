@@ -56,7 +56,7 @@ The relay is an optional piece: it only introduces the browser and the pod, the 
 web-ide-pod relay            # signaling + STUN/TURN + bootstrap page, SQLite in ~/.web-ide-relay
 ```
 
-Its own data folder (`~/.web-ide-relay`, `-data` only when given explicitly), so it does not share the pod's. Options: `-addr` (`127.0.0.1:4430`), `-turn-port` (3478), `-turn-ip` (the IP announced to clients), `-tls-port` (443, shared with HTTPS and TURN over TLS; a port below 1024 needs root, and TURN over TLS is simply off when it cannot be bound). Open the link the pod prints — `#pod=<id>&t=<token>`, the token stays in the hash and never reaches the relay.
+Its own data folder (`~/.web-ide-relay`, `-data` only when given explicitly), so it does not share the pod's. Options: `-addr` (`127.0.0.1:4430`), `-turn-port` (3478), `-turn-ip` (the IP announced to clients), `-tls-port` (443, shared with HTTPS and TURN over TLS; a port below 1024 needs root, and TURN over TLS is simply off when it cannot be bound), `-push-subject` (the contact given to the push services, `mailto:` or `https:`; the VAPID key of the notifications is made once in `vapid.json`). Open the link the pod prints — `#pod=<id>&t=<token>`, the token stays in the hash and never reaches the relay.
 
 Then start a pod with `-relay http://127.0.0.1:4430` (or `relay` in `config.json`). The pod prints its remote link, also shown in Settings > Remote access:
 
@@ -93,6 +93,10 @@ web-ide-pod pair revoke <key>    # the phrase typed: the list spreads from pod t
 ```
 
 With no relay, the Devices panel (on `localhost`) is answered by the pod itself: it lists the devices it knows, shows the pods waiting to join on the LAN with their fingerprint, and passes a revocation on to the other pods. A list made offline goes to the relay as soon as a pod of the account reaches it, so a later revocation never undoes it. Inviting a phone by QR still needs the relay.
+
+#### Notifications on the phone
+
+On the relay origin, the bootstrap page installs as an app (*Install*, or *Add to Home Screen* on iOS, which shows notifications only from the installed app). Settings > Notifications > *Enable on this device* subscribes the browser: the pod then notifies it when the agent finishes a turn or asks for you, when a saved command flagged *test* fails, and when the assistant or Claude Code leaves feedback on a ticket — one switch per kind, *Send a test* to check. Nothing is sent while the device shows a window of the pod. A click opens the conversation or the ticket. The pod encrypts every notification for the browser: the relay forwards it without being able to read it.
 
 ### From the sources
 

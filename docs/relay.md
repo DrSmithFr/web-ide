@@ -126,7 +126,15 @@ The **token mode** of M1 (`#t=`) stays for unpaired pods, and `127.0.0.1` is unc
 
 ## Push notifications
 
-Web Push from the relay (an installed PWA on iOS): the agent finished, tests failed, a feedback arrived. The pod encrypts the payload for the subscription of the browser (RFC 8291), so the relay forwards ciphertext.
+**Done** (milestone 6: `pod/internal/push`, `relay/push.go`, Settings > Notifications). The **pod** decides when to notify, since the page may be closed, and encrypts the payload for the subscription of the browser (RFC 8291, aes128gcm); the **relay** holds the VAPID key, signs (RFC 8292) and POSTs the ciphertext to the push service. The relay sees an endpoint and ciphertext, never a title or a project name.
+
+- **Installable app**: the relay serves the manifest and the icons of the pod's front end (`web/public`, one copy), linked by the bootstrap page; the Service Worker shows a notification from the decrypted JSON `{title, body, url, tag}` and, on a click, moves the app of that pod's bootstrap window to the path (`/#pod=<id>&open=/project/<id>?chat=<id>` or `?ticket=<n>`), or opens a new window. The bootstrap page remembers the last pod, so the installed app starts at `/`. iOS shows notifications only from the installed app: the settings say so when `Notification` or `PushManager` is missing.
+- **Relay**: the VAPID P-256 key is made once in its data folder (`vapid.json`, 0600), its public half at `/_relay/push/key`. A browser registers its endpoint (`POST /_relay/push/subscribe`) with its certificate and the Ed25519 signature of its device key over `web-ide push v1|subscribe|<endpoint>|<created ms>` (10 minutes at most): the certificate must verify against its account and not be on the relay's revocation list. It gets an opaque id (`push_subs (id, account, device, endpoint, created)`); `unsubscribe` is signed the same way. Only the endpoints of the push services of the browsers are taken (FCM, Mozilla, Apple, WNS, https on the default port; `-push-test-endpoint` adds a prefix for the tests), and the POST follows no redirect: no open proxy, no request into the relay's network.
+- **Pod link**: `push.send {sub, body, ttl, urgency, topic}` is taken only from a pod that registered with a certificate of its account the relay checked, for a subscription of that account, within 30 a minute per account. `404`/`410` from the push service deletes the subscription and tells the pod (`push.gone`); revoking a device deletes its subscriptions. Nothing of the payload is stored or logged.
+- **Pod**: `push.json` (0600) keeps, per browser device, the relay's id, the keys of the subscription, a switch per kind and the language of its texts (RPCs `push.status`, `push.subscribe`, `push.unsubscribe`, `push.settings`, `push.test`). The kinds: **agent finished** (a run of a root conversation ends by itself), **agent asks** (an approval, a question, a plan), **tests failed** (the task of a saved command flagged `test` ends with a code that is not 0, whoever started it: the Console, the assistant, the MCP), **ticket feedback** (added by the assistant or Claude Code, not by the user). A device whose window on this pod is visible (`window.visible`, sent by the page with its device) gets nothing; the toasts of the page are there. The `Topic` is the conversation (or the ticket), so a burst of turns leaves one notification.
+- **Settings > Notifications** (on the relay origin, paired): *Enable on this device* (the permission, `pushManager.subscribe` with the relay's key, the signed registration, then `push.subscribe` on the pod), a switch per kind, *Send a test*, *Disable*.
+
+The e2e `push` suite replaces the subscription of the browser with one whose keys it made, runs the fake push service it points to (VAPID checked, body decrypted in Node), hands the payload to the Service Worker (CDP `ServiceWorker.deliverPushMessage`) and clicks the notification; it also checks that the relay base and log hold no title nor project name. Not yet: one subscription reaches the pods of the account (multi-pod, milestone 3); today the browser subscribes on the pod it shows.
 
 ## Share links
 
@@ -161,7 +169,7 @@ Code and review together:
 3. Multi-pod: gateway, sites, pod to pod, encrypted project lists, versions and updates.
 4. Settings sync, per-device layout, vault.
 5. Hosted relay at `antennae.space`, GitHub Sponsors, quotas, counters.
-6. Push notifications.
+6. **Done**: push notifications. See *Push notifications* above.
 7. Wake-on-LAN and shutdown.
 8. Share links.
 9. Shared sessions and voice.

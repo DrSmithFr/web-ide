@@ -56,7 +56,7 @@ Le relay est une pièce optionnelle : il ne fait que présenter le navigateur et
 web-ide-pod relay            # signaling + STUN/TURN + page de bootstrap, SQLite dans ~/.web-ide-relay
 ```
 
-Son propre dossier de données (`~/.web-ide-relay`, `-data` seulement quand il est donné explicitement), il ne partage donc pas celui du pod. Options : `-addr` (`127.0.0.1:4430`), `-turn-port` (3478), `-turn-ip` (l'IP annoncée aux clients), `-tls-port` (443, partagé avec HTTPS et TURN over TLS ; un port en dessous de 1024 demande root, et TURN over TLS est simplement désactivé quand il ne peut pas être lié). Ouvrez le lien affiché par le pod — `#pod=<id>&t=<token>`, le token reste dans le hash et ne parvient jamais au relay.
+Son propre dossier de données (`~/.web-ide-relay`, `-data` seulement quand il est donné explicitement), il ne partage donc pas celui du pod. Options : `-addr` (`127.0.0.1:4430`), `-turn-port` (3478), `-turn-ip` (l'IP annoncée aux clients), `-tls-port` (443, partagé avec HTTPS et TURN over TLS ; un port en dessous de 1024 demande root, et TURN over TLS est simplement désactivé quand il ne peut pas être lié), `-push-subject` (le contact donné aux services de push, `mailto:` ou `https:` ; la clé VAPID des notifications est créée une fois dans `vapid.json`). Ouvrez le lien affiché par le pod — `#pod=<id>&t=<token>`, le token reste dans le hash et ne parvient jamais au relay.
 
 Puis démarrez un pod avec `-relay http://127.0.0.1:4430` (ou `relay` dans `config.json`). Le pod affiche son lien distant, aussi visible dans Réglages > Accès distant :
 
@@ -93,6 +93,10 @@ web-ide-pod pair revoke <clé>    # la phrase tapée : la liste passe de pod en 
 ```
 
 Sans relay, le panneau Appareils (sur `localhost`) est servi par le pod lui-même : il liste les appareils qu'il connaît, montre les pods qui attendent sur le réseau local avec leur empreinte, et transmet une révocation aux autres pods. Une liste faite hors ligne part vers le relay dès qu'un pod du compte l'atteint, donc une révocation plus tardive ne l'annule jamais. Inviter un téléphone par QR demande toujours le relay.
+
+#### Les notifications sur le téléphone
+
+Sur l'origine du relay, la page de bootstrap s'installe comme une app (*Installer*, ou *Sur l'écran d'accueil* sur iOS, qui n'affiche les notifications que depuis l'app installée). Réglages > Notifications > *Activer sur cet appareil* abonne le navigateur : le pod le notifie alors quand l'agent termine un tour ou vous attend, quand une commande enregistrée marquée *test* échoue, et quand l'assistant ou Claude Code laisse un retour sur un ticket — un interrupteur par type, *Envoyer un test* pour vérifier. Rien n'est envoyé tant que l'appareil affiche une fenêtre du pod. Un clic ouvre la conversation ou le ticket. Le pod chiffre chaque notification pour le navigateur : le relay la transmet sans pouvoir la lire.
 
 ### Depuis les sources
 
