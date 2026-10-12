@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/agent"
+	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 )
 
 func TestReasoningOfTheTurn(t *testing.T) {
@@ -70,5 +71,44 @@ func TestResumeKeepsTheFailedAnswer(t *testing.T) {
 	}
 	if used := contextUsed(chat); used != 60 {
 		t.Fatalf("its usage is not the context: %d", used)
+	}
+}
+
+func TestReasoningLoop(t *testing.T) {
+	stops := 0
+	a := &answer{onLoop: func() { stops++ }}
+	long := "Let me look at the log of pod B once more, more carefully this time.\n"
+	for range 7 {
+		a.add(llm.Delta{Reasoning: long + "const tools = r.messages.filter((m) => m.role === 'tool').length\n"})
+	}
+	if a.looped {
+		t.Fatal("7 times: a sound reasoning")
+	}
+	for range 3 {
+		a.add(llm.Delta{Reasoning: "short line\n"})
+	}
+	// A line cut between two pieces counts once whole.
+	a.add(llm.Delta{Reasoning: long[:20]})
+	a.add(llm.Delta{Reasoning: long[20:]})
+	for range 5 {
+		a.add(llm.Delta{Reasoning: long})
+	}
+	if !a.looped || stops != 1 {
+		t.Fatalf("the 10th time: a loop, stopped once (%v, %d)", a.looped, stops)
+	}
+}
+
+func TestStuckNudge(t *testing.T) {
+	msgs := []*agent.Message{
+		{Role: "user", Content: agent.String("go")},
+		{Role: "assistant", Reasoning: "round", Error: "loop", Stuck: true, Resumed: true},
+	}
+	out := apiMessages("sys", msgs, false)
+	if len(out) != 3 || out[2].Role != "user" || agent.ContentText(out[2].Content) != stuckNudge {
+		t.Fatalf("asked again with the nudge: %+v", out)
+	}
+	msgs = append(msgs, &agent.Message{Role: "assistant", Content: agent.String("done")})
+	if out := apiMessages("sys", msgs, false); len(out) != 3 || out[2].Role != "assistant" {
+		t.Fatalf("the nudge only while it is the last: %+v", out)
 	}
 }

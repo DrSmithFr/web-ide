@@ -84,6 +84,7 @@
   "Answer": "Répondre",
   "Answer cut: length limit reached.": "Réponse coupée : limite de longueur atteinte.",
   "Answer ended in its reasoning, without text or action.": "Réponse arrêtée dans sa réflexion, sans texte ni action.",
+  "Reasoning loop: the answer was stopped.": "Réflexion en boucle : la réponse a été arrêtée.",
   "Answer running in another window": "Réponse en cours dans une autre fenêtre",
   "Answer running in another window: wait for its end to write here": "Réponse en cours dans une autre fenêtre : attendre sa fin pour écrire ici",
   "Answer running in another window…": "Réponse en cours dans une autre fenêtre…",

@@ -49,7 +49,9 @@ const fake = http.createServer(async (req, res) => {
   requests.push(r)
   const msgs = r.messages
   const last = msgs[msgs.length - 1]
-  const lastUser = [...msgs].reverse().find((m) => m.role === 'user' && !text(m).startsWith('Summary of the earlier conversation'))
+  // The pod asks again after a stuck answer, with a nudge as the last message.
+  const nudge = (m) => m.role === 'user' && text(m).startsWith('Your previous answer was stopped')
+  const lastUser = [...msgs].reverse().find((m) => m.role === 'user' && !text(m).startsWith('Summary of the earlier conversation') && !nudge(m))
   const ask = text(lastUser ?? { content: '' })
   const toolsDone = msgs.filter((m) => m.role === 'tool').length
   if (ask.includes('tools')) {
@@ -86,9 +88,16 @@ const fake = http.createServer(async (req, res) => {
     sse(res, { content: 'Commands tried.' })
     return end(res, 'stop', { prompt_tokens: 600, completion_tokens: 5 })
   }
+  if (ask.includes('Loop please')) {
+    // The same line over and over, the stream left open: the pod stops it and asks again.
+    if (nudge(last)) return sse(res, { content: 'Acted after the loop.' }), end(res, 'stop')
+    for (let i = 0; i < 12; i++) sse(res, { reasoning_content: 'Let me look at the log of pod B once more, more carefully this time.\n' })
+    return
+  }
   if (ask.includes('think')) {
-    // Reasoning and a call, then reasoning only: the first goes back, the second is an error.
-    if (last.role === 'user') return sse(res, { reasoning_content: 'THINK-1 list first' }), sse(res, { tool_calls: calls([['t1', 'list_dir', { path: '.' }]]) }), end(res, 'tool_calls')
+    // Reasoning and a call, then reasoning only (asked again once): the first goes back, the
+    // others are errors.
+    if (last.role === 'user' && !nudge(last)) return sse(res, { reasoning_content: 'THINK-1 list first' }), sse(res, { tool_calls: calls([['t1', 'list_dir', { path: '.' }]]) }), end(res, 'tool_calls')
     sse(res, { reasoning_content: 'THINK-2 and then?' })
     return end(res, 'stop')
   }
@@ -261,13 +270,23 @@ run(async ({ page }) => {
     // Reasoning sent back within the turn; an answer without text nor call is an error.
     await page.fill('.ai-composer .ed-content', 'Just think')
     await page.keyboard.press('Control+Enter')
-    await page.waitForSelector('.ai-error:has-text("Answer ended in its reasoning")', { timeout: 20000 })
+    await page.waitForSelector('.ai-error:has-text("Answer ended in its reasoning") >> nth=1', { timeout: 20000 })
     await page.waitForSelector('[data-testid=send]')
     const think = requests[requests.length - 1].messages
+    const stuck = await page.$$eval('.ai-error:has-text("Answer ended in its reasoning")', (e) => e.map((x) => !!x.querySelector('.ai-resumed')))
+    assert(stuck.length === 2 && stuck[0] && !stuck[1], 'an answer ended in its reasoning is asked again once, then the turn ends: ' + JSON.stringify(stuck))
+    assert(think[think.length - 1].role === 'user' && text(think[think.length - 1]).startsWith('Your previous answer was stopped'), 'asked again with a nudge to act')
     assert(think.some((m) => m.role === 'assistant' && m.reasoning_content === 'THINK-1 list first') && !think.some((m) => m.role === 'assistant' && m.reasoning_content && m.tool_calls === undefined), 'reasoning of the turn sent back, not the one of older turns')
     await ask(page, 'After the thought', 'Answer of fake-other.')
     const after = requests[requests.length - 1].messages
     assert(!after.some((m) => m.reasoning_content) && !after.some((m) => m.role === 'assistant' && text(m) === '' && !m.tool_calls), 'next turn: no reasoning, the empty answer left out: ' + JSON.stringify(after.filter((m) => m.role === 'assistant').map((m) => [m.content, m.reasoning_content, !!m.tool_calls])))
+    assert(!after.some((m) => text(m).startsWith('Your previous answer was stopped')), 'next turn: no nudge')
+
+    // A reasoning going round in circles: stopped by the pod, asked again to act.
+    await ask(page, 'Loop please', 'Acted after the loop.')
+    assert(await page.isVisible('.ai-error:has-text("Reasoning loop") .ai-resumed'), 'the loop shown as stopped and set aside')
+    const looped = requests[requests.length - 1].messages
+    assert(text(looped[looped.length - 1]).startsWith('Your previous answer was stopped') && !looped.some((m) => (m.reasoning_content ?? '').includes('once more')), 'asked again without the loop')
 
     // @ mention with completion: only the path is sent.
     await page.click('.ai-composer .ed-content')

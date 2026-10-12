@@ -138,6 +138,8 @@ type Message struct {
 	// Finish: why the server ended the answer (stop, length, tool_calls…), for diagnosis.
 	Finish    string `json:"finish,omitempty"`
 	Compacted bool   `json:"compacted,omitempty"`
+	// Stuck: an answer that looped in its reasoning, or ended in it without text nor action.
+	Stuck bool `json:"stuck,omitempty"`
 	// Resumed: a failed answer a resume went on from; shown, not sent back to the model.
 	Resumed    bool   `json:"resumed,omitempty"`
 	Kind       string `json:"kind,omitempty"`

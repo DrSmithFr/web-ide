@@ -147,6 +147,9 @@ func apiMessages(system string, msgs []*agent.Message, vision bool) []llm.Messag
 		out = append(out, msg)
 	}
 	flush()
+	if n := len(msgs); n > 0 && msgs[n-1].Stuck && msgs[n-1].Resumed {
+		out = append(out, llm.Message{Role: "user", Content: agent.String(stuckNudge)})
+	}
 	return out
 }
 
@@ -300,7 +303,16 @@ type answer struct {
 	started    time.Time
 	thinkStart time.Time
 	thinkEnd   time.Time
+	// The lines of the reasoning seen, to tell a loop; onLoop is called once when one is.
+	line   string
+	lines  map[string]int
+	looped bool
+	onLoop func()
 }
+
+// loopRepeats: a line of the reasoning (60 characters or more) seen this many times is a
+// loop. A sound reasoning repeats one at most 7 times (lines of code), a looping one dozens.
+const loopRepeats = 10
 
 func (a *answer) add(d llm.Delta) {
 	a.mu.Lock()
@@ -311,6 +323,7 @@ func (a *answer) add(d llm.Delta) {
 			a.thinkStart = now
 		}
 		a.reasoning += d.Reasoning
+		a.watch(d.Reasoning)
 	}
 	if d.Content != "" || d.Tool != "" {
 		if !a.thinkStart.IsZero() && a.thinkEnd.IsZero() {
@@ -318,6 +331,37 @@ func (a *answer) add(d llm.Delta) {
 		}
 		a.content += d.Content
 	}
+}
+
+// watch counts the lines of the reasoning as they end.
+func (a *answer) watch(text string) {
+	a.line += text
+	for {
+		i := strings.IndexByte(a.line, '\n')
+		if i < 0 {
+			return
+		}
+		l := strings.TrimSpace(a.line[:i])
+		a.line = a.line[i+1:]
+		if len(l) < 60 || a.looped {
+			continue
+		}
+		if a.lines == nil {
+			a.lines = map[string]int{}
+		}
+		if a.lines[l]++; a.lines[l] >= loopRepeats {
+			a.looped = true
+			if a.onLoop != nil {
+				a.onLoop()
+			}
+		}
+	}
+}
+
+func (a *answer) isLooped() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.looped
 }
 
 // timing sets the time spent thinking and the time of the answer on its message.
@@ -339,6 +383,8 @@ func (a *answer) timing(m *agent.Message) {
 // resumed one reads again what the relay received for it, then goes on.
 func (s *Server) complete(r *agentRun, req llm.ChatRequest, stream string, resumed bool, started time.Time) (*llm.ChatResult, *answer, error) {
 	a := &answer{started: started}
+	// A reasoning that goes round in circles is stopped: the turn asks again (stuckNudge).
+	a.onLoop = func() { s.LLM.CancelChat(stream) }
 	start := s.LLM.StartChat
 	if resumed {
 		start = func(stream string, req llm.ChatRequest) error { return s.LLM.ResumeChat(stream, req, started) }
@@ -531,9 +577,10 @@ func (s *Server) loop(r *agentRun) {
 		res, ans, err := s.complete(r, req, stream, resumed, started)
 		release()
 
+		looped := err != nil && r.ctx.Err() == nil && ans.isLooped()
 		r.mu.Lock()
 		r.chat.Running = &agent.Running{}
-		if err != nil {
+		if err != nil && !looped {
 			canceled := r.ctx.Err() != nil
 			r.mu.Unlock()
 			if !canceled && !compactedForError && ans.content == "" && contextError.MatchString(err.Error()) {
@@ -557,6 +604,9 @@ func (s *Server) loop(r *agentRun) {
 			r.mu.Unlock()
 			return
 		}
+		if looped {
+			res = &llm.ChatResult{Message: llm.Message{Content: agent.String(ans.content), Reasoning: ans.reasoning}, Finish: "loop"}
+		}
 		msg := &agent.Message{Role: "assistant", Content: agent.String(agent.ContentText(res.Message.Content)), Reasoning: res.Message.Reasoning, Model: model, Mode: mode, Effort: effort}
 		for _, c := range res.Message.ToolCalls {
 			var tc agent.ToolCall
@@ -575,7 +625,9 @@ func (s *Server) loop(r *agentRun) {
 			}
 		}
 		msg.Finish = res.Finish
-		if res.Finish == "length" {
+		if looped {
+			msg.Error = "Reasoning loop: the answer was stopped."
+		} else if res.Finish == "length" {
 			msg.Error = "Answer cut: length limit reached."
 		} else if emptyAnswer(msg) {
 			// Said, not taken for the end of the turn.
@@ -585,11 +637,16 @@ func (s *Server) loop(r *agentRun) {
 				msg.Error = "Empty answer from the model."
 			}
 		}
+		// Stuck (a loop, or a reasoning without text nor action): set aside and asked once
+		// more to act; stuck again, the turn ends.
+		msg.Stuck = looped || emptyAnswer(msg) && msg.Reasoning != ""
+		retry := msg.Stuck && !lastStuck(r.chat)
+		msg.Resumed = retry
 		ans.timing(msg)
 		r.chat.Messages = append(r.chat.Messages, msg)
 		s.publish(r, len(r.chat.Messages)-1)
 		calls := msg.ToolCalls
-		more := len(r.chat.Queue) > 0
+		more := len(r.chat.Queue) > 0 || retry
 		var report *agent.AgentEvent
 		if len(calls) == 0 && !more && msg.Error == "" {
 			// A sub-agent ends with a report.
@@ -624,6 +681,15 @@ func (s *Server) loop(r *agentRun) {
 // emptyAnswer: an answer without text nor tool call.
 func emptyAnswer(m *agent.Message) bool {
 	return strings.TrimSpace(agent.ContentText(m.Content)) == "" && len(m.ToolCalls) == 0
+}
+
+// stuckNudge follows a stuck answer set aside, in the request asking again.
+const stuckNudge = "Your previous answer was stopped: its reasoning went round in circles, or ended without text nor action. Do not start the analysis over: take the next concrete step now (call a tool, or answer), with a short reasoning."
+
+// lastStuck: the last message is an answer that got stuck.
+func lastStuck(c *agent.Chat) bool {
+	n := len(c.Messages)
+	return n > 0 && c.Messages[n-1].Stuck
 }
 
 // unsent: a failed answer the model does not read again (empty, or set aside by a resume).
