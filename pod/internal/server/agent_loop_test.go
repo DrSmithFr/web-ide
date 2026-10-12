@@ -33,3 +33,27 @@ func TestEmptyAnswer(t *testing.T) {
 		}
 	}
 }
+
+func TestCompactCut(t *testing.T) {
+	big := string(make([]byte, 7000)) // about 2000 tokens
+	step := func() []*agent.Message {
+		return []*agent.Message{
+			{Role: "assistant", Reasoning: big, ToolCalls: []agent.ToolCall{{ID: "1"}}},
+			{Role: "tool", ToolCallID: "1", Content: agent.String("ok")},
+		}
+	}
+	// A summary, then one long turn: a manual compaction summarizes its oldest steps.
+	msgs := []*agent.Message{{Role: "user", Kind: "summary"}, {Role: "user", Content: agent.String("go")}}
+	for range 10 {
+		msgs = append(msgs, step()...)
+	}
+	cut := compactCut(msgs, 0, 16000, true)
+	if cut < 4 || cut >= len(msgs) || msgs[cut].Role != "assistant" {
+		t.Fatalf("one turn: cut at %d of %d", cut, len(msgs))
+	}
+	// Several turns: all but the last exchange.
+	msgs = append(msgs, &agent.Message{Role: "user", Content: agent.String("next")}, &agent.Message{Role: "assistant", Content: agent.String("ok")})
+	if cut := compactCut(msgs, 0, 16000, true); cut != len(msgs)-2 {
+		t.Fatalf("last exchange kept: cut at %d of %d", cut, len(msgs))
+	}
+}

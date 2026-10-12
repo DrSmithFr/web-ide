@@ -173,6 +173,8 @@ func estimateTokens(m *agent.Message) int {
 	for _, c := range m.ToolCalls {
 		chars += len(c.Function.Name) + len(c.Function.Arguments)
 	}
+	// The reasoning goes back within the turn: counted, an older turn is overestimated.
+	chars += len(m.Reasoning)
 	return (chars*2+6)/7 + media*800 + 8
 }
 
@@ -825,6 +827,46 @@ func transcriptOf(m *agent.Message, budget int) string {
 
 var errNothingToCompact = i18n.New("Nothing to compact")
 
+// compactCut is the first message a compaction keeps: about a quarter of the context, or all
+// but the last exchange when that is too little or manual. One long turn alone loses its
+// oldest steps.
+func compactCut(msgs []*agent.Message, start, ctxSize int, manual bool) int {
+	// The kept tail starts at a user or assistant message (never at a tool result).
+	tail := func(budget int) int {
+		from, tokens := len(msgs), 0
+		for i := len(msgs) - 1; i > start; i-- {
+			tokens += estimateTokens(msgs[i])
+			if tokens > budget && from < len(msgs) {
+				break
+			}
+			if msgs[i].Role != "tool" {
+				from = i
+			}
+		}
+		return from
+	}
+	from := len(msgs)
+	if !manual {
+		from = tail(ctxSize / 4)
+	}
+	if manual || from-start < 2 {
+		from = len(msgs)
+		for i := len(msgs) - 1; i > start; i-- {
+			if msgs[i].Role == "user" && msgs[i].Kind != "summary" {
+				from = i
+				break
+			}
+		}
+		if from == len(msgs) {
+			from = len(msgs) - 1
+		}
+	}
+	if from-start < 2 {
+		from = tail(ctxSize / 4)
+	}
+	return from
+}
+
 // compact replaces the oldest messages by a summary, keeping the recent ones (about a
 // quarter of the context). manual: compact even a short conversation (all but the last
 // exchange).
@@ -842,33 +884,7 @@ func (s *Server) compact(r *agentRun, manual bool, instructions string) error {
 	if ctxSize == 0 {
 		ctxSize = 16384
 	}
-	keepBudget := ctxSize / 4
-	if manual {
-		keepBudget = 0
-	}
-	// The kept tail starts at a user or assistant message (never at a tool result).
-	keepFrom, tokens := len(msgs), 0
-	for i := len(msgs) - 1; i > start; i-- {
-		tokens += estimateTokens(msgs[i])
-		if tokens > keepBudget && keepFrom < len(msgs) {
-			break
-		}
-		if msgs[i].Role != "tool" {
-			keepFrom = i
-		}
-	}
-	if manual || keepFrom-start < 2 {
-		keepFrom = len(msgs)
-		for i := len(msgs) - 1; i > start; i-- {
-			if msgs[i].Role == "user" && msgs[i].Kind != "summary" {
-				keepFrom = i
-				break
-			}
-		}
-		if keepFrom == len(msgs) {
-			keepFrom = len(msgs) - 1
-		}
-	}
+	keepFrom := compactCut(msgs, start, ctxSize, manual)
 	if keepFrom-start < 2 {
 		if manual {
 			return errNothingToCompact
