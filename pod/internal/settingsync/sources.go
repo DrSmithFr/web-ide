@@ -29,8 +29,9 @@ type SettingsSource struct {
 	on func() bool
 }
 
-// Map fields of the settings: their entries merge per key.
-var settingsMaps = []string{"tokenColors", "syntax", "keyboard/overrides"}
+// Map fields of the settings: their entries merge per key. The per-device layout and the sync
+// switches are maps too, so the entry of a device does not overwrite the entry of another.
+var settingsMaps = []string{"tokenColors", "syntax", "keyboard/overrides", "devices", "sync"}
 
 func NewSettingsSource(s *settings.Settings, on func() bool) *SettingsSource {
 	return &SettingsSource{s: s, on: on}

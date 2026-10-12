@@ -14,7 +14,7 @@ import { Icon } from './icons'
 import { Doc } from '../editor/doc'
 import { FindBar } from '../editor/FindBar'
 import { grammarGeneration, languageName } from '../editor/languages'
-import { settings } from '../state/settings'
+import { fontFor, settings } from '../state/settings'
 import { actions, registerAction, runAction, shortcutOf } from '../keys/bindings'
 import { contextMenu, pick, prompt } from './overlay'
 import { openConflict } from '../conflict/ConflictDialog'
@@ -387,7 +387,7 @@ export function useEditorView(doc: () => Doc | null, host: () => HTMLElement | u
   })
   createEffect(
     on(
-      () => [settings.font.family, settings.font.size, settings.font.lineHeight],
+      () => [settings.font.family, fontFor().size, fontFor().lineHeight],
       () => requestAnimationFrame(() => view()?.measure()),
       { defer: true },
     ),

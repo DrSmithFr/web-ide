@@ -2,7 +2,8 @@
 import { createMemo, createResource, createSignal, For, Index, onCleanup, onMount, Show } from 'solid-js'
 import { unwrap } from 'solid-js/store'
 import { Modal } from '../ui/overlay'
-import { settings, updateSettings, replaceSettings, type Settings } from '../state/settings'
+import { fontFor, replaceSettings, saveFallbackLayout, settings, updateDeviceLayout, updateSettings, type Settings } from '../state/settings'
+import { deviceId } from '../state/device'
 import { accents, accentOf, themes, themeById, tokenLabels, tokenTypes } from './themes'
 import {
   actionLabel, actionOf, actionsFor, activeLayout, allActions, captureKeys, comboFromEvent, comboLabel, detectedLayout, effectiveBindings, presets, suggestedLayout,
@@ -177,10 +178,13 @@ function Themes() {
 }
 
 function Fonts() {
+  // The family and the ligatures are shared by the account; the sizes belong to this device, so a
+  // size changed here does not move the other devices (state/device.ts).
   const num = (path: 'size' | 'lineHeight' | 'uiSize', v: string) => {
     const n = parseFloat(v)
-    if (n > 0) updateSettings((s) => ((s.font as any)[path] = n), 'Font')
+    if (n > 0) updateDeviceLayout((d) => ((d.font as any)[path] = n), 'Font')
   }
+  const f = fontFor()
   return (
     <section class="form">
       <label class="field">
@@ -190,21 +194,25 @@ function Fonts() {
       <div class="field-row">
         <label class="field">
           <span>{t('Code size (px)')}</span>
-          <input type="number" min="8" max="32" value={settings.font.size} onChange={(e) => num('size', e.currentTarget.value)} />
+          <input type="number" min="8" max="32" value={f.size} onChange={(e) => num('size', e.currentTarget.value)} />
         </label>
         <label class="field">
           <span>{t('Line height')}</span>
-          <input type="number" min="1" max="2.5" step="0.05" value={settings.font.lineHeight} onChange={(e) => num('lineHeight', e.currentTarget.value)} />
+          <input type="number" min="1" max="2.5" step="0.05" value={f.lineHeight} onChange={(e) => num('lineHeight', e.currentTarget.value)} />
         </label>
         <label class="field">
           <span>{t('Interface size (px)')}</span>
-          <input type="number" min="10" max="20" value={settings.font.uiSize} onChange={(e) => num('uiSize', e.currentTarget.value)} />
+          <input type="number" min="10" max="20" value={f.uiSize} onChange={(e) => num('uiSize', e.currentTarget.value)} />
         </label>
       </div>
       <label class="check">
         <input type="checkbox" checked={settings.font.ligatures} onChange={(e) => updateSettings((s) => (s.font.ligatures = e.currentTarget.checked), 'Ligatures')} />
         {t('Ligatures')}
       </label>
+      <p class="muted small">{t('The sizes are those of this device. {device} uses the layout saved for new devices.', { device: deviceId || t('this device') })}</p>
+      <div class="field-row">
+        <button class="btn" onClick={() => saveFallbackLayout()}>{t('Use as default for new devices')}</button>
+      </div>
       <Preview lang="typescript" />
     </section>
   )

@@ -7,8 +7,8 @@ import (
 )
 
 // The fields whose entries merge per key: a token color added on one pod must not overwrite the
-// whole map of the other.
-var mapFields = []string{"tokenColors", "syntax", "keyboard/overrides"}
+// whole map of the other. The per-device layout and the sync switches are maps too.
+var mapFields = []string{"tokenColors", "syntax", "keyboard/overrides", "devices", "sync"}
 
 // state makes a state for a device by applying a content to an empty one.
 func state(t *testing.T, device, content string) State {
@@ -200,6 +200,38 @@ func TestMergeKeepsEmptyMaps(t *testing.T) {
 	want := map[string]any{"tokenColors": map[string]any{}}
 	if !reflect.DeepEqual(project(t, got), want) {
 		t.Fatalf("the emptied map must stay an object: %v", project(t, got))
+	}
+}
+
+// The layout of a device is its own entry: a size chosen on one device never moves the entry of
+// another, and a device that has none of its own keeps the fallback the user saved.
+func TestMergePerDeviceLayout(t *testing.T) {
+	base := state(t, "a", `{"devices":{"fallback":{"font":{"size":13}},"a":{"font":{"size":15}}},"sync":{"vault":false}}`)
+	remote := changed(t, base, "b", `{"devices":{"fallback":{"font":{"size":13}},"a":{"font":{"size":15}},"b":{"font":{"size":11}}},"sync":{"vault":true}}`)
+	local := changed(t, base, "a", `{"devices":{"fallback":{"font":{"size":13}},"a":{"font":{"size":16}}},"sync":{"vault":false}}`)
+
+	got, conflicts := Merge(base, local, remote)
+	if len(conflicts) != 0 {
+		t.Fatalf("the entry of a device must not conflict with the entry of another: %+v", conflicts)
+	}
+	// A number read back from JSON is a float64, so the sizes are compared as numbers.
+	d := project(t, got)["devices"].(map[string]any)
+	a := d["a"].(map[string]any)["font"].(map[string]any)
+	b := d["b"].(map[string]any)["font"].(map[string]any)
+	fb := d["fallback"].(map[string]any)["font"].(map[string]any)
+	if a["size"] != float64(16) || b["size"] != float64(11) || fb["size"] != float64(13) {
+		t.Fatalf("each device must keep its own layout: %v", d)
+	}
+	if v := project(t, got)["sync"].(map[string]any)["vault"]; v != true {
+		t.Fatalf("the vault switch changed on one side must be taken: %v", v)
+	}
+
+	// The same device changed on both pods (two windows on one device): it asks. An entry of a map
+	// field is one value, so the entry of a device is the path that conflicts.
+	other := changed(t, base, "b", `{"devices":{"fallback":{"font":{"size":13}},"a":{"font":{"size":12}}}}`)
+	_, conflicts = Merge(base, local, other)
+	if len(conflicts) != 1 || conflicts[0].Path != "devices/a" {
+		t.Fatalf("the same device changed on both sides must ask: %+v", conflicts)
 	}
 }
 
