@@ -33,7 +33,11 @@ run(async ({ page }) => {
   await page.keyboard.press('Control+Shift+f')
   await page.waitForSelector('.search-panel input')
   await page.keyboard.type('Greeter')
-  await page.waitForSelector('.search-hit', { timeout: 5000 })
+  // The results of the whole word: on a loaded machine a prefix may be searched first.
+  await page.waitForFunction(() => {
+    const marks = [...document.querySelectorAll('.search-hit mark')]
+    return marks.length && marks.every((m) => m.textContent.toLowerCase() === 'greeter')
+  }, null, { timeout: 5000 }).catch(() => {})
   assert((await page.$$('.search-hit')).length >= 3, 'global search lists matches')
   await page.click('.search-hit >> nth=1')
   await page.waitForFunction(() => document.querySelector('.pane.active .tab.active')?.textContent.includes('main.go'), null, { timeout: 5000 }).catch(() => {})

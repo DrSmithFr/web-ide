@@ -48,6 +48,8 @@ const cleanup = () => {
   }
 }
 process.on('exit', cleanup)
+// An interrupted run (run.sh stops its workers by SIGTERM) removes the stack too.
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(130))
 
 // Scripted model server: calls docker_ps and docker_logs, then answers.
 const requests = []
