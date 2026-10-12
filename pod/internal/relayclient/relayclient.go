@@ -16,6 +16,7 @@ import (
 	"errors"
 	"io"
 	"log"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -54,6 +55,29 @@ type sigMsg struct {
 	Kind    string                  `json:"kind,omitempty"`
 	Updated int64                   `json:"updated,omitempty"`
 	Message string                  `json:"message,omitempty"`
+	// Sites (milestone 3): register announces that this pod answers the proof of possession and
+	// carries its version and the preferred switch, `site` the device keys of its LAN peers,
+	// `challenge`/`proof` the nonce, `pods`/`gateway` what the relay sees of the account.
+	Prove     bool      `json:"prove,omitempty"`
+	Nonce     string    `json:"nonce,omitempty"`
+	Sig       string    `json:"sig,omitempty"`
+	Version   string    `json:"version,omitempty"`
+	Preferred bool      `json:"preferred,omitempty"`
+	Peers     []string  `json:"peers,omitempty"`
+	Site      string    `json:"site,omitempty"`
+	Gateway   string    `json:"gateway,omitempty"`
+	Pods      []PodInfo `json:"pods,omitempty"`
+}
+
+// PodInfo is one pod of the account as the relay sees it (mirrors relay.PodInfo).
+type PodInfo struct {
+	Key     string `json:"key"`
+	PodID   string `json:"podId"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Site    string `json:"site"`
+	Gateway bool   `json:"gateway"`
+	Since   int64  `json:"since"`
 }
 
 // toSync turns the sync part of a signaling message into the message the sync loop reads.
@@ -75,6 +99,14 @@ type Config struct {
 	// the answers and the pushes of the relay (nil: the pod does not sync).
 	Sync   *settingsync.Hub
 	Limits *tunnel.RateLimiter
+	// Version is the pod version, told to the relay (it lists the pods of the account).
+	Version string
+	// Preferred marks this pod as the entry point of its site (Settings > Remote access).
+	Preferred bool
+	// OnPods is called with the pods of the account the relay sees, OnGateway with the gateway of
+	// a site (multipod.Directory).
+	OnPods    func([]PodInfo)
+	OnGateway func(site, key string)
 	// ForceTurn only advertises relay (TURN) candidates (e2e).
 	ForceTurn bool
 	// OnState is called with the state of the link to the relay (connecting, connected,
@@ -147,15 +179,17 @@ func (c *Client) runOnce(ctx context.Context) error {
 	link := &podLink{c: conn}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	// Register: the relay stores the secret and marks the pod online. A paired pod also
-	// gives its account and its certificate — the relay can check them but never make one.
+	// Register: the relay stores the secret and marks the pod online. A paired pod also gives its
+	// account and its certificate — the relay can check them but never make one — and answers the
+	// nonce it is sent with the device key: the proof of possession. Without it the relay knows
+	// nothing about this pod: no presence, no gateway role.
 	var reg sigMsg
 	if c.cfg.Identity != nil && c.cfg.Identity.Paired() {
 		account, cert, _ := c.cfg.Identity.State()
 		reg = sigMsg{Type: "register", ID: c.cfg.PodID, Secret: c.cfg.Secret, Name: c.cfg.Name,
-			Account: account, Cert: cert}
+			Account: account, Cert: cert, Prove: true, Version: c.cfg.Version, Preferred: c.cfg.Preferred}
 	} else {
-		reg = sigMsg{Type: "register", ID: c.cfg.PodID, Secret: c.cfg.Secret, Name: c.cfg.Name}
+		reg = sigMsg{Type: "register", ID: c.cfg.PodID, Secret: c.cfg.Secret, Name: c.cfg.Name, Version: c.cfg.Version}
 	}
 	if err := link.send(reg); err != nil {
 		return err
@@ -163,6 +197,16 @@ func (c *Client) runOnce(ctx context.Context) error {
 	m, err := link.recv(ctx)
 	if err != nil {
 		return err
+	}
+	if m.Type == "challenge" {
+		sig := identity.Sign(c.cfg.Identity.Key(), []byte(identity.RelayBinding(relayHost(c.cfg.RelayURL), m.Nonce)))
+		if err := link.send(sigMsg{Type: "proof", Nonce: m.Nonce, Sig: sig}); err != nil {
+			return err
+		}
+		m, err = link.recv(ctx)
+		if err != nil {
+			return err
+		}
 	}
 	if m.Type != "ready" {
 		return errors.New("relay refused the pod: " + m.Type)
@@ -199,6 +243,9 @@ func (c *Client) runOnce(ctx context.Context) error {
 	}
 	for {
 		if ctx.Err() != nil {
+			// A clean goodbye: the relay moves the gateway role at once instead of waiting for
+			// the grace, and this pod starts fresh next time it comes up.
+			_ = link.send(sigMsg{Type: "bye"})
 			return ctx.Err()
 		}
 		m, err := link.recv(ctx)
@@ -206,6 +253,14 @@ func (c *Client) runOnce(ctx context.Context) error {
 			return err
 		}
 		switch m.Type {
+		case "pods":
+			if c.cfg.OnPods != nil {
+				c.cfg.OnPods(m.Pods)
+			}
+		case "gateway":
+			if c.cfg.OnGateway != nil {
+				c.cfg.OnGateway(m.Site, m.Gateway)
+			}
 		case "revocations":
 			if err := c.applyRevocations(m.List); err != nil {
 				return err
@@ -267,6 +322,40 @@ func (c *Client) PushRevocations(list *identity.Revocations) {
 	if link != nil && list != nil {
 		_ = link.send(sigMsg{Type: "revocations", List: list})
 	}
+}
+
+// ReportSite tells the relay the device keys of the pods this pod sees on its LAN: the relay
+// builds the sites from what every pod reports, and elects one gateway per site.
+func (c *Client) ReportSite(peers []string) {
+	c.mu.Lock()
+	link := c.link
+	c.mu.Unlock()
+	if link == nil {
+		return
+	}
+	_ = link.send(sigMsg{Type: "site", Peers: peers})
+}
+
+// SetPreferred marks this pod as the entry point of its site (Settings > Remote access), and tells
+// the relay about the change.
+func (c *Client) SetPreferred(on bool) {
+	c.mu.Lock()
+	c.cfg.Preferred = on
+	link := c.link
+	c.mu.Unlock()
+	if link != nil {
+		_ = link.send(sigMsg{Type: "preferred", Preferred: on})
+	}
+}
+
+// relayHost is the origin the pod dials: the string a proof of possession is bound to, the same
+// one the relay read in the Host header of the link.
+func relayHost(u string) string {
+	p, err := url.Parse(u)
+	if err != nil || p.Host == "" {
+		return u
+	}
+	return p.Host
 }
 
 // applyRevocations takes a revocation list from the relay. The pod checks the signature

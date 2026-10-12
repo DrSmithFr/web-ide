@@ -153,9 +153,14 @@ function show() {
 }
 
 // The revocation list is checked against the pinned account before it is believed: the relay
-// is only the courier, it cannot sign one.
+// is only the courier, it cannot sign one. The link proves possession of this device's key with
+// the nonce the relay sends: only then does it learn which pods are online.
 async function applyRevocations(l) {
-  l.send({ type: 'register', account, name: deviceName(), cert: rec?.cert, lang })
+  l.send({ type: 'register', account, name: deviceName(), cert: rec?.cert, lang, prove: !!key })
+  if (key) {
+    const err = await id.prove(l, key, location.host)
+    if (err) return fail(text(err.message ?? err.type))
+  }
   const m = await l.recv()
   if (m.type === 'error') return fail(text(m.message))
   if (m.list) {

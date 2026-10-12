@@ -53,6 +53,11 @@ func Verify(id, sig string, msg []byte) bool {
 	return ed25519.Verify(pub, msg, b)
 }
 
+// RelayBinding is the bytes a device signs to prove it holds the private half of the key its
+// certificate names: the nonce the relay sent, tied to the origin the link was opened at, so a
+// proof made for one relay cannot be replayed on another. A copied certificate answers nothing.
+func RelayBinding(origin, nonce string) string { return "relay|" + origin + "|" + nonce }
+
 // Fingerprint is the 4-word reading of a key id (44 bits of its SHA-256, 11 bits per
 // word): what the user compares on both sides of a pairing, the guard against a relay that
 // swaps a key.

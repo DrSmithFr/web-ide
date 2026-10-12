@@ -45,6 +45,18 @@ type sigMsg struct {
 	Kind    string                  `json:"kind,omitempty"`
 	Updated int64                   `json:"updated,omitempty"` // time the stored blob or wrap was written
 	Message string                  `json:"message,omitempty"`
+	// Sites (milestone 3): register carries the pod version and the preferred switch, `site` the
+	// device keys of its LAN peers, `challenge`/`proof` the nonce of the proof of possession, and
+	// `pods`/`gateway` what the relay sees of the account.
+	Prove     bool      `json:"prove,omitempty"`
+	Nonce     string    `json:"nonce,omitempty"`
+	Sig       string    `json:"sig,omitempty"`
+	Version   string    `json:"version,omitempty"`
+	Preferred bool      `json:"preferred,omitempty"`
+	Peers     []string  `json:"peers,omitempty"`
+	Site      string    `json:"site,omitempty"`
+	Gateway   string    `json:"gateway,omitempty"`
+	Pods      []PodInfo `json:"pods,omitempty"`
 }
 
 // Server routes signaling between the pods (one persistent link each) and the browsers
@@ -53,14 +65,21 @@ type sigMsg struct {
 // proved inside the DataChannel, bound to both DTLS fingerprints, so the relay cannot
 // MITM.
 type Server struct {
-	store    *Store
-	turn     *Turn
-	mu       sync.Mutex
-	pods     map[string]*podConn      // online pods, by pod id
-	browsers map[string]*browserConn  // active browsers, by session id
-	links    map[*identityConn]bool   // live pairing/admin links
-	codes    map[string]*identityConn // pairing code → the link that created it
-	joiners  map[string]*identityConn // pairing code → the link that posted its key to it
+	store       *Store
+	turn        *Turn
+	mu          sync.Mutex
+	pods        map[string]*podConn      // online pods, by pod id
+	browsers    map[string]*browserConn  // active browsers, by session id
+	links       map[*identityConn]bool   // live pairing/admin links
+	codes       map[string]*identityConn // pairing code → the link that created it
+	joiners     map[string]*identityConn // pairing code → the link that posted its key to it
+	since       map[string]time.Time     // device key → when its link came up (sites.go)
+	gateways    map[string]string        // site id → the device key elected gateway
+	siteOf      map[string]string        // device key → the site it was last seen in
+	siteAccount map[string]string        // site id → the account it belongs to
+	siteText    map[string]string        // account → the last sites pushed
+	sitePods    map[string][]PodInfo     // account → the pods as last computed (sites.go)
+	grace       map[string]*graceEntry   // device key → a gateway kept after an unclean drop
 	// App is the front end of the pod: the relay serves its manifest and icons (static.go).
 	App fs.FS
 	// Push sends the Web Push notifications of the pods (push.go); nil: off.
@@ -76,6 +95,14 @@ type podConn struct {
 	// certified is the account when the pod registered with a certificate of it that the relay
 	// checked, not revoked: the only account it may send push notifications to.
 	certified string
+	// The site presence (sites.go): the device key the link proved possession of (empty: an old
+	// pod in token mode, which gets no presence), what it reported about its LAN peers, when its
+	// link came up, and whether it ended cleanly (a bye).
+	key       string
+	version   string
+	preferred bool
+	peers     []string
+	clean     bool
 	ws        *websocket.Conn
 	mu        sync.Mutex
 }
@@ -105,13 +132,20 @@ func (bc *browserConn) send(m sigMsg) error {
 // New builds a relay Server over the given store and TURN server.
 func New(st *Store, turn *Turn) *Server {
 	return &Server{
-		store:    st,
-		turn:     turn,
-		pods:     map[string]*podConn{},
-		browsers: map[string]*browserConn{},
-		links:    map[*identityConn]bool{},
-		codes:    map[string]*identityConn{},
-		joiners:  map[string]*identityConn{},
+		store:       st,
+		turn:        turn,
+		pods:        map[string]*podConn{},
+		browsers:    map[string]*browserConn{},
+		links:       map[*identityConn]bool{},
+		codes:       map[string]*identityConn{},
+		joiners:     map[string]*identityConn{},
+		since:       map[string]time.Time{},
+		gateways:    map[string]string{},
+		siteOf:      map[string]string{},
+		siteAccount: map[string]string{},
+		siteText:    map[string]string{},
+		sitePods:    map[string][]PodInfo{},
+		grace:       map[string]*graceEntry{},
 	}
 }
 
@@ -138,8 +172,10 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 				delete(s.browsers, sid)
 			}
 		}
+		s.podLeaves(pc)
 		s.mu.Unlock()
 		s.store.Offline(pc.id)
+		s.recomputeSites(pc.account)
 		_ = ws.CloseNow()
 	}()
 	for {
@@ -158,6 +194,7 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			pc.id, pc.name, pc.account = m.ID, m.Name, m.Account
+			pc.version, pc.preferred = m.Version, m.Preferred
 			// A paired pod sends its certificate: it must verify against the account it
 			// claims, which only a device holding the account key can sign.
 			if m.Cert != nil {
@@ -165,12 +202,37 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 					pc.send(sigMsg{Type: "error", Message: err.Error()})
 					return
 				}
-				if list, err := s.store.Revocations(m.Account); err == nil && m.Cert.Account == m.Account && m.Cert.Kind == identity.KindPod && !list.Has(m.Cert.Key) {
+				list, err := s.store.Revocations(m.Account)
+				if err != nil {
+					pc.send(sigMsg{Type: "error", Message: err.Error()})
+					return
+				}
+				if m.Cert.Account != m.Account || m.Cert.Kind != identity.KindPod || list.Has(m.Cert.Key) {
+					pc.send(sigMsg{Type: "error", Message: identity.ErrForeignAccount.Error()})
+					return
+				}
+				// A pod that announces the proof gets a nonce it must sign with the key its
+				// certificate names: a copied certificate is refused. An old pod that does not
+				// announce it stays in token mode, with no presence and no gateway role.
+				if m.Prove {
+					nonce := relayNonce()
+					if err := pc.send(sigMsg{Type: "challenge", Nonce: nonce}); err != nil {
+						return
+					}
+					if err := s.proofOfPossession(ws, r.Host, m.Cert, nonce); err != nil {
+						pc.send(sigMsg{Type: "error", Message: err.Error()})
+						return
+					}
+					pc.key, pc.certified = m.Cert.Key, m.Account
+				} else {
 					pc.certified = m.Account
 				}
 			}
 			s.mu.Lock()
 			s.pods[m.ID] = pc
+			if pc.key != "" {
+				s.podArrives(pc)
+			}
 			s.mu.Unlock()
 			s.store.Online(m.ID)
 			list, err := s.store.Revocations(m.Account)
@@ -179,6 +241,29 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			pc.send(sigMsg{Type: "ready", Account: m.Account, List: list})
+			if pc.key != "" && !s.recomputeSites(m.Account) {
+				s.sendSites(m.Account, nil, pc)
+			}
+		case "site":
+			s.mu.Lock()
+			s.setSite(pc, m.Peers)
+			s.mu.Unlock()
+			s.recomputeSites(pc.account)
+		case "preferred":
+			// Settings > Remote access: the user says which pod of the site opens the others.
+			s.mu.Lock()
+			pc.preferred = m.Preferred
+			s.mu.Unlock()
+			s.recomputeSites(pc.account)
+		case "bye":
+			if m.Session == "" {
+				// The pod is leaving on its own: a clean goodbye. Its gateway role moves at once
+				// and its "since" is reset, unlike a link that dropped.
+				pc.mu.Lock()
+				pc.clean = true
+				pc.mu.Unlock()
+				return
+			}
 		case "revocations":
 			// A pod holds a newer list than the relay (made offline by the pair command, or
 			// received from a pod of the LAN): kept only when signed by the account of the pod
@@ -199,13 +284,6 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 			if bc := s.browserOf(m.Session); bc != nil {
 				bc.send(sigMsg{Type: "candidate", Session: m.Session, Candidate: m.Candidate})
 			}
-		case "bye":
-			if bc := s.browserOf(m.Session); bc != nil {
-				bc.send(sigMsg{Type: "bye", Session: m.Session})
-			}
-			s.mu.Lock()
-			delete(s.browsers, m.Session)
-			s.mu.Unlock()
 		case "syncKey", "wrapGet", "blobGet", "blobPut":
 			// The sync messages of a paired pod. The relay stores ciphertext only: it checks the
 			// signature against the device that wrote it, it cannot read a value.
