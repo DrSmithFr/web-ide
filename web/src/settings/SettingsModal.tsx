@@ -19,6 +19,7 @@ import { samples } from './samples'
 import { Devices } from './Devices'
 import { SyncPanel } from './Sync'
 import { LanSection } from './Lan'
+import { PodsSection } from './Pods'
 import { Notifications } from './Notifications'
 import { relayDevice } from '../pod/push'
 import { browserLang, fmtDate, languages, t, tn, type LangSetting } from '../i18n'
@@ -633,6 +634,8 @@ function RemoteAccess() {
         </div>
         <p class="muted small">{t('The relay only introduces the browser and the pod; the traffic between them is encrypted and the token is proved inside the tunnel.')}</p>
       </Show>
+      <h3>{t('Pods of the account')}</h3>
+      <PodsSection />
       <h3>{t('Local network')}</h3>
       <LanSection />
     </section>

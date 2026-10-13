@@ -55,9 +55,14 @@ type Directory struct {
 	emit    func()
 }
 
-// New makes the directory of a paired pod.
+// New makes the directory of a pod. Without a hub (the pod is not paired, or has no sync key yet)
+// it still shows the pods of its LAN: the relay reports nothing and the lists cannot be read.
 func New(hub *settingsync.Hub, l LAN) *Directory {
-	return &Directory{hub: hub, lan: l, own: hub.Device(), lists: map[string]*List{}, seen: map[string]int64{}}
+	d := &Directory{hub: hub, lan: l, lists: map[string]*List{}, seen: map[string]int64{}}
+	if hub != nil {
+		d.own = hub.Device()
+	}
+	return d
 }
 
 // SetEmitter is called when the view changes, so the page refreshes its blocks.
@@ -104,6 +109,13 @@ func (d *Directory) Gateway() string {
 	return d.gateway
 }
 
+// Site is the site of this pod: the smallest device key of the pods linked by the local network.
+func (d *Directory) Site() string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.site
+}
+
 // Pull asks the relay for the project lists of the account: a blobGet of the kind prefix answers
 // one blob per pod that published one.
 func (d *Directory) Pull() error {
@@ -117,7 +129,7 @@ func (d *Directory) Pull() error {
 // ciphertext: the pod opens it with the sub-key of its kind, which only a device holding the sync
 // key can build.
 func (d *Directory) HandleBlob(m settingsync.Msg) {
-	if m.Type != "blob" || m.Blob == nil || m.Blob.Kind != identity.ProjectsKind(m.Blob.Device) {
+	if d.hub == nil || m.Type != "blob" || m.Blob == nil || m.Blob.Kind != identity.ProjectsKind(m.Blob.Device) {
 		return
 	}
 	key := d.hub.KeyFor(m.Blob.Kind)
@@ -223,6 +235,8 @@ func (d *Directory) List() []PodView {
 }
 
 // fill adds the cached list of a pod to its view: its projects, and the time it published them.
+// The projects are written with the field names of projects.list, so the page shows a cached list
+// and a live LAN list the same way.
 func (d *Directory) fill(v *PodView, key, name string) {
 	l := d.lists[key]
 	if l == nil {
@@ -231,10 +245,9 @@ func (d *Directory) fill(v *PodView, key, name string) {
 	}
 	v.Name, v.Version = first(l.Name, name), first(l.Version, v.Version)
 	v.Seen = d.seen[key]
-	projects := []Project{}
+	projects := []map[string]string{}
 	for _, p := range l.Projects {
-		p.Icon = "" // the icon of another pod's project is not shown through a cached list
-		projects = append(projects, p)
+		projects = append(projects, map[string]string{"id": p.ID, "name": p.Title, "description": p.Description, "type": p.Type, "path": p.Path})
 	}
 	b, _ := json.Marshal(projects)
 	v.Projects = b

@@ -13,7 +13,8 @@ import { t } from '../i18n'
 import { iconOf, iconURL, type IconSpec, loadIcon, loadIcons, setFavicon } from '../ui/projectIcon'
 import { IconEditor } from '../ui/IconEditor'
 import { OpenTunnels } from '../docker/OpenTunnels'
-import { gateway, gatewayHome, peerURL, useLan, type LanPeer } from '../state/lan'
+import { gateway, gatewayHome, useLan } from '../state/lan'
+import { podURL, usePods, type PodInfo } from '../state/pods'
 
 interface Project {
   id: string
@@ -147,7 +148,7 @@ export function Home() {
           </For>
         </div>
         <Show when={!gateway()}>
-          <LanPods />
+          <OtherPods />
         </Show>
         <OpenTunnels />
         <Show when={available().length}>
@@ -185,14 +186,16 @@ export function Home() {
   )
 }
 
-/** One Projects block per pod of the account on the LAN: its page opens through the gateway
- * port this pod keeps for it. */
-function LanPods() {
+/** One Projects block per pod of the account: the pods of the local network first (their page runs
+ * through this pod), then the pods the relay reports, then the pods whose encrypted list the relay
+ * cached — greyed, with the time they published it. */
+function OtherPods() {
+  const [pods] = usePods()
   const [lan] = useLan()
   const outdated = () => (lan()?.failed ?? []).filter((f) => f.error === 'version')
   return (
     <>
-      <For each={lan()?.peers ?? []}>{(peer) => <LanPodBlock peer={peer} />}</For>
+      <For each={pods() ?? []}>{(pod) => <PodBlock pod={pod} />}</For>
       <For each={outdated()}>
         {(f) => (
           <p class="muted small" data-testid="lan-outdated">
@@ -204,37 +207,81 @@ function LanPods() {
   )
 }
 
-function LanPodBlock(props: { peer: LanPeer }) {
-  const p = () => props.peer
+function PodBlock(props: { pod: PodInfo }) {
+  const p = () => props.pod
+  const seen = () => {
+    const at = p().seen
+    if (!at) return ''
+    const d = new Date(at)
+    return t('seen {time}', { time: d.toLocaleString() })
+  }
   return (
-    <section class="lan-pod" classList={{ offline: !p().online }} data-testid="lan-pod" data-name={p().name}>
+    <section class="lan-pod" classList={{ offline: !p().online }} data-testid="pod-block" data-name={p().name}>
       <div class="home-bar">
         <h2>{t('Projects of {name}', { name: p().name })}</h2>
         <span class="muted small" title={t('Fingerprint of the pod')}>
           {p().fingerprint}
         </span>
+        <Show when={p().gateway}>
+          <span class="badge" data-testid="pod-gateway">
+            {t('gateway')}
+          </span>
+        </Show>
         <Show when={!p().online}>
           <span class="badge">{t('offline')}</span>
         </Show>
+        <Show when={p().nokey}>
+          <span class="badge" data-testid="pod-nokey">
+            {t('waiting for the sync key')}
+          </span>
+        </Show>
         <span class="grow" />
+        <Show when={!p().online && seen()}>
+          <span class="muted small">{seen()}</span>
+        </Show>
         <span class="muted small mono">{p().version}</span>
       </div>
       <div class="project-list">
-        <For each={p().projects ?? []} fallback={<p class="muted">{p().online ? t('Loading…') : t('This pod is offline.')}</p>}>
+        <For
+          each={p().projects ?? []}
+          fallback={
+            <p class="muted">
+              {p().nokey ? t('This pod has not published its projects yet.') : p().online ? t('Loading…') : t('This pod is offline.')}
+            </p>
+          }
+        >
           {(pr) => (
             <article class="project-card">
-              <a class="project-open" href={p().online ? peerURL(p(), `/project/${pr.id}`) : undefined} data-testid="lan-project">
-                <span class="project-icon" />
-                <div class="project-info">
-                  <div class="project-title">
-                    {pr.name} <span class="badge">{pr.type === 'ssh' ? 'SSH' : 'local'}</span>
+              <Show
+                when={p().path}
+                fallback={
+                  <div class="project-open" title={t('Opening the projects of another site comes with the next version')} data-testid="pod-project">
+                    <span class="project-icon" />
+                    <div class="project-info">
+                      <div class="project-title">
+                        {pr.name} <span class="badge">{pr.type === 'ssh' ? 'SSH' : 'local'}</span>
+                      </div>
+                      <Show when={pr.description}>
+                        <div class="project-desc">{pr.description}</div>
+                      </Show>
+                      <div class="muted small mono ellipsis">{pr.path}</div>
+                    </div>
                   </div>
-                  <Show when={pr.description}>
-                    <div class="project-desc">{pr.description}</div>
-                  </Show>
-                  <div class="muted small mono ellipsis">{pr.path}</div>
-                </div>
-              </a>
+                }
+              >
+                <a class="project-open" href={podURL(p(), `/project/${pr.id}`)} data-testid="pod-project">
+                  <span class="project-icon" />
+                  <div class="project-info">
+                    <div class="project-title">
+                      {pr.name} <span class="badge">{pr.type === 'ssh' ? 'SSH' : 'local'}</span>
+                    </div>
+                    <Show when={pr.description}>
+                      <div class="project-desc">{pr.description}</div>
+                    </Show>
+                    <div class="muted small mono ellipsis">{pr.path}</div>
+                  </div>
+                </a>
+              </Show>
             </article>
           )}
         </For>

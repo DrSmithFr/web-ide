@@ -154,9 +154,9 @@ func TestDirectoryMergesSources(t *testing.T) {
 	if !b.Online || b.Site != "devL" || b.Seen != 111 {
 		t.Fatalf("the pod the relay reports online: %+v", b)
 	}
-	var got []Project
+	var got []map[string]string
 	_ = json.Unmarshal(b.Projects, &got)
-	if len(got) != 2 || got[0].Title != "quiet reader" {
+	if len(got) != 2 || got[0]["name"] != "quiet reader" {
 		t.Fatalf("the cached list must be shown: %s", b.Projects)
 	}
 	o := by["devO"]

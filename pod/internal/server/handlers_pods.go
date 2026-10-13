@@ -18,8 +18,9 @@ type Pods interface {
 	Preferred() bool
 	SetPreferred(on bool) error
 	// Gateway is the pod of the account the browser should open first ("" when the relay says
-	// nothing).
+	// nothing), and Site the site this pod belongs to.
 	Gateway() string
+	Site() string
 }
 
 func (s *Server) registerPods() {
@@ -28,6 +29,12 @@ func (s *Server) registerPods() {
 			return nil, i18n.New("the pod is not paired")
 		}
 		return s.Pods.List(), nil
+	})
+	s.handle("pods.self", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		if s.Pods == nil {
+			return nil, i18n.New("the pod is not paired")
+		}
+		return map[string]any{"site": s.Pods.Site(), "gateway": s.Pods.Gateway(), "preferred": s.Pods.Preferred()}, nil
 	})
 	s.handle("pods.preferred", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 		a, err := bind[struct{ On bool }](p)

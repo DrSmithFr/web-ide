@@ -12,7 +12,7 @@ import * as id from './identity.js'
 
 const params = new URLSearchParams(location.hash.slice(1) || location.search.slice(1))
 // The pod of the link, else the last one opened here: the installed app (PWA) starts at /.
-const pod = params.get('pod') || (params.get('join') ? null : remembered())
+let pod = params.get('pod') || (params.get('join') ? null : remembered())
 const token = params.get('t') || params.get('token') || ''
 const join = params.get('join')
 // A path of the app to open instead of its home page (the link of a notification).
@@ -23,6 +23,7 @@ const fr = (navigator.languages?.[0] ?? navigator.language ?? 'en').startsWith('
 const words = {
   connecting: fr ? 'Connexion…' : 'Connecting…',
   nopod: fr ? 'Aucun pod indiqué. Ouvrez <relay>/#pod=<id>&t=<token>.' : 'No pod given. Open <relay>/#pod=<id>&t=<token>.',
+  nopodonline: fr ? 'Aucun pod en ligne sur le relay. Pods de ce compte : ' : 'No pod online at the relay. Pods of this account: ',
   offline: fr ? 'Ce pod n’est pas en ligne sur le relay.' : 'This pod is not online at the relay.',
   loading: fr ? 'Chargement de l’IDE…' : 'Loading the IDE…',
   update: fr ? 'Mettez ce pod à jour : les versions ne correspondent pas.' : 'Update this pod: the versions do not match.',
@@ -76,6 +77,18 @@ function remembered() {
 function remember(id) {
   try {
     localStorage.setItem('webide.relay.pod', id)
+  } catch {}
+}
+function rememberedSite() {
+  try {
+    return localStorage.getItem('webide.relay.site')
+  } catch {
+    return null
+  }
+}
+function rememberSite(id) {
+  try {
+    if (id) localStorage.setItem('webide.relay.site', id)
   } catch {}
 }
 // Only a path of this origin: a link must not turn the frame into another site.
@@ -172,6 +185,35 @@ async function applyRevocations(l) {
   return ''
 }
 
+// Milestone 3: a link with no pod in it enters the account through a gateway. The relay says who
+// is online and which pod it elected for each site — it is only the courier, the names come from
+// the certificates this device already verified. The site used last wins, else the first site.
+async function enterSite(l) {
+  const m = await l.recv('pods')
+  const pods = m.pods ?? []
+  if (!pods.length) {
+    l.send({ type: 'devices' })
+    const d = await l.recv('devices')
+    const names = (d.devices ?? []).filter((x) => x.cert?.kind === id.KindPod).map((x) => x.cert.name)
+    if (!names.length) return fail(words.nopod)
+    return fail(words.nopodonline + names.map((n) => '<b>' + n + '</b>').join(', '))
+  }
+  const sites = new Map()
+  for (const p of pods) {
+    if (!sites.has(p.site)) sites.set(p.site, [])
+    sites.get(p.site).push(p)
+  }
+  const order = [...sites.keys()].sort()
+  const last = rememberedSite()
+  const site = order.includes(last) ? last : order[0]
+  const group = sites.get(site) ?? pods
+  const chosen = group.find((p) => p.gateway) ?? group[0]
+  rememberSite(site)
+  pod = chosen.podId
+  status('<div class="spin"></div>' + words.connecting + ' <b>' + (chosen.name || chosen.podId) + '</b>')
+  return ''
+}
+
 // Joining by an invite link (#join=<code>), usually opened by a phone from the QR. The device
 // makes its own key, shows its fingerprint, posts the key to the code and waits for the
 // approval. The certificate that comes back must verify against the account it names: the
@@ -260,8 +302,7 @@ async function main() {
     if (err) return
     if (!pod) return fail(words.nopod)
   } else {
-    if (!pod) return fail(words.nopod)
-    status('<div class="spin"></div>' + words.connecting + ' <b>' + pod + '</b>')
+    status('<div class="spin"></div>' + words.connecting + (pod ? ' <b>' + pod + '</b>' : ''))
     const d = await id.unlock(db)
     if (d) {
       rec = d.rec
@@ -279,7 +320,13 @@ async function main() {
   if (account) {
     const err = await applyRevocations(l)
     if (err) return
+    // No pod in the link: the account is entered through one of its gateways.
+    if (!pod) {
+      const err = await enterSite(l)
+      if (err) return
+    }
   }
+  if (!pod) return fail(words.nopod)
   await connect(rec?.cert ? 'cert' : 'token')
 }
 

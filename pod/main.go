@@ -24,8 +24,8 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 	"github.com/DrSmithFr/web-ide/pod/internal/keeper"
 	"github.com/DrSmithFr/web-ide/pod/internal/lan"
-	"github.com/DrSmithFr/web-ide/pod/internal/multipod"
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
+	"github.com/DrSmithFr/web-ide/pod/internal/multipod"
 	"github.com/DrSmithFr/web-ide/pod/internal/pair"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 	"github.com/DrSmithFr/web-ide/pod/internal/push"
@@ -253,19 +253,19 @@ func main() {
 			lanMgr = m
 		}
 	}
+	dir = multipod.New(hub, lanView{m: lanMgr})
 	if hub != nil {
-		dir = multipod.New(hub, lanView{m: lanMgr})
 		hub.SetOther(func(m settingsync.Msg) { dir.HandleBlob(m) })
-		dir.SetEmitter(srv.PodsChanged)
 		pub = multipod.NewDebounce(hub, identity.ProjectsKind(podID.ID()), 2*time.Second)
 		srv.ProjectsChanged = pub.Touch
-		srv.Pods = &podsView{dir: dir, cfg: cfg, st: st, relayCli: &relayCli}
 		if cfg.RelayURL == "" && lanMgr != nil {
 			// A pod with no link to the relay sends its sync messages through a peer of its site.
 			hub.SetTransport(lanTransport{m: lanMgr})
 		}
-		onLANChange()
 	}
+	dir.SetEmitter(srv.PodsChanged)
+	srv.Pods = &podsView{dir: dir, cfg: cfg, st: st, relayCli: &relayCli}
+	onLANChange()
 	remote := ""
 	if cfg.RelayURL != "" {
 		ids, err := config.Relay(st)
@@ -594,6 +594,7 @@ func (v *podsView) List() any { return v.dir.List() }
 func (v *podsView) Gateway() string {
 	return v.dir.Gateway()
 }
+func (v *podsView) Site() string    { return v.dir.Site() }
 func (v *podsView) Preferred() bool { return v.cfg.Gateway.Preferred }
 
 func (v *podsView) SetPreferred(on bool) error {
