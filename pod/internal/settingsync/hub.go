@@ -2,6 +2,7 @@ package settingsync
 
 import (
 	"crypto/ecdh"
+	"strings"
 	"sync"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
@@ -122,13 +123,22 @@ func (h *Hub) Source(kind string) *Sync { return h.sources[kind] }
 // default, the vault is opt-in.
 func (h *Hub) Flags() *Flags { return h.flags }
 
-// Status lists the sources of the pod.
+// Status lists the sources of the pod, as the Sync panel shows them: the project lists are
+// published by every pod of the account, they are not a switch the user flips.
 func (h *Hub) Status() []Status {
 	var out []Status
-	for _, s := range h.sources {
+	for kind, s := range h.sources {
+		if !shownKind(kind) {
+			continue
+		}
 		out = append(out, s.Status())
 	}
 	return out
+}
+
+// shownKind tells whether a kind belongs in the Sync panel.
+func shownKind(kind string) bool {
+	return !strings.HasPrefix(kind, identity.ProjectsPrefix)
 }
 
 // Record is the X25519 key of this device, signed by its device key: the pod publishes it so an
@@ -294,7 +304,7 @@ func (h *Hub) x25519() (*ecdh.PrivateKey, error) {
 }
 
 func (h *Hub) emitEvent(s Status, name string, payload any) {
-	if h.emit == nil {
+	if h.emit == nil || !shownKind(s.Kind) {
 		return
 	}
 	h.emit(s, name, payload)

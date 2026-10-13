@@ -251,6 +251,11 @@ func main() {
 	// (the sites), and a pod with no link of its own publishes its key and its list through a peer.
 	onLANChange := func() {
 		srv.LANChanged()
+		// The blocks of the home page come from the LAN too: a peer that connects or drops has to
+		// refresh them, even when the pod has no link to the relay.
+		if dir != nil {
+			dir.Changed()
+		}
 		if lanMgr == nil {
 			return
 		}

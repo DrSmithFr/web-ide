@@ -69,7 +69,7 @@ func New(hub *settingsync.Hub, l LAN) *Directory {
 func (d *Directory) SetEmitter(fn func()) { d.emit = fn }
 
 // Changed tells the windows the pods moved.
-func (d *Directory) changed() {
+func (d *Directory) Changed() {
 	if d.emit != nil {
 		d.emit()
 	}
@@ -89,7 +89,7 @@ func (d *Directory) RelayPods(pods []relayclient.PodInfo) {
 		}
 	}
 	d.mu.Unlock()
-	d.changed()
+	d.Changed()
 }
 
 // RelayGateway records the gateway of a site the relay elected.
@@ -99,7 +99,7 @@ func (d *Directory) RelayGateway(site, key string) {
 		d.gateway = key
 	}
 	d.mu.Unlock()
-	d.changed()
+	d.Changed()
 }
 
 // Gateway is the device key of the gateway of this pod's site ("" when the relay says nothing).
@@ -141,7 +141,7 @@ func (d *Directory) HandleBlob(m settingsync.Msg) {
 		delete(d.lists, m.Blob.Device)
 		delete(d.seen, m.Blob.Device)
 		d.mu.Unlock()
-		d.changed()
+		d.Changed()
 		return
 	}
 	if m.Blob.Epoch != d.hub.Epoch() {
@@ -164,7 +164,7 @@ func (d *Directory) HandleBlob(m settingsync.Msg) {
 	d.lists[m.Blob.Device] = &l
 	d.seen[m.Blob.Device] = m.Updated
 	d.mu.Unlock()
-	d.changed()
+	d.Changed()
 }
 
 // List is what a pod publishes about its projects, sealed under its own kind.

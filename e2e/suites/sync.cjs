@@ -59,7 +59,10 @@ const appOf = (page) => page.mainFrame().childFrames()[0]
 // The app opens on the home, or straight on the project it had last time (a reload keeps it).
 async function openProject(app) {
   await app.waitForSelector('.home .home-bar, .menubar', { timeout: 30000 })
-  if (await app.locator('.project-open:has-text("demo")').count()) await app.click('.project-open:has-text("demo")')
+  // The local list only: a block of another pod holds a project of the same name, and its card is
+  // not clickable here.
+  const local = '.home main > .project-list .project-open:has-text("demo")'
+  if (await app.locator(local).count()) await app.click(local)
   else if (await app.locator('.ws-dir:has-text("demo")').count()) await app.click('.ws-dir:has-text("demo")')
   await app.waitForSelector('.menubar', { timeout: 30000 })
 }
