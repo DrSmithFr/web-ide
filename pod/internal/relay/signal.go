@@ -169,6 +169,9 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 		}
 		for sid, bc := range s.browsers {
 			if bc.podID == pc.id {
+				// The window on the other side of that pod must know it is gone: it asks for
+				// another gateway rather than waiting on a tunnel that will never answer.
+				bc.send(sigMsg{Type: "bye", Session: sid})
 				delete(s.browsers, sid)
 			}
 		}

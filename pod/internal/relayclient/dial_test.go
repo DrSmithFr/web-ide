@@ -67,8 +67,9 @@ func rpcCallMsg(t *testing.T, conn tunnel.MsgConn, id int64, method string, para
 func dialTry(ctx context.Context, cli *Client, podID, key string) (*Peer, error) {
 	var peer *Peer
 	var err error
-	for i := 0; i < 3; i++ {
-		// One attempt per deadline: a tunnel that stalls must not eat the whole budget.
+	for i := 0; i < 4; i++ {
+		// One attempt per deadline: a tunnel that stalls must not eat the whole budget. A pod
+		// that just registered is worth another try a moment later.
 		actx, cancel := context.WithTimeout(ctx, 12*time.Second)
 		peer, err = cli.Dial(actx, podID, key, nil)
 		cancel()
@@ -78,6 +79,7 @@ func dialTry(ctx context.Context, cli *Client, podID, key string) (*Peer, error)
 		if peer != nil {
 			peer.Close()
 		}
+		time.Sleep(400 * time.Millisecond)
 	}
 	return nil, err
 }

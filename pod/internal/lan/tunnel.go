@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"net/url"
 	"time"
@@ -103,12 +104,14 @@ func (m *Manager) serveTunnel(w http.ResponseWriter, r *http.Request, fp string)
 		Limits:    m.limits,
 	}
 	if err := hs.Run(conn); err != nil {
+		log.Printf("lan: bridged window %s: handshake: %v", window, err)
 		time.Sleep(300 * time.Millisecond) // let the refusal reach the browser
 		_ = c.CloseNow()
 		return
 	}
 	if hs.PeerCert == nil || (via != nil && hs.PeerCert.Key != via.Key) {
 		// The gateway must vouch for the very browser that signed the proof.
+		log.Printf("lan: bridged window %s: the gateway vouches for %v, the proof is %v", window, via, hs.PeerCert)
 		_ = c.CloseNow()
 		return
 	}

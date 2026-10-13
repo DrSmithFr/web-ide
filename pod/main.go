@@ -299,6 +299,9 @@ func main() {
 			hub.SetTransport(lanTransport{m: lanMgr})
 		}
 	}
+	// A pod with a link of its own dials the pods of another site pod to pod: their page runs
+	// under its own origin too (pod/internal/multipod.RemoteGateway).
+	dir.SetRemote(cfg.RelayURL != "")
 	dir.SetEmitter(srv.PodsChanged)
 	srv.Pods = &podsView{dir: dir, cfg: cfg, st: st, relayCli: &relayCli}
 	onLANChange()

@@ -50,9 +50,12 @@ type Directory struct {
 	relay   []relayclient.PodInfo
 	site    string
 	gateway string
-	lists   map[string]*List // device key → the list read from a blob
-	seen    map[string]int64
-	emit    func()
+	// remote: this pod has a link to the relay, so it can dial a pod of another site pod to pod
+	// (pod/internal/multipod.RemoteGateway) and serve its page under its own /_lan/pod/.
+	remote bool
+	lists  map[string]*List // device key → the list read from a blob
+	seen   map[string]int64
+	emit   func()
 }
 
 // New makes the directory of a pod. Without a hub (the pod is not paired, or has no sync key yet)
@@ -113,6 +116,13 @@ func (d *Directory) PodID(key string) string {
 		}
 	}
 	return ""
+}
+
+// SetRemote says that this pod can dial the pods the relay reports (it has a link of its own).
+func (d *Directory) SetRemote(on bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.remote = on
 }
 
 // Gateway is the device key of the gateway of this pod's site ("" when the relay says nothing).
@@ -228,6 +238,10 @@ func (d *Directory) List() []PodView {
 		}
 		v := PodView{Key: p.Key, Name: p.Name, Version: p.Version, Fingerprint: identity.Fingerprint(p.Key),
 			Site: p.Site, Gateway: p.Gateway, Online: true}
+		if d.remote {
+			// Reachable pod to pod: its page runs under this pod's origin too.
+			v.Path = lan.PeerPrefix + p.Key
+		}
 		d.fill(&v, p.Key, p.Name)
 		seen[p.Key] = true
 		rank[p.Key] = 1

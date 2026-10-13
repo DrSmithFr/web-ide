@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -86,6 +87,7 @@ func (g *RemoteGateway) serveFetch(w http.ResponseWriter, r *http.Request, key, 
 	defer cancel()
 	win, err := g.window(ctx, key)
 	if err != nil {
+		log.Printf("multipod: remote gateway %s: %v", key, err)
 		http.Error(w, "this pod does not answer", http.StatusBadGateway)
 		return
 	}

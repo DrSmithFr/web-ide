@@ -9,7 +9,7 @@
 // mode (M1), which a paired pod refuses. Recent browsers only: WebCrypto Ed25519 and WebAuthn
 // PRF are required, nothing is attempted without them.
 import * as id from './identity.js'
-import { keyOf, pickGateway, pickSite: pickSite_, routeOf } from './routes.js'
+import { keyOf, pickGateway, pickSite, routeOf } from './routes.js'
 
 const params = new URLSearchParams(location.hash.slice(1) || location.search.slice(1))
 // The pod of the link, else the last one opened here: the installed app (PWA) starts at /.
@@ -151,6 +151,9 @@ let entrySite = ''
 let shownKey = '' // the pod the frame shows (a pod of the site, not always the gateway)
 let appPort = null
 let entryMode = 'token'
+let pods = [] // the pods the relay reports: {key, podId, name, site, gateway, preferred}
+let podsPrev = [] // the pods list as it was before the last one
+let link = null // the identity link, kept for the pods list and the failover
 const buffers = new Map()
 
 function read(dc, e) {
@@ -243,7 +246,7 @@ async function enterSite(l) {
     if (!names.length) return fail(words.nopod)
     return fail(words.nopodonline + names.map((n) => '<b>' + n + '</b>').join(', '))
   }
-  const chosen = pickSite()
+  const chosen = enterGateway()
   rememberSite(chosen.site)
   pod = chosen.podId
   remember(pod)
@@ -255,10 +258,10 @@ async function enterSite(l) {
 }
 
 // The gateway of the site this window enters (routes.js, tested by scripts/routes-test.mjs).
-function pickSite() {
-  const { site, pod: chosen } = pickSite_(pods, rememberedSite())
+function enterGateway() {
+  const { site, pod } = pickSite(pods, rememberedSite())
   entrySite = site
-  return chosen ?? pods[0]
+  return pod ?? pods[0]
 }
 
 // Joining by an invite link (#join=<code>), usually opened by a phone from the QR. The device
@@ -356,7 +359,10 @@ async function enter(mode) {
 // sees them (a gateway that left or came back changes that list).
 function onPush(m) {
   if (m.type === 'revocations' && m.list) revoked = m.list
-  if (m.type === 'pods') pods = m.pods ?? []
+  if (m.type === 'pods') {
+    podsPrev = pods // the list before this one: who was with whom before the gateway left
+    pods = m.pods ?? []
+  }
 }
 
 async function main() {
@@ -425,9 +431,9 @@ function connect(key, podId, mode) {
     else if (m.type === 'candidate') { try { t.pc?.addIceCandidate(JSON.parse(m.candidate)) } catch {} }
     else if (m.type === 'error') drop(t, text(m.message))
     else if (m.type === 'bye') {
-      // The refusal travels on the DataChannel (the handshake error), the bye on the signaling
-      // link: the bye can arrive first. Give the proof a moment before saying the pod closed.
-      setTimeout(() => { if (!t.done && !t.dropped) drop(t, lastError ?? words.closed) }, 600)
+      // The pod is gone: the relay says so on the signaling link. A refusal also travels on the
+      // DataChannel (the handshake error), which can arrive first: give it that moment.
+      setTimeout(() => { if (!t.dropped) drop(t, lastError ?? words.closed) }, 600)
     }
   }
   sig.onerror = () => drop(t, words.offline)
@@ -523,7 +529,9 @@ async function handshake(t, dc, mode, want, fpB, fpP) {
   await opened(dc)
   fpB = fpB ?? fingerprint(t.pc.localDescription)
   fpP = fpP ?? fingerprint(t.pc.remoteDescription)
-  t.fpB, t.fpP = fpB, fpP
+  // A channel that rides this tunnel is bound to the fingerprints of the tunnel itself.
+  t.fpB = fpB
+  t.fpP = fpP
   const rd = reader(dc)
   const nonceB = rand()
   send(dc, mode === 'token'
@@ -583,7 +591,7 @@ async function failover() {
   for (let i = 0; i < 6; i++) {
     await refreshPods()
     // The relay has not elected one yet: the pod this window was on is worth another try.
-    const g = pickGateway(entrySite) ?? (entryPod ? { key: entryKey, podId: entryPod, site: entrySite } : null)
+    const g = nextGateway()
     if (g) {
       const old = entryKey
       entryKey = g.key
@@ -600,6 +608,24 @@ async function failover() {
     await new Promise((r) => setTimeout(r, Math.min(8000, 500 * 2 ** i)))
   }
   fail(lastError ?? words.closed)
+}
+
+// The gateway to reconnect through: the one of the site this window entered, else the gateway of
+// another site, else any pod of the account that is not the one that left. A site id is made of
+// the pods of the local network: when the gateway leaves, the site of its peers is named by
+// another key, so the search must not stop at the site this window came from.
+function nextGateway() {
+  // A site is named after the pods of the local network: when the gateway leaves, the site of its
+  // peers may be named by another key. The pods this window knew before are what to follow.
+  const known = new Set(podsPrev.map((p) => p.key))
+  const score = new Map()
+  for (const p of pods) score.set(p.site, (score.get(p.site) ?? 0) + (known.has(p.key) ? 2 : 1))
+  const best = [...score.entries()].sort((a, b) => b[1] - a[1])[0]
+  // A pod the relay does not report would refuse the signaling link: only the pods list is worth
+  // dialling, except when it says nothing at all (the link of the account is not up yet).
+  return pickGateway(pods, entrySite) ?? (best ? pickGateway(pods, best[0]) : null) ??
+    pods.find((p) => p.gateway) ?? pods.find((p) => p.podId !== entryPod) ??
+    (pods.length || !entryPod ? null : { key: entryKey, podId: entryPod, site: entrySite })
 }
 
 // The pods as the relay sees them now: the link pushes them, and a gateway that just left has
@@ -662,6 +688,12 @@ async function onMessage(d) {
       d.port.postMessage(null)
       return
     }
+    try {
+      if (r.prefix) await routedRPC(r.t, r.prefix)
+    } catch (err) {
+      d.port.postMessage(null)
+      return
+    }
     httpFetch(r.t, d, r.prefix)
   }
 }
@@ -673,10 +705,13 @@ navigator.serviceWorker.addEventListener('message', (e) => onMessage(e.data))
 // the pod at the other end checks the browser's proof against them, and the gateway vouches for
 // the browser with the certificate it checked.
 async function bridge(t, label, port, prefix) {
-  const name = (prefix ?? '') + label
   const own = !prefix && label === 'rpc'
   if (label === 'rpc') appPort = port
-  const dc = own ? t.rpc : t.pc.createDataChannel(name, { ordered: true })
+  // A pod reached through the gateway is a *window* on that pod: its rpc channel is opened
+  // first, and every other channel of the page rides it. On the pod's own tunnel, the extra
+  // channels are DataChannels of their own.
+  const routed = prefix ? await routedRPC(t, prefix) : null
+  const dc = own ? t.rpc : routed ? routed.dc : t.pc.createDataChannel(label, { ordered: true })
   const pending = []
   const write = (text) => {
     const bytes = new TextEncoder().encode(typeof text === 'string' ? text : JSON.stringify(text))
@@ -685,28 +720,40 @@ async function bridge(t, label, port, prefix) {
   }
   port.onmessage = (e) => write(e.data)
   port.onclose = () => (own ? close(t) : dc.close())
-  let rd
-  if (own) {
-    rd = t.rpcReader
-  } else {
-    const want = prefix ? prefix.slice(1, -1) : t.key
-    const r = await handshake(t, dc, 'cert', want, t.fpB, t.fpP)
-    if (!r.ok) {
-      status('<div class="err">' + r.error + '</div>')
-      port.close()
-      return
-    }
-    rd = r.rd
-  }
+  const rd = own ? t.rpcReader : routed ? routed.rd : reader(dc)
   // A DataChannel is not open when the app asks for it: keep its messages until it is, else
   // the first request of the window is dropped.
-  for (const b of pending.splice(0)) frame(dc, b)
+  const flush = () => {
+    for (const b of pending.splice(0)) frame(dc, b)
+  }
+  if (dc.readyState === 'open') flush()
+  else dc.addEventListener('open', flush)
   for (;;) {
     const m = await rd.next()
     if (!m) break
     port.postMessage(decode(m))
   }
   port.close()
+}
+
+// The rpc channel of a pod reached through the gateway: it is the window the pod serves the
+// other channels on, so it is opened before them, and kept while the page lives. Its handshake
+// is the browser's own, bound to the fingerprints of the tunnel it rides on.
+async function routedRPC(t, prefix) {
+  const key = prefix.slice(1, -1)
+  t.routed = t.routed ?? new Map()
+  const have = t.routed.get(key)
+  if (have) return have
+  const dc = t.pc.createDataChannel(prefix + 'rpc', { ordered: true })
+  const r = await handshake(t, dc, 'cert', key, t.fpB, t.fpP)
+  if (!r.ok) throw new Error(r.error)
+  const e = { dc, rd: r.rd }
+  t.routed.set(key, e)
+  dc.onclose = () => {
+    t.routed.delete(key)
+    if (shownKey === key) status('<div class="err">' + words.closed + '</div>')
+  }
+  return e
 }
 
 // One fetch of the page, answered by the pod on an http:<n> channel: the head as JSON,
@@ -725,7 +772,8 @@ function httpFetch(t, d, prefix) {
   void (async () => {
     for (;;) {
       const m = await rd.next()
-      if (!m) break
+      // The pod closes a body with an empty message: the Service Worker reads it as the end.
+      if (!m || !m.length) break
       if (!head) {
         head = JSON.parse(decode(m))
         d.port.postMessage({ head })

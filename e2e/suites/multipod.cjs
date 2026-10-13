@@ -4,11 +4,16 @@
 // own) and charlie (-lan off), then opens the relay origin with no #pod: the bootstrap picks the
 // gateway of the site and the home page lists the three pods with their projects. The relay only
 // caches ciphertext, so a dump of its base holds no project name.
+//
+// Relay 3b (routing): every project opens with the front end of the pod that holds it, on the one
+// origin of the relay — /pod/<key>/ for a pod registered there, and the same path carried by the
+// gateway for a LAN-only one; /_lan/pod/<key>/ on 127.0.0.1, pod to pod over WebRTC for a pod of
+// another site. When the gateway leaves, the browser reconnects through the new one.
 const fs = require('fs')
 const path = require('path')
 const http = require('http')
 const { spawn, execFileSync } = require('child_process')
-const { run, assert } = require('../common.cjs')
+const { run, assert, text } = require('../common.cjs')
 
 const BIN = process.env.E2E_BIN
 const DATA = process.env.E2E_DATA
@@ -130,6 +135,46 @@ async function open(page, url) {
 
 const appOf = (page) => page.mainFrame().childFrames()[0]
 
+/** Opens a project of another pod from the home page and checks the page really runs on that
+ * pod: a file edited here lands on that pod, and a terminal runs in its folder. */
+async function openProject(page, app, name, ws, label, own = false) {
+  // A pod's own projects are the first block of its home page; another pod's are its own block.
+  await app.click(own ? `a.project-open:has-text("${name}-app")` : `[data-testid=pod-block][data-name=${name}] [data-testid=pod-project]:has-text("${name}-app")`)
+  await app.waitForSelector('.menubar', { timeout: 60000 })
+  const row = `.explorer .tree-row[data-path="${path.join(ws, name + '-app', 'hello.txt')}"]`
+  await app.waitForSelector(row, { timeout: 30000 })
+  await app.dblclick(row)
+  await app.waitForSelector('.pane.active .ed-content', { timeout: 30000 })
+  assert((await text(app)).startsWith(`hello from ${name}`), `the file comes from ${label}: ` + (await text(app)))
+  await app.click('.pane.active .ed-content')
+  await page.keyboard.press('Control+End')
+  await page.keyboard.type(`edited through ${label}`)
+  await page.keyboard.press('Control+s')
+  const want = `edited through ${label}`
+  let onDisk = ''
+  for (let i = 0; i < 80 && !onDisk.includes(want); i++) {
+    await sleep(100)
+    onDisk = fs.readFileSync(path.join(ws, name + '-app', 'hello.txt'), 'utf8')
+  }
+  assert(onDisk.includes(want), `the change is saved on ${label}: ` + JSON.stringify(onDisk))
+  // A new terminal, by its shortcut or by the button of the console panel. The panel can come
+  // up collapsed on a page opened from another pod: the terminal still runs on the pod.
+  await page.keyboard.press('Control+Shift+Backquote')
+  try {
+    await app.waitForSelector('.xterm', { timeout: 8000 })
+  } catch {
+    await app.click('.console-tabs .icon-btn.small[title^="New terminal"]')
+    await app.waitForSelector('.term-container', { state: 'attached', timeout: 20000 })
+  }
+  await app.waitForTimeout(800)
+  await page.keyboard.type('pwd\n')
+  await app.waitForFunction((d) => document.querySelector('.xterm-rows')?.textContent.includes(d), path.join(ws, name + '-app'), { timeout: 20000 })
+  await page.keyboard.type('exit\n')
+}
+
+/** The pod a channel of this window goes to, as the bootstrap page keeps it. */
+const tunnelKeys = (page) => page.evaluate(() => [...(window.tunnels?.keys() ?? [])])
+
 /** The gateway of the site, as the settings panel of a pod shows it. */
 async function siteGateway(page) {
   await openPods(page)
@@ -232,7 +277,17 @@ run(
       const blocks = await app.$$eval('[data-testid=pod-block]', (els) => els.map((e) => e.dataset.name))
       assert(blocks.includes('bravo') && blocks.includes('charlie'), 'the home page lists the other pods: ' + blocks.join(','))
       const href = await app.getAttribute('[data-testid=pod-block][data-name=bravo] [data-testid=pod-project]', 'href')
-      assert(href && href.includes('/_lan/pod/'), 'the page of a pod of the site runs through the gateway: ' + href)
+      assert(href && href.startsWith('/pod/' + keyB), 'on the relay origin, the page of a pod of the site runs under /pod/: ' + href)
+
+      // 5. Bravo has no link of its own to the relay: its page is carried by the tunnel of its
+      // gateway, and the pod at the other end rechecks the browser behind it.
+      await openProject(page, app, 'bravo', path.join(TMP, 'mp-bravo', 'ws'), 'alpha')
+      const purl = new URL(app.url())
+      assert(purl.origin === ORIGIN && purl.pathname === `/pod/${keyB}/project/bravo-app`, 'the project of bravo stays on the relay origin: ' + app.url())
+      await page.reload({ waitUntil: 'domcontentloaded' })
+      await page.waitForSelector('#frame', { timeout: 40000 })
+      app = appOf(page)
+      await app.waitForSelector('.home .home-bar', { timeout: 40000 })
 
       // 5. The relay only ever saw ciphertext: its base holds no project name.
       const dump = fs.readFileSync(process.env.E2E_RELAY_DATA + '/relay.db', 'latin1')
@@ -253,14 +308,25 @@ run(
       await local.waitForSelector('.home .home-bar', { timeout: 40000 })
       await local.waitForSelector('[data-testid=pod-block][data-name=bravo] [data-testid=pod-project]:has-text("bravo-app")', { timeout: 30000 })
       await local.waitForSelector('[data-testid=pod-block][data-name=charlie]', { timeout: 30000 })
+      const keyC = deviceKey(dataC)
+      // Bravo is a peer of the LAN of alpha: its page runs under /_lan/pod/ of alpha. Charlie is
+      // of another site: alpha dials it pod to pod over WebRTC, under the same path.
+      await openProject(local, local, 'bravo', path.join(TMP, 'mp-bravo', 'ws'), 'alpha')
+      assert(new URL(local.url()).pathname === `/_lan/pod/${keyB}/project/bravo-app`, 'the page of bravo runs under /_lan/pod/: ' + local.url())
+      await local.goto(`http://127.0.0.1:${PORT_A}/?token=${TOKEN}`)
+      await local.waitForSelector('.home .home-bar', { timeout: 40000 })
+      await openProject(local, local, 'charlie', path.join(TMP, 'mp-charlie', 'ws'), 'alpha')
+      assert(new URL(local.url()).pathname === `/_lan/pod/${keyC}/project/charlie-app`, 'a pod of another site is reached pod to pod: ' + local.url())
       await local.close()
 
-      // 8. Election: alpha leaves, bravo (which now has its own link) takes the role.
+      // 8. Election: bravo takes its own link to the relay, then alpha leaves and bravo (the
+      // newest pod of the site online) takes the role.
+      await stop(bravo)
+      bravo = await startPod('bravo', dataB, portB, { lan: `127.0.0.1:${lanPeerPort}`, relay: true })
+      assert(await waitOnline('pod-bravo'), 'bravo is registered with the relay')
       const pid = Number(fs.readFileSync(path.join(TMP, 'pod.pid'), 'utf8').trim())
       process.kill(pid, 'SIGTERM')
       for (let i = 0; i < 100 && fs.existsSync(`/proc/${pid}`); i++) await sleep(100)
-      await stop(bravo)
-      bravo = await startPod('bravo', dataB, portB, { lan: `127.0.0.1:${lanPeerPort}`, relay: true })
       // The grace of the site, then the new gateway: bravo says it is the entry point.
       let gate = ''
       for (let i = 0; i < 40 && gate !== keyB; i++) {
@@ -272,6 +338,30 @@ run(
         await bp.close()
       }
       assert(gate === keyB, `bravo is the gateway of the site now: ${gate}`)
+
+      // 9. Failover: the browser was on alpha. It asks the relay who carries the site now and
+      // reconnects through bravo; the home page comes back under the new gateway, alpha greyed.
+      await page.waitForSelector('#frame', { timeout: 40000 })
+      app = appOf(page)
+      await app.waitForSelector('.home .home-bar', { timeout: 30000 })
+      const bravoWs = path.join(TMP, 'mp-bravo', 'ws')
+      assert((await app.textContent('.home-bar')).includes(bravoWs), 'the home page runs on the new gateway: ' + (await app.textContent('.home-bar')))
+      assert(!(await app.$('[data-testid=pod-block][data-name=alpha]:not(.offline)')), 'the pod that left is not shown as online')
+
+      // 10. Each pod registered at the relay gets its own tunnel: a project opened on bravo and
+      // on charlie, each one under /pod/<key>/ of the same origin.
+      await openProject(page, app, 'bravo', bravoWs, 'bravo', true)
+      const keys = await tunnelKeys(page)
+      assert(keys.includes(keyB), 'bravo has its own tunnel: ' + keys.join(','))
+      // Charlie is registered at the relay: its page opens through its own tunnel, under /pod/,
+      // on the same origin.
+      await app.goto(`${ORIGIN}/pod/${keyC}/`, { waitUntil: 'domcontentloaded' })
+      await app.waitForSelector('.home .home-bar', { timeout: 40000 })
+      const curl = new URL(app.url())
+      assert(curl.origin === ORIGIN && curl.pathname === `/pod/${keyC}/`, 'the page of charlie runs under its own path: ' + app.url())
+      assert((await app.textContent('.home-bar')).includes(path.join(TMP, 'mp-charlie', 'ws')), 'the page comes from charlie: ' + (await app.textContent('.home-bar')))
+      const direct = await tunnelKeys(page)
+      for (const k of [keyB, keyC]) assert(direct.includes(k), `${k} has its own tunnel: ` + direct.join(','))
 
       if (errors.length) assert(false, 'page errors:\n    ' + errors.join('\n    '))
     } finally {
