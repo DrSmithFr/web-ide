@@ -62,6 +62,7 @@ type sigMsg struct {
 	Nonce     string    `json:"nonce,omitempty"`
 	Sig       string    `json:"sig,omitempty"`
 	Version   string    `json:"version,omitempty"`
+	Protocol  int       `json:"protocol,omitempty"`
 	Preferred bool      `json:"preferred,omitempty"`
 	Peers     []string  `json:"peers,omitempty"`
 	Site      string    `json:"site,omitempty"`
@@ -71,13 +72,14 @@ type sigMsg struct {
 
 // PodInfo is one pod of the account as the relay sees it (mirrors relay.PodInfo).
 type PodInfo struct {
-	Key     string `json:"key"`
-	PodID   string `json:"podId"`
-	Name    string `json:"name"`
-	Version string `json:"version"`
-	Site    string `json:"site"`
-	Gateway bool   `json:"gateway"`
-	Since   int64  `json:"since"`
+	Key      string `json:"key"`
+	PodID    string `json:"podId"`
+	Name     string `json:"name"`
+	Version  string `json:"version"`
+	Protocol int    `json:"protocol"`
+	Site     string `json:"site"`
+	Gateway  bool   `json:"gateway"`
+	Since    int64  `json:"since"`
 }
 
 // toSync turns the sync part of a signaling message into the message the sync loop reads.
@@ -129,6 +131,9 @@ type Config struct {
 	Limits *tunnel.RateLimiter
 	// Version is the pod version, told to the relay (it lists the pods of the account).
 	Version string
+	// Protocol is the multi-pod protocol of this pod (multipod.Protocol), told to the relay: a pod
+	// of another one is listed with its version and never elected gateway.
+	Protocol int
 	// Preferred marks this pod as the entry point of its site (Settings > Remote access).
 	Preferred bool
 	// OnPods is called with the pods of the account the relay sees, OnGateway with the gateway of
@@ -223,9 +228,9 @@ func (c *Client) runOnce(ctx context.Context) error {
 	if c.cfg.Identity != nil && c.cfg.Identity.Paired() {
 		account, cert, _ := c.cfg.Identity.State()
 		reg = sigMsg{Type: "register", ID: c.cfg.PodID, Secret: c.cfg.Secret, Name: c.cfg.Name,
-			Account: account, Cert: cert, Prove: true, Version: c.cfg.Version, Preferred: c.cfg.Preferred}
+			Account: account, Cert: cert, Prove: true, Version: c.cfg.Version, Protocol: c.cfg.Protocol, Preferred: c.cfg.Preferred}
 	} else {
-		reg = sigMsg{Type: "register", ID: c.cfg.PodID, Secret: c.cfg.Secret, Name: c.cfg.Name, Version: c.cfg.Version}
+		reg = sigMsg{Type: "register", ID: c.cfg.PodID, Secret: c.cfg.Secret, Name: c.cfg.Name, Version: c.cfg.Version, Protocol: c.cfg.Protocol}
 	}
 	if err := link.send(reg); err != nil {
 		return err

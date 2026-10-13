@@ -44,8 +44,13 @@ type PodInfo struct {
 	PodID   string `json:"podId"`
 	Name    string `json:"name"`
 	Version string `json:"version"`
-	Site    string `json:"site"`
-	Gateway bool   `json:"gateway"`
+	// Protocol is the multi-pod protocol the pod told at register (0: a pod older than #60).
+	Protocol int    `json:"protocol"`
+	Site     string `json:"site"`
+	Gateway  bool   `json:"gateway"`
+	// Mismatch: this pod does not speak the protocol of its site ("outdated" or "newer"). The
+	// relay never elects one as gateway, and a pod that routes says so (relay.md, *Multi-pod*).
+	Mismatch string `json:"mismatch,omitempty"`
 	// Preferred: the pod was marked as the entry point of its site by its user.
 	Preferred bool  `json:"preferred,omitempty"`
 	Since     int64 `json:"since"` // when its link came up (kept across a link that dropped uncleanly)
@@ -224,6 +229,9 @@ func (s *Server) recomputeSites(account string) bool {
 			siteOf[k] = site
 		}
 		gateway := ""
+		// A gateway must speak the protocol of its site: a browser entering through it routes every
+		// pod of the site through it, and a pod of another protocol cannot carry those channels.
+		proto := siteProtocol(keys, online)
 		// A gateway in grace keeps the role even though its link is down.
 		if prev := s.gateways[site]; prev != "" && s.grace[prev] != nil {
 			for _, k := range keys {
@@ -239,6 +247,9 @@ func (s *Server) recomputeSites(account string) bool {
 				if pc == nil {
 					continue // a gateway in grace is not online: it is kept above, never elected
 				}
+				if pc.protocol != proto {
+					continue
+				}
 				if gateway == "" || betterGateway(s.since[pc.key], pc.preferred, s.since[gateway], online[gateway].preferred) {
 					gateway = k
 				}
@@ -253,6 +264,7 @@ func (s *Server) recomputeSites(account string) bool {
 				continue
 			}
 			infos = append(infos, PodInfo{Key: k, PodID: pc.id, Name: pc.name, Version: pc.version,
+				Protocol: pc.protocol, Mismatch: protocolMismatch(pc.protocol, proto),
 				Site: site, Gateway: gateways[site] == k, Preferred: pc.preferred, Since: s.since[k].Unix()})
 		}
 	}
@@ -282,6 +294,40 @@ func (s *Server) recomputeSites(account string) bool {
 	}
 	s.pushSites(account, gateways, infos)
 	return true
+}
+
+// siteProtocol is the protocol of a site: the one its online pods mostly run, the highest winning
+// a tie. A pod of another one is listed with its version but never elected gateway.
+func siteProtocol(keys []string, online map[string]*podConn) int {
+	best, count := 0, -1
+	for _, k := range keys {
+		pc := online[k]
+		if pc == nil {
+			continue
+		}
+		c := 0
+		for _, o := range keys {
+			if po := online[o]; po != nil && po.protocol == pc.protocol {
+				c++
+			}
+		}
+		if c > count || (c == count && pc.protocol > best) {
+			best, count = pc.protocol, c
+		}
+	}
+	return best
+}
+
+// protocolMismatch names what a pod that does not run the protocol of its site is: outdated (an
+// older one, so *Update this pod*) or newer (this pod is the one to update).
+func protocolMismatch(p, site int) string {
+	switch {
+	case p < site:
+		return "outdated"
+	case p > site:
+		return "newer"
+	}
+	return ""
 }
 
 // betterGateway elects the gateway of a site: the preferred pod, else the one online the longest,

@@ -33,7 +33,7 @@ func (s *ProjectsSource) Enabled() bool       { return true }
 // Read is the whole list. It holds no timestamp: the relay stamps the write it stores, so an
 // unchanged list stays an unchanged list and nothing is written again.
 func (s *ProjectsSource) Read() json.RawMessage {
-	l := List{V: 1, Name: s.name, Version: s.version, Projects: s.read()}
+	l := List{V: 1, Name: s.name, Version: s.version, Protocol: Protocol, Projects: s.read()}
 	b, err := json.Marshal(l)
 	if err != nil {
 		return json.RawMessage(`{}`)

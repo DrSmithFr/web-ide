@@ -31,6 +31,7 @@ type Config struct {
 	Identity *identity.PodIdentity
 	Name     string // told to the peers (the host name)
 	Version  string // the pod version, told to the peers
+	Protocol int    // the multi-pod protocol of this pod (multipod.Protocol), told to the peers
 	// Handler serves a request of a trusted peer as a request of the machine itself
 	// (server.ServeTrusted): the peer proved it is a device of the account.
 	Handler http.Handler
@@ -109,6 +110,7 @@ type peer struct {
 	cert     *identity.Cert
 	name     string
 	version  string
+	protocol int // the multi-pod protocol it told in its $info (0: older than #60)
 	links    map[*link]bool
 	out      *link // the link we dialed: the gateway goes through it
 	projects json.RawMessage
@@ -496,7 +498,7 @@ func (m *Manager) run(l *link, peerFP string) {
 	m.attach(l, peerFP)
 	defer m.detach(l, peerFP)
 	_, _, rev := m.cfg.Identity.State()
-	_ = l.send("$info", info{Name: m.cfg.Name, Version: m.cfg.Version, Port: m.Port()})
+	_ = l.send("$info", info{Name: m.cfg.Name, Version: m.cfg.Version, Protocol: m.cfg.Protocol, Port: m.Port()})
 	if rev != nil {
 		_ = l.send("$revocations", rev)
 	}
@@ -626,7 +628,7 @@ func (m *Manager) setInfo(l *link, i info) {
 		if i.Name != "" {
 			p.name = i.Name
 		}
-		p.version = i.Version
+		p.version, p.protocol = i.Version, i.Protocol
 	}
 	m.mu.Unlock()
 	if l.inbound && i.Port > 0 && l.remoteHost != "" {
@@ -784,8 +786,10 @@ type PeerView struct {
 	Name        string `json:"name"`
 	Fingerprint string `json:"fingerprint"`
 	Version     string `json:"version"`
-	Addr        string `json:"addr"`
-	Online      bool   `json:"online"`
+	// Protocol is the multi-pod protocol the peer told (0: a pod older than #60).
+	Protocol int    `json:"protocol"`
+	Addr     string `json:"addr"`
+	Online   bool   `json:"online"`
 	// Path is where the page of the peer is served through this pod (empty: offline).
 	Path     string          `json:"path"`
 	Projects json.RawMessage `json:"projects,omitempty"`
@@ -819,7 +823,7 @@ func (m *Manager) Status() Status {
 		if m.cfg.Identity.PeerError(p.cert) != nil {
 			continue
 		}
-		v := PeerView{ID: key, Name: p.name, Fingerprint: identity.Fingerprint(key), Version: p.version, Online: p.out != nil, Projects: p.projects}
+		v := PeerView{ID: key, Name: p.name, Fingerprint: identity.Fingerprint(key), Version: p.version, Protocol: p.protocol, Online: p.out != nil, Projects: p.projects}
 		if p.out != nil {
 			v.Addr = p.out.addr
 		}

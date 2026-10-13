@@ -81,8 +81,14 @@ func wrapFor(t *testing.T, a *identity.Account, p *identity.PodIdentity, epoch i
 // blobOf is the list a pod published under its own kind, sealed with the key of the epoch.
 func blobOf(t *testing.T, a *identity.Account, device string, epoch int64, seq int64, name string, titles ...string) *identity.BlobRecord {
 	t.Helper()
+	return blobOfProto(t, a, device, epoch, seq, name, 0, titles...)
+}
+
+// blobOfProto seals the list of a pod that tells the protocol proto (0: it tells none).
+func blobOfProto(t *testing.T, a *identity.Account, device string, epoch int64, seq int64, name string, proto int, titles ...string) *identity.BlobRecord {
+	t.Helper()
 	kind := identity.ProjectsKind(device)
-	content, err := json.Marshal(List{V: 1, Name: name, Version: "1.0", Projects: projects(titles...)})
+	content, err := json.Marshal(List{V: 1, Name: name, Version: "1.0", Protocol: proto, Projects: projects(titles...)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,6 +114,57 @@ func projects(titles ...string) []Project {
 		out = append(out, Project{ID: string(rune('a' + i)), Title: s})
 	}
 	return out
+}
+
+// TestDirectoryProtocolMismatch: a pod that does not speak this multi-pod protocol is listed with
+// its version and what it means — outdated (Update this pod) or newer (this pod is the one to
+// update) — and it is never routed to. A pod that tells none is the older one.
+func TestDirectoryProtocolMismatch(t *testing.T) {
+	hub, p, a := hubOf(t)
+	d := New(hub, fakeLAN{st: lan.Status{Peers: []lan.PeerView{{ID: "devOld", Name: "older", Online: true,
+		Path: "/_lan/pod/devOld", Protocol: 0}}}})
+	if err := hub.SetWrap(wrapFor(t, a, p, 0)); err != nil {
+		t.Fatal(err)
+	}
+	hub.SetOther(func(m settingsync.Msg) { d.HandleBlob(m) })
+	d.HandleBlob(settingsync.Msg{Type: "blob", Blob: blobOfProto(t, a, "devList", 0, 1, "listed", Protocol+1, "quiet reader")})
+	d.RelayPods([]relayclient.PodInfo{
+		{Key: "devNew", Name: "newer", Site: "devOld", Protocol: Protocol + 1},
+		{Key: "devSame", Name: "same", Site: "devOld", Protocol: Protocol},
+		{Key: p.ID(), Name: "this pod", Site: "devOld", Gateway: true},
+	})
+
+	by := map[string]PodView{}
+	for _, v := range d.List() {
+		by[v.Key] = v
+	}
+	if len(by) != 4 {
+		t.Fatalf("four pods expected: %+v", by)
+	}
+	if by["devOld"].Mismatch != MismatchOutdated || by["devOld"].Protocol != 0 {
+		t.Fatalf("a LAN peer that tells no protocol is outdated: %+v", by["devOld"])
+	}
+	if by["devNew"].Mismatch != MismatchNewer || by["devNew"].Protocol != Protocol+1 {
+		t.Fatalf("a pod the relay reports with a newer protocol: %+v", by["devNew"])
+	}
+	if by["devSame"].Mismatch != "" {
+		t.Fatalf("a pod of this protocol carries no mismatch: %+v", by["devSame"])
+	}
+	if by["devList"].Mismatch != MismatchNewer || by["devList"].Online {
+		t.Fatalf("a pod only known by its list: the list carries its protocol: %+v", by["devList"])
+	}
+	for _, key := range []string{"devOld", "devNew", "devList"} {
+		if d.Routeable(key) {
+			t.Fatalf("%s does not speak this protocol, it is not routed to", key)
+		}
+	}
+	if !d.Routeable("devSame") {
+		t.Fatal("a pod of this protocol is routed to")
+	}
+	// A pod nothing says about: routed to, like any pod of this build.
+	if !d.Routeable("devUnknown") {
+		t.Fatal("a pod no source names is not held against a protocol")
+	}
 }
 
 // TestDirectoryNoKeyYet: before the wrap arrived, a pod online is listed without its list — the page

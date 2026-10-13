@@ -45,13 +45,14 @@ type sigMsg struct {
 	Kind    string                  `json:"kind,omitempty"`
 	Updated int64                   `json:"updated,omitempty"` // time the stored blob or wrap was written
 	Message string                  `json:"message,omitempty"`
-	// Sites (milestone 3): register carries the pod version and the preferred switch, `site` the
-	// device keys of its LAN peers, `challenge`/`proof` the nonce of the proof of possession, and
-	// `pods`/`gateway` what the relay sees of the account.
+	// Sites (milestone 3): register carries the pod version, its multi-pod protocol and the
+	// preferred switch, `site` the device keys of its LAN peers, `challenge`/`proof` the nonce of
+	// the proof of possession, and `pods`/`gateway` what the relay sees of the account.
 	Prove     bool      `json:"prove,omitempty"`
 	Nonce     string    `json:"nonce,omitempty"`
 	Sig       string    `json:"sig,omitempty"`
 	Version   string    `json:"version,omitempty"`
+	Protocol  int       `json:"protocol,omitempty"`
 	Preferred bool      `json:"preferred,omitempty"`
 	Peers     []string  `json:"peers,omitempty"`
 	Site      string    `json:"site,omitempty"`
@@ -100,6 +101,7 @@ type podConn struct {
 	// link came up, and whether it ended cleanly (a bye).
 	key       string
 	version   string
+	protocol  int // the multi-pod protocol the pod told (0: one older than #60, or none told)
 	preferred bool
 	peers     []string
 	clean     bool
@@ -197,7 +199,7 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			pc.id, pc.name, pc.account = m.ID, m.Name, m.Account
-			pc.version, pc.preferred = m.Version, m.Preferred
+			pc.version, pc.preferred, pc.protocol = m.Version, m.Preferred, m.Protocol
 			// A paired pod sends its certificate: it must verify against the account it
 			// claims, which only a device holding the account key can sign.
 			if m.Cert != nil {

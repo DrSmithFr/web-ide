@@ -26,6 +26,25 @@ const PeerPrefix = "/_lan/pod/"
 // BaseHeader tells a peer the path its page runs under (server.ServeTrusted).
 const BaseHeader = "X-Webide-Base"
 
+// ProtocolGap compares what the pod at key speaks with what this pod speaks: -1 when it is older,
+// 1 when it is newer, 0 when they agree (the number is multipod.Protocol). name and version go
+// with it, for the page that offers to update.
+func (m *Manager) ProtocolGap(key string) (name, version string, gap int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	p := m.peers[key]
+	if p == nil {
+		return "", "", 0
+	}
+	gap = p.protocol - m.cfg.Protocol
+	if gap > 0 {
+		gap = 1
+	} else if gap < 0 {
+		gap = -1
+	}
+	return p.name, p.version, gap
+}
+
 // ServeGateway forwards a request under the path of a peer to that peer, over the link we
 // dialed, with our TLS certificate, which the peer trusts. The server checked the token.
 // base is the path the peer's page runs under for the browser: the gateway origin by default,
@@ -50,6 +69,11 @@ func (m *Manager) ServeGateway(w http.ResponseWriter, r *http.Request, base stri
 		addr, fp = p.out.addr, p.out.serverFP
 	}
 	m.mu.Unlock()
+	// A pod of another protocol is not routed to: its channels would not agree with this pod's.
+	if name, version, gap := m.ProtocolGap(key); gap != 0 {
+		UpdatePage(w, r, name, version, gap < 0)
+		return
+	}
 	if addr == "" {
 		// Not a pod of the local network: this pod may still reach it, pod to pod through the
 		// relay (pod/internal/multipod.RemoteGateway).

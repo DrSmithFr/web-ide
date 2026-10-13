@@ -38,13 +38,20 @@ func host(ts *httptest.Server) string {
 // proof of possession with the given key (its own, or another one to fake a copied certificate).
 func registerPod(t *testing.T, ts *httptest.Server, id, secret string, account string, cert *identity.Cert, prove bool, signWith ed25519.PrivateKey, preferred bool) *wsClient {
 	t.Helper()
+	return registerPodProto(t, ts, id, secret, account, cert, prove, signWith, preferred, 0)
+}
+
+// registerPodProto registers a pod that tells the multi-pod protocol proto (0: it tells none, the
+// way a pod older than #60 does).
+func registerPodProto(t *testing.T, ts *httptest.Server, id, secret string, account string, cert *identity.Cert, prove bool, signWith ed25519.PrivateKey, preferred bool, proto int) *wsClient {
+	t.Helper()
 	c, _, err := websocket.Dial(context.Background(), wsURL(ts, "/_relay/pod"), nil)
 	if err != nil {
 		t.Fatal("dialing the pod link:", err)
 	}
 	pc := &wsClient{c}
 	pc.send(t, sigMsg{Type: "register", ID: id, Secret: secret, Name: id, Account: account,
-		Cert: cert, Prove: prove, Version: "1.10.0", Preferred: preferred})
+		Cert: cert, Prove: prove, Version: "1.10.0", Protocol: proto, Preferred: preferred})
 	if prove {
 		m := pc.next(t)
 		if m.Type != "challenge" || m.Nonce == "" {
@@ -407,6 +414,105 @@ loop:
 			}
 		case <-end:
 			t.Fatal("the gateway role must move when the grace ends")
+		}
+	}
+}
+
+// TestSiteProtocolGateway: a pod of another multi-pod protocol is listed with its version and is
+// never elected gateway — a browser entering through it could not route the pods of its site. The
+// protocol of the site is the one its pods mostly run.
+func TestSiteProtocolGateway(t *testing.T) {
+	ts := newRelay(t)
+	a := testAccount(t)
+	kA, kB := identity.KeyID(podDevice(t, a, "A").key), identity.KeyID(podDevice(t, a, "B").key)
+	kC := identity.KeyID(podDevice(t, a, "C").key)
+
+	aPod := registerPodProto(t, ts, "A", "s1", a.ID, podDevice(t, a, "A").cert, true, podDevice(t, a, "A").key, false, 1)
+	defer aPod.close()
+	ready(t, aPod)
+	bPod := registerPodProto(t, ts, "B", "s2", a.ID, podDevice(t, a, "B").cert, true, podDevice(t, a, "B").key, false, 1)
+	defer bPod.close()
+	ready(t, bPod)
+	// C speaks a newer protocol and is marked preferred: without the rule it would be the gateway.
+	cPod := registerPodProto(t, ts, "C", "s3", a.ID, podDevice(t, a, "C").cert, true, podDevice(t, a, "C").key, true, 2)
+	defer cPod.close()
+	ready(t, cPod)
+	for _, p := range []*wsClient{aPod, bPod} {
+		p.send(t, sigMsg{Type: "site", Peers: []string{kA, kB, kC}})
+	}
+
+	pods := podsUntil(t, aPod, func(p []PodInfo) bool {
+		var sa, sb, sc string
+		for _, x := range p {
+			switch x.PodID {
+			case "A":
+				sa = x.Site
+			case "B":
+				sb = x.Site
+			case "C":
+				sc = x.Site
+			}
+		}
+		return len(p) == 3 && sa != "" && sa == sb && sa == sc
+	})
+	for _, p := range pods {
+		switch p.PodID {
+		case "C":
+			if p.Gateway {
+				t.Fatalf("a pod of another protocol is never the gateway of the site: %+v", p)
+			}
+			if p.Protocol != 2 || p.Mismatch != "newer" {
+				t.Fatalf("the pod of another protocol is listed with its protocol and what it means: %+v", p)
+			}
+		default:
+			if p.Protocol != 1 || p.Mismatch != "" {
+				t.Fatalf("the pods of the protocol of the site carry no mismatch: %+v", p)
+			}
+		}
+	}
+	var gateway string
+	for _, p := range pods {
+		if p.Gateway {
+			gateway = p.PodID
+		}
+	}
+	if gateway != "A" {
+		t.Fatalf("the gateway must be a pod of the protocol of the site (A), got %s", gateway)
+	}
+}
+
+// TestSiteProtocolTie: when the pods of a site split evenly, the highest protocol wins — the site
+// runs the newest build the majority can agree on, and the older pods are the ones to update.
+func TestSiteProtocolTie(t *testing.T) {
+	ts := newRelay(t)
+	a := testAccount(t)
+	kB := identity.KeyID(podDevice(t, a, "B").key)
+
+	aPod := registerPodProto(t, ts, "A", "s1", a.ID, podDevice(t, a, "A").cert, true, podDevice(t, a, "A").key, false, 1)
+	defer aPod.close()
+	ready(t, aPod)
+	bPod := registerPodProto(t, ts, "B", "s2", a.ID, podDevice(t, a, "B").cert, true, podDevice(t, a, "B").key, false, 2)
+	defer bPod.close()
+	ready(t, bPod)
+	aPod.send(t, sigMsg{Type: "site", Peers: []string{kB}})
+
+	pods := podsUntil(t, aPod, func(p []PodInfo) bool {
+		if len(p) != 2 {
+			return false
+		}
+		for _, x := range p {
+			if x.Mismatch != "" {
+				return true
+			}
+		}
+		return false
+	})
+	for _, p := range pods {
+		if p.PodID == "B" && (!p.Gateway || p.Mismatch != "") {
+			t.Fatalf("the highest protocol wins the tie, B runs it and is the gateway: %+v", p)
+		}
+		if p.PodID == "A" && (p.Gateway || p.Mismatch != "outdated") {
+			t.Fatalf("A runs the older protocol: it is listed as outdated and kept out of the role: %+v", p)
 		}
 	}
 }

@@ -63,6 +63,7 @@ func main() {
 	lanAddr := flag.String("lan", "", "listen address of the link to the other pods of the account on the LAN (default: config.json, else "+lan.DefaultAddr+"; off: none)")
 	relay := flag.String("relay", "", "relay URL the pod registers with (wss:// or ws://), or the word relay to enable")
 	preferred := flag.Bool("preferred", false, "make this pod the preferred gateway of its site: the browser opens the other pods through it")
+	multipodProtocol := flag.Int("multipod-protocol", multipod.Protocol, "the multi-pod protocol this pod speaks (tests: a pod of another one is listed with its version and never routed to)")
 	forceTurn := flag.Bool("force-turn", false, "force the browser through TURN (no direct or STUN path)")
 	turnPort := flag.Int("turn-port", 0, "relay: the STUN/TURN control port (default 3478)")
 	turnIP := flag.String("turn-ip", "", "relay: the STUN/TURN IP given to clients (default: the machine IP)")
@@ -78,6 +79,9 @@ func main() {
 		fmt.Println(version)
 		return
 	}
+	// The multi-pod protocol this pod speaks (multipod.Protocol, unless a test asked for another
+	// one): what the other pods compare to decide it can be routed to.
+	protocol := *multipodProtocol
 	if len(flag.Args()) > 0 && flag.Arg(0) == "relay" {
 		// The relay has its own data folder (~/.web-ide-relay): pass "" when -data was not
 		// set explicitly, else the pod's default would hold relay.db.
@@ -276,7 +280,7 @@ func main() {
 		}
 	}
 	if cfg.LAN.Addr != "off" {
-		m := startLAN(ctx, st, cfg, srv, podID, *mdns, pushRevocations, forwardBlob, forwardSyncKey, pullLists, hub, &onLANChange, remoteGateway(&relayCli, &dir))
+		m := startLAN(ctx, st, cfg, srv, podID, *mdns, protocol, pushRevocations, forwardBlob, forwardSyncKey, pullLists, hub, &onLANChange, remoteGateway(&relayCli, &dir))
 		if m != nil {
 			srv.LAN = m
 			lanMgr = m
@@ -325,6 +329,7 @@ func main() {
 			Identity:  podID,
 			Sync:      srv.Sync,
 			Version:   version,
+			Protocol:  protocol,
 			Preferred: cfg.Gateway.Preferred,
 			Route:     podRoute(lanMgr),
 			ForceTurn: *forceTurn,
@@ -401,7 +406,12 @@ func main() {
 // pod-to-pod WebRTC tunnel. The relay link and the directory of the pods come up later, so the
 // dialer reads them when a page asks (Settings > Remote access, relay.md).
 func remoteGateway(cli *atomic.Pointer[relayclient.Client], dir **multipod.Directory) http.Handler {
-	return multipod.NewRemoteGateway(relayDialer{cli: cli, dir: dir})
+	return multipod.NewRemoteGateway(relayDialer{cli: cli, dir: dir}, func(key string) (string, string, int) {
+		if d := *dir; d != nil {
+			return d.GapOf(key)
+		}
+		return "", "", 0
+	})
 }
 
 // relayDialer dials a pod of the account the relay reports online, by its device key.
@@ -414,6 +424,10 @@ func (d relayDialer) Dial(ctx context.Context, key string) (multipod.RemotePod, 
 	cli, dir := d.cli.Load(), *d.dir
 	if cli == nil || dir == nil {
 		return nil, errors.New("this pod has no link to the relay")
+	}
+	// A pod of another multi-pod protocol is never routed to, pod to pod either.
+	if !dir.Routeable(key) {
+		return nil, fmt.Errorf("%s runs another multi-pod protocol: update it", key)
 	}
 	podID := dir.PodID(key)
 	if podID == "" {
@@ -433,7 +447,7 @@ func podRoute(m *lan.Manager) *multipod.Route {
 
 // startLAN runs the link to the other pods of the account on the local network: the LAN
 // port, mDNS, and the page of each pod found, served under /_lan/pod/<key>/.
-func startLAN(ctx context.Context, st *store.Store, cfg *config.Config, srv *server.Server, podID *identity.PodIdentity, mdns bool,
+func startLAN(ctx context.Context, st *store.Store, cfg *config.Config, srv *server.Server, podID *identity.PodIdentity, mdns bool, protocol int,
 	onRevocations func(*identity.Revocations), onBlob func(*identity.BlobRecord), onSync func(*identity.SyncKeyRecord),
 	onKeyReady func(), hub *settingsync.Hub, onChange *func(), remote http.Handler) *lan.Manager {
 	m, err := lan.New(lan.Config{
@@ -442,6 +456,7 @@ func startLAN(ctx context.Context, st *store.Store, cfg *config.Config, srv *ser
 		Identity:    podID,
 		Name:        hostname(),
 		Version:     version,
+		Protocol:    protocol,
 		Handler:     http.HandlerFunc(srv.ServeTrusted),
 		ServeTunnel: srv.ServeTunnel,
 		Remote:      remote,

@@ -274,5 +274,10 @@
   "The agent needs you": "L'agent a besoin de vous",
   "Tests failed": "Les tests ont échoué",
   "%s · %s ended with code %d": "%s · %s s'est terminé avec le code %d",
-  "Feedback on #%d %s": "Retour sur #%d %s"
+  "Feedback on #%d %s": "Retour sur #%d %s",
+  "Update this pod": "Mettez ce pod à jour",
+  "Back to the projects": "Retour aux projets",
+  "%s runs an older version (%s): its projects cannot be opened from this pod.": "%s tourne sur une version plus ancienne (%s) : ses projets ne peuvent pas être ouverts depuis ce pod.",
+  "%s runs a newer version (%s): this pod is the one to update.": "%s tourne sur une version plus récente (%s) : c'est ce pod qu'il faut mettre à jour.",
+  "%s runs another multi-pod protocol: update it": "%s tourne sur un autre protocole multi-pod : mettez-le à jour"
 }

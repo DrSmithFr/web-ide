@@ -44,11 +44,18 @@ const remoteIdle = 2 * time.Minute
 // RemoteGateway serves the pods a dialer reaches, under the peer path of this pod's origin.
 type RemoteGateway struct {
 	dial Dialer
+	// gap is what this pod makes of the protocol of a pod, by its device key (Directory.GapOf);
+	// nil when nothing is known, which routes everything.
+	gap GapOf
 
 	mu    sync.Mutex
 	fetch map[string]*fetchWindow // by device key: the window carrying the http channels
 	seq   int
 }
+
+// GapOf says what this pod makes of the protocol of the pod at key: -1 older, 1 newer, 0 the same.
+// Implemented by multipod.Directory.GapOf.
+type GapOf func(key string) (name, version string, gap int)
 
 // fetchWindow is the window one pod's fetches run on: its rpc channel stays open, idle, only so
 // the pod keeps serving the http channels opened on it.
@@ -59,11 +66,11 @@ type fetchWindow struct {
 }
 
 // NewRemoteGateway makes the handler; dial is nil when this pod cannot reach another pod.
-func NewRemoteGateway(dial Dialer) *RemoteGateway {
+func NewRemoteGateway(dial Dialer, gap GapOf) *RemoteGateway {
 	if dial == nil {
 		return nil
 	}
-	return &RemoteGateway{dial: dial, fetch: map[string]*fetchWindow{}}
+	return &RemoteGateway{dial: dial, gap: gap, fetch: map[string]*fetchWindow{}}
 }
 
 // ServeHTTP serves /_lan/pod/<key>/… of a pod this pod reaches over the relay.
@@ -72,6 +79,14 @@ func (g *RemoteGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if key == "" {
 		http.Error(w, "no pod", http.StatusBadRequest)
 		return
+	}
+	// A pod of another protocol is not routed to, pod to pod or over the LAN: the page of the
+	// gateway says what to update instead of the app of a pod it cannot serve.
+	if g.gap != nil {
+		if name, version, gap := g.gap(key); gap != 0 {
+			lan.UpdatePage(w, r, first(name, key), version, gap < 0)
+			return
+		}
 	}
 	if rest == "ws" {
 		g.serveWS(w, r, key)

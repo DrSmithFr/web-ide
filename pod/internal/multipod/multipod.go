@@ -31,6 +31,11 @@ type PodView struct {
 	Site        string `json:"site,omitempty"`
 	Gateway     bool   `json:"gateway,omitempty"`
 	Online      bool   `json:"online"`
+	// Protocol is the multi-pod protocol of the pod (multipod.Protocol): 0 for a pod that tells
+	// none, which is a pod older than #60. Mismatch says what this pod makes of it: "outdated"
+	// (Update this pod) or "newer" (this pod is the one to update), empty when they agree.
+	Protocol int    `json:"protocol"`
+	Mismatch string `json:"mismatch,omitempty"`
 	// Path is where the page of the pod runs through this pod (a pod of the LAN).
 	Path     string          `json:"path,omitempty"`
 	Seen     int64           `json:"seen,omitempty"` // time the pod last published its list
@@ -195,6 +200,7 @@ type List struct {
 	V        int       `json:"v"`
 	Name     string    `json:"name"`
 	Version  string    `json:"version"`
+	Protocol int       `json:"protocol,omitempty"`
 	Projects []Project `json:"projects"`
 }
 
@@ -223,7 +229,7 @@ func (d *Directory) List() []PodView {
 	if d.lan != nil {
 		for _, p := range d.lan.Status().Peers {
 			v := PodView{Key: p.ID, Name: p.Name, Version: p.Version, Fingerprint: p.Fingerprint,
-				Online: p.Online, Path: p.Path, Projects: p.Projects}
+				Online: p.Online, Path: p.Path, Projects: p.Projects, Protocol: p.Protocol}
 			if l := d.lists[p.ID]; l != nil {
 				v.Name, v.Version = first(l.Name, v.Name), first(l.Version, v.Version)
 			}
@@ -237,7 +243,7 @@ func (d *Directory) List() []PodView {
 			continue
 		}
 		v := PodView{Key: p.Key, Name: p.Name, Version: p.Version, Fingerprint: identity.Fingerprint(p.Key),
-			Site: p.Site, Gateway: p.Gateway, Online: true}
+			Site: p.Site, Gateway: p.Gateway, Online: true, Protocol: p.Protocol}
 		if d.remote {
 			// Reachable pod to pod: its page runs under this pod's origin too.
 			v.Path = lan.PeerPrefix + p.Key
@@ -251,7 +257,7 @@ func (d *Directory) List() []PodView {
 		if key == d.own || seen[key] {
 			continue
 		}
-		v := PodView{Key: key, Name: l.Name, Version: l.Version, Fingerprint: identity.Fingerprint(key), Online: false}
+		v := PodView{Key: key, Name: l.Name, Version: l.Version, Fingerprint: identity.Fingerprint(key), Online: false, Protocol: l.Protocol}
 		d.fill(&v, key, l.Name)
 		seen[key] = true
 		rank[key] = 2
@@ -263,7 +269,52 @@ func (d *Directory) List() []PodView {
 		}
 		return out[i].Name < out[j].Name
 	})
+	for i := range out {
+		out[i].Mismatch = Mismatch(Protocol, out[i].Protocol)
+	}
 	return out
+}
+
+// GapOf is what this pod makes of the protocol of another pod, by its device key: -1 when it is
+// older, 1 when it is newer, 0 when they speak the same one (or when nothing says). The live
+// sources (the relay, the LAN link) answer before a cached list.
+func (d *Directory) GapOf(key string) (name, version string, gap int) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for _, p := range d.relay {
+		if p.Key == key {
+			return p.Name, p.Version, gapTo(Protocol, p.Protocol)
+		}
+	}
+	if d.lan != nil {
+		for _, p := range d.lan.Status().Peers {
+			if p.ID == key {
+				return p.Name, p.Version, gapTo(Protocol, p.Protocol)
+			}
+		}
+	}
+	if l := d.lists[key]; l != nil {
+		return l.Name, l.Version, gapTo(Protocol, l.Protocol)
+	}
+	return "", "", 0
+}
+
+// Routeable reports whether this pod may open a channel of the pod at key: one that does not
+// speak this protocol is never routed to, the home page offers to update it instead.
+func (d *Directory) Routeable(key string) bool {
+	_, _, gap := d.GapOf(key)
+	return gap == 0
+}
+
+// gapTo turns two protocol numbers into -1, 0 or 1.
+func gapTo(own, other int) int {
+	switch {
+	case other < own:
+		return -1
+	case other > own:
+		return 1
+	}
+	return 0
 }
 
 // fill adds the cached list of a pod to its view: its projects, and the time it published them.

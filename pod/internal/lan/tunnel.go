@@ -11,6 +11,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 	"github.com/DrSmithFr/web-ide/pod/internal/tunnel"
 )
@@ -147,6 +148,14 @@ func (m *Manager) OpenTunnel(ctx context.Context, key, window, label string, via
 		addr, fp = p.out.addr, p.out.serverFP
 	}
 	m.mu.Unlock()
+	// A pod of another protocol is never routed to: the channels of a window would not agree on
+	// the other side. The home page offers to update it instead.
+	if name, _, gap := m.ProtocolGap(key); gap != 0 {
+		if name == "" {
+			name = key
+		}
+		return nil, i18n.Errorf("%s runs another multi-pod protocol: update it", name)
+	}
 	if addr == "" {
 		return nil, errors.New("lan: this pod is not a peer of the local network")
 	}

@@ -103,6 +103,30 @@ func startPod(t *testing.T, a *identity.Account, name string, peers ...string) *
 	return &pod{m: m, id: id, dir: dir}
 }
 
+// which names the word the page of the gateway must use for that peer.
+func wantWord(name string) string {
+	if name == "older" {
+		return "older version"
+	}
+	return "newer version"
+}
+
+// startPodProto starts a pod of the account that speaks another multi-pod protocol (0: it tells
+// none, the way a pod older than #60 does).
+func startPodProto(t *testing.T, a *identity.Account, name string, proto int, peers ...string) *pod {
+	t.Helper()
+	id, dir := podIdentity(t, a, name)
+	m, err := New(Config{Dir: dir, Addr: "127.0.0.1:0", Identity: id, Name: name, Version: "test", Protocol: proto,
+		Handler: podHandler(name), Peers: peers, Tick: 50 * time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	m.Start(ctx)
+	return &pod{m: m, id: id, dir: dir}
+}
+
 func (p *pod) addr() string { return p.m.Status().Listen }
 
 // waitFor polls the status of a pod until cond holds.
@@ -188,6 +212,52 @@ func TestTwoPodsReachEachOther(t *testing.T) {
 	res.Body.Close()
 	if !strings.Contains(string(body), `"name":"alpha"`) {
 		t.Fatalf("gateway path: %s", body)
+	}
+}
+
+// TestProtocolMismatch: a peer that does not speak the multi-pod protocol of this pod is listed
+// with its protocol, its page is not served under the gateway path (the page says what to update),
+// and no channel of it is opened. A pod that tells no protocol at all is the older one.
+func TestProtocolMismatch(t *testing.T) {
+	a := account(t, 1)
+	newer := startPodProto(t, a, "newer", 2)
+	older := startPodProto(t, a, "older", 0)
+	al := startPodProto(t, a, "alpha", 1, newer.addr(), older.addr())
+
+	st := waitFor(t, al, "alpha sees both peers", func(st Status) bool {
+		return online(st, "newer") != nil && online(st, "older") != nil
+	})
+	if p := online(st, "newer"); p.Protocol != 2 {
+		t.Fatalf("the peer tells its protocol: %+v", p)
+	}
+	if p := online(st, "older"); p.Protocol != 0 {
+		t.Fatalf("a peer that tells none counts as protocol 0: %+v", p)
+	}
+
+	gw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { al.m.ServeGateway(w, r, "") }))
+	defer gw.Close()
+	for _, name := range []string{"newer", "older"} {
+		base := online(st, name).Path
+		res, err := http.Get(gw.URL + base + "/project/x")
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		if res.StatusCode != http.StatusBadGateway || !strings.Contains(string(body), "Update this pod") {
+			t.Fatalf("the gateway of %s answers the page that says what to update: %d %s", name, res.StatusCode, body)
+		}
+		if !strings.Contains(string(body), wantWord(name)) {
+			t.Fatalf("the page names which pod is behind: %s", body)
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	for _, p := range st.Peers {
+		if _, err := al.m.OpenTunnel(ctx, p.ID, "window", "rpc", nil, "fb", "fp"); err == nil {
+			t.Fatalf("a pod of another protocol is never routed to: %s", p.Name)
+		}
 	}
 }
 

@@ -68,6 +68,10 @@ type message struct {
 type info struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
+	// Protocol is the multi-pod protocol of the pod (multipod.Protocol): a pod that speaks
+	// another one is listed as outdated or newer and is never routed to. A pod older than #60
+	// tells none: it counts as protocol 0.
+	Protocol int `json:"protocol,omitempty"`
 	// Port is the LAN port of the pod: a pod that was dialed learns where to dial back.
 	Port int `json:"port"`
 }
