@@ -102,6 +102,14 @@ web-ide-pod pair revoke <clé>    # la phrase tapée : la liste passe de pod en 
 
 Sans relay, le panneau Appareils (sur `localhost`) est servi par le pod lui-même : il liste les appareils qu'il connaît, montre les pods qui attendent sur le réseau local avec leur empreinte, et transmet une révocation aux autres pods. Une liste faite hors ligne part vers le relay dès qu'un pod du compte l'atteint, donc une révocation plus tardive ne l'annule jamais. Inviter un téléphone par QR demande toujours le relay.
 
+#### Plusieurs pods, un point d'entrée
+
+Avec un relay, les pods d'un compte sont listés sur la page d'accueil de n'importe lequel, et le relay sait où vous envoyer. Les pods qui se voient sur le réseau local forment un **site** ; le relay élit une **passerelle** par site — le pod marqué *Passerelle préférée* (Réglages > Accès distant > Pods du compte), sinon celui en ligne depuis le plus longtemps — et déplace le rôle quand il part. Ouvrir le lien du relay sans `#pod=` mène à cette passerelle, et le navigateur se souvient du site utilisé la dernière fois.
+
+Chaque pod publie sa liste de projets **chiffrée** sous sa propre clé ; le relay ne garde que le chiffré, ne voit jamais un nom de projet, et ce sont les pods qui lisent les listes. La page d'accueil montre donc aussi les pods hors ligne, grisés avec la date où ils ont publié, et un pod sans lien propre est porté jusqu'au relay par un pair de son site. Un pod qui n'a pas encore sa clé de sync est listé *en attente de la clé de sync* : le panneau Appareils lui enveloppe la clé. Ouvrir un projet d'un autre site vient avec la version suivante.
+
+Un appareil prouve qu'il détient sa clé en s'inscrivant auprès du relay (une signature sur un nonce que le relay a donné) : un certificat copié n'ouvre rien.
+
 #### Les notifications sur le téléphone
 
 Sur l'origine du relay, la page de bootstrap s'installe comme une app (*Installer*, ou *Sur l'écran d'accueil* sur iOS, qui n'affiche les notifications que depuis l'app installée). Réglages > Notifications > *Activer sur cet appareil* abonne le navigateur : le pod le notifie alors quand l'agent termine un tour ou vous attend, quand une commande enregistrée marquée *test* échoue, et quand l'assistant ou Claude Code laisse un retour sur un ticket — un interrupteur par type, *Envoyer un test* pour vérifier. Rien n'est envoyé tant que l'appareil affiche une fenêtre du pod. Un clic ouvre la conversation ou le ticket. Le pod chiffre chaque notification pour le navigateur : le relay la transmet sans pouvoir la lire.

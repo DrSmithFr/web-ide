@@ -102,6 +102,14 @@ web-ide-pod pair revoke <key>    # the phrase typed: the list spreads from pod t
 
 With no relay, the Devices panel (on `localhost`) is answered by the pod itself: it lists the devices it knows, shows the pods waiting to join on the LAN with their fingerprint, and passes a revocation on to the other pods. A list made offline goes to the relay as soon as a pod of the account reaches it, so a later revocation never undoes it. Inviting a phone by QR still needs the relay.
 
+#### Several pods, one entry point
+
+With a relay, the pods of one account are listed on the home page of any of them, and the relay can send you to the right one. The pods that see each other on the local network form a **site**; the relay elects one **gateway** per site — the pod you marked *Preferred gateway* (Settings > Remote access > Pods of the account), else the one online the longest — and moves the role when it leaves. Opening the relay link with no `#pod=` goes to that gateway, and the browser remembers the site you used last.
+
+Each pod publishes its list of projects **encrypted** under its own key; the relay caches the ciphertext and never sees a project name, and the pods read the lists themselves. So the home page shows the pods that are offline too, greyed with the time they last published, and a pod with no link of its own is carried to the relay by a peer of its site. A pod that has no sync key yet is listed with *waiting for the sync key*: the Devices panel wraps the key for it. Opening a project of another site comes with the next version.
+
+A device proves it holds its key when it registers with the relay (a signature on a nonce the relay gave), so a copied certificate opens nothing.
+
 #### Notifications on the phone
 
 On the relay origin, the bootstrap page installs as an app (*Install*, or *Add to Home Screen* on iOS, which shows notifications only from the installed app). Settings > Notifications > *Enable on this device* subscribes the browser: the pod then notifies it when the agent finishes a turn or asks for you, when a saved command flagged *test* fails, and when the assistant or Claude Code leaves feedback on a ticket — one switch per kind, *Send a test* to check. Nothing is sent while the device shows a window of the pod. A click opens the conversation or the ticket. The pod encrypts every notification for the browser: the relay forwards it without being able to read it.
