@@ -21,7 +21,6 @@
 .agent-composer.mode-plan { --mode: var(--info); }
 .agent-composer.mode-auto { --mode: var(--ok); }
 .agent-composer.mode-bypass { --mode: var(--danger); }
-.agent-ring { cursor: help; height: 28px; align-items: center; }
 .agent-session.composer-full .ai-messages { display: none; }
 .agent-user-atts { justify-content: flex-end; margin-bottom: 4px; }
 .agent-image-modal img { display: block; max-width: min(80vw, 1200px); max-height: 75vh; margin: 0 auto; }

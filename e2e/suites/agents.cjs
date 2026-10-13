@@ -52,6 +52,14 @@ run(async ({ page }) => {
   assert(diff.includes('del:- hi') && diff.includes('add:+ hello') && diff.includes(':  there'), 'edit with its diff: ' + JSON.stringify(diff))
   await page.waitForFunction(() => document.querySelector('[data-testid=agent-tab] .tab-title')?.textContent === 'Fake session')
   assert((await page.getAttribute('[data-testid=agent-usage]', 'title')).includes('1.2k / 200k'), 'context usage shown on the ring')
+  // The popover of the ring: the context, the time and cost of the session, /compact of the agent.
+  await page.click('[data-testid=agent-usage]')
+  const ctx = await page.textContent('[data-testid=agent-context]')
+  assert(ctx.includes('1.2k') && ctx.includes('200k'), 'context in the popover: ' + ctx)
+  await page.waitForSelector('[data-testid=agent-context-stats]')
+  assert(/Turns\s*1/.test(await page.textContent('[data-testid=agent-context-stats]')), 'session stats in the popover')
+  assert(await page.isVisible('[data-testid=agent-compact]'), 'Compact now: the agent offers /compact')
+  await page.keyboard.press('Escape')
   // Time and cost of the turn on the tab (the fake runs on a plan: an API equivalent).
   await page.waitForFunction(() => /Cost: \$0\.\d+ \(API equivalent\)/.test(document.querySelector('[data-testid=agent-tab]')?.title ?? ''))
   assert(/Work: \d+ s/.test(await page.getAttribute(tab, 'title')), 'work time on the tab')
@@ -67,15 +75,13 @@ run(async ({ page }) => {
   await page.waitForSelector('[data-testid=agent-message]:has-text("Edited.")')
   await waitState(page, 'ready')
 
-  // Follow mode: off by default (the edit of hello.txt opened nothing), on from the options of the
-  // composer: the file of an edit done opens in the editor (its relative path made absolute).
+  // Follow mode: off by default (the edit of hello.txt opened nothing), on from the eye of the
+  // composer bar: the file of an edit done opens in the editor (its relative path made absolute).
   const editorTabs = () => page.$$eval('.pane .tab', (l) => l.map((t) => t.textContent))
   assert(!(await editorTabs()).some((t) => t.includes('hello.txt')), 'no file opened without the follow mode')
-  await page.click('[data-testid=agent-options]')
-  assert(!(await page.isChecked('[data-testid=agent-follow] input')), 'follow mode off')
-  await page.click('[data-testid=agent-follow] input')
-  await page.waitForFunction(() => document.querySelector('[data-testid=agent-follow] input')?.checked)
-  await page.keyboard.press('Escape')
+  assert((await page.getAttribute('[data-testid=agent-follow]', 'aria-pressed')) === 'false', 'follow mode off')
+  await page.click('[data-testid=agent-follow]')
+  await page.waitForSelector('[data-testid=agent-follow][aria-pressed=true]')
   await prompt(page, 'follow me')
   await page.waitForSelector('[data-testid=agent-message]:has-text("Wrote follow.txt.")')
   await page.waitForFunction(() => document.querySelector('.pane.active .tab.active')?.textContent.includes('follow.txt'))
@@ -83,10 +89,8 @@ run(async ({ page }) => {
   await page.click(`${tab}`, { button: 'right' })
   await page.waitForSelector('.ctx-menu .ctx-item:has-text("Follow the edits") .ctx-check.on')
   await page.keyboard.press('Escape')
-  await page.click('[data-testid=agent-options]')
-  await page.click('[data-testid=agent-follow] input')
-  await page.waitForFunction(() => !document.querySelector('[data-testid=agent-follow] input')?.checked)
-  await page.keyboard.press('Escape')
+  await page.click('[data-testid=agent-follow]')
+  await page.waitForSelector('[data-testid=agent-follow][aria-pressed=false]')
   await waitState(page, 'ready')
 
   // The composer: /commands of the agent, @paths of the project.

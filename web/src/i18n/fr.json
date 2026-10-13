@@ -1969,5 +1969,10 @@
   "open each file the agent edits": "ouvre chaque fichier que l'agent modifie",
   "Agent options": "Options de l'agent",
   "Context: {used} / {size} tokens ({n} %)": "Contexte : {used} / {size} jetons ({n} %)",
-  "Each file the agent edits opens in the editor": "Chaque fichier que l'agent modifie s'ouvre dans l'éditeur"
+  "Work time": "Temps de travail",
+  "Turns": "Tours",
+  "Cost (API equivalent)": "Coût (équivalent API)",
+  "Cost": "Coût",
+  "Follow the edits: open each file the agent edits": "Suivre les modifications : ouvrir chaque fichier que l'agent modifie",
+  "Following the edits: each file the agent edits opens in the editor (click to stop)": "Suivi des modifications : chaque fichier que l'agent modifie s'ouvre dans l'éditeur (cliquer pour arrêter)"
 }

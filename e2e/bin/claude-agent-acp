@@ -209,7 +209,7 @@ function handle(m) {
       const sid = `fake-${process.pid}-${sessions.size}`
       sessions.set(sid, { cwd: p.cwd, mode: 'default', turns: 0, mcp: p.mcpServers ?? [] })
       send({ id: m.id, result: { sessionId: sid, configOptions: configOptions() } })
-      return update(sid, { sessionUpdate: 'available_commands_update', availableCommands: [{ name: 'review', description: 'Review the changes' }] })
+      return update(sid, { sessionUpdate: 'available_commands_update', availableCommands: [{ name: 'review', description: 'Review the changes' }, { name: 'compact', description: 'Clear the conversation history but keep a summary' }] })
     }
     case 'session/load':
       sessions.set(p.sessionId, { cwd: p.cwd, mode: 'default', turns: 0, mcp: p.mcpServers ?? [] })

@@ -17,7 +17,8 @@ import { cloneDoc, newDoc, type DoodleDoc } from '../llm/doodle/model'
 import { doodleSession, openDoodle } from '../llm/doodle/session'
 import { canCapture, captureScreen, type Picture } from '../llm/doodle/background'
 import { cancelRecording, canRecord, speech, startRecording, stopRecording, transcribe } from '../llm/transcribe'
-import { AttachmentChip, formatTokens, Popover, Switch } from '../llm/parts'
+import { AttachmentChip, formatTokens, Popover } from '../llm/parts'
+import { fmtCost, fmtWork } from './stats'
 import type { Caps } from '../llm/state'
 import { phone } from '../state/mobile'
 import { cancelAgent, configAgent, followAgent, promptAgent, sessions, threads, unqueueAgent, type AgentPart, type ConfigOption } from './state'
@@ -278,6 +279,16 @@ export function AgentComposer(props: { id: string }) {
           >
             <Icon name="paperclip" size={16} />
           </button>
+          <button
+            class="ai-icon"
+            classList={{ on: !!info()?.follow }}
+            aria-pressed={!!info()?.follow}
+            title={info()?.follow ? t('Following the edits: each file the agent edits opens in the editor (click to stop)') : t('Follow the edits: open each file the agent edits')}
+            data-testid="agent-follow"
+            onClick={() => void followAgent(props.id, !info()?.follow).catch(errorToast)}
+          >
+            <Icon name="eye" size={16} />
+          </button>
           <input
             ref={fileInput}
             type="file"
@@ -288,9 +299,11 @@ export function AgentComposer(props: { id: string }) {
               e.currentTarget.value = ''
             }}
           />
-          <AgentOptions id={props.id} options={otherOptions()} follow={!!info()?.follow} />
+          <Show when={otherOptions().length}>
+            <AgentOptions id={props.id} options={otherOptions()} />
+          </Show>
           <span class="grow" />
-          <Show when={info()?.usage}>{(u) => <Ring used={u().used} size={u().size} />}</Show>
+          <Show when={info()?.usage}>{(u) => <ContextPop id={props.id} used={u().used} size={u().size} />}</Show>
           <Show when={modelOption()}>{(o) => <ModelPill id={props.id} option={o()} />}</Show>
           <Show when={busy() && canSend()}>
             <button class="ai-send queue" onClick={() => void submit()} aria-label={t('Queue')} title={t('Queue: sent at the end of the turn')} data-testid="agent-enqueue">
@@ -396,8 +409,8 @@ function ModelPill(props: { id: string; option: ConfigOption }) {
   )
 }
 
-/** The follow mode and the other settings of the agent (effort…), behind the options button. */
-function AgentOptions(props: { id: string; options: ConfigOption[]; follow: boolean }) {
+/** The other settings of the agent (effort…), behind the options button. */
+function AgentOptions(props: { id: string; options: ConfigOption[] }) {
   return (
     <Popover
       class="ai-options-pop"
@@ -409,7 +422,6 @@ function AgentOptions(props: { id: string; options: ConfigOption[]; follow: bool
     >
       {() => (
         <>
-          <Switch label={t('Follow the edits')} hint={t('Each file the agent edits opens in the editor')} checked={props.follow} onChange={(v) => void followAgent(props.id, v).catch(errorToast)} testid="agent-follow" />
           <For each={props.options}>
             {(o) => (
               <div class="ai-effort-row">
@@ -432,22 +444,76 @@ function AgentOptions(props: { id: string; options: ConfigOption[]; follow: bool
   )
 }
 
-/** The context the agent uses, as the ring of the assistant. */
-function Ring(props: { used: number; size: number }) {
+/** The context the agent uses, as the ring of the assistant and its popover: the tokens, the
+ * work time and cost of the session, and /compact when the agent offers it. */
+function ContextPop(props: { id: string; used: number; size: number }) {
+  const info = () => sessions().find((s) => s.id === props.id)
   const ratio = () => (props.size ? Math.min(1, props.used / props.size) : 0)
   const level = () => (ratio() > 0.9 ? 'danger' : ratio() > 0.75 ? 'warn' : '')
+  const canCompact = () => !!info()?.commands?.some((c) => c.name === 'compact')
   const r = 7
   const c = 2 * Math.PI * r
   return (
-    <span
-      class={`ai-ring agent-ring ${level()}`}
-      title={t('Context: {used} / {size} tokens ({n} %)', { used: formatTokens(props.used), size: formatTokens(props.size), n: Math.round(ratio() * 100) })}
-      data-testid="agent-usage"
+    <Popover
+      align="right"
+      class="ai-ctx-pop"
+      trigger={(toggle, open) => (
+        <button
+          class={`ai-ring ${level()}`}
+          classList={{ on: open }}
+          onClick={toggle}
+          title={t('Context: {used} / {size} tokens ({n} %)', { used: formatTokens(props.used), size: formatTokens(props.size), n: Math.round(ratio() * 100) })}
+          data-testid="agent-usage"
+        >
+          <svg width="18" height="18" viewBox="0 0 18 18">
+            <circle cx="9" cy="9" r={r} class="ai-ring-bg" />
+            <circle cx="9" cy="9" r={r} class="ai-ring-fg" stroke-dasharray={`${c * ratio()} ${c}`} transform="rotate(-90 9 9)" />
+          </svg>
+        </button>
+      )}
     >
-      <svg width="18" height="18" viewBox="0 0 18 18">
-        <circle cx="9" cy="9" r={r} class="ai-ring-bg" />
-        <circle cx="9" cy="9" r={r} class="ai-ring-fg" stroke-dasharray={`${c * ratio()} ${c}`} transform="rotate(-90 9 9)" />
-      </svg>
-    </span>
+      {(close) => (
+        <div class="ai-ctx" data-testid="agent-context">
+          <div class="ai-ctx-title">{t('Context')}</div>
+          <div class="ai-ctx-num">
+            <strong>{formatTokens(props.used)}</strong> / {t('{n} tokens', { n: formatTokens(props.size) })} <span class="muted">· {Math.round(ratio() * 100)} %</span>
+          </div>
+          <div class={`ai-ctx-bar ${level()}`}>
+            <span style={{ width: `${ratio() * 100}%` }} />
+          </div>
+          <Show when={info()?.stats?.turns}>
+            <div class="ai-ctx-rows small" data-testid="agent-context-stats">
+              <span>{t('Work time')}</span>
+              <span>{fmtWork(info()!.stats!.work)}</span>
+              <Show when={info()!.stats!.wait}>
+                <span>{t('Waiting for you')}</span>
+                <span>{fmtWork(info()!.stats!.wait)}</span>
+              </Show>
+              <span>{t('Turns')}</span>
+              <span>{info()!.stats!.turns}</span>
+              <Show when={info()!.stats!.turns - (info()!.stats!.unpriced ?? 0) > 0}>
+                <span>{info()!.stats!.apiEquivalent ? t('Cost (API equivalent)') : t('Cost')}</span>
+                <span>{fmtCost(info()!.stats!.cost)}</span>
+              </Show>
+            </div>
+          </Show>
+          <Show when={canCompact()}>
+            <div class="ai-pop-sep" />
+            <button
+              class="btn small primary ai-ctx-compact"
+              disabled={info()?.state !== 'ready'}
+              onClick={() => {
+                close()
+                void promptAgent(props.id, '/compact', []).catch(errorToast)
+              }}
+              data-testid="agent-compact"
+            >
+              <Icon name="history" size={13} /> {t('Compact now')}
+            </button>
+            <p class="muted small ai-ctx-tip">{t('Or type /compact followed by instructions for the summary.')}</p>
+          </Show>
+        </div>
+      )}
+    </Popover>
   )
 }
