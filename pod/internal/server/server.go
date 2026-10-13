@@ -275,7 +275,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.HasPrefix(r.URL.Path, peerPrefix) && s.LAN != nil {
-		s.LAN.ServeGateway(w, r)
+		s.LAN.ServeGateway(w, r, "")
 		return
 	}
 	// The identity module, the wordlist and the pairing link: the app runs on the pod origin
@@ -336,7 +336,7 @@ func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request) {
 	// The front end is built with relative paths (base ./ of Vite): its assets start from
 	// the root, or from the path of a peer served through its gateway pod. The rest (the
 	// manifest of the installed app) stays at the root of the origin.
-	base, _ := r.Context().Value(baseKey{}).(string)
+	base := baseOf(r.Context())
 	data = bytes.ReplaceAll(data, []byte(`="./assets/`), []byte(`="`+base+`/assets/`))
 	data = bytes.ReplaceAll(data, []byte(`="./`), []byte(`="/`))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -426,9 +426,12 @@ func (c *Client) openChannel(ctx context.Context, label string, conn tunnel.MsgC
 
 // httpRequest is one fetch forwarded by the Service Worker of the relay on an http:<n>
 // channel: the path of the pod (the app, an asset, a preview) and the headers of the page.
+// Base is the path the page runs under on the origin the browser used (/pod/<key> on the relay
+// origin): the pod serves its index.html with its assets under it.
 type httpRequest struct {
 	Path    string            `json:"path"`
 	Preview string            `json:"preview,omitempty"`
+	Base    string            `json:"base,omitempty"`
 	Method  string            `json:"method,omitempty"`
 	Headers map[string]string `json:"headers,omitempty"`
 	Body    string            `json:"body,omitempty"`
@@ -471,6 +474,10 @@ func (c *Client) serveHTTPChannel(ctx context.Context, tr *transport) {
 	// the machine of the pod.
 	r.Header.Set("Cookie", cookieName+"="+c.srv.Token)
 	r.RemoteAddr = "127.0.0.1:0"
+	// The path the page runs under on the origin the browser used, when the bootstrap gave one.
+	if basePattern.MatchString(req.Base) {
+		r = r.WithContext(context.WithValue(r.Context(), baseKey{}, req.Base))
+	}
 	h.ServeHTTP(w, r)
 	if !w.head {
 		c.sendRaw(tr, mustJSON(httpHead{Status: http.StatusInternalServerError, Headers: map[string]string{}}))
@@ -479,10 +486,18 @@ func (c *Client) serveHTTPChannel(ctx context.Context, tr *transport) {
 	c.sendRaw(tr, nil) // the end of the body
 }
 
-// httpHandler picks the handler of a path of the page: a preview, or the static app.
+// httpHandler picks the handler of a path of the page: a preview, the page of a peer served
+// through this pod, or the static app.
 func (s *Server) httpHandler(req httpRequest) (http.Handler, bool) {
 	if req.Preview != "" {
 		return s.Previews.Handler(req.Preview)
+	}
+	// A window of the tunnel can open a pod of this pod's LAN too: the same gateway as on the
+	// origin of this pod.
+	if strings.HasPrefix(req.Path, peerPrefix) && s.LAN != nil {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			s.LAN.ServeGateway(w, r, baseOf(r.Context()))
+		}), true
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { s.serveStatic(w, r) }), true
 }

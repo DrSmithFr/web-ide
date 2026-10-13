@@ -28,9 +28,13 @@ const BaseHeader = "X-Webide-Base"
 
 // ServeGateway forwards a request under the path of a peer to that peer, over the link we
 // dialed, with our TLS certificate, which the peer trusts. The server checked the token.
-func (m *Manager) ServeGateway(w http.ResponseWriter, r *http.Request) {
+// base is the path the peer's page runs under for the browser: the gateway origin by default,
+// the relay origin (/pod/<key>) when the request came through the tunnel of a browser there.
+func (m *Manager) ServeGateway(w http.ResponseWriter, r *http.Request, base string) {
 	key, rest, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, PeerPrefix), "/")
-	base := PeerPrefix + key
+	if base == "" {
+		base = PeerPrefix + key
+	}
 	if rest == "" && !strings.HasSuffix(r.URL.Path, "/") {
 		http.Redirect(w, r, base+"/", http.StatusFound)
 		return

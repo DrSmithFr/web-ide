@@ -154,7 +154,7 @@ func TestTwoPodsReachEachOther(t *testing.T) {
 
 	// alpha serves bravo under its path, WebSocket included.
 	base := online(st, "bravo").Path
-	gw := httptest.NewServer(http.HandlerFunc(al.m.ServeGateway))
+	gw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { al.m.ServeGateway(w, r, "") }))
 	defer gw.Close()
 	res, err := http.Get(gw.URL + base + "/project/x")
 	if err != nil {
