@@ -115,6 +115,8 @@ type Config struct {
 	// OnState is called with the state of the link to the relay (connecting, connected,
 	// disconnected); the page shows it in Settings > Remote access.
 	OnState func(state string)
+	// OnReady is called once the link is up and the sync loop published.
+	OnReady func()
 	// OnPushGone is called with a push subscription the relay dropped (the push service said
 	// 410, or the subscription is not of this account).
 	OnPushGone func(sub string)
@@ -243,6 +245,11 @@ func (c *Client) runOnce(ctx context.Context) error {
 			log.Printf("relayclient: sync: %v", err)
 			c.cfg.Sync.SetError(err)
 		}
+	}
+	// The link is up and the sync loop published: what the pod reads from the relay (the cached
+	// project lists of the other pods) can start here.
+	if c.cfg.OnReady != nil {
+		c.cfg.OnReady()
 	}
 	for {
 		if ctx.Err() != nil {

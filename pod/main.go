@@ -236,6 +236,16 @@ func main() {
 			}
 		}
 	}
+	// Reading the cached lists of the other pods: it needs a link (the relay, or a peer that
+	// carries the wrap), so it happens when one of them brought the key of the epoch.
+	pullLists := func() {
+		if dir == nil {
+			return
+		}
+		if err := dir.Pull(); err != nil {
+			log.Printf("relay: project lists: %v", err)
+		}
+	}
 	var lanMgr *lan.Manager
 	// What a change of the LAN links means: the page refreshes, the relay learns what this pod sees
 	// (the sites), and a pod with no link of its own publishes its key and its list through a peer.
@@ -252,7 +262,7 @@ func main() {
 			c.ReportSite(keys)
 			return
 		}
-		if hub != nil && pub != nil {
+		if hub != nil && pub != nil && cfg.RelayURL == "" {
 			// No relay link of its own: a peer carries the X25519 key of this device to an admin,
 			// and the project list once the wrap came back.
 			_ = hub.Publish()
@@ -260,7 +270,7 @@ func main() {
 		}
 	}
 	if cfg.LAN.Addr != "off" {
-		m := startLAN(ctx, st, cfg, srv, podID, *mdns, pushRevocations, forwardBlob, forwardSyncKey, hub, &onLANChange)
+		m := startLAN(ctx, st, cfg, srv, podID, *mdns, pushRevocations, forwardBlob, forwardSyncKey, pullLists, hub, &onLANChange)
 		if m != nil {
 			srv.LAN = m
 			lanMgr = m
@@ -269,6 +279,13 @@ func main() {
 	dir = multipod.New(hub, lanView{m: lanMgr})
 	if hub != nil {
 		hub.SetOther(func(m settingsync.Msg) { dir.HandleBlob(m) })
+		// The key of the epoch arrived: this pod can publish its own list, and read the others.
+		hub.SetOnKey(func() {
+			pullLists()
+			if pub != nil {
+				pub.Touch()
+			}
+		})
 		pub = multipod.NewDebounce(hub, identity.ProjectsKind(podID.ID()), 2*time.Second)
 		srv.ProjectsChanged = pub.Touch
 		if cfg.RelayURL == "" && lanMgr != nil {
@@ -304,6 +321,16 @@ func main() {
 			OnState: func(s string) {
 				state.Store(s)
 				srv.Broadcast("relay.changed", srv.RelayStatus())
+
+			},
+			OnReady: func() {
+				// The link came up and the sync loop published: read the lists the relay cached
+				// (a push only reaches a pod that was ready to read it at that moment), and write
+				// this pod's own list if it never could.
+				pullLists()
+				if pub != nil {
+					pub.Touch()
+				}
 			},
 			OnPods: func(p []relayclient.PodInfo) {
 				if dir != nil {
@@ -363,7 +390,8 @@ func main() {
 // startLAN runs the link to the other pods of the account on the local network: the LAN
 // port, mDNS, and the page of each pod found, served under /_lan/pod/<key>/.
 func startLAN(ctx context.Context, st *store.Store, cfg *config.Config, srv *server.Server, podID *identity.PodIdentity, mdns bool,
-	onRevocations func(*identity.Revocations), onBlob func(*identity.BlobRecord), onSync func(*identity.SyncKeyRecord), hub *settingsync.Hub, onChange *func()) *lan.Manager {
+	onRevocations func(*identity.Revocations), onBlob func(*identity.BlobRecord), onSync func(*identity.SyncKeyRecord),
+	onKeyReady func(), hub *settingsync.Hub, onChange *func()) *lan.Manager {
 	m, err := lan.New(lan.Config{
 		Dir:      st.Dir(),
 		Addr:     cfg.LAN.Addr,
@@ -388,6 +416,8 @@ func startLAN(ctx context.Context, st *store.Store, cfg *config.Config, srv *ser
 			}
 			if err := hub.SetWrap(w); err != nil {
 				log.Printf("lan: wrap: %v", err)
+			} else if onKeyReady != nil {
+				onKeyReady()
 			}
 		},
 	})

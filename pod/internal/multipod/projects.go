@@ -24,8 +24,10 @@ func NewProjectsSource(own, name, version string, read func() []Project) *Projec
 	return &ProjectsSource{own: own, name: name, version: version, read: read}
 }
 
-func (s *ProjectsSource) Kind() string        { return identity.ProjectsKind(s.own) }
-func (s *ProjectsSource) MapFields() []string { return []string{"projects"} }
+func (s *ProjectsSource) Kind() string { return identity.ProjectsKind(s.own) }
+
+// No map field: the list is written whole. There is one writer per kind, so nothing is merged.
+func (s *ProjectsSource) MapFields() []string { return nil }
 func (s *ProjectsSource) Enabled() bool       { return true }
 
 // Read is the whole list. It holds no timestamp: the relay stamps the write it stores, so an

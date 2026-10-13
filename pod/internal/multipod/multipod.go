@@ -151,8 +151,13 @@ func (d *Directory) HandleBlob(m settingsync.Msg) {
 	if err != nil {
 		return
 	}
+	// The blob holds the state envelope of #28, not the list itself.
+	var st settingsync.State
+	if json.Unmarshal(plain, &st) != nil {
+		return
+	}
 	var l List
-	if json.Unmarshal(plain, &l) != nil {
+	if json.Unmarshal(st.Project(nil), &l) != nil {
 		return
 	}
 	d.mu.Lock()

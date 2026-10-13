@@ -7,6 +7,9 @@ const pending = new Map()
 // Which preview each client belongs to: a page opened under /__preview/<id>/ keeps fetching
 // its assets there, even with an absolute path.
 const owners = new Map()
+// Which bootstrap window owns which pod, as the page declared it: a page that picked its pod
+// itself (no #pod= in the link) has nothing in its URL to be recognised by.
+const ownPods = new Map()
 
 const appFiles = new Set(['/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png'])
 
@@ -15,8 +18,14 @@ self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()))
 
 async function bootstrap() {
   const all = await self.clients.matchAll({ type: 'window' })
-  return all.find((c) => c.url.includes('pod=')) || null
+  // A page that picked its pod itself has no "pod=" in the URL of its client (the hash was set
+  // after the page loaded): it declared itself the owner of a pod instead.
+  return all.find((c) => ownPods.has(c.id)) || all.find((c) => c.url.includes('pod=')) || null
 }
+
+self.addEventListener('message', (e) => {
+  if (e.data?.kind === 'own' && e.source) ownPods.set(e.source.id, e.data.pod || '')
+})
 
 self.addEventListener('fetch', (event) => {
   const req = event.request
@@ -29,7 +38,7 @@ self.addEventListener('fetch', (event) => {
 })
 
 async function handle(req, url, clientId) {
-  const win = await bootstrap()
+  const win = await bootstrap(clientId)
   if (!win) return new Response('The bootstrap page is not open.', { status: 503 })
 
   let preview = ''

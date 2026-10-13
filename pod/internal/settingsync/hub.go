@@ -24,7 +24,10 @@ type Hub struct {
 	emit    func(s Status, name string, payload any)
 	// other is called with a blob of a kind this pod does not sync (the project lists of the
 	// other pods).
-	other   func(Msg)
+	other func(Msg)
+	// onKey is called when the key of the epoch arrived (the wrap of an admin): what needs the
+	// key can start reading, the pod having asked for nothing before it.
+	onKey   func()
 	lastErr string
 }
 
@@ -67,6 +70,9 @@ func (h *Hub) Send(m Msg) error {
 // SetOther is called with a blob the relay pushed for a kind this pod does not sync: the project
 // lists of the other pods are read that way.
 func (h *Hub) SetOther(fn func(Msg)) { h.other = fn }
+
+// SetOnKey is called when this pod got the key of the epoch, from its own wrap.
+func (h *Hub) SetOnKey(fn func()) { h.onKey = fn }
 
 // KeyFor is the sub-key of a kind under the epoch key this pod holds (nil: no wrap yet).
 func (h *Hub) KeyFor(kind string) []byte { return h.kindKey(kind) }
@@ -148,10 +154,10 @@ func (h *Hub) Publish() error {
 	if err != nil {
 		return err
 	}
-	if err := h.tr.Send(Msg{Type: "syncKey", Account: h.ident.Account, Device: h.ident.ID(), SyncKey: rec}); err != nil {
+	if err := h.Send(Msg{Type: "syncKey", Account: h.ident.Account, Device: h.ident.ID(), SyncKey: rec}); err != nil {
 		return err
 	}
-	if err := h.tr.Send(Msg{Type: "wrapGet", Account: h.ident.Account, Device: h.ident.ID()}); err != nil {
+	if err := h.Send(Msg{Type: "wrapGet", Account: h.ident.Account, Device: h.ident.ID()}); err != nil {
 		return err
 	}
 	// A pod paired by an admin has no key until the wrap arrives: the pull is made when it does.
@@ -211,6 +217,9 @@ func (h *Hub) SetWrap(w *identity.WrapRecord) error {
 	// it, else the panel keeps saying "no sync key yet".
 	for _, s := range h.sources {
 		s.event("changed", nil)
+	}
+	if h.onKey != nil {
+		h.onKey()
 	}
 	// A pod that just got its key, or that moved to a new epoch, cannot read the stored state
 	// before: it reads it now, otherwise its own changes would overwrite the other pods.

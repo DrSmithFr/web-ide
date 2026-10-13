@@ -205,11 +205,22 @@ async function enterSite(l) {
   }
   const order = [...sites.keys()].sort()
   const last = rememberedSite()
-  const site = order.includes(last) ? last : order[0]
+  // A pod its user marked as the entry point of its site wins over the plain order of the sites:
+  // that is what "Preferred gateway" means.
+  const preferred = order.find((id) => (sites.get(id) ?? []).some((p) => p.gateway && p.preferred))
+  const site = order.includes(last) ? last : (preferred ?? order[0])
   const group = sites.get(site) ?? pods
-  const chosen = group.find((p) => p.gateway) ?? group[0]
+  const chosen = group.find((p) => p.gateway && p.preferred) ?? group.find((p) => p.gateway) ?? group[0]
   rememberSite(site)
   pod = chosen.podId
+  remember(pod)
+  // The Service Worker answers the fetches of the app by finding the bootstrap page by its
+  // "pod=": the pod picked here goes in the hash (a hash does not reload the page).
+  location.hash = 'pod=' + pod
+  try {
+    const reg = await navigator.serviceWorker.getRegistration()
+    reg?.active?.postMessage({ kind: 'own', pod })
+  } catch {}
   status('<div class="spin"></div>' + words.connecting + ' <b>' + (chosen.name || chosen.podId) + '</b>')
   return ''
 }

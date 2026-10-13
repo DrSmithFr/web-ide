@@ -82,7 +82,14 @@ func wrapFor(t *testing.T, a *identity.Account, p *identity.PodIdentity, epoch i
 func blobOf(t *testing.T, a *identity.Account, device string, epoch int64, seq int64, name string, titles ...string) *identity.BlobRecord {
 	t.Helper()
 	kind := identity.ProjectsKind(device)
-	plain, err := json.Marshal(List{V: 1, Name: name, Version: "1.0", Projects: projects(titles...)})
+	content, err := json.Marshal(List{V: 1, Name: name, Version: "1.0", Projects: projects(titles...)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// What travels is the state envelope of #28, the way the hub of the publishing pod writes it.
+	st := &settingsync.State{Device: device, Fields: map[string]settingsync.Field{}}
+	st.Apply(content, nil)
+	plain, err := json.Marshal(st)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +105,7 @@ func blobOf(t *testing.T, a *identity.Account, device string, epoch int64, seq i
 func projects(titles ...string) []Project {
 	out := []Project{}
 	for i, s := range titles {
-		out = append(out, Project{ID: string(rune('a'+i)), Title: s})
+		out = append(out, Project{ID: string(rune('a' + i)), Title: s})
 	}
 	return out
 }

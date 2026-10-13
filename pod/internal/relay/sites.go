@@ -46,7 +46,9 @@ type PodInfo struct {
 	Version string `json:"version"`
 	Site    string `json:"site"`
 	Gateway bool   `json:"gateway"`
-	Since   int64  `json:"since"` // when its link came up (kept across a link that dropped uncleanly)
+	// Preferred: the pod was marked as the entry point of its site by its user.
+	Preferred bool  `json:"preferred,omitempty"`
+	Since     int64 `json:"since"` // when its link came up (kept across a link that dropped uncleanly)
 }
 
 // graceEntry is a gateway kept in its role after its link dropped without saying bye.
@@ -251,7 +253,7 @@ func (s *Server) recomputeSites(account string) bool {
 				continue
 			}
 			infos = append(infos, PodInfo{Key: k, PodID: pc.id, Name: pc.name, Version: pc.version,
-				Site: site, Gateway: gateways[site] == k, Since: s.since[k].Unix()})
+				Site: site, Gateway: gateways[site] == k, Preferred: pc.preferred, Since: s.since[k].Unix()})
 		}
 	}
 	// Forget the sites of this account that no longer exist.
