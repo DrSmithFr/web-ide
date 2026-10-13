@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/acp"
@@ -76,11 +77,35 @@ func (s *Server) registerAgents() {
 		return map[string]any{"info": info, "entries": entries}, nil
 	}))
 	s.handle("agents.prompt", withSession(func(sess *acp.Session, p json.RawMessage) (any, error) {
-		a, err := bind[struct{ Text string }](p)
+		a, err := bind[struct {
+			Text  string
+			Parts []acp.Part
+		}](p)
 		if err != nil {
 			return nil, err
 		}
-		return nil, sess.Prompt(a.Text)
+		return nil, sess.Prompt(a.Text, a.Parts...)
+	}))
+	// A queued prompt taken back: its text goes back to the message box.
+	s.handle("agents.unqueue", withSession(func(sess *acp.Session, p json.RawMessage) (any, error) {
+		a, err := bind[struct{ Index int }](p)
+		if err != nil {
+			return nil, err
+		}
+		text, err := sess.Unqueue(a.Index)
+		return map[string]string{"text": text}, err
+	}))
+	// An image of a prompt, as a data URL.
+	s.handle("agents.image", withSession(func(sess *acp.Session, p json.RawMessage) (any, error) {
+		a, err := bind[struct{ File string }](p)
+		if err != nil {
+			return nil, err
+		}
+		data, mime, err := sess.Image(a.File)
+		if err != nil {
+			return nil, err
+		}
+		return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data), nil
 	}))
 	s.handle("agents.cancel", withSession(func(sess *acp.Session, p json.RawMessage) (any, error) {
 		return nil, sess.Cancel()

@@ -10,7 +10,9 @@ type Entry struct {
 	// Kind: user, agent, thought, tool, plan, permission, notice.
 	Kind string `json:"kind"`
 	Text string `json:"text,omitempty"`
-	Time int64  `json:"time"`
+	// Attachments of a user prompt (prompt.go).
+	Attachments []Attachment `json:"attachments,omitempty"`
+	Time        int64        `json:"time"`
 
 	// A tool call.
 	ToolID    string        `json:"toolId,omitempty"`

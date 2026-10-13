@@ -70,6 +70,21 @@ run(
     await page.tap('.ai-composer .ed-content')
     assert(await typing(), 'a touch on the message box focuses it')
 
+    // An agent session: its message box (the one of the assistant) in full screen, not focused.
+    await page.tap('[data-testid=mobile-rail] [data-id=agents]')
+    await page.tap('[data-testid=agent-card-claude] button:has-text("Open")')
+    await page.waitForSelector('.phone-body > .zone[data-tool=agents] [data-testid=agent-tab][data-state=ready]')
+    await page.waitForTimeout(300)
+    assert(!(await typing()), 'an agent session opens without focusing its message box')
+    await page.tap('[data-testid=agent-input] .ed-content')
+    assert(await typing(), 'a touch on the box of the agent focuses it')
+    await page.keyboard.type('hello')
+    await page.tap('[data-testid=agent-send]')
+    await page.waitForSelector('.zone[data-tool=agents] [data-testid=agent-message]:has-text("Hello from the")')
+    await page.screenshot({ path: OUT + '/mobile-agent.png' })
+    await page.tap('[data-testid=agent-tab] .tab-close')
+    await page.waitForSelector('[data-testid=agents-launcher]')
+
     // The icon of a view gives it the focus; the editor without the keyboard.
     await page.tap('[data-testid=mobile-rail] [data-id=explorer]')
     await page.waitForFunction(() => document.activeElement?.closest('.zone[data-tool=explorer]'))

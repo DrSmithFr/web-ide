@@ -8,31 +8,29 @@ import { contextMenu, type MenuItem } from '../ui/overlay'
 import { errorToast, toast } from '../ui/toast'
 import { copyText } from '../ui/clipboard'
 import { openFile, project, relPath } from '../state/project'
-import { DiffBlock, Markdown, formatTokens } from '../llm/parts'
+import { DiffBlock, Markdown } from '../llm/parts'
 import { t } from '../i18n'
 import {
   active,
   answerAgent,
-  cancelAgent,
   catalog,
   closeAgent,
-  configAgent,
   createAgent,
   diffLines,
   installAgent,
   loadThread,
-  promptAgent,
   restartAgent,
   sessions,
   setActive,
   threads,
   type AgentInfo,
   type CatalogAgent,
-  type ConfigOption,
   type Entry,
 } from './state'
 import '../llm/assistant.css'
 import { ProjectAgentStats, statsTitle } from './stats'
+import { AgentComposer } from './Composer'
+import { UserAttachments } from './UserAttachments'
 import './agents.css'
 
 const stateLabel = (s: AgentInfo['state']) =>
@@ -219,79 +217,8 @@ function SessionView(props: { id: string }) {
           </Show>
         </div>
       </div>
-      <PromptBox id={props.id} busy={busy()} ready={info()?.state === 'ready'} />
-      <div class="agent-foot">
-        <For each={info()?.config ?? []}>{(c) => <ConfigSelect id={props.id} option={c} />}</For>
-        <span class="grow" />
-        <Show when={info()?.usage}>
-          {(u) => (
-            <span class="muted small" title={t('Context used')} data-testid="agent-usage">
-              {formatTokens(u().used)} / {formatTokens(u().size)}
-            </span>
-          )}
-        </Show>
-      </div>
+      <AgentComposer id={props.id} />
     </div>
-  )
-}
-
-function PromptBox(props: { id: string; busy: boolean; ready: boolean }) {
-  const [text, setText] = createSignal('')
-  let ta!: HTMLTextAreaElement
-  const send = async () => {
-    const v = text().trim()
-    if (!v || !props.ready) return
-    try {
-      await promptAgent(props.id, v)
-      setText('')
-    } catch (e) {
-      errorToast(e)
-    }
-  }
-  onMount(() => ta.focus())
-  return (
-    <div class="agent-prompt">
-      <textarea
-        ref={ta}
-        rows={3}
-        value={text()}
-        placeholder={t('Ask the agent… (Enter sends, Shift+Enter for a new line)')}
-        onInput={(e) => setText(e.currentTarget.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-            e.preventDefault()
-            void send()
-          }
-        }}
-        data-testid="agent-input"
-      />
-      <Show
-        when={props.busy}
-        fallback={
-          <button class="btn primary" disabled={!props.ready || !text().trim()} onClick={() => void send()} data-testid="agent-send" title={t('Send')}>
-            <Icon name="arrowUp" size={14} />
-          </button>
-        }
-      >
-        <button class="btn" onClick={() => void cancelAgent(props.id).catch(errorToast)} data-testid="agent-stop" title={t('Stop')}>
-          <Icon name="stop" size={14} />
-        </button>
-      </Show>
-    </div>
-  )
-}
-
-function ConfigSelect(props: { id: string; option: ConfigOption }) {
-  const flat = () => (props.option.options ?? []).flatMap((o: any) => (o.options ? o.options : [o])) as { value: string; name: string }[]
-  return (
-    <Show when={props.option.type === 'select' && flat().length > 1}>
-      <label class="agent-config" title={props.option.name}>
-        <span class="muted small">{props.option.name}</span>
-        <select value={props.option.currentValue} onChange={(e) => void configAgent(props.id, props.option.id, e.currentTarget.value).catch(errorToast)} data-testid={`agent-config-${props.option.id}`}>
-          <For each={flat()}>{(o) => <option value={o.value}>{o.name}</option>}</For>
-        </select>
-      </label>
-    </Show>
   )
 }
 
@@ -301,6 +228,9 @@ function EntryView(props: { id: string; entry: Entry; index: number }) {
     <Switch>
       <Match when={e().kind === 'user'}>
         <div class="ai-msg user" data-testid="agent-user">
+          <Show when={e().attachments?.length}>
+            <UserAttachments id={props.id} list={e().attachments!} />
+          </Show>
           <div class="ai-user-bubble">
             <div class="ai-user-text">{e().text}</div>
           </div>

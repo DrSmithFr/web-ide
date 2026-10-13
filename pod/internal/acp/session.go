@@ -65,7 +65,11 @@ type Info struct {
 	Commands json.RawMessage `json:"commands,omitempty"`
 	// Stats sum the turns of the session (work time, cost).
 	Stats *Totals `json:"stats,omitempty"`
-	Seq   int64   `json:"seq"`
+	// Queue: the prompts waiting for the end of the turn; Caps: what the prompts may hold
+	// (prompt.go).
+	Queue []QueuedInfo `json:"queue,omitempty"`
+	Caps  PromptCaps   `json:"caps"`
+	Seq   int64        `json:"seq"`
 }
 
 // saved is the file of a session: what a restarted pod needs to go on.
@@ -86,6 +90,10 @@ type saved struct {
 	Subscription bool       `json:"subscription,omitempty"`
 	// First is the prompt sent once the session is open (a ticket's briefing), until then.
 	First string `json:"first,omitempty"`
+	// Caps, Queue and Images: see Session.
+	Caps   PromptCaps `json:"caps"`
+	Queue  []queued   `json:"queue,omitempty"`
+	Images int        `json:"images,omitempty"`
 }
 
 type message struct {
@@ -137,11 +145,17 @@ type Session struct {
 	turn         *turnState
 	reportedCost float64
 	subscription bool
+	// caps: the content the agent takes; queue: the prompts waiting for the end of the turn;
+	// images numbers the image files of the session (prompt.go).
+	caps   PromptCaps
+	queue  []queued
+	images int
 }
 
 func (s *Session) snapshot() saved {
 	return saved{Info: s.info, Entries: s.th.Entries, ACP: s.acp, CanLoad: s.canLoad, Proc: s.procID, Offset: s.offset, NextID: s.nextID, Prompt: s.prompt,
-		Turn: s.turn, ReportedCost: s.reportedCost, Subscription: s.subscription, First: s.first}
+		Turn: s.turn, ReportedCost: s.reportedCost, Subscription: s.subscription, First: s.first,
+		Caps: s.caps, Queue: s.queue, Images: s.images}
 }
 
 // ---------- events to the page (under s.mu) ----------
@@ -278,6 +292,9 @@ func (s *Session) start(load bool) {
 		s.m.save(s)
 		s.mu.Unlock()
 	}
+	s.mu.Lock()
+	s.next()
+	s.mu.Unlock()
 }
 
 func (s *Session) open(load bool) error {
@@ -291,8 +308,9 @@ func (s *Session) open(load bool) error {
 	}
 	var init struct {
 		AgentCapabilities struct {
-			LoadSession     bool `json:"loadSession"`
-			MCPCapabilities struct {
+			LoadSession        bool       `json:"loadSession"`
+			PromptCapabilities PromptCaps `json:"promptCapabilities"`
+			MCPCapabilities    struct {
 				HTTP bool `json:"http"`
 			} `json:"mcpCapabilities"`
 		} `json:"agentCapabilities"`
@@ -300,6 +318,8 @@ func (s *Session) open(load bool) error {
 	_ = json.Unmarshal(res, &init)
 	s.mu.Lock()
 	s.canLoad = init.AgentCapabilities.LoadSession
+	s.caps = init.AgentCapabilities.PromptCapabilities
+	s.info.Caps = s.caps
 	acpID, cwd := s.acp, s.info.Cwd
 	s.mu.Unlock()
 	// The MCP server of the IDE, for the agents that reach a server over HTTP.
@@ -502,6 +522,7 @@ func (s *Session) endTurn(result json.RawMessage, err error) {
 		s.notice("notice", "The agent refused to go on.")
 	}
 	s.setState(Ready, "")
+	s.next()
 }
 
 // cancelPermissions answers the questions still open as cancelled.
@@ -561,29 +582,6 @@ func (s *Session) exit(gen, code int) {
 }
 
 // ---------- actions of the page ----------
-
-func (s *Session) Prompt(text string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	switch s.info.State {
-	case Busy, Asking:
-		return i18n.New("the agent is working: wait or stop it")
-	case Ready:
-	default:
-		return i18n.New("the agent is not ready")
-	}
-	s.nextID++
-	id := s.nextID
-	if err := s.request(id, "session/prompt", map[string]any{"sessionId": s.acp, "prompt": []map[string]string{{"type": "text", "text": text}}}); err != nil {
-		return err
-	}
-	s.prompt = id
-	s.beginTurn()
-	s.th.plan = -1
-	s.entry(s.th.add(Entry{Kind: "user", Text: text}))
-	s.setState(Busy, "")
-	return nil
-}
 
 func (s *Session) Cancel() error {
 	s.mu.Lock()

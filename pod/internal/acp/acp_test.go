@@ -1,6 +1,7 @@
 package acp
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -97,10 +98,7 @@ func TestPromptStreamsTheThread(t *testing.T) {
 	if err := s.Prompt("hi"); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Prompt("again"); err == nil {
-		t.Fatal("a second prompt during a turn is refused")
-	}
-	waitState(t, s, Ready)
+	waitFor(t, "the turn ends", func() bool { _, e := s.Thread(); return s.Info().State == Ready && len(e) >= 5 })
 	info, entries := s.Thread()
 	if got := kinds(entries); got != "user,thought,plan,agent,tool" {
 		t.Fatalf("entries: %s", got)
@@ -321,4 +319,90 @@ func TestLinesAcrossChunks(t *testing.T) {
 	if got[len(got)-1] != "xy" || offsets[len(offsets)-1] != 33 {
 		t.Fatalf("%v %v", got, offsets)
 	}
+}
+
+func TestPromptBlocksAndQueue(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "notes.md"), []byte("# notes"), 0o644)
+	m, _ := newManager(t, dir, nil)
+	defer m.CloseAll()
+	s := open(t, m)
+	png := base64.StdEncoding.EncodeToString([]byte("\x89PNG fake"))
+	err := s.Prompt("blocks: look at @notes.md and @missing.txt", Part{Kind: "image", Name: "shot.png", Mime: "image/png", Data: png}, Part{Kind: "text", Name: "doodle", Text: "a box"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitState(t, s, Ready)
+	_, entries := s.Thread()
+	if got := entries[len(entries)-1].Text; got != "blocks: text,resource_link:notes.md,image:image/png,text" {
+		t.Fatalf("blocks received: %q", got)
+	}
+	user := entries[len(entries)-2]
+	if len(user.Attachments) != 2 || user.Attachments[0].File == "" || user.Attachments[1].Kind != "text" {
+		t.Fatalf("attachments of the prompt: %+v", user.Attachments)
+	}
+	data, mime, err := s.Image(user.Attachments[0].File)
+	if err != nil || mime != "image/png" || string(data) != "\x89PNG fake" {
+		t.Fatalf("image kept: %q %s %v", data, mime, err)
+	}
+	if _, _, err := s.Image("../acp.json"); err == nil {
+		t.Fatal("only the images of the session are served")
+	}
+	if err := s.Prompt("x", Part{Kind: "image", Mime: "image/bmp", Data: png}); err == nil {
+		t.Fatal("an unsupported image type is refused")
+	}
+
+	// Queued during a turn, sent after it; one taken back.
+	_ = s.Prompt("slow")
+	waitFor(t, "busy", func() bool { return s.Info().State == Busy })
+	_ = s.Prompt("first queued")
+	_ = s.Prompt("second queued")
+	if q := s.Info().Queue; len(q) != 2 || q[1].Text != "second queued" {
+		t.Fatalf("queue: %+v", q)
+	}
+	if text, err := s.Unqueue(1); err != nil || text != "second queued" {
+		t.Fatalf("unqueue: %q %v", text, err)
+	}
+	_ = s.Cancel()
+	waitFor(t, "the queued prompt sent", func() bool {
+		_, e := s.Thread()
+		return s.Info().State == Ready && len(s.Info().Queue) == 0 && e[len(e)-1].Kind == "tool"
+	})
+	_, entries = s.Thread()
+	users := []string{}
+	for _, e := range entries {
+		if e.Kind == "user" {
+			users = append(users, e.Text)
+		}
+	}
+	if strings.Join(users, "|") != "blocks: look at @notes.md and @missing.txt|slow|first queued" {
+		t.Fatalf("prompts sent: %v", users)
+	}
+}
+
+// A queue survives the pod: without keeper the next one starts the agent again and sends it.
+func TestQueueRestored(t *testing.T) {
+	dir := t.TempDir()
+	m, _ := newManager(t, dir, nil)
+	s := open(t, m)
+	id := s.Info().ID
+	_ = s.Prompt("slow")
+	waitFor(t, "busy", func() bool { return s.Info().State == Busy })
+	_ = s.Prompt("after the restart")
+	m.Release()
+	m2, _ := newManager(t, dir, nil)
+	defer m2.CloseAll()
+	s2, err := m2.Get(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "sent after the restart", func() bool {
+		_, e := s2.Thread()
+		for _, x := range e {
+			if x.Kind == "user" && x.Text == "after the restart" {
+				return s2.Info().State == Ready
+			}
+		}
+		return false
+	})
 }

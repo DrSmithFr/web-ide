@@ -761,6 +761,8 @@
   "Queue (Ctrl+S or Ctrl+Enter): sent at the next step": "Mettre en file d’attente (Ctrl+S ou Ctrl+Entrée) : envoyé à la prochaine étape",
   "Queued: sent at the next step of the answer": "En file d’attente : envoyé à la prochaine étape de la réponse",
   "Queued: sent with the next message": "En file d’attente : envoyé avec le prochain message",
+  "Queued: sent at the end of the turn": "En file : envoyé à la fin du tour",
+  "Queue: sent at the end of the turn": "Mettre en file : envoyé à la fin du tour",
   "Quick documentation": "Documentation rapide",
   "read-only": "lecture seule",
   "Read-only file (outside the project)": "Fichier en lecture seule (hors du projet)",
@@ -1940,7 +1942,7 @@
   "Agents in this project": "Agents dans ce projet",
   "nothing yet": "rien pour l'instant",
   "This agent cannot reach the MCP server of the IDE: no kanban tools in this session.": "Cet agent ne peut pas joindre le serveur MCP de l'IDE : pas d'outils kanban dans cette session.",
-  "Ask the agent… (Enter sends, Shift+Enter for a new line)": "Demander à l'agent… (Entrée envoie, Maj+Entrée pour une nouvelle ligne)",
+  "Ask the agent… (Ctrl+Enter sends)": "Demander à l'agent… (Ctrl+Entrée envoie)",
   "Allow: {title}?": "Autoriser : {title} ?",
   "Cancelled": "Annulé"
 }
