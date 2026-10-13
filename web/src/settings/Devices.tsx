@@ -49,6 +49,7 @@ interface Identity {
   support(): Promise<string[]>
   link(onPush: (m: any) => void): Promise<{ send: (m: any) => void; recv: (type?: string) => Promise<any>; close: () => void }>
   wordlist(): Promise<string[]>
+  lock(): Promise<void>
   KindBrowser: string
 }
 
@@ -277,6 +278,13 @@ export function Devices() {
     void refresh()
   }
 
+  // The device stays unlocked an hour after its last use (identity.js, keepUnlocked): Lock ends
+  // that now, and the next page of this origin asks the passkey.
+  async function lockDevice() {
+    await id()?.lock()
+    toast(t('This device is locked: the next page asks its passkey.'), 'ok')
+  }
+
   return (
     <section class="form" data-testid="devices">
       <Show when={error()}>
@@ -403,6 +411,7 @@ export function Devices() {
 
         <div class="field-row">
           <button class="btn" onClick={() => void inviteDevice()}>{t('Invite a device')}</button>
+          <button class="btn" data-testid="lock-device" onClick={() => void lockDevice()}>{t('Lock this device now')}</button>
         </div>
         <Show when={invite()}>
           <div class="qr">

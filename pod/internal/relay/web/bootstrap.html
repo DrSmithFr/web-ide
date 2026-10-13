@@ -5,25 +5,31 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Web IDE</title>
 <link rel="manifest" href="/manifest.webmanifest">
-<meta name="theme-color" content="#1b1d21">
+<meta name="theme-color" content="#14161b" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f4f5f7" media="(prefers-color-scheme: light)">
 <link rel="apple-touch-icon" href="/icon-192.png">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%232f6fde'/%3E%3Cpath d='M6 4 2.5 8 6 12M10 4l3.5 4L10 12' stroke='white' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
-<style>
-  html,body{margin:0;height:100%;background:#111318;color:#d7dbe0;font:14px/1.4 system-ui,sans-serif}
-  #frame{position:fixed;inset:0;width:100%;height:100%;border:0;display:none}
-  #status{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
-  #msg{max-width:420px;text-align:center;color:#aeb4bc}
-  #msg .err{color:#e5a1a1}
-  .spin{width:22px;height:22px;margin:0 auto 12px;border:2px solid #3a4048;border-top-color:#8aa;border-radius:50%;animation:s .9s linear infinite}
-  #pair{margin-top:14px}
-  #pair input{width:100%;padding:8px 10px;border:1px solid #3a4048;border-radius:6px;background:#171a20;color:#d7dbe0;font:14px/1.4 ui-monospace,monospace}
-  .small{color:#8b9199}
-  @keyframes s{to{transform:rotate(1turn)}}
-</style>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/_relay/bootstrap.css">
 </head>
 <body>
-<div id="status"><div id="msg"><div class="spin"></div>Connecting…</div></div>
-<form id="pair" hidden><input id="phrase" autocomplete="off" spellcheck="false" placeholder="Recovery phrase (24 words), never stored"></form>
+<div id="status">
+  <main class="card">
+    <header class="brand">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="8" class="logo-bg"/>
+        <path d="M16 15v10M12.5 25h7" class="logo-mast"/>
+        <circle cx="16" cy="13" r="2.2" class="logo-dot"/>
+        <path d="M11.5 8.5a6.4 6.4 0 0 0 0 9M20.5 8.5a6.4 6.4 0 0 1 0 9M8.3 5.5a10.8 10.8 0 0 0 0 15M23.7 5.5a10.8 10.8 0 0 1 0 15" class="logo-wave"/>
+      </svg>
+      <div>
+        <div class="name" id="brand">Web IDE</div>
+        <div class="host" id="host"></div>
+      </div>
+    </header>
+    <div id="msg" aria-live="polite"><div class="spin"></div><p class="center muted">Connecting…</p></div>
+    <footer id="foot" hidden></footer>
+  </main>
+</div>
 <iframe id="frame" title="Web IDE"></iframe>
 <script type="module" src="/_relay/bootstrap.js"></script>
 </body>

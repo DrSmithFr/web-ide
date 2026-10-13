@@ -179,9 +179,9 @@ run(
       // can wrap the key of the epoch for the pods.
       await authenticator(page)
       const msg = await open(page, `${ORIGIN}/#pod=${POD_A}`)
-      assert(msg.includes('No device on this origin'), 'the phrase form shows up: ' + msg)
-      await page.waitForSelector('#pair input', { timeout: 20000 })
-      await page.fill('#pair input', phrase)
+      assert(msg.includes('No device is paired in this browser'), 'the phrase form shows up: ' + msg)
+      await page.waitForSelector('#phrase', { timeout: 20000 })
+      await page.fill('#phrase', phrase)
       await page.keyboard.press('Enter')
       await page.waitForSelector('#frame', { timeout: 30000 })
       const appA = appOf(page)

@@ -1,0 +1,151 @@
+/* The bootstrap page of the relay: one card, light and dark, phone first. No external
+   resource: the page must work under a strict CSP. */
+:root {
+  --bg: #f4f5f7;
+  --bg2: #e9ecf1;
+  --card: #ffffff;
+  --line: #dde1e7;
+  --text: #1d2026;
+  --muted: #5d6470;
+  --accent: #2f6fde;
+  --accent-text: #ffffff;
+  --accent-soft: #e6eefc;
+  --ok: #2e8b57;
+  --err: #b4373a;
+  --err-soft: #fbeaea;
+  --code: #f1f3f6;
+  --shadow: 0 1px 2px rgba(20, 24, 31, 0.06), 0 8px 28px rgba(20, 24, 31, 0.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161b;
+    --bg2: #1a1d24;
+    --card: #1d2027;
+    --line: #2d323b;
+    --text: #e2e5ea;
+    --muted: #9aa1ac;
+    --accent: #5b8ff0;
+    --accent-text: #0e1116;
+    --accent-soft: #1f2a40;
+    --ok: #5cc28a;
+    --err: #ec8a8a;
+    --err-soft: #3a2224;
+    --code: #16181d;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.35);
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+html { background: var(--bg); }
+body {
+  background: radial-gradient(1200px 600px at 50% -10%, var(--bg2), var(--bg));
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-underline-offset: 2px; }
+#frame { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; display: none; }
+#status { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
+
+.card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 24px;
+}
+.brand { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.logo { width: 40px; height: 40px; flex: none; }
+.logo-bg { fill: var(--accent); }
+.logo-mast, .logo-wave { stroke: var(--accent-text); stroke-width: 1.8; fill: none; stroke-linecap: round; }
+.logo-wave { opacity: 0.85; }
+.logo-dot { fill: var(--accent-text); }
+.brand .name { font-weight: 650; font-size: 18px; letter-spacing: 0.2px; }
+.brand .host { color: var(--muted); font-size: 13px; }
+
+h1 { font-size: 20px; line-height: 1.3; margin: 0 0 6px; font-weight: 650; }
+h2 { font-size: 15px; margin: 0 0 4px; font-weight: 600; }
+p { margin: 0 0 12px; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.center { text-align: center; }
+b { font-weight: 600; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 42px; padding: 0 16px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--card); color: var(--text);
+  font: inherit; font-weight: 550; cursor: pointer; text-decoration: none;
+}
+.btn:hover { border-color: var(--accent); }
+.btn:focus-visible, textarea:focus-visible, .link:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.block { width: 100%; }
+.btn[disabled] { opacity: 0.55; cursor: default; filter: none; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.link { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+
+/* The welcome view: the restore form first, the other ways in below. */
+.lead { color: var(--muted); margin-bottom: 18px; }
+#pair { margin: 0; }
+#pair label { display: block; font-weight: 600; margin-bottom: 6px; }
+textarea {
+  width: 100%; min-height: 96px; resize: vertical; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--code); color: var(--text);
+  font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.check { display: flex; justify-content: space-between; gap: 8px; margin: 6px 0 12px; font-size: 13px; color: var(--muted); }
+.check .good { color: var(--ok); }
+.check .bad { color: var(--err); }
+.ways { margin-top: 18px; border-top: 1px solid var(--line); }
+details { border-bottom: 1px solid var(--line); }
+details:last-child { border-bottom: 0; }
+summary { cursor: pointer; padding: 12px 0; font-weight: 550; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+summary::-webkit-details-marker { display: none; }
+summary::after { content: "+"; color: var(--muted); font-weight: 400; font-size: 18px; }
+details[open] summary::after { content: "−"; }
+details .body { padding: 0 0 14px; color: var(--muted); font-size: 14px; }
+code, .code {
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--code); border: 1px solid var(--line); border-radius: 6px; padding: 1px 5px; color: var(--text);
+}
+.code { display: block; padding: 8px 10px; margin: 6px 0; overflow-x: auto; white-space: pre; }
+
+/* A device: its name and the words of its fingerprint. */
+.device { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; margin: 12px 0 16px; }
+.device .icon { width: 36px; height: 36px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; flex: none; }
+.device .icon svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.fp { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.fp span { padding: 6px 10px; border-radius: 8px; background: var(--accent-soft); color: var(--text); font: 600 16px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.fp.big { justify-content: center; }
+.fp.big span { font-size: 18px; padding: 8px 12px; }
+
+/* The connection: three steps that tick. */
+.steps { list-style: none; padding: 0; margin: 4px 0 0; }
+.steps li { display: flex; align-items: center; gap: 12px; padding: 9px 0; color: var(--muted); }
+.steps li .dot { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); flex: none; display: flex; align-items: center; justify-content: center; }
+.steps li.done { color: var(--text); }
+.steps li.done .dot { border-color: var(--ok); background: var(--ok); }
+.steps li.done .dot::after { content: ""; width: 6px; height: 10px; border: solid var(--card); border-width: 0 2px 2px 0; transform: translateY(-1px) rotate(45deg); }
+.steps li.now { color: var(--text); font-weight: 550; }
+.steps li.now .dot { border-color: var(--accent); border-top-color: transparent; animation: spin 0.9s linear infinite; }
+
+.spin { width: 26px; height: 26px; margin: 8px auto 14px; border: 2.5px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) { .spin, .steps li.now .dot { animation-duration: 3s; } }
+
+.err { background: var(--err-soft); color: var(--err); border-radius: 10px; padding: 12px 14px; font-weight: 550; }
+.notice { display: flex; gap: 10px; align-items: flex-start; }
+
+footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+
+@media (max-width: 420px) {
+  #status { align-items: flex-start; padding-top: 32px; }
+  .card { padding: 20px 18px; border-radius: 14px; }
+  .actions .btn { flex: 1; }
+}
