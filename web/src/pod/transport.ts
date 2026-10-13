@@ -1,7 +1,7 @@
 // Transport of the front end to the pod: a WebSocket on 127.0.0.1, or a MessagePort to the
 // bootstrap page of the relay (which owns the WebRTC connection). Both carry the same JSON
 // protocol, one whole message at a time.
-import { base } from '../app/base'
+import { base as pageBase } from '../app/base'
 
 export interface Channel {
   send(text: string): void
@@ -17,7 +17,7 @@ export function wsChannel(): Channel {
   const handlers = { open: () => {}, close: () => {}, message: (_: string) => {} }
   let sock: WebSocket | null = null
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  sock = new WebSocket(`${proto}//${location.host}${base}/ws`)
+  sock = new WebSocket(`${proto}//${location.host}${pageBase}/ws`)
   sock.onopen = () => handlers.open()
   sock.onmessage = (ev) => handlers.message(ev.data as string)
   sock.onclose = () => handlers.close()
@@ -61,11 +61,18 @@ export function portChannel(port: MessagePort): Channel {
  * One channel of the tunnel, asked to the bootstrap page that owns the PeerConnection: we
  * hand it one end of a MessageChannel, it wires the other end to a DataChannel of the
  * given label. Null outside the bootstrap page (127.0.0.1), where there is no parent.
+ *
+ * base names the pod the channel is for: on the relay origin, one window reaches every pod of
+ * the account and the bootstrap page picks the tunnel of that pod (its own, or the gateway's
+ * with the labels prefixed by @<key>/). side asks a channel beside the rpc channel of the page:
+ * the bootstrap never wires it as the app's own connection, and closing it never drops the
+ * tunnel. A pod serves one rpc channel per window, so a side channel of a pod reached on its own
+ * tunnel carries a label of its own ('rpc:push') and rides the window of the gateway on a routed one.
  */
-export function askPort(label: string): Promise<Channel | null> {
+export function askPort(label: string, base = pageBase, side = false): Promise<Channel | null> {
   if (window.parent === window) return Promise.resolve(null)
   const chan = new MessageChannel()
-  window.parent.postMessage({ kind: 'port', label, port: chan.port2 }, '*', [chan.port2])
+  window.parent.postMessage({ kind: 'port', label, base, side, port: chan.port2 }, '*', [chan.port2])
   return Promise.resolve(portChannel(chan.port1))
 }
 

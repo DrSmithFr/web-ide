@@ -12,10 +12,14 @@ package relayclient
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +31,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/server"
 	"github.com/DrSmithFr/web-ide/pod/internal/settingsync"
 	"github.com/DrSmithFr/web-ide/pod/internal/tunnel"
+	"github.com/DrSmithFr/web-ide/pod/internal/update"
 )
 
 // sigMsg is one signaling message between the relay and the pod (mirrored by the relay).
@@ -54,6 +59,37 @@ type sigMsg struct {
 	Kind    string                  `json:"kind,omitempty"`
 	Updated int64                   `json:"updated,omitempty"`
 	Message string                  `json:"message,omitempty"`
+	// Sites (milestone 3): register announces that this pod answers the proof of possession and
+	// carries its version and the preferred switch, `site` the device keys of its LAN peers,
+	// `challenge`/`proof` the nonce, `pods`/`gateway` what the relay sees of the account.
+	Prove     bool      `json:"prove,omitempty"`
+	Nonce     string    `json:"nonce,omitempty"`
+	Sig       string    `json:"sig,omitempty"`
+	Version   string    `json:"version,omitempty"`
+	Protocol  int       `json:"protocol,omitempty"`
+	Preferred bool      `json:"preferred,omitempty"`
+	Peers     []string  `json:"peers,omitempty"`
+	Site      string    `json:"site,omitempty"`
+	Gateway   string    `json:"gateway,omitempty"`
+	Pods      []PodInfo `json:"pods,omitempty"`
+	// Update this pod (#60): the relay only carries a signed update request between two pods of the
+	// same account. req is the id of the hop the relay handed out, echoed on the answer.
+	Update  *identity.UpdateRequest `json:"update,omitempty"`
+	Req     string                  `json:"req,omitempty"`
+	Status  string                  `json:"status,omitempty"`
+	Command string                  `json:"command,omitempty"`
+}
+
+// PodInfo is one pod of the account as the relay sees it (mirrors relay.PodInfo).
+type PodInfo struct {
+	Key      string `json:"key"`
+	PodID    string `json:"podId"`
+	Name     string `json:"name"`
+	Version  string `json:"version"`
+	Protocol int    `json:"protocol"`
+	Site     string `json:"site"`
+	Gateway  bool   `json:"gateway"`
+	Since    int64  `json:"since"`
 }
 
 // toSync turns the sync part of a signaling message into the message the sync loop reads.
@@ -62,24 +98,74 @@ func toSync(m sigMsg) settingsync.Msg {
 		SyncKey: m.SyncKey, Wrap: m.Wrap, Blob: m.Blob, Updated: m.Updated, Message: m.Message}
 }
 
+// PeerRoute opens one channel of a pod of the account this pod can reach without the relay: a
+// peer of its site, over the LAN link (pod/internal/lan.OpenTunnel). window is the id of the
+// browser's tunnel on this pod, via the certificate of the browser this pod authenticated, and
+// fpBrowser / fpPod the DTLS fingerprints of that tunnel — the peer binds the browser's proof to
+// them. Implemented by pod/internal/multipod.Route.
+type PeerRoute interface {
+	Open(ctx context.Context, key, window, label string, via *identity.Cert, fpBrowser, fpPod string) (tunnel.MsgConn, error)
+}
+
+// RoutedLabel is the label of a channel of another pod, asked on this pod's tunnel:
+// @<device key>/<label>. The gateway pipes it to that pod; it never serves it itself.
+const RoutedLabel = "@"
+
+// splitRouted splits a routed label into the device key of the target pod and its own label.
+func splitRouted(label string) (key, rest string, ok bool) {
+	if !strings.HasPrefix(label, RoutedLabel) {
+		return "", "", false
+	}
+	key, rest, found := strings.Cut(strings.TrimPrefix(label, RoutedLabel), "/")
+	if !found || key == "" || rest == "" {
+		return "", "", false
+	}
+	return key, rest, true
+}
+
 // Config of a relayclient.
 type Config struct {
 	RelayURL string // ws:// or wss:// URL of the relay (the base, without /_relay/pod)
-	PodID    string // the pod id registered with the relay
-	Secret   string // the pod secret (register, or re-register)
-	Name     string // a human name for the relay UI (optional)
-	Server   *server.Server
-	Token    string                // the pod token, proved inside the tunnel (token mode)
-	Identity *identity.PodIdentity // the paired pod: its device key and its pinned account
+	// SignalURL is the base of a pod-to-pod signaling link: the relay by default. A test can put
+	// a rewriting relay in front of it to check what a swapped offer breaks.
+	SignalURL string
+	PodID     string // the pod id registered with the relay
+	Secret    string // the pod secret (register, or re-register)
+	Name      string // a human name for the relay UI (optional)
+	Server    *server.Server
+	Token     string                // the pod token, proved inside the tunnel (token mode)
+	Identity  *identity.PodIdentity // the paired pod: its device key and its pinned account
 	// Sync is the settings sync loop of the pod: it sends its messages on this link and receives
 	// the answers and the pushes of the relay (nil: the pod does not sync).
 	Sync   *settingsync.Hub
 	Limits *tunnel.RateLimiter
+	// Version is the pod version, told to the relay (it lists the pods of the account).
+	Version string
+	// Protocol is the multi-pod protocol of this pod (multipod.Protocol), told to the relay: a pod
+	// of another one is listed with its version and never elected gateway.
+	Protocol int
+	// Preferred marks this pod as the entry point of its site (Settings > Remote access).
+	Preferred bool
+	// OnPods is called with the pods of the account the relay sees, OnGateway with the gateway of
+	// a site (multipod.Directory).
+	OnPods    func([]PodInfo)
+	OnGateway func(site, key string)
+	// OnForeignWrap is called with a wrap the relay pushed for another device: this pod passes it
+	// on over its LAN links, which is how a pod with no link of its own gets its key back.
+	OnForeignWrap func(*identity.WrapRecord)
+	// Route reaches a pod of this pod's site that has no link of its own: a browser tunneled to
+	// this pod gets its channels through it (relay.md, *Multi-pod*).
+	Route PeerRoute
+	// OnUpdate runs an update request the relay carried to this pod: the pod checks the request
+	// itself, the relay is a plain carrier.
+	OnUpdate func(*identity.UpdateRequest) update.Answer
 	// ForceTurn only advertises relay (TURN) candidates (e2e).
 	ForceTurn bool
 	// OnState is called with the state of the link to the relay (connecting, connected,
 	// disconnected); the page shows it in Settings > Remote access.
 	OnState func(state string)
+	// OnReady is called once the link is up and the sync loop published.
+	OnReady func()
 	// OnPushGone is called with a push subscription the relay dropped (the push service said
 	// 410, or the subscription is not of this account).
 	OnPushGone func(sub string)
@@ -96,6 +182,9 @@ type Client struct {
 	link   *podLink
 	iceMu  sync.Mutex
 	iceFor map[string]webrtc.ICEServer
+	// updates holds the update requests this pod sent through the relay, by the id the relay gave
+	// the hop: the answer comes back on the same link.
+	updates map[string]chan update.Answer
 }
 
 // New builds a relayclient Client.
@@ -103,7 +192,8 @@ func New(cfg Config) *Client {
 	if cfg.Limits == nil {
 		cfg.Limits = tunnel.NewRateLimiter(5, 5*time.Minute)
 	}
-	return &Client{cfg: cfg, limits: cfg.Limits, sessions: map[string]*session{}, iceFor: map[string]webrtc.ICEServer{}}
+	return &Client{cfg: cfg, limits: cfg.Limits, sessions: map[string]*session{}, iceFor: map[string]webrtc.ICEServer{},
+		updates: map[string]chan update.Answer{}}
 }
 
 // Run dials the relay, registers, and routes signaling until ctx ends. It reconnects
@@ -147,15 +237,17 @@ func (c *Client) runOnce(ctx context.Context) error {
 	link := &podLink{c: conn}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	// Register: the relay stores the secret and marks the pod online. A paired pod also
-	// gives its account and its certificate — the relay can check them but never make one.
+	// Register: the relay stores the secret and marks the pod online. A paired pod also gives its
+	// account and its certificate — the relay can check them but never make one — and answers the
+	// nonce it is sent with the device key: the proof of possession. Without it the relay knows
+	// nothing about this pod: no presence, no gateway role.
 	var reg sigMsg
 	if c.cfg.Identity != nil && c.cfg.Identity.Paired() {
 		account, cert, _ := c.cfg.Identity.State()
 		reg = sigMsg{Type: "register", ID: c.cfg.PodID, Secret: c.cfg.Secret, Name: c.cfg.Name,
-			Account: account, Cert: cert}
+			Account: account, Cert: cert, Prove: true, Version: c.cfg.Version, Protocol: c.cfg.Protocol, Preferred: c.cfg.Preferred}
 	} else {
-		reg = sigMsg{Type: "register", ID: c.cfg.PodID, Secret: c.cfg.Secret, Name: c.cfg.Name}
+		reg = sigMsg{Type: "register", ID: c.cfg.PodID, Secret: c.cfg.Secret, Name: c.cfg.Name, Version: c.cfg.Version, Protocol: c.cfg.Protocol}
 	}
 	if err := link.send(reg); err != nil {
 		return err
@@ -163,6 +255,16 @@ func (c *Client) runOnce(ctx context.Context) error {
 	m, err := link.recv(ctx)
 	if err != nil {
 		return err
+	}
+	if m.Type == "challenge" {
+		sig := identity.Sign(c.cfg.Identity.Key(), []byte(identity.RelayBinding(relayHost(c.cfg.RelayURL), m.Nonce)))
+		if err := link.send(sigMsg{Type: "proof", Nonce: m.Nonce, Sig: sig}); err != nil {
+			return err
+		}
+		m, err = link.recv(ctx)
+		if err != nil {
+			return err
+		}
 	}
 	if m.Type != "ready" {
 		return errors.New("relay refused the pod: " + m.Type)
@@ -197,8 +299,16 @@ func (c *Client) runOnce(ctx context.Context) error {
 			c.cfg.Sync.SetError(err)
 		}
 	}
+	// The link is up and the sync loop published: what the pod reads from the relay (the cached
+	// project lists of the other pods) can start here.
+	if c.cfg.OnReady != nil {
+		c.cfg.OnReady()
+	}
 	for {
 		if ctx.Err() != nil {
+			// A clean goodbye: the relay moves the gateway role at once instead of waiting for
+			// the grace, and this pod starts fresh next time it comes up.
+			_ = link.send(sigMsg{Type: "bye"})
 			return ctx.Err()
 		}
 		m, err := link.recv(ctx)
@@ -206,6 +316,14 @@ func (c *Client) runOnce(ctx context.Context) error {
 			return err
 		}
 		switch m.Type {
+		case "pods":
+			if c.cfg.OnPods != nil {
+				c.cfg.OnPods(m.Pods)
+			}
+		case "gateway":
+			if c.cfg.OnGateway != nil {
+				c.cfg.OnGateway(m.Site, m.Gateway)
+			}
 		case "revocations":
 			if err := c.applyRevocations(m.List); err != nil {
 				return err
@@ -219,6 +337,13 @@ func (c *Client) runOnce(ctx context.Context) error {
 		case "bye":
 			c.route(m.Session, func(s *session) { s.close() })
 		case "wrap", "blob":
+			if m.Type == "wrap" && m.Wrap != nil && c.cfg.Identity != nil && m.Wrap.Device != c.cfg.Identity.ID() {
+				// Not for this pod: it is for a pod of its site that has no link of its own.
+				if c.cfg.OnForeignWrap != nil {
+					c.cfg.OnForeignWrap(m.Wrap)
+				}
+				continue
+			}
 			if c.cfg.Sync == nil {
 				continue
 			}
@@ -229,6 +354,26 @@ func (c *Client) runOnce(ctx context.Context) error {
 		case "push.gone":
 			if c.cfg.OnPushGone != nil {
 				c.cfg.OnPushGone(m.ID)
+			}
+		case "update":
+			// The relay carried an update request to this pod. It checks it itself: the relay is a
+			// plain carrier, it never decided who is a device of the account.
+			if m.Update != nil && c.cfg.OnUpdate != nil {
+				ans := c.cfg.OnUpdate(m.Update)
+				_ = link.send(sigMsg{Type: "update.done", Req: m.Req, Status: ans.Status, Message: ans.Message, Command: ans.Command})
+			}
+		case "update.done":
+			c.mu.Lock()
+			ch := c.updates[m.Req]
+			if ch != nil {
+				delete(c.updates, m.Req)
+			}
+			c.mu.Unlock()
+			if ch != nil {
+				select {
+				case ch <- update.Answer{Status: m.Status, Message: m.Message, Command: m.Command}:
+				default:
+				}
 			}
 		}
 	}
@@ -267,6 +412,111 @@ func (c *Client) PushRevocations(list *identity.Revocations) {
 	if link != nil && list != nil {
 		_ = link.send(sigMsg{Type: "revocations", List: list})
 	}
+}
+
+// UpdateWait is how long this pod waits for the answer of an update request it sent through the
+// relay: a pod older than #60 knows no update message and never answers, and the page then shows
+// the command to run by hand.
+const UpdateWait = 10 * time.Second
+
+// SendUpdate gives the relay a signed update request for another pod of the account and waits for
+// its answer. The relay carries it to the online link of that device, for pods of the same account
+// only; the target checks the signature itself.
+func (c *Client) SendUpdate(ctx context.Context, device string, req *identity.UpdateRequest) (*update.Answer, error) {
+	c.mu.Lock()
+	link := c.link
+	if link == nil {
+		c.mu.Unlock()
+		return nil, errors.New("relay: not connected")
+	}
+	id := randID()
+	ch := make(chan update.Answer, 1)
+	c.updates[id] = ch
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		delete(c.updates, id)
+		c.mu.Unlock()
+	}()
+	if err := link.send(sigMsg{Type: "update", Device: device, Req: id, Update: req}); err != nil {
+		return nil, err
+	}
+	select {
+	case a := <-ch:
+		return &a, nil
+	case <-time.After(UpdateWait):
+		return &update.Answer{Status: update.StatusNotService, Command: update.Command(req.Version)}, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// randID is the id of one request of this link; the relay hands out its own for the hop it carries.
+func randID() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b)
+}
+
+// ReportSite tells the relay the device keys of the pods this pod sees on its LAN: the relay
+// builds the sites from what every pod reports, and elects one gateway per site.
+func (c *Client) ReportSite(peers []string) {
+	c.mu.Lock()
+	link := c.link
+	c.mu.Unlock()
+	if link == nil {
+		return
+	}
+	_ = link.send(sigMsg{Type: "site", Peers: peers})
+}
+
+// PutBlob stores a blob a peer of the site handed over: a pod with no link to the relay publishes
+// its project list through this pod. The record is forwarded unchanged — the relay checks the
+// signature of the device that wrote it, so the hop adds no trust.
+func (c *Client) PutBlob(rec *identity.BlobRecord) error {
+	c.mu.Lock()
+	link := c.link
+	c.mu.Unlock()
+	if link == nil {
+		return errors.New("relay: not connected")
+	}
+	return link.send(sigMsg{Type: "blobPut", Account: rec.Account, Device: rec.Device, Kind: rec.Kind, Blob: rec})
+}
+
+// PutSyncKey hands the X25519 key a peer of the site published to the relay, so an admin can wrap
+// the key of the epoch for a pod that has no link of its own. The record is forwarded unchanged.
+func (c *Client) PutSyncKey(rec *identity.SyncKeyRecord) error {
+	c.mu.Lock()
+	link := c.link
+	c.mu.Unlock()
+	if link == nil {
+		return errors.New("relay: not connected")
+	}
+	return link.send(sigMsg{Type: "syncKey", Account: rec.Account, Device: rec.Device, SyncKey: rec})
+}
+
+// SetPreferred marks this pod as the entry point of its site (Settings > Remote access), and tells
+// the relay about the change.
+func (c *Client) SetPreferred(on bool) {
+	c.mu.Lock()
+	c.cfg.Preferred = on
+	link := c.link
+	c.mu.Unlock()
+	if link != nil {
+		_ = link.send(sigMsg{Type: "preferred", Preferred: on})
+	}
+}
+
+// relayHost is the origin the pod dials: the string a proof of possession is bound to, the same
+// one the relay read in the Host header of the link.
+func relayHost(u string) string {
+	p, err := url.Parse(u)
+	if err != nil || p.Host == "" {
+		return u
+	}
+	return p.Host
 }
 
 // applyRevocations takes a revocation list from the relay. The pod checks the signature
@@ -321,17 +571,20 @@ func (c *Client) dropSession(id string) {
 // serves the tunnel. It runs in its own goroutine (per session), so one handshake does
 // not block the signaling loop.
 func (c *Client) handleOffer(m sigMsg, link *podLink) {
-	s := &session{client: c, link: link, id: m.Session, rpcCh: make(chan *dataChannelChunk, 1), chans: make(chan tunnel.LabeledConn, 64)}
+	s := &session{client: c, link: link, id: m.Session, rpcCh: make(chan *dataChannelChunk, 1), chans: make(chan tunnel.LabeledConn, 64),
+		routed: make(chan routedConn, 16), authed: make(chan struct{})}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	c.addSession(m.Session, s)
 	if err := s.setupOffer(m); err != nil {
-		link.send(sigMsg{Type: "error", Session: m.Session})
+		log.Printf("relayclient: offer: %v", err)
+		link.send(sigMsg{Type: "error", Session: m.Session, Message: err.Error()})
 		s.close()
 		return
 	}
 	// serveRPC waits for the browser's "rpc" DataChannel (OnDataChannel hands it to
 	// s.rpcCh, registered synchronously) and runs the handshake and the tunnel.
 	go s.serveRPC()
+	go s.serveRouted()
 }
 
 // podLink is one pod's persistent WebSocket to the relay; writes are serialized.
@@ -377,9 +630,25 @@ type session struct {
 	// chans carries every other DataChannel of this session (term:<id>, xfer:<n>,
 	// http:<n>), framed, to ServeTunnel.
 	chans chan tunnel.LabeledConn
+	// routed carries the channels of another pod of the site (@<key>/<label>): this pod is the
+	// gateway of this browser and pipes them to that pod.
+	routed chan routedConn
+	// authed is closed once the browser proved itself on the rpc channel: only then does this
+	// pod relay its channels, with its certificate and the fingerprints of its tunnel.
+	authed      chan struct{}
+	browserCert *identity.Cert
+	fpBrowser   string
+	fpPod       string
 	// rpcConn is the framed rpc channel, so the pod can answer on it (terminal output).
 	rpcConn *tunnel.Framed
 	closed  bool
+}
+
+// routedConn is one channel of another pod asked on this window.
+type routedConn struct {
+	key   string
+	label string
+	conn  *tunnel.Framed
 }
 
 func (s *session) setupOffer(m sigMsg) error {
@@ -411,6 +680,14 @@ func (s *session) setupOffer(m sigMsg) error {
 			return
 		}
 		conn := tunnel.NewFramed(chunk, 8*1024*1024)
+		if key, rest, ok := splitRouted(dc.Label()); ok {
+			// A channel of another pod of the site: this pod is the gateway of this browser.
+			select {
+			case s.routed <- routedConn{key: key, label: rest, conn: conn}:
+			case <-s.ctx.Done():
+			}
+			return
+		}
 		s.chans <- tunnel.LabeledConn{Label: dc.Label(), Conn: conn}
 	})
 	pc.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
@@ -432,7 +709,12 @@ func (s *session) setupOffer(m sigMsg) error {
 	if err := pc.SetLocalDescription(answer); err != nil {
 		return err
 	}
-	<-gather
+	// A candidate gathering that stalls (a TURN allocation that never answers) must not hold the
+	// answer forever: what was gathered is sent, and the tunnel is made of that.
+	select {
+	case <-gather:
+	case <-time.After(8 * time.Second):
+	}
 	// The final answer SDP carries the pod's DTLS fingerprint (the handshake binds it);
 	// the raw CreateAnswer SDP may not have it yet.
 	lc := pc.LocalDescription()
@@ -482,9 +764,67 @@ func (s *session) serveRPC() {
 		s.close()
 		return
 	}
+	s.browserCert, s.fpBrowser, s.fpPod = hs.PeerCert, hs.FPBrowser, hs.FPPod
+	close(s.authed)
 	s.client.cfg.Server.ServeTunnel(s.ctx, conn, s.chans)
 	// ServeTunnel returned: the browser closed the tunnel.
 	s.close()
+}
+
+// serveRouted pipes the channels of another pod of the site to that pod, over the LAN link.
+// The browser proved itself on this pod's rpc channel first: this pod vouches for it, and the
+// end pod checks its certificate against the list it holds itself.
+func (s *session) serveRouted() {
+	select {
+	case <-s.authed:
+	case <-s.ctx.Done():
+		return
+	}
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case rc := <-s.routed:
+			go s.pipe(rc)
+		}
+	}
+}
+
+// pipe opens the channel of the target pod and copies both ways until one side ends.
+func (s *session) pipe(rc routedConn) {
+	route := s.client.cfg.Route
+	if route == nil || s.browserCert == nil {
+		_ = rc.conn.Close()
+		return
+	}
+	peer, err := route.Open(s.ctx, rc.key, s.id, rc.label, s.browserCert, s.fpBrowser, s.fpPod)
+	if err != nil {
+		log.Printf("relayclient: route @%s/%s: %v", rc.key, rc.label, err)
+		_ = rc.conn.Close()
+		return
+	}
+	go func() {
+		defer peer.Close()
+		for {
+			b, err := rc.conn.Read()
+			if err != nil {
+				return
+			}
+			if err := peer.Write(b); err != nil {
+				return
+			}
+		}
+	}()
+	for {
+		b, err := peer.Read()
+		if err != nil {
+			break
+		}
+		if err := rc.conn.Write(b); err != nil {
+			break
+		}
+	}
+	_ = rc.conn.Close()
 }
 
 // close ends the session (browser bye, ICE failed, or the tunnel closed).

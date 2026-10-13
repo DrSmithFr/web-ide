@@ -30,6 +30,10 @@ type vectors struct {
 
 	// Sync (milestone 4): the key of an epoch, its sub-keys, the X25519 pair of a device and
 	// the wrap of the epoch key for it, checked by the browser with WebCrypto.
+	// Update this pod (#60): the request a browser signs for a pod of its account.
+	UpdateCanonical string `json:"updateCanonical"`
+	UpdateSig       string `json:"updateSig"`
+
 	EpochKey1        string `json:"epochKey1"`
 	SettingsKey      string `json:"settingsKey"`
 	VaultKey         string `json:"vaultKey"`

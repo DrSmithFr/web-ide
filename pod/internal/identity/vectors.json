@@ -35,5 +35,7 @@
   "blobCanonical": "{\"account\":\"zTFqKvpAtSeuHqtYNDGohuqw5giUVa4Zx0uHH0wYrFY\",\"kind\":\"settings\",\"epoch\":1,\"seq\":1,\"device\":\"S6ZXtI0OcDa4t1QXvRf_DWwpA2DJKuRqdJKGe8UveQs\",\"op\":\"put\",\"nonce\":\"AAAAAAAAAAAAAAAA\",\"data\":\"sgADJqePjNes-0dpZmFfoSX6pHJ844UmbtEsukYZDU8\"}",
   "blobSig": "CQ3byv0cGnUcZQqKKIHS0AREA60e7yV_SsuAE3Xczv83K7WTd-fNqiL2IRSbs4BxW2N2O6ETRV99E7NPHIOcBg",
   "wrapCanonical": "{\"account\":\"zTFqKvpAtSeuHqtYNDGohuqw5giUVa4Zx0uHH0wYrFY\",\"device\":\"S6ZXtI0OcDa4t1QXvRf_DWwpA2DJKuRqdJKGe8UveQs\",\"epoch\":1,\"key\":\"c7LYt2qptTZgAyvI9di-46OuTjs6f9Sa3oH3NHo0qmg\",\"nonce\":\"AAAAAAAAAAAAAAAA\",\"data\":\"7Gsmn0AwTAksqO2Wj7pIus-HK9tMpvZk0K5s_Jjl0WvolUEq-lCdjN4NogeTDPrn\"}",
-  "wrapSig": "hgucxDBFObBCfPVkgyYbx4rarfYrs8yKPg3vl7tZdf_4vk1WuPSr6FLcwA3wMN2OhVfxdueQurSVBJu4w-C5CQ"
+  "wrapSig": "hgucxDBFObBCfPVkgyYbx4rarfYrs8yKPg3vl7tZdf_4vk1WuPSr6FLcwA3wMN2OhVfxdueQurSVBJu4w-C5CQ",
+  "updateCanonical": "{\"v\":1,\"pod\":\"S6ZXtI0OcDa4t1QXvRf_DWwpA2DJKuRqdJKGe8UveQs\",\"version\":\"v1.11.0\",\"created\":1766721600000}",
+  "updateSig": "2oGbzg6d1OvSZW5D8mMd0Jao8vMz_9nz3m3OUz7LB5KnU2Mh2rNs24dK9B7jZdWWk1n9hHYjx3mzwa-wK8qFBQ"
 }

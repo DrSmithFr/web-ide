@@ -2,7 +2,7 @@
 // through the relay, encrypted by the pod), a switch per kind, and a test.
 import { createSignal, For, onMount, Show } from 'solid-js'
 import { request } from '../pod/rpc'
-import { disablePush, enablePush, pushMissing, relayDevice } from '../pod/push'
+import { disablePush, enablePush, pushMissing, pushSetting, relayDevice } from '../pod/push'
 import { errorToast, toast } from '../ui/toast'
 import { t } from '../i18n'
 
@@ -60,7 +60,7 @@ export function Notifications() {
               {(k) => (
                 <label class="check">
                   <input type="checkbox" checked={!!status()!.choices?.[k]} data-testid={`push-kind-${k}`}
-                    onChange={(e) => void run(() => request('push.settings', { device: relayDevice(), kind: k, on: e.currentTarget.checked }))} />
+                    onChange={(e) => void run(() => pushSetting(k, e.currentTarget.checked))} />
                   {t(kindLabels[k] ?? k)}
                 </label>
               )}

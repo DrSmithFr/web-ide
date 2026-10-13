@@ -24,11 +24,21 @@ const (
 	InfoWrap   = "web-ide sync wrap v1"
 )
 
-// Kinds of blob the relay stores, one per account and kind.
+// Kinds of blob the relay stores, one per account and kind. The project list of a pod lives under
+// its own kind, "projects:<device key>": one writer, and a pod reads the whole family with the
+// prefix KindProjects.
 const (
 	KindSettings = "settings"
 	KindVault    = "vault"
+	KindProjects = "projects"
 )
+
+// ProjectsPrefix is the start of the kind of every project list: a blobGet of the prefix returns
+// the lists of all the pods of the account.
+const ProjectsPrefix = KindProjects + ":"
+
+// ProjectsKind is the kind of the project list published by one device.
+func ProjectsKind(device string) string { return ProjectsPrefix + device }
 
 // EpochInfo is the info string of the key of an epoch.
 func EpochInfo(epoch int64) string { return fmt.Sprintf("web-ide sync epoch %d", epoch) }

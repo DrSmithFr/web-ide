@@ -16,12 +16,14 @@ var webFS embed.FS
 var (
 	bootstrapHTML []byte
 	bootstrapJS   []byte
+	routesJS      []byte
 	swJS          []byte
 )
 
 func init() {
 	bootstrapHTML, _ = io.ReadAll(mustRead("bootstrap.html"))
 	bootstrapJS, _ = io.ReadAll(mustRead("bootstrap.js"))
+	routesJS, _ = io.ReadAll(mustRead("routes.js"))
 	swJS, _ = io.ReadAll(mustRead("sw.js"))
 }
 
@@ -43,6 +45,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/_relay/signal", s.serveSignal)
 	mux.HandleFunc("/_relay/identity", s.serveIdentity)
 	mux.HandleFunc("/_relay/bootstrap.js", staticJS(bootstrapJS))
+	// The routing decisions of the bootstrap page, in their own module: the same file is run by
+	// node --test (scripts/routes-test.mjs) without a browser.
+	mux.HandleFunc("/_relay/routes.js", staticJS(routesJS))
 	// The identity module and the BIP39 wordlist come from the identity package: the bootstrap
 	// page and the app import the same file, so the browser and the pod cannot disagree on a
 	// format.

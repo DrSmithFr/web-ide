@@ -19,6 +19,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 	"github.com/DrSmithFr/web-ide/pod/internal/tunnel"
+	"github.com/DrSmithFr/web-ide/pod/internal/update"
 )
 
 // DefaultAddr is the LAN listen address when config.json sets none.
@@ -31,9 +32,17 @@ type Config struct {
 	Identity *identity.PodIdentity
 	Name     string // told to the peers (the host name)
 	Version  string // the pod version, told to the peers
+	Protocol int    // the multi-pod protocol of this pod (multipod.Protocol), told to the peers
 	// Handler serves a request of a trusted peer as a request of the machine itself
 	// (server.ServeTrusted): the peer proved it is a device of the account.
 	Handler http.Handler
+	// ServeTunnel runs the protocol of a window a gateway of the site bridged to this pod: its
+	// channels arrive on the LAN port (/_lan/tunnel), the rpc one having passed the handshake of
+	// the browser the gateway vouches for.
+	ServeTunnel func(ctx context.Context, rpc tunnel.MsgConn, chans <-chan tunnel.LabeledConn)
+	// Remote serves the page of a pod this pod reaches through the relay rather than the LAN
+	// (pod/internal/multipod.RemoteGateway): the same /_lan/pod/ path, over WebRTC.
+	Remote http.Handler
 	// Peers are the addresses typed by hand (host:port), for a network where mDNS fails.
 	Peers []string
 	// SavePeers stores the addresses typed by hand (config.json).
@@ -45,6 +54,16 @@ type Config struct {
 	// OnRevocations is called with each newer revocation list the pod holds, whatever
 	// brought it (the relay link passes it on).
 	OnRevocations func(*identity.Revocations)
+	// OnBlob, OnWrap and OnSyncKey are called with a sync record a peer passed on: a pod with no
+	// link to the relay publishes its project list and reads its wrap through a peer of its site,
+	// which forwards them on its own link. The relay checks the original signature, so this adds
+	// no trust.
+	OnBlob func(*identity.BlobRecord)
+	OnWrap func(*identity.WrapRecord)
+	OnSync func(*identity.SyncKeyRecord)
+	// OnUpdate runs an update request a peer of the site carried to this pod ($update): the pod
+	// checks it itself, whatever brought it.
+	OnUpdate func(*identity.UpdateRequest) update.Answer
 	// Tick is the pace of the dial loop (default 2 s); Browse runs every 5 ticks.
 	Tick time.Duration
 }
@@ -64,14 +83,16 @@ type Manager struct {
 	listenErr string
 	listening bool
 	manual    []string
-	cands     map[string]*candidate     // by address
-	peers     map[string]*peer          // by device key
-	trusted   map[string]*trust         // by TLS fingerprint of a peer
-	joins     map[string]*joinReq       // joining pods, by address
-	browsers  map[string]*identity.Cert // certificates of the browsers of the Devices panel
-	idLinks   map[*idLink]bool          // the open links of the Devices panel
-	seq       int64                     // the seq of the last revocation list passed on
-	announced string                    // the account announced by mDNS
+	cands     map[string]*candidate         // by address
+	peers     map[string]*peer              // by device key
+	trusted   map[string]*trust             // by TLS fingerprint of a peer
+	joins     map[string]*joinReq           // joining pods, by address
+	tunnels   map[string]*tunnelWindow      // windows bridged by a gateway, by window id + peer TLS fp
+	browsers  map[string]*identity.Cert     // certificates of the browsers of the Devices panel
+	idLinks   map[*idLink]bool              // the open links of the Devices panel
+	updates   map[string]chan update.Answer // update requests this pod sent, by request id
+	seq       int64                         // the seq of the last revocation list passed on
+	announced string                        // the account announced by mDNS
 	stopAnn   func()
 	// transports reach the peers, by the TLS fingerprint they pin.
 	transports map[string]*http.Transport
@@ -94,6 +115,7 @@ type peer struct {
 	cert     *identity.Cert
 	name     string
 	version  string
+	protocol int // the multi-pod protocol it told in its $info (0: older than #60)
 	links    map[*link]bool
 	out      *link // the link we dialed: the gateway goes through it
 	projects json.RawMessage
@@ -121,7 +143,9 @@ func New(cfg Config) (*Manager, error) {
 		cfg: cfg, cert: cert, fp: Fingerprint(cert.Certificate[0]),
 		limits: tunnel.NewRateLimiter(20, time.Minute),
 		cands:  map[string]*candidate{}, peers: map[string]*peer{}, trusted: map[string]*trust{}, joins: map[string]*joinReq{},
+		tunnels:  map[string]*tunnelWindow{},
 		browsers: map[string]*identity.Cert{}, idLinks: map[*idLink]bool{},
+		updates: map[string]chan update.Answer{},
 	}
 	for _, a := range cfg.Peers {
 		m.addCandidate(a, "manual")
@@ -395,6 +419,10 @@ func (m *Manager) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not a device of this account", http.StatusForbidden)
 		return
 	}
+	if r.URL.Path == TunnelPath {
+		m.serveTunnel(w, r, fp)
+		return
+	}
 	m.cfg.Handler.ServeHTTP(w, r)
 }
 
@@ -476,7 +504,7 @@ func (m *Manager) run(l *link, peerFP string) {
 	m.attach(l, peerFP)
 	defer m.detach(l, peerFP)
 	_, _, rev := m.cfg.Identity.State()
-	_ = l.send("$info", info{Name: m.cfg.Name, Version: m.cfg.Version, Port: m.Port()})
+	_ = l.send("$info", info{Name: m.cfg.Name, Version: m.cfg.Version, Protocol: m.cfg.Protocol, Port: m.Port()})
 	if rev != nil {
 		_ = l.send("$revocations", rev)
 	}
@@ -522,6 +550,49 @@ func (m *Manager) run(l *link, peerFP string) {
 			if newer, err := m.cfg.Identity.Apply(&r); err == nil && newer {
 				m.recheck()
 				m.spread(&r, l)
+			}
+		case "$blob":
+			var b identity.BlobRecord
+			if json.Unmarshal(msg.Params, &b) == nil && m.cfg.OnBlob != nil {
+				m.cfg.OnBlob(&b)
+			}
+		case "$wrap":
+			var w identity.WrapRecord
+			if json.Unmarshal(msg.Params, &w) == nil {
+				// The wrap is sealed for its device: a peer that is not it only passes it on.
+				if w.Device == m.cfg.Identity.ID() {
+					if m.cfg.OnWrap != nil {
+						m.cfg.OnWrap(&w)
+					}
+					continue
+				}
+				m.spreadWrap(&w, l)
+			}
+		case "$syncKey":
+			var k identity.SyncKeyRecord
+			if json.Unmarshal(msg.Params, &k) == nil && m.cfg.OnSync != nil {
+				m.cfg.OnSync(&k)
+			}
+		case "$update":
+			// A peer of the site carried an update request for this pod. The pod checks it itself:
+			// a peer is a device of the account, not an authority.
+			var u updateMsg
+			if json.Unmarshal(msg.Params, &u) == nil && m.cfg.OnUpdate != nil {
+				ans := m.cfg.OnUpdate(u.Update)
+				_ = l.send("$update.done", updateDone{Req: u.Req, Status: ans.Status, Message: ans.Message, Command: ans.Command})
+			}
+		case "$update.done":
+			var d updateDone
+			if json.Unmarshal(msg.Params, &d) == nil {
+				m.mu.Lock()
+				ch := m.updates[d.Req]
+				m.mu.Unlock()
+				if ch != nil {
+					select {
+					case ch <- update.Answer{Status: d.Status, Message: d.Message, Command: d.Command}:
+					default:
+					}
+				}
 			}
 		}
 	}
@@ -584,7 +655,7 @@ func (m *Manager) setInfo(l *link, i info) {
 		if i.Name != "" {
 			p.name = i.Name
 		}
-		p.version = i.Version
+		p.version, p.protocol = i.Version, i.Protocol
 	}
 	m.mu.Unlock()
 	if l.inbound && i.Port > 0 && l.remoteHost != "" {
@@ -609,6 +680,132 @@ func (m *Manager) recheck() {
 	m.mu.Unlock()
 	for _, l := range drop {
 		l.close()
+	}
+}
+
+// PublishBlob hands a sealed blob to a peer of the site: a pod with no link to the relay publishes
+// its project list this way, and the peer puts it on its own link unchanged. The relay checks the
+// signature of the device that wrote it, so the hop adds no trust.
+func (m *Manager) PublishBlob(b *identity.BlobRecord) error {
+	l := m.publishLink()
+	if l == nil {
+		return errors.New("lan: no peer of the account to publish through")
+	}
+	return l.send("$blob", b)
+}
+
+// PublishSyncKey hands the X25519 key of this device to a peer, so an admin can wrap the epoch key
+// for a pod that has no link of its own.
+func (m *Manager) PublishSyncKey(k *identity.SyncKeyRecord) error {
+	l := m.publishLink()
+	if l == nil {
+		return errors.New("lan: no peer of the account to publish through")
+	}
+	return l.send("$syncKey", k)
+}
+
+// UpdateWait is how long this pod waits for the answer of an update request it carried: a pod
+// older than #60 knows no $update and never answers, and the page then shows the command to run
+// by hand.
+const UpdateWait = 10 * time.Second
+
+// SendUpdate carries a signed update request to a peer of the site over its control link and waits
+// for its answer. The peer runs the checks itself: what this pod adds is the route, not the trust.
+func (m *Manager) SendUpdate(ctx context.Context, key string, req *identity.UpdateRequest) (*update.Answer, error) {
+	m.mu.Lock()
+	var l *link
+	if p := m.peers[key]; p != nil && p.out != nil && !p.out.closed() {
+		l = p.out
+	}
+	m.mu.Unlock()
+	if l == nil {
+		return nil, errors.New("lan: this pod is not a peer of the local network")
+	}
+	id := nonce()
+	ch := make(chan update.Answer, 1)
+	m.mu.Lock()
+	if m.updates == nil {
+		m.updates = map[string]chan update.Answer{}
+	}
+	m.updates[id] = ch
+	m.mu.Unlock()
+	defer func() {
+		m.mu.Lock()
+		delete(m.updates, id)
+		m.mu.Unlock()
+	}()
+	if err := l.send("$update", updateMsg{Req: id, Update: req}); err != nil {
+		return nil, err
+	}
+	select {
+	case a := <-ch:
+		return &a, nil
+	case <-time.After(UpdateWait):
+		// No answer: the pod on the other side is older than this ticket. The user runs the command.
+		return &update.Answer{Status: update.StatusNotService, Command: update.Command(req.Version)}, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// PassWrap forwards a wrap the relay pushed for a pod of this site that has no link of its own: it
+// is the only way that pod can read the epoch key.
+func (m *Manager) PassWrap(w *identity.WrapRecord) error {
+	m.mu.Lock()
+	var links []*link
+	for _, p := range m.peers {
+		for l := range p.links {
+			links = append(links, l)
+		}
+	}
+	m.mu.Unlock()
+	if len(links) == 0 {
+		return errors.New("lan: no peer of the account to pass a wrap to")
+	}
+	var err error
+	for _, l := range links {
+		if e := l.send("$wrap", w); e != nil {
+			err = e
+		}
+	}
+	return err
+}
+
+// publishLink is a link we dialed (the one the gateway would use for the peer's page), or any open
+// control link.
+func (m *Manager) publishLink() *link {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, p := range m.peers {
+		if p.out != nil && !p.out.closed() {
+			return p.out
+		}
+	}
+	for _, p := range m.peers {
+		for l := range p.links {
+			if !l.closed() {
+				return l
+			}
+		}
+	}
+	return nil
+}
+
+// spreadWrap passes a wrap for another device on to the other peers: the pod it is for reaches the
+// relay through one of them, so the key comes back the same way.
+func (m *Manager) spreadWrap(w *identity.WrapRecord, from *link) {
+	m.mu.Lock()
+	var links []*link
+	for _, p := range m.peers {
+		for l := range p.links {
+			if l != from {
+				links = append(links, l)
+			}
+		}
+	}
+	m.mu.Unlock()
+	for _, l := range links {
+		_ = l.send("$wrap", w)
 	}
 }
 
@@ -660,8 +857,10 @@ type PeerView struct {
 	Name        string `json:"name"`
 	Fingerprint string `json:"fingerprint"`
 	Version     string `json:"version"`
-	Addr        string `json:"addr"`
-	Online      bool   `json:"online"`
+	// Protocol is the multi-pod protocol the peer told (0: a pod older than #60).
+	Protocol int    `json:"protocol"`
+	Addr     string `json:"addr"`
+	Online   bool   `json:"online"`
 	// Path is where the page of the peer is served through this pod (empty: offline).
 	Path     string          `json:"path"`
 	Projects json.RawMessage `json:"projects,omitempty"`
@@ -695,7 +894,7 @@ func (m *Manager) Status() Status {
 		if m.cfg.Identity.PeerError(p.cert) != nil {
 			continue
 		}
-		v := PeerView{ID: key, Name: p.name, Fingerprint: identity.Fingerprint(key), Version: p.version, Online: p.out != nil, Projects: p.projects}
+		v := PeerView{ID: key, Name: p.name, Fingerprint: identity.Fingerprint(key), Version: p.version, Protocol: p.protocol, Online: p.out != nil, Projects: p.projects}
 		if p.out != nil {
 			v.Addr = p.out.addr
 		}

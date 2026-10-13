@@ -97,8 +97,20 @@ function handleMessage(text: string) {
 
 function connect() {
   setState('connecting')
-  const c = chan ?? wsChannel()
-  chan = c
+  if (chan) {
+    attach(chan)
+    return
+  }
+  // On the relay origin the channel is a port of the tunnel: after a tunnel that dropped, it is
+  // asked again and the bootstrap page opens a new one (through another gateway, relay.md).
+  void askPort('rpc').then((c) => {
+    const ch = c ?? wsChannel()
+    chan = ch
+    attach(ch)
+  })
+}
+
+function attach(c: Channel) {
   c.onOpen(() => {
     retry = 0
     setState('connected')

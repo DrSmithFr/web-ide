@@ -172,6 +172,13 @@ export function canonicalCert(c) {
     `"scope":${JSON.stringify(c.scope)}}`
 }
 
+// The bytes an update request covers: the pod it names, the release tag to install, the moment
+// the user asked. The pod checks the signature against the key of the certificate that travels
+// with the request.
+export function canonicalUpdate(r) {
+  return `{"v":${r.v},"pod":${JSON.stringify(r.pod)},"version":${JSON.stringify(r.version)},"created":${r.created}}`
+}
+
 export function canonicalRevocations(r) {
   const revoked = [...r.revoked].sort()
   return `{"account":${JSON.stringify(r.account)},"seq":${r.seq},"epoch":${r.epoch},` +
@@ -369,6 +376,22 @@ export async function passkey(rec, create) {
   const out = cred.getClientExtensionResults?.()?.prf?.results?.first
   if (!out) throw new Error('the passkey did not give its PRF (WebAuthn PRF is required)')
   return { id: b64u(new Uint8Array(cred.rawId)), prf: asBytes(out) }
+}
+
+// The bytes a device signs to prove it holds the private half of the key its certificate names:
+// the nonce the relay sent, tied to the origin the link was opened at. A copied certificate
+// answers nothing.
+export function relayBinding(origin, nonce) {
+  return 'relay|' + origin + '|' + nonce
+}
+
+// prove answers the challenge of a link that registered with `prove: true`: the nonce it sent,
+// signed with this device's key.
+export async function prove(l, key, origin) {
+  const c = await l.recv()
+  if (!c || c.type !== 'challenge') return c // an error: the relay refused the link
+  await l.send({ type: 'proof', nonce: c.nonce, sig: await sign(key, relayBinding(origin, c.nonce)) })
+  return null
 }
 
 // The pairing and admin link: the same path on the relay origin (the bootstrap page) and on

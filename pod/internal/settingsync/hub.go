@@ -2,6 +2,7 @@ package settingsync
 
 import (
 	"crypto/ecdh"
+	"strings"
 	"sync"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
@@ -22,6 +23,12 @@ type Hub struct {
 	sources map[string]*Sync
 	flags   *Flags
 	emit    func(s Status, name string, payload any)
+	// other is called with a blob of a kind this pod does not sync (the project lists of the
+	// other pods).
+	other func(Msg)
+	// onKey is called when the key of the epoch arrived (the wrap of an admin): what needs the
+	// key can start reading, the pod having asked for nothing before it.
+	onKey   func()
 	lastErr string
 }
 
@@ -52,6 +59,36 @@ func (h *Hub) SetEmitter(fn func(s Status, name string, payload any)) { h.emit =
 // SetTransport gives the hub the link it sends its sync messages on. The link comes up later than
 // the hub (the pod dials the relay), so the transport is set after the hub is built.
 func (h *Hub) SetTransport(tr Transport) { h.tr = tr }
+
+// Send sends one sync message on the link of the pod (nil transport: the link is down).
+func (h *Hub) Send(m Msg) error {
+	if h.tr == nil {
+		return i18n.New("no link to the relay")
+	}
+	return h.tr.Send(m)
+}
+
+// SetOther is called with a blob the relay pushed for a kind this pod does not sync: the project
+// lists of the other pods are read that way.
+func (h *Hub) SetOther(fn func(Msg)) { h.other = fn }
+
+// SetOnKey is called when this pod got the key of the epoch, from its own wrap.
+func (h *Hub) SetOnKey(fn func()) { h.onKey = fn }
+
+// KeyFor is the sub-key of a kind under the epoch key this pod holds (nil: no wrap yet).
+func (h *Hub) KeyFor(kind string) []byte { return h.kindKey(kind) }
+
+// Epoch is the epoch of the key this pod holds.
+func (h *Hub) Epoch() int64 { return h.currentEpoch() }
+
+// HasKey reports whether this pod holds the key of the epoch (its own wrap arrived).
+func (h *Hub) HasKey() bool { return h.hasKey() }
+
+// Account is the account this pod is paired with.
+func (h *Hub) Account() string { return h.ident.Account }
+
+// Device is the device id of this pod.
+func (h *Hub) Device() string { return h.ident.ID() }
 
 // SetError keeps the last error the relay answered for this pod (a revoked device, a blob of
 // another epoch): the page shows it next to the state of the sync.
@@ -86,13 +123,22 @@ func (h *Hub) Source(kind string) *Sync { return h.sources[kind] }
 // default, the vault is opt-in.
 func (h *Hub) Flags() *Flags { return h.flags }
 
-// Status lists the sources of the pod.
+// Status lists the sources of the pod, as the Sync panel shows them: the project lists are
+// published by every pod of the account, they are not a switch the user flips.
 func (h *Hub) Status() []Status {
 	var out []Status
-	for _, s := range h.sources {
+	for kind, s := range h.sources {
+		if !shownKind(kind) {
+			continue
+		}
 		out = append(out, s.Status())
 	}
 	return out
+}
+
+// shownKind tells whether a kind belongs in the Sync panel.
+func shownKind(kind string) bool {
+	return !strings.HasPrefix(kind, identity.ProjectsPrefix)
 }
 
 // Record is the X25519 key of this device, signed by its device key: the pod publishes it so an
@@ -118,10 +164,10 @@ func (h *Hub) Publish() error {
 	if err != nil {
 		return err
 	}
-	if err := h.tr.Send(Msg{Type: "syncKey", Account: h.ident.Account, Device: h.ident.ID(), SyncKey: rec}); err != nil {
+	if err := h.Send(Msg{Type: "syncKey", Account: h.ident.Account, Device: h.ident.ID(), SyncKey: rec}); err != nil {
 		return err
 	}
-	if err := h.tr.Send(Msg{Type: "wrapGet", Account: h.ident.Account, Device: h.ident.ID()}); err != nil {
+	if err := h.Send(Msg{Type: "wrapGet", Account: h.ident.Account, Device: h.ident.ID()}); err != nil {
 		return err
 	}
 	// A pod paired by an admin has no key until the wrap arrives: the pull is made when it does.
@@ -182,6 +228,9 @@ func (h *Hub) SetWrap(w *identity.WrapRecord) error {
 	for _, s := range h.sources {
 		s.event("changed", nil)
 	}
+	if h.onKey != nil {
+		h.onKey()
+	}
 	// A pod that just got its key, or that moved to a new epoch, cannot read the stored state
 	// before: it reads it now, otherwise its own changes would overwrite the other pods.
 	if !hadKey || rotated {
@@ -200,6 +249,9 @@ func (h *Hub) Handle(m Msg) error {
 	}
 	if s := h.sources[m.Kind]; s != nil {
 		return s.Handle(m)
+	}
+	if h.other != nil {
+		h.other(m)
 	}
 	return nil
 }
@@ -252,7 +304,7 @@ func (h *Hub) x25519() (*ecdh.PrivateKey, error) {
 }
 
 func (h *Hub) emitEvent(s Status, name string, payload any) {
-	if h.emit == nil {
+	if h.emit == nil || !shownKind(s.Kind) {
 		return
 	}
 	h.emit(s, name, payload)

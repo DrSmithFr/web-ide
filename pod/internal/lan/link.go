@@ -30,6 +30,9 @@ func (w *wsConn) Read() ([]byte, error) {
 
 func (w *wsConn) Write(b []byte) error { return w.c.Write(w.ctx, websocket.MessageText, b) }
 
+// Buffered: a WebSocket keeps nothing of its own, a frame is sent as it is written.
+func (w *wsConn) Buffered() int { return 0 }
+
 func (w *wsConn) Close() error { return w.c.Close(websocket.StatusNormalClosure, "") }
 
 // link is one control link with a peer, made by either side once the handshake passed. While
@@ -65,8 +68,28 @@ type message struct {
 type info struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
+	// Protocol is the multi-pod protocol of the pod (multipod.Protocol): a pod that speaks
+	// another one is listed as outdated or newer and is never routed to. A pod older than #60
+	// tells none: it counts as protocol 0.
+	Protocol int `json:"protocol,omitempty"`
 	// Port is the LAN port of the pod: a pod that was dialed learns where to dial back.
 	Port int `json:"port"`
+}
+
+// updateMsg is the body of $update: a signed update request of a browser of the account, carried
+// by the gateway of the site to the pod it names. req is the id of this hop, so the answer lands
+// on the request that asked for it.
+type updateMsg struct {
+	Req    string                  `json:"req"`
+	Update *identity.UpdateRequest `json:"update"`
+}
+
+// updateDone is the answer of the pod the request named, sent before it restarts.
+type updateDone struct {
+	Req     string `json:"req"`
+	Status  string `json:"status"`
+	Message string `json:"message,omitempty"`
+	Command string `json:"command,omitempty"`
 }
 
 func (l *link) send(method string, params any) error {

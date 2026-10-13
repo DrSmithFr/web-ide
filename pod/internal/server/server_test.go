@@ -171,6 +171,13 @@ func TestPageBase(t *testing.T) {
 	if got := page(s.ServeTrusted, "/elsewhere"); !strings.Contains(got, `src="/assets/app.js"`) {
 		t.Fatalf("base out of the peer paths: %s", got)
 	}
+	// The relay origin serves the page of a pod under /pod/<key> of its own origin.
+	if got := page(s.ServeTrusted, "/pod/abc"); !strings.Contains(got, `src="/pod/abc/assets/app.js"`) {
+		t.Fatalf("page of a pod on the relay origin: %s", got)
+	}
+	if got := page(s.ServeHTTP, "/pod/abc"); !strings.Contains(got, `src="/assets/app.js"`) {
+		t.Fatalf("own page, relay base in the header: %s", got)
+	}
 }
 
 func TestProjectFilesAndRemoteChanges(t *testing.T) {

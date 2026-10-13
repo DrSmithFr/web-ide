@@ -12,6 +12,7 @@
 // byte a signature covers. The pod only carries the frames of the pairing link: it holds no
 // account key and cannot approve a pairing or sign a revocation list.
 import { podPath } from '../app/base'
+import { inTunnel } from '../pod/transport'
 import { createSignal, For, Show, onCleanup, onMount } from 'solid-js'
 import { request } from '../pod/rpc'
 import { errorToast, toast } from '../ui/toast'
@@ -54,7 +55,9 @@ interface Identity {
 type SyncKey = { account: string; device: string; key: string; sig: string }
 type Wrap = { account: string; device: string; epoch: number; key: string; nonce: string; data: string; sig: string }
 
-const IDENTITY_PATH = podPath('/_relay/identity.js')
+// The identity module comes from whoever serves this origin: the relay on the relay origin (its
+// own path, whatever pod the page belongs to), the pod on the origin of a pod.
+const IDENTITY_PATH = inTunnel() ? '/_relay/identity.js' : podPath('/_relay/identity.js')
 
 const deviceName = () => (navigator as any).userAgentData?.platform || navigator.platform || 'browser'
 

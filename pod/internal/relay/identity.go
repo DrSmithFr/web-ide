@@ -38,6 +38,14 @@ type idMsg struct {
 	Updated  int64                    `json:"updated,omitempty"` // time the stored blob or wrap was written
 	Lang     string                   `json:"lang,omitempty"`    // language of the link, for the errors it is sent
 	Message  string                   `json:"message,omitempty"`
+	// Sites (milestone 3): `challenge`/`proof` for the proof of possession, `pods` the pods of the
+	// account the relay sees, `gateway` the entry point of each site.
+	Prove   bool      `json:"prove,omitempty"`
+	Nonce   string    `json:"nonce,omitempty"`
+	Sig     string    `json:"sig,omitempty"`
+	Site    string    `json:"site,omitempty"`
+	Gateway string    `json:"gateway,omitempty"`
+	Pods    []PodInfo `json:"pods,omitempty"`
 }
 
 // identityConn is one live pairing/admin link: a browser (or the pod CLI) that pairs a
@@ -50,6 +58,8 @@ type identityConn struct {
 	// The device id this link published a sync key under: an admin panel never publishes one, so
 	// an empty device means a panel, which reads the wraps of the whole account.
 	device string
+	// The device key this link proved possession of (empty: it did not, so it gets no presence).
+	key string
 }
 
 func (c *identityConn) send(m idMsg) error {
@@ -101,6 +111,20 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 					_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})
 					return
 				}
+				// A link that announces the proof signs the nonce the relay sends with the key its
+				// certificate names: only a device that holds the private half gets the presence of
+				// the account (the pods list, the gateways).
+				if m.Prove {
+					nonce := relayNonce()
+					if err := c.send(idMsg{Type: "challenge", Nonce: nonce}); err != nil {
+						return
+					}
+					if err := s.proofOfPossession(ws, r.Host, m.Cert, nonce); err != nil {
+						_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})
+						return
+					}
+					c.key = m.Cert.Key
+				}
 			}
 			s.mu.Lock()
 			c.account = m.Account
@@ -114,7 +138,14 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 				_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})
 				return
 			}
+			if c.key != "" && list.Has(c.key) {
+				_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, identity.ErrRevoked)})
+				return
+			}
 			_ = c.send(idMsg{Type: "ready", Account: m.Account, List: list})
+			if c.key != "" && !s.recomputeSites(m.Account) {
+				s.sendSites(m.Account, c, nil)
+			}
 		case "devices":
 			devs, err := s.store.Devices(c.account)
 			if err != nil {

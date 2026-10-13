@@ -112,16 +112,16 @@ run(async ({ page }) => {
     await page.waitForSelector('.modal', { state: 'detached' })
 
     // 3. The home page shows one block per pod of the account, with its projects.
-    await page.waitForSelector('[data-testid=lan-pod][data-name=bravo] [data-testid=lan-project]:has-text("bravo-app")', { timeout: 15000 })
-    await page.waitForSelector('[data-testid=lan-pod][data-name=echo] [data-testid=lan-project]:has-text("echo-app")')
-    const names = await page.$$eval('[data-testid=lan-pod]', (els) => els.map((e) => e.dataset.name))
+    await page.waitForSelector('[data-testid=pod-block][data-name=bravo] [data-testid=pod-project]:has-text("bravo-app")', { timeout: 15000 })
+    await page.waitForSelector('[data-testid=pod-block][data-name=echo] [data-testid=pod-project]:has-text("echo-app")')
+    const names = await page.$$eval('[data-testid=pod-block]', (els) => els.map((e) => e.dataset.name))
     assert(names.sort().join() === 'bravo,echo', 'only the pods of the account have a block: ' + names)
 
     // 4. echo is revoked offline (phrase typed): alpha drops it, and bravo gets the list
     // from alpha, with no relay.
     const out = pair(DATA, ['revoke', deviceKey(echo.data)], PHRASE + '\n')
     assert(out.includes('revocations : seq 1'), 'pair revoke signs the list: ' + out.replace(/\n/g, ' | '))
-    await page.waitForFunction(() => !document.querySelector('[data-testid=lan-pod][data-name=echo]'), null, { timeout: 15000 })
+    await page.waitForFunction(() => !document.querySelector('[data-testid=pod-block][data-name=echo]'), null, { timeout: 15000 })
     assert(true, 'the revoked pod leaves the home page')
     let bravoStatus = ''
     for (let i = 0; i < 40 && !bravoStatus.includes('revocations'); i++) {
@@ -162,7 +162,7 @@ run(async ({ page }) => {
     // 6. A project of bravo opens through alpha, under /_lan/pod/<key>/ of its origin: its
     // page comes from bravo.
     const home = page.url()
-    await page.click('[data-testid=lan-pod][data-name=bravo] [data-testid=lan-project]')
+    await page.click('[data-testid=pod-block][data-name=bravo] [data-testid=pod-project]')
     await page.waitForSelector('.menubar', { timeout: 20000 })
     const url = new URL(page.url())
     const prefix = url.pathname.match(/^\/_lan\/pod\/[\w-]+/)?.[0]
@@ -192,9 +192,9 @@ run(async ({ page }) => {
     await page.goto(`${url.origin}${prefix}/`)
     await page.waitForSelector('[data-testid=lan-back]')
     assert((await page.textContent('[data-testid=lan-back]')).includes('alpha'), 'the page of bravo links back to alpha')
-    assert(!(await page.$('[data-testid=lan-pod]')), 'the page of bravo shows no LAN blocks of its own')
+    assert(!(await page.$('[data-testid=pod-block]')), 'the page of bravo shows no LAN blocks of its own')
     await page.click('[data-testid=lan-back]')
-    await page.waitForSelector('[data-testid=lan-pod][data-name=bravo]')
+    await page.waitForSelector('[data-testid=pod-block][data-name=bravo]')
     assert(new URL(page.url()).pathname === '/', 'back on the home page of alpha')
   } finally {
     for (const p of pods) p.kill()

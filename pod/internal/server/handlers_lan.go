@@ -17,8 +17,9 @@ type LAN interface {
 	SetManual(addrs []string) error
 	// ServeIdentity answers the Devices panel when the pod has no relay.
 	ServeIdentity(w http.ResponseWriter, r *http.Request)
-	// ServeGateway serves the page of a peer under peerPrefix.
-	ServeGateway(w http.ResponseWriter, r *http.Request)
+	// ServeGateway serves the page of a peer under peerPrefix. base is the path the peer's page
+	// runs under for the browser ("" : peerPrefix + the device key, the plain gateway origin).
+	ServeGateway(w http.ResponseWriter, r *http.Request, base string)
 }
 
 // peerPrefix is the path of the pages of the peers on this pod (lan.PeerPrefix).
@@ -28,7 +29,14 @@ const peerPrefix = "/_lan/pod/"
 // the gateway pod (lan.BaseHeader).
 type baseKey struct{}
 
-var basePattern = regexp.MustCompile(`^/_lan/pod/[A-Za-z0-9_-]+$`)
+var basePattern = regexp.MustCompile(`^(/_lan/pod|/pod)/[A-Za-z0-9_-]+$`)
+
+// baseOf is the path a page runs under on the origin the browser used, taken from the context a
+// trusted request carries (ServeTrusted, serveHTTPChannel).
+func baseOf(ctx context.Context) string {
+	base, _ := ctx.Value(baseKey{}).(string)
+	return base
+}
 
 func (s *Server) registerLAN() {
 	s.handle("lan.status", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {

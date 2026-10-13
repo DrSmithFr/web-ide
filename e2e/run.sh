@@ -17,7 +17,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 # The longest first: the workers end together.
-[ ${#SUITES[@]} -eq 0 ] && SUITES=(kanban chat agents kanbanagents questions features restore+ docker lan identity sync push keeper doodle speech relay preview git editor agent llm subagents orchestrator kanbanai editing lsp mousenav kanbangit commands mcptools projects popups keyboard mobile tunnels explorer plan i18n perf)
+[ ${#SUITES[@]} -eq 0 ] && SUITES=(kanban chat agents kanbanagents questions features restore+ docker lan identity multipod sync push keeper doodle speech relay preview git editor agent llm subagents orchestrator kanbanai editing lsp mousenav kanbangit commands mcptools projects popups keyboard mobile tunnels explorer plan i18n perf)
 [ -d node_modules/playwright-core ] || npm install --no-audit --no-fund >/dev/null
 if [ -z "$JOBS" ]; then JOBS=$(($(nproc) / 4)); [ "$JOBS" -gt 8 ] && JOBS=8; [ "$JOBS" -lt 1 ] && JOBS=1; fi
 # wait -n -p needs bash 5.1.
@@ -128,10 +128,14 @@ start_pod() {
   rm -rf "$TMP/data" "$TMP/ws"
   EXTRA=()
   # The identity, sync and push suites pair the pod with the CLI, so its pod must reach the relay too.
-  if [ "${1:-}" = relay ] || [ "${1:-}" = identity ] || [ "${1:-}" = sync ] || [ "${1:-}" = push ]; then EXTRA=(-relay "http://127.0.0.1:$RELAY_PORT" -force-turn); fi
+  if [ "${1:-}" = relay ] || [ "${1:-}" = identity ] || [ "${1:-}" = sync ] || [ "${1:-}" = push ] || [ "${1:-}" = multipod ]; then EXTRA=(-relay "http://127.0.0.1:$RELAY_PORT" -force-turn); fi
   # The LAN link only in its suite, on loopback and with the addresses typed (no mDNS): a
   # paired pod of another suite must not take the port of the IDE's own pod.
-  if [ "${1:-}" = lan ]; then EXTRA+=(-lan "127.0.0.1:$LAN_PORT" -mdns=false -name alpha); else EXTRA+=(-lan off); fi
+  if [ "${1:-}" = lan ]; then EXTRA+=(-lan "127.0.0.1:$LAN_PORT" -mdns=false -name alpha)
+  # The multipod suite tests *Update this pod*: alpha stands for a release, no pod installs the
+  # development version a build of the source tree reports.
+  elif [ "${1:-}" = multipod ]; then EXTRA+=(-lan "127.0.0.1:$LAN_PORT" -mdns=false -name alpha -preferred -pod-version v1.11.0)
+  else EXTRA+=(-lan off); fi
   mkdir -p "$TMP/ws" "$TMP/data" "$MODELS"
   # Speech models are kept between runs (downloaded once from Hugging Face).
   ln -s "$MODELS" "$TMP/data/models"
@@ -181,7 +185,7 @@ for s in "${SUITES[@]}"; do
     stop_relay
     # The relay comes up first for the suites that need it: a pod started before the relay
     # fails its first dial and sits in exponential backoff.
-    { [ "$s" = relay ] || [ "$s" = identity ] || [ "$s" = sync ] || [ "$s" = push ]; } && start_relay
+    { [ "$s" = relay ] || [ "$s" = identity ] || [ "$s" = sync ] || [ "$s" = push ] || [ "$s" = multipod ]; } && start_relay
     stop_pod; start_pod "$s"
   fi
   export E2E_TOKEN=$(cat "$TMP/data/token")

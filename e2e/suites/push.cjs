@@ -10,63 +10,17 @@
 // it shows and clicks it.
 const fs = require('fs')
 const http = require('http')
-const crypto = require('crypto')
 const { execFileSync } = require('child_process')
-const { run, assert } = require('../common.cjs')
+const { run, assert, pushService } = require('../common.cjs')
 
 const ORIGIN = `http://localhost:${process.env.E2E_RELAY_PORT}`
 const POD_ID = process.env.E2E_POD_ID
-const PUSH_PORT = Number(process.env.E2E_PUSH_PORT)
 const PHRASE = 'lecture vapor excuse note pledge rough bundle start regular burden reveal theme banana pencil owner cube social job emotion member joy sting dash whisper'
 
-const b64u = (b) => Buffer.from(b).toString('base64url')
-
-// The keys of the browser subscription, made here: the suite decrypts what the pod sends.
-const ua = crypto.createECDH('prime256v1')
-ua.generateKeys()
-const auth = crypto.randomBytes(16)
-const endpoint = `http://127.0.0.1:${PUSH_PORT}/push/${crypto.randomBytes(8).toString('hex')}`
-
-/** RFC 8291 decryption, the side of the browser. */
-function decrypt(buf) {
-  const salt = buf.subarray(0, 16)
-  const idlen = buf[20]
-  const asPub = buf.subarray(21, 21 + idlen)
-  const body = buf.subarray(21 + idlen)
-  const secret = ua.computeSecret(asPub)
-  const info = Buffer.concat([Buffer.from('WebPush: info\0'), ua.getPublicKey(), asPub])
-  const ikm = Buffer.from(crypto.hkdfSync('sha256', secret, auth, info, 32))
-  const cek = Buffer.from(crypto.hkdfSync('sha256', ikm, salt, Buffer.from('Content-Encoding: aes128gcm\0'), 16))
-  const nonce = Buffer.from(crypto.hkdfSync('sha256', ikm, salt, Buffer.from('Content-Encoding: nonce\0'), 12))
-  const d = crypto.createDecipheriv('aes-128-gcm', cek, nonce)
-  d.setAuthTag(body.subarray(-16))
-  const plain = Buffer.concat([d.update(body.subarray(0, -16)), d.final()])
-  return plain.subarray(0, plain.lastIndexOf(2)).toString()
-}
-
-/** The VAPID token (ES256) verifies with the key the relay sends with it. */
-function vapidOK(authz) {
-  const m = /^vapid t=([^,]+), k=(.+)$/.exec(authz || '')
-  if (!m) return false
-  const [head, claims, sig] = m[1].split('.')
-  const k = Buffer.from(m[2], 'base64url')
-  const key = crypto.createPublicKey({ key: { kty: 'EC', crv: 'P-256', x: b64u(k.subarray(1, 33)), y: b64u(k.subarray(33)) }, format: 'jwk' })
-  return crypto.verify('sha256', Buffer.from(head + '.' + claims), { key, dsaEncoding: 'ieee-p1363' }, Buffer.from(sig, 'base64url'))
-}
-
-// The fake push service: every POST, decrypted.
-const received = []
-const pushSvc = http.createServer(async (req, res) => {
-  const chunks = []
-  for await (const c of req) chunks.push(c)
-  const body = Buffer.concat(chunks)
-  let payload = null
-  try {
-    payload = JSON.parse(decrypt(body))
-  } catch {}
-  received.push({ path: req.url, vapid: vapidOK(req.headers.authorization), encoding: req.headers['content-encoding'], topic: req.headers.topic, raw: body, payload })
-  res.writeHead(201).end()
-})
+// The fake push service, with the keys of the subscription it made: the suite decrypts what the
+// pod sends.
+const push = pushService()
+const { endpoint, received } = push
 
 // The fake model server: one answer per message.
 const sse = (res, delta) => res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`)
@@ -108,7 +62,7 @@ async function waitOnline() {
 
 run(
   async ({ page, ctx, browser }) => {
-    await listen(pushSvc, PUSH_PORT)
+    await push.listen()
     await listen(llm)
 
     // The pod joins the account with the phrase (its own key), then restarts to use it.
@@ -130,7 +84,7 @@ run(
       let current = null
       PushManager.prototype.subscribe = async () => (current = sub)
       PushManager.prototype.getSubscription = async () => current
-    }, { endpoint, p256dh: b64u(ua.getPublicKey()), auth: b64u(auth) })
+    }, { endpoint, p256dh: push.keys.p256dh, auth: push.keys.auth })
 
     // Pair this browser with the phrase on the bootstrap page.
     await page.goto(`${ORIGIN}/#pod=${POD_ID}`, { waitUntil: 'domcontentloaded' })
@@ -229,7 +183,7 @@ run(
 
     llm.closeAllConnections()
     llm.close()
-    pushSvc.close()
+    push.server.close()
   },
   { url: 'about:blank' },
 )

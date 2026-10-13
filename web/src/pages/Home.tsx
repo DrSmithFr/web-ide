@@ -6,6 +6,7 @@ import { on as onPod, request } from '../pod/rpc'
 import { navigate } from '../app/router'
 import { Modal } from '../ui/overlay'
 import { errorToast, toast } from '../ui/toast'
+import { copyText } from '../ui/clipboard'
 import { Icon } from '../ui/icons'
 import { PodStatus } from './ProjectPage'
 import { openSettings } from '../settings/SettingsModal'
@@ -13,7 +14,9 @@ import { t } from '../i18n'
 import { iconOf, iconURL, type IconSpec, loadIcon, loadIcons, setFavicon } from '../ui/projectIcon'
 import { IconEditor } from '../ui/IconEditor'
 import { OpenTunnels } from '../docker/OpenTunnels'
-import { gateway, gatewayHome, peerURL, useLan, type LanPeer } from '../state/lan'
+import { gateway, gatewayHome, useLan } from '../state/lan'
+import { podOpenable, podURL, usePods, type PodInfo } from '../state/pods'
+import { askUpdate, updateOffer, type UpdateAnswer } from '../pod/update'
 
 interface Project {
   id: string
@@ -147,7 +150,7 @@ export function Home() {
           </For>
         </div>
         <Show when={!gateway()}>
-          <LanPods />
+          <OtherPods />
         </Show>
         <OpenTunnels />
         <Show when={available().length}>
@@ -185,14 +188,16 @@ export function Home() {
   )
 }
 
-/** One Projects block per pod of the account on the LAN: its page opens through the gateway
- * port this pod keeps for it. */
-function LanPods() {
+/** One Projects block per pod of the account: the pods of the local network first (their page runs
+ * through this pod), then the pods the relay reports, then the pods whose encrypted list the relay
+ * cached — greyed, with the time they published it. */
+function OtherPods() {
+  const [pods] = usePods()
   const [lan] = useLan()
   const outdated = () => (lan()?.failed ?? []).filter((f) => f.error === 'version')
   return (
     <>
-      <For each={lan()?.peers ?? []}>{(peer) => <LanPodBlock peer={peer} />}</For>
+      <For each={pods() ?? []}>{(pod) => <PodBlock pod={pod} />}</For>
       <For each={outdated()}>
         {(f) => (
           <p class="muted small" data-testid="lan-outdated">
@@ -204,41 +209,125 @@ function LanPods() {
   )
 }
 
-function LanPodBlock(props: { peer: LanPeer }) {
-  const p = () => props.peer
+function PodBlock(props: { pod: PodInfo }) {
+  const p = () => props.pod
+  const seen = () => {
+    const at = p().seen
+    if (!at) return ''
+    const d = new Date(at)
+    return t('seen {time}', { time: d.toLocaleString() })
+  }
+  // *Update this pod*: only a pod running a release version has a version to offer, and only a pod
+  // the site says runs an older one is worth offering it to (the pod asked does the checking).
+  const [offer, setOffer] = createSignal<{ can: boolean; version: string } | null>(null)
+  const [answer, setAnswer] = createSignal<UpdateAnswer | null>(null)
+  const [busy, setBusy] = createSignal(false)
+  const outdated = () => p().mismatch === 'outdated' && !!offer()?.can
+  onMount(() => {
+    if (p().mismatch) void updateOffer().then(setOffer, () => {})
+  })
+  const runUpdate = async () => {
+    setBusy(true)
+    try {
+      const ans = await askUpdate(p().key, offer()!.version)
+      setAnswer(ans)
+      if (ans.status === 'running') toast(t('{name} updates: it comes back in a moment.', { name: p().name }), 'ok')
+      else if (ans.status === 'refused') errorToast(new Error(ans.message || t('the pod refused the request')))
+    } catch (e) {
+      errorToast(e)
+    } finally {
+      setBusy(false)
+    }
+  }
   return (
-    <section class="lan-pod" classList={{ offline: !p().online }} data-testid="lan-pod" data-name={p().name}>
+    <section class="lan-pod" classList={{ offline: !p().online }} data-testid="pod-block" data-name={p().name}>
       <div class="home-bar">
         <h2>{t('Projects of {name}', { name: p().name })}</h2>
         <span class="muted small" title={t('Fingerprint of the pod')}>
           {p().fingerprint}
         </span>
+        <Show when={p().gateway}>
+          <span class="badge" data-testid="pod-gateway">
+            {t('gateway')}
+          </span>
+        </Show>
+        <Show when={p().mismatch}>
+          <span class="badge" data-testid="pod-mismatch">
+            {p().mismatch === 'outdated' ? t('older version') : t('newer version')}
+          </span>
+        </Show>
         <Show when={!p().online}>
           <span class="badge">{t('offline')}</span>
         </Show>
+        <Show when={p().nokey}>
+          <span class="badge" data-testid="pod-nokey">
+            {t('waiting for the sync key')}
+          </span>
+        </Show>
         <span class="grow" />
+        <Show when={!p().online && seen()}>
+          <span class="muted small">{seen()}</span>
+        </Show>
         <span class="muted small mono">{p().version}</span>
       </div>
       <div class="project-list">
-        <For each={p().projects ?? []} fallback={<p class="muted">{p().online ? t('Loading…') : t('This pod is offline.')}</p>}>
+        <For
+          each={p().projects ?? []}
+          fallback={
+            <p class="muted">
+              {p().nokey ? t('This pod has not published its projects yet.') : p().online ? t('Loading…') : t('This pod is offline.')}
+            </p>
+          }
+        >
           {(pr) => (
             <article class="project-card">
-              <a class="project-open" href={p().online ? peerURL(p(), `/project/${pr.id}`) : undefined} data-testid="lan-project">
-                <span class="project-icon" />
-                <div class="project-info">
-                  <div class="project-title">
-                    {pr.name} <span class="badge">{pr.type === 'ssh' ? 'SSH' : 'local'}</span>
+              <Show
+                when={podOpenable(p())}
+                fallback={
+                  <div class="project-open" title={p().mismatch ? t('{name} runs another multi-pod protocol: update it', { name: p().name }) : t('Opening the projects of another site comes with the next version')} data-testid="pod-project">
+                    <span class="project-icon" />
+                    <div class="project-info">
+                      <div class="project-title">
+                        {pr.name} <span class="badge">{pr.type === 'ssh' ? 'SSH' : 'local'}</span>
+                      </div>
+                      <Show when={pr.description}>
+                        <div class="project-desc">{pr.description}</div>
+                      </Show>
+                      <div class="muted small mono ellipsis">{pr.path}</div>
+                    </div>
                   </div>
-                  <Show when={pr.description}>
-                    <div class="project-desc">{pr.description}</div>
-                  </Show>
-                  <div class="muted small mono ellipsis">{pr.path}</div>
-                </div>
-              </a>
+                }
+              >
+                <a class="project-open" href={podURL(p(), `/project/${pr.id}`)} data-testid="pod-project">
+                  <span class="project-icon" />
+                  <div class="project-info">
+                    <div class="project-title">
+                      {pr.name} <span class="badge">{pr.type === 'ssh' ? 'SSH' : 'local'}</span>
+                    </div>
+                    <Show when={pr.description}>
+                      <div class="project-desc">{pr.description}</div>
+                    </Show>
+                    <div class="muted small mono ellipsis">{pr.path}</div>
+                  </div>
+                </a>
+              </Show>
             </article>
           )}
         </For>
       </div>
+      <Show when={outdated()}>
+        <div class="home-bar" data-testid="pod-update">
+          <button class="btn" disabled={busy()} onClick={runUpdate}>{t('Update this pod')}</button>
+          <span class="muted small">{t('to {version}', { version: offer()!.version })}</span>
+        </div>
+      </Show>
+      <Show when={answer()?.status === 'not_service'}>
+        <div data-testid="pod-update-cmd">
+          <p class="small">{t('That pod does not run as the service: run this command there, then restart it:')}</p>
+          <pre class="mono small">{answer()!.command}</pre>
+          <button class="btn small" onClick={() => void copyText(answer()!.command ?? '')}>{t('Copy')}</button>
+        </div>
+      </Show>
     </section>
   )
 }

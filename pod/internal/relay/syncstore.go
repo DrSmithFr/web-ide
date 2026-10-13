@@ -3,6 +3,7 @@ package relay
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
@@ -220,6 +221,36 @@ func (s *Store) Blob(account, kind string) (*identity.BlobRecord, int64, error) 
 		return nil, 0, err
 	}
 	return &r, updated, nil
+}
+
+// Blobs returns the stored writes whose kind starts with prefix: a pod reads the project lists of
+// the whole account with the prefix "projects:". The relay still only passes ciphertext.
+func (s *Store) Blobs(account, prefix string) ([]*identity.BlobRecord, map[string]int64, error) {
+	rows, err := s.db.Query("SELECT account, kind, seq, epoch, device, op, nonce, data, updated FROM blobs WHERE account=? AND kind LIKE ? ESCAPE '\\' ORDER BY kind",
+		account, escapeLike(prefix)+"%")
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	var out []*identity.BlobRecord
+	updated := map[string]int64{}
+	for rows.Next() {
+		var r identity.BlobRecord
+		var u int64
+		if err := rows.Scan(&r.Account, &r.Kind, &r.Seq, &r.Epoch, &r.Device, &r.Op, &r.Nonce, &r.Data, &u); err != nil {
+			return nil, nil, err
+		}
+		out = append(out, &r)
+		updated[r.Kind] = u
+	}
+	return out, updated, rows.Err()
+}
+
+// escapeLike quotes the wildcards a kind may hold, so a prefix matches literally.
+func escapeLike(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	return strings.ReplaceAll(s, `_`, `\_`)
 }
 
 // PutWrap stores the key of an epoch wrapped for a device. Only a signature that verifies against
