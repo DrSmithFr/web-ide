@@ -148,6 +148,7 @@ type Session struct {
 	// turn is the clock of the turn running (turn.go); reportedCost the running total of cost
 	// the agent tells (opencode); subscription: it runs on a plan (cost = API equivalent).
 	turn         *turnState
+	liveAt       int64
 	reportedCost float64
 	subscription bool
 	// caps: the content the agent takes; queue: the prompts waiting for the end of the turn;
@@ -477,11 +478,12 @@ func (s *Session) apply(raw json.RawMessage) {
 		var w wireToolCall
 		if json.Unmarshal(raw, &w) == nil && w.ToolCallID != "" {
 			s.entry(s.th.applyTool(w, s.info.Cwd))
+			s.readLive()
 		}
 	case "plan":
 		s.entry(s.th.setPlan(u.Entries))
 	case "available_commands_update":
-		s.info.Commands = u.AvailableCommands
+		s.info.Commands = withHidden(u.AvailableCommands, s.info.Agent)
 		s.changed()
 	case "current_mode_update":
 		for i := range s.info.Config {

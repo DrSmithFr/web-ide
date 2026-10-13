@@ -65,9 +65,9 @@ func promptUsage(result json.RawMessage, model string) []Tokens {
 // piHome holds the files of pi (a variable for the tests).
 var piHome = func() string { h, _ := os.UserHomeDir(); return filepath.Join(h, ".pi") }
 
-// piUsage reads the tokens and the cost of the answers of a pi session between from and to
-// (ms) in its session file: pi-acp maps the ACP session to it in pi-acp/session-map.json.
-func piUsage(session string, from, to int64) ([]Tokens, float64) {
+// piSessionFile is the session file of pi of an ACP session: pi-acp maps them in
+// pi-acp/session-map.json.
+func piSessionFile(session string) string {
 	var sm struct {
 		Sessions map[string]struct {
 			SessionFile string `json:"sessionFile"`
@@ -75,9 +75,15 @@ func piUsage(session string, from, to int64) ([]Tokens, float64) {
 	}
 	data, err := os.ReadFile(filepath.Join(piHome(), "pi-acp", "session-map.json"))
 	if err != nil || json.Unmarshal(data, &sm) != nil {
-		return nil, 0
+		return ""
 	}
-	f, err := os.Open(sm.Sessions[session].SessionFile)
+	return sm.Sessions[session].SessionFile
+}
+
+// piUsage reads the tokens and the cost of the answers of a pi session between from and to
+// (ms) in its session file.
+func piUsage(session string, from, to int64) ([]Tokens, float64) {
+	f, err := os.Open(piSessionFile(session))
 	if err != nil {
 		return nil, 0
 	}

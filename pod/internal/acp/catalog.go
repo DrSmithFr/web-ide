@@ -2,6 +2,7 @@ package acp
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,12 +29,21 @@ type Agent struct {
 	Paths []string `json:"-"`
 	// Hint tells how to install an agent the IDE does not install.
 	Hint string `json:"hint,omitempty"`
+	// Hidden are the commands the agent runs but does not list.
+	Hidden []Command `json:"-"`
+}
+
+// Command is a slash command of an agent (ACP AvailableCommand).
+type Command struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
 }
 
 // Agents are the agents the Agents tool offers, versions pinned (spike of 2026-10-13).
 var Agents = []Agent{
 	{ID: "claude", Name: "Claude Code", Bin: "claude-agent-acp", Package: "@agentclientprotocol/claude-agent-acp@0.89.1"},
-	{ID: "opencode", Name: "opencode", Bin: "opencode", Args: []string{"acp"}, Paths: []string{"~/.opencode/bin/opencode"}, Hint: "curl -fsSL https://opencode.ai/install | bash"},
+	{ID: "opencode", Name: "opencode", Bin: "opencode", Args: []string{"acp"}, Paths: []string{"~/.opencode/bin/opencode"}, Hint: "curl -fsSL https://opencode.ai/install | bash",
+		Hidden: []Command{{Name: "compact", Description: "Compact the session context"}}},
 	{ID: "pi", Name: "pi", Bin: "pi-acp", Package: "pi-acp@0.0.34", Needs: "pi"},
 }
 
@@ -169,4 +179,24 @@ func npmErrors(out string) string {
 		text = text[len(text)-1500:]
 	}
 	return text
+}
+
+// withHidden adds to the commands an agent sent the ones it runs without listing them.
+func withHidden(commands json.RawMessage, agent string) json.RawMessage {
+	a, _ := agentByID(agent)
+	var list []map[string]any
+	if len(a.Hidden) == 0 || json.Unmarshal(commands, &list) != nil {
+		return commands
+	}
+	for _, h := range a.Hidden {
+		found := false
+		for _, c := range list {
+			found = found || c["name"] == h.Name
+		}
+		if !found {
+			list = append(list, map[string]any{"name": h.Name, "description": h.Description})
+		}
+	}
+	out, _ := json.Marshal(list)
+	return out
 }
