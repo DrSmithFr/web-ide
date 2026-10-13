@@ -56,13 +56,16 @@ export function AskCard(props: {
   msg: ChatMessage
   index: number
   onSend: (index: number, answers: (AnswerEntry | null)[][], notes: string[], path?: number[], offPath?: number) => void
+  /** What the progress of the card is kept under (the conversation shown by default; the
+   * Questions tool shows the cards of other conversations and of MCP calls). */
+  scope?: string
 }) {
   // The message is read through props: the pod replaces it when the answers come back.
   const msg = () => props.msg
   const questions: Question[] = props.msg.questions ?? []
   const n = questions.length
   const pending = () => msg().askState === 'pending'
-  const key = `${chat.id}:${props.index}`
+  const key = `${props.scope ?? chat.id}:${props.index}`
   const [step, setStep] = kept(key, 'step', 0)
   // One state per question index: the widget answer, the special answer, the free answer
   // and the note. Kept here (not in the widgets) so a step change recreates the widget

@@ -7,7 +7,7 @@ import (
 
 // Entry is an item of the thread of a session.
 type Entry struct {
-	// Kind: user, agent, thought, tool, plan, permission, notice.
+	// Kind: user, agent, thought, tool, plan, permission, question, notice.
 	Kind string `json:"kind"`
 	Text string `json:"text,omitempty"`
 	// Attachments of a user prompt (prompt.go).
@@ -26,10 +26,13 @@ type Entry struct {
 	Plan []PlanItem `json:"plan,omitempty"`
 
 	// A permission asked: the JSON-RPC id of the request, its options, the option chosen
-	// ("cancelled" when the turn stopped).
+	// ("cancelled" when the turn stopped). A question (a form, ask.go): Text is its message,
+	// Schema its fields; Outcome accept, decline or cancelled, Answer the fields sent.
 	Request json.RawMessage `json:"request,omitempty"`
 	Options []Option        `json:"options,omitempty"`
 	Outcome string          `json:"outcome,omitempty"`
+	Schema  json.RawMessage `json:"schema,omitempty"`
+	Answer  json.RawMessage `json:"answer,omitempty"`
 }
 
 type ToolContent struct {

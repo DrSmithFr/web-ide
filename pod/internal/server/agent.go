@@ -216,6 +216,7 @@ func (s *Server) publish(r *agentRun, from int) {
 		s.emitAgent(r.root, "agent.error", map[string]string{"id": r.id, "error": i18n.Translate(r.lang, err)})
 	}
 	s.emitAgent(r.root, "agent.update", updateOf(r.chat, r.state, r.ahead, from))
+	s.noteAsks(r.root, r.chat, from)
 }
 
 // publishIdle saves a conversation that does not run and announces it.
@@ -224,6 +225,7 @@ func (s *Server) publishIdle(loc llm.ChatLocation, root string, c *agent.Chat, f
 		return err
 	}
 	s.emitAgent(root, "agent.update", updateOf(c, "idle", 0, from))
+	s.noteAsks(root, c, from)
 	return nil
 }
 

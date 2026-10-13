@@ -3,6 +3,9 @@
 //   "crash"       the process exits at once (restarted by the IDE, its session loaded)
 //   "crash loop"  the process and every later start exit (.fake-acp-crash in the cwd)
 //   "permission"  asks before an edit, then applies it or not
+//   "ask me"      asks a form (elicitation/create, as Claude's AskUserQuestion), tells the answer
+//   "ask then withdraw"  asks a form, then withdraws it ($/cancel_request)
+//   "… later"     waits 1.5 s before anything
 //   "slow"        streams until session/cancel
 //   "blocks…"     answers the types of the content blocks it received
 //   "# Ticket"    (a ticket's briefing) calls kanban_get through the MCP server it was given
@@ -65,6 +68,8 @@ async function prompt(id, p) {
   const sid = p.sessionId
   const text = p.prompt.map((b) => b.text ?? '').join('')
   const s = sessions.get(sid)
+  // "… later": the agent works a moment first (the page can look elsewhere meanwhile).
+  if (text.includes('later')) await sleep(1500)
   if (text.startsWith('blocks')) {
     // The content received: its block types, the names of the links and the image types.
     const desc = p.prompt.map((b) => (b.type === 'resource_link' ? `resource_link:${b.name}` : b.type === 'image' ? `image:${b.mimeType}` : b.type)).join(',')
@@ -95,6 +100,34 @@ async function prompt(id, p) {
       await sleep(100)
     }
     return
+  }
+  if (text.includes('ask me') || text.includes('ask then withdraw')) {
+    update(sid, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'I need to know your **favourite color**.' } })
+    const rid = nextId
+    const answer = ask('elicitation/create', {
+      mode: 'form',
+      sessionId: sid,
+      toolCallId: 'ask-1',
+      message: 'Which color?',
+      requestedSchema: {
+        type: 'object',
+        properties: {
+          question_0: { type: 'string', title: 'Color', oneOf: [{ const: 'Red', title: 'Red', description: 'Warm' }, { const: 'Blue', title: 'Blue' }] },
+          question_0_custom: { type: 'string', title: 'Other' },
+          count: { type: 'integer', title: 'How many?' },
+          sure: { type: 'boolean', title: 'Sure?' },
+          extras: { type: 'array', title: 'Extras', items: { anyOf: [{ const: 'a', title: 'A' }, { const: 'b', title: 'B' }] } },
+        },
+      },
+    })
+    if (text.includes('withdraw')) {
+      await sleep(1500)
+      send({ method: '$/cancel_request', params: { requestId: rid } })
+    }
+    const r = await answer
+    const said = !r || r.action === 'cancel' ? 'Withdrawn.' : r.action === 'decline' ? 'Skipped.' : `You chose ${JSON.stringify(r.content)}.`
+    update(sid, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: said } })
+    return send({ id, result: done('end_turn') })
   }
   const file = path.join(s.cwd, 'hello.txt')
   if (text.includes('permission')) {

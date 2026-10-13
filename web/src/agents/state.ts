@@ -5,6 +5,7 @@ import { createStore, produce, reconcile } from 'solid-js/store'
 import { on as onPod, requestIn } from '../pod/rpc'
 import { attached, home } from '../state/project'
 import type { DiffLine } from '../llm/state'
+import type { FormSchema } from '../questions/state'
 import { lineHunks } from '../editor/linediff'
 import type { Totals } from './stats'
 
@@ -38,6 +39,8 @@ export interface AgentInfo {
   started: number
   /** Ticket the session develops (kanban), 0 or absent for none. */
   ticket?: number
+  /** Its questions open by themselves (or not), overriding the setting; absent: the setting. */
+  autoOpen?: boolean
   seq: number
   /** Worktree the session runs in (set by the page). */
   project?: string
@@ -52,7 +55,7 @@ export interface ToolContent {
 }
 
 export interface Entry {
-  kind: 'user' | 'agent' | 'thought' | 'tool' | 'plan' | 'permission' | 'notice' | 'error'
+  kind: 'user' | 'agent' | 'thought' | 'tool' | 'plan' | 'permission' | 'question' | 'notice' | 'error'
   text?: string
   /** Images (a file of the session) and files of a user prompt. */
   attachments?: { name: string; kind: 'image' | 'text'; file?: string; mime?: string }[]
@@ -66,6 +69,9 @@ export interface Entry {
   plan?: { content: string; priority?: string; status?: string }[]
   options?: { optionId: string; name: string; kind: string }[]
   outcome?: string
+  /** A question (a form): its fields, and the answer sent. */
+  schema?: FormSchema
+  answer?: Record<string, unknown>
 }
 
 export interface CatalogAgent {

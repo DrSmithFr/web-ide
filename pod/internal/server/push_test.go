@@ -116,6 +116,21 @@ func TestPushNotifications(t *testing.T) {
 		t.Fatalf("feedback: %+v", m)
 	}
 
+	// A question of an agent through MCP (Questions tool): the agent asks.
+	mc := &mcpClient{t: t, url: ts.URL, token: s.Token}
+	done := make(chan string, 1)
+	go func() {
+		text, _ := mc.tool("ask_user", map[string]any{"cwd": dir, "questions": []map[string]any{{"question": "Go on?", "options": []string{"Yes", "No"}}}})
+		done <- text
+	}()
+	m = read("a question")
+	if m["title"] != "L'agent a besoin de vous" || !strings.Contains(m["url"], "questions") || m["tag"] != "questions-"+id {
+		t.Fatalf("question: %+v", m)
+	}
+	q := a.call("questions.list", nil)["result"].([]any)[0].(map[string]any)
+	a.call("questions.answer", map[string]any{"id": q["id"], "answers": [][]string{{"Yes"}}})
+	<-done
+
 	// The test notification, and a subscription the relay dropped.
 	a.call("push.test", map[string]any{"device": "dev1"})
 	if m = read("test"); m["title"] != "Les notifications fonctionnent" {

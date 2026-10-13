@@ -8,7 +8,7 @@ import { on, request } from '../pod/rpc'
 import { activeTab, attachWorktree, home, relPath, session } from '../state/project'
 import { approval, chat, chatTrail, config, emptyChat, leaveChat, live, loadModels, newId, prefs, refreshChats, setApproval, setChat, setIncomingDraft, setLive, type Chat, type ChatMessage, type Mode, type Part } from './state'
 import { runUiTool } from './uiTools'
-import { entryToString, type AnswerEntry } from './ask'
+import { answerStrings, type AnswerEntry } from './ask'
 import { toast } from '../ui/toast'
 import { t } from '../i18n'
 
@@ -368,9 +368,7 @@ export function unqueue(id: string) {
 
 /** The user answers the questions of a tool message: the agent goes on with them. */
 export async function answerQuestions(index: number, answers: (AnswerEntry | null)[][], notes: string[] = [], path?: number[], offPath?: number) {
-  // One string per chosen option: the pod follows the branches by label.
-  const strings = answers.map((a) => a.flatMap((x) => (x?.kind === 'choices' ? x.value : [entryToString(x)])).filter((s) => s.trim()))
-  await request('agent.answer', { id: chat.id, index, answers: strings, notes, path, offPath })
+  await request('agent.answer', { id: chat.id, index, answers: answerStrings(answers), notes, path, offPath })
 }
 
 /** The user accepts the plan of a tool message: Build mode, then its execution. */
