@@ -3,7 +3,7 @@
 import { createEffect, createRoot, createSignal, on } from 'solid-js'
 import { createStore, produce, reconcile } from 'solid-js/store'
 import { on as onPod, requestIn } from '../pod/rpc'
-import { attached, home } from '../state/project'
+import { attached, home, openFile } from '../state/project'
 import type { DiffLine } from '../llm/state'
 import type { FormSchema } from '../questions/state'
 import { lineHunks } from '../editor/linediff'
@@ -41,6 +41,8 @@ export interface AgentInfo {
   ticket?: number
   /** Its questions open by themselves (or not), overriding the setting; absent: the setting. */
   autoOpen?: boolean
+  /** Follow mode: the file of each edit of the agent opens in the editor. */
+  follow?: boolean
   seq: number
   /** Worktree the session runs in (set by the page). */
   project?: string
@@ -158,6 +160,19 @@ onPod('agents.append', (e: { id: string; seq: number; index: number; text: strin
   }))
 })
 
+// Follow mode: an edit done opens its file, once per tool call, in the windows showing the session.
+const followed = new Set<string>()
+onPod('agents.entry', (e: { id: string; entry: Entry }) => {
+  const x = e.entry
+  if (x.kind !== 'tool' || x.status !== 'completed' || !sessions().find((s) => s.id === e.id)?.follow) return
+  const paths = x.locations?.length ? x.locations : (x.content ?? []).filter((c) => c.type === 'diff' && c.path).map((c) => c.path!)
+  if (!paths.length || (x.toolKind !== 'edit' && !x.content?.some((c) => c.type === 'diff'))) return
+  const key = `${e.id}:${x.toolId}`
+  if (followed.has(key) || document.visibilityState === 'hidden') return
+  followed.add(key)
+  void openFile(paths[0]).catch(() => {})
+})
+
 // ---------- actions ----------
 
 const call = <T = unknown>(id: string, method: string, params: Record<string, unknown> = {}) => requestIn<T>(projectOf(id), method, { id, ...params })
@@ -177,6 +192,7 @@ export const agentImage = (id: string, file: string) => call<string>(id, 'agents
 export const cancelAgent = (id: string) => call(id, 'agents.cancel')
 export const answerAgent = (id: string, index: number, option: string) => call(id, 'agents.answer', { index, option })
 export const configAgent = (id: string, config: string, value: string) => call(id, 'agents.config', { config, value })
+export const followAgent = (id: string, value: boolean) => call(id, 'agents.follow', { value })
 export const restartAgent = (id: string) => call(id, 'agents.restart')
 export const closeAgent = (id: string) => call(id, 'agents.close')
 

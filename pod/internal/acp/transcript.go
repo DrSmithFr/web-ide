@@ -2,6 +2,7 @@ package acp
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"time"
 )
 
@@ -83,7 +84,7 @@ type wireToolContent struct {
 	Path    string        `json:"path,omitempty"`
 	OldText *string       `json:"oldText,omitempty"`
 	NewText string        `json:"newText,omitempty"`
-	// TerminalID of a terminal content: shown as its id (the IDE offers no terminal yet).
+	// TerminalID of a terminal content: shown as its id (the IDE offers no terminals to the agents).
 	TerminalID string `json:"terminalId,omitempty"`
 }
 
@@ -115,8 +116,8 @@ type wireToolCall struct {
 	} `json:"locations"`
 }
 
-// merge sets the fields the update carries.
-func (w wireToolCall) merge(e *Entry) {
+// merge sets the fields the update carries; relative paths are of cwd (opencode sends them).
+func (w wireToolCall) merge(e *Entry, cwd string) {
 	if w.Title != nil && *w.Title != "" {
 		e.Title = *w.Title
 	}
@@ -128,13 +129,25 @@ func (w wireToolCall) merge(e *Entry) {
 	}
 	if w.Content != nil {
 		e.Content = toolContent(*w.Content)
+		for i := range e.Content {
+			if e.Content[i].Path != "" {
+				e.Content[i].Path = absolute(e.Content[i].Path, cwd)
+			}
+		}
 	}
 	if w.Locations != nil {
 		e.Locations = e.Locations[:0]
 		for _, l := range *w.Locations {
-			e.Locations = append(e.Locations, l.Path)
+			e.Locations = append(e.Locations, absolute(l.Path, cwd))
 		}
 	}
+}
+
+func absolute(path, cwd string) string {
+	if filepath.IsAbs(path) || cwd == "" {
+		return path
+	}
+	return filepath.Join(cwd, path)
 }
 
 type update struct {
@@ -211,12 +224,12 @@ func (t *thread) chunk(kind, text string) (int, bool) {
 }
 
 // applyTool records a tool call or its update; the index of its entry.
-func (t *thread) applyTool(w wireToolCall) int {
+func (t *thread) applyTool(w wireToolCall, cwd string) int {
 	i, ok := t.tools[w.ToolCallID]
 	if !ok {
 		i = t.add(Entry{Kind: "tool", ToolID: w.ToolCallID, Status: "pending"})
 	}
-	w.merge(&t.Entries[i])
+	w.merge(&t.Entries[i], cwd)
 	return i
 }
 

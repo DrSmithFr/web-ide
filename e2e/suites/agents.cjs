@@ -1,6 +1,6 @@
 // Agents tool: ACP sessions with the fake agent of e2e/bin (claude-agent-acp): opened from
 // the launcher, a prompt streams thought, plan, message and an edit with its diff; a
-// permission card; the composer (/ and @ completion, image and file as blocks, history, queue);
+// permission card; the follow mode opens the file of an edit; the composer (/ and @ completion, image and file as blocks, history, queue);
 // a config option; Stop; the agent killed is restarted and its session
 // loaded; closing the tab ends the session. Work time and cost: on the tab, the project, and
 // the ticket of a session run in its worktree.
@@ -65,6 +65,24 @@ run(async ({ page }) => {
   await page.click('[data-testid=agent-option-allow-once]')
   await page.waitForSelector('[data-testid=agent-permission][data-outcome=allow-once]')
   await page.waitForSelector('[data-testid=agent-message]:has-text("Edited.")')
+  await waitState(page, 'ready')
+
+  // Follow mode: off by default (the edit of hello.txt opened nothing), on from the composer
+  // bar: the file of an edit done opens in the editor (its relative path made absolute).
+  const editorTabs = () => page.$$eval('.pane .tab', (l) => l.map((t) => t.textContent))
+  assert(!(await editorTabs()).some((t) => t.includes('hello.txt')), 'no file opened without the follow mode')
+  assert((await page.getAttribute('[data-testid=agent-follow]', 'aria-pressed')) === 'false', 'follow mode off')
+  await page.click('[data-testid=agent-follow]')
+  await page.waitForSelector('[data-testid=agent-follow][aria-pressed=true]')
+  await prompt(page, 'follow me')
+  await page.waitForSelector('[data-testid=agent-message]:has-text("Wrote follow.txt.")')
+  await page.waitForFunction(() => document.querySelector('.pane.active .tab.active')?.textContent.includes('follow.txt'))
+  await page.waitForFunction(() => document.querySelector('.pane.active .ed-content')?.textContent.includes('followed'))
+  await page.click(`${tab}`, { button: 'right' })
+  await page.waitForSelector('.ctx-menu .ctx-item:has-text("Follow the edits") .ctx-check.on')
+  await page.keyboard.press('Escape')
+  await page.click('[data-testid=agent-follow]')
+  await page.waitForSelector('[data-testid=agent-follow][aria-pressed=false]')
   await waitState(page, 'ready')
 
   // The composer: /commands of the agent, @paths of the project.

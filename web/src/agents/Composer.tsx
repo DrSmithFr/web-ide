@@ -20,7 +20,7 @@ import { cancelRecording, canRecord, speech, startRecording, stopRecording, tran
 import { AttachmentChip, formatTokens } from '../llm/parts'
 import type { Caps } from '../llm/state'
 import { phone } from '../state/mobile'
-import { cancelAgent, configAgent, promptAgent, sessions, threads, unqueueAgent, type AgentPart, type ConfigOption } from './state'
+import { cancelAgent, configAgent, followAgent, promptAgent, sessions, threads, unqueueAgent, type AgentPart, type ConfigOption } from './state'
 
 interface Box {
   draft: string
@@ -242,6 +242,16 @@ export function AgentComposer(props: { id: string }) {
             }}
           >
             <Icon name="paperclip" size={16} />
+          </button>
+          <button
+            class="ai-icon"
+            classList={{ on: !!info()?.follow }}
+            aria-pressed={!!info()?.follow}
+            title={info()?.follow ? t('Following the edits: each file the agent edits opens in the editor (click to stop)') : t('Follow the edits: open each file the agent edits')}
+            data-testid="agent-follow"
+            onClick={() => void followAgent(props.id, !info()?.follow).catch(errorToast)}
+          >
+            <Icon name="eye" size={16} />
           </button>
           <input
             ref={fileInput}

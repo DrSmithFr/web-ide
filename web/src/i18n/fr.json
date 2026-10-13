@@ -1965,5 +1965,9 @@
   "Later": "Plus tard",
   "Show less": "Voir moins",
   "Show more": "Voir plus",
-  "Cancelled": "Annulé"
+  "Cancelled": "Annulé",
+  "Follow the edits": "Suivre les modifications",
+  "open each file the agent edits": "ouvre chaque fichier que l'agent modifie",
+  "Follow the edits: open each file the agent edits": "Suivre les modifications : ouvrir chaque fichier que l'agent modifie",
+  "Following the edits: each file the agent edits opens in the editor (click to stop)": "Suivi des modifications : chaque fichier que l'agent modifie s'ouvre dans l'éditeur (cliquer pour arrêter)"
 }
