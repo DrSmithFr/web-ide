@@ -270,11 +270,28 @@ function showPhraseForm() {
       account = rec.account
       show()
       status(`${words.paired} <b>${rec.fp}</b>`)
-      await connect('cert')
+      await enter('cert')
     } catch (err) {
       fail(text(err.message))
     }
   }
+}
+
+// The link of the account: the proof of possession, the revocation list, and — when the link
+// named no pod — the gateway this browser enters through.
+async function enter(mode) {
+  const l = await id.link((m) => { if (m.type === 'revocations' && m.list) revoked = m.list }, lang)
+  if (account) {
+    const err = await applyRevocations(l)
+    if (err) return err
+    if (!pod) {
+      const err = await enterSite(l)
+      if (err) return err
+    }
+  }
+  if (!pod) return fail(words.nopod)
+  await connect(mode)
+  return ''
 }
 
 async function main() {
@@ -311,23 +328,13 @@ async function main() {
       account = rec.account ?? ''
       show()
     } else if (!token) {
-      // Nothing paired on this origin and no token: the phrase form is the only way in.
-      return showPhraseForm()
+      // Nothing paired on this origin and no token: the phrase form is the only way in. It
+      // ends on the same link as an unlocked device, so it can pick a gateway too.
+      showPhraseForm()
+      return
     }
   }
-
-  const l = await id.link((m) => { if (m.type === 'revocations' && m.list) revoked = m.list }, lang)
-  if (account) {
-    const err = await applyRevocations(l)
-    if (err) return
-    // No pod in the link: the account is entered through one of its gateways.
-    if (!pod) {
-      const err = await enterSite(l)
-      if (err) return
-    }
-  }
-  if (!pod) return fail(words.nopod)
-  await connect(rec?.cert ? 'cert' : 'token')
+  await enter(rec?.cert ? 'cert' : 'token')
 }
 
 async function connect(mode) {

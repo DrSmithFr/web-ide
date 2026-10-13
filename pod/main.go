@@ -61,6 +61,7 @@ func main() {
 	mdns := flag.Bool("mdns", true, "find the other pods of the account on the LAN by mDNS (false: the addresses typed in Settings only)")
 	lanAddr := flag.String("lan", "", "listen address of the link to the other pods of the account on the LAN (default: config.json, else "+lan.DefaultAddr+"; off: none)")
 	relay := flag.String("relay", "", "relay URL the pod registers with (wss:// or ws://), or the word relay to enable")
+	preferred := flag.Bool("preferred", false, "make this pod the preferred gateway of its site: the browser opens the other pods through it")
 	forceTurn := flag.Bool("force-turn", false, "force the browser through TURN (no direct or STUN path)")
 	turnPort := flag.Int("turn-port", 0, "relay: the STUN/TURN control port (default 3478)")
 	turnIP := flag.String("turn-ip", "", "relay: the STUN/TURN IP given to clients (default: the machine IP)")
@@ -178,6 +179,9 @@ func main() {
 	if *lanAddr != "" {
 		cfg.LAN.Addr = *lanAddr
 	}
+	if *preferred {
+		cfg.Gateway.Preferred = true
+	}
 	// A newer revocation list reached over the LAN goes on to the relay.
 	var relayCli atomic.Pointer[relayclient.Client]
 	pushRevocations := func(r *identity.Revocations) {
@@ -223,6 +227,15 @@ func main() {
 			}
 		}
 	}
+	// The same for the X25519 key of a peer: an admin of the account wraps the key of the epoch
+	// for it once the relay holds it.
+	forwardSyncKey := func(k *identity.SyncKeyRecord) {
+		if c := relayCli.Load(); c != nil {
+			if err := c.PutSyncKey(k); err != nil {
+				log.Printf("lan: forwarding the sync key of a pod: %v", err)
+			}
+		}
+	}
 	var lanMgr *lan.Manager
 	// What a change of the LAN links means: the page refreshes, the relay learns what this pod sees
 	// (the sites), and a pod with no link of its own publishes its key and its list through a peer.
@@ -247,7 +260,7 @@ func main() {
 		}
 	}
 	if cfg.LAN.Addr != "off" {
-		m := startLAN(ctx, st, cfg, srv, podID, *mdns, pushRevocations, forwardBlob, hub, &onLANChange)
+		m := startLAN(ctx, st, cfg, srv, podID, *mdns, pushRevocations, forwardBlob, forwardSyncKey, hub, &onLANChange)
 		if m != nil {
 			srv.LAN = m
 			lanMgr = m
@@ -350,7 +363,7 @@ func main() {
 // startLAN runs the link to the other pods of the account on the local network: the LAN
 // port, mDNS, and the page of each pod found, served under /_lan/pod/<key>/.
 func startLAN(ctx context.Context, st *store.Store, cfg *config.Config, srv *server.Server, podID *identity.PodIdentity, mdns bool,
-	onRevocations func(*identity.Revocations), onBlob func(*identity.BlobRecord), hub *settingsync.Hub, onChange *func()) *lan.Manager {
+	onRevocations func(*identity.Revocations), onBlob func(*identity.BlobRecord), onSync func(*identity.SyncKeyRecord), hub *settingsync.Hub, onChange *func()) *lan.Manager {
 	m, err := lan.New(lan.Config{
 		Dir:      st.Dir(),
 		Addr:     cfg.LAN.Addr,
@@ -366,6 +379,7 @@ func startLAN(ctx context.Context, st *store.Store, cfg *config.Config, srv *ser
 		OnChange:      func() { (*onChange)() },
 		OnRevocations: onRevocations,
 		OnBlob:        onBlob,
+		OnSync:        onSync,
 		OnWrap: func(w *identity.WrapRecord) {
 			// The wrap the relay pushed for this pod, carried back by a peer of its site: it is the
 			// only way a pod with no link of its own gets the key of the epoch.

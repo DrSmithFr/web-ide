@@ -359,6 +359,18 @@ func (c *Client) PutBlob(rec *identity.BlobRecord) error {
 	return link.send(sigMsg{Type: "blobPut", Account: rec.Account, Device: rec.Device, Kind: rec.Kind, Blob: rec})
 }
 
+// PutSyncKey hands the X25519 key a peer of the site published to the relay, so an admin can wrap
+// the key of the epoch for a pod that has no link of its own. The record is forwarded unchanged.
+func (c *Client) PutSyncKey(rec *identity.SyncKeyRecord) error {
+	c.mu.Lock()
+	link := c.link
+	c.mu.Unlock()
+	if link == nil {
+		return errors.New("relay: not connected")
+	}
+	return link.send(sigMsg{Type: "syncKey", Account: rec.Account, Device: rec.Device, SyncKey: rec})
+}
+
 // SetPreferred marks this pod as the entry point of its site (Settings > Remote access), and tells
 // the relay about the change.
 func (c *Client) SetPreferred(on bool) {
