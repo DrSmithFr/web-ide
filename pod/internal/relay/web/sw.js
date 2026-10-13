@@ -7,8 +7,9 @@ const pending = new Map()
 // Which preview each client belongs to: a page opened under /__preview/<id>/ keeps fetching
 // its assets there, even with an absolute path.
 const owners = new Map()
-// Which bootstrap window owns which pod, as the page declared it: a page that picked its pod
-// itself (no #pod= in the link) has nothing in its URL to be recognised by.
+// Which bootstrap window owns which pod, as the page declared it: {pod, key, keys}. A page that
+// picked its pod itself (no #pod= in the link) has nothing in its URL to be recognised by, and a
+// page of a pod reached through a gateway is served by the window that opened that gateway.
 const ownPods = new Map()
 
 const appFiles = new Set(['/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png'])
@@ -16,15 +17,24 @@ const appFiles = new Set(['/manifest.webmanifest', '/icon.svg', '/icon-192.png',
 self.addEventListener('install', (e) => self.skipWaiting())
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()))
 
-async function bootstrap() {
+async function bootstrap(key) {
   const all = await self.clients.matchAll({ type: 'window' })
-  // A page that picked its pod itself has no "pod=" in the URL of its client (the hash was set
-  // after the page loaded): it declared itself the owner of a pod instead.
-  return all.find((c) => ownPods.has(c.id)) || all.find((c) => c.url.includes('pod=')) || null
+  // The window that shows that pod wins; else one that declared it can reach it (its page moved
+  // to another pod, or the pod rides the gateway this window opened); else any bootstrap window.
+  const owned = all.filter((c) => ownPods.has(c.id))
+  return (
+    owned.find((c) => ownPods.get(c.id).key === key) ||
+    owned.find((c) => (ownPods.get(c.id).keys ?? []).includes(key)) ||
+    owned[0] ||
+    all.find((c) => c.url.includes('pod=')) ||
+    null
+  )
 }
 
 self.addEventListener('message', (e) => {
-  if (e.data?.kind === 'own' && e.source) ownPods.set(e.source.id, e.data.pod || '')
+  if (e.data?.kind === 'own' && e.source) {
+    ownPods.set(e.source.id, { pod: e.data.pod || '', key: e.data.key || '', keys: e.data.keys ?? [] })
+  }
 })
 
 self.addEventListener('fetch', (event) => {
@@ -38,11 +48,18 @@ self.addEventListener('fetch', (event) => {
 })
 
 async function handle(req, url, clientId) {
-  const win = await bootstrap(clientId)
+  // A page of another pod lives under /pod/<key>/ of this origin: the same origin for every pod
+  // of the account, so the installed app never shows the bar of an outside site.
+  let key = ''
+  let path = url.pathname
+  if (path.startsWith('/pod/')) {
+    key = path.split('/')[2] ?? ''
+    path = path.slice(('/pod/' + key).length) || '/'
+  }
+  const win = await bootstrap(key)
   if (!win) return new Response('The bootstrap page is not open.', { status: 503 })
 
   let preview = ''
-  let path = url.pathname
   if (path.startsWith('/__preview/')) {
     preview = path.split('/')[2]
     path = path.slice(('/__preview/' + preview).length) || '/'
@@ -72,7 +89,10 @@ async function handle(req, url, clientId) {
       if (got.length === 1) resolve(e.data.head)
     }
   })
-  win.postMessage({ kind: 'http', id, url: path, preview, method: req.method, headers, body, port: chan.port2 }, [chan.port2])
+  win.postMessage(
+    { kind: 'http', id, key, base: key ? '/pod/' + key : '', url: path, preview, method: req.method, headers, body, port: chan.port2 },
+    [chan.port2],
+  )
 
   const h = await Promise.race([head, new Promise((r) => setTimeout(() => r(null), 60000))])
   if (!h) return new Response('The pod did not answer.', { status: 504 })

@@ -65,7 +65,9 @@ export function portChannel(port: MessagePort): Channel {
 export function askPort(label: string): Promise<Channel | null> {
   if (window.parent === window) return Promise.resolve(null)
   const chan = new MessageChannel()
-  window.parent.postMessage({ kind: 'port', label, port: chan.port2 }, '*', [chan.port2])
+  // base names the pod the channel is for: on the relay origin, one window reaches every pod of
+  // the account and the bootstrap page picks the tunnel of this page's pod.
+  window.parent.postMessage({ kind: 'port', label, base, port: chan.port2 }, '*', [chan.port2])
   return Promise.resolve(portChannel(chan.port1))
 }
 

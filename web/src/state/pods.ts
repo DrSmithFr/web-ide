@@ -4,6 +4,7 @@
 // others.
 import { createSignal, onCleanup } from 'solid-js'
 import { on, request } from '../pod/rpc'
+import { inTunnel } from '../pod/transport'
 
 export interface PodProject {
   id: string
@@ -41,5 +42,9 @@ export function usePods() {
   return [pods, setPods] as const
 }
 
-/** The page of a pod of the LAN, served through this pod. */
-export const podURL = (p: PodInfo, path = '/') => (p.path ?? '') + path
+/** The page of a pod: under /_lan/pod/<key>/ on the origin of the pod that serves it, under
+ * /pod/<key>/ on the relay origin, where one origin carries every pod of the account. */
+export const podURL = (p: PodInfo, path = '/') => (inTunnel() ? '/pod/' + p.key : (p.path ?? '')) + path
+
+/** A project of that pod can be opened from this page. */
+export const podOpenable = (p: PodInfo) => inTunnel() || !!p.path

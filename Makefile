@@ -42,6 +42,7 @@ test: pod/webdist/dist
 	cd pod && $(GO) vet ./... && $(GO) test ./...
 	cd web && npm run check
 	node scripts/identity-vectors.mjs
+	node --test scripts/routes-test.mjs
 
 # Browser tests (headless Chromium from the Playwright cache, or CHROME=/path/to/chrome).
 e2e: build

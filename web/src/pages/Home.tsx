@@ -14,7 +14,7 @@ import { iconOf, iconURL, type IconSpec, loadIcon, loadIcons, setFavicon } from 
 import { IconEditor } from '../ui/IconEditor'
 import { OpenTunnels } from '../docker/OpenTunnels'
 import { gateway, gatewayHome, useLan } from '../state/lan'
-import { podURL, usePods, type PodInfo } from '../state/pods'
+import { podOpenable, podURL, usePods, type PodInfo } from '../state/pods'
 
 interface Project {
   id: string
@@ -253,7 +253,7 @@ function PodBlock(props: { pod: PodInfo }) {
           {(pr) => (
             <article class="project-card">
               <Show
-                when={p().path}
+                when={podOpenable(p())}
                 fallback={
                   <div class="project-open" title={t('Opening the projects of another site comes with the next version')} data-testid="pod-project">
                     <span class="project-icon" />
