@@ -305,7 +305,7 @@ func (s *Server) openRuntime(id string, creds sshx.Creds) (*runtime.Runtime, err
 	if !ok {
 		return nil, i18n.New("project not found")
 	}
-	deps := runtime.Deps{Pool: s.Pool, Store: s.Store, Keeper: s.Keeper}
+	deps := runtime.Deps{Pool: s.Pool, Store: s.Store, Keeper: s.Keeper, Version: s.Version}
 	if main, ok := s.Projects.Get(p.Parent); ok && p.Parent != "" {
 		deps.SettingsRoot = main.Path
 	}

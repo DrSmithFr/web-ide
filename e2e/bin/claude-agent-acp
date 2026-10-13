@@ -1,0 +1,144 @@
+#!/usr/bin/env node
+// Fake ACP agent of the tests (Go and browser): answers a prompt by its words.
+//   "crash"       the process exits at once (restarted by the IDE, its session loaded)
+//   "crash loop"  the process and every later start exit (.fake-acp-crash in the cwd)
+//   "permission"  asks before an edit, then applies it or not
+//   "slow"        streams until session/cancel
+//   anything else thought, plan, message, an edit with its diff, usage, title
+const fs = require('fs')
+const path = require('path')
+
+const crashFile = () => path.join(process.cwd(), '.fake-acp-crash')
+process.stderr.write(`fake agent ${process.pid} started\n`)
+if (fs.existsSync(crashFile())) {
+  process.stderr.write('fake agent: crash loop\n')
+  process.exit(5)
+}
+
+let buf = ''
+let nextId = 1000
+const waiting = new Map()
+const sessions = new Map()
+let slow = null
+
+const send = (m) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...m }) + '\n')
+const update = (sessionId, u) => send({ method: 'session/update', params: { sessionId, update: u } })
+const ask = (method, params) =>
+  new Promise((resolve) => {
+    const id = nextId++
+    waiting.set(id, resolve)
+    send({ id, method, params })
+  })
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+const configOptions = (mode) => [
+  {
+    id: 'mode',
+    name: 'Mode',
+    category: 'mode',
+    type: 'select',
+    currentValue: mode,
+    options: [
+      { value: 'default', name: 'Manual' },
+      { value: 'bypass', name: 'Bypass' },
+    ],
+  },
+]
+
+async function prompt(id, p) {
+  const sid = p.sessionId
+  const text = p.prompt.map((b) => b.text ?? '').join('')
+  const s = sessions.get(sid)
+  if (text.includes('crash loop')) {
+    fs.writeFileSync(crashFile(), '')
+    process.exit(4)
+  }
+  if (text.includes('crash')) process.exit(3)
+  if (text.includes('slow')) {
+    slow = { id, sid }
+    for (let i = 0; slow && i < 600; i++) {
+      update(sid, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `tick ${i} ` } })
+      await sleep(100)
+    }
+    return
+  }
+  const file = path.join(s.cwd, 'hello.txt')
+  if (text.includes('permission')) {
+    update(sid, { sessionUpdate: 'tool_call', toolCallId: 'edit-1', title: 'Edit hello.txt', kind: 'edit', status: 'pending', content: [], locations: [] })
+    const answer = await ask('session/request_permission', {
+      sessionId: sid,
+      toolCall: { toolCallId: 'edit-1', title: 'Edit hello.txt', kind: 'edit', status: 'pending', content: [{ type: 'diff', path: file, oldText: 'hi', newText: 'hello' }], locations: [{ path: file }] },
+      options: [
+        { optionId: 'allow-once', name: 'Yes', kind: 'allow_once' },
+        { optionId: 'allow-always', name: 'Yes, always', kind: 'allow_always' },
+        { optionId: 'reject', name: 'No', kind: 'reject_once' },
+      ],
+    })
+    const o = answer.outcome
+    if (o.outcome === 'cancelled') return send({ id, result: { stopReason: 'cancelled' } })
+    const allowed = o.optionId.startsWith('allow')
+    update(sid, { sessionUpdate: 'tool_call_update', toolCallId: 'edit-1', status: allowed ? 'completed' : 'failed' })
+    update(sid, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: allowed ? 'Edited.' : 'Not edited.' } })
+    return send({ id, result: { stopReason: 'end_turn' } })
+  }
+  update(sid, { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: 'Thinking about it' } })
+  update(sid, { sessionUpdate: 'plan', entries: [{ content: 'Say hello', priority: 'high', status: 'completed' }, { content: 'Edit the file', priority: 'medium', status: 'in_progress' }] })
+  await sleep(50)
+  update(sid, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Hello ' } })
+  await sleep(50)
+  update(sid, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'from the **fake agent**.' } })
+  update(sid, { sessionUpdate: 'tool_call', toolCallId: `edit-${nextId++}`, title: 'Edit hello.txt', kind: 'edit', status: 'completed', content: [{ type: 'diff', path: file, oldText: 'hi\nthere', newText: 'hello\nthere' }], locations: [{ path: file }] })
+  update(sid, { sessionUpdate: 'usage_update', used: 1234, size: 200000 })
+  update(sid, { sessionUpdate: 'session_info_update', title: 'Fake session' })
+  s.turns++
+  send({ id, result: { stopReason: 'end_turn' } })
+}
+
+function handle(m) {
+  if (m.method === undefined) {
+    const r = waiting.get(m.id)
+    waiting.delete(m.id)
+    return r?.(m.result)
+  }
+  const p = m.params ?? {}
+  switch (m.method) {
+    case 'initialize':
+      return send({ id: m.id, result: { protocolVersion: 1, agentCapabilities: { loadSession: true, promptCapabilities: { image: true } }, authMethods: [], agentInfo: { name: 'fake', version: '1' } } })
+    case 'session/new': {
+      const sid = `fake-${process.pid}-${sessions.size}`
+      sessions.set(sid, { cwd: p.cwd, mode: 'default', turns: 0 })
+      send({ id: m.id, result: { sessionId: sid, configOptions: configOptions('default') } })
+      return update(sid, { sessionUpdate: 'available_commands_update', availableCommands: [{ name: 'review', description: 'Review the changes' }] })
+    }
+    case 'session/load':
+      sessions.set(p.sessionId, { cwd: p.cwd, mode: 'default', turns: 0 })
+      // The replay of the history, which the IDE already has.
+      update(p.sessionId, { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'replayed question' } })
+      update(p.sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'replayed answer' } })
+      return send({ id: m.id, result: { configOptions: configOptions('default') } })
+    case 'session/set_config_option':
+      sessions.get(p.sessionId).mode = p.value
+      return send({ id: m.id, result: { configOptions: configOptions(p.value) } })
+    case 'session/prompt':
+      return void prompt(m.id, p)
+    case 'session/cancel':
+      if (slow) {
+        send({ id: slow.id, result: { stopReason: 'cancelled' } })
+        slow = null
+      }
+      return
+    default:
+      if (m.id !== undefined) send({ id: m.id, error: { code: -32601, message: `unknown method ${m.method}` } })
+  }
+}
+
+process.stdin.on('data', (d) => {
+  buf += d
+  let i
+  while ((i = buf.indexOf('\n')) >= 0) {
+    const line = buf.slice(0, i)
+    buf = buf.slice(i + 1)
+    if (line.trim()) handle(JSON.parse(line))
+  }
+})
+process.stdin.on('end', () => process.exit(0))

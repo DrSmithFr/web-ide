@@ -1,0 +1,29 @@
+/* Agents tool: tabs of ACP sessions; the thread reuses the classes of the assistant. */
+
+.agents-body { display: flex; flex-direction: column; min-height: 0; }
+.agent-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--fg-faint); }
+.agent-dot.ready { background: var(--ok); }
+.agent-dot.busy, .agent-dot.starting { background: var(--accent); animation: ai-dot 1.2s ease-in-out infinite; }
+.agent-dot.asking { background: var(--warn); }
+.agent-dot.error { background: var(--danger); }
+
+.agents-launcher { display: flex; flex-direction: column; gap: 8px; padding: 16px; max-width: 520px; margin: 0 auto; width: 100%; }
+.agent-card { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-2); }
+.agent-card-name { font-weight: 600; min-width: 96px; }
+
+.agent-session { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.agent-thread { --ai-gap: 12px; padding-top: 12px; }
+.agent-stderr { margin: 4px 0 0; max-height: 160px; overflow: auto; white-space: pre-wrap; font: 11.5px/1.4 var(--font-code); color: var(--fg-muted); }
+
+.agent-prompt { display: flex; gap: 8px; align-items: flex-end; padding: 8px 12px; border-top: 1px solid var(--line); }
+.agent-prompt textarea { flex: 1; resize: none; min-height: 44px; max-height: 200px; font: inherit; }
+.agent-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 0 12px 8px; }
+.agent-config { display: inline-flex; align-items: center; gap: 4px; }
+.agent-config select { font-size: 12px; padding: 2px 4px; }
+
+.agent-plan { border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px 8px; background: var(--ai-softer); font-size: 13px; }
+.agent-plan-head { display: flex; align-items: center; gap: 6px; color: var(--fg-muted); font-size: 12.5px; margin-bottom: 4px; }
+.agent-plan-item { display: flex; gap: 8px; padding: 1px 0; }
+.agent-plan-item.completed { color: var(--fg-muted); text-decoration: line-through; }
+.agent-plan-mark { width: 12px; flex: none; color: var(--accent); }
+.agent-notice { text-align: center; padding: 2px 0; }

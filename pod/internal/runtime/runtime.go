@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DrSmithFr/web-ide/pod/internal/acp"
 	"github.com/DrSmithFr/web-ide/pod/internal/console"
 	"github.com/DrSmithFr/web-ide/pod/internal/db"
 	"github.com/DrSmithFr/web-ide/pod/internal/docker"
@@ -41,6 +42,8 @@ type Deps struct {
 	// SettingsRoot is the folder of the main project of a worktree: its .ide holds the
 	// settings ("" for the project itself).
 	SettingsRoot string
+	// Version of the pod, told to the agents.
+	Version string
 }
 
 type fileState struct {
@@ -66,6 +69,8 @@ type Runtime struct {
 	IdeDir string
 
 	Consoles *console.Manager
+	// Agents are the sessions of the Agents tool (nil on an SSH project: local only for now).
+	Agents *acp.Manager
 	// Keeper runs the processes that survive the pod, else nil; KeeperTarget is where: ""
 	// (local) or "ssh:<key>" (its own connection to the host of an SSH project).
 	Keeper       *keeper.Client
@@ -164,6 +169,10 @@ func Open(p projects.Project, creds sshx.Creds, d Deps, emit Emit) (*Runtime, er
 			}
 		}
 	}
+	if r.Local && d.Store != nil {
+		r.Agents = acp.NewManager(acp.Deps{Keeper: d.Keeper, Owner: p.ID, Dir: d.Store.Path("agents", p.ID), Root: root,
+			Catalog: acp.Catalog{Dir: d.Store.Path("acp")}, Version: d.Version, Emit: func(ev string, data any) { r.emit(ev, data, "") }})
+	}
 	exists := func(p string) bool { _, err := r.FS.Stat(p); return err == nil }
 	r.LSP = lsp.NewManager(r.Runner, root, r.Local, r.Config.LSP, exists, func(ev string, data any) { r.emit(ev, data, "") })
 	r.Git = git.New(r.Runner, root)
@@ -202,6 +211,9 @@ func (r *Runtime) Detach() {
 // Close ends everything the project runs (the project is closed).
 func (r *Runtime) Close() {
 	r.Consoles.CloseAll()
+	if r.Agents != nil {
+		r.Agents.CloseAll()
+	}
 	r.release()
 }
 
@@ -209,6 +221,9 @@ func (r *Runtime) Close() {
 // adopts them again when it starts).
 func (r *Runtime) Release() {
 	r.Consoles.Release()
+	if r.Agents != nil {
+		r.Agents.Release()
+	}
 	r.release()
 }
 

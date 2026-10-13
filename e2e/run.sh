@@ -17,7 +17,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 # The longest first: the workers end together.
-[ ${#SUITES[@]} -eq 0 ] && SUITES=(kanban chat features restore+ docker lan identity sync push keeper doodle speech relay preview git editor agent llm subagents orchestrator kanbanai editing lsp mousenav kanbangit commands projects popups keyboard mobile tunnels explorer plan i18n perf)
+[ ${#SUITES[@]} -eq 0 ] && SUITES=(kanban chat agents features restore+ docker lan identity sync push keeper doodle speech relay preview git editor agent llm subagents orchestrator kanbanai editing lsp mousenav kanbangit commands projects popups keyboard mobile tunnels explorer plan i18n perf)
 [ -d node_modules/playwright-core ] || npm install --no-audit --no-fund >/dev/null
 if [ -z "$JOBS" ]; then JOBS=$(($(nproc) / 4)); [ "$JOBS" -gt 8 ] && JOBS=8; [ "$JOBS" -lt 1 ] && JOBS=1; fi
 # wait -n -p needs bash 5.1.
