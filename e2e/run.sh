@@ -132,7 +132,9 @@ start_pod() {
   # The LAN link only in its suite, on loopback and with the addresses typed (no mDNS): a
   # paired pod of another suite must not take the port of the IDE's own pod.
   if [ "${1:-}" = lan ]; then EXTRA+=(-lan "127.0.0.1:$LAN_PORT" -mdns=false -name alpha)
-  elif [ "${1:-}" = multipod ]; then EXTRA+=(-lan "127.0.0.1:$LAN_PORT" -mdns=false -name alpha -preferred)
+  # The multipod suite tests *Update this pod*: alpha stands for a release, no pod installs the
+  # development version a build of the source tree reports.
+  elif [ "${1:-}" = multipod ]; then EXTRA+=(-lan "127.0.0.1:$LAN_PORT" -mdns=false -name alpha -preferred -pod-version v1.11.0)
   else EXTRA+=(-lan off); fi
   mkdir -p "$TMP/ws" "$TMP/data" "$MODELS"
   # Speech models are kept between runs (downloaded once from Hugging Face).

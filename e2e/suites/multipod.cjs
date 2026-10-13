@@ -84,7 +84,7 @@ async function stop(proc) {
 
 /** A pod of its own: its data folder, its workspace with one project <name>-app, paired with the
  * phrase. relay: it registers with the relay; lan: the address of its LAN port (off: none). */
-async function startPod(name, data, port, { lan = null, relay = false } = {}) {
+async function startPod(name, data, port, { lan = null, relay = false, protocol = 1, podVersion = '', updateCmd = '' } = {}) {
   const dir = path.dirname(data)
   const ws = path.join(dir, 'ws')
   const app = path.join(ws, name + '-app')
@@ -99,8 +99,14 @@ async function startPod(name, data, port, { lan = null, relay = false } = {}) {
   const args = ['-addr', `127.0.0.1:${port}`, '-data', data, '-workspace', ws, '-static', STATIC, '-name', name, '-keeper', 'off']
   args.push(lan ? ['-lan', lan, '-mdns=false'] : ['-lan', 'off'])
   if (relay) args.push('-relay', `http://127.0.0.1:${RELAY_PORT}`)
+  // A pod started with another multi-pod protocol, and with an install command of its own standing
+  // for scripts/install.sh (the suite never installs anything as a service).
+  if (protocol !== 1) args.push('-multipod-protocol', String(protocol))
+  // A pod that stands for a release: a build of the source tree reports a development version, and
+  // no pod installs one of those.
+  if (podVersion) args.push('-pod-version', podVersion)
   const log = fs.openSync(path.join(dir, 'pod.log'), 'a')
-  const proc = spawn(BIN, args.flat(), { stdio: ['ignore', log, log] })
+  const proc = spawn(BIN, args.flat(), { stdio: ['ignore', log, log], env: { ...process.env, ...(updateCmd ? { WEBIDE_UPDATE_CMD: updateCmd } : {}) } })
   procs.push(proc)
   for (let i = 0; i < 150; i++) {
     if (await fetch(`http://127.0.0.1:${port}/`).then(() => true, () => false)) break
@@ -424,7 +430,28 @@ run(
         document.dispatchEvent(new Event('visibilitychange'))
       })
 
-      // 12. Failover. Bravo takes its own link to the relay, a project of bravo is opened on the
+      // 12. Update this pod. Charlie is restarted with an older multi-pod protocol and an install
+      // command of its own: the home page of the window shows it as an older version, its projects
+      // are not openable, and *Update this pod* carries a request signed by the device key of this
+      // browser to charlie, which runs the installer it was given.
+      const marker = path.join(TMP, 'charlie-installed')
+      fs.rmSync(marker, { force: true })
+      await stop(charlie)
+      charlie = await startPod('charlie', dataC, portC, { relay: true, protocol: 0, updateCmd: 'touch ' + marker })
+      assert(await waitOnline('pod-charlie'), 'charlie is registered with the relay')
+      await app.goto(`${ORIGIN}/app`, { waitUntil: 'domcontentloaded' })
+      await app.waitForSelector('.home .home-bar', { timeout: 40000 })
+      const block = '[data-testid=pod-block][data-name=charlie]'
+      const badge = await app.waitForSelector(`${block} [data-testid=pod-mismatch]`, { timeout: 40000 })
+      assert((await badge.textContent()).includes('older version'), 'charlie runs an older multi-pod protocol: ' + (await badge.textContent()))
+      const card = await waitFor(() => app.$(`${block} [data-testid=pod-project]`), 40000)
+      assert(card, 'the projects of charlie are listed: ' + (await app.textContent(block)))
+      assert((await card.getAttribute('title')).includes('multi-pod protocol'), 'its projects are not openable: ' + (await card.getAttribute('title')))
+      assert(!(await app.$(`${block} a.project-open`)), 'no link opens a pod of another protocol')
+      await app.click(`${block} [data-testid=pod-update] button`)
+      assert(await waitFor(() => (fs.existsSync(marker) ? true : null), 30000), 'charlie ran the installer with the request signed by the device key of the browser')
+
+      // 13. Failover. Bravo takes its own link to the relay, a project of bravo is opened on the
       // page, a terminal runs in it. Then alpha, the gateway this window entered through, is
       // killed: the page of bravo keeps working, and the home page of the window is the new
       // gateway's.

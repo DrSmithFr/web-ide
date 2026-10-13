@@ -112,6 +112,8 @@ A project opens with the front end of **the pod that holds it**, and the address
 
 A device proves it holds its key when it registers with the relay (a signature on a nonce the relay gave), so a copied certificate opens nothing.
 
+Each pod also says which **multi-pod protocol** it speaks. A pod of another one is listed with *older version* or *newer version* and is never routed to: its projects are listed without a link, the two would not understand each other. When it is that pod to update, the home page of a pod running a release shows *Update this pod*: your browser signs the request with its device key, the pod it names checks it against the account it pinned and its revocation list, then runs the installer it installed itself (`scripts/install.sh`), outside the process it restarts. A pod that does not run as the service answers with the command to run there by hand.
+
 #### Notifications on the phone
 
 On the relay origin, the bootstrap page installs as an app (*Install*, or *Add to Home Screen* on iOS, which shows notifications only from the installed app). Settings > Notifications > *Enable on this device* subscribes the browser, on **every pod of the account** (a project of another pod notifies it too): a pod notifies it when the agent finishes a turn or asks for you, when a saved command flagged *test* fails, and when the assistant or Claude Code leaves feedback on a ticket — one switch per kind, *Send a test* to check. Nothing is sent while the device shows a window of that pod. A click opens the conversation or the ticket. The pod encrypts every notification for the browser: the relay forwards it without being able to read it.

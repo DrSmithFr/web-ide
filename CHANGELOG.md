@@ -6,6 +6,8 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ### Added
 
+- Multi-pod protocol versions: each pod tells which multi-pod protocol it speaks, the home page marks a pod of another one (*older version* or *newer version*), and nothing crosses the gap — no route, no gateway of the site, no project link.
+- *Update this pod* on the home page: a pod running a release offers an outdated pod the version it runs itself. The browser signs the request with its device key; the pod it names checks it against the account it pinned and its revocation list, then runs the installer it installed, outside the process it restarts. A pod that does not run as the service is given the command to run there by hand.
 - Push notifications through the relay (Settings > Notifications, on the relay origin): the agent finished or asks for you, tests failed, feedback on a ticket; a switch per kind and per device, nothing while the device shows a window of the pod, a click opens the conversation or the ticket. The pod encrypts each notification for the browser (RFC 8291): the relay signs (VAPID) and forwards ciphertext only, to the registered endpoints of signed, non-revoked browsers of the same account.
 - The bootstrap page of the relay installs as an app (PWA) and remembers the last pod.
 

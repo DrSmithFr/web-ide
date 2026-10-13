@@ -45,9 +45,12 @@ export function nextGateway(pods, podsPrev, entrySite, entryKey) {
 
 /** The tunnel that carries the channels of a pod, and the prefix of its labels: the pod's own
  * when the relay reports it online, else the gateway this window entered through, with every
- * label prefixed by @<key>/ (the gateway opens them on its own link to the peer). */
+ * label prefixed by @<key>/ (the gateway opens them on its own link to the peer). A pod the relay
+ * flags as speaking another multi-pod protocol is never routed to: the two would not understand
+ * each other, and the home page offers to update it. */
 export function routeOf(pods, key, entryKey) {
   if (!key || key === entryKey) return { via: entryKey, prefix: '' }
-  if (pods.some((p) => p.key === key)) return { via: key, prefix: '' }
+  const target = pods.find((p) => p.key === key)
+  if (target && !target.mismatch) return { via: key, prefix: '' }
   return { via: entryKey, prefix: '@' + key + '/' }
 }

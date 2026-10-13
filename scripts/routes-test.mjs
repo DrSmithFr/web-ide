@@ -33,6 +33,14 @@ test('a pod the relay does not see rides the gateway, with its labels prefixed',
   assert.deepEqual(routeOf(pods, 'kd', 'ka'), { via: 'ka', prefix: '@kd/' })
 })
 
+test('a pod of another multi-pod protocol is never routed to', () => {
+  const mixed = pods.map((p) => ({ ...p, protocol: 1 }))
+  mixed[1] = { ...mixed[1], protocol: 0, mismatch: 'outdated' }
+  // Its own tunnel is refused: the channels would not understand each other.
+  assert.deepEqual(routeOf(mixed, 'kb', 'ka'), { via: 'ka', prefix: '@kb/' })
+  assert.deepEqual(routeOf(mixed, 'kc', 'ka'), { via: 'kc', prefix: '' })
+})
+
 test('the page of the gateway itself is not routed through it', () => {
   assert.deepEqual(routeOf(pods, 'ka', 'ka'), { via: 'ka', prefix: '' })
   assert.deepEqual(routeOf(pods, '', 'ka'), { via: 'ka', prefix: '' })

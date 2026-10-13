@@ -20,6 +20,11 @@ export interface PodInfo {
   name: string
   version: string
   fingerprint: string
+  /** The multi-pod protocol it speaks. A pod of another one is not routed to (Home). */
+  protocol?: number
+  /** "outdated": it runs an older release, this pod can offer it the version it runs itself.
+   *  "newer": this pod is the one to update. */
+  mismatch?: string
   /** The site it belongs to (the pods linked by the local network). */
   site?: string
   /** The relay opens the other pods of the site through this one. */
@@ -46,5 +51,7 @@ export function usePods() {
  * /pod/<key>/ on the relay origin, where one origin carries every pod of the account. */
 export const podURL = (p: PodInfo, path = '/') => (inTunnel() ? '/pod/' + p.key : (p.path ?? '')) + path
 
-/** A project of that pod can be opened from this page. */
-export const podOpenable = (p: PodInfo) => inTunnel() || !!p.path
+/** A project of that pod can be opened from this page. A pod that does not speak the same
+ *  multi-pod protocol cannot: the two would not understand each other, and the home page offers
+ *  to update it instead. */
+export const podOpenable = (p: PodInfo) => !p.mismatch && (inTunnel() || !!p.path)

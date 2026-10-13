@@ -6,6 +6,7 @@ import { on as onPod, request } from '../pod/rpc'
 import { navigate } from '../app/router'
 import { Modal } from '../ui/overlay'
 import { errorToast, toast } from '../ui/toast'
+import { copyText } from '../ui/clipboard'
 import { Icon } from '../ui/icons'
 import { PodStatus } from './ProjectPage'
 import { openSettings } from '../settings/SettingsModal'
@@ -15,6 +16,7 @@ import { IconEditor } from '../ui/IconEditor'
 import { OpenTunnels } from '../docker/OpenTunnels'
 import { gateway, gatewayHome, useLan } from '../state/lan'
 import { podOpenable, podURL, usePods, type PodInfo } from '../state/pods'
+import { askUpdate, updateOffer, type UpdateAnswer } from '../pod/update'
 
 interface Project {
   id: string
@@ -215,6 +217,28 @@ function PodBlock(props: { pod: PodInfo }) {
     const d = new Date(at)
     return t('seen {time}', { time: d.toLocaleString() })
   }
+  // *Update this pod*: only a pod running a release version has a version to offer, and only a pod
+  // the site says runs an older one is worth offering it to (the pod asked does the checking).
+  const [offer, setOffer] = createSignal<{ can: boolean; version: string } | null>(null)
+  const [answer, setAnswer] = createSignal<UpdateAnswer | null>(null)
+  const [busy, setBusy] = createSignal(false)
+  const outdated = () => p().mismatch === 'outdated' && !!offer()?.can
+  onMount(() => {
+    if (p().mismatch) void updateOffer().then(setOffer, () => {})
+  })
+  const runUpdate = async () => {
+    setBusy(true)
+    try {
+      const ans = await askUpdate(p().key, offer()!.version)
+      setAnswer(ans)
+      if (ans.status === 'running') toast(t('{name} updates: it comes back in a moment.', { name: p().name }), 'ok')
+      else if (ans.status === 'refused') errorToast(new Error(ans.message || t('the pod refused the request')))
+    } catch (e) {
+      errorToast(e)
+    } finally {
+      setBusy(false)
+    }
+  }
   return (
     <section class="lan-pod" classList={{ offline: !p().online }} data-testid="pod-block" data-name={p().name}>
       <div class="home-bar">
@@ -225,6 +249,11 @@ function PodBlock(props: { pod: PodInfo }) {
         <Show when={p().gateway}>
           <span class="badge" data-testid="pod-gateway">
             {t('gateway')}
+          </span>
+        </Show>
+        <Show when={p().mismatch}>
+          <span class="badge" data-testid="pod-mismatch">
+            {p().mismatch === 'outdated' ? t('older version') : t('newer version')}
           </span>
         </Show>
         <Show when={!p().online}>
@@ -255,7 +284,7 @@ function PodBlock(props: { pod: PodInfo }) {
               <Show
                 when={podOpenable(p())}
                 fallback={
-                  <div class="project-open" title={t('Opening the projects of another site comes with the next version')} data-testid="pod-project">
+                  <div class="project-open" title={p().mismatch ? t('{name} runs another multi-pod protocol: update it', { name: p().name }) : t('Opening the projects of another site comes with the next version')} data-testid="pod-project">
                     <span class="project-icon" />
                     <div class="project-info">
                       <div class="project-title">
@@ -286,6 +315,19 @@ function PodBlock(props: { pod: PodInfo }) {
           )}
         </For>
       </div>
+      <Show when={outdated()}>
+        <div class="home-bar" data-testid="pod-update">
+          <button class="btn" disabled={busy()} onClick={runUpdate}>{t('Update this pod')}</button>
+          <span class="muted small">{t('to {version}', { version: offer()!.version })}</span>
+        </div>
+      </Show>
+      <Show when={answer()?.status === 'not_service'}>
+        <div data-testid="pod-update-cmd">
+          <p class="small">{t('That pod does not run as the service: run this command there, then restart it:')}</p>
+          <pre class="mono small">{answer()!.command}</pre>
+          <button class="btn small" onClick={() => void copyText(answer()!.command ?? '')}>{t('Copy')}</button>
+        </div>
+      </Show>
     </section>
   )
 }

@@ -1906,5 +1906,14 @@
   "Test notification sent.": "Notification de test envoyée.",
   "Notifications are blocked for this site.": "Les notifications sont bloquées pour ce site.",
   "This browser shows notifications only from the installed app: add the page to the home screen, then open it from there.": "Ce navigateur n’affiche les notifications que depuis l’app installée : ajoutez la page à l’écran d’accueil, puis ouvrez-la depuis là.",
-  "push notifications are off on this relay": "les notifications push sont désactivées sur ce relay"
+  "push notifications are off on this relay": "les notifications push sont désactivées sur ce relay",
+  "older version": "version plus ancienne",
+  "newer version": "version plus récente",
+  "{name} runs another multi-pod protocol: update it": "{name} tourne sur un autre protocole multi-pod : mettez-le à jour",
+  "Update this pod": "Mettre à jour ce pod",
+  "to {version}": "à la version {version}",
+  "{name} updates: it comes back in a moment.": "{name} se met à jour : il revient dans un instant.",
+  "the pod refused the request": "le pod a refusé la demande",
+  "That pod does not run as the service: run this command there, then restart it:": "Ce pod ne tourne pas comme service : lancez cette commande sur sa machine, puis redémarrez-le :",
+  "This browser is not paired on this origin, or its passkey was not unlocked.": "Ce navigateur n’est pas appairé sur cette origine, ou sa clé d’accès n’a pas été déverrouillée."
 }

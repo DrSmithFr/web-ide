@@ -66,6 +66,7 @@ func main() {
 	relay := flag.String("relay", "", "relay URL the pod registers with (wss:// or ws://), or the word relay to enable")
 	preferred := flag.Bool("preferred", false, "make this pod the preferred gateway of its site: the browser opens the other pods through it")
 	multipodProtocol := flag.Int("multipod-protocol", multipod.Protocol, "the multi-pod protocol this pod speaks (tests: a pod of another one is listed with its version and never routed to)")
+	podVersion := flag.String("pod-version", "", "the version this pod reports (a build of the source tree reports a development version no pod will install: name the release this build stands for)")
 	forceTurn := flag.Bool("force-turn", false, "force the browser through TURN (no direct or STUN path)")
 	turnPort := flag.Int("turn-port", 0, "relay: the STUN/TURN control port (default 3478)")
 	turnIP := flag.String("turn-ip", "", "relay: the STUN/TURN IP given to clients (default: the machine IP)")
@@ -76,6 +77,9 @@ func main() {
 	flag.Parse()
 	if *name != "" {
 		podName = *name
+	}
+	if *podVersion != "" {
+		version = *podVersion
 	}
 	if *showVersion {
 		fmt.Println(version)
