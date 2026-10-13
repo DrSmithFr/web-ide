@@ -10,7 +10,7 @@ export const defaultPlacement: Record<Zone, string[]> = {
   left: ['explorer', 'search', 'git', 'kanban'],
   bottomLeft: ['console'],
   bottomRight: ['problems', 'docker'],
-  right: ['database', 'assistant', 'structure', 'conflicts', 'info'],
+  right: ['database', 'assistant', 'agents', 'structure', 'conflicts', 'info'],
 }
 
 export const toolIds = zones.flatMap((z) => defaultPlacement[z])

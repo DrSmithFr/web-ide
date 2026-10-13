@@ -28,6 +28,8 @@ import { AssistantTool } from '../llm/AssistantTool'
 import { ConflictsTool, StructureTool } from '../tools/tools'
 import { InfoTool } from '../tools/InfoTool'
 import { DockerTool } from '../docker/DockerTool'
+import { AgentsTool } from '../agents/AgentsTool'
+import { refreshAgents } from '../agents/state'
 import { openConflict } from '../conflict/ConflictDialog'
 import { openSettings } from '../settings/SettingsModal'
 import { actions, registerAction, runAction, shortcutOf } from '../keys/bindings'
@@ -56,6 +58,7 @@ export const toolPanels: Record<string, { label: string; icon: string; component
   docker: { label: 'Docker', icon: 'docker', component: DockerTool },
   database: { label: 'Database explorer', icon: 'database', component: DatabaseTool },
   assistant: { label: 'AI assistant', icon: 'sparkle', component: AssistantTool },
+  agents: { label: 'Agents', icon: 'comment', component: AgentsTool },
   structure: { label: 'Structure', icon: 'outline', component: StructureTool },
   conflicts: { label: 'Conflicts', icon: 'conflict', component: ConflictsTool },
   info: { label: 'Infos', icon: 'info', component: InfoTool },
@@ -216,7 +219,7 @@ const menus: [string, string[]][] = [
   ['menu|Navigate', ['search.everywhere', 'nav.recentFiles', '-', 'nav.back', 'nav.forward', '-', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', '-', 'nav.related', 'nav.test']],
   ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover', '-', 'lsp.rename', 'lsp.format', '-', 'edit.fold', 'edit.unfold', 'edit.foldAll', 'edit.unfoldAll']],
   ['menu|View', ['view.splitRight', 'view.splitDown', '-', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', '-', 'view.visualFocus', 'view.focusOutline', 'view.focusDim', '-', 'view.whitespace', 'view.wordWrap', 'view.markdown', '-', 'console.new', 'palette.open']],
-  ['menu|Tools', ['tool.explorer', 'tool.search', 'tool.git', 'tool.kanban', '-', 'tool.assistant', 'tool.database', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.console', 'tool.problems', 'tool.docker']],
+  ['menu|Tools', ['tool.explorer', 'tool.search', 'tool.git', 'tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.database', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.console', 'tool.problems', 'tool.docker']],
 ]
 
 // Menu entries switching a setting, shown with a check box.
@@ -624,6 +627,7 @@ export function ProjectPage(props: { id: string }) {
     onPod('pod.reconnected', async () => {
       await reopenProject()
       void refreshConsoles()
+      void refreshAgents()
       refreshConnections()
     }),
     // A worktree shown besides goes by itself (state/project).

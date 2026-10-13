@@ -143,6 +143,7 @@ func (s *Server) Init() {
 	s.registerTunnels()
 	s.registerIdeDir()
 	s.registerCommands()
+	s.registerAgents()
 	s.registerPreviews()
 	s.registerKanban()
 	s.registerKanbanGit()
