@@ -68,6 +68,8 @@ type Info struct {
 	// AutoOpen overrides for this session the setting that opens its questions by themselves
 	// (nil: the setting).
 	AutoOpen *bool `json:"autoOpen,omitempty"`
+	// Follow: the pages open the file of each edit the agent makes.
+	Follow bool `json:"follow,omitempty"`
 	// Queue: the prompts waiting for the end of the turn; Caps: what the prompts may hold
 	// (prompt.go).
 	Queue []QueuedInfo `json:"queue,omitempty"`
@@ -303,6 +305,7 @@ func (s *Session) start(load bool) {
 func (s *Session) open(load bool) error {
 	res, err := s.call("initialize", map[string]any{
 		"protocolVersion": 1,
+		// No file system or terminals: Claude, opencode and pi use their own tools (spike of #69).
 		"clientCapabilities": map[string]any{"fs": map[string]bool{"readTextFile": false, "writeTextFile": false}, "terminal": false,
 			// Forms of questions (elicitation/create): Claude's AskUserQuestion comes this way.
 			"elicitation": map[string]any{"form": map[string]any{}}},
@@ -436,7 +439,7 @@ func (s *Session) agentRequest(m message) {
 		}
 		_ = json.Unmarshal(m.Params, &p)
 		if p.ToolCall.ToolCallID != "" {
-			s.entry(s.th.applyTool(p.ToolCall))
+			s.entry(s.th.applyTool(p.ToolCall, s.info.Cwd))
 		}
 		title := ""
 		if p.ToolCall.Title != nil {
@@ -473,7 +476,7 @@ func (s *Session) apply(raw json.RawMessage) {
 	case "tool_call", "tool_call_update":
 		var w wireToolCall
 		if json.Unmarshal(raw, &w) == nil && w.ToolCallID != "" {
-			s.entry(s.th.applyTool(w))
+			s.entry(s.th.applyTool(w, s.info.Cwd))
 		}
 	case "plan":
 		s.entry(s.th.setPlan(u.Entries))
@@ -633,6 +636,16 @@ func (s *Session) SetConfig(id, value string) error {
 	}
 	s.changed()
 	return nil
+}
+
+// SetFollow turns the follow mode of the session on or off.
+func (s *Session) SetFollow(v bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.info.Follow != v {
+		s.info.Follow = v
+		s.changed()
+	}
 }
 
 // Restart starts again an agent stopped by its crashes.

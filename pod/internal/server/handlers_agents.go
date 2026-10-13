@@ -127,6 +127,15 @@ func (s *Server) registerAgents() {
 		}
 		return nil, sess.SetConfig(a.Config, a.Value)
 	}))
+	// agents.follow: the page opens the file of each edit of the session.
+	s.handle("agents.follow", withSession(func(sess *acp.Session, p json.RawMessage) (any, error) {
+		a, err := bind[struct{ Value bool }](p)
+		if err != nil {
+			return nil, err
+		}
+		sess.SetFollow(a.Value)
+		return nil, nil
+	}))
 	s.handle("agents.restart", withSession(func(sess *acp.Session, p json.RawMessage) (any, error) {
 		return nil, sess.Restart()
 	}))

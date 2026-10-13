@@ -14,6 +14,7 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 - Agents tool: the message box of the assistant for the sessions — `@` files, `/` the commands the agent announces, images, files and doodles sent as ACP content blocks, a queue for the prompts sent during a turn (kept by the pod), ↑ / ↓ history, the agent's settings in its bar, the phone layout.
 - Kanban: a *Development agent* setting (assistant, or Claude Code / opencode / pi of the Agents tool). With an agent, *Start development* opens one session per ticket in its worktree, briefed with the ticket; corrections go to the same session; the ticket opens it; removing the worktree ends it. Every agent session gets the MCP server of the IDE (kanban tools), and `kanban_get` / `kanban_conversation` / `/review-dev` read the session.
 - Questions tool: every question waiting for you (permissions and forms of the Agents sessions — Claude's AskUserQuestion included —, `ask_user` of the assistant, and a new MCP `ask_user` for the CLI agents) in one list, and a modal with the last message of the agent that opens by itself when the question is not on screen (a setting, an override per session); a push notification on a new question.
+- Agents tool: a follow mode per session (the eye of the message box) opens in the editor each file the agent edits, for Claude Code, opencode and pi.
 
 ### Changed
 

@@ -18,6 +18,7 @@ import {
   closeAgent,
   createAgent,
   diffLines,
+  followAgent,
   installAgent,
   loadThread,
   restartAgent,
@@ -377,7 +378,7 @@ function ToolView(props: { entry: Entry }) {
   )
 }
 
-/** The menu of a tab: whether its questions open by themselves. */
+/** The menu of a tab: whether its questions open by themselves, the follow mode. */
 function tabMenu(e: MouseEvent, s: AgentInfo) {
   e.preventDefault()
   const set = (value: boolean | null) => void requestIn(s.project, 'agents.autoOpen', { id: s.id, value }).catch(errorToast)
@@ -385,6 +386,8 @@ function tabMenu(e: MouseEvent, s: AgentInfo) {
     { label: t('Its questions open as the setting says'), checked: s.autoOpen === undefined, action: () => set(null) },
     { label: t('Its questions always open by themselves'), checked: s.autoOpen === true, action: () => set(true) },
     { label: t('Its questions never open by themselves'), checked: s.autoOpen === false, action: () => set(false) },
+    { separator: true, label: '' },
+    { label: t('Follow the edits'), hint: t('open each file the agent edits'), checked: !!s.follow, action: () => void followAgent(s.id, !s.follow).catch(errorToast) },
   ])
 }
 
