@@ -48,6 +48,7 @@ const b64d = (s: string) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_
 interface Identity {
   openStore(): Promise<IDBDatabase>
   unlock(db: IDBDatabase): Promise<{ rec: any; key: CryptoKey } | null>
+  resume(db: IDBDatabase): Promise<{ rec: any; key: CryptoKey } | null>
   sign(key: CryptoKey, msg: string): Promise<string>
 }
 
@@ -57,7 +58,9 @@ const IDENTITY_PATH = '/_relay/identity.js'
 /** A request to the relay signed by the device key, with its certificate. */
 async function signed(path: string, action: string, target: string, body: Record<string, string>) {
   const id = (await import(/* @vite-ignore */ IDENTITY_PATH)) as unknown as Identity
-  const d = await id.unlock(await id.openStore())
+  // The session of the device (an hour after its last use) signs without asking the passkey.
+  const db = await id.openStore()
+  const d = (await id.resume(db)) ?? (await id.unlock(db))
   if (!d?.rec?.cert) throw new Error('This device is not paired on this origin, or its passkey was not unlocked.')
   const created = Date.now()
   const sig = await id.sign(d.key, `web-ide push v1|${action}|${target}|${created}`)

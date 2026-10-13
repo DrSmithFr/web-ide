@@ -447,6 +447,85 @@ export async function unlock(db) {
   return null
 }
 
+// --- the unlocked session ---
+
+// A device unlocked by its passkey stays unlocked an hour after its last use, so a reload or
+// the installed app opening again does not ask the passkey. Only the signing key of the device
+// is kept, as a non-extractable CryptoKey: never the seed, the PRF, the account key or the sync
+// seed, so an admin action still asks the passkey. Its own database: the one of the devices
+// keeps its version, which an older copy of this module (a pod of the LAN) must still open.
+const SessionDB = 'webide-session'
+export const SessionTTL = 60 * 60 * 1000
+
+function sessions() {
+  return new Promise((resolve, reject) => {
+    const r = indexedDB.open(SessionDB, 1)
+    r.onupgradeneeded = () => r.result.createObjectStore('session')
+    r.onsuccess = () => resolve(r.result)
+    r.onerror = () => reject(r.error)
+  })
+}
+
+async function sessionOp(mode, fn) {
+  const s = await sessions()
+  try {
+    return await new Promise((resolve, reject) => {
+      const t = s.transaction('session', mode)
+      const q = fn(t.objectStore('session'))
+      t.oncomplete = () => resolve(q?.result)
+      t.onerror = () => reject(t.error)
+    })
+  } finally {
+    s.close()
+  }
+}
+
+// keepUnlocked starts the session of a paired device (its key must be non-extractable).
+export async function keepUnlocked(rec, key) {
+  if (!rec?.cert || !key || key.extractable) return
+  await sessionOp('readwrite', (st) => st.put({ device: rec.key, key, until: Date.now() + SessionTTL }, rec.key))
+}
+
+// resume returns the device of a session still running, { rec, key }, and moves its end an hour
+// later; null when there is none. An expired session is deleted.
+export async function resume(db) {
+  let all = []
+  try {
+    all = (await sessionOp('readonly', (st) => st.getAll())) ?? []
+  } catch {
+    return null
+  }
+  const now = Date.now()
+  for (const s of all) {
+    if (s.until <= now) {
+      await sessionOp('readwrite', (st) => st.delete(s.device))
+      continue
+    }
+    const rec = await load(db, s.device)
+    if (!rec?.cert) continue
+    await sessionOp('readwrite', (st) => st.put({ ...s, until: now + SessionTTL }, s.device))
+    return { rec, key: s.key }
+  }
+  return null
+}
+
+// touch moves the end of the running sessions an hour later: the page calls it while it is used.
+export async function touch() {
+  try {
+    const now = Date.now()
+    for (const s of (await sessionOp('readonly', (st) => st.getAll())) ?? []) {
+      if (s.until > now) await sessionOp('readwrite', (st) => st.put({ ...s, until: now + SessionTTL }, s.device))
+    }
+  } catch {}
+}
+
+// lock ends every session of this origin: the next page asks the passkey again.
+export async function lock() {
+  try {
+    await sessionOp('readwrite', (st) => st.clear())
+  } catch {}
+}
+
 // The account key of an admin device, unwrapped for the session: the only key that can sign a
 // certificate or a revocation list.
 export async function accountKey(rec, prf) {

@@ -29,8 +29,25 @@ const VA = {
 async function authenticator(page) {
   const cdp = await page.context().newCDPSession(page)
   await cdp.send('WebAuthn.enable')
-  await cdp.send('WebAuthn.addVirtualAuthenticator', { options: VA })
+  const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', { options: VA })
+  return { cdp, authenticatorId }
 }
+
+/** How many times the passkeys of an authenticator were used: each assertion moves the count. */
+async function assertions(a) {
+  const { credentials } = await a.cdp.send('WebAuthn.getCredentials', { authenticatorId: a.authenticatorId })
+  return credentials.reduce((n, c) => n + c.signCount, 0)
+}
+
+/** The unlocked sessions this origin keeps (identity.js, keepUnlocked). */
+const sessionsOf = (page) => page.evaluate(() => new Promise((resolve) => {
+  const r = indexedDB.open('webide-session', 1)
+  r.onupgradeneeded = () => r.result.createObjectStore('session')
+  r.onsuccess = () => {
+    const q = r.result.transaction('session').objectStore('session').getAll()
+    q.onsuccess = () => resolve(q.result.map((s) => ({ device: s.device, until: s.until, extractable: s.key.extractable })))
+  }
+}))
 
 /** Runs "pair create" to the end: reads the phrase (eight numbered rows of three words), the
  * positions asked back, answers them with answer(positions, phrase), and returns the phrase
@@ -144,15 +161,15 @@ run(
     // it is registered with the relay.
     execFileSync('bash', [process.env.E2E_RESTART_POD])
     assert(await waitOnline(), 'the restarted pod is online at the relay')
-    await authenticator(page)
+    const auth1 = await authenticator(page)
 
     // 3. Browser 1 pairs with the phrase and becomes an admin (virtual authenticator, PRF).
     // An origin with no device and no token must show the phrase form: the wordlist is part
     // of that path (a missing wordlist leaves the page on the spinner).
     const msg = await open(page, `${ORIGIN}/#pod=${POD_ID}`)
-    assert(msg.includes('No device on this origin'), 'the phrase form shows up on an unpaired origin: ' + msg)
-    await page.waitForSelector('#pair input', { timeout: 20000 })
-    await page.fill('#pair input', phrase)
+    assert(msg.includes('No device is paired in this browser'), 'the phrase form shows up on an unpaired origin: ' + msg)
+    await page.waitForSelector('#phrase', { timeout: 20000 })
+    await page.fill('#phrase', phrase)
     await page.keyboard.press('Enter')
     await page.waitForSelector('#frame', { timeout: 30000 })
     const b1 = await page.evaluate(async () => {
@@ -233,8 +250,89 @@ run(
     assert(refused.includes('Device revoked'), 'the revoked device is refused: ' + refused)
     assert(await page.waitForSelector('#frame'), 'the admin device is still connected')
 
+    // The revoked device ended its session: it would not open a pod even before the refusal.
+    assert((await sessionsOf(page2)).length === 0, 'a revoked device keeps no session')
+
+    // 8. The device stays unlocked an hour after its last use: a reload opens the pods without
+    // the passkey, and only a non-extractable key is kept.
+    const sess = await sessionsOf(page)
+    assert(sess.length === 1 && sess[0].device === b1.device && !sess[0].extractable, 'one session, a non-extractable key: ' + JSON.stringify(sess))
+    assert(sess[0].until > Date.now() + 50 * 60 * 1000, 'the session runs an hour')
+    const before = await assertions(auth1)
+    let msg8 = await open(page, `${ORIGIN}/#pod=${POD_ID}`)
+    assert(await page.isVisible('#frame'), 'the reload opens the app: ' + msg8)
+    assert((await assertions(auth1)) === before, 'a reload within the hour does not ask the passkey')
+
+    // An hour gone by: the passkey is asked again.
+    await page.evaluate(() => new Promise((resolve) => {
+      const r = indexedDB.open('webide-session', 1)
+      r.onsuccess = () => {
+        const st = r.result.transaction('session', 'readwrite').objectStore('session')
+        const q = st.getAll()
+        q.onsuccess = () => { for (const s of q.result) st.put({ ...s, until: Date.now() - 1000 }, s.device); resolve() }
+      }
+    }))
+    msg8 = await open(page, `${ORIGIN}/#pod=${POD_ID}`)
+    assert(await page.isVisible('#frame'), 'the expired session unlocks with the passkey: ' + msg8)
+    assert((await assertions(auth1)) > before, 'an expired session asks the passkey')
+
+    // 9. A passkey not given (dismissed, or a browser that wants a click first) shows the unlock
+    // view and its button; the button unlocks. The first prompt of the page is refused once.
+    const used = await assertions(auth1)
+    await page.context().addInitScript(() => {
+      if (sessionStorage.getItem('dismissOnce') !== '1') return
+      sessionStorage.removeItem('dismissOnce')
+      const get = navigator.credentials.get.bind(navigator.credentials)
+      let first = true
+      navigator.credentials.get = (o) => {
+        if (!first) return get(o)
+        first = false
+        return Promise.reject(new DOMException('dismissed', 'NotAllowedError'))
+      }
+    })
+    await page.evaluate(async () => {
+      sessionStorage.setItem('dismissOnce', '1')
+      await (await import('/_relay/identity.js')).lock()
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await page.waitForSelector('#msg button:has-text("Unlock with your passkey")', { timeout: 20000 })
+    assert((await page.textContent('#msg')).includes(b1.fp.split(' ')[0]), 'the unlock view shows the fingerprint of the device')
+    await page.click('#msg button:has-text("Unlock with your passkey")')
+    await page.waitForSelector('#frame', { state: 'visible', timeout: 30000 })
+    assert((await assertions(auth1)) > used, 'the button asks the passkey')
+
+    // 10. Lock in Settings > Remote access > Devices ends the session at once.
+    const app10 = page.mainFrame().childFrames()[0]
+    await app10.waitForSelector('.menubar, .home .home-bar', { timeout: 30000 })
+    if (!(await app10.locator('.menubar').count())) {
+      if (await app10.locator('.project-open:has-text("demo")').count()) await app10.click('.project-open:has-text("demo")')
+      else await app10.click('.ws-dir:has-text("demo")')
+      await app10.waitForSelector('.menubar', { timeout: 30000 })
+    }
+    await app10.click('.menubar button[title^="Settings"]')
+    await app10.click('.settings-nav button:has-text("Remote access")')
+    await app10.click('[data-testid=lock-device]', { timeout: 20000 })
+    await app10.waitForSelector('.toast:has-text("locked")', { timeout: 15000 })
+    assert((await sessionsOf(page)).length === 0, 'Lock ends the session')
+
+    // 11. The welcome view of an origin with no device: the three ways in, and the phrase is
+    // checked as it is typed.
+    const ctx4 = await ctx.browser().newContext({ locale: process.env.E2E_LOCALE ?? 'en-US' })
+    const page4 = await ctx4.newPage()
+    await authenticator(page4)
+    await page4.goto(`${ORIGIN}/`, { waitUntil: 'domcontentloaded' })
+    await page4.waitForSelector('#phrase', { timeout: 20000 })
+    const welcome = await page4.textContent('#msg')
+    assert(welcome.includes('Your machines, from any browser') && welcome.includes('I have an invite link') && welcome.includes('New here?'), 'the welcome view: ' + welcome.slice(0, 200))
+    await page4.fill('#phrase', phrase.split(' ').slice(0, 23).join(' ') + ' notaword')
+    await page4.waitForSelector('#phrase-check .bad', { timeout: 5000 })
+    await page4.fill('#phrase', phrase)
+    await page4.waitForSelector('#phrase-check .good', { timeout: 5000 })
+    assert(!(await page4.evaluate(() => document.querySelector('[href^="http"]:not([href^="https://github.com/"])'))), 'no link out of the page but the docs')
+
     await ctx2.close()
     await ctx3.close()
+    await ctx4.close()
     if (errors.length) assert(false, 'page errors:\n    ' + errors.join('\n    '))
   },
   { url: `${ORIGIN}/#pod=${POD_ID}` },

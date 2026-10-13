@@ -47,3 +47,39 @@ func TestAppFiles(t *testing.T) {
 		t.Fatal("the bootstrap page links the manifest")
 	}
 }
+
+// TestBootstrapPage: the page, its script and its styles are served, and none of them loads a
+// resource from another origin or carries a script inline (the page must fit a strict CSP).
+func TestBootstrapPage(t *testing.T) {
+	st, _ := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
+	t.Cleanup(func() { st.Close() })
+	ts := httptest.NewServer(New(st, nil).Handler())
+	t.Cleanup(ts.Close)
+	for path, ct := range map[string]string{
+		"/":                     "text/html",
+		"/_relay/bootstrap.css": "text/css",
+		"/_relay/bootstrap.js":  "text/javascript",
+	} {
+		r, err := http.Get(ts.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(r.Body)
+		r.Body.Close()
+		body := string(b)
+		if r.StatusCode != 200 || !strings.HasPrefix(r.Header.Get("Content-Type"), ct) {
+			t.Fatalf("%s: %d %q", path, r.StatusCode, r.Header.Get("Content-Type"))
+		}
+		for _, bad := range []string{"@import", "url(http", `src="http`, `href="http`} {
+			if strings.Contains(body, bad) {
+				t.Fatalf("%s loads something from another origin: %q", path, bad)
+			}
+		}
+		if path == "/" && (strings.Contains(body, "<script>") || strings.Contains(body, "<style")) {
+			t.Fatal("the page carries a script or styles inline")
+		}
+		if path == "/_relay/bootstrap.js" && strings.Contains(body, "innerHTML") {
+			t.Fatal("the page builds HTML from strings")
+		}
+	}
+}

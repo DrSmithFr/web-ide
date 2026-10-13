@@ -40,6 +40,36 @@ const words = {
   waiting: fr ? 'En attente de l’approbation d’un administrateur…' : 'Waiting for an admin to approve…',
   paired: fr ? 'Apparié.' : 'Paired.',
   unlock: fr ? 'Déverrouillage de la clé de l’appareil…' : 'Unlocking the device key…',
+  welcome: fr ? 'Vos machines, depuis n’importe quel navigateur' : 'Your machines, from any browser',
+  lead: fr ? 'Ouvrez l’IDE de vos pods d’ici, chiffré de bout en bout. Rien à installer sur cet appareil.' : 'Open the IDE of your pods from here, end-to-end encrypted. Nothing to install on this device.',
+  nodevice: fr ? 'Aucun appareil n’est encore apparié dans ce navigateur.' : 'No device is paired in this browser yet.',
+  restore: fr ? 'Restaurer avec votre phrase de récupération' : 'Restore with your recovery phrase',
+  wordsOf: fr ? '{n} mots' : '{n} words',
+  phraseOk: fr ? 'Phrase valide' : 'Valid phrase',
+  pairThis: fr ? 'Apparier ce navigateur' : 'Pair this browser',
+  pairing: fr ? 'Appariement…' : 'Pairing…',
+  invite: fr ? 'J’ai un lien d’invitation' : 'I have an invite link',
+  inviteHow: fr ? 'Sur un appareil déjà apparié, ouvrez Réglages › Accès distant › Appareils › Inviter un appareil, puis ouvrez le lien ou scannez le QR code avec cet appareil.' : 'On a paired device, open Settings › Remote access › Devices › Invite a device, then open the link or scan the QR code with this device.',
+  newHere: fr ? 'Nouveau ici ?' : 'New here?',
+  newHow: fr ? 'Installez le pod sur votre machine :' : 'Install the pod on your machine:',
+  newCreate: fr ? 'puis créez votre compte, qui affiche votre phrase de récupération une seule fois :' : 'then create your account, which shows your recovery phrase once:',
+  newBack: fr ? 'Revenez ici et restaurez avec cette phrase.' : 'Come back here and restore with that phrase.',
+  docs: fr ? 'Documentation' : 'Documentation',
+  locked: fr ? 'Appareil verrouillé' : 'Device locked',
+  unlockWith: fr ? 'Déverrouiller avec votre clé d’accès' : 'Unlock with your passkey',
+  unlockKeep: fr ? 'Il reste déverrouillé une heure après sa dernière utilisation.' : 'It stays unlocked for an hour after its last use.',
+  usePhrase: fr ? 'Utiliser la phrase de récupération' : 'Use the recovery phrase instead',
+  lock: fr ? 'Verrouiller' : 'Lock',
+  retry: fr ? 'Réessayer' : 'Retry',
+  newDevice: fr ? 'Nouvel appareil' : 'New device',
+  approveOn: fr ? 'Approuvez-le sur un appareil administrateur : Réglages › Accès distant › Appareils.' : 'Approve it on an admin device: Settings › Remote access › Devices.',
+  stepRelay: fr ? 'Relay' : 'Relay',
+  stepPod: fr ? 'Pod' : 'Pod',
+  stepSecure: fr ? 'Liaison chiffrée' : 'Secure handshake',
+  account: fr ? 'Votre compte' : 'Your account',
+  podsOff: fr ? 'Aucun pod en ligne' : 'No pod online',
+  podsOffHow: fr ? 'Démarrez un pod de ce compte, ou vérifiez qu’il est relié à ce relay.' : 'Start a pod of this account, or check that it is linked to this relay.',
+  oops: fr ? 'Connexion impossible' : 'Cannot connect',
 }
 // The texts the page shows for what the pod or the identity module answers: the handshake
 // codes (tunnel.Code*) and the error keys of the identity module, the same words as the pod's
@@ -60,14 +90,117 @@ const texts = {
   'the approval did not come': fr ? "L'approbation n'est pas venue." : 'The approval did not come.',
   'the relay is not reachable': fr ? 'Le relay est injoignable.' : 'The relay is not reachable.',
   'the wordlist is not reachable': fr ? 'La liste de mots est injoignable.' : 'The wordlist is not reachable.',
+  'the checksum of the phrase does not match': fr ? 'La somme de contrôle de la phrase ne correspond pas : un mot est faux.' : 'The checksum of the phrase does not match: a word is wrong.',
+  'a phrase is 12, 15, 18, 21 or 24 words': fr ? 'Une phrase fait 12, 15, 18, 21 ou 24 mots.' : 'A phrase is 12, 15, 18, 21 or 24 words.',
   'the passkey did not give its PRF (WebAuthn PRF is required)': fr ? 'La clé d’accès n’a pas donné sa PRF (WebAuthn PRF est nécessaire).' : 'The passkey did not give its PRF (WebAuthn PRF is required).',
 }
 const lang = fr ? 'fr' : 'en'
 const text = (key) => texts[key] ?? key
-const status = (html) => { const el = document.getElementById('msg'); if (el) el.innerHTML = html }
+// The checks of a phrase, one of them naming the word that is not in the list.
+const phraseError = (err) => {
+  const m = /^"(.*)" is not a BIP39 word$/.exec(err)
+  if (m) return fr ? `« ${m[1]} » n’est pas un mot BIP39` : err
+  return text(err)
+}
+const fmt = (s, v) => s.replace(/\{(\w+)\}/g, (_, k) => String(v[k] ?? ''))
+
+// --- the views of the page ---
+//
+// Every state of the page is a view drawn in the card (#msg). They are built from DOM nodes,
+// never from HTML strings: the names of pods and the messages of a pod or of the relay are not
+// ours to trust.
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag)
+  for (const [k, v] of Object.entries(attrs ?? {})) {
+    if (v == null || v === false) continue
+    if (k.startsWith('on')) el.addEventListener(k.slice(2), v)
+    else if (k === 'class') el.className = v
+    else el.setAttribute(k, v === true ? '' : v)
+  }
+  for (const c of kids.flat()) if (c != null && c !== false) el.append(c)
+  return el
+}
+const svg = (d) => {
+  const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  s.setAttribute('viewBox', '0 0 24 24')
+  s.setAttribute('aria-hidden', 'true')
+  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  p.setAttribute('d', d)
+  s.append(p)
+  return s
+}
+const ICON_LOCK = 'M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3'
+
+let view = ''
+function draw(name, ...nodes) {
+  view = name
+  const el = document.getElementById('msg')
+  if (!el) return
+  el.replaceChildren(...nodes.flat())
+  drawFoot()
+}
+// The words of a fingerprint, each in its own box: easier to compare from one screen to another.
+const fpWords = (fp, big) => h('div', { class: big ? 'fp big' : 'fp' }, (fp ?? '').split(' ').flatMap((w, i) => (i ? [' ', h('span', {}, w)] : [h('span', {}, w)])))
+
+// The footer: the relay this page belongs to, and Lock while the device is unlocked.
+function drawFoot() {
+  const f = document.getElementById('foot')
+  if (!f) return
+  const unlocked = !!(key && rec?.cert)
+  f.hidden = false
+  f.replaceChildren(
+    h('span', {}, location.host),
+    unlocked ? h('button', { class: 'link', type: 'button', onclick: () => void lockNow() }, words.lock) : '',
+  )
+}
+
+// The brand: antennae.space shows its name, a relay of one's own its host.
+function drawBrand() {
+  const host = location.hostname
+  const own = /^[\d.]+$|^\[|^localhost$/.test(host) ? 'Web IDE' : host.split('.')[0]
+  const b = document.getElementById('brand')
+  if (b) b.textContent = own
+  const hs = document.getElementById('host')
+  const remote = fr ? 'accès distant' : 'remote access'
+  if (hs) hs.textContent = own === 'Web IDE' ? remote : 'Web IDE · ' + remote
+}
+
+// The connection, in three steps: the relay, the pod, the secure handshake.
+let stepAt = 0
+let stepPod = ''
+function connecting(step, name) {
+  if (failed || view === 'error' || view === 'offline') return
+  stepAt = step ?? stepAt
+  if (name) stepPod = name
+  const labels = [words.stepRelay, words.stepPod + (stepPod ? ' ' : ''), words.stepSecure]
+  draw('connecting',
+    h('h1', {}, words.connecting),
+    h('ol', { class: 'steps' }, labels.map((l, i) =>
+      h('li', { class: i < stepAt ? 'done' : i === stepAt ? 'now' : '' },
+        h('span', { class: 'dot' }), h('span', {}, l, i === 1 && stepPod ? h('b', {}, stepPod) : '')))),
+  )
+}
+const busy = (line) => draw('busy', h('div', { class: 'spin' }), h('p', { class: 'center muted' }, line))
+// A page of the window that lost its channel: said in the card, without ending the window.
+const notice = (m) => draw('error', h('div', { class: 'err' }, m))
+
 let failed = false
 let lastError = null
-const fail = (m) => { failed = true; lastError = m; status('<div class="err">' + m + '</div>') }
+// An error: what happened, and what to do about it. A revoked device ends its session and is
+// offered the phrase; anything else can be retried.
+function fail(m) {
+  failed = true
+  lastError = m
+  const revokedNow = m === text('revoked') || m === text('device revoked')
+  if (revokedNow) void id.lock()
+  draw('error',
+    h('h1', {}, words.oops),
+    h('div', { class: 'err' }, m),
+    h('div', { class: 'actions' },
+      h('button', { class: 'btn primary', type: 'button', onclick: () => location.reload() }, words.retry),
+      revokedNow ? h('button', { class: 'btn', type: 'button', onclick: () => { failed = false; showPhraseForm() } }, words.usePhrase) : ''),
+  )
+}
 
 function remembered() {
   try {
@@ -237,14 +370,20 @@ async function applyRevocations(l) {
 // is online and which pod it elected for each site — it is only the courier, the names come from
 // the certificates this device already verified. The site used last wins, else the first site.
 async function enterSite(l) {
-  const m = await l.recv('pods')
-  pods = m.pods ?? []
+  await firstPods(l)
   if (!pods.length) {
     l.send({ type: 'devices' })
     const d = await l.recv('devices')
     const names = (d.devices ?? []).filter((x) => x.cert?.kind === id.KindPod).map((x) => x.cert.name)
     if (!names.length) return fail(words.nopod)
-    return fail(words.nopodonline + names.map((n) => '<b>' + n + '</b>').join(', '))
+    failed = true
+    lastError = words.nopodonline
+    draw('offline',
+      h('h1', {}, words.podsOff),
+      h('div', { class: 'err' }, words.nopodonline, names.join(', ')),
+      h('p', { class: 'muted small' }, words.podsOffHow),
+      h('div', { class: 'actions' }, h('button', { class: 'btn primary', type: 'button', onclick: () => location.reload() }, words.retry)))
+    return lastError
   }
   const chosen = enterGateway()
   rememberSite(chosen.site)
@@ -253,7 +392,7 @@ async function enterSite(l) {
   // The Service Worker answers the fetches of the app by finding the bootstrap page by its
   // "pod=": the pod picked here goes in the hash (a hash does not reload the page).
   location.hash = 'pod=' + pod
-  status('<div class="spin"></div>' + words.connecting + ' <b>' + (chosen.name || chosen.podId) + '</b>')
+  connecting(1, chosen.name || chosen.podId)
   return ''
 }
 
@@ -274,7 +413,14 @@ async function joinFlow(code, wl) {
   rec = id.newRecord(deviceId)
   rec.fp = await id.fingerprint(deviceId, wl)
   show()
-  status(`${words.device} <b>${rec.fp}</b><br><span class="small">${words.compare}</span>`)
+  const pairing = (waiting) => draw('pairing',
+    h('h1', {}, words.newDevice),
+    h('p', { class: 'muted' }, words.compare),
+    fpWords(rec.fp, true),
+    waiting ? h('div', { class: 'notice' }, h('div', { class: 'spin' })) : '',
+    h('p', { class: 'muted small center' }, waiting ? words.waiting : words.approveOn),
+    waiting ? h('p', { class: 'muted small center' }, words.approveOn) : '')
+  pairing(false)
   const l = await id.link(null, lang)
   l.send({ type: 'register', account: '', name: deviceName(), lang })
   const ready = await l.recv()
@@ -282,7 +428,7 @@ async function joinFlow(code, wl) {
   l.send({ type: 'pairAttach', code, key: deviceId, name: deviceName(), kind: id.KindBrowser })
   const p = await l.recv()
   if (p.type === 'error') return fail(text(p.message))
-  status(`${words.device} <b>${rec.fp}</b><br><span class="small">${words.waiting}</span>`)
+  pairing(true)
   const ok = await l.recv()
   if (ok.type === 'error') return fail(text(ok.message))
   const c = ok.pairing?.cert
@@ -297,21 +443,54 @@ async function joinFlow(code, wl) {
   await id.save(db, deviceId, rec)
   key = await id.keyFromSeed(deviceSeed, false)
   account = c.account
-  status(words.paired)
+  await id.keepUnlocked(rec, key)
+  busy(words.paired)
   return ''
 }
 
+// The welcome view of an origin with no device: what this page is, the recovery phrase to pair
+// this browser, and the two other ways in (an invite link, a first pod).
 function showPhraseForm() {
-  const f = document.getElementById('pair')
-  if (!f) return
-  status(words.pair)
-  f.hidden = false
-  const input = document.getElementById('phrase')
-  input.placeholder = words.phrase // the bootstrap page has its own words, not the app catalog
+  const input = h('textarea', {
+    id: 'phrase', rows: '4', autocomplete: 'off', autocapitalize: 'none', spellcheck: 'false',
+    placeholder: words.phrase, 'aria-describedby': 'phrase-check',
+  })
+  const count = h('span', {}, fmt(words.wordsOf, { n: 0 }))
+  const verdict = h('span', {})
+  const go = h('button', { class: 'btn primary block', type: 'submit' }, words.pairThis)
+  const form = h('form', { id: 'pair' },
+    h('label', { for: 'phrase' }, words.restore),
+    input,
+    h('div', { class: 'check', id: 'phrase-check' }, count, verdict),
+    go)
+  // The words are counted, and the BIP39 checksum checked, as they are typed.
+  let wl = null
+  const check = async () => {
+    const phrase = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean).join(' ')
+    const n = phrase ? phrase.split(' ').length : 0
+    count.textContent = fmt(words.wordsOf, { n })
+    verdict.className = ''
+    verdict.textContent = ''
+    if (![12, 15, 18, 21, 24].includes(n)) return
+    wl = wl ?? (await id.wordlist())
+    const err = await id.validatePhrase(phrase, wl)
+    verdict.className = err ? 'bad' : 'good'
+    verdict.textContent = err ? phraseError(err) : words.phraseOk
+  }
+  input.addEventListener('input', () => void check())
+  // Enter pairs, Shift+Enter is a new line.
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      form.requestSubmit()
+    }
+  })
   // The form must not submit: that would reload the page and lose the tunnel.
-  f.onsubmit = async (e) => {
+  form.addEventListener('submit', async (e) => {
     e.preventDefault()
     if (!input.value.trim()) return
+    go.disabled = true
+    go.textContent = words.pairing
     try {
       const d = await id.enroll(db, input.value.trim(), await id.wordlist(), deviceName(), id.KindBrowser)
       rec = d.rec
@@ -319,12 +498,61 @@ function showPhraseForm() {
       key = d.key
       account = rec.account
       show()
-      status(`${words.paired} <b>${rec.fp}</b>`)
+      await id.keepUnlocked(rec, key)
+      connecting(0)
       await enter('cert')
     } catch (err) {
       fail(text(err.message))
     }
-  }
+  })
+  const install = 'curl -fsSL https://raw.githubusercontent.com/DrSmithFr/web-ide/main/scripts/install.sh | sh'
+  draw('welcome',
+    h('h1', {}, words.welcome),
+    h('p', { class: 'lead' }, words.lead),
+    h('p', { class: 'muted small' }, words.nodevice),
+    form,
+    h('div', { class: 'ways' },
+      h('details', {}, h('summary', {}, words.invite), h('div', { class: 'body' }, words.inviteHow)),
+      h('details', {}, h('summary', {}, words.newHere), h('div', { class: 'body' },
+        words.newHow, h('code', { class: 'code' }, install),
+        words.newCreate, h('code', { class: 'code' }, 'web-ide-pod pair create'),
+        words.newBack, ' ',
+        h('a', { href: 'https://github.com/DrSmithFr/web-ide', target: '_blank', rel: 'noopener' }, words.docs)))),
+  )
+}
+
+// The unlock view: a device is paired here but its passkey was not given (dismissed, or a browser
+// that wants a click before it shows the prompt). Resolves with the unlocked device, or null when
+// the user goes for the phrase.
+function showUnlock(recs) {
+  return new Promise((resolve) => {
+    const r0 = recs[0]
+    const fp = h('div', {})
+    void id.wordlist().then((wl) => id.fingerprint(r0.key, wl)).then((f) => fp.replaceChildren(fpWords(f)), () => {})
+    const go = h('button', { class: 'btn primary block', type: 'button' }, words.unlockWith)
+    go.addEventListener('click', async () => {
+      go.disabled = true
+      const d = await id.unlock(db).catch(() => null)
+      go.disabled = false
+      if (d) resolve(d)
+    })
+    draw('unlock',
+      h('h1', {}, words.locked),
+      h('div', { class: 'device' },
+        h('div', { class: 'icon' }, svg(ICON_LOCK)),
+        h('div', {}, h('b', {}, r0.cert?.name || deviceName()), h('div', { class: 'muted small' }, words.account))),
+      fp,
+      go,
+      h('p', { class: 'muted small center' }, words.unlockKeep),
+      h('p', { class: 'center small' }, h('button', { class: 'link', type: 'button', onclick: () => resolve(null) }, words.usePhrase)))
+    go.focus()
+  })
+}
+
+// Lock: the session of this device ends now, the next page asks the passkey.
+async function lockNow() {
+  await id.lock()
+  location.reload()
 }
 
 // The link of the account: the proof of possession, the revocation list, the pods the relay
@@ -340,8 +568,7 @@ async function enter(mode) {
       const err = await enterSite(l)
       if (err) return err
     } else {
-      const m = await l.recv('pods')
-      pods = m.pods ?? []
+      await firstPods(l)
     }
   }
   if (!pod) return fail(words.nopod)
@@ -350,9 +577,18 @@ async function enter(mode) {
   entryPod = pod
   entrySite = p?.site ?? ''
   shownKey = entryKey
+  connecting(1, p?.name || pod)
   entry = await connect(entryKey, pod, mode)
   openApp()
   return ''
+}
+
+// The first pods list of the link. It can arrive while the page still writes the revocation list
+// to IndexedDB, before anyone waits for it: onPush has kept it then, and waiting for another one
+// would hang the page.
+let podsSeen = false
+async function firstPods(l) {
+  if (!podsSeen) await l.recv('pods')
 }
 
 // What the identity link pushes: the revocation list, and the pods of the account as the relay
@@ -360,6 +596,7 @@ async function enter(mode) {
 function onPush(m) {
   if (m.type === 'revocations' && m.list) revoked = m.list
   if (m.type === 'pods') {
+    podsSeen = true
     podsPrev = pods // the list before this one: who was with whom before the gateway left
     pods = m.pods ?? []
     syncSite()
@@ -375,6 +612,7 @@ function syncSite() {
 }
 
 async function main() {
+  drawBrand()
   const missing = await id.support()
   if (missing.length) return fail(words.needs + missing.join(', '))
 
@@ -399,8 +637,23 @@ async function main() {
     if (err) return
     if (!pod) return fail(words.nopod)
   } else {
-    status('<div class="spin"></div>' + words.connecting + (pod ? ' <b>' + pod + '</b>' : ''))
-    const d = await id.unlock(db)
+    connecting(0, pod ?? '')
+    // A session still running opens without the passkey; else the passkey, asked at once, and
+    // when it is not given, the unlock view and its button.
+    let d = await id.resume(db)
+    if (!d) {
+      const recs = await id.list(db)
+      if (recs.length) {
+        d = await id.unlock(db)
+        if (!d && !token) d = await showUnlock(recs)
+        if (d) await id.keepUnlocked(d.rec, d.key)
+        if (!d && !token) {
+          showPhraseForm()
+          return
+        }
+        connecting(0)
+      }
+    }
     if (d) {
       rec = d.rec
       rec.fp = await id.fingerprint(rec.key, wl)
@@ -536,6 +789,7 @@ async function start(t, ice) {
 // (a routed pod) is bound to the fingerprints of the tunnel it rides on.
 async function handshake(t, dc, mode, want, fpB, fpP) {
   await opened(dc)
+  if (t.key === entryKey && dc === t.rpc) connecting(2)
   fpB = fpB ?? fingerprint(t.pc.localDescription)
   fpP = fpP ?? fingerprint(t.pc.remoteDescription)
   // A channel that rides this tunnel is bound to the fingerprints of the tunnel itself.
@@ -617,14 +871,14 @@ function drop(t, msg) {
   if (tunnels.get(t.key) === t) tunnels.delete(t.key)
   t.reject?.(new Error(msg))
   if (t.key === entryKey) void failover()
-  else if (shownKey === t.key) status('<div class="err">' + msg + '</div>')
+  else if (shownKey === t.key) notice(msg)
 }
 
 // The gateway left: ask the relay who carries the site now and reconnect through it, with a
 // waiting time that grows. The pages of the pods reached directly are not touched.
 async function failover() {
   if (failed) return
-  status('<div class="spin"></div>' + words.reconnecting)
+  busy(words.reconnecting.trim())
   for (let i = 0; i < 6; i++) {
     await refreshPods()
     // The relay has not elected one yet: the pod this window was on is worth another try.
@@ -634,7 +888,7 @@ async function failover() {
       entryKey = g.key
       entryPod = g.podId
       rememberSite(g.site)
-      status('<div class="spin"></div>' + words.reconnecting + ' <b>' + (g.name || g.podId) + '</b>')
+      busy(words.reconnecting + (g.name || g.podId))
       try {
         entry = await connect(g.key, g.podId, entryMode)
         if (shownKey === old) {
@@ -680,7 +934,7 @@ async function refreshPods() {
 // and its rpc channel is a DataChannel of the tunnel of its pod. One origin for every pod: the
 // installed app never leaves it.
 function openApp() {
-  status(words.loading)
+  busy(words.loading)
   const f = document.getElementById('frame')
   f.style.display = 'block'
   f.src = (shownKey ? '/pod/' + shownKey : '') + (openPath ?? '/app')
@@ -808,7 +1062,7 @@ async function routedRPC(t, prefix) {
   t.routed.set(key, e)
   dc.onclose = () => {
     t.routed.delete(key)
-    if (shownKey === key) status('<div class="err">' + words.closed + '</div>')
+    if (shownKey === key) notice(words.closed)
   }
   return e
 }
@@ -848,6 +1102,15 @@ function httpFetch(t, d, prefix) {
 }
 
 function send(dc, obj) { frame(dc, new TextEncoder().encode(JSON.stringify(obj))) }
+
+// The session of the device lasts an hour after its last use: a page left open and looked at
+// keeps it going.
+setInterval(() => {
+  if (key && document.visibilityState === 'visible') void id.touch()
+}, 5 * 60 * 1000)
+document.addEventListener('visibilitychange', () => {
+  if (key && document.visibilityState === 'visible') void id.touch()
+})
 
 // A rejected flow (a passkey dismissed, the wordlist unreachable) must not leave the page
 // stuck on the spinner: the message names what failed.

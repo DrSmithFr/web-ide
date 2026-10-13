@@ -13,6 +13,7 @@ const IDENTITY_PATH = inTunnel() ? '/_relay/identity.js' : podPath('/_relay/iden
 interface Identity {
   openStore(): Promise<IDBDatabase>
   unlock(db: IDBDatabase): Promise<{ rec: any; key: CryptoKey } | null>
+  resume(db: IDBDatabase): Promise<{ rec: any; key: CryptoKey } | null>
   sign(key: CryptoKey, msg: string): Promise<string>
   canonicalUpdate(r: { v: number; pod: string; version: string; created: number }): string
 }
@@ -33,7 +34,9 @@ export async function updateOffer(): Promise<{ can: boolean; version: string }> 
 /** Signs the request with the device key of this browser and gives it to this pod to carry. */
 export async function askUpdate(podKey: string, version: string): Promise<UpdateAnswer> {
   const id = (await import(/* @vite-ignore */ IDENTITY_PATH)) as unknown as Identity
-  const d = await id.unlock(await id.openStore())
+  // The session of the device (an hour after its last use) signs without asking the passkey.
+  const db = await id.openStore()
+  const d = (await id.resume(db)) ?? (await id.unlock(db))
   if (!d?.rec?.cert) throw new Error(t('This browser is not paired on this origin, or its passkey was not unlocked.'))
   const req = { v: 1, pod: podKey, version, created: Date.now() }
   const sig = await id.sign(d.key, id.canonicalUpdate(req))

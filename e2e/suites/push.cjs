@@ -88,8 +88,8 @@ run(
 
     // Pair this browser with the phrase on the bootstrap page.
     await page.goto(`${ORIGIN}/#pod=${POD_ID}`, { waitUntil: 'domcontentloaded' })
-    await page.waitForSelector('#pair input', { timeout: 30000 })
-    await page.fill('#pair input', PHRASE)
+    await page.waitForSelector('#phrase', { timeout: 30000 })
+    await page.fill('#phrase', PHRASE)
     await page.keyboard.press('Enter')
     await page.waitForSelector('#frame', { state: 'visible', timeout: 30000 })
     const app = page.mainFrame().childFrames()[0]

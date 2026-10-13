@@ -16,6 +16,7 @@ var webFS embed.FS
 var (
 	bootstrapHTML []byte
 	bootstrapJS   []byte
+	bootstrapCSS  []byte
 	routesJS      []byte
 	swJS          []byte
 )
@@ -23,6 +24,7 @@ var (
 func init() {
 	bootstrapHTML, _ = io.ReadAll(mustRead("bootstrap.html"))
 	bootstrapJS, _ = io.ReadAll(mustRead("bootstrap.js"))
+	bootstrapCSS, _ = io.ReadAll(mustRead("bootstrap.css"))
 	routesJS, _ = io.ReadAll(mustRead("routes.js"))
 	swJS, _ = io.ReadAll(mustRead("sw.js"))
 }
@@ -45,6 +47,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/_relay/signal", s.serveSignal)
 	mux.HandleFunc("/_relay/identity", s.serveIdentity)
 	mux.HandleFunc("/_relay/bootstrap.js", staticJS(bootstrapJS))
+	// The styles of the page in a file of their own: nothing inline, so a strict CSP fits.
+	mux.HandleFunc("/_relay/bootstrap.css", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+		_, _ = w.Write(bootstrapCSS)
+	})
 	// The routing decisions of the bootstrap page, in their own module: the same file is run by
 	// node --test (scripts/routes-test.mjs) without a browser.
 	mux.HandleFunc("/_relay/routes.js", staticJS(routesJS))

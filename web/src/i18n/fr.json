@@ -1838,6 +1838,8 @@
   "revoked": "révoqué",
   "Revoke": "Révoquer",
   "Invite a device": "Inviter un appareil",
+  "Lock this device now": "Verrouiller cet appareil maintenant",
+  "This device is locked: the next page asks its passkey.": "Cet appareil est verrouillé : la prochaine page demandera sa clé d’accès.",
   "Fingerprint of this device: {fp}. Compare it with the one the joining device shows.": "Empreinte de cet appareil : {fp}. Comparez-la avec celle affichée par l'appareil qui rejoint.",
   "Copy the invite link": "Copier le lien d'invitation",
   "The sizes are those of this device. {device} uses the layout saved for new devices.": "Les tailles sont celles de cet appareil. {device} utilise la disposition enregistrée pour les nouveaux appareils.",
