@@ -109,6 +109,15 @@ Each question of `ask_user` has a type that picks its widget: `choice` (the defa
 
 One call may hold a small graph of questions: a question with an `id` is asked only when an option naming it in `next` is chosen (for an idea, `nextYes` / `nextNo`); the others are asked in order. The card walks the graph without the model and shows the answers that led to a question as a breadcrumb. A free answer, "Yes, but…" or "I don't know" on a question with branches leaves the anticipated path: the round is sent at once, and the model is told where the user left it and which questions were not asked. The pod refuses unknown ids and cycles.
 
+## Development by a CLI agent (Agents tool)
+
+The kanban settings choose the **development agent**: the integrated assistant (default) or a CLI agent installed for the Agents tool (Claude Code, opencode, pi; `meta.devAgent`).
+
+- With an agent, *Start development* creates the branch and the worktree as usual, then gives the ticket to the agent (`kanban.agent`): **one session per ticket** in the Agents tool, in the worktree, named `#<n> <title>`, whose first prompt is the briefing of the role (the instructions of `agent/texts.go`, the ticket in Markdown) followed by the message of the button. *Fix session*, *Fix feedbacks*, *New dev session* and the resolution of a rebase in the worktree send their briefing to the same session (refused while it works).
+- Every session of the Agents tool gets the **MCP server of the IDE** in `session/new` / `session/load` (`http`, `http://127.0.0.1:<port>/mcp`, the token as a bearer, named `web-ide` like the one users add to Claude Code, so it replaces it): the agent reaches the kanban tools with its worktree as `cwd`, which selects its ticket. pi has no MCP over HTTP: its sessions say so in a notice.
+- The ticket view shows an *Agent session* section with *Open the session* (also in *More actions*): the worktree in the window, the Agents tool on that tab. `kanban_get` lists it under *Agent session* with its id; `kanban_conversation` reads it (`chat`: that id); `/review-dev` reviews it, its comments going to the report (`kanban_reply` writes to conversations of the assistant only).
+- The worktree removed (merge, abandon), its sessions end, also when no window had it open (`acp.Purge`: their processes in the keeper, their files).
+
 ## Claude Code
 
 The pod serves an MCP endpoint (`POST /mcp`, the token of the pod as a bearer) so that Claude Code can work on the kanban next to the local assistant: a planning or a debug that needs a stronger model, a task to go faster. Setup, once:

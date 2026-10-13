@@ -6,6 +6,7 @@ import { Modal } from '../ui/overlay'
 import { errorToast } from '../ui/toast'
 import { copyText } from '../ui/clipboard'
 import { mcpAddCommand } from './claude'
+import { catalog } from '../agents/state'
 import { openCommands } from '../console/CommandsModal'
 import { commands, loadCommands } from '../console/commands'
 import {
@@ -191,6 +192,9 @@ export function Card(props: { tk: Summary; compact?: boolean; closed?: boolean }
 /** Settings of the kanban of the project (kept in its base). */
 function KanbanSettings(props: { onClose: () => void }) {
   const [base, setBase] = createSignal(board.meta.base ?? '')
+  const [agent, setAgent] = createSignal(board.meta.devAgent || 'assistant')
+  // The agents of the Agents tool that are installed (the one chosen stays listed).
+  const [agents] = createResource(() => catalog().then((c) => (c.local ? c.agents.filter((a) => a.installed || a.id === agent()) : []), () => []))
   const [mcp] = createResource(mcpAddCommand)
   // The setup of a new worktree: the project commands flagged setup.
   onMount(() => void loadCommands())
@@ -201,7 +205,7 @@ function KanbanSettings(props: { onClose: () => void }) {
       .join(', ')
   const save = async () => {
     try {
-      await setMeta({ base: base().trim() })
+      await setMeta({ base: base().trim(), devAgent: agent() })
       props.onClose()
     } catch (e) {
       errorToast(e)
@@ -226,6 +230,14 @@ function KanbanSettings(props: { onClose: () => void }) {
         <label class="field">
           <span>{t('Base of the ticket branches (empty: origin/main, else main)')}</span>
           <input class="mono" placeholder="origin/main" value={base()} onInput={(e) => setBase(e.currentTarget.value)} data-testid="kanban-base" />
+        </label>
+        <label class="field">
+          <span>{t('Development agent')}</span>
+          <select value={agent()} onChange={(e) => setAgent(e.currentTarget.value)} data-testid="kanban-dev-agent">
+            <option value="assistant">{t('AI assistant')}</option>
+            <For each={agents() ?? []}>{(a) => <option value={a.id}>{a.name}</option>}</For>
+          </select>
+          <span class="muted small">{t('Start development, corrections and conflicts of a worktree go to a session of this agent in the Agents tool, with the kanban tools of the IDE.')}</span>
         </label>
         <div class="field">
           <span>{t('Setup of a worktree')}</span>

@@ -35,6 +35,32 @@ type Deps struct {
 	Command func(agent string) ([]string, error)
 	Emit    func(event string, data any)
 	Version string
+	// MCP are the MCP servers given to the sessions (the one of the IDE), to the agents that
+	// support them over HTTP.
+	MCP []MCPServer
+}
+
+// MCPServer is an MCP server over HTTP as ACP passes it in session/new.
+type MCPServer struct {
+	Type    string   `json:"type"`
+	Name    string   `json:"name"`
+	URL     string   `json:"url"`
+	Headers []Header `json:"headers"`
+}
+
+type Header struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// Options of a new session.
+type Options struct {
+	// Title replaces the name of the agent (and the title the agent gives).
+	Title string
+	// Ticket the session works on.
+	Ticket int64
+	// Prompt is sent once the session is open.
+	Prompt string
 }
 
 type Manager struct {
@@ -184,7 +210,7 @@ func (m *Manager) restore() {
 			continue
 		}
 		s := m.newSession(sv.Info)
-		s.th.Entries, s.acp, s.canLoad, s.nextID = sv.Entries, sv.ACP, sv.CanLoad, sv.NextID
+		s.th.Entries, s.acp, s.canLoad, s.nextID, s.first = sv.Entries, sv.ACP, sv.CanLoad, sv.NextID, sv.First
 		s.reportedCost, s.subscription = sv.ReportedCost, sv.Subscription
 		s.th.index()
 		m.sessions[s.info.ID] = s
@@ -243,7 +269,10 @@ func (m *Manager) newSession(info Info) *Session {
 // ---------- API ----------
 
 // Create opens a session with an agent, in cwd (the project by default).
-func (m *Manager) Create(agent, cwd string) (Info, error) {
+func (m *Manager) Create(agent, cwd string) (Info, error) { return m.CreateWith(agent, cwd, Options{}) }
+
+// CreateWith opens a session with options (a ticket's session: its title, its briefing).
+func (m *Manager) CreateWith(agent, cwd string, o Options) (Info, error) {
 	a, ok := agentByID(agent)
 	if !ok {
 		return Info{}, i18n.Errorf("unknown agent: %s", agent)
@@ -254,7 +283,12 @@ func (m *Manager) Create(agent, cwd string) (Info, error) {
 	if cwd == "" {
 		cwd = m.Root
 	}
-	s := m.newSession(Info{ID: newID(), Agent: agent, Name: a.Name, Title: a.Name, Cwd: cwd, State: Starting, Started: time.Now().UnixMilli()})
+	title := a.Name
+	if o.Title != "" {
+		title = o.Title
+	}
+	s := m.newSession(Info{ID: newID(), Agent: agent, Name: a.Name, Title: title, Cwd: cwd, State: Starting, Started: time.Now().UnixMilli(), Ticket: o.Ticket})
+	s.first = o.Prompt
 	_ = os.MkdirAll(m.Dir, 0o700)
 	_ = os.WriteFile(m.logFile(s.info.ID), nil, 0o600)
 	m.mu.Lock()
@@ -357,4 +391,38 @@ func (m *Manager) Release() {
 		s.mu.Unlock()
 		s.q.close()
 	}
+}
+
+// Purge ends the sessions of a project that is not open (the worktree of a ticket removed):
+// their processes in the keeper and their files.
+func Purge(k *keeper.Client, owner, dir string) {
+	if k != nil {
+		if list, err := k.List(owner); err == nil {
+			for _, p := range list {
+				var mt procMeta
+				if !p.PTY && json.Unmarshal(p.Meta, &mt) == nil && mt.Agent != "" {
+					_ = k.Forget(p.ID)
+				}
+			}
+		}
+	}
+	_ = os.RemoveAll(dir)
+}
+
+// Find reads the saved sessions of a project (open or not) for the one of a ticket.
+func Find(dir string, ticket int64) (Info, []Entry, bool) {
+	files, _ := filepath.Glob(filepath.Join(dir, "*.json"))
+	var best saved
+	found := false
+	for _, f := range files {
+		var sv saved
+		data, err := os.ReadFile(f)
+		if err != nil || json.Unmarshal(data, &sv) != nil || sv.Info.Ticket != ticket {
+			continue
+		}
+		if !found || sv.Info.Started > best.Info.Started {
+			best, found = sv, true
+		}
+	}
+	return best.Info, best.Entries, found
 }

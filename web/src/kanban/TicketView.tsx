@@ -18,6 +18,7 @@ import { abandonTicket, ChatLink, PullRequest, recommended, routed, ticketAction
 import { aiLabel, aiSuffix, claudeLabel, claudeSuffix, tiers, type Tier } from './route'
 import { runClaude } from './claude'
 import { startWorkSession } from './sessions'
+import { TicketAgentSession } from './agentSession'
 import { LineageSection } from './Lineage'
 import { TicketAgentStats } from '../agents/stats'
 import { fmtDate, fmtSize, t } from '../i18n'
@@ -122,7 +123,12 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
           </Section>
         )
       case 'devChats':
-        return <TicketChats tk={tk()} roles={['dev', 'resolve']} title={t('Development conversations')} folded={folded(p)} />
+        return (
+          <>
+            <TicketAgentSession tk={tk()} />
+            <TicketChats tk={tk()} roles={['dev', 'resolve']} title={t('Development conversations')} folded={folded(p)} />
+          </>
+        )
       case 'test':
         return (
           <Section title={t('How to test')} folded={folded(p)}>

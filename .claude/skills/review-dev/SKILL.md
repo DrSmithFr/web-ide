@@ -1,6 +1,6 @@
 ---
 name: review-dev
-description: Reviews the developments in progress on the kanban of the Web IDE - each ticket In progress, its worktree and branch, its goals and its development conversation of the local assistant - then reports where each one is, what goes wrong, and comments in the conversations. Use when the user asks to check, follow or review the developments, the dev conversations or the tickets in progress.
+description: Reviews the developments in progress on the kanban of the Web IDE - each ticket In progress, its worktree and branch, its goals and its development conversation of the local assistant or its agent session (Agents tool) - then reports where each one is, what goes wrong, and comments in the conversations. Use when the user asks to check, follow or review the developments, the dev conversations or the tickets in progress.
 argument-hint: "[ticket numbers…] [--dry]"
 ---
 
@@ -17,11 +17,11 @@ Your part is to look, report, and comment in the conversations.
 With ticket numbers in the arguments, only those.
 
 For each one, `kanban_get`: branch, worktree, base, goals (done or not), notes, linked conversations.
-The conversation to review is the latest one with the role `dev`, `correction` or `resolve`.
+The conversation to review is the latest one with the role `dev`, `correction` or `resolve`; when the kanban develops with a CLI agent (Claude Code, opencode, pi in the Agents tool), it is the **Agent session** that `kanban_get` lists (its id).
 
 ## 2. The conversation
 
-`kanban_conversation` with `last: 60` and `tools: true`. Read it again with a larger `last` only if needed. Note:
+`kanban_conversation` with `last: 60` and `tools: true` (`chat`: the conversation id, or the id of the agent session). Read it again with a larger `last` only if needed. Note:
 
 - **State**: answering now, idle, waiting for the user (questions, plan), or failed ("The answer failed").
 - **What it is doing**: the current step of the plan, its latest note to the Orchestrator if it is adopted.
@@ -64,6 +64,8 @@ End with what waits for the user:
 - the points you kept for them (see below).
 
 ## 6. The comments
+
+An agent session cannot receive them (`kanban_reply` writes to conversations of the assistant only): put them in the report for the user.
 
 Send them with `kanban_reply` without asking the user first: they want you to talk to the conversations directly. With `--dry` in the arguments, only propose them.
 

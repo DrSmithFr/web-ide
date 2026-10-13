@@ -44,6 +44,8 @@ type Deps struct {
 	SettingsRoot string
 	// Version of the pod, told to the agents.
 	Version string
+	// AgentsMCP is the MCP server of the IDE, given to the sessions of the Agents tool.
+	AgentsMCP []acp.MCPServer
 }
 
 type fileState struct {
@@ -171,7 +173,7 @@ func Open(p projects.Project, creds sshx.Creds, d Deps, emit Emit) (*Runtime, er
 	}
 	if r.Local && d.Store != nil {
 		r.Agents = acp.NewManager(acp.Deps{Keeper: d.Keeper, Owner: p.ID, Dir: d.Store.Path("agents", p.ID), Root: root,
-			Catalog: acp.Catalog{Dir: d.Store.Path("acp")}, Version: d.Version, Emit: func(ev string, data any) { r.emit(ev, data, "") }})
+			Catalog: acp.Catalog{Dir: d.Store.Path("acp")}, Version: d.Version, MCP: d.AgentsMCP, Emit: func(ev string, data any) { r.emit(ev, data, "") }})
 	}
 	exists := func(p string) bool { _, err := r.FS.Stat(p); return err == nil }
 	r.LSP = lsp.NewManager(r.Runner, root, r.Local, r.Config.LSP, exists, func(ev string, data any) { r.emit(ev, data, "") })
