@@ -5,7 +5,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
@@ -105,6 +107,13 @@ func (c Catalog) Command(id string) ([]string, error) {
 	return append([]string{bin}, a.Args...), nil
 }
 
+// installMu runs one npm at a time in Dir: two at once break each other's renames.
+var installMu sync.Mutex
+
+// staleNpm matches the folders an interrupted npm leaves in node_modules (".express-BMNsvdDe"):
+// the next install fails with ENOTEMPTY when it renames to the same name.
+var staleNpm = regexp.MustCompile(`^\.[^.].*-[A-Za-z0-9]{8}$`)
+
 // Install installs the adapter of an agent with npm, in Dir.
 func (c Catalog) Install(ctx context.Context, id string) error {
 	a, ok := agentByID(id)
@@ -117,15 +126,47 @@ func (c Catalog) Install(ctx context.Context, id string) error {
 	if err := os.MkdirAll(c.Dir, 0o755); err != nil {
 		return err
 	}
+	installMu.Lock()
+	defer installMu.Unlock()
+	cleanStaleNpm(filepath.Join(c.Dir, "node_modules"))
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, "npm", "install", "--prefix", c.Dir, "--no-audit", "--no-fund", a.Package).CombinedOutput()
 	if err != nil {
-		text := strings.TrimSpace(string(out))
-		if len(text) > 1500 {
-			text = text[len(text)-1500:]
-		}
-		return i18n.Errorf("the installation failed: %s", text)
+		return i18n.Errorf("the installation failed: %s", npmErrors(string(out)))
 	}
 	return nil
+}
+
+// cleanStaleNpm removes the folders an interrupted npm left in node_modules and its scopes.
+func cleanStaleNpm(dir string) {
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		switch {
+		case !e.IsDir():
+		case staleNpm.MatchString(e.Name()):
+			os.RemoveAll(filepath.Join(dir, e.Name()))
+		case strings.HasPrefix(e.Name(), "@"):
+			cleanStaleNpm(filepath.Join(dir, e.Name()))
+		}
+	}
+}
+
+// npmErrors keeps the error lines of an npm output (its warnings, such as an unsupported node
+// version the adapters run with anyway, hide the cause), at most 1500 bytes.
+func npmErrors(out string) string {
+	var lines []string
+	for _, l := range strings.Split(out, "\n") {
+		if strings.HasPrefix(l, "npm error") || strings.HasPrefix(l, "npm ERR!") {
+			lines = append(lines, l)
+		}
+	}
+	text := strings.TrimSpace(strings.Join(lines, "\n"))
+	if text == "" {
+		text = strings.TrimSpace(out)
+	}
+	if len(text) > 1500 {
+		text = text[len(text)-1500:]
+	}
+	return text
 }

@@ -92,7 +92,7 @@ func TestPromptStreamsTheThread(t *testing.T) {
 	m, rec := newManager(t, dir, nil)
 	defer m.CloseAll()
 	s := open(t, m)
-	if info := s.Info(); len(info.Config) != 1 || info.Config[0].CurrentValue != "default" || !strings.Contains(string(info.Commands), "review") {
+	if info := s.Info(); len(info.Config) != 3 || info.Config[0].CurrentValue != "default" || info.Config[1].Category != "model" || !strings.Contains(string(info.Commands), "review") {
 		t.Fatalf("info after session/new: %+v", info)
 	}
 	if err := s.Prompt("hi"); err != nil {

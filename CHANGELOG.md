@@ -20,6 +20,10 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 - A project of another pod of the LAN opens under `/_lan/pod/<key>/` of the local pod, not on a port of its own: it stays in the window of the installed app, with no warning bar of an outside site.
 
+### Fixed
+
+- Agents tool: *Install* failed with `ENOTEMPTY` after an interrupted npm; the IDE now removes the folders it left, runs one install at a time and shows the npm errors without its warnings.
+
 ## [1.10.0] - 2026-10-12
 
 ### Added
