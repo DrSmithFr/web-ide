@@ -4,6 +4,7 @@ import { createResource, For, onCleanup, Show } from 'solid-js'
 import { request, on as onPod, podState } from '../pod/rpc'
 import { activeTab, basename, docsVersion, getDoc, project, relPath, root, isLocal, diagnostics } from '../state/project'
 import { newConsole } from '../console/consoles'
+import { ProjectAgentStats } from '../agents/stats'
 import { Icon } from '../ui/icons'
 import { languageName } from '../editor/languages'
 import { fmtDate, fmtNumber, t } from '../i18n'
@@ -29,6 +30,12 @@ export function InfoTool() {
         <section class="info-section" data-testid="info-properties">
           <h2>{t('Properties')}</h2>
           <ProjectCard />
+          <Show when={isLocal()}>
+            <section class="card">
+              <h3>{t('Agents')}</h3>
+              <ProjectAgentStats />
+            </section>
+          </Show>
           <ActiveTabCard />
         </section>
         <section class="info-section" data-testid="info-connections">

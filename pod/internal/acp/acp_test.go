@@ -267,6 +267,10 @@ func TestAdoptAfterPodRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitState(t, s2, Ready)
+	// The clock of the turn crossed the restart.
+	if st := s2.Info().Stats; st == nil || st.Turns != 1 || st.Work < 500 {
+		t.Fatalf("turn timed across the restart: %+v", st)
+	}
 	if err := s2.Prompt("hi"); err != nil {
 		t.Fatal(err)
 	}

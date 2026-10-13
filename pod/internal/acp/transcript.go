@@ -148,6 +148,10 @@ type update struct {
 	// usage
 	Used *int64 `json:"used"`
 	Size *int64 `json:"size"`
+	// Cost: the running total some agents tell (opencode).
+	Cost *struct {
+		Amount float64 `json:"amount"`
+	} `json:"cost"`
 	// info
 	Title *string `json:"title"`
 }

@@ -185,6 +185,7 @@ func (m *Manager) restore() {
 		}
 		s := m.newSession(sv.Info)
 		s.th.Entries, s.acp, s.canLoad, s.nextID = sv.Entries, sv.ACP, sv.CanLoad, sv.NextID
+		s.reportedCost, s.subscription = sv.ReportedCost, sv.Subscription
 		s.th.index()
 		m.sessions[s.info.ID] = s
 		if p, ok := procs[sv.Proc]; ok {
@@ -231,7 +232,7 @@ func (m *Manager) adopt(s *Session, sv saved, p keeper.Proc) bool {
 		_ = m.Keeper.Forget(p.ID)
 		return false
 	}
-	s.proc, s.procID, s.offset, s.prompt = kp, p.ID, sv.Offset, sv.Prompt
+	s.proc, s.procID, s.offset, s.prompt, s.turn = kp, p.ID, sv.Offset, sv.Prompt, sv.Turn
 	return true
 }
 

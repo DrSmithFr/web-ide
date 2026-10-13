@@ -19,6 +19,7 @@ import { aiLabel, aiSuffix, claudeLabel, claudeSuffix, tiers, type Tier } from '
 import { runClaude } from './claude'
 import { startWorkSession } from './sessions'
 import { LineageSection } from './Lineage'
+import { TicketAgentStats } from '../agents/stats'
 import { fmtDate, fmtSize, t } from '../i18n'
 import './kanban.css'
 
@@ -177,6 +178,7 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
           </Show>
           <ComplexitySelect value={tk().complexity} onChange={(c) => props.apply(updateTicket(tk().id, { complexity: c }))} testid="ticket-complexity" />
           <span class="muted small">{t('created on {date}', { date: fmtDate(tk().created) })}</span>
+          <TicketAgentStats ticket={tk().id} />
           <span class="grow" />
           <For each={buttons().filter((b) => !b.more)}>{(b) => <ActionBtn b={b} />}</For>
           <button

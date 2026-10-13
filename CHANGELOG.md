@@ -10,6 +10,7 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 - The bootstrap page of the relay installs as an app (PWA) and remembers the last pod.
 - Agents tool: Claude Code, opencode and pi in tabs through the Agent Client Protocol, beside the assistant. Streamed messages, thoughts, plan, tool calls with their diffs, permission cards, mode / model / effort of the agent, Stop. The adapters are installed by the IDE on demand. A session runs in the keeper and survives the pod; an agent that ends is restarted with its session loaded.
 - MCP of the IDE: the tools of the assistant for Claude Code and the CLI agents — consoles (`list_consoles`, `read_console`, `console_input`), Docker (`docker_ps`, `docker_logs`), previews (`share_preview` offered with a click, `list_previews`), and the window: `open_file`, `open_diff`, `focus`, `show_message`, `request_doodle` (the user draws, the agent gets the image).
+- Work time and cost of the agents: per session (tab tooltip), per ticket (badge) and per project (Agents launcher, Infos tool) over today / 7 days / all; tokens per model from Claude, opencode and pi, priced by a table kept in the pod (`<data>/prices.json` to add models), shown as an API equivalent under a subscription.
 
 ### Changed
 

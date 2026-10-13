@@ -138,7 +138,7 @@ The pictures of this guide are made with Qwen3.8 27B on llama.cpp.
 
 ## Agents: Claude Code, opencode, pi
 
-The *Agents* tool (right bar) runs the coding agents installed on your machine in the IDE, through the Agent Client Protocol: Claude Code (with your subscription or API key, as in the terminal), opencode and pi. Open it, pick an agent: *Install* fetches a missing adapter (`npm`, into the data folder of the pod), opencode is installed by hand. Each session is a tab working in the project: type a prompt, follow its messages, tool calls and diffs, answer its permission cards, change its mode or model under the box. A session keeps running when you close the window or update the pod; closing its tab ends it.
+The *Agents* tool (right bar) runs the coding agents installed on your machine in the IDE, through the Agent Client Protocol: Claude Code (with your subscription or API key, as in the terminal), opencode and pi. Open it, pick an agent: *Install* fetches a missing adapter (`npm`, into the data folder of the pod), opencode is installed by hand. Each session is a tab working in the project: type a prompt, follow its messages, tool calls and diffs, answer its permission cards, change its mode or model under the box. A session keeps running when you close the window or update the pod; closing its tab ends it. The tooltip of a tab, the header of a ticket and the Infos tool show the work time and the cost of the agents (an *API equivalent* under a subscription).
 
 ## The development cycle
 
