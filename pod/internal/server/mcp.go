@@ -24,6 +24,7 @@ var mcpProtocols = map[string]bool{"2024-11-05": true, "2025-03-26": true, "2025
 const mcpInstructions = `Kanban of the Web IDE of the user: tickets go New → To do (plan written) → In progress (branch and worktree) → To test → Done.
 Pass cwd (your working directory) to every tool: it selects the project; in the worktree of a ticket, that ticket is the default id.
 The saved commands of the project (list_commands, run_saved_command) run in consoles of the IDE that the user sees: use them for a development server or a command the user set up.
+The IDE itself: its consoles (list_consoles, read_console, console_input), Docker (docker_ps, docker_logs), app previews to try on any device (share_preview, list_previews), and what shows in its window (open_file, open_diff, focus, show_message, request_doodle for a drawing of the user).
 Your changes are shown as written by Claude. Keep descriptions under 1500 characters and notes under 1000: notes are for decisions, not reports.
 When you mention a file of the project to the user, write it as a Markdown link to the IDE: [path:line](` + "<ide>" + `/open?path=<absolute path>&line=<line>), so that a click opens it in the IDE.`
 
@@ -123,7 +124,7 @@ func (s *Server) mcpCall(ctx context.Context, m mcpMessage) mcpReply {
 		reply.Result = map[string]any{
 			"protocolVersion": version,
 			"capabilities":    map[string]any{"tools": map[string]any{}, "prompts": map[string]any{}},
-			"serverInfo":      map[string]any{"name": "web-ide", "title": "Web IDE kanban", "version": s.Version},
+			"serverInfo":      map[string]any{"name": "web-ide", "title": "Web IDE", "version": s.Version},
 			"instructions":    strings.ReplaceAll(mcpInstructions, "<ide>", s.publicURL()),
 		}
 	case "ping":
@@ -146,13 +147,20 @@ func (s *Server) mcpCall(ctx context.Context, m mcpMessage) mcpReply {
 		if t == nil {
 			return fail(-32602, "unknown tool: "+a.Name)
 		}
-		text, err := t.run(ctx, s, a.Arguments)
+		var content []any
+		if t.rich != nil {
+			content, err = t.rich(ctx, s, a.Arguments)
+		} else {
+			var text string
+			text, err = t.run(ctx, s, a.Arguments)
+			content = []any{textContent(text)}
+		}
 		if err != nil {
 			// Tool errors go back to the model, which can correct its call.
-			reply.Result = map[string]any{"content": []any{map[string]any{"type": "text", "text": "Error: " + err.Error()}}, "isError": true}
+			reply.Result = map[string]any{"content": []any{textContent("Error: " + err.Error())}, "isError": true}
 			return reply
 		}
-		reply.Result = map[string]any{"content": []any{map[string]any{"type": "text", "text": text}}}
+		reply.Result = map[string]any{"content": content}
 	case "prompts/list":
 		reply.Result = map[string]any{"prompts": mcpPromptList()}
 	case "prompts/get":

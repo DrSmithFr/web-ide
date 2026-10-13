@@ -107,8 +107,9 @@ const isTyping = (el: EventTarget | null) => {
   return !!e && (e.tagName === 'TEXTAREA' || e.tagName === 'INPUT' || e.tagName === 'SELECT' || e.isContentEditable)
 }
 
-export function DoodleHost(props: { onSettings: () => void }) {
-  return <Show when={doodleSession()}>{(s) => <DoodleModal session={s()} onSettings={props.onSettings} />}</Show>
+/** external: the host of the doodles asked by an agent (project window), else the assistant's. */
+export function DoodleHost(props: { onSettings: () => void; external?: boolean }) {
+  return <Show when={!!doodleSession()?.external === !!props.external && doodleSession()}>{(s) => <DoodleModal session={s()} onSettings={props.onSettings} />}</Show>
 }
 
 function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) {
@@ -832,7 +833,7 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
               ?
             </button>
             <button class="btn primary small" disabled={busy()} onClick={() => void attach()} data-testid="dd-attach">
-              <Icon name="paperclip" size={14} /> {t('Attach')}
+              <Icon name={props.session.attachLabel ? 'arrowUp' : 'paperclip'} size={14} /> {props.session.attachLabel ?? t('Attach')}
             </button>
             <button class="icon-btn" title={t('Close (Esc)')} onClick={close} data-testid="dd-close">
               ✕
@@ -1014,22 +1015,25 @@ function DoodleModal(props: { session: DoodleSession; onSettings: () => void }) 
                 <Show when={editing()}>{(ed) => <TextEditor ed={ed()} view={view()} dark={dark()} onInput={(text) => setEditing({ ...ed(), text })} onDone={commitText} />}</Show>
               </div>
             </div>
-            <div class="dd-chat">
-              <div class="ai-messages dd-thread" ref={thread}>
-                <Thread onSuggest={suggest} onSettings={props.onSettings} />
+            {/* The conversation of the assistant: not for a doodle an agent asked for. */}
+            <Show when={!props.session.external}>
+              <div class="dd-chat">
+                <div class="ai-messages dd-thread" ref={thread}>
+                  <Thread onSuggest={suggest} onSettings={props.onSettings} />
+                </div>
+                <Composer
+                  onSettings={props.onSettings}
+                  onSent={() => {}}
+                  inDoodle
+                  sendable={() => !isEmpty(h.doc()) || !!editing()?.text.trim()}
+                  beforeSend={async () => {
+                    commitText()
+                    if (!isEmpty(h.doc())) await attach()
+                    else closeDoodle()
+                  }}
+                />
               </div>
-              <Composer
-                onSettings={props.onSettings}
-                onSent={() => {}}
-                inDoodle
-                sendable={() => !isEmpty(h.doc()) || !!editing()?.text.trim()}
-                beforeSend={async () => {
-                  commitText()
-                  if (!isEmpty(h.doc())) await attach()
-                  else closeDoodle()
-                }}
-              />
-            </div>
+            </Show>
           </div>
         </div>
       </div>

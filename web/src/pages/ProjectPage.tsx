@@ -46,6 +46,7 @@ import { SearchEverywhereHost, searchEverywhere } from '../popups/SearchEverywhe
 import { RecentFilesHost, recentFiles } from '../popups/RecentFiles'
 import { ClipboardHistoryHost, pasteFromHistory } from '../popups/ClipboardHistory'
 import { newDoodle } from '../llm/Composer'
+import { DoodleHost } from '../llm/doodle/DoodleModal'
 
 /** Tools of the four zones; their placement comes from state/zones. */
 export const toolPanels: Record<string, { label: string; icon: string; component: () => JSX.Element; badge?: () => number }> = {
@@ -666,6 +667,7 @@ export function ProjectPage(props: { id: string }) {
         <SearchEverywhereHost />
         <RecentFilesHost tools={switcherTools} onTool={toggleToolFocus} />
         <ClipboardHistoryHost />
+        <DoodleHost external onSettings={() => openSettings()} />
         <Show when={phone()}>
           {/* One view at a time, full screen: the editor stays mounted under the tools. */}
           <div class="workbench phone-body" onPointerDown={trackFocus} onFocusIn={trackFocus}>

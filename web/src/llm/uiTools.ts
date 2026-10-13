@@ -1,7 +1,10 @@
 // Tools of the agent that act on the interface, run by this window when the pod asks it
 // (agent.ui): show a file, bring a panel, a console or the problems to the front, draw a page
 // of the board (it needs the doodle code of the page: text measures, description, PNG).
-import { attached, loadDoc, mutate, openFile, relPath, root } from '../state/project'
+import { attached, basename, loadDoc, mutate, openFile, openTab, relPath, root } from '../state/project'
+import { errorToast, toast } from '../ui/toast'
+import { openPreview, previewUrl, type PreviewSpec } from './previews'
+import { doodleSession, openDoodle } from './doodle/session'
 import { chat } from './state'
 import { consoles } from '../console/consoles'
 import { showTool, toolIds } from '../state/zones'
@@ -15,8 +18,10 @@ import type { ModelPage } from './state'
 interface UiResult {
   content: string
   summary: string
-  status: 'ok' | 'error'
+  status: 'ok' | 'error' | 'cancelled'
   page?: ModelPage
+  /** Drawing of request_doodle: a data URL of a PNG. */
+  image?: string
 }
 
 /** Root of the worktree the conversation shown works in (a ticket one may work in another worktree than the one shown). */
@@ -168,6 +173,65 @@ export async function drawPage(a: DrawArgs & { number: number; clone?: number; s
 
 /** base: root of the worktree the run works in (relative paths). */
 export function runUiTool(tool: string, args: Record<string, any>, base?: string): Promise<UiResult> {
-  if (tool === 'board_draw') return drawPage(args as any)
-  return tool === 'open_file' ? showFile(args.path, args.line, args.end_line, base) : focus(args, base)
+  switch (tool) {
+    case 'board_draw':
+      return drawPage(args as any)
+    case 'open_file':
+      return showFile(args.path, args.line, args.end_line, base)
+    case 'open_diff':
+      return showDiff(args.path, base)
+    case 'show_message':
+      return showMessage(args.text, args.kind)
+    case 'share_preview':
+      return offerPreview(args.spec)
+    case 'request_doodle':
+      return requestDoodle(args.title)
+  }
+  return focus(args, base)
+}
+
+// ---------- tools of the MCP (CLI agents) ----------
+
+async function showDiff(p: string, base?: string): Promise<UiResult> {
+  if (!p) throw new Error('path is missing')
+  const abs = absPath(p, base)
+  openTab({ kind: 'diff', path: abs, head: true, title: `${basename(abs)} (${t('changes')})` })
+  return ok(`Changes of ${relPath(abs)} shown in the diff view.`, relPath(abs))
+}
+
+async function showMessage(text: string, kind?: string): Promise<UiResult> {
+  if (!text) throw new Error('text is missing')
+  const k = kind === 'ok' || kind === 'warn' || kind === 'error' ? kind : 'info'
+  toast(text, k, undefined, 8000)
+  return ok('Message shown to the user.', text)
+}
+
+/** share_preview of an agent: a notification whose button starts the app (nothing before). */
+async function offerPreview(spec: PreviewSpec): Promise<UiResult> {
+  const open = () =>
+    void openPreview(spec)
+      .then((p) => window.open(previewUrl(p), '_blank', 'noopener'))
+      .catch(errorToast)
+  toast(t('An agent offers to try “{title}”', { title: spec.title }), 'info', { label: t('Open'), run: open }, 120_000)
+  return ok('Offered to the user.', spec.title)
+}
+
+/** request_doodle of an agent: the doodle editor, then the drawing as a PNG and its description. */
+function requestDoodle(title: string): Promise<UiResult> {
+  if (doodleSession()) return Promise.reject(new Error('the user is already drawing a doodle: ask again later'))
+  const name = title || t('Doodle')
+  return new Promise((resolve) => {
+    let done = false
+    openDoodle({
+      doc: newDoc(),
+      name,
+      external: true,
+      attachLabel: t('Send to the agent'),
+      onAttach: async (doc) => {
+        done = true
+        resolve({ ...ok(describe(doc, name), name), image: await png(doc, MAX_SIDE) })
+      },
+      onClose: () => !done && resolve({ content: 'closed', summary: '', status: 'cancelled' }),
+    })
+  })
 }

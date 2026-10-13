@@ -18,10 +18,16 @@ type uiResult struct {
 	Status  string          `json:"status"`
 	// A page drawn by board_draw.
 	Page *agent.Page `json:"page,omitempty"`
+	// Image drawn by the user for request_doodle of the MCP (a data URL of a PNG).
+	Image string `json:"image,omitempty"`
 }
 
 // uiClient picks the window that runs a tool for a run.
-func (s *Server) uiClient(r *agentRun) *Client {
+func (s *Server) uiClient(r *agentRun) *Client { return s.uiClientFor(r.project, r.id) }
+
+// uiClientFor picks a window of project, the one showing the conversation chat first ("" for
+// a call of the MCP: a window showing the project first).
+func (s *Server) uiClientFor(project, chat string) *Client {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var best *Client
@@ -29,11 +35,13 @@ func (s *Server) uiClient(r *agentRun) *Client {
 	for c := range s.clients {
 		sc := -1
 		switch {
-		case c.sees(r.project) && c.chat() == r.id:
+		case c.sees(project) && chat != "" && c.chat() == chat:
 			sc = 3
-		case c.sees(r.project):
+		case c.sees(project) && chat == "" && c.project == project:
+			sc = 3
+		case c.sees(project):
 			sc = 2
-		case c.chat() == r.id:
+		case chat != "" && c.chat() == chat:
 			sc = 1
 		}
 		if sc > score {
@@ -63,7 +71,12 @@ func (s *Server) uiTool(r *agentRun, name string, a toolArgs) (toolResult, error
 // uiCall asks a window of the project to run a tool and, with wait, waits for its result:
 // window tells whether a window was there, answered whether it answered in time.
 func (s *Server) uiCall(r *agentRun, name string, args any, wait bool, timeout time.Duration) (res uiResult, window, answered bool) {
-	c := s.uiClient(r)
+	return s.uiCallIn(r.ctx, s.uiClient(r), r.project, r.id, name, args, wait, timeout)
+}
+
+// uiCallIn asks the window c (nil: none) to run a tool for the conversation chat ("" for the
+// MCP) working in project.
+func (s *Server) uiCallIn(ctx context.Context, c *Client, project, chat, name string, args any, wait bool, timeout time.Duration) (res uiResult, window, answered bool) {
 	if c == nil {
 		return res, false, false
 	}
@@ -77,11 +90,11 @@ func (s *Server) uiCall(r *agentRun, name string, args any, wait bool, timeout t
 		delete(s.agents.ui, id)
 		s.agents.mu.Unlock()
 	}()
-	c.push("agent.ui", map[string]any{"id": id, "chat": r.id, "tool": name, "args": args, "project": r.project})
+	c.push("agent.ui", map[string]any{"id": id, "chat": chat, "tool": name, "args": args, "project": project})
 	if !wait {
 		return res, true, false
 	}
-	ctx, cancel := context.WithTimeout(r.ctx, timeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	select {
 	case res = <-ch:

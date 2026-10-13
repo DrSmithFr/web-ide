@@ -1,12 +1,14 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/agent"
 	"github.com/DrSmithFr/web-ide/pod/internal/docker"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
+	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
 )
 
 // Docker tools of the assistant, read-only in every mode: state of the Compose services of
@@ -53,23 +55,32 @@ func containerRow(c docker.Container) string {
 }
 
 func (s *Server) dockerTool(r *agentRun, ref *runtimeRef, name string, a toolArgs) toolResult {
-	rt := ref.rt
 	r.mu.Lock()
 	profiles := append([]string{}, opt(r.chat).DockerProfiles...)
 	r.mu.Unlock()
+	res, err := dockerToolIn(r.ctx, ref.rt, name, a, profiles)
+	if err != nil {
+		return fail(r, err)
+	}
+	return res
+}
+
+// dockerToolIn runs docker_ps or docker_logs with the Compose profiles active (the assistant
+// and the MCP).
+func dockerToolIn(ctx context.Context, rt *runtime.Runtime, name string, a toolArgs, profiles []string) (toolResult, error) {
 	if name == "docker_ps" {
-		st := rt.Docker.Status(r.ctx)
+		st := rt.Docker.Status(ctx)
 		if !st.Available {
 			msg := st.Error
 			if st.Err != nil {
 				msg = i18n.Translate("en", st.Err)
 			}
-			return toolResult{Content: "Error: Docker is not reachable: " + msg, Summary: agent.Plain(msg), Status: "error"}
+			return toolResult{Content: "Error: Docker is not reachable: " + msg, Summary: agent.Plain(msg), Status: "error"}, nil
 		}
 		if st.ComposeFile == "" || !st.Compose {
-			list, err := rt.Docker.Containers(r.ctx)
+			list, err := rt.Docker.Containers(ctx)
 			if err != nil {
-				return fail(r, err)
+				return toolResult{}, err
 			}
 			why := "No Compose file at the project root"
 			if st.ComposeFile != "" {
@@ -83,7 +94,7 @@ func (s *Server) dockerTool(r *agentRun, ref *runtimeRef, name string, a toolArg
 			if text == "" {
 				text = "(none)"
 			}
-			return ok(why+". Containers of the host:\n"+text, agent.Tn(len(list), "{n} container", "{n} containers", nil))
+			return ok(why+". Containers of the host:\n"+text, agent.Tn(len(list), "{n} container", "{n} containers", nil)), nil
 		}
 		var active []string
 		for _, p := range profiles {
@@ -93,9 +104,9 @@ func (s *Server) dockerTool(r *agentRun, ref *runtimeRef, name string, a toolArg
 				}
 			}
 		}
-		stack, err := rt.Docker.Stack(r.ctx, active)
+		stack, err := rt.Docker.Stack(ctx, active)
 		if err != nil {
-			return fail(r, err)
+			return toolResult{}, err
 		}
 		running := 0
 		lines := []string{}
@@ -123,11 +134,11 @@ func (s *Server) dockerTool(r *agentRun, ref *runtimeRef, name string, a toolArg
 			}
 			lines = append(lines, fmt.Sprintf("Profiles declared: %s; active: %s.", strings.Join(st.Profiles, ", "), act))
 		}
-		return ok(strings.Join(lines, "\n"), agent.T("{n}/{total} running", map[string]any{"n": running, "total": len(stack.Services)}))
+		return ok(strings.Join(lines, "\n"), agent.T("{n}/{total} running", map[string]any{"n": running, "total": len(stack.Services)})), nil
 	}
 	service, container := strings.TrimSpace(a.str("service")), strings.TrimSpace(a.str("container"))
 	if service == "" && container == "" {
-		return fail(r, usagef("service or container is missing"))
+		return toolResult{}, usagef("service or container is missing")
 	}
 	lines := a.num("lines")
 	if lines <= 0 {
@@ -137,9 +148,9 @@ func (s *Server) dockerTool(r *agentRun, ref *runtimeRef, name string, a toolArg
 	if container != "" {
 		service = ""
 	}
-	out, err := rt.Docker.LogsTail(r.ctx, container, service, profiles, lines)
+	out, err := rt.Docker.LogsTail(ctx, container, service, profiles, lines)
 	if err != nil {
-		return fail(r, err)
+		return toolResult{}, err
 	}
 	rows := strings.Split(agent.TrimEnd(agent.PlainOutput(out)), "\n")
 	if filter := strings.ToLower(a.str("filter")); filter != "" {
@@ -163,5 +174,5 @@ func (s *Server) dockerTool(r *agentRun, ref *runtimeRef, name string, a toolArg
 	if a.str("filter") != "" {
 		f = fmt.Sprintf(", filtered on \"%s\"", a.str("filter"))
 	}
-	return ok(fmt.Sprintf("Logs of %s (last %d lines%s):\n%s", what, lines, f, text), agent.Tn(len(rows), "{n} line", "{n} lines", nil).With(what+" · ", ""))
+	return ok(fmt.Sprintf("Logs of %s (last %d lines%s):\n%s", what, lines, f, text), agent.Tn(len(rows), "{n} line", "{n} lines", nil).With(what+" · ", "")), nil
 }
