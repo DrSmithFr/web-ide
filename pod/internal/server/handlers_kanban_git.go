@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"github.com/DrSmithFr/web-ide/pod/internal/acp"
 	"github.com/DrSmithFr/web-ide/pod/internal/idedir"
 	"path"
 	"strconv"
@@ -439,6 +440,8 @@ func (s *Server) removeWorktree(ctx context.Context, loc kanban.Location, root *
 		_ = s.Projects.Delete(child)
 		s.Sessions.Delete(child)
 	}
+	// Its agent sessions end with it, even when no window had it open.
+	acp.Purge(s.Keeper, child, s.Store.Path("agents", child))
 	if wt != "" {
 		if err := g.RemoveWorktree(ctx, wt); err != nil {
 			return err

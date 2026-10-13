@@ -7,6 +7,7 @@ import { chat, config, loadConfig, resetChat, setChat, type ChatRole, type Effor
 import { openChat, send } from '../llm/agent'
 import { feedbackOp, inWorktreeOf, moveTicket, roleLabels, startWork, worktreeProject, type Feedback, type Ticket } from './state'
 import { t } from '../i18n'
+import { devAgent, startAgentSession } from './agentSession'
 
 const firstMessage: Record<ChatRole, (tk: Ticket, f?: Feedback) => string> = {
   briefing: (k) => t("Let's do the briefing of ticket #{id} “{title}”: help me clarify it.", { id: k.id, title: k.title }),
@@ -58,10 +59,12 @@ export async function openTicketChat(chatId: string) {
 
 /**
  * Development, correction or conflict resolution: the conversation works in the worktree
- * of the ticket (created on the way), which the window shows.
+ * of the ticket (created on the way), which the window shows. With a development agent
+ * (kanban settings), it is the session of the ticket in the Agents tool.
  */
 export async function startWorkSession(tk: Ticket, role: ChatRole, feedback?: Feedback, force = false, adoptedBy?: string, effort?: 'auto' | Effort) {
-  if (project()?.ticket === tk.id) return startTicketChat(tk, role, undefined, feedback, adoptedBy, effort)
+  const work = () => (devAgent() ? startAgentSession(tk, role, firstMessage[role](tk, feedback), feedback?.id) : startTicketChat(tk, role, undefined, feedback, adoptedBy, effort))
+  if (project()?.ticket === tk.id) return work()
   let target: string
   try {
     target = (await startWork(tk.id, '', force)).project
@@ -80,7 +83,7 @@ export async function startWorkSession(tk: Ticket, role: ChatRole, feedback?: Fe
     errorToast(e)
     return
   }
-  return startTicketChat(tk, role, undefined, feedback, adoptedBy, effort)
+  return work()
 }
 
 /** Shows the worktree of a ticket in the window. */

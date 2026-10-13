@@ -277,7 +277,8 @@ export const MAX_DESCRIPTION = 1500
 export const MAX_NOTE = 1000
 export const linkChat = (id: number, chatId: string, role: ChatRole, title = '') => request<Ticket>('kanban.chat.link', { id, chatId, role, title })
 export const unlinkChat = (id: number, chatId: string) => request<Ticket>('kanban.chat.unlink', { id, chatId })
-export const setMeta = (values: Record<string, string>) => request<Record<string, string>>('kanban.meta.set', { values })
+export const setMeta = (values: Record<string, string>) =>
+  request<Record<string, string>>('kanban.meta.set', { values }).then((meta) => (setBoard('meta', meta ?? {}), meta))
 
 export async function addAttachment(id: number, file: File) {
   const buf = new Uint8Array(await file.arrayBuffer())

@@ -11,6 +11,7 @@ import {
   validateStep, workTime, worktreeProject, type ChatRole, type Complexity, type Diff, type GitInfo, type GitOpState, type Status, type Ticket,
 } from './state'
 import { openTicketChat, openWorktree, startTicketChat, startWorkSession } from './sessions'
+import { devAgent, openAgentSession } from './agentSession'
 import { blockerText } from './Lineage'
 import { runClaude } from './claude'
 import { hardest, tierOf, type Tier } from './route'
@@ -67,7 +68,10 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
   const here = inWorktreeOf(tk)
   const blocked = tk.blockers?.length ? tk.blockers.map(blockerText).join(', ') : ''
   const openChildren = (tk.children ?? []).filter((c) => c.status !== 'done' && c.status !== 'abandoned')
-  const worktree: ActionButton[] = tk.worktree && !here ? [{ label: t('Open the worktree'), run: () => void openWorktree(tk), more: true }] : []
+  const worktree: ActionButton[] = [
+    ...(tk.worktree && !here ? [{ label: t('Open the worktree'), run: () => void openWorktree(tk), more: true }] : []),
+    ...(tk.worktree && devAgent() ? [{ label: t('Open the session'), run: () => void openAgentSession(tk), more: true, testid: 'ticket-agent-session-open' }] : []),
+  ]
   const review = routed(
     { label: t('Review'), title: t('A review of the work: its findings become test feedback'), testid: 'ticket-review' },
     { complexity: tk.complexity, claude: (x) => runClaude(tk, 'review', undefined, x.claude), levels: ['high', 'medium'] },

@@ -58,6 +58,9 @@ type Info struct {
 	Config  []ConfigOption `json:"config,omitempty"`
 	Usage   *Usage         `json:"usage,omitempty"`
 	Started int64          `json:"started"`
+	// Ticket the session works on (Start development of the kanban), 0 for none: its title
+	// stays the one of the ticket.
+	Ticket int64 `json:"ticket,omitempty"`
 	// Commands: the slash commands of the agent, as it sent them.
 	Commands json.RawMessage `json:"commands,omitempty"`
 	// Stats sum the turns of the session (work time, cost).
@@ -81,6 +84,8 @@ type saved struct {
 	Turn         *turnState `json:"turn,omitempty"`
 	ReportedCost float64    `json:"reportedCost,omitempty"`
 	Subscription bool       `json:"subscription,omitempty"`
+	// First is the prompt sent once the session is open (a ticket's briefing), until then.
+	First string `json:"first,omitempty"`
 }
 
 type message struct {
@@ -115,7 +120,9 @@ type Session struct {
 	offset  int64
 	nextID  int64
 	prompt  int64
-	proc    proc
+	// first: see saved.First.
+	first string
+	proc  proc
 	// gen numbers the processes: the events of an older one are dropped.
 	gen     int
 	pending map[int64]chan response
@@ -134,7 +141,7 @@ type Session struct {
 
 func (s *Session) snapshot() saved {
 	return saved{Info: s.info, Entries: s.th.Entries, ACP: s.acp, CanLoad: s.canLoad, Proc: s.procID, Offset: s.offset, NextID: s.nextID, Prompt: s.prompt,
-		Turn: s.turn, ReportedCost: s.reportedCost, Subscription: s.subscription}
+		Turn: s.turn, ReportedCost: s.reportedCost, Subscription: s.subscription, First: s.first}
 }
 
 // ---------- events to the page (under s.mu) ----------
@@ -256,6 +263,20 @@ func (s *Session) start(load bool) {
 			s.setState(Failed, err.Error())
 		}
 		s.mu.Unlock()
+		return
+	}
+	s.mu.Lock()
+	first := s.first
+	s.mu.Unlock()
+	if first != "" {
+		if err := s.Prompt(first); err != nil {
+			log.Printf("acp: %s: first prompt: %v", s.info.ID, err)
+			return
+		}
+		s.mu.Lock()
+		s.first = ""
+		s.m.save(s)
+		s.mu.Unlock()
 	}
 }
 
@@ -270,7 +291,10 @@ func (s *Session) open(load bool) error {
 	}
 	var init struct {
 		AgentCapabilities struct {
-			LoadSession bool `json:"loadSession"`
+			LoadSession     bool `json:"loadSession"`
+			MCPCapabilities struct {
+				HTTP bool `json:"http"`
+			} `json:"mcpCapabilities"`
 		} `json:"agentCapabilities"`
 	}
 	_ = json.Unmarshal(res, &init)
@@ -278,6 +302,14 @@ func (s *Session) open(load bool) error {
 	s.canLoad = init.AgentCapabilities.LoadSession
 	acpID, cwd := s.acp, s.info.Cwd
 	s.mu.Unlock()
+	// The MCP server of the IDE, for the agents that reach a server over HTTP.
+	mcp := []any{}
+	noMCP := len(s.m.MCP) > 0 && !init.AgentCapabilities.MCPCapabilities.HTTP
+	if !noMCP {
+		for _, m := range s.m.MCP {
+			mcp = append(mcp, m)
+		}
+	}
 
 	var opened struct {
 		SessionID     string         `json:"sessionId"`
@@ -288,7 +320,7 @@ func (s *Session) open(load bool) error {
 		s.mu.Lock()
 		s.loading = true
 		s.mu.Unlock()
-		res, err = s.call("session/load", map[string]any{"sessionId": acpID, "cwd": cwd, "mcpServers": []any{}}, 2*time.Minute)
+		res, err = s.call("session/load", map[string]any{"sessionId": acpID, "cwd": cwd, "mcpServers": mcp}, 2*time.Minute)
 		s.mu.Lock()
 		s.loading = false
 		s.mu.Unlock()
@@ -301,7 +333,7 @@ func (s *Session) open(load bool) error {
 	}
 	if opened.SessionID == "" {
 		lost = load && acpID != ""
-		res, err = s.call("session/new", map[string]any{"cwd": cwd, "mcpServers": []any{}}, 2*time.Minute)
+		res, err = s.call("session/new", map[string]any{"cwd": cwd, "mcpServers": mcp}, 2*time.Minute)
 		if err != nil {
 			return err
 		}
@@ -317,6 +349,9 @@ func (s *Session) open(load bool) error {
 	}
 	if lost {
 		s.notice("notice", "The agent could not load the session again: it starts a new one, without the context above.")
+	}
+	if noMCP && !load {
+		s.notice("notice", "This agent cannot reach the MCP server of the IDE: no kanban tools in this session.")
 	}
 	s.info.State, s.info.Error, s.info.Crashed = Ready, "", false
 	s.changed()
@@ -440,7 +475,7 @@ func (s *Session) apply(raw json.RawMessage) {
 			s.changed()
 		}
 	case "session_info_update":
-		if u.Title != nil && *u.Title != "" {
+		if u.Title != nil && *u.Title != "" && s.info.Ticket == 0 {
 			s.info.Title = *u.Title
 			s.changed()
 		}

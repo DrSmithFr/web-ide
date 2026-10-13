@@ -233,12 +233,16 @@ var mcpTools = []mcpTool{
 					t.Blockers, _ = s.ticketBlockers(ctx, k, id)
 				}
 			}
-			return fmt.Sprintf("%s\n\nTicket in the IDE: %s\nProject in the IDE: %s", kanban.Markdown(t), s.ticketURL(sc, id), s.projectURL(sc.here.ID)), nil
+			md := kanban.Markdown(t)
+			if _, info, _, ok := s.ticketSession(sc.root, t); ok {
+				md += fmt.Sprintf("\n\n## Agent session\n- %s (%s, %s): read it with kanban_conversation chat=%s", info.Title, info.Name, info.State, info.ID)
+			}
+			return fmt.Sprintf("%s\n\nTicket in the IDE: %s\nProject in the IDE: %s", md, s.ticketURL(sc, id), s.projectURL(sc.here.ID)), nil
 		}),
 	},
 	{
 		name:        "kanban_conversation",
-		description: "Reads a conversation of the local assistant linked to the ticket (see Linked conversations in kanban_get): the messages of the user and of the assistant, with the questions asked and their answers. Use it to take over a briefing; with last and tools, to review a development (its commands, errors and notes).",
+		description: "Reads a conversation of the local assistant linked to the ticket (see Linked conversations in kanban_get), or the session of the agent developing it (Agent session in kanban_get): the messages of the user and of the assistant, with the questions asked and their answers. Use it to take over a briefing; with last and tools, to review a development (its commands, errors and notes).",
 		props: map[string]any{"id": ticketID, "chat": str("Conversation id (chat … in kanban_get)"),
 			"last":  map[string]any{"type": "integer", "description": "Only the last messages, this many (default: all)"},
 			"tools": map[string]any{"type": "boolean", "description": "Also the tool calls (name and arguments, cut), their errors, the answers that failed and the notes and reports of sub-agents"}},
@@ -255,6 +259,9 @@ var mcpTools = []mcpTool{
 			linked := false
 			for _, c := range t.ChatList {
 				linked = linked || c.ChatID == a.Chat
+			}
+			if _, info, entries, ok := s.ticketSession(sc.root, t); !linked && ok && info.ID == a.Chat {
+				return acpThreadText(info, entries, a.Last, a.Tools), nil
 			}
 			if !linked {
 				return "", fmt.Errorf("conversation %s is not linked to ticket #%d", a.Chat, id)

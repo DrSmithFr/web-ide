@@ -376,6 +376,7 @@ export const notices = () => [
   t('The agent stopped during the turn.'),
   t('The agent ended: it is restarted and its session loaded.'),
   t('The agent could not load the session again: it starts a new one, without the context above.'),
+  t('This agent cannot reach the MCP server of the IDE: no kanban tools in this session.'),
 ]
 
 const kindIcons: Record<string, string> = { read: 'file', edit: 'edit', delete: 'trash', move: 'file', search: 'search', execute: 'terminal', think: 'sparkle', fetch: 'external' }

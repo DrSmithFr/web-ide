@@ -4,6 +4,7 @@
 //   "crash loop"  the process and every later start exit (.fake-acp-crash in the cwd)
 //   "permission"  asks before an edit, then applies it or not
 //   "slow"        streams until session/cancel
+//   "# Ticket"    (a ticket's briefing) calls kanban_get through the MCP server it was given
 //   anything else thought, plan, message, an edit with its diff, usage, title
 // Each turn ends with its tokens per model, as claude-agent-acp tells them (on a plan).
 const fs = require('fs')
@@ -68,6 +69,18 @@ async function prompt(id, p) {
     process.exit(4)
   }
   if (text.includes('crash')) process.exit(3)
+  if (text.includes('# Ticket linked')) {
+    const mcp = s.mcp.find((m) => m.type === 'http')
+    let got = 'no MCP server'
+    if (mcp) {
+      const headers = Object.fromEntries((mcp.headers ?? []).map((h) => [h.name, h.value]))
+      const r = await fetch(mcp.url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'kanban_get', arguments: { cwd: s.cwd } } }) })
+      const body = await r.json().catch(() => ({}))
+      got = body.result?.content?.[0]?.text?.split('\n')[0] ?? `MCP error ${r.status}`
+    }
+    update(sid, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `Briefing received (${text.match(/ticket #\d+/)?.[0] ?? '?'}). MCP ${mcp?.name ?? 'none'}: ${got}` } })
+    return send({ id, result: { stopReason: 'end_turn' } })
+  }
   if (text.includes('slow')) {
     slow = { id, sid }
     for (let i = 0; slow && i < 600; i++) {
@@ -118,15 +131,15 @@ function handle(m) {
   switch (m.method) {
     case 'initialize':
       send({ method: '_auth/status_update', params: { authStatus: { kind: 'account', label: 'Claude Pro' } } })
-      return send({ id: m.id, result: { protocolVersion: 1, agentCapabilities: { loadSession: true, promptCapabilities: { image: true } }, authMethods: [], agentInfo: { name: 'fake', version: '1' } } })
+      return send({ id: m.id, result: { protocolVersion: 1, agentCapabilities: { loadSession: true, promptCapabilities: { image: true }, mcpCapabilities: { http: true } }, authMethods: [], agentInfo: { name: 'fake', version: '1' } } })
     case 'session/new': {
       const sid = `fake-${process.pid}-${sessions.size}`
-      sessions.set(sid, { cwd: p.cwd, mode: 'default', turns: 0 })
+      sessions.set(sid, { cwd: p.cwd, mode: 'default', turns: 0, mcp: p.mcpServers ?? [] })
       send({ id: m.id, result: { sessionId: sid, configOptions: configOptions('default') } })
       return update(sid, { sessionUpdate: 'available_commands_update', availableCommands: [{ name: 'review', description: 'Review the changes' }] })
     }
     case 'session/load':
-      sessions.set(p.sessionId, { cwd: p.cwd, mode: 'default', turns: 0 })
+      sessions.set(p.sessionId, { cwd: p.cwd, mode: 'default', turns: 0, mcp: p.mcpServers ?? [] })
       // The replay of the history, which the IDE already has.
       update(p.sessionId, { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'replayed question' } })
       update(p.sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'replayed answer' } })

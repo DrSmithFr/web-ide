@@ -31,6 +31,8 @@ export interface AgentInfo {
   /** Work time and cost of its turns (agents/stats.tsx). */
   stats?: Totals
   started: number
+  /** Ticket the session develops (kanban), 0 or absent for none. */
+  ticket?: number
   seq: number
   /** Worktree the session runs in (set by the page). */
   project?: string
