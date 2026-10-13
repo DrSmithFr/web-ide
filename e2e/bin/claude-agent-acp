@@ -4,6 +4,7 @@
 //   "crash loop"  the process and every later start exit (.fake-acp-crash in the cwd)
 //   "permission"  asks before an edit, then applies it or not
 //   "slow"        streams until session/cancel
+//   "blocks…"     answers the types of the content blocks it received
 //   "# Ticket"    (a ticket's briefing) calls kanban_get through the MCP server it was given
 //   anything else thought, plan, message, an edit with its diff, usage, title
 // Each turn ends with its tokens per model, as claude-agent-acp tells them (on a plan).
@@ -64,6 +65,12 @@ async function prompt(id, p) {
   const sid = p.sessionId
   const text = p.prompt.map((b) => b.text ?? '').join('')
   const s = sessions.get(sid)
+  if (text.startsWith('blocks')) {
+    // The content received: its block types, the names of the links and the image types.
+    const desc = p.prompt.map((b) => (b.type === 'resource_link' ? `resource_link:${b.name}` : b.type === 'image' ? `image:${b.mimeType}` : b.type)).join(',')
+    update(sid, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `blocks: ${desc}` } })
+    return send({ id, result: { stopReason: 'end_turn' } })
+  }
   if (text.includes('crash loop')) {
     fs.writeFileSync(crashFile(), '')
     process.exit(4)

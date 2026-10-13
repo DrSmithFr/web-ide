@@ -1,6 +1,7 @@
 // Agents tool: ACP sessions with the fake agent of e2e/bin (claude-agent-acp): opened from
 // the launcher, a prompt streams thought, plan, message and an edit with its diff; a
-// permission card; a config option; Stop; the agent killed is restarted and its session
+// permission card; the composer (/ and @ completion, image and file as blocks, history, queue);
+// a config option; Stop; the agent killed is restarted and its session
 // loaded; closing the tab ends the session. Work time and cost: on the tab, the project, and
 // the ticket of a session run in its worktree.
 const { execSync } = require('child_process')
@@ -10,10 +11,20 @@ const tab = '[data-testid=agent-tab]'
 const state = (page) => page.getAttribute(tab, 'data-state')
 const waitState = (page, s) => page.waitForSelector(`${tab}[data-state=${s}]`, { timeout: 15000 })
 
+const box = '[data-testid=agent-input] .ed-content'
+const draft = (page) => page.$eval(box, (e) => e.textContent.replace(/\n$/, ''))
+
+/** Types in the message box (an editor: Enter adds a line) and sends with Ctrl+Enter. */
 async function prompt(page, text) {
-  await page.fill('[data-testid=agent-input]', text)
-  await page.keyboard.press('Enter')
+  await page.click(box)
+  await page.keyboard.press('Control+a')
+  await page.keyboard.press('Delete')
+  await page.keyboard.type(text)
+  await page.keyboard.press('Control+Enter')
 }
+
+// A 1×1 PNG.
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
 
 run(async ({ page }) => {
   await openProject(page)
@@ -56,17 +67,52 @@ run(async ({ page }) => {
   await page.waitForSelector('[data-testid=agent-message]:has-text("Edited.")')
   await waitState(page, 'ready')
 
-  // A config option of the agent.
+  // The composer: /commands of the agent, @paths of the project.
+  await page.click(box)
+  await page.keyboard.type('/rev')
+  await page.waitForSelector('[data-testid=ai-complete] .ai-complete-label:has-text("/review")')
+  assert((await page.textContent('[data-testid=ai-complete]')).includes('Review the changes'), 'the commands the agent announces, with their description')
+  await page.keyboard.press('Control+a')
+  await page.keyboard.press('Delete')
+  await page.keyboard.type('see @go.m')
+  await page.waitForSelector('[data-testid=ai-complete] .ai-complete-label:has-text("go.mod")')
+  await page.keyboard.press('Enter')
+  assert((await draft(page)).trimEnd() === 'see @go.mod', '@ completes a file of the project: ' + (await draft(page)))
+
+  // A multi-line prompt with an image and a file: text, resource link and image blocks.
+  await page.setInputFiles('[data-testid=agent-composer] input[type=file]', { name: 'dot.png', mimeType: 'image/png', buffer: PNG })
+  await page.waitForSelector('[data-testid=agent-atts] .ai-att[data-kind=image]')
+  await prompt(page, 'blocks: look at @go.mod\nsecond line')
+  await page.waitForSelector('[data-testid=agent-message]:has-text("blocks: text,resource_link:go.mod,image:image/png")')
+  const sent = await page.$$eval('[data-testid=agent-user]', (l) => l[l.length - 1].textContent)
+  assert(sent.includes('look at @go.mod') && sent.includes('second line'), 'multi-line prompt kept: ' + sent)
+  await page.waitForSelector('[data-testid=agent-user] [data-testid=agent-user-att] img')
+  assert(!(await page.$('[data-testid=agent-atts]')), 'attachments cleared once sent')
+  await waitState(page, 'ready')
+
+  // ↑ in the empty box: the prompts sent.
+  await page.click(box)
+  await page.keyboard.press('ArrowUp')
+  assert((await draft(page)).startsWith('blocks: look at @go.mod'), 'history with ↑: ' + (await draft(page)))
+  await page.keyboard.press('ArrowDown')
+  assert((await draft(page)) === '', 'back to an empty box with ↓')
+
+  // A config option of the agent, in the bar of the composer.
+  assert(await page.$('[data-testid=agent-composer] [data-testid=agent-config-mode]'), 'the mode select is in the composer bar')
   await page.selectOption('[data-testid=agent-config-mode]', 'bypass')
   await page.waitForFunction(() => document.querySelector('[data-testid=agent-config-mode]')?.value === 'bypass')
 
-  // Stop during a turn.
+  // Stop during a turn; a prompt sent meanwhile waits in the queue, then goes.
   await prompt(page, 'slow')
   await page.waitForSelector('[data-testid=agent-message]:has-text("tick 3")')
   assert((await state(page)) === 'busy', 'tab busy')
+  await prompt(page, 'queued meanwhile')
+  await page.waitForSelector('[data-testid=agent-queue]:has-text("queued meanwhile")')
   await page.click('[data-testid=agent-stop]')
   await page.waitForSelector('[data-testid=agent-notice]:has-text("Stopped.")')
+  await page.waitForSelector('[data-testid=agent-user]:has-text("queued meanwhile")')
   await waitState(page, 'ready')
+  assert(!(await page.$('[data-testid=agent-queue]')), 'queue sent at the end of the turn')
 
   // The agent dies: restarted with its session loaded; the thread stays, without the replay.
   const users = await page.$$eval('[data-testid=agent-user]', (l) => l.length)

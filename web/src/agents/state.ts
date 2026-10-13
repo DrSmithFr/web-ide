@@ -28,6 +28,11 @@ export interface AgentInfo {
   crashed?: boolean
   config?: ConfigOption[]
   usage?: { used: number; size: number }
+  /** The prompts waiting for the end of the turn, and what a prompt may hold. */
+  queue?: { text: string; attachments?: number }[]
+  caps?: { image: boolean; embeddedContext: boolean }
+  /** The slash commands the agent announces. */
+  commands?: { name: string; description: string; input?: { hint?: string } }[]
   /** Work time and cost of its turns (agents/stats.tsx). */
   stats?: Totals
   started: number
@@ -49,6 +54,8 @@ export interface ToolContent {
 export interface Entry {
   kind: 'user' | 'agent' | 'thought' | 'tool' | 'plan' | 'permission' | 'notice' | 'error'
   text?: string
+  /** Images (a file of the session) and files of a user prompt. */
+  attachments?: { name: string; kind: 'image' | 'text'; file?: string; mime?: string }[]
   time: number
   toolId?: string
   title?: string
@@ -149,7 +156,18 @@ onPod('agents.append', (e: { id: string; seq: number; index: number; text: strin
 
 const call = <T = unknown>(id: string, method: string, params: Record<string, unknown> = {}) => requestIn<T>(projectOf(id), method, { id, ...params })
 
-export const promptAgent = (id: string, text: string) => call(id, 'agents.prompt', { text })
+/** A piece of a prompt besides its text: an image (base64) or the text of a file. */
+export interface AgentPart {
+  kind: 'image' | 'text'
+  name: string
+  mime?: string
+  data?: string
+  text?: string
+}
+
+export const promptAgent = (id: string, text: string, parts: AgentPart[] = []) => call(id, 'agents.prompt', { text, parts })
+export const unqueueAgent = (id: string, index: number) => call<{ text: string }>(id, 'agents.unqueue', { index })
+export const agentImage = (id: string, file: string) => call<string>(id, 'agents.image', { file })
 export const cancelAgent = (id: string) => call(id, 'agents.cancel')
 export const answerAgent = (id: string, index: number, option: string) => call(id, 'agents.answer', { index, option })
 export const configAgent = (id: string, config: string, value: string) => call(id, 'agents.config', { config, value })

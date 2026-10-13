@@ -211,6 +211,7 @@ func (m *Manager) restore() {
 		}
 		s := m.newSession(sv.Info)
 		s.th.Entries, s.acp, s.canLoad, s.nextID, s.first = sv.Entries, sv.ACP, sv.CanLoad, sv.NextID, sv.First
+		s.caps, s.queue, s.images = sv.Caps, sv.Queue, sv.Images
 		s.reportedCost, s.subscription = sv.ReportedCost, sv.Subscription
 		s.th.index()
 		m.sessions[s.info.ID] = s
@@ -355,6 +356,7 @@ func (m *Manager) Close(id string) error {
 	s.mu.Unlock()
 	s.q.close()
 	removeQuiet(m.file(id))
+	_ = os.RemoveAll(filepath.Join(m.Dir, id))
 	removeQuiet(m.logFile(id))
 	m.emit("agents.closed", map[string]string{"id": id})
 	return nil
