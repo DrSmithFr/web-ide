@@ -1931,7 +1931,6 @@
   "The agent kept ending, it is not restarted anymore.": "L'agent s'est arrêté plusieurs fois de suite, il n'est plus relancé.",
   "The agent stopped.": "L'agent s'est arrêté.",
   "Starting {name}…": "Démarrage de {name}…",
-  "Context used": "Contexte utilisé",
   "Work: {time}": "Travail : {time}",
   "Waiting for you: {time}": "En attente de vous : {time}",
   "{n} turns, {tokens} tokens": "{n} tours, {tokens} tokens",
@@ -1968,6 +1967,7 @@
   "Cancelled": "Annulé",
   "Follow the edits": "Suivre les modifications",
   "open each file the agent edits": "ouvre chaque fichier que l'agent modifie",
-  "Follow the edits: open each file the agent edits": "Suivre les modifications : ouvrir chaque fichier que l'agent modifie",
-  "Following the edits: each file the agent edits opens in the editor (click to stop)": "Suivi des modifications : chaque fichier que l'agent modifie s'ouvre dans l'éditeur (cliquer pour arrêter)"
+  "Agent options": "Options de l'agent",
+  "Context: {used} / {size} tokens ({n} %)": "Contexte : {used} / {size} jetons ({n} %)",
+  "Each file the agent edits opens in the editor": "Chaque fichier que l'agent modifie s'ouvre dans l'éditeur"
 }

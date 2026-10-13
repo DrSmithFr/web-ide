@@ -51,16 +51,40 @@ const done = (stopReason) => ({
   },
 })
 
-const configOptions = (mode) => [
+// The settings of a session: its mode, model and effort, as claude-agent-acp announces them.
+const configOptions = (s = {}) => [
   {
     id: 'mode',
     name: 'Mode',
     category: 'mode',
     type: 'select',
-    currentValue: mode,
+    currentValue: s.mode ?? 'default',
     options: [
       { value: 'default', name: 'Manual' },
+      { value: 'plan', name: 'Plan' },
       { value: 'bypass', name: 'Bypass' },
+    ],
+  },
+  {
+    id: 'model',
+    name: 'Model',
+    category: 'model',
+    type: 'select',
+    currentValue: s.model ?? 'opus',
+    options: [
+      { value: 'opus', name: 'Opus', description: 'The most capable' },
+      { value: 'sonnet', name: 'Sonnet' },
+    ],
+  },
+  {
+    id: 'effort',
+    name: 'Effort',
+    category: 'thought_level',
+    type: 'select',
+    currentValue: s.effort ?? 'high',
+    options: [
+      { value: 'low', name: 'Low' },
+      { value: 'high', name: 'High' },
     ],
   },
 ]
@@ -184,7 +208,7 @@ function handle(m) {
     case 'session/new': {
       const sid = `fake-${process.pid}-${sessions.size}`
       sessions.set(sid, { cwd: p.cwd, mode: 'default', turns: 0, mcp: p.mcpServers ?? [] })
-      send({ id: m.id, result: { sessionId: sid, configOptions: configOptions('default') } })
+      send({ id: m.id, result: { sessionId: sid, configOptions: configOptions() } })
       return update(sid, { sessionUpdate: 'available_commands_update', availableCommands: [{ name: 'review', description: 'Review the changes' }] })
     }
     case 'session/load':
@@ -192,10 +216,10 @@ function handle(m) {
       // The replay of the history, which the IDE already has.
       update(p.sessionId, { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'replayed question' } })
       update(p.sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'replayed answer' } })
-      return send({ id: m.id, result: { configOptions: configOptions('default') } })
+      return send({ id: m.id, result: { configOptions: configOptions() } })
     case 'session/set_config_option':
-      sessions.get(p.sessionId).mode = p.value
-      return send({ id: m.id, result: { configOptions: configOptions(p.value) } })
+      sessions.get(p.sessionId)[p.configId] = p.value
+      return send({ id: m.id, result: { configOptions: configOptions(sessions.get(p.sessionId)) } })
     case 'session/prompt':
       return void prompt(m.id, p)
     case 'session/cancel':

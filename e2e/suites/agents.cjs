@@ -51,7 +51,7 @@ run(async ({ page }) => {
   const diff = await page.$$eval('[data-testid=agent-diff] .ai-diff > div', (l) => l.map((d) => d.className + ':' + d.textContent))
   assert(diff.includes('del:- hi') && diff.includes('add:+ hello') && diff.includes(':  there'), 'edit with its diff: ' + JSON.stringify(diff))
   await page.waitForFunction(() => document.querySelector('[data-testid=agent-tab] .tab-title')?.textContent === 'Fake session')
-  assert((await page.textContent('[data-testid=agent-usage]')).replace(/\s/g, '') === '1.2k/200k', 'context usage shown')
+  assert((await page.getAttribute('[data-testid=agent-usage]', 'title')).includes('1.2k / 200k'), 'context usage shown on the ring')
   // Time and cost of the turn on the tab (the fake runs on a plan: an API equivalent).
   await page.waitForFunction(() => /Cost: \$0\.\d+ \(API equivalent\)/.test(document.querySelector('[data-testid=agent-tab]')?.title ?? ''))
   assert(/Work: \d+ s/.test(await page.getAttribute(tab, 'title')), 'work time on the tab')
@@ -67,13 +67,15 @@ run(async ({ page }) => {
   await page.waitForSelector('[data-testid=agent-message]:has-text("Edited.")')
   await waitState(page, 'ready')
 
-  // Follow mode: off by default (the edit of hello.txt opened nothing), on from the composer
-  // bar: the file of an edit done opens in the editor (its relative path made absolute).
+  // Follow mode: off by default (the edit of hello.txt opened nothing), on from the options of the
+  // composer: the file of an edit done opens in the editor (its relative path made absolute).
   const editorTabs = () => page.$$eval('.pane .tab', (l) => l.map((t) => t.textContent))
   assert(!(await editorTabs()).some((t) => t.includes('hello.txt')), 'no file opened without the follow mode')
-  assert((await page.getAttribute('[data-testid=agent-follow]', 'aria-pressed')) === 'false', 'follow mode off')
-  await page.click('[data-testid=agent-follow]')
-  await page.waitForSelector('[data-testid=agent-follow][aria-pressed=true]')
+  await page.click('[data-testid=agent-options]')
+  assert(!(await page.isChecked('[data-testid=agent-follow] input')), 'follow mode off')
+  await page.click('[data-testid=agent-follow] input')
+  await page.waitForFunction(() => document.querySelector('[data-testid=agent-follow] input')?.checked)
+  await page.keyboard.press('Escape')
   await prompt(page, 'follow me')
   await page.waitForSelector('[data-testid=agent-message]:has-text("Wrote follow.txt.")')
   await page.waitForFunction(() => document.querySelector('.pane.active .tab.active')?.textContent.includes('follow.txt'))
@@ -81,8 +83,10 @@ run(async ({ page }) => {
   await page.click(`${tab}`, { button: 'right' })
   await page.waitForSelector('.ctx-menu .ctx-item:has-text("Follow the edits") .ctx-check.on')
   await page.keyboard.press('Escape')
-  await page.click('[data-testid=agent-follow]')
-  await page.waitForSelector('[data-testid=agent-follow][aria-pressed=false]')
+  await page.click('[data-testid=agent-options]')
+  await page.click('[data-testid=agent-follow] input')
+  await page.waitForFunction(() => !document.querySelector('[data-testid=agent-follow] input')?.checked)
+  await page.keyboard.press('Escape')
   await waitState(page, 'ready')
 
   // The composer: /commands of the agent, @paths of the project.
@@ -115,10 +119,38 @@ run(async ({ page }) => {
   await page.keyboard.press('ArrowDown')
   assert((await draft(page)) === '', 'back to an empty box with ↓')
 
-  // A config option of the agent, in the bar of the composer.
-  assert(await page.$('[data-testid=agent-composer] [data-testid=agent-config-mode]'), 'the mode select is in the composer bar')
-  await page.selectOption('[data-testid=agent-config-mode]', 'bypass')
-  await page.waitForFunction(() => document.querySelector('[data-testid=agent-config-mode]')?.value === 'bypass')
+  // The settings of the agent in the bar of the composer: the mode as the mode button of the
+  // assistant (its color), the model as its model button, the effort behind the options.
+  const mode = '[data-testid=agent-composer] [data-testid=agent-config-mode]'
+  assert((await page.textContent(mode)).trim() === 'Manual', 'the mode button shows the mode')
+  assert(await page.$('[data-testid=agent-composer].mode-manual'), 'manual mode: its color')
+  await page.click(mode)
+  await page.click('[data-testid=agent-config-mode-list] [data-value=bypass]')
+  await page.waitForSelector(`${mode}[data-value=bypass]`)
+  assert(await page.$('[data-testid=agent-composer].mode-bypass'), 'bypass mode: its color')
+  await page.click(box)
+  await page.keyboard.press('Shift+Tab')
+  await page.waitForSelector(`${mode}[data-value=default]`)
+  await page.keyboard.press('Shift+Tab')
+  await page.waitForSelector(`${mode}[data-value=plan]`)
+  assert(await page.$('[data-testid=agent-composer].mode-plan'), 'Shift+Tab goes to the next mode')
+  await page.keyboard.press('Shift+Tab')
+  await page.keyboard.press('Shift+Tab')
+  await page.waitForSelector(`${mode}[data-value=bypass]`)
+  await page.click('[data-testid=agent-config-model]')
+  await page.click('[data-testid=agent-config-model-list] [data-value=sonnet]')
+  await page.waitForSelector('[data-testid=agent-config-model][data-value=sonnet]')
+  assert((await page.textContent('[data-testid=agent-config-model]')).includes('Sonnet'), 'the model button shows the model')
+  await page.click('[data-testid=agent-options]')
+  await page.click('[data-testid=agent-config-effort] button:has-text("Low")')
+  await page.waitForSelector('[data-testid=agent-config-effort] button.on:has-text("Low")')
+  await page.keyboard.press('Escape')
+  await page.screenshot({ path: OUT + '/agents-composer.png' })
+  // Full screen: the thread hidden, Esc leaves.
+  await page.click('[data-testid=agent-full]')
+  assert(!(await page.isVisible('[data-testid=agent-thread]')), 'full screen hides the thread')
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('[data-testid=agent-thread]', { state: 'visible' })
 
   // Stop during a turn; a prompt sent meanwhile waits in the queue, then goes.
   await prompt(page, 'slow')

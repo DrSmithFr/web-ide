@@ -32,7 +32,7 @@ import {
 } from './state'
 import '../llm/assistant.css'
 import { ProjectAgentStats, statsTitle } from './stats'
-import { AgentComposer } from './Composer'
+import { AgentComposer, agentFull } from './Composer'
 import { UserAttachments } from './UserAttachments'
 import { QuestionForm, formAnswerText } from '../questions/Form'
 import { showsQuestions } from '../questions/state'
@@ -193,7 +193,7 @@ function SessionView(props: { id: string }) {
   )
   const busy = () => info()?.state === 'busy' || info()?.state === 'asking'
   return (
-    <div class="agent-session" data-testid="agent-session">
+    <div class="agent-session" classList={{ 'composer-full': agentFull() }} data-testid="agent-session">
       <Show when={info()?.state === 'error'}>
         <div class="ai-banner" data-testid="agent-error">
           <Icon name="warning" size={14} />

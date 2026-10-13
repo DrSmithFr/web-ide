@@ -16,10 +16,13 @@
 .agent-thread { --ai-gap: 12px; padding-top: 12px; }
 .agent-stderr { margin: 4px 0 0; max-height: 160px; overflow: auto; white-space: pre-wrap; font: 11.5px/1.4 var(--font-code); color: var(--fg-muted); }
 
-/* The message box of the assistant (MessageBox), in the color of the tool. */
-.agent-composer { --mode: var(--accent); }
-.agent-config { display: inline-flex; align-items: center; min-width: 0; }
-.agent-config select { font-size: 12px; padding: 2px 4px; max-width: 160px; }
+/* The message box of the assistant (MessageBox), in the color of the mode of the agent. */
+.agent-composer.mode-manual { --mode: var(--warn); }
+.agent-composer.mode-plan { --mode: var(--info); }
+.agent-composer.mode-auto { --mode: var(--ok); }
+.agent-composer.mode-bypass { --mode: var(--danger); }
+.agent-ring { cursor: help; height: 28px; align-items: center; }
+.agent-session.composer-full .ai-messages { display: none; }
 .agent-user-atts { justify-content: flex-end; margin-bottom: 4px; }
 .agent-image-modal img { display: block; max-width: min(80vw, 1200px); max-height: 75vh; margin: 0 auto; }
 

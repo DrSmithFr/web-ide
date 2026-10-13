@@ -7,7 +7,7 @@ import { createStore, produce } from 'solid-js/store'
 import { Icon } from '../ui/icons'
 import { contextMenu } from '../ui/overlay'
 import { errorToast, toast } from '../ui/toast'
-import { shortcutOf } from '../keys/bindings'
+import { registerAction, shortcutOf } from '../keys/bindings'
 import { t, tn } from '../i18n'
 import type { EditorView } from '../editor/view'
 import { insertAtCaret, MessageBox, type CompletionItem } from '../llm/MessageBox'
@@ -17,7 +17,7 @@ import { cloneDoc, newDoc, type DoodleDoc } from '../llm/doodle/model'
 import { doodleSession, openDoodle } from '../llm/doodle/session'
 import { canCapture, captureScreen, type Picture } from '../llm/doodle/background'
 import { cancelRecording, canRecord, speech, startRecording, stopRecording, transcribe } from '../llm/transcribe'
-import { AttachmentChip, formatTokens } from '../llm/parts'
+import { AttachmentChip, formatTokens, Popover, Switch } from '../llm/parts'
 import type { Caps } from '../llm/state'
 import { phone } from '../state/mobile'
 import { cancelAgent, configAgent, followAgent, promptAgent, sessions, threads, unqueueAgent, type AgentPart, type ConfigOption } from './state'
@@ -29,6 +29,9 @@ interface Box {
 const [boxes, setBoxes] = createStore<Record<string, Box>>({})
 const box = (id: string): Box => boxes[id] ?? { draft: '', pending: [] }
 const setBox = (id: string, f: (b: Box) => void) => setBoxes(produce((all) => f((all[id] ??= { draft: '', pending: [] }))))
+
+/** The message box over the whole session (the thread hidden), as in the assistant. */
+export const [agentFull, setAgentFull] = createSignal(false)
 
 /** What the agent reads, in the terms of the attachments of the assistant. */
 const capsOf = (id: string): Caps => ({ vision: !!sessions().find((s) => s.id === id)?.caps?.image, video: false, audio: false, tools: true, thinking: false, known: true })
@@ -141,6 +144,17 @@ export function AgentComposer(props: { id: string }) {
   }
   const onKey = (e: KeyboardEvent): boolean => {
     if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) return browse(e.key === 'ArrowUp' ? 1 : -1)
+    if (e.key === 'Tab' && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && modeOption()) {
+      const o = modeOption()!
+      const list = flatOptions(o)
+      const next = list[(list.findIndex((x) => x.value === o.currentValue) + 1) % list.length]
+      if (next) void configAgent(props.id, o.id, next.value).catch(errorToast)
+      return true
+    }
+    if (e.key === 'Escape' && agentFull() && !view()?.hasCarets()) {
+      setAgentFull(false)
+      return true
+    }
     if (e.key === 'Escape' && busy()) {
       void cancelAgent(props.id).catch(errorToast)
       return true
@@ -151,10 +165,21 @@ export function AgentComposer(props: { id: string }) {
     }
     return false
   }
+  const config = () => (info()?.config ?? []).filter((c) => c.type === 'select' && flatOptions(c).length > 1)
+  const modeOption = () => config().find((c) => c.category === 'mode')
+  const modelOption = () => config().find((c) => c.category === 'model')
+  const otherOptions = () => config().filter((c) => c !== modeOption() && c !== modelOption())
+  const off = registerAction('assistant.fullComposer', () => {
+    if (!view()?.hasFocus()) return false
+    setAgentFull(!agentFull())
+  })
+  onCleanup(off)
+
   const placeholder = () => (busy() ? t('Queued message…') : t('Ask the agent… (Ctrl+Enter sends)'))
 
   return (
-    <div class="ai-composer-wrap agent-composer" data-testid="agent-composer">
+    <div class={`ai-composer-wrap agent-composer mode-${modeTone(modeOption()?.currentValue)}`} classList={{ full: agentFull(), busy: busy() }} data-testid="agent-composer">
+      <div class="ai-led" />
       <div class="ai-composer">
         <Show when={info()?.queue?.length}>
           <div class="ai-queue" data-testid="agent-queue">
@@ -217,7 +242,17 @@ export function AgentComposer(props: { id: string }) {
           onView={(v) => (setView(v), !phone() && queueMicrotask(() => v.focus()))}
           testid="agent-input"
         />
+        <button
+          class="ai-act ai-full-btn"
+          title={agentFull() ? t('Leave the full screen (Esc)') : `${t('Full screen')} (${shortcutOf('assistant.fullComposer')})`}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => (setAgentFull(!agentFull()), view()?.focus())}
+          data-testid="agent-full"
+        >
+          <Icon name={agentFull() ? 'minimize' : 'maximize'} size={13} />
+        </button>
         <div class="ai-composer-bar">
+          <Show when={modeOption()}>{(o) => <ModePill id={props.id} option={o()} />}</Show>
           <button
             class="ai-icon ai-mic"
             classList={{ rec: speech.phase === 'recording' }}
@@ -243,16 +278,6 @@ export function AgentComposer(props: { id: string }) {
           >
             <Icon name="paperclip" size={16} />
           </button>
-          <button
-            class="ai-icon"
-            classList={{ on: !!info()?.follow }}
-            aria-pressed={!!info()?.follow}
-            title={info()?.follow ? t('Following the edits: each file the agent edits opens in the editor (click to stop)') : t('Follow the edits: open each file the agent edits')}
-            data-testid="agent-follow"
-            onClick={() => void followAgent(props.id, !info()?.follow).catch(errorToast)}
-          >
-            <Icon name="eye" size={16} />
-          </button>
           <input
             ref={fileInput}
             type="file"
@@ -263,15 +288,10 @@ export function AgentComposer(props: { id: string }) {
               e.currentTarget.value = ''
             }}
           />
-          <For each={[...(info()?.config ?? [])].sort((a, b) => Number(b.category === 'mode') - Number(a.category === 'mode'))}>{(c) => <ConfigSelect id={props.id} option={c} />}</For>
+          <AgentOptions id={props.id} options={otherOptions()} follow={!!info()?.follow} />
           <span class="grow" />
-          <Show when={info()?.usage}>
-            {(u) => (
-              <span class="muted small" title={t('Context used')} data-testid="agent-usage">
-                {formatTokens(u().used)} / {formatTokens(u().size)}
-              </span>
-            )}
-          </Show>
+          <Show when={info()?.usage}>{(u) => <Ring used={u().used} size={u().size} />}</Show>
+          <Show when={modelOption()}>{(o) => <ModelPill id={props.id} option={o()} />}</Show>
           <Show when={busy() && canSend()}>
             <button class="ai-send queue" onClick={() => void submit()} aria-label={t('Queue')} title={t('Queue: sent at the end of the turn')} data-testid="agent-enqueue">
               <Icon name="arrowUp" size={16} />
@@ -295,15 +315,139 @@ export function AgentComposer(props: { id: string }) {
   )
 }
 
-function ConfigSelect(props: { id: string; option: ConfigOption }) {
-  const flat = () => (props.option.options ?? []).flatMap((o: any) => (o.options ? o.options : [o])) as { value: string; name: string }[]
+type Choice = { value: string; name: string; description?: string }
+const flatOptions = (o: ConfigOption): Choice[] => (o.options ?? []).flatMap((x: any) => (x.options ? x.options : [x]))
+const nameOf = (o: ConfigOption) => flatOptions(o).find((x) => x.value === o.currentValue)?.name ?? o.currentValue
+
+/** The tone of a mode, for its color: plan, automatic (edits accepted), bypass or manual. */
+function modeTone(value = ''): 'plan' | 'auto' | 'bypass' | 'manual' {
+  const v = value.toLowerCase()
+  if (v.includes('plan')) return 'plan'
+  if (/bypass|yolo|dontask|full/.test(v)) return 'bypass'
+  if (/accept|auto/.test(v)) return 'auto'
+  return 'manual'
+}
+const toneIcons = { plan: 'outline', auto: 'check', bypass: 'warning', manual: 'edit' } as const
+
+/** The choices of an option in a popover, the current one checked. */
+function ChoiceList(props: { id: string; option: ConfigOption; close: () => void }) {
   return (
-    <Show when={props.option.type === 'select' && flat().length > 1}>
-      <label class="agent-config" title={props.option.name}>
-        <select value={props.option.currentValue} onChange={(e) => void configAgent(props.id, props.option.id, e.currentTarget.value).catch(errorToast)} data-testid={`agent-config-${props.option.id}`}>
-          <For each={flat()}>{(o) => <option value={o.value}>{o.name}</option>}</For>
-        </select>
-      </label>
-    </Show>
+    <div class="ai-model-list" role="listbox" data-testid={`agent-config-${props.option.id}-list`}>
+      <For each={flatOptions(props.option)}>
+        {(c) => (
+          <button
+            class="ai-model-item"
+            classList={{ active: c.value === props.option.currentValue }}
+            role="option"
+            aria-selected={c.value === props.option.currentValue}
+            data-value={c.value}
+            onClick={() => (props.close(), void configAgent(props.id, props.option.id, c.value).catch(errorToast))}
+          >
+            <span class="ai-model-check">{c.value === props.option.currentValue ? '✓' : ''}</span>
+            <span class="grow">
+              <span class="ai-model-name">{c.name}</span>
+              <Show when={c.description}>
+                <span class="ai-model-meta">{c.description}</span>
+              </Show>
+            </span>
+          </button>
+        )}
+      </For>
+    </div>
+  )
+}
+
+/** The mode of the agent, as the mode button of the assistant: its color and its choices (Shift+Tab: the next one). */
+function ModePill(props: { id: string; option: ConfigOption }) {
+  const tone = () => modeTone(props.option.currentValue)
+  return (
+    <Popover
+      class="ai-options-pop"
+      trigger={(toggle) => (
+        <button class="ai-mode" title={`${props.option.name} (Shift+Tab)`} onClick={toggle} data-testid={`agent-config-${props.option.id}`} data-value={props.option.currentValue}>
+          <Icon name={toneIcons[tone()]} size={13} />
+          <span class="ai-mode-label">{nameOf(props.option)}</span>
+        </button>
+      )}
+    >
+      {(close) => <ChoiceList id={props.id} option={props.option} close={close} />}
+    </Popover>
+  )
+}
+
+/** The model of the agent, as the model button of the assistant. */
+function ModelPill(props: { id: string; option: ConfigOption }) {
+  return (
+    <Popover
+      align="right"
+      class="ai-model-pop"
+      trigger={(toggle, open) => (
+        <button class="ai-pill" classList={{ open }} onClick={toggle} title={props.option.name} data-testid={`agent-config-${props.option.id}`} data-value={props.option.currentValue}>
+          <span class="ai-loaded-dot" />
+          <span class="ellipsis">{nameOf(props.option)}</span>
+          <span class="ai-chev open-up">
+            <Icon name="chevron" size={10} />
+          </span>
+        </button>
+      )}
+    >
+      {(close) => <ChoiceList id={props.id} option={props.option} close={close} />}
+    </Popover>
+  )
+}
+
+/** The follow mode and the other settings of the agent (effort…), behind the options button. */
+function AgentOptions(props: { id: string; options: ConfigOption[]; follow: boolean }) {
+  return (
+    <Popover
+      class="ai-options-pop"
+      trigger={(toggle, open) => (
+        <button class="ai-icon" classList={{ on: open }} onClick={toggle} title={t('Agent options')} data-testid="agent-options">
+          <Icon name="sliders" size={16} />
+        </button>
+      )}
+    >
+      {() => (
+        <>
+          <Switch label={t('Follow the edits')} hint={t('Each file the agent edits opens in the editor')} checked={props.follow} onChange={(v) => void followAgent(props.id, v).catch(errorToast)} testid="agent-follow" />
+          <For each={props.options}>
+            {(o) => (
+              <div class="ai-effort-row">
+                <span>{o.name}</span>
+                <div class="segmented" role="radiogroup" data-testid={`agent-config-${o.id}`}>
+                  <For each={flatOptions(o)}>
+                    {(c) => (
+                      <button type="button" role="radio" aria-checked={c.value === o.currentValue} classList={{ on: c.value === o.currentValue }} title={c.description} onClick={() => void configAgent(props.id, o.id, c.value).catch(errorToast)}>
+                        {c.name}
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </div>
+            )}
+          </For>
+        </>
+      )}
+    </Popover>
+  )
+}
+
+/** The context the agent uses, as the ring of the assistant. */
+function Ring(props: { used: number; size: number }) {
+  const ratio = () => (props.size ? Math.min(1, props.used / props.size) : 0)
+  const level = () => (ratio() > 0.9 ? 'danger' : ratio() > 0.75 ? 'warn' : '')
+  const r = 7
+  const c = 2 * Math.PI * r
+  return (
+    <span
+      class={`ai-ring agent-ring ${level()}`}
+      title={t('Context: {used} / {size} tokens ({n} %)', { used: formatTokens(props.used), size: formatTokens(props.size), n: Math.round(ratio() * 100) })}
+      data-testid="agent-usage"
+    >
+      <svg width="18" height="18" viewBox="0 0 18 18">
+        <circle cx="9" cy="9" r={r} class="ai-ring-bg" />
+        <circle cx="9" cy="9" r={r} class="ai-ring-fg" stroke-dasharray={`${c * ratio()} ${c}`} transform="rotate(-90 9 9)" />
+      </svg>
+    </span>
   )
 }
