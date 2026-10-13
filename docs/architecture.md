@@ -44,7 +44,7 @@ The keeper also relays HTTP requests (`keeper/http.go`): the completions of the 
 
 JSON over one WebSocket per window. Request `{id, method, params}` → response `{id, result | error}`; events pushed as `{event, data}` (`fs.changed`, `buffer.synced`, `session.changed`, `console.output`, `lsp.diagnostics`, `git.changed`, `llm.delta`, `agent.update`, `agents.changed` / `agents.entry` / `agents.append`, `kanban.changed`…). `id: 0` is a notification without answer; `$/cancel` cancels a request. Some methods run in order per group (document changes, terminal input), and a language server request waits for the document changes sent before it (`barrier` in `server.go`).
 
-`POST /mcp` is the MCP endpoint for Claude Code (`server/mcp*.go`, JSON-RPC over HTTP without streaming, the token as a bearer): tools and prompts on the kanban and the saved commands, see [kanban.md](kanban.md#claude-code). `/open?path=&line=` opens a file in the windows of its project (`server/open.go`).
+`POST /mcp` is the MCP endpoint for Claude Code and the CLI agents (`server/mcp*.go`, JSON-RPC over HTTP without streaming, the token as a bearer): tools and prompts on the kanban and the saved commands, and tools of the IDE (`mcp_ide.go`: consoles, Docker, previews, and what a window shows, run there through `agent.ui` like the window tools of the assistant), see [kanban.md](kanban.md#claude-code). `/open?path=&line=` opens a file in the windows of its project (`server/open.go`).
 
 Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a message translated into the language of the window.
 

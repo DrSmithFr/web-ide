@@ -26,6 +26,8 @@ type mcpTool struct {
 	props             map[string]any
 	required          []string
 	run               func(ctx context.Context, s *Server, args json.RawMessage) (string, error)
+	// rich answers with content blocks (an image…) instead of a text.
+	rich func(ctx context.Context, s *Server, args json.RawMessage) ([]any, error)
 }
 
 func (t mcpTool) schema() map[string]any {

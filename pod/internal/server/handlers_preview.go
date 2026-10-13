@@ -175,7 +175,12 @@ func (s *Server) registerPreviews() {
 // The app is a saved serve command when there is one: command_id, else the only one with a
 // port when no command is given, else the one whose text is the command.
 func (s *Server) sharePreview(r *agentRun, rt *runtime.Runtime, a toolArgs) (toolResult, error) {
-	pv := &agent.Preview{Project: r.project, Title: strings.TrimSpace(a.str("title")), Command: strings.TrimSpace(a.str("command")),
+	return s.sharePreviewIn(r.project, rt, a)
+}
+
+// sharePreviewIn resolves the app of share_preview in project (the assistant and the MCP).
+func (s *Server) sharePreviewIn(project string, rt *runtime.Runtime, a toolArgs) (toolResult, error) {
+	pv := &agent.Preview{Project: project, Title: strings.TrimSpace(a.str("title")), Command: strings.TrimSpace(a.str("command")),
 		Cwd: a.str("cwd"), Port: a.num("port"), CommandID: strings.TrimSpace(a.str("command_id"))}
 	list, err := s.projectCommands(rt)
 	if err != nil && (pv.CommandID != "" || pv.Command == "") {
