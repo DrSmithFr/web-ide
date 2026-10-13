@@ -1,8 +1,10 @@
 // Agents tool: ACP sessions with the fake agent of e2e/bin (claude-agent-acp): opened from
 // the launcher, a prompt streams thought, plan, message and an edit with its diff; a
 // permission card; a config option; Stop; the agent killed is restarted and its session
-// loaded; closing the tab ends the session.
-const { run, openProject, assert, OUT } = require('../common.cjs')
+// loaded; closing the tab ends the session. Work time and cost: on the tab, the project, and
+// the ticket of a session run in its worktree.
+const { execSync } = require('child_process')
+const { run, openProject, assert, mcp, OUT, WS } = require('../common.cjs')
 
 const tab = '[data-testid=agent-tab]'
 const state = (page) => page.getAttribute(tab, 'data-state')
@@ -39,6 +41,9 @@ run(async ({ page }) => {
   assert(diff.includes('del:- hi') && diff.includes('add:+ hello') && diff.includes(':  there'), 'edit with its diff: ' + JSON.stringify(diff))
   await page.waitForFunction(() => document.querySelector('[data-testid=agent-tab] .tab-title')?.textContent === 'Fake session')
   assert((await page.textContent('[data-testid=agent-usage]')).replace(/\s/g, '') === '1.2k/200k', 'context usage shown')
+  // Time and cost of the turn on the tab (the fake runs on a plan: an API equivalent).
+  await page.waitForFunction(() => /Cost: \$0\.\d+ \(API equivalent\)/.test(document.querySelector('[data-testid=agent-tab]')?.title ?? ''))
+  assert(/Work: \d+ s/.test(await page.getAttribute(tab, 'title')), 'work time on the tab')
   await page.screenshot({ path: OUT + '/agents-turn.png' })
 
   // A permission: a card in the thread, the tab waits for the user.
@@ -84,4 +89,32 @@ run(async ({ page }) => {
   await page.click(`${tab} .tab-close`)
   await page.waitForSelector('[data-testid=agents-launcher]')
   assert((await page.$$(tab)).length === 0, 'session closed')
+
+  // The turns stay counted for the project once the session is closed.
+  await page.waitForFunction(() => /\$0\.\d+/.test(document.querySelector('[data-testid=project-agent-stats-value]')?.textContent ?? ''))
+
+  // A session in the worktree of a ticket: its time and cost on the ticket.
+  const home = page.url().replace(/[?#].*$/, '')
+  // A ticket branch needs a first commit.
+  const env = { ...process.env, GIT_AUTHOR_NAME: 'E2E', GIT_AUTHOR_EMAIL: 'e2e@test', GIT_COMMITTER_NAME: 'E2E', GIT_COMMITTER_EMAIL: 'e2e@test' }
+  execSync('git add -A && git commit -q -m "initial state"', { cwd: WS + '/demo', env })
+  await mcp('kanban_create', { title: 'Timed by the agents' })
+  const created = await mcp('kanban_list', {})
+  const n = Math.max(...[...JSON.stringify(created).matchAll(/#(\d+)/g)].map((m) => +m[1]))
+  await mcp('kanban_set_plan', { id: n, plan: 'Do it.', goals: [{ title: 'Done' }], size: 's', complexity: 'low' })
+  const started = JSON.stringify(await mcp('kanban_start', { id: n }))
+  const wt = started.match(/project\/([\w-]+-t\d+)/)?.[1]
+  assert(wt, 'ticket started in a worktree: ' + started.slice(0, 300))
+  await page.goto(home.replace(/\/project\/[^/]+$/, '/project/' + wt))
+  await page.waitForSelector('.menubar')
+  if (!(await page.isVisible('[data-testid=agents-launcher]'))) await page.click('.rail-btn[data-id=agents]')
+  await page.click('[data-testid=agent-card-claude] button:has-text("Open")')
+  await waitState(page, 'ready')
+  await prompt(page, 'hello')
+  await page.waitForSelector('[data-testid=agent-user]:has-text("hello")')
+  await waitState(page, 'ready')
+  await page.goto(home + '?ticket=' + n)
+  await page.waitForSelector('[data-testid=ticket-agent-stats]')
+  const badge = await page.textContent('[data-testid=ticket-agent-stats]')
+  assert(/^Agents: \d+ s · \$0\.\d+$/.test(badge), 'time and cost on the ticket: ' + badge)
 })

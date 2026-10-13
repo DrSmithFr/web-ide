@@ -32,6 +32,7 @@ import {
   type Entry,
 } from './state'
 import '../llm/assistant.css'
+import { ProjectAgentStats, statsTitle } from './stats'
 import './agents.css'
 
 const stateLabel = (s: AgentInfo['state']) =>
@@ -68,7 +69,7 @@ export function AgentsTool() {
               data-state={s.state}
               aria-selected={current() === s.id}
               classList={{ active: current() === s.id }}
-              title={`${s.name} · ${stateLabel(s.state)}`}
+              title={`${s.name} · ${stateLabel(s.state)}` + (s.stats ? '\n' + statsTitle(s.stats) : '')}
               onClick={() => setActive(s.id)}
               onMouseDown={(e) => e.button === 1 && (e.preventDefault(), void close(s.id))}
             >
@@ -136,6 +137,7 @@ function Launcher() {
     <div class="agents-launcher" data-testid="agents-launcher">
       <Show when={list()?.local !== false} fallback={<EmptyState icon="sparkle" text={t('Agents run on local projects only, for now.')} />}>
         <p class="muted small">{t('Open a session with a coding agent. It works in this project, through the Agent Client Protocol.')}</p>
+        <ProjectAgentStats />
         <For each={list()?.agents ?? []}>
           {(a) => (
             <div class="agent-card" data-testid={`agent-card-${a.id}`}>

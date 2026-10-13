@@ -134,7 +134,7 @@ Les images de ce guide sont faites avec Qwen3.8 27B sur llama.cpp.
 
 ## Agents : Claude Code, opencode, pi
 
-L'outil *Agents* (barre de droite) fait tourner dans l'IDE les agents de code installés sur votre machine, via l'Agent Client Protocol : Claude Code (avec votre abonnement ou votre clé d'API, comme dans le terminal), opencode et pi. Ouvrez-le, choisissez un agent : *Installer* récupère un adaptateur manquant (`npm`, dans le dossier de données du pod), opencode s'installe à la main. Chaque session est un onglet qui travaille dans le projet : tapez une demande, suivez ses messages, ses appels d'outils et ses diffs, répondez à ses cartes de permission, changez son mode ou son modèle sous la zone de saisie. Une session continue quand vous fermez la fenêtre ou mettez le pod à jour ; fermer son onglet la termine.
+L'outil *Agents* (barre de droite) fait tourner dans l'IDE les agents de code installés sur votre machine, via l'Agent Client Protocol : Claude Code (avec votre abonnement ou votre clé d'API, comme dans le terminal), opencode et pi. Ouvrez-le, choisissez un agent : *Installer* récupère un adaptateur manquant (`npm`, dans le dossier de données du pod), opencode s'installe à la main. Chaque session est un onglet qui travaille dans le projet : tapez une demande, suivez ses messages, ses appels d'outils et ses diffs, répondez à ses cartes de permission, changez son mode ou son modèle sous la zone de saisie. Une session continue quand vous fermez la fenêtre ou mettez le pod à jour ; fermer son onglet la termine. L'infobulle d'un onglet, l'en-tête d'un ticket et l'outil Infos montrent le temps de travail et le coût des agents (un *équivalent API* sous abonnement).
 
 ## Le cycle de développement
 

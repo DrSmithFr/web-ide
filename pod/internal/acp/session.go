@@ -60,7 +60,9 @@ type Info struct {
 	Started int64          `json:"started"`
 	// Commands: the slash commands of the agent, as it sent them.
 	Commands json.RawMessage `json:"commands,omitempty"`
-	Seq      int64           `json:"seq"`
+	// Stats sum the turns of the session (work time, cost).
+	Stats *Totals `json:"stats,omitempty"`
+	Seq   int64   `json:"seq"`
 }
 
 // saved is the file of a session: what a restarted pod needs to go on.
@@ -75,6 +77,10 @@ type saved struct {
 	NextID int64  `json:"nextId"`
 	// Prompt is the id of the session/prompt awaited (0: no turn running).
 	Prompt int64 `json:"prompt,omitempty"`
+	// Turn: the clock of the turn running; ReportedCost and Subscription: see Session.
+	Turn         *turnState `json:"turn,omitempty"`
+	ReportedCost float64    `json:"reportedCost,omitempty"`
+	Subscription bool       `json:"subscription,omitempty"`
 }
 
 type message struct {
@@ -119,10 +125,16 @@ type Session struct {
 	closed  bool
 	// released: the pod stops, the process is left to the next one.
 	released bool
+	// turn is the clock of the turn running (turn.go); reportedCost the running total of cost
+	// the agent tells (opencode); subscription: it runs on a plan (cost = API equivalent).
+	turn         *turnState
+	reportedCost float64
+	subscription bool
 }
 
 func (s *Session) snapshot() saved {
-	return saved{Info: s.info, Entries: s.th.Entries, ACP: s.acp, CanLoad: s.canLoad, Proc: s.procID, Offset: s.offset, NextID: s.nextID, Prompt: s.prompt}
+	return saved{Info: s.info, Entries: s.th.Entries, ACP: s.acp, CanLoad: s.canLoad, Proc: s.procID, Offset: s.offset, NextID: s.nextID, Prompt: s.prompt,
+		Turn: s.turn, ReportedCost: s.reportedCost, Subscription: s.subscription}
 }
 
 // ---------- events to the page (under s.mu) ----------
@@ -338,6 +350,8 @@ func (s *Session) line(gen int, data []byte, next int64) {
 		}
 	case m.Method != "" && m.ID != nil:
 		s.agentRequest(m)
+	case m.Method == "_auth/status_update":
+		s.authStatus(m.Params)
 	case m.Method == "session/update":
 		if !s.loading {
 			var p struct {
@@ -367,6 +381,7 @@ func (s *Session) agentRequest(m message) {
 			title = *p.ToolCall.Title
 		}
 		s.entry(s.th.add(Entry{Kind: "permission", ToolID: p.ToolCall.ToolCallID, Title: title, Request: m.ID, Options: p.Options}))
+		s.asking()
 		s.setState(Asking, "")
 	default:
 		_ = s.write(map[string]any{"jsonrpc": "2.0", "id": m.ID, "error": rpcError{Code: -32601, Message: "method not found: " + m.Method}})
@@ -417,6 +432,9 @@ func (s *Session) apply(raw json.RawMessage) {
 			s.changed()
 		}
 	case "usage_update":
+		if u.Cost != nil {
+			s.reportedCost = u.Cost.Amount
+		}
 		if u.Used != nil && u.Size != nil {
 			s.info.Usage = &Usage{Used: *u.Used, Size: *u.Size}
 			s.changed()
@@ -433,6 +451,7 @@ func (s *Session) apply(raw json.RawMessage) {
 func (s *Session) endTurn(result json.RawMessage, err error) {
 	s.prompt = 0
 	s.cancelPermissions()
+	s.finishTurn(result)
 	var r struct {
 		StopReason string `json:"stopReason"`
 	}
@@ -460,6 +479,7 @@ func (s *Session) cancelPermissions() {
 			s.entry(i)
 		}
 	}
+	s.answered()
 }
 
 // exit handles the end of the process (on the queue): restarted with its session, unless it
@@ -477,6 +497,7 @@ func (s *Session) exit(gen, code int) {
 	}
 	if s.prompt != 0 {
 		s.prompt = 0
+		s.finishTurn(nil)
 		s.notice("notice", "The agent stopped during the turn.")
 	}
 	for i := range s.th.Entries {
@@ -522,6 +543,7 @@ func (s *Session) Prompt(text string) error {
 		return err
 	}
 	s.prompt = id
+	s.beginTurn()
 	s.th.plan = -1
 	s.entry(s.th.add(Entry{Kind: "user", Text: text}))
 	s.setState(Busy, "")
@@ -556,6 +578,7 @@ func (s *Session) Answer(index int, option string) error {
 		open = open || (x.Kind == "permission" && x.Outcome == "")
 	}
 	if !open && s.info.State == Asking {
+		s.answered()
 		s.setState(Busy, "")
 	}
 	return nil

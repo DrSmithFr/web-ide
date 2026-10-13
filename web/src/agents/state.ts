@@ -6,6 +6,7 @@ import { on as onPod, requestIn } from '../pod/rpc'
 import { attached, home } from '../state/project'
 import type { DiffLine } from '../llm/state'
 import { lineHunks } from '../editor/linediff'
+import type { Totals } from './stats'
 
 export interface ConfigOption {
   id: string
@@ -27,6 +28,8 @@ export interface AgentInfo {
   crashed?: boolean
   config?: ConfigOption[]
   usage?: { used: number; size: number }
+  /** Work time and cost of its turns (agents/stats.tsx). */
+  stats?: Totals
   started: number
   seq: number
   /** Worktree the session runs in (set by the page). */

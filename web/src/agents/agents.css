@@ -9,6 +9,7 @@
 
 .agents-launcher { display: flex; flex-direction: column; gap: 8px; padding: 16px; max-width: 520px; margin: 0 auto; width: 100%; }
 .agent-card { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-2); }
+.agent-stats { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .agent-card-name { font-weight: 600; min-width: 96px; }
 
 .agent-session { flex: 1; min-height: 0; display: flex; flex-direction: column; }

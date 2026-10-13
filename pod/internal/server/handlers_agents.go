@@ -11,6 +11,7 @@ import (
 
 // Agents tool: sessions of CLI agents through ACP (package acp), one per tab.
 func (s *Server) registerAgents() {
+	s.registerAgentStats()
 	catalog := func() acp.Catalog { return acp.Catalog{Dir: s.Store.Path("acp")} }
 	withAgents := func(f func(ctx context.Context, c *Client, rt *runtime.Runtime, m *acp.Manager, p json.RawMessage) (any, error)) handler {
 		return func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
