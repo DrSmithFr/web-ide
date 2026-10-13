@@ -500,7 +500,8 @@ func (s *Session) apply(raw json.RawMessage) {
 		if u.Cost != nil {
 			s.reportedCost = u.Cost.Amount
 		}
-		if u.Used != nil && u.Size != nil {
+		// opencode tells 0 when a turn is stopped: the last count stays.
+		if u.Used != nil && u.Size != nil && (*u.Used > 0 || s.info.Usage == nil) {
 			s.info.Usage = &Usage{Used: *u.Used, Size: *u.Size}
 			s.changed()
 		}

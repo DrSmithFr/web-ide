@@ -156,6 +156,17 @@ run(async ({ page }) => {
   await page.keyboard.press('Escape')
   await page.waitForSelector('[data-testid=agent-thread]', { state: 'visible' })
 
+  // A thought streams open, with its clock, then folds when the turn ends.
+  await prompt(page, 'slow think')
+  const live = '[data-testid=agent-thought].live.open'
+  await page.waitForSelector(`${live} [data-testid=agent-thought-text]:has-text("tick 3")`)
+  assert(await page.isVisible(`${live} .spinner`), 'a live thought has a spinner')
+  await page.waitForSelector(`${live} .ai-dur`)
+  await page.click('[data-testid=agent-stop]')
+  await waitState(page, 'ready')
+  await page.waitForSelector('[data-testid=agent-thought]:has-text("tick 3"):not(.live):not(.open)')
+  assert(!(await page.isVisible('[data-testid=agent-thought-text]:has-text("tick 3")')), 'the thought folds at the end of the turn')
+
   // Stop during a turn; a prompt sent meanwhile waits in the queue, then goes.
   await prompt(page, 'slow')
   await page.waitForSelector('[data-testid=agent-message]:has-text("tick 3")')

@@ -406,3 +406,16 @@ func TestQueueRestored(t *testing.T) {
 		return false
 	})
 }
+
+func TestStoppedTurnKeepsTheContext(t *testing.T) {
+	m, _ := newManager(t, t.TempDir(), nil)
+	defer m.CloseAll()
+	s := open(t, m)
+	s.mu.Lock()
+	s.apply(json.RawMessage(`{"sessionUpdate":"usage_update","used":19094,"size":262144}`))
+	s.apply(json.RawMessage(`{"sessionUpdate":"usage_update","used":0,"size":262144}`))
+	s.mu.Unlock()
+	if u := s.Info().Usage; u == nil || u.Used != 19094 {
+		t.Fatalf("usage: %+v", u)
+	}
+}

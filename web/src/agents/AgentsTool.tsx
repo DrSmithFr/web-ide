@@ -9,6 +9,7 @@ import { errorToast, toast } from '../ui/toast'
 import { copyText } from '../ui/clipboard'
 import { openFile, project, relPath } from '../state/project'
 import { DiffBlock, Markdown } from '../llm/parts'
+import { Elapsed, follow, useFold } from '../llm/Thread'
 import { t } from '../i18n'
 import { requestIn } from '../pod/rpc'
 import {
@@ -213,7 +214,7 @@ function SessionView(props: { id: string }) {
           <Show when={info()?.state === 'starting' && entries().length === 0}>
             <div class="muted small">{t('Starting {name}…', { name: info()?.name ?? '' })}</div>
           </Show>
-          <For each={entries()}>{(e, i) => <EntryView id={props.id} entry={e} index={i()} />}</For>
+          <For each={entries()}>{(e, i) => <EntryView id={props.id} entry={e} index={i()} live={busy() && i() === entries().length - 1} />}</For>
           <Show when={busy()}>
             <div class="ai-live-stats">
               <span class="ai-dots">
@@ -231,7 +232,7 @@ function SessionView(props: { id: string }) {
   )
 }
 
-function EntryView(props: { id: string; entry: Entry; index: number }) {
+function EntryView(props: { id: string; entry: Entry; index: number; live: boolean }) {
   const e = () => props.entry
   return (
     <Switch>
@@ -251,7 +252,7 @@ function EntryView(props: { id: string; entry: Entry; index: number }) {
         </div>
       </Match>
       <Match when={e().kind === 'thought'}>
-        <Thought text={e().text ?? ''} />
+        <Thought text={e().text ?? ''} live={props.live} />
       </Match>
       <Match when={e().kind === 'tool'}>
         <ToolView entry={e()} />
@@ -291,21 +292,34 @@ function EntryView(props: { id: string; entry: Entry; index: number }) {
   )
 }
 
-function Thought(props: { text: string }) {
-  const [open, setOpen] = createSignal(false)
+/** A thought: open while the agent thinks (the last entry of a busy session), folded after. */
+function Thought(props: { text: string; live: boolean }) {
+  const [open, toggle] = useFold(() => props.live)
+  // Entries carry no time: the clock starts when the thought is seen live.
+  const [start, setStart] = createSignal<number>()
+  const [ms, setMs] = createSignal<number>()
+  createEffect(() => {
+    if (props.live && start() === undefined) setStart(Date.now())
+    else if (!props.live && start() !== undefined && ms() === undefined) setMs(Date.now() - start()!)
+  })
   return (
-    <div class="ai-reasoning" classList={{ open: open() }} data-testid="agent-thought">
-      <button class="ai-tool-head" onClick={() => setOpen(!open())}>
+    <div class="ai-reasoning" classList={{ live: props.live, open: open() }} data-testid="agent-thought">
+      <button class="ai-tool-head" onClick={toggle}>
         <span class="ai-tool-icon">
-          <Icon name="sparkle" size={13} />
+          <Show when={!props.live} fallback={<span class="spinner" />}>
+            <Icon name="sparkle" size={13} />
+          </Show>
         </span>
-        <span class="ai-tool-name">{t('Thinking')}</span>
+        <span class={props.live ? 'ai-tool-name ai-shimmer' : 'ai-tool-name'}>{props.live ? `${t('Thinking')}…` : t('Thinking')}</span>
         <span class="grow" />
+        <Elapsed running={props.live} start={start()} ms={ms()} />
         <span class="ai-chev" classList={{ open: open() }}>
           <Icon name="chevron" size={12} />
         </span>
       </button>
-      <div class="ai-reasoning-text">{props.text}</div>
+      <div class="ai-reasoning-text" data-testid="agent-thought-text" ref={(el) => follow(el, () => props.live && open(), () => props.text)}>
+        {props.text}
+      </div>
     </div>
   )
 }

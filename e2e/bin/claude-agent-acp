@@ -6,7 +6,7 @@
 //   "ask me"      asks a form (elicitation/create, as Claude's AskUserQuestion), tells the answer
 //   "ask then withdraw"  asks a form, then withdraws it ($/cancel_request)
 //   "… later"     waits 1.5 s before anything
-//   "slow"        streams until session/cancel
+//   "slow"        streams until session/cancel ("slow think": its thought)
 //   "blocks…"     answers the types of the content blocks it received
 //   "follow"      writes follow.txt, its tool call with a path relative to the cwd (as opencode)
 //   "# Ticket"    (a ticket's briefing) calls kanban_get through the MCP server it was given
@@ -121,7 +121,8 @@ async function prompt(id, p) {
   if (text.includes('slow')) {
     slow = { id, sid }
     for (let i = 0; slow && i < 600; i++) {
-      update(sid, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `tick ${i} ` } })
+      const kind = text.includes('think') ? 'agent_thought_chunk' : 'agent_message_chunk'
+      update(sid, { sessionUpdate: kind, content: { type: 'text', text: `tick ${i} ` } })
       await sleep(100)
     }
     return

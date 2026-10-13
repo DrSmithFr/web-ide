@@ -324,14 +324,14 @@ function UserMessage(props: { msg: ChatMessage; index: number }) {
 // ---------- answers ----------
 
 /** A block open while it runs and folded when it ends, unless the user toggled it. */
-function useFold(running: () => boolean) {
+export function useFold(running: () => boolean) {
   const [user, setUser] = createSignal<boolean>()
   const open = () => user() ?? running()
   return [open, () => setUser(!open())] as const
 }
 
 /** Duration of a block: counted while it runs, then the final one. */
-function Elapsed(props: { running: boolean; start?: number; ms?: number }) {
+export function Elapsed(props: { running: boolean; start?: number; ms?: number }) {
   const now = useNow(() => props.running && !!props.start, 500)
   const ms = () => (props.running ? (props.start ? now() - props.start : undefined) : props.ms)
   return (
@@ -342,7 +342,7 @@ function Elapsed(props: { running: boolean; start?: number; ms?: number }) {
 }
 
 /** A box that follows the end of its text while it streams, unless the user scrolled up in it. */
-function follow(el: HTMLElement, streaming: () => boolean, text: () => unknown) {
+export function follow(el: HTMLElement, streaming: () => boolean, text: () => unknown) {
   let stick = true
   el.addEventListener('scroll', () => (stick = el.scrollHeight - el.scrollTop - el.clientHeight < 30))
   createEffect(() => {
