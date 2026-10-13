@@ -93,6 +93,12 @@ async function main() {
   check('syncKeyCanonical', identity.canonicalSyncKey(srk), v.syncKeyCanonical)
   check('syncKeySig', await identity.sign(deviceKey, identity.canonicalSyncKey(srk)), v.syncKeySig)
 
+  // Update this pod (#60): the browser signs the pod it names, the tag to install and the moment
+  // it asked; the pod checks the same bytes.
+  const upd = { v: 1, pod: v.deviceId, version: 'v1.11.0', created: Number(v.updateCanonical.match(/"created":(\d+)/)[1]) }
+  check('updateCanonical', identity.canonicalUpdate(upd), v.updateCanonical)
+  check('updateSig', await identity.sign(deviceKey, identity.canonicalUpdate(upd)), v.updateSig)
+
   // A signature made by the browser must verify with the account id alone (the pod checks a
   // peer the same way).
   if (!(await identity.verify(v.accountId, v.messageSig, v.message))) {

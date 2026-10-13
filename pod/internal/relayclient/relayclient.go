@@ -12,8 +12,11 @@ package relayclient
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/url"
@@ -28,6 +31,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/server"
 	"github.com/DrSmithFr/web-ide/pod/internal/settingsync"
 	"github.com/DrSmithFr/web-ide/pod/internal/tunnel"
+	"github.com/DrSmithFr/web-ide/pod/internal/update"
 )
 
 // sigMsg is one signaling message between the relay and the pod (mirrored by the relay).
@@ -68,6 +72,12 @@ type sigMsg struct {
 	Site      string    `json:"site,omitempty"`
 	Gateway   string    `json:"gateway,omitempty"`
 	Pods      []PodInfo `json:"pods,omitempty"`
+	// Update this pod (#60): the relay only carries a signed update request between two pods of the
+	// same account. req is the id of the hop the relay handed out, echoed on the answer.
+	Update  *identity.UpdateRequest `json:"update,omitempty"`
+	Req     string                  `json:"req,omitempty"`
+	Status  string                  `json:"status,omitempty"`
+	Command string                  `json:"command,omitempty"`
 }
 
 // PodInfo is one pod of the account as the relay sees it (mirrors relay.PodInfo).
@@ -146,6 +156,9 @@ type Config struct {
 	// Route reaches a pod of this pod's site that has no link of its own: a browser tunneled to
 	// this pod gets its channels through it (relay.md, *Multi-pod*).
 	Route PeerRoute
+	// OnUpdate runs an update request the relay carried to this pod: the pod checks the request
+	// itself, the relay is a plain carrier.
+	OnUpdate func(*identity.UpdateRequest) update.Answer
 	// ForceTurn only advertises relay (TURN) candidates (e2e).
 	ForceTurn bool
 	// OnState is called with the state of the link to the relay (connecting, connected,
@@ -169,6 +182,9 @@ type Client struct {
 	link   *podLink
 	iceMu  sync.Mutex
 	iceFor map[string]webrtc.ICEServer
+	// updates holds the update requests this pod sent through the relay, by the id the relay gave
+	// the hop: the answer comes back on the same link.
+	updates map[string]chan update.Answer
 }
 
 // New builds a relayclient Client.
@@ -176,7 +192,8 @@ func New(cfg Config) *Client {
 	if cfg.Limits == nil {
 		cfg.Limits = tunnel.NewRateLimiter(5, 5*time.Minute)
 	}
-	return &Client{cfg: cfg, limits: cfg.Limits, sessions: map[string]*session{}, iceFor: map[string]webrtc.ICEServer{}}
+	return &Client{cfg: cfg, limits: cfg.Limits, sessions: map[string]*session{}, iceFor: map[string]webrtc.ICEServer{},
+		updates: map[string]chan update.Answer{}}
 }
 
 // Run dials the relay, registers, and routes signaling until ctx ends. It reconnects
@@ -338,6 +355,26 @@ func (c *Client) runOnce(ctx context.Context) error {
 			if c.cfg.OnPushGone != nil {
 				c.cfg.OnPushGone(m.ID)
 			}
+		case "update":
+			// The relay carried an update request to this pod. It checks it itself: the relay is a
+			// plain carrier, it never decided who is a device of the account.
+			if m.Update != nil && c.cfg.OnUpdate != nil {
+				ans := c.cfg.OnUpdate(m.Update)
+				_ = link.send(sigMsg{Type: "update.done", Req: m.Req, Status: ans.Status, Message: ans.Message, Command: ans.Command})
+			}
+		case "update.done":
+			c.mu.Lock()
+			ch := c.updates[m.Req]
+			if ch != nil {
+				delete(c.updates, m.Req)
+			}
+			c.mu.Unlock()
+			if ch != nil {
+				select {
+				case ch <- update.Answer{Status: m.Status, Message: m.Message, Command: m.Command}:
+				default:
+				}
+			}
 		}
 	}
 }
@@ -375,6 +412,52 @@ func (c *Client) PushRevocations(list *identity.Revocations) {
 	if link != nil && list != nil {
 		_ = link.send(sigMsg{Type: "revocations", List: list})
 	}
+}
+
+// UpdateWait is how long this pod waits for the answer of an update request it sent through the
+// relay: a pod older than #60 knows no update message and never answers, and the page then shows
+// the command to run by hand.
+const UpdateWait = 10 * time.Second
+
+// SendUpdate gives the relay a signed update request for another pod of the account and waits for
+// its answer. The relay carries it to the online link of that device, for pods of the same account
+// only; the target checks the signature itself.
+func (c *Client) SendUpdate(ctx context.Context, device string, req *identity.UpdateRequest) (*update.Answer, error) {
+	c.mu.Lock()
+	link := c.link
+	if link == nil {
+		c.mu.Unlock()
+		return nil, errors.New("relay: not connected")
+	}
+	id := randID()
+	ch := make(chan update.Answer, 1)
+	c.updates[id] = ch
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		delete(c.updates, id)
+		c.mu.Unlock()
+	}()
+	if err := link.send(sigMsg{Type: "update", Device: device, Req: id, Update: req}); err != nil {
+		return nil, err
+	}
+	select {
+	case a := <-ch:
+		return &a, nil
+	case <-time.After(UpdateWait):
+		return &update.Answer{Status: update.StatusNotService, Command: update.Command(req.Version)}, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// randID is the id of one request of this link; the relay hands out its own for the hop it carries.
+func randID() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b)
 }
 
 // ReportSite tells the relay the device keys of the pods this pod sees on its LAN: the relay

@@ -64,6 +64,11 @@ echo "Installed $("$BIN_DIR/web-ide-pod" -version) in $BIN_DIR"
 KEEPER_DIR=$HOME/.local/lib/web-ide
 KEEPER=$KEEPER_DIR/web-ide-keeper
 mkdir -p "$KEEPER_DIR"
+
+# A copy of this script next to the binary it installs: *Update this pod* (the pod itself) runs
+# that file, it has no way back to the folder the user ran this from.
+SRC=$(readlink -f "$0" 2>/dev/null || echo "$0")
+[ "$SRC" = "$KEEPER_DIR/install.sh" ] || install -m755 "$SRC" "$KEEPER_DIR/install.sh"
 NEW_PROTOCOL=$("$BIN_DIR/web-ide-pod" keeper -protocol)
 OLD_PROTOCOL=$("$KEEPER" keeper -protocol 2>/dev/null || echo none)
 KEEPER_CHANGED=

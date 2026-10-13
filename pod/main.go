@@ -22,6 +22,7 @@ import (
 
 	"github.com/DrSmithFr/web-ide/pod/internal/config"
 	"github.com/DrSmithFr/web-ide/pod/internal/hfcache"
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 	"github.com/DrSmithFr/web-ide/pod/internal/keeper"
 	"github.com/DrSmithFr/web-ide/pod/internal/lan"
@@ -38,6 +39,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/settingsync"
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
 	"github.com/DrSmithFr/web-ide/pod/internal/store"
+	"github.com/DrSmithFr/web-ide/pod/internal/update"
 	"github.com/DrSmithFr/web-ide/pod/webdist"
 )
 
@@ -252,6 +254,9 @@ func main() {
 		}
 	}
 	var lanMgr *lan.Manager
+	// What a pod does with an update request that reached it, over a LAN link or the relay: the
+	// checks are the same whatever carried it.
+	upd := update.New(podID)
 	// What a change of the LAN links means: the page refreshes, the relay learns what this pod sees
 	// (the sites), and a pod with no link of its own publishes its key and its list through a peer.
 	onLANChange := func() {
@@ -280,7 +285,7 @@ func main() {
 		}
 	}
 	if cfg.LAN.Addr != "off" {
-		m := startLAN(ctx, st, cfg, srv, podID, *mdns, protocol, pushRevocations, forwardBlob, forwardSyncKey, pullLists, hub, &onLANChange, remoteGateway(&relayCli, &dir))
+		m := startLAN(ctx, st, cfg, srv, podID, *mdns, protocol, pushRevocations, forwardBlob, forwardSyncKey, pullLists, hub, &onLANChange, remoteGateway(&relayCli, &dir), upd.Run)
 		if m != nil {
 			srv.LAN = m
 			lanMgr = m
@@ -308,6 +313,7 @@ func main() {
 	dir.SetRemote(cfg.RelayURL != "")
 	dir.SetEmitter(srv.PodsChanged)
 	srv.Pods = &podsView{dir: dir, cfg: cfg, st: st, relayCli: &relayCli}
+	srv.Pods.(*podsView).lan = lanMgr
 	onLANChange()
 	remote := ""
 	if cfg.RelayURL != "" {
@@ -332,6 +338,7 @@ func main() {
 			Protocol:  protocol,
 			Preferred: cfg.Gateway.Preferred,
 			Route:     podRoute(lanMgr),
+			OnUpdate:  upd.Run,
 			ForceTurn: *forceTurn,
 			OnState: func(s string) {
 				state.Store(s)
@@ -449,7 +456,7 @@ func podRoute(m *lan.Manager) *multipod.Route {
 // port, mDNS, and the page of each pod found, served under /_lan/pod/<key>/.
 func startLAN(ctx context.Context, st *store.Store, cfg *config.Config, srv *server.Server, podID *identity.PodIdentity, mdns bool, protocol int,
 	onRevocations func(*identity.Revocations), onBlob func(*identity.BlobRecord), onSync func(*identity.SyncKeyRecord),
-	onKeyReady func(), hub *settingsync.Hub, onChange *func(), remote http.Handler) *lan.Manager {
+	onKeyReady func(), hub *settingsync.Hub, onChange *func(), remote http.Handler, onUpdate func(*identity.UpdateRequest) update.Answer) *lan.Manager {
 	m, err := lan.New(lan.Config{
 		Dir:         st.Dir(),
 		Addr:        cfg.LAN.Addr,
@@ -469,6 +476,7 @@ func startLAN(ctx context.Context, st *store.Store, cfg *config.Config, srv *ser
 		OnRevocations: onRevocations,
 		OnBlob:        onBlob,
 		OnSync:        onSync,
+		OnUpdate:      onUpdate,
 		OnWrap: func(w *identity.WrapRecord) {
 			// The wrap the relay pushed for this pod, carried back by a peer of its site: it is the
 			// only way a pod with no link of its own gets the key of the epoch.
@@ -692,6 +700,7 @@ type podsView struct {
 	dir      *multipod.Directory
 	cfg      *config.Config
 	st       *store.Store
+	lan      *lan.Manager
 	relayCli *atomic.Pointer[relayclient.Client]
 }
 
@@ -711,6 +720,25 @@ func (v *podsView) SetPreferred(on bool) error {
 		c.SetPreferred(on)
 	}
 	return nil
+}
+
+// CanUpdate: a pod offers another pod the version it runs itself, and only a release version is
+// worth installing.
+func (v *podsView) CanUpdate() bool { return identity.IsReleaseTag(version) }
+
+// Update carries a signed update request to the pod it names: over the LAN link when it is a peer
+// of the site, else through the relay. The answer is what that pod said — this pod adds the route,
+// not the trust.
+func (v *podsView) Update(ctx context.Context, req *identity.UpdateRequest) (any, error) {
+	if v.lan != nil {
+		if ans, err := v.lan.SendUpdate(ctx, req.Pod, req); err == nil {
+			return ans, nil
+		}
+	}
+	if c := v.relayCli.Load(); c != nil {
+		return c.SendUpdate(ctx, req.Pod, req)
+	}
+	return nil, i18n.New("this pod reaches no other pod")
 }
 
 // runRelayCmd runs the relay server subcommand until interrupted.

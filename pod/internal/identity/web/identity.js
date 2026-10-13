@@ -172,6 +172,13 @@ export function canonicalCert(c) {
     `"scope":${JSON.stringify(c.scope)}}`
 }
 
+// The bytes an update request covers: the pod it names, the release tag to install, the moment
+// the user asked. The pod checks the signature against the key of the certificate that travels
+// with the request.
+export function canonicalUpdate(r) {
+  return `{"v":${r.v},"pod":${JSON.stringify(r.pod)},"version":${JSON.stringify(r.version)},"created":${r.created}}`
+}
+
 export function canonicalRevocations(r) {
   const revoked = [...r.revoked].sort()
   return `{"account":${JSON.stringify(r.account)},"seq":${r.seq},"epoch":${r.epoch},` +

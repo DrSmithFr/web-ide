@@ -58,6 +58,12 @@ type sigMsg struct {
 	Site      string    `json:"site,omitempty"`
 	Gateway   string    `json:"gateway,omitempty"`
 	Pods      []PodInfo `json:"pods,omitempty"`
+	// Update this pod (#60): the relay is a plain carrier of a signed update request between two
+	// pods of the same account. req is the id of the hop the relay handed out, echoed on the answer.
+	Update  *identity.UpdateRequest `json:"update,omitempty"`
+	Req     string                  `json:"req,omitempty"`
+	Status  string                  `json:"status,omitempty"`
+	Command string                  `json:"command,omitempty"`
 }
 
 // Server routes signaling between the pods (one persistent link each) and the browsers
@@ -81,6 +87,7 @@ type Server struct {
 	siteText    map[string]string        // account → the last sites pushed
 	sitePods    map[string][]PodInfo     // account → the pods as last computed (sites.go)
 	grace       map[string]*graceEntry   // device key → a gateway kept after an unclean drop
+	updateHops  map[string]*updateHop    // an update request being carried, by the id of the hop
 	// App is the front end of the pod: the relay serves its manifest and icons (static.go).
 	App fs.FS
 	// Push sends the Web Push notifications of the pods (push.go); nil: off.
@@ -115,6 +122,21 @@ func (pc *podConn) send(m sigMsg) error {
 	b, _ := json.Marshal(m)
 	return pc.ws.Write(context.Background(), websocket.MessageText, b)
 }
+
+// updateHop is an update request the relay is carrying: who asked, with which id of its own, and
+// when. The relay is a plain carrier (relay.md, *Multi-pod*): it checks that both ends are pods of
+// the same account and that the target is online; the pod the request names checks the signature.
+// The id of the hop is the relay's, not the requester's, so another pod cannot answer a request it
+// did not send.
+type updateHop struct {
+	pc  *podConn
+	req string
+	at  time.Time
+}
+
+// updateHopTTL is how long a carried request stays open: the pod answers within the wait of the one
+// that asked (relayclient.UpdateWait), an answer after that reaches nothing.
+const updateHopTTL = 30 * time.Second
 
 // browserConn is one active browser signaling to a pod, in one session.
 type browserConn struct {
@@ -281,6 +303,50 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 			}
 		case "push.send":
 			s.pushFromPod(pc, b)
+		case "update":
+			// Carried unchanged to the pod the request names, online on a link of the same account.
+			// What the request is worth is decided by that pod, not here.
+			if m.Update == nil || m.Device == "" || pc.certified == "" {
+				continue
+			}
+			s.mu.Lock()
+			var target *podConn
+			for _, p := range s.pods {
+				if p.key != "" && p.key == m.Device && p.certified == pc.certified {
+					target = p
+					break
+				}
+			}
+			hop := ""
+			if target != nil {
+				hop = relayNonce()
+				if s.updateHops == nil {
+					s.updateHops = map[string]*updateHop{}
+				}
+				for id, h := range s.updateHops {
+					if time.Since(h.at) > updateHopTTL {
+						delete(s.updateHops, id)
+					}
+				}
+				s.updateHops[hop] = &updateHop{pc: pc, req: m.Req, at: time.Now()}
+			}
+			s.mu.Unlock()
+			if target == nil {
+				_ = pc.send(sigMsg{Type: "update.done", Req: m.Req, Status: "refused", Message: "the pod is not online at the relay"})
+				continue
+			}
+			_ = target.send(sigMsg{Type: "update", Device: m.Device, Req: hop, Update: m.Update})
+		case "update.done":
+			s.mu.Lock()
+			h := s.updateHops[m.Req]
+			if h != nil {
+				delete(s.updateHops, m.Req)
+			}
+			s.mu.Unlock()
+			if h == nil || time.Since(h.at) > updateHopTTL {
+				continue
+			}
+			_ = h.pc.send(sigMsg{Type: "update.done", Req: h.req, Status: m.Status, Message: m.Message, Command: m.Command})
 		case "answer":
 			if bc := s.browserOf(m.Session); bc != nil {
 				bc.send(sigMsg{Type: "answer", Session: m.Session, SDP: m.SDP})

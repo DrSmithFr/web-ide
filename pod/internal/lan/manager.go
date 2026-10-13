@@ -19,6 +19,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 	"github.com/DrSmithFr/web-ide/pod/internal/tunnel"
+	"github.com/DrSmithFr/web-ide/pod/internal/update"
 )
 
 // DefaultAddr is the LAN listen address when config.json sets none.
@@ -60,6 +61,9 @@ type Config struct {
 	OnBlob func(*identity.BlobRecord)
 	OnWrap func(*identity.WrapRecord)
 	OnSync func(*identity.SyncKeyRecord)
+	// OnUpdate runs an update request a peer of the site carried to this pod ($update): the pod
+	// checks it itself, whatever brought it.
+	OnUpdate func(*identity.UpdateRequest) update.Answer
 	// Tick is the pace of the dial loop (default 2 s); Browse runs every 5 ticks.
 	Tick time.Duration
 }
@@ -79,15 +83,16 @@ type Manager struct {
 	listenErr string
 	listening bool
 	manual    []string
-	cands     map[string]*candidate     // by address
-	peers     map[string]*peer          // by device key
-	trusted   map[string]*trust         // by TLS fingerprint of a peer
-	joins     map[string]*joinReq       // joining pods, by address
-	tunnels   map[string]*tunnelWindow  // windows bridged by a gateway, by window id + peer TLS fp
-	browsers  map[string]*identity.Cert // certificates of the browsers of the Devices panel
-	idLinks   map[*idLink]bool          // the open links of the Devices panel
-	seq       int64                     // the seq of the last revocation list passed on
-	announced string                    // the account announced by mDNS
+	cands     map[string]*candidate         // by address
+	peers     map[string]*peer              // by device key
+	trusted   map[string]*trust             // by TLS fingerprint of a peer
+	joins     map[string]*joinReq           // joining pods, by address
+	tunnels   map[string]*tunnelWindow      // windows bridged by a gateway, by window id + peer TLS fp
+	browsers  map[string]*identity.Cert     // certificates of the browsers of the Devices panel
+	idLinks   map[*idLink]bool              // the open links of the Devices panel
+	updates   map[string]chan update.Answer // update requests this pod sent, by request id
+	seq       int64                         // the seq of the last revocation list passed on
+	announced string                        // the account announced by mDNS
 	stopAnn   func()
 	// transports reach the peers, by the TLS fingerprint they pin.
 	transports map[string]*http.Transport
@@ -140,6 +145,7 @@ func New(cfg Config) (*Manager, error) {
 		cands:  map[string]*candidate{}, peers: map[string]*peer{}, trusted: map[string]*trust{}, joins: map[string]*joinReq{},
 		tunnels:  map[string]*tunnelWindow{},
 		browsers: map[string]*identity.Cert{}, idLinks: map[*idLink]bool{},
+		updates: map[string]chan update.Answer{},
 	}
 	for _, a := range cfg.Peers {
 		m.addCandidate(a, "manual")
@@ -567,6 +573,27 @@ func (m *Manager) run(l *link, peerFP string) {
 			if json.Unmarshal(msg.Params, &k) == nil && m.cfg.OnSync != nil {
 				m.cfg.OnSync(&k)
 			}
+		case "$update":
+			// A peer of the site carried an update request for this pod. The pod checks it itself:
+			// a peer is a device of the account, not an authority.
+			var u updateMsg
+			if json.Unmarshal(msg.Params, &u) == nil && m.cfg.OnUpdate != nil {
+				ans := m.cfg.OnUpdate(u.Update)
+				_ = l.send("$update.done", updateDone{Req: u.Req, Status: ans.Status, Message: ans.Message, Command: ans.Command})
+			}
+		case "$update.done":
+			var d updateDone
+			if json.Unmarshal(msg.Params, &d) == nil {
+				m.mu.Lock()
+				ch := m.updates[d.Req]
+				m.mu.Unlock()
+				if ch != nil {
+					select {
+					case ch <- update.Answer{Status: d.Status, Message: d.Message, Command: d.Command}:
+					default:
+					}
+				}
+			}
 		}
 	}
 }
@@ -675,6 +702,50 @@ func (m *Manager) PublishSyncKey(k *identity.SyncKeyRecord) error {
 		return errors.New("lan: no peer of the account to publish through")
 	}
 	return l.send("$syncKey", k)
+}
+
+// UpdateWait is how long this pod waits for the answer of an update request it carried: a pod
+// older than #60 knows no $update and never answers, and the page then shows the command to run
+// by hand.
+const UpdateWait = 10 * time.Second
+
+// SendUpdate carries a signed update request to a peer of the site over its control link and waits
+// for its answer. The peer runs the checks itself: what this pod adds is the route, not the trust.
+func (m *Manager) SendUpdate(ctx context.Context, key string, req *identity.UpdateRequest) (*update.Answer, error) {
+	m.mu.Lock()
+	var l *link
+	if p := m.peers[key]; p != nil && p.out != nil && !p.out.closed() {
+		l = p.out
+	}
+	m.mu.Unlock()
+	if l == nil {
+		return nil, errors.New("lan: this pod is not a peer of the local network")
+	}
+	id := nonce()
+	ch := make(chan update.Answer, 1)
+	m.mu.Lock()
+	if m.updates == nil {
+		m.updates = map[string]chan update.Answer{}
+	}
+	m.updates[id] = ch
+	m.mu.Unlock()
+	defer func() {
+		m.mu.Lock()
+		delete(m.updates, id)
+		m.mu.Unlock()
+	}()
+	if err := l.send("$update", updateMsg{Req: id, Update: req}); err != nil {
+		return nil, err
+	}
+	select {
+	case a := <-ch:
+		return &a, nil
+	case <-time.After(UpdateWait):
+		// No answer: the pod on the other side is older than this ticket. The user runs the command.
+		return &update.Answer{Status: update.StatusNotService, Command: update.Command(req.Version)}, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 // PassWrap forwards a wrap the relay pushed for a pod of this site that has no link of its own: it

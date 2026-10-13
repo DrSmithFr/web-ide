@@ -76,6 +76,22 @@ type info struct {
 	Port int `json:"port"`
 }
 
+// updateMsg is the body of $update: a signed update request of a browser of the account, carried
+// by the gateway of the site to the pod it names. req is the id of this hop, so the answer lands
+// on the request that asked for it.
+type updateMsg struct {
+	Req    string                  `json:"req"`
+	Update *identity.UpdateRequest `json:"update"`
+}
+
+// updateDone is the answer of the pod the request named, sent before it restarts.
+type updateDone struct {
+	Req     string `json:"req"`
+	Status  string `json:"status"`
+	Message string `json:"message,omitempty"`
+	Command string `json:"command,omitempty"`
+}
+
 func (l *link) send(method string, params any) error {
 	b, err := json.Marshal(params)
 	if err != nil {

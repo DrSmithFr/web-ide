@@ -8,6 +8,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,6 +19,7 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
+	"github.com/DrSmithFr/web-ide/pod/internal/update"
 )
 
 // account makes an account from a fixed entropy byte.
@@ -213,6 +216,69 @@ func TestTwoPodsReachEachOther(t *testing.T) {
 	if !strings.Contains(string(body), `"name":"alpha"`) {
 		t.Fatalf("gateway path: %s", body)
 	}
+}
+
+// TestUpdateOverTheLAN: a peer carries a signed update request to the pod it names over the control
+// link; the target runs its own checks and answers before it restarts. A request signed by a device
+// of another account is refused, and the command reaches the page instead.
+func TestUpdateOverTheLAN(t *testing.T) {
+	a := account(t, 1)
+	marker := filepath.Join(t.TempDir(), "updated")
+	t.Setenv(update.UpdateCmdEnv, "touch "+marker)
+
+	id, dir := podIdentity(t, a, "bravo")
+	handler := update.New(id)
+	bravoMgr, err := New(Config{Dir: dir, Addr: "127.0.0.1:0", Identity: id, Name: "bravo", Version: "test", Protocol: 1,
+		Handler: podHandler("bravo"), Tick: 50 * time.Millisecond, OnUpdate: handler.Run})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bctx, bcancel := context.WithCancel(context.Background())
+	t.Cleanup(bcancel)
+	bravoMgr.Start(bctx)
+
+	al := startPodProto(t, a, "alpha", 1, bravoMgr.Status().Listen)
+	waitFor(t, al, "alpha sees bravo", func(st Status) bool { return online(st, "bravo") != nil })
+
+	browser := identity.KeyFromSeed(identity.Derive(a.Seed, "the browser"))
+	req := &identity.UpdateRequest{V: 1, Pod: id.ID(), Version: "v1.11.0", Created: time.Now().UnixMilli(),
+		Cert: identity.NewCert(a, browser, "phone", identity.KindBrowser)}
+	req.Sig = identity.SignUpdate(browser, req)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	ans, err := al.m.SendUpdate(ctx, identity.KeyID(id.Key()), req)
+	if err != nil {
+		t.Fatal("carrying the request:", err)
+	}
+	if ans.Status != update.StatusRunning {
+		t.Fatalf("bravo ran the request of a device of its account: %+v", ans)
+	}
+	for i := 0; i < 100 && !exists(marker); i++ {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !exists(marker) {
+		t.Fatal("the install command ran on the pod the request named")
+	}
+
+	// A request signed by a device of another account never reaches the installer.
+	foreign := account(t, 2)
+	intruder := identity.KeyFromSeed(identity.Derive(foreign.Seed, "a browser of another account"))
+	bad := &identity.UpdateRequest{V: 1, Pod: id.ID(), Version: "v1.11.0", Created: time.Now().UnixMilli(),
+		Cert: identity.NewCert(foreign, intruder, "intruder", identity.KindBrowser)}
+	bad.Sig = identity.SignUpdate(intruder, bad)
+	ans, err = al.m.SendUpdate(ctx, identity.KeyID(id.Key()), bad)
+	if err != nil {
+		t.Fatal("carrying the request:", err)
+	}
+	if ans.Status != update.StatusRefused || ans.Message == "" {
+		t.Fatalf("the target pod refuses a request it does not trust: %+v", ans)
+	}
+}
+
+func exists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }
 
 // TestProtocolMismatch: a peer that does not speak the multi-pod protocol of this pod is listed

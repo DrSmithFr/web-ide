@@ -279,5 +279,15 @@
   "Back to the projects": "Retour aux projets",
   "%s runs an older version (%s): its projects cannot be opened from this pod.": "%s tourne sur une version plus ancienne (%s) : ses projets ne peuvent pas être ouverts depuis ce pod.",
   "%s runs a newer version (%s): this pod is the one to update.": "%s tourne sur une version plus récente (%s) : c'est ce pod qu'il faut mettre à jour.",
-  "%s runs another multi-pod protocol: update it": "%s tourne sur un autre protocole multi-pod : mettez-le à jour"
+  "%s runs another multi-pod protocol: update it": "%s tourne sur un autre protocole multi-pod : mettez-le à jour",
+  "no update request": "pas de demande de mise à jour",
+  "update request version %d": "demande de mise à jour de version %d",
+  "the request is not for this pod": "la demande ne concerne pas ce pod",
+  "%s is not a release tag": "%s n'est pas une version publiée",
+  "this request was already run": "cette demande a déjà été exécutée",
+  "this pod does not run as the service": "ce pod ne tourne pas comme service",
+  "the installer is not installed: %s": "l'installateur n'est pas installé : %s",
+  "the update could not start: %w": "la mise à jour n'a pas pu démarrer : %w",
+  "this pod reaches no other pod": "ce pod ne joint aucun autre pod",
+  "no command": "pas de commande"
 }
