@@ -100,7 +100,10 @@ type helloParams struct {
 	Proof    string         `json:"proof,omitempty"` // token mode
 	Cert     *identity.Cert `json:"cert,omitempty"`  // cert mode
 	Sig      string         `json:"sig,omitempty"`   // cert mode
-	Error    string         `json:"error,omitempty"`
+	// Via: the certificate of a browser the peer showing this $hello vouches for — a pod that
+	// reached another pod through this one. The pod reading it checks it against its own list.
+	Via   *identity.Cert `json:"via,omitempty"`
+	Error string         `json:"error,omitempty"`
 }
 
 type authParams struct {
@@ -127,6 +130,8 @@ type Handshake struct {
 	Deadline time.Duration
 	// PeerCert is the certificate the peer showed (nil in token mode), set by Run.
 	PeerCert *identity.Cert
+	// Via is the certificate of the browser a peer vouches for, when the peer sent one.
+	Via *identity.Cert
 }
 
 // deadline returns the bounded window for the handshake reads.
@@ -215,6 +220,18 @@ func (h *Handshake) runCert(conn MsgConn, hi helloParams) error {
 	if hi.Cert == nil {
 		_ = h.sendError(conn, CodeCert)
 		return identity.ErrNoCert
+	}
+	// A peer that vouches for a browser (a gateway): the browser it names is checked here,
+	// against the list this pod holds, not the one the gateway was told with.
+	if hi.Via != nil {
+		if err := h.Identity.PeerError(hi.Via); err != nil {
+			if !h.count() {
+				return ErrLimit
+			}
+			_ = h.sendError(conn, code(err))
+			return err
+		}
+		h.Via = hi.Via
 	}
 	if err := h.Identity.PeerError(hi.Cert); err != nil {
 		if !h.count() {
@@ -429,7 +446,14 @@ func RunBrowser(conn MsgConn, token, fpBrowser, fpPod, nonceB string) error {
 // pod's certificate against the pinned account, signs the binding string with its device
 // key and checks the pod's signature. It returns the pod's certificate.
 func RunBrowserCert(conn MsgConn, key ed25519.PrivateKey, cert *identity.Cert, account, fpBrowser, fpPod, nonceB string) (*identity.Cert, error) {
-	if err := sendMsg(conn, "$hello", helloParams{Protocol: Protocol, Version: Version, Nonce: nonceB, Cert: cert}); err != nil {
+	return RunBrowserCertVia(conn, key, cert, account, fpBrowser, fpPod, nonceB, nil)
+}
+
+// RunBrowserCertVia is RunBrowserCert for a peer that vouches for a browser: it shows its own
+// certificate and the certificate (via) of the browser it relays, which the pod checks against
+// the list it holds itself.
+func RunBrowserCertVia(conn MsgConn, key ed25519.PrivateKey, cert *identity.Cert, account, fpBrowser, fpPod, nonceB string, via *identity.Cert) (*identity.Cert, error) {
+	if err := sendMsg(conn, "$hello", helloParams{Protocol: Protocol, Version: Version, Nonce: nonceB, Cert: cert, Via: via}); err != nil {
 		return nil, err
 	}
 	// pod -> $hello{protocol, version, nonce, cert, sig}

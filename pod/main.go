@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io/fs"
@@ -275,7 +276,7 @@ func main() {
 		}
 	}
 	if cfg.LAN.Addr != "off" {
-		m := startLAN(ctx, st, cfg, srv, podID, *mdns, pushRevocations, forwardBlob, forwardSyncKey, pullLists, hub, &onLANChange)
+		m := startLAN(ctx, st, cfg, srv, podID, *mdns, pushRevocations, forwardBlob, forwardSyncKey, pullLists, hub, &onLANChange, remoteGateway(&relayCli, &dir))
 		if m != nil {
 			srv.LAN = m
 			lanMgr = m
@@ -393,6 +394,31 @@ func main() {
 	}
 }
 
+// remoteGateway serves the pods of another site under this pod's /_lan/pod/ path, over a
+// pod-to-pod WebRTC tunnel. The relay link and the directory of the pods come up later, so the
+// dialer reads them when a page asks (Settings > Remote access, relay.md).
+func remoteGateway(cli *atomic.Pointer[relayclient.Client], dir **multipod.Directory) http.Handler {
+	return multipod.NewRemoteGateway(relayDialer{cli: cli, dir: dir})
+}
+
+// relayDialer dials a pod of the account the relay reports online, by its device key.
+type relayDialer struct {
+	cli *atomic.Pointer[relayclient.Client]
+	dir **multipod.Directory
+}
+
+func (d relayDialer) Dial(ctx context.Context, key string) (multipod.RemotePod, error) {
+	cli, dir := d.cli.Load(), *d.dir
+	if cli == nil || dir == nil {
+		return nil, errors.New("this pod has no link to the relay")
+	}
+	podID := dir.PodID(key)
+	if podID == "" {
+		return nil, fmt.Errorf("no pod online at the relay for %s", key)
+	}
+	return cli.Dial(ctx, podID, key, nil)
+}
+
 // podRoute is how this pod reaches the pods of its site that have no link of their own: a
 // browser tunneled to it gets their channels through the LAN link.
 func podRoute(m *lan.Manager) *multipod.Route {
@@ -406,7 +432,7 @@ func podRoute(m *lan.Manager) *multipod.Route {
 // port, mDNS, and the page of each pod found, served under /_lan/pod/<key>/.
 func startLAN(ctx context.Context, st *store.Store, cfg *config.Config, srv *server.Server, podID *identity.PodIdentity, mdns bool,
 	onRevocations func(*identity.Revocations), onBlob func(*identity.BlobRecord), onSync func(*identity.SyncKeyRecord),
-	onKeyReady func(), hub *settingsync.Hub, onChange *func()) *lan.Manager {
+	onKeyReady func(), hub *settingsync.Hub, onChange *func(), remote http.Handler) *lan.Manager {
 	m, err := lan.New(lan.Config{
 		Dir:         st.Dir(),
 		Addr:        cfg.LAN.Addr,
@@ -415,6 +441,7 @@ func startLAN(ctx context.Context, st *store.Store, cfg *config.Config, srv *ser
 		Version:     version,
 		Handler:     http.HandlerFunc(srv.ServeTrusted),
 		ServeTunnel: srv.ServeTunnel,
+		Remote:      remote,
 		Peers:       cfg.LAN.Peers,
 		SavePeers: func(peers []string) error {
 			cfg.LAN.Peers = peers

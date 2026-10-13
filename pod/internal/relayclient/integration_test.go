@@ -53,6 +53,8 @@ const (
 // testEnv is a running relay plus a real pod wired to it.
 type testEnv struct {
 	httpSrv *httptest.Server
+	st      *relay.Store
+	cli     *Client
 	podID   string
 	secret  string
 	token   string
@@ -124,7 +126,7 @@ func startEnv(t *testing.T, ident *identity.PodIdentity, route PeerRoute) *testE
 	if !st.OnlinePod(podID) {
 		t.Fatal("the pod did not register with the relay")
 	}
-	return &testEnv{httpSrv: httpSrv, podID: podID, token: podToken, pod: s}
+	return &testEnv{httpSrv: httpSrv, st: st, cli: cli, podID: podID, token: podToken, pod: s}
 }
 
 // buildPod builds a real server.Server in a temp dir, the way main.go does.

@@ -284,6 +284,11 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 			if bc := s.browserOf(m.Session); bc != nil {
 				bc.send(sigMsg{Type: "candidate", Session: m.Session, Candidate: m.Candidate})
 			}
+		case "error":
+			// The pod could not answer the offer: the browser is told, rather than left waiting.
+			if bc := s.browserOf(m.Session); bc != nil {
+				bc.send(sigMsg{Type: "error", Session: m.Session, Message: m.Message})
+			}
 		case "syncKey", "wrapGet", "blobGet", "blobPut":
 			// The sync messages of a paired pod. The relay stores ciphertext only: it checks the
 			// signature against the device that wrote it, it cannot read a value.

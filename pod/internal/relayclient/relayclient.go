@@ -114,12 +114,15 @@ func splitRouted(label string) (key, rest string, ok bool) {
 // Config of a relayclient.
 type Config struct {
 	RelayURL string // ws:// or wss:// URL of the relay (the base, without /_relay/pod)
-	PodID    string // the pod id registered with the relay
-	Secret   string // the pod secret (register, or re-register)
-	Name     string // a human name for the relay UI (optional)
-	Server   *server.Server
-	Token    string                // the pod token, proved inside the tunnel (token mode)
-	Identity *identity.PodIdentity // the paired pod: its device key and its pinned account
+	// SignalURL is the base of a pod-to-pod signaling link: the relay by default. A test can put
+	// a rewriting relay in front of it to check what a swapped offer breaks.
+	SignalURL string
+	PodID     string // the pod id registered with the relay
+	Secret    string // the pod secret (register, or re-register)
+	Name      string // a human name for the relay UI (optional)
+	Server    *server.Server
+	Token     string                // the pod token, proved inside the tunnel (token mode)
+	Identity  *identity.PodIdentity // the paired pod: its device key and its pinned account
 	// Sync is the settings sync loop of the pod: it sends its messages on this link and receives
 	// the answers and the pushes of the relay (nil: the pod does not sync).
 	Sync   *settingsync.Hub
@@ -485,7 +488,8 @@ func (c *Client) handleOffer(m sigMsg, link *podLink) {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	c.addSession(m.Session, s)
 	if err := s.setupOffer(m); err != nil {
-		link.send(sigMsg{Type: "error", Session: m.Session})
+		log.Printf("relayclient: offer: %v", err)
+		link.send(sigMsg{Type: "error", Session: m.Session, Message: err.Error()})
 		s.close()
 		return
 	}
@@ -617,7 +621,12 @@ func (s *session) setupOffer(m sigMsg) error {
 	if err := pc.SetLocalDescription(answer); err != nil {
 		return err
 	}
-	<-gather
+	// A candidate gathering that stalls (a TURN allocation that never answers) must not hold the
+	// answer forever: what was gathered is sent, and the tunnel is made of that.
+	select {
+	case <-gather:
+	case <-time.After(8 * time.Second):
+	}
 	// The final answer SDP carries the pod's DTLS fingerprint (the handshake binds it);
 	// the raw CreateAnswer SDP may not have it yet.
 	lc := pc.LocalDescription()

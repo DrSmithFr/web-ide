@@ -102,6 +102,19 @@ func (d *Directory) RelayGateway(site, key string) {
 	d.Changed()
 }
 
+// PodID is the pod id the relay reported for a device key: the address of its signaling link.
+// Empty when this pod never saw that pod online.
+func (d *Directory) PodID(key string) string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for _, p := range d.relay {
+		if p.Key == key {
+			return p.PodID
+		}
+	}
+	return ""
+}
+
 // Gateway is the device key of the gateway of this pod's site ("" when the relay says nothing).
 func (d *Directory) Gateway() string {
 	d.mu.Lock()

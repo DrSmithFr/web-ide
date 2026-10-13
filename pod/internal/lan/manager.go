@@ -38,6 +38,9 @@ type Config struct {
 	// channels arrive on the LAN port (/_lan/tunnel), the rpc one having passed the handshake of
 	// the browser the gateway vouches for.
 	ServeTunnel func(ctx context.Context, rpc tunnel.MsgConn, chans <-chan tunnel.LabeledConn)
+	// Remote serves the page of a pod this pod reaches through the relay rather than the LAN
+	// (pod/internal/multipod.RemoteGateway): the same /_lan/pod/ path, over WebRTC.
+	Remote http.Handler
 	// Peers are the addresses typed by hand (host:port), for a network where mDNS fails.
 	Peers []string
 	// SavePeers stores the addresses typed by hand (config.json).

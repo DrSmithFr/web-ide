@@ -51,6 +51,12 @@ func (m *Manager) ServeGateway(w http.ResponseWriter, r *http.Request, base stri
 	}
 	m.mu.Unlock()
 	if addr == "" {
+		// Not a pod of the local network: this pod may still reach it, pod to pod through the
+		// relay (pod/internal/multipod.RemoteGateway).
+		if m.cfg.Remote != nil {
+			m.cfg.Remote.ServeHTTP(w, r)
+			return
+		}
 		http.Error(w, "this pod is offline", http.StatusBadGateway)
 		return
 	}

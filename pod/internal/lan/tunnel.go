@@ -76,10 +76,9 @@ func (m *Manager) serveTunnel(w http.ResponseWriter, r *http.Request, fp string)
 		return
 	}
 	c.SetReadLimit(8 << 20)
-	// The request context ends when this handler returns: a channel of a window must outlive
-	// it, so the window lives on its own context.
-	ctx, cancel := context.WithCancel(context.Background())
-	conn := &wsConn{c: c, ctx: ctx}
+	// The request context ends when this handler returns: a channel of a window must outlive it,
+	// so it lives on its own context.
+	conn := &wsConn{c: c, ctx: context.Background()}
 	if label != "rpc" {
 		// An extra channel of a window already open (term:<id>, xfer:<n>, http:<n>): the server
 		// serves it as a channel of that window.
@@ -88,7 +87,6 @@ func (m *Manager) serveTunnel(w http.ResponseWriter, r *http.Request, fp string)
 		m.mu.Unlock()
 		if tw == nil {
 			_ = c.Close(websocket.StatusBadGateway, "no such window")
-			cancel()
 			return
 		}
 		tw.chans <- tunnel.LabeledConn{Label: label, Conn: conn}
@@ -107,15 +105,15 @@ func (m *Manager) serveTunnel(w http.ResponseWriter, r *http.Request, fp string)
 	if err := hs.Run(conn); err != nil {
 		time.Sleep(300 * time.Millisecond) // let the refusal reach the browser
 		_ = c.CloseNow()
-		cancel()
 		return
 	}
 	if hs.PeerCert == nil || (via != nil && hs.PeerCert.Key != via.Key) {
 		// The gateway must vouch for the very browser that signed the proof.
 		_ = c.CloseNow()
-		cancel()
 		return
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	tw := &tunnelWindow{chans: make(chan tunnel.LabeledConn, 16)}
 	m.mu.Lock()
 	m.tunnels[window+"|"+fp] = tw
@@ -130,7 +128,6 @@ func (m *Manager) serveTunnel(w http.ResponseWriter, r *http.Request, fp string)
 		delete(m.tunnels, window+"|"+fp)
 	}
 	m.mu.Unlock()
-	cancel()
 }
 
 // OpenTunnel dials one channel of a peer's bridged window: this pod is the gateway of a browser
