@@ -61,7 +61,7 @@ type testEnv struct {
 
 // startEnv starts a real relay (signaling + embedded TURN) and a real pod wired to it. The
 // identity is the pod's own: nil keeps the pod unpaired (token mode).
-func startEnv(t *testing.T, ident *identity.PodIdentity) *testEnv {
+func startEnv(t *testing.T, ident *identity.PodIdentity, route PeerRoute) *testEnv {
 	t.Helper()
 	// A free UDP port for STUN/TURN.
 	u, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
@@ -108,6 +108,7 @@ func startEnv(t *testing.T, ident *identity.PodIdentity) *testEnv {
 		Token:     podToken,
 		Identity:  ident,
 		Limits:    limits,
+		Route:     route,
 		ForceTurn: true,
 	})
 	go cli.Run(runCtx)
@@ -141,7 +142,7 @@ func buildPod(t *testing.T) (*server.Server, *tunnel.RateLimiter) {
 		Cfg: cfg, Store: st, Token: podToken, Projects: reg, Settings: sets,
 		Sessions: sessions.New(st), LLM: llm.New(st), Models: hfcache.New(st.Path("models", "hf")),
 		Pool:    sshx.NewPool(sshx.NewHostKeys(st.Path("known_hosts"))),
-		Static:  fstest.MapFS{"index.html": {Data: []byte("<html>app</html>")}},
+		Static:  fstest.MapFS{"index.html": {Data: []byte(`<html><script src="./assets/app.js"></script>app</html>`)}},
 		Version: "1",
 	}
 	s.Init()
@@ -305,7 +306,7 @@ func nonceHex() string {
 // rpc protocol (workspace.get), a >1 MB request on its own xfer channel, the terminal
 // input and output on its term channel, and an HTTP fetch on an http channel.
 func TestIntegrationRelay(t *testing.T) {
-	env := startEnv(t, nil)
+	env := startEnv(t, nil, nil)
 
 	pc, rpc := openBrowser(t, env, "int-1", env.token)
 
@@ -505,7 +506,7 @@ func readEnvelope(t *testing.T, rpc *tunnel.Framed, d time.Duration) envelope {
 // of the writer's buffer, else the caller (io.Copy, which reuses its buffer) overwrites the
 // chunks still queued on the channel.
 func TestHTTPChannelOrder(t *testing.T) {
-	env := startEnv(t, nil)
+	env := startEnv(t, nil, nil)
 	pc, _ := openBrowser(t, env, "http-order", env.token)
 
 	body := make([]byte, 300*1024)
@@ -646,7 +647,7 @@ func TestIntegrationSwappedOffer(t *testing.T) {
 	if err := podID.SetCert(identity.NewCert(a, podID.Key(), "pod", identity.KindPod)); err != nil {
 		t.Fatal(err)
 	}
-	env := startEnv(t, podID)
+	env := startEnv(t, podID, nil)
 
 	browserKey := identity.KeyFromSeed(identity.Derive(a.Seed, "browser device"))
 	cert := identity.NewCert(a, browserKey, "browser", identity.KindBrowser)

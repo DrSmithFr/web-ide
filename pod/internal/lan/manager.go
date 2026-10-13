@@ -34,6 +34,10 @@ type Config struct {
 	// Handler serves a request of a trusted peer as a request of the machine itself
 	// (server.ServeTrusted): the peer proved it is a device of the account.
 	Handler http.Handler
+	// ServeTunnel runs the protocol of a window a gateway of the site bridged to this pod: its
+	// channels arrive on the LAN port (/_lan/tunnel), the rpc one having passed the handshake of
+	// the browser the gateway vouches for.
+	ServeTunnel func(ctx context.Context, rpc tunnel.MsgConn, chans <-chan tunnel.LabeledConn)
 	// Peers are the addresses typed by hand (host:port), for a network where mDNS fails.
 	Peers []string
 	// SavePeers stores the addresses typed by hand (config.json).
@@ -75,6 +79,7 @@ type Manager struct {
 	peers     map[string]*peer          // by device key
 	trusted   map[string]*trust         // by TLS fingerprint of a peer
 	joins     map[string]*joinReq       // joining pods, by address
+	tunnels   map[string]*tunnelWindow  // windows bridged by a gateway, by window id + peer TLS fp
 	browsers  map[string]*identity.Cert // certificates of the browsers of the Devices panel
 	idLinks   map[*idLink]bool          // the open links of the Devices panel
 	seq       int64                     // the seq of the last revocation list passed on
@@ -128,6 +133,7 @@ func New(cfg Config) (*Manager, error) {
 		cfg: cfg, cert: cert, fp: Fingerprint(cert.Certificate[0]),
 		limits: tunnel.NewRateLimiter(20, time.Minute),
 		cands:  map[string]*candidate{}, peers: map[string]*peer{}, trusted: map[string]*trust{}, joins: map[string]*joinReq{},
+		tunnels:  map[string]*tunnelWindow{},
 		browsers: map[string]*identity.Cert{}, idLinks: map[*idLink]bool{},
 	}
 	for _, a := range cfg.Peers {
@@ -400,6 +406,10 @@ func (m *Manager) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	m.mu.Unlock()
 	if t == nil || m.cfg.Identity.PeerError(t.cert) != nil {
 		http.Error(w, "not a device of this account", http.StatusForbidden)
+		return
+	}
+	if r.URL.Path == TunnelPath {
+		m.serveTunnel(w, r, fp)
 		return
 	}
 	m.cfg.Handler.ServeHTTP(w, r)

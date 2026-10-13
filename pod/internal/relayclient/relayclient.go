@@ -86,6 +86,31 @@ func toSync(m sigMsg) settingsync.Msg {
 		SyncKey: m.SyncKey, Wrap: m.Wrap, Blob: m.Blob, Updated: m.Updated, Message: m.Message}
 }
 
+// PeerRoute opens one channel of a pod of the account this pod can reach without the relay: a
+// peer of its site, over the LAN link (pod/internal/lan.OpenTunnel). window is the id of the
+// browser's tunnel on this pod, via the certificate of the browser this pod authenticated, and
+// fpBrowser / fpPod the DTLS fingerprints of that tunnel — the peer binds the browser's proof to
+// them. Implemented by pod/internal/multipod.Route.
+type PeerRoute interface {
+	Open(ctx context.Context, key, window, label string, via *identity.Cert, fpBrowser, fpPod string) (tunnel.MsgConn, error)
+}
+
+// RoutedLabel is the label of a channel of another pod, asked on this pod's tunnel:
+// @<device key>/<label>. The gateway pipes it to that pod; it never serves it itself.
+const RoutedLabel = "@"
+
+// splitRouted splits a routed label into the device key of the target pod and its own label.
+func splitRouted(label string) (key, rest string, ok bool) {
+	if !strings.HasPrefix(label, RoutedLabel) {
+		return "", "", false
+	}
+	key, rest, found := strings.Cut(strings.TrimPrefix(label, RoutedLabel), "/")
+	if !found || key == "" || rest == "" {
+		return "", "", false
+	}
+	return key, rest, true
+}
+
 // Config of a relayclient.
 type Config struct {
 	RelayURL string // ws:// or wss:// URL of the relay (the base, without /_relay/pod)
@@ -110,6 +135,9 @@ type Config struct {
 	// OnForeignWrap is called with a wrap the relay pushed for another device: this pod passes it
 	// on over its LAN links, which is how a pod with no link of its own gets its key back.
 	OnForeignWrap func(*identity.WrapRecord)
+	// Route reaches a pod of this pod's site that has no link of its own: a browser tunneled to
+	// this pod gets its channels through it (relay.md, *Multi-pod*).
+	Route PeerRoute
 	// ForceTurn only advertises relay (TURN) candidates (e2e).
 	ForceTurn bool
 	// OnState is called with the state of the link to the relay (connecting, connected,
@@ -452,7 +480,8 @@ func (c *Client) dropSession(id string) {
 // serves the tunnel. It runs in its own goroutine (per session), so one handshake does
 // not block the signaling loop.
 func (c *Client) handleOffer(m sigMsg, link *podLink) {
-	s := &session{client: c, link: link, id: m.Session, rpcCh: make(chan *dataChannelChunk, 1), chans: make(chan tunnel.LabeledConn, 64)}
+	s := &session{client: c, link: link, id: m.Session, rpcCh: make(chan *dataChannelChunk, 1), chans: make(chan tunnel.LabeledConn, 64),
+		routed: make(chan routedConn, 16), authed: make(chan struct{})}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	c.addSession(m.Session, s)
 	if err := s.setupOffer(m); err != nil {
@@ -463,6 +492,7 @@ func (c *Client) handleOffer(m sigMsg, link *podLink) {
 	// serveRPC waits for the browser's "rpc" DataChannel (OnDataChannel hands it to
 	// s.rpcCh, registered synchronously) and runs the handshake and the tunnel.
 	go s.serveRPC()
+	go s.serveRouted()
 }
 
 // podLink is one pod's persistent WebSocket to the relay; writes are serialized.
@@ -508,9 +538,25 @@ type session struct {
 	// chans carries every other DataChannel of this session (term:<id>, xfer:<n>,
 	// http:<n>), framed, to ServeTunnel.
 	chans chan tunnel.LabeledConn
+	// routed carries the channels of another pod of the site (@<key>/<label>): this pod is the
+	// gateway of this browser and pipes them to that pod.
+	routed chan routedConn
+	// authed is closed once the browser proved itself on the rpc channel: only then does this
+	// pod relay its channels, with its certificate and the fingerprints of its tunnel.
+	authed      chan struct{}
+	browserCert *identity.Cert
+	fpBrowser   string
+	fpPod       string
 	// rpcConn is the framed rpc channel, so the pod can answer on it (terminal output).
 	rpcConn *tunnel.Framed
 	closed  bool
+}
+
+// routedConn is one channel of another pod asked on this window.
+type routedConn struct {
+	key   string
+	label string
+	conn  *tunnel.Framed
 }
 
 func (s *session) setupOffer(m sigMsg) error {
@@ -542,6 +588,14 @@ func (s *session) setupOffer(m sigMsg) error {
 			return
 		}
 		conn := tunnel.NewFramed(chunk, 8*1024*1024)
+		if key, rest, ok := splitRouted(dc.Label()); ok {
+			// A channel of another pod of the site: this pod is the gateway of this browser.
+			select {
+			case s.routed <- routedConn{key: key, label: rest, conn: conn}:
+			case <-s.ctx.Done():
+			}
+			return
+		}
 		s.chans <- tunnel.LabeledConn{Label: dc.Label(), Conn: conn}
 	})
 	pc.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
@@ -613,9 +667,67 @@ func (s *session) serveRPC() {
 		s.close()
 		return
 	}
+	s.browserCert, s.fpBrowser, s.fpPod = hs.PeerCert, hs.FPBrowser, hs.FPPod
+	close(s.authed)
 	s.client.cfg.Server.ServeTunnel(s.ctx, conn, s.chans)
 	// ServeTunnel returned: the browser closed the tunnel.
 	s.close()
+}
+
+// serveRouted pipes the channels of another pod of the site to that pod, over the LAN link.
+// The browser proved itself on this pod's rpc channel first: this pod vouches for it, and the
+// end pod checks its certificate against the list it holds itself.
+func (s *session) serveRouted() {
+	select {
+	case <-s.authed:
+	case <-s.ctx.Done():
+		return
+	}
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case rc := <-s.routed:
+			go s.pipe(rc)
+		}
+	}
+}
+
+// pipe opens the channel of the target pod and copies both ways until one side ends.
+func (s *session) pipe(rc routedConn) {
+	route := s.client.cfg.Route
+	if route == nil || s.browserCert == nil {
+		_ = rc.conn.Close()
+		return
+	}
+	peer, err := route.Open(s.ctx, rc.key, s.id, rc.label, s.browserCert, s.fpBrowser, s.fpPod)
+	if err != nil {
+		log.Printf("relayclient: route @%s/%s: %v", rc.key, rc.label, err)
+		_ = rc.conn.Close()
+		return
+	}
+	go func() {
+		defer peer.Close()
+		for {
+			b, err := rc.conn.Read()
+			if err != nil {
+				return
+			}
+			if err := peer.Write(b); err != nil {
+				return
+			}
+		}
+	}()
+	for {
+		b, err := peer.Read()
+		if err != nil {
+			break
+		}
+		if err := rc.conn.Write(b); err != nil {
+			break
+		}
+	}
+	_ = rc.conn.Close()
 }
 
 // close ends the session (browser bye, ICE failed, or the tunnel closed).

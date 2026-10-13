@@ -30,6 +30,9 @@ func (w *wsConn) Read() ([]byte, error) {
 
 func (w *wsConn) Write(b []byte) error { return w.c.Write(w.ctx, websocket.MessageText, b) }
 
+// Buffered: a WebSocket keeps nothing of its own, a frame is sent as it is written.
+func (w *wsConn) Buffered() int { return 0 }
+
 func (w *wsConn) Close() error { return w.c.Close(websocket.StatusNormalClosure, "") }
 
 // link is one control link with a peer, made by either side once the handshake passed. While

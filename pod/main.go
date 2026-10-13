@@ -322,6 +322,7 @@ func main() {
 			Sync:      srv.Sync,
 			Version:   version,
 			Preferred: cfg.Gateway.Preferred,
+			Route:     podRoute(lanMgr),
 			ForceTurn: *forceTurn,
 			OnState: func(s string) {
 				state.Store(s)
@@ -392,19 +393,29 @@ func main() {
 	}
 }
 
+// podRoute is how this pod reaches the pods of its site that have no link of their own: a
+// browser tunneled to it gets their channels through the LAN link.
+func podRoute(m *lan.Manager) *multipod.Route {
+	if m == nil {
+		return multipod.NewRoute(nil)
+	}
+	return multipod.NewRoute(m)
+}
+
 // startLAN runs the link to the other pods of the account on the local network: the LAN
 // port, mDNS, and the page of each pod found, served under /_lan/pod/<key>/.
 func startLAN(ctx context.Context, st *store.Store, cfg *config.Config, srv *server.Server, podID *identity.PodIdentity, mdns bool,
 	onRevocations func(*identity.Revocations), onBlob func(*identity.BlobRecord), onSync func(*identity.SyncKeyRecord),
 	onKeyReady func(), hub *settingsync.Hub, onChange *func()) *lan.Manager {
 	m, err := lan.New(lan.Config{
-		Dir:      st.Dir(),
-		Addr:     cfg.LAN.Addr,
-		Identity: podID,
-		Name:     hostname(),
-		Version:  version,
-		Handler:  http.HandlerFunc(srv.ServeTrusted),
-		Peers:    cfg.LAN.Peers,
+		Dir:         st.Dir(),
+		Addr:        cfg.LAN.Addr,
+		Identity:    podID,
+		Name:        hostname(),
+		Version:     version,
+		Handler:     http.HandlerFunc(srv.ServeTrusted),
+		ServeTunnel: srv.ServeTunnel,
+		Peers:       cfg.LAN.Peers,
 		SavePeers: func(peers []string) error {
 			cfg.LAN.Peers = peers
 			return cfg.Save(st)

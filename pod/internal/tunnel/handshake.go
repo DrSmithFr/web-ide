@@ -253,6 +253,12 @@ func (h *Handshake) runCert(conn MsgConn, hi helloParams) error {
 	return h.send(conn, "$ready", map[string]any{"ok": true})
 }
 
+// SendError writes one $hello{error: code} refusal on a channel, for a peer refused before the
+// handshake runs (a browser the gateway vouches for is revoked here).
+func SendError(conn MsgConn, code string) error {
+	return sendMsg(conn, "$hello", helloParams{Protocol: Protocol, Version: Version, Error: code})
+}
+
 // ErrDeadline is returned when the browser does not answer within the handshake window.
 var ErrDeadline = errors.New("tunnel: the handshake timed out")
 
