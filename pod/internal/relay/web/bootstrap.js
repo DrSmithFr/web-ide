@@ -9,7 +9,7 @@
 // mode (M1), which a paired pod refuses. Recent browsers only: WebCrypto Ed25519 and WebAuthn
 // PRF are required, nothing is attempted without them.
 import * as id from './identity.js'
-import { keyOf, pickGateway, pickSite, routeOf } from './routes.js'
+import { keyOf, nextGateway, pickGateway, pickSite, routeOf } from './routes.js'
 
 const params = new URLSearchParams(location.hash.slice(1) || location.search.slice(1))
 // The pod of the link, else the last one opened here: the installed app (PWA) starts at /.
@@ -362,7 +362,16 @@ function onPush(m) {
   if (m.type === 'pods') {
     podsPrev = pods // the list before this one: who was with whom before the gateway left
     pods = m.pods ?? []
+    syncSite()
   }
+}
+
+// A site is named after the pods of the local network, so its id moves when a pod joins or leaves
+// it. The site this window entered through must follow that: a failover looks for the pods of the
+// site as the relay names it now.
+function syncSite() {
+  const e = pods.find((p) => p.key === entryKey)
+  if (e?.site) entrySite = e.site
 }
 
 async function main() {
@@ -570,6 +579,34 @@ function close(t) {
   t.sig = null
 }
 
+// One PeerConnection per window and pod adds up: a tunnel no channel of this window uses any
+// more is closed after two idle minutes (relay.md, *Routing*). The tunnel this window entered
+// through and the one of the page it shows are kept: the next fetch of the page must not pay
+// for a new handshake.
+const IDLE = 2 * 60 * 1000
+const used = (t) => (t.used = Date.now())
+const held = (t, on) => {
+  t.refs = (t.refs ?? 0) + (on ? 1 : -1)
+  return used(t)
+}
+setInterval(() => {
+  const now = Date.now()
+  for (const t of [...tunnels.values()]) {
+    for (const [key, e] of t.routed ?? []) {
+      // A window opened on the gateway for a pod this page does not show any more.
+      if (key !== shownKey && key !== entryKey && now - (e.used ?? 0) >= IDLE) {
+        try { e.dc.close() } catch {}
+        t.routed.delete(key)
+      }
+    }
+    if (t.dropped || t.refs || t.key === entryKey || t.key === shownKey || now - (t.used ?? 0) < IDLE) continue
+    tunnels.delete(t.key)
+    t.dropped = true
+    close(t)
+    declare()
+  }
+}, 15 * 1000)
+
 // A tunnel that ended: its channels are gone, the app will ask for them again. The gateway this
 // window entered through is the one case where the browser must go looking for another one.
 function drop(t, msg) {
@@ -591,7 +628,7 @@ async function failover() {
   for (let i = 0; i < 6; i++) {
     await refreshPods()
     // The relay has not elected one yet: the pod this window was on is worth another try.
-    const g = nextGateway()
+    const g = entryGateway()
     if (g) {
       const old = entryKey
       entryKey = g.key
@@ -600,8 +637,16 @@ async function failover() {
       status('<div class="spin"></div>' + words.reconnecting + ' <b>' + (g.name || g.podId) + '</b>')
       try {
         entry = await connect(g.key, g.podId, entryMode)
-        if (shownKey === old) shownKey = g.key
-        openApp()
+        if (shownKey === old) {
+          // This window showed the pod that left: the same path, on the new gateway. A page
+          // reached on its own tunnel is left alone: the app asks its channels again, and a page
+          // of a pod of the site rides the new gateway under its own /pod/<key>/.
+          shownKey = g.key
+          openPath = appPath() ?? openPath
+          openApp()
+        } else {
+          declare()
+        }
         return
       } catch {}
     }
@@ -610,21 +655,11 @@ async function failover() {
   fail(lastError ?? words.closed)
 }
 
-// The gateway to reconnect through: the one of the site this window entered, else the gateway of
-// another site, else any pod of the account that is not the one that left. A site id is made of
-// the pods of the local network: when the gateway leaves, the site of its peers is named by
-// another key, so the search must not stop at the site this window came from.
-function nextGateway() {
-  // A site is named after the pods of the local network: when the gateway leaves, the site of its
-  // peers may be named by another key. The pods this window knew before are what to follow.
-  const known = new Set(podsPrev.map((p) => p.key))
-  const score = new Map()
-  for (const p of pods) score.set(p.site, (score.get(p.site) ?? 0) + (known.has(p.key) ? 2 : 1))
-  const best = [...score.entries()].sort((a, b) => b[1] - a[1])[0]
-  // A pod the relay does not report would refuse the signaling link: only the pods list is worth
-  // dialling, except when it says nothing at all (the link of the account is not up yet).
-  return pickGateway(pods, entrySite) ?? (best ? pickGateway(pods, best[0]) : null) ??
-    pods.find((p) => p.gateway) ?? pods.find((p) => p.podId !== entryPod) ??
+// The gateway to reconnect through (routes.js). A pod the relay does not report would refuse the
+// signaling link: only the pods list is worth dialling, except when it says nothing at all (the
+// link of the account is not up yet).
+function entryGateway() {
+  return nextGateway(pods, podsPrev, entrySite, entryKey) ??
     (pods.length || !entryPod ? null : { key: entryKey, podId: entryPod, site: entrySite })
 }
 
@@ -634,7 +669,10 @@ async function refreshPods() {
   if (!link) return
   try {
     const m = await Promise.race([link.recv('pods'), new Promise((r) => setTimeout(() => r(null), 2000))])
-    if (m?.pods) pods = m.pods
+    if (m?.pods) {
+      pods = m.pods
+      syncSite()
+    }
   } catch {}
 }
 
@@ -649,6 +687,19 @@ function openApp() {
   document.getElementById('status').style.display = 'none'
   remember(entryPod)
   declare()
+}
+
+// The path the app of this window is on, without the /pod/<key>/ prefix: on a failover the page
+// keeps it, it does not fall back to the home page.
+function appPath() {
+  try {
+    const u = new URL(document.getElementById('frame').contentWindow.location.href)
+    const prefix = shownKey ? '/pod/' + shownKey : ''
+    if (prefix && u.pathname.startsWith(prefix)) return u.pathname.slice(prefix.length) + u.search || '/'
+    return u.pathname + u.search
+  } catch {
+    return null
+  }
 }
 
 // What the Service Worker needs to know to answer the fetches of this window: which pod its frame
@@ -681,7 +732,7 @@ async function onMessage(d) {
       d.port.close()
       return
     }
-    bridge(r.t, d.label, d.port, r.prefix).catch(() => d.port.close())
+    bridge(r.t, d.label, d.port, r.prefix, d.side).catch(() => d.port.close())
   } else if (d.kind === 'http') {
     const r = await route(keyOf(d.base))
     if (!r) {
@@ -704,19 +755,22 @@ navigator.serviceWorker.addEventListener('message', (e) => onMessage(e.data))
 // runs its own handshake on the tunnel of the gateway, bound to the fingerprints of that tunnel:
 // the pod at the other end checks the browser's proof against them, and the gateway vouches for
 // the browser with the certificate it checked.
-async function bridge(t, label, port, prefix) {
-  const own = !prefix && label === 'rpc'
-  if (label === 'rpc') appPort = port
+async function bridge(t, label, port, prefix, side) {
+  const own = !prefix && label === 'rpc' && !side
+  if (label === 'rpc' && !side) appPort = port
   // A pod reached through the gateway is a *window* on that pod: its rpc channel is opened
   // first, and every other channel of the page rides it. On the pod's own tunnel, the extra
   // channels are DataChannels of their own.
   const routed = prefix ? await routedRPC(t, prefix) : null
   const dc = own ? t.rpc : routed ? routed.dc : t.pc.createDataChannel(label, { ordered: true })
   const pending = []
+  held(t, true)
   const write = (text) => {
     const bytes = new TextEncoder().encode(typeof text === 'string' ? text : JSON.stringify(text))
     if (dc.readyState === 'open') frame(dc, bytes)
     else pending.push(bytes)
+    used(t)
+    if (routed) routed.used = Date.now()
   }
   port.onmessage = (e) => write(e.data)
   port.onclose = () => (own ? close(t) : dc.close())
@@ -731,8 +785,11 @@ async function bridge(t, label, port, prefix) {
   for (;;) {
     const m = await rd.next()
     if (!m) break
+    used(t)
+    if (routed) routed.used = Date.now()
     port.postMessage(decode(m))
   }
+  held(t, false)
   port.close()
 }
 
@@ -743,11 +800,11 @@ async function routedRPC(t, prefix) {
   const key = prefix.slice(1, -1)
   t.routed = t.routed ?? new Map()
   const have = t.routed.get(key)
-  if (have) return have
+  if (have) return (have.used = Date.now()), have
   const dc = t.pc.createDataChannel(prefix + 'rpc', { ordered: true })
   const r = await handshake(t, dc, 'cert', key, t.fpB, t.fpP)
   if (!r.ok) throw new Error(r.error)
-  const e = { dc, rd: r.rd }
+  const e = { dc, rd: r.rd, used: Date.now() }
   t.routed.set(key, e)
   dc.onclose = () => {
     t.routed.delete(key)
@@ -760,11 +817,13 @@ async function routedRPC(t, prefix) {
 // then the body as raw chunks, closed by an empty one.
 function httpFetch(t, d, prefix) {
   const dc = t.pc.createDataChannel((prefix ?? '') + d.id, { ordered: true })
+  held(t, true)
   const sendReq = () => {
     if (dc.readyState !== 'open') return setTimeout(sendReq, 200)
     frame(dc, new TextEncoder().encode(JSON.stringify({
       path: d.url, preview: d.preview, base: d.base, method: d.method, headers: d.headers, body: d.body,
     })))
+    used(t)
   }
   dc.onopen = sendReq
   let head = null
@@ -774,6 +833,7 @@ function httpFetch(t, d, prefix) {
       const m = await rd.next()
       // The pod closes a body with an empty message: the Service Worker reads it as the end.
       if (!m || !m.length) break
+      used(t)
       if (!head) {
         head = JSON.parse(decode(m))
         d.port.postMessage({ head })
@@ -783,6 +843,7 @@ function httpFetch(t, d, prefix) {
     }
     d.port.postMessage(null)
     dc.close()
+    held(t, false)
   })()
 }
 

@@ -2,7 +2,7 @@
 // browser: which pod opens the page of another one, and under which label. Run by make test.
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { keyOf, pickGateway, pickSite, routeOf } from '../pod/internal/relay/web/routes.js'
+import { keyOf, nextGateway, pickGateway, pickSite, routeOf } from '../pod/internal/relay/web/routes.js'
 
 // Site 1: A (preferred) and B, both registered at the relay. Site 2: C. D is a pod of the LAN of
 // A that the relay never sees (it has no link of its own).
@@ -44,6 +44,22 @@ test('failover: when the gateway leaves, the same pod rides the new one', () => 
   // The page of D keeps its /pod/kd/ URL: only the tunnel it rides on changes.
   assert.deepEqual(routeOf(after, 'kd', 'kb'), { via: 'kb', prefix: '@kd/' })
   assert.deepEqual(routeOf(after, 'kc', 'kb'), { via: 'kc', prefix: '' })
+})
+
+test('failover: the window follows a pod of the site it entered, not another site', () => {
+  const prev = pods.map((p) => ({ ...p }))
+  // A left. B is alone on its own site now (a site is named after the pods of the local network),
+  // C is the gateway of its own site: the window that entered through A goes to B.
+  const after = [
+    { key: 'kb', podId: 'pb', site: 'kb', gateway: true },
+    { key: 'kc', podId: 'pc', site: 's2', gateway: true },
+  ]
+  assert.equal(nextGateway(after, prev, 's1', 'ka').key, 'kb')
+  // The site id did not move: the elected gateway of that site is taken.
+  assert.equal(nextGateway([{ key: 'kb', podId: 'pb', site: 's1', gateway: true }], prev, 's1', 'ka').key, 'kb')
+  // Nobody of that site is online: another gateway carries the window.
+  assert.equal(nextGateway([{ key: 'kc', podId: 'pc', site: 's2', gateway: true }], prev, 's1', 'ka').key, 'kc')
+  assert.equal(nextGateway([], prev, 's1', 'ka'), null)
 })
 
 test('the base of a page names the pod it belongs to', () => {

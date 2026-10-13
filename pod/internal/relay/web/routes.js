@@ -30,6 +30,19 @@ export function keyOf(base) {
   return m ? m[1] : ''
 }
 
+/** The gateway to reconnect through when the one this window entered through left: a pod of the
+ * site as this window knew it (a site is named after the pods of the local network, so its id
+ * changes when the gateway leaves — the pods seen before are what to follow), elected for the site
+ * it is on now; else the gateway of the site as it is named now; else any gateway the relay
+ * reports, then any pod that is not the one that left. */
+export function nextGateway(pods, podsPrev, entrySite, entryKey) {
+  const same = new Set(podsPrev.filter((p) => p.site === entrySite).map((p) => p.key))
+  const group = pods.filter((p) => same.has(p.key) && p.key !== entryKey)
+  return pickGateway(group, group[0]?.site) ?? pickGateway(pods, entrySite) ??
+    pods.find((p) => p.gateway && same.has(p.key)) ?? pods.find((p) => p.gateway) ??
+    pods.find((p) => p.key !== entryKey) ?? null
+}
+
 /** The tunnel that carries the channels of a pod, and the prefix of its labels: the pod's own
  * when the relay reports it online, else the gateway this window entered through, with every
  * label prefixed by @<key>/ (the gateway opens them on its own link to the peer). */
