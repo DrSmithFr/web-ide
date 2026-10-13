@@ -29,6 +29,8 @@ import { ConflictsTool, StructureTool } from '../tools/tools'
 import { InfoTool } from '../tools/InfoTool'
 import { DockerTool } from '../docker/DockerTool'
 import { AgentsTool } from '../agents/AgentsTool'
+import { QuestionModal, QuestionsTool } from '../questions/QuestionsTool'
+import { questions, refreshQuestions, resetQuestions, showQuestion } from '../questions/state'
 import { refreshAgents } from '../agents/state'
 import { openConflict } from '../conflict/ConflictDialog'
 import { openSettings } from '../settings/SettingsModal'
@@ -60,6 +62,7 @@ export const toolPanels: Record<string, { label: string; icon: string; component
   database: { label: 'Database explorer', icon: 'database', component: DatabaseTool },
   assistant: { label: 'AI assistant', icon: 'sparkle', component: AssistantTool },
   agents: { label: 'Agents', icon: 'comment', component: AgentsTool },
+  questions: { label: 'Questions', icon: 'question', component: QuestionsTool, badge: () => questions().length },
   structure: { label: 'Structure', icon: 'outline', component: StructureTool },
   conflicts: { label: 'Conflicts', icon: 'conflict', component: ConflictsTool },
   info: { label: 'Infos', icon: 'info', component: InfoTool },
@@ -220,7 +223,7 @@ const menus: [string, string[]][] = [
   ['menu|Navigate', ['search.everywhere', 'nav.recentFiles', '-', 'nav.back', 'nav.forward', '-', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', '-', 'nav.related', 'nav.test']],
   ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover', '-', 'lsp.rename', 'lsp.format', '-', 'edit.fold', 'edit.unfold', 'edit.foldAll', 'edit.unfoldAll']],
   ['menu|View', ['view.splitRight', 'view.splitDown', '-', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', '-', 'view.visualFocus', 'view.focusOutline', 'view.focusDim', '-', 'view.whitespace', 'view.wordWrap', 'view.markdown', '-', 'console.new', 'palette.open']],
-  ['menu|Tools', ['tool.explorer', 'tool.search', 'tool.git', 'tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.database', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.console', 'tool.problems', 'tool.docker']],
+  ['menu|Tools', ['tool.explorer', 'tool.search', 'tool.git', 'tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.questions', 'tool.database', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.console', 'tool.problems', 'tool.docker']],
 ]
 
 // Menu entries switching a setting, shown with a check box.
@@ -589,6 +592,13 @@ export function ProjectPage(props: { id: string }) {
         mutate((s) => (s.right.panel = 'assistant'))
         void openChat(chatId).catch(() => {})
       }
+      // A push notification of a question of an agent: /project/<id>?questions shows the first one.
+      await resetQuestions()
+      if (new URLSearchParams(location.search).has('questions')) {
+        history.replaceState(null, '', location.pathname)
+        mutate((s) => showTool(s, 'questions'))
+        showQuestion()
+      }
       // Opened from a file link of Claude Code while no window had the project.
       const open = new URLSearchParams(location.search).get('open')
       if (open) {
@@ -629,6 +639,7 @@ export function ProjectPage(props: { id: string }) {
       await reopenProject()
       void refreshConsoles()
       void refreshAgents()
+      void refreshQuestions()
       refreshConnections()
     }),
     // A worktree shown besides goes by itself (state/project).
@@ -667,6 +678,7 @@ export function ProjectPage(props: { id: string }) {
         <SearchEverywhereHost />
         <RecentFilesHost tools={switcherTools} onTool={toggleToolFocus} />
         <ClipboardHistoryHost />
+        <QuestionModal />
         <DoodleHost external onSettings={() => openSettings()} />
         <Show when={phone()}>
           {/* One view at a time, full screen: the editor stays mounted under the tools. */}

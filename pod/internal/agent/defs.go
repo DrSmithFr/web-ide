@@ -134,6 +134,20 @@ var askUserDef = fn("ask_user",
 		},
 	}}, "questions")
 
+// AskUserQuestions is the schema of the questions of ask_user, for the MCP tool of the same
+// name (the CLI agents ask through the Questions tool of the IDE).
+func AskUserQuestions() map[string]any {
+	var d struct {
+		Function struct {
+			Parameters struct {
+				Properties map[string]map[string]any `json:"properties"`
+			} `json:"parameters"`
+		} `json:"function"`
+	}
+	_ = json.Unmarshal(askUserDef.JSON, &d)
+	return d.Function.Parameters.Properties["questions"]
+}
+
 // MaxPageElements and MaxStrokePoints bound a board_draw call.
 const (
 	MaxPageElements = 200

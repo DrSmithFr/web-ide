@@ -65,6 +65,9 @@ type Info struct {
 	Commands json.RawMessage `json:"commands,omitempty"`
 	// Stats sum the turns of the session (work time, cost).
 	Stats *Totals `json:"stats,omitempty"`
+	// AutoOpen overrides for this session the setting that opens its questions by themselves
+	// (nil: the setting).
+	AutoOpen *bool `json:"autoOpen,omitempty"`
 	// Queue: the prompts waiting for the end of the turn; Caps: what the prompts may hold
 	// (prompt.go).
 	Queue []QueuedInfo `json:"queue,omitempty"`
@@ -299,9 +302,11 @@ func (s *Session) start(load bool) {
 
 func (s *Session) open(load bool) error {
 	res, err := s.call("initialize", map[string]any{
-		"protocolVersion":    1,
-		"clientCapabilities": map[string]any{"fs": map[string]bool{"readTextFile": false, "writeTextFile": false}, "terminal": false},
-		"clientInfo":         map[string]string{"name": "web-ide", "title": "Web IDE", "version": s.m.Version},
+		"protocolVersion": 1,
+		"clientCapabilities": map[string]any{"fs": map[string]bool{"readTextFile": false, "writeTextFile": false}, "terminal": false,
+			// Forms of questions (elicitation/create): Claude's AskUserQuestion comes this way.
+			"elicitation": map[string]any{"form": map[string]any{}}},
+		"clientInfo": map[string]string{"name": "web-ide", "title": "Web IDE", "version": s.m.Version},
 	}, 2*time.Minute)
 	if err != nil {
 		return err
@@ -405,6 +410,8 @@ func (s *Session) line(gen int, data []byte, next int64) {
 		}
 	case m.Method != "" && m.ID != nil:
 		s.agentRequest(m)
+	case m.Method == "$/cancel_request":
+		s.cancelRequest(m.Params)
 	case m.Method == "_auth/status_update":
 		s.authStatus(m.Params)
 	case m.Method == "session/update":
@@ -435,9 +442,9 @@ func (s *Session) agentRequest(m message) {
 		if p.ToolCall.Title != nil {
 			title = *p.ToolCall.Title
 		}
-		s.entry(s.th.add(Entry{Kind: "permission", ToolID: p.ToolCall.ToolCallID, Title: title, Request: m.ID, Options: p.Options}))
-		s.asking()
-		s.setState(Asking, "")
+		s.ask(Entry{Kind: "permission", ToolID: p.ToolCall.ToolCallID, Title: title, Request: m.ID, Options: p.Options})
+	case "elicitation/create":
+		s.elicitation(m)
 	default:
 		_ = s.write(map[string]any{"jsonrpc": "2.0", "id": m.ID, "error": rpcError{Code: -32601, Message: "method not found: " + m.Method}})
 	}
@@ -505,7 +512,7 @@ func (s *Session) apply(raw json.RawMessage) {
 // endTurn closes the turn running with the answer of its session/prompt.
 func (s *Session) endTurn(result json.RawMessage, err error) {
 	s.prompt = 0
-	s.cancelPermissions()
+	s.cancelAsks()
 	s.finishTurn(result)
 	var r struct {
 		StopReason string `json:"stopReason"`
@@ -523,19 +530,6 @@ func (s *Session) endTurn(result json.RawMessage, err error) {
 	}
 	s.setState(Ready, "")
 	s.next()
-}
-
-// cancelPermissions answers the questions still open as cancelled.
-func (s *Session) cancelPermissions() {
-	for i := range s.th.Entries {
-		e := &s.th.Entries[i]
-		if e.Kind == "permission" && e.Outcome == "" {
-			e.Outcome = "cancelled"
-			_ = s.reply(e.Request, map[string]any{"outcome": map[string]string{"outcome": "cancelled"}})
-			s.entry(i)
-		}
-	}
-	s.answered()
 }
 
 // exit handles the end of the process (on the queue): restarted with its session, unless it
@@ -556,11 +550,16 @@ func (s *Session) exit(gen, code int) {
 		s.finishTurn(nil)
 		s.notice("notice", "The agent stopped during the turn.")
 	}
+	open := 0
 	for i := range s.th.Entries {
-		if e := &s.th.Entries[i]; e.Kind == "permission" && e.Outcome == "" {
+		if e := &s.th.Entries[i]; isOpenAsk(*e) {
 			e.Outcome = "cancelled"
 			s.entry(i)
+			open++
 		}
+	}
+	if open > 0 {
+		s.questionsChanged(false)
 	}
 	now := time.Now()
 	recent := s.exits[:0]
@@ -589,7 +588,7 @@ func (s *Session) Cancel() error {
 	if s.prompt == 0 {
 		return nil
 	}
-	s.cancelPermissions()
+	s.cancelAsks()
 	return s.write(map[string]any{"jsonrpc": "2.0", "method": "session/cancel", "params": map[string]string{"sessionId": s.acp}})
 }
 
@@ -597,23 +596,16 @@ func (s *Session) Cancel() error {
 func (s *Session) Answer(index int, option string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if index < 0 || index >= len(s.th.Entries) || s.th.Entries[index].Kind != "permission" || s.th.Entries[index].Outcome != "" {
-		return i18n.New("this question is no longer open")
+	e, err := s.openAsk(index, "permission")
+	if err != nil {
+		return err
 	}
-	e := &s.th.Entries[index]
 	if err := s.reply(e.Request, map[string]any{"outcome": map[string]string{"outcome": "selected", "optionId": option}}); err != nil {
 		return err
 	}
 	e.Outcome = option
 	s.entry(index)
-	open := false
-	for _, x := range s.th.Entries {
-		open = open || (x.Kind == "permission" && x.Outcome == "")
-	}
-	if !open && s.info.State == Asking {
-		s.answered()
-		s.setState(Busy, "")
-	}
+	s.askClosed()
 	return nil
 }
 

@@ -292,5 +292,6 @@
   "the agent stopped": "l'agent s'est arrêté",
   "the installation failed: %s": "l'installation a échoué : %s",
   "this question is no longer open": "cette question n'est plus ouverte",
-  "unknown agent: %s": "agent inconnu : %s"
+  "unknown agent: %s": "agent inconnu : %s",
+  "unknown answer: %s": "réponse inconnue : %s"
 }

@@ -100,6 +100,8 @@ type Server struct {
 	handlers map[string]handler
 	// agents are the conversations of the assistant running in the pod.
 	agents agents
+	// asks: the questions of the MCP tool ask_user, and the conversations asking (Questions tool).
+	asks askRegistry
 	// previewMu serializes preview.open (one command per app).
 	previewMu sync.Mutex
 	// tunnelIdle closes the tunnels once no window is left (windowsChanged).
@@ -147,6 +149,7 @@ func (s *Server) Init() {
 	s.registerIdeDir()
 	s.registerCommands()
 	s.registerAgents()
+	s.registerQuestions()
 	s.registerKanbanAgent()
 	s.registerPreviews()
 	s.registerKanban()
@@ -976,6 +979,12 @@ func toRPCError(err error, lang string) *rpcError {
 // emitter returns the event function of a project runtime.
 func (s *Server) emitter(projectID string) runtime.Emit {
 	return func(name string, data any, except string) {
+		// The questions of a session show in the windows of its root, a worktree's too.
+		if name == "questions.changed" {
+			asked, _ := data.(map[string]any)["asked"].(string)
+			s.questionsChanged(projectID, asked)
+			return
+		}
 		s.mu.Lock()
 		var targets []*Client
 		for c := range s.clients {

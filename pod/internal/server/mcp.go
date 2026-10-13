@@ -25,6 +25,7 @@ const mcpInstructions = `Kanban of the Web IDE of the user: tickets go New → T
 Pass cwd (your working directory) to every tool: it selects the project; in the worktree of a ticket, that ticket is the default id.
 The saved commands of the project (list_commands, run_saved_command) run in consoles of the IDE that the user sees: use them for a development server or a command the user set up.
 The IDE itself: its consoles (list_consoles, read_console, console_input), Docker (docker_ps, docker_logs), app previews to try on any device (share_preview, list_previews), and what shows in its window (open_file, open_diff, focus, show_message, request_doodle for a drawing of the user).
+When a choice is the user's, ask_user puts your questions in the Questions tool of the IDE and returns the answers.
 Your changes are shown as written by Claude. Keep descriptions under 1500 characters and notes under 1000: notes are for decisions, not reports.
 When you mention a file of the project to the user, write it as a Markdown link to the IDE: [path:line](` + "<ide>" + `/open?path=<absolute path>&line=<line>), so that a click opens it in the IDE.`
 

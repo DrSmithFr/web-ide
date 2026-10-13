@@ -1,6 +1,6 @@
 // Agents tool: one tab per ACP session of a CLI agent (Claude Code, opencode, pi), its thread
 // streamed by the pod, a prompt box under it. Permissions are asked in the thread.
-import { createEffect, createResource, createSignal, For, Match, on, onMount, Show, Switch } from 'solid-js'
+import { createEffect, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from 'solid-js'
 import { Icon } from '../ui/icons'
 import { EmptyState } from '../ui/EmptyState'
 import { WorktreeChip } from '../ui/WorktreeChip'
@@ -10,6 +10,7 @@ import { copyText } from '../ui/clipboard'
 import { openFile, project, relPath } from '../state/project'
 import { DiffBlock, Markdown } from '../llm/parts'
 import { t } from '../i18n'
+import { requestIn } from '../pod/rpc'
 import {
   active,
   answerAgent,
@@ -23,6 +24,7 @@ import {
   sessions,
   setActive,
   threads,
+  projectOf,
   type AgentInfo,
   type CatalogAgent,
   type Entry,
@@ -31,6 +33,9 @@ import '../llm/assistant.css'
 import { ProjectAgentStats, statsTitle } from './stats'
 import { AgentComposer } from './Composer'
 import { UserAttachments } from './UserAttachments'
+import { QuestionForm, formAnswerText } from '../questions/Form'
+import { showsQuestions } from '../questions/state'
+import '../questions/questions.css'
 import './agents.css'
 
 const stateLabel = (s: AgentInfo['state']) =>
@@ -41,6 +46,8 @@ export function AgentsTool() {
     const a = active()
     return sessions().some((s) => s.id === a) ? a : (sessions()[0]?.id ?? null)
   }
+  // The questions of the session shown are in its thread: no modal for them.
+  onCleanup(showsQuestions((q) => q.source === 'acp' && q.session === current()))
   const plus = async (e: MouseEvent) => {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
     const at = { clientX: r.left, clientY: r.bottom + 2, preventDefault() {}, stopPropagation() {} } as MouseEvent
@@ -70,6 +77,7 @@ export function AgentsTool() {
               title={`${s.name} · ${stateLabel(s.state)}` + (s.stats ? '\n' + statsTitle(s.stats) : '')}
               onClick={() => setActive(s.id)}
               onMouseDown={(e) => e.button === 1 && (e.preventDefault(), void close(s.id))}
+              onContextMenu={(e) => tabMenu(e, s)}
             >
               <span class={`agent-dot ${s.state}`} />
               <span class="tab-title">{s.title}</span>
@@ -265,6 +273,9 @@ function EntryView(props: { id: string; entry: Entry; index: number }) {
       <Match when={e().kind === 'permission'}>
         <PermissionCard id={props.id} entry={e()} index={props.index} />
       </Match>
+      <Match when={e().kind === 'question'}>
+        <QuestionCard id={props.id} entry={e()} index={props.index} />
+      </Match>
       <Match when={e().kind === 'notice'}>
         <div class="agent-notice muted small" data-testid="agent-notice">
           {t(e().text ?? '')}
@@ -362,6 +373,48 @@ function ToolView(props: { entry: Entry }) {
         </For>
         <For each={texts()}>{(c) => <pre class="ai-tool-out">{c.text}</pre>}</For>
       </Show>
+    </div>
+  )
+}
+
+/** The menu of a tab: whether its questions open by themselves. */
+function tabMenu(e: MouseEvent, s: AgentInfo) {
+  e.preventDefault()
+  const set = (value: boolean | null) => void requestIn(s.project, 'agents.autoOpen', { id: s.id, value }).catch(errorToast)
+  contextMenu(e, [
+    { label: t('Its questions open as the setting says'), checked: s.autoOpen === undefined, action: () => set(null) },
+    { label: t('Its questions always open by themselves'), checked: s.autoOpen === true, action: () => set(true) },
+    { label: t('Its questions never open by themselves'), checked: s.autoOpen === false, action: () => set(false) },
+  ])
+}
+
+/** A form the agent asks (Claude's AskUserQuestion): answered here or in the Questions tool. */
+function QuestionCard(props: { id: string; entry: Entry; index: number }) {
+  const e = () => props.entry
+  const [busy, setBusy] = createSignal(false)
+  const answer = async (action: 'accept' | 'decline' | 'cancel', content?: Record<string, unknown>) => {
+    setBusy(true)
+    try {
+      await requestIn(projectOf(props.id), 'questions.answer', { id: `acp:${projectOf(props.id)}:${props.id}:${props.index}`, action, content })
+    } catch (err) {
+      errorToast(err)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const outcome = () =>
+    e().outcome === 'accept' ? formAnswerText(e().schema, e().answer) || t('Answered') : e().outcome === 'decline' ? t('Skipped') : t('Cancelled')
+  return (
+    <div class="ai-approval agent-question" data-testid="agent-question" data-outcome={e().outcome ?? ''}>
+      <div class="ai-approval-head">
+        <Icon name="question" size={14} />
+        <span class="grow">{e().text}</span>
+      </div>
+      <div class="ai-approval-foot">
+        <Show when={!e().outcome} fallback={<span class="muted small q-answer">{outcome()}</span>}>
+          <QuestionForm schema={e().schema ?? {}} idPrefix={`${props.id}-${props.index}`} busy={busy()} onAnswer={(a, c) => void answer(a, c)} />
+        </Show>
+      </div>
     </div>
   )
 }

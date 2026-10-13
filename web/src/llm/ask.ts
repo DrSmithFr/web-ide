@@ -30,6 +30,11 @@ export const entryToString = (a: AnswerEntry | null): string => {
   return a.value
 }
 
+/** The answers of an ask_user card as the pod takes them: one string per option chosen (the
+ * pod follows the branches by label). */
+export const answerStrings = (answers: (AnswerEntry | null)[][]): string[][] =>
+  answers.map((a) => a.flatMap((x) => (x?.kind === 'choices' ? x.value : [entryToString(x)])).filter((s) => s.trim()))
+
 /** The answer as the user reads it (recap and folded card), through t(). */
 export function answerLabel(a: AnswerEntry | null): string {
   if (!a) return t('(no answer)')

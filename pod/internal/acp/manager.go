@@ -227,7 +227,7 @@ func (m *Manager) restore() {
 		// Its process is gone: what it was doing is lost.
 		s.prompt = 0
 		for i := range s.th.Entries {
-			if e := &s.th.Entries[i]; e.Kind == "permission" && e.Outcome == "" {
+			if e := &s.th.Entries[i]; isOpenAsk(*e) {
 				e.Outcome = "cancelled"
 			}
 		}

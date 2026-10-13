@@ -1,0 +1,23 @@
+/* Questions tool: the list, the modal, the forms of the agents (also in the Agents thread). */
+
+.q-list { display: flex; flex-direction: column; gap: 6px; padding: 8px; }
+.q-item { display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-2); color: var(--fg); cursor: pointer; }
+.q-item:hover, .q-item.active { border-color: var(--accent); }
+.q-item-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.q-who { font-weight: 600; font-size: 12.5px; }
+.q-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.q-text { font-size: 13px; overflow-wrap: anywhere; }
+
+.q-modal { width: min(640px, calc(100vw - 32px)); }
+.q-dialog { display: flex; flex-direction: column; gap: 10px; }
+.q-last { border-left: 3px solid var(--line); padding: 2px 0 2px 10px; color: var(--fg-muted); font-size: 13px; max-height: 40vh; overflow: auto; }
+.q-last.folded { max-height: 120px; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent); mask-image: linear-gradient(to bottom, #000 70%, transparent); }
+.q-ask { font-weight: 600; }
+
+.q-form { display: flex; flex-direction: column; gap: 10px; }
+.q-field { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.q-field legend { font-weight: 600; font-size: 13px; padding: 0; margin-bottom: 2px; }
+.q-choice { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; cursor: pointer; }
+.q-choice input { margin-top: 3px; }
+.q-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.q-answer { font-size: 12.5px; }

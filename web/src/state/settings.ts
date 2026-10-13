@@ -33,6 +33,8 @@ export interface Settings {
   devices: Record<string, DeviceLayout>
   /** Settings sync: the switches, read by the pod. The vault is opt-in. */
   sync: { settings: boolean; vault: boolean }
+  /** Questions tool: a question of an agent opens in a modal by itself (a session may override it). */
+  questions: { autoOpen: boolean }
 }
 
 export const defaultSettings: Settings = {
@@ -51,6 +53,7 @@ export const defaultSettings: Settings = {
   language: 'auto',
   devices: {},
   sync: { settings: true, vault: false },
+  questions: { autoOpen: true },
 }
 
 function merge(raw: any): Settings {
@@ -72,6 +75,7 @@ function merge(raw: any): Settings {
     language: raw.language === 'en' || raw.language === 'fr' ? raw.language : 'auto',
     devices: raw.devices ?? {},
     sync: { settings: raw.sync?.settings !== false, vault: raw.sync?.vault === true },
+    questions: { autoOpen: raw.questions?.autoOpen !== false },
   }
 }
 

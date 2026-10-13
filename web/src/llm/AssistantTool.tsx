@@ -2,6 +2,7 @@
 // change the project files, ask the language servers and run commands. Layout: history side
 // bar (always shown in a wide detached window, else folding), conversation, message box.
 import { createEffect, createSignal, on, onCleanup, onMount, Show } from 'solid-js'
+import { showsQuestions } from '../questions/state'
 import { Icon } from '../ui/icons'
 import { errorToast } from '../ui/toast'
 import { route } from '../app/router'
@@ -74,6 +75,8 @@ const BOARD_WIDE = 1000
 
 export function AssistantTool() {
   const detached = route().name === 'tool'
+  // The questions of the conversation shown are in its thread: no modal for them.
+  onCleanup(showsQuestions((q) => q.source === 'assistant' && q.session === chat.id))
   const [width, setWidth] = createSignal(0)
   const [settings, setSettings] = createSignal(false)
   const [dragging, setDragging] = createSignal(false)
