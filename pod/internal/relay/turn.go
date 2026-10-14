@@ -36,7 +36,44 @@ type Turn struct {
 	mu     sync.Mutex
 	active map[string]bool // in-flight short-lived credential usernames
 	usage  *usageRegistry
+	quota  int64 // bytes per month per key (0: no limit)
+	supp   func(key string) bool
 	stop   chan struct{}
+}
+
+// errQuota: the key reached its monthly TURN quota and is not freed from it. Only the relayed
+// path is refused: the direct and STUN paths stay open.
+var errQuota = errors.New("quota")
+
+// QuotaState is what the relay knows of the TURN month of a key: the bytes it moved, the
+// monthly limit (0: none) and whether the account is freed from it. It travels to the pod
+// (Settings > Remote access) and to the bootstrap page.
+type QuotaState struct {
+	Used      int64 `json:"used"`
+	Limit     int64 `json:"limit"`
+	Supporter bool  `json:"supporter,omitempty"`
+	Over      bool  `json:"over,omitempty"`
+}
+
+// isSupporter reports whether this key is freed from the quota.
+func (t *Turn) isSupporter(key string) bool {
+	return t.supp != nil && t.supp(key)
+}
+
+// QuotaState reads the month of a key from the base. An account over its quota is told so
+// before it dials, not after a failed tunnel.
+func (t *Turn) QuotaState(key string) *QuotaState {
+	st := &QuotaState{Limit: t.quota, Supporter: t.isSupporter(key)}
+	if key == "" {
+		return st
+	}
+	used, err := t.store.TurnUsage(key, usageMonth(time.Now()))
+	if err != nil {
+		return st
+	}
+	st.Used = used
+	st.Over = st.Limit > 0 && !st.Supporter && used >= st.Limit
+	return st
 }
 
 // usageRegistry holds the bytes relayed by the live allocations, keyed by the key the TURN
@@ -117,6 +154,12 @@ type TurnConfig struct {
 	// MinPort/MaxPort: the range the relay sockets of the allocations are bound in. Unset: any
 	// free port, which is what a machine with no firewall to declare wants.
 	MinPort, MaxPort uint16
+	// Quota: the bytes one key (an account, or a pod while it is unpaired) may move through
+	// TURN in a month. 0: no limit, which is what a self-hosted relay wants.
+	Quota int64
+	// Supporter reports whether a key is freed from the quota (a GitHub Sponsors link, see
+	// github.go). nil: nobody is, which is what a self-hosted relay wants too.
+	Supporter func(key string) bool
 }
 
 // NewTurn starts the embedded TURN/STUN server. It binds the control listeners on every
@@ -158,6 +201,8 @@ func NewTurn(st *Store, cfg TurnConfig) (*Turn, error) {
 		gens:   gens,
 		active: map[string]bool{},
 		usage:  usage,
+		quota:  cfg.Quota,
+		supp:   cfg.Supporter,
 		stop:   make(chan struct{}),
 	}
 	t.ice = iceURLs(cfg, addrs)
@@ -464,6 +509,14 @@ func (t *Turn) Creds(podID, key string, ttl time.Duration) (user, pass string, e
 	}
 	if key == "" {
 		key = podID
+	}
+	// The monthly quota of the hosted relay (-quota): a supporter is freed from it, and a
+	// self-hosted relay has none (Quota 0). Refusing here only closes the relayed path — the
+	// browser and the pod still try their direct and STUN candidates.
+	if t.quota > 0 && !t.isSupporter(key) {
+		if used, err := t.store.TurnUsage(key, usageMonth(time.Now())); err == nil && used >= t.quota {
+			return "", "", errQuota
+		}
 	}
 	user, pass, err = turnserver.GenerateLongTermTURNRESTCredentials(string(t.secret), key, ttl)
 	if err != nil {

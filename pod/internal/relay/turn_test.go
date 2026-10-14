@@ -130,6 +130,69 @@ func TestStoreUsageMonths(t *testing.T) {
 	}
 }
 
+// TestTurnQuota: over the monthly quota the credentials are refused (the direct paths stay
+// open), a supporter is freed from it, and a relay with no -quota has no limit.
+func TestTurnQuota(t *testing.T) {
+	st, _ := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
+	defer st.Close()
+	month := usageMonth(time.Now())
+	if err := st.AddUsage("acct-over", month, 600, 500); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddUsage("acct-under", month, 100, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	turn, err := NewTurn(st, TurnConfig{
+		AdvertiseIP: "127.0.0.1", Port: freeTurnPort(t), Quota: 1000,
+		Supporter: func(key string) bool { return key == "acct-supporter" },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer turn.Close()
+	for _, id := range []string{"acct-over", "acct-under", "acct-supporter"} {
+		if err := st.Register(id, "secret-"+id, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, _, err := turn.Creds("acct-over", "acct-over", time.Hour); err != errQuota {
+		t.Fatalf("an account over its quota must be refused: %v", err)
+	}
+	if _, _, err := turn.Creds("acct-under", "acct-under", time.Hour); err != nil {
+		t.Fatalf("under the quota: %v", err)
+	}
+	if _, _, err := turn.Creds("acct-supporter", "acct-supporter", time.Hour); err != nil {
+		t.Fatalf("a supporter is freed from the quota: %v", err)
+	}
+
+	// What the relay tells the pod and the page.
+	stOver := turn.QuotaState("acct-over")
+	if !stOver.Over || stOver.Used != 1100 || stOver.Limit != 1000 {
+		t.Fatalf("quota state of an account over it: %+v", stOver)
+	}
+	if stUnder := turn.QuotaState("acct-under"); stUnder.Over {
+		t.Fatalf("under the quota: %+v", stUnder)
+	}
+	if sup := turn.QuotaState("acct-supporter"); !sup.Supporter || sup.Over {
+		t.Fatalf("a supporter: %+v", sup)
+	}
+
+	// No -quota (a self-hosted relay): the same bytes move freely.
+	free, err := NewTurn(st, TurnConfig{AdvertiseIP: "127.0.0.1", Port: freeTurnPort(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer free.Close()
+	if _, _, err := free.Creds("acct-over", "acct-over", time.Hour); err != nil {
+		t.Fatalf("a self-hosted relay has no limit: %v", err)
+	}
+	if q := free.QuotaState("acct-over"); q.Over || q.Limit != 0 {
+		t.Fatalf("no limit, no over: %+v", q)
+	}
+}
+
 // TestTurnICEURLs: with a domain, the ICE URLs name it (turns: on the TLS port, the scheme of
 // TURN over TLS); without one, they name the addresses of the machine, IPv4 and IPv6.
 func TestTurnICEURLs(t *testing.T) {

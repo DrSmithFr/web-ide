@@ -599,6 +599,22 @@ interface RelayInfo {
   podId: string
   link: string
   state: string
+  turnUsed: number
+  turnLimit: number
+  turnSupporter?: boolean
+  turnOver?: boolean
+}
+
+/** A byte count as the relay reports it, read the way a person reads a size. */
+function bytes(n: number) {
+  const units = ['B', 'kB', 'MB', 'GB', 'TB']
+  let v = n
+  let u = 0
+  while (v >= 1024 && u < units.length - 1) {
+    v /= 1024
+    u++
+  }
+  return `${u === 0 ? v : v.toFixed(v < 10 ? 1 : 0)} ${units[u]}`
 }
 
 /** Remote access: the relay the pod registers with, the state of its link, and the link the
@@ -628,7 +644,25 @@ function RemoteAccess() {
           </dd>
           <dt>{t('Open from another device')}</dt>
           <dd class="mono small">{info()?.link}</dd>
+          <Show when={info()!.turnLimit > 0 || info()!.turnUsed > 0}>
+            <dt>{t('TURN traffic this month')}</dt>
+            <dd>
+              {bytes(info()!.turnUsed)}
+              <Show when={info()!.turnLimit > 0}>
+                {' / '}{bytes(info()!.turnLimit)}
+              </Show>
+              <Show when={info()!.turnSupporter}>
+                {' · '}{t('Supporter: no quota')}
+              </Show>
+            </dd>
+          </Show>
         </dl>
+        <Show when={info()!.turnOver}>
+          <p class="muted small">
+            {t('The monthly TURN quota is reached on this account: the direct paths still work, a tunnel relayed through the relay does not. A Supporter lifts it.')}{' '}
+            <a href="https://github.com/sponsors/DrSmithFr" target="_blank" rel="noreferrer">github.com/sponsors/DrSmithFr</a>
+          </p>
+        </Show>
         <div class="field-row">
           <button class="btn" onClick={() => void copyText(info()?.link ?? '')}>{t('Copy the link')}</button>
         </div>

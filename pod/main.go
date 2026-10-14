@@ -78,6 +78,7 @@ func main() {
 	keyFile := flag.String("key", "", "relay: key of that certificate (default: <data>/key.pem)")
 	domain := flag.String("domain", "", "relay: serve this domain: the certificate is issued and renewed by Let's Encrypt (TLS-ALPN-01), the ICE URLs name the domain")
 	acmeStaging := flag.Bool("acme-staging", false, "relay: ask the Let's Encrypt test CA instead of the production one")
+	quota := flag.String("quota", "", "relay: monthly TURN quota per account, 10GB (default: no limit, what a self-hosted relay wants)")
 	pushSubject := flag.String("push-subject", "", "relay: the contact of the Web Push (VAPID) claims, mailto: or https:")
 	pushTest := flag.String("push-test-endpoint", "", "relay: also allow the push endpoints under this prefix (tests only)")
 	showVersion := flag.Bool("version", false, "print the version and exit")
@@ -104,7 +105,7 @@ func main() {
 		if *static != "" {
 			app = os.DirFS(*static)
 		}
-		runRelayCmd(flagValue(flag.CommandLine, "data", ""), *addr, *turnPort, *turnIP, *turnIP6, *turnPorts, *tlsPort, *certFile, *keyFile, *domain, *acmeStaging, app, *pushSubject, *pushTest)
+		runRelayCmd(flagValue(flag.CommandLine, "data", ""), *addr, *turnPort, *turnIP, *turnIP6, *turnPorts, *tlsPort, *certFile, *keyFile, *domain, *acmeStaging, *quota, app, *pushSubject, *pushTest)
 		return
 	}
 	if len(flag.Args()) > 0 && flag.Arg(0) == "pair" {
@@ -333,7 +334,13 @@ func main() {
 		var state atomic.Value
 		state.Store("connecting")
 		srv.RelayStatus = func() server.RelayInfo {
-			return server.RelayInfo{URL: cfg.RelayURL, PodID: ids.PodID, Link: relayLink(cfg.RelayURL, ids.PodID, token), State: state.Load().(string)}
+			info := server.RelayInfo{URL: cfg.RelayURL, PodID: ids.PodID, Link: relayLink(cfg.RelayURL, ids.PodID, token), State: state.Load().(string)}
+			if c := relayCli.Load(); c != nil {
+				if q := c.Quota(); q != nil {
+					info.TurnUsed, info.TurnLimit, info.TurnOver, info.TurnSupporter = q.Used, q.Limit, q.Over, q.Supporter
+				}
+			}
+			return info
 		}
 
 		cli := relayclient.New(relayclient.Config{
@@ -753,16 +760,44 @@ func (v *podsView) Update(ctx context.Context, req *identity.UpdateRequest) (any
 }
 
 // runRelayCmd runs the relay server subcommand until interrupted.
-func runRelayCmd(dataDir string, addr string, turnPort int, turnIP, turnIP6, turnPorts string, tlsPort int, certFile, keyFile, domain string, acmeStaging bool, app fs.FS, pushSubject, pushTest string) {
+func runRelayCmd(dataDir string, addr string, turnPort int, turnIP, turnIP6, turnPorts string, tlsPort int, certFile, keyFile, domain string, acmeStaging bool, quota string, app fs.FS, pushSubject, pushTest string) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	minPort, maxPort := turnPortRange(turnPorts)
+	bytes, err := parseSize(quota)
+	if err != nil {
+		log.Printf("relay: -quota %q: %v (no limit)", quota, err)
+	}
 	check(relay.Run(ctx, relay.RelayConfig{
 		DataDir: dataDir, Addr: addr, TurnPort: turnPort, AdvertiseIP: turnIP, AdvertiseIPv6: turnIP6,
 		TurnMinPort: minPort, TurnMaxPort: maxPort, TLSPort: tlsPort,
-		CertFile: certFile, KeyFile: keyFile, Domain: domain, ACMEStaging: acmeStaging,
+		CertFile: certFile, KeyFile: keyFile, Domain: domain, ACMEStaging: acmeStaging, Quota: bytes,
 		App: app, PushSubject: pushSubject, PushTestEndpoint: pushTest,
 	}))
+}
+
+// parseSize reads a byte count with a unit suffix ("10GB", "1MB", "500k"); empty is no limit.
+func parseSize(s string) (int64, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, nil
+	}
+	units := map[string]int64{"K": 1 << 10, "M": 1 << 20, "G": 1 << 30, "T": 1 << 40}
+	mult := int64(1)
+	if last := s[len(s)-1]; last >= 'a' && last <= 'z' {
+		key := strings.ToUpper(string(last))
+		u, ok := units[key]
+		if !ok {
+			return 0, fmt.Errorf("unknown unit %q", string(last))
+		}
+		mult = u
+		s = strings.TrimSpace(s[:len(s)-1])
+	}
+	n, err := strconv.ParseFloat(s, 64)
+	if err != nil || n < 0 {
+		return 0, fmt.Errorf("not a number")
+	}
+	return int64(n * float64(mult)), nil
 }
 
 // turnPortRange reads the -turn-ports range ("49160-49999"): the ports the TURN relay sockets

@@ -28,6 +28,7 @@ type RelayConfig struct {
 	KeyFile       string
 	Domain        string // serve this domain: the certificate comes from Let's Encrypt (autocert)
 	ACMEStaging   bool   // ask the Let's Encrypt test CA instead (bring a domain up without spending the production limits)
+	Quota         int64  // bytes one account may move through TURN in a month (0 → no limit)
 	App           fs.FS  // the front end of the pod: the manifest and the icons of the installable app
 	// PushSubject is the contact of the VAPID claims (mailto: or https:); PushTestEndpoint lets
 	// the endpoints under this prefix through, for the e2e fake push service.
@@ -71,6 +72,7 @@ func Run(ctx context.Context, cfg RelayConfig) error {
 		TLSPort:       cfg.TLSPort,
 		MinPort:       cfg.TurnMinPort,
 		MaxPort:       cfg.TurnMaxPort,
+		Quota:         cfg.Quota,
 	}
 	var demux *Demux
 	tcfg, acme, err := TLSConfig(dataDir, TLSOptions{

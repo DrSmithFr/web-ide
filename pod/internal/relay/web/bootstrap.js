@@ -88,6 +88,8 @@ const words = {
   podsOff: fr ? 'Aucun pod en ligne' : 'No pod online',
   podsOffHow: fr ? 'Démarrez un pod de ce compte, ou vérifiez qu’il est relié à ce relay.' : 'Start a pod of this account, or check that it is linked to this relay.',
   oops: fr ? 'Connexion impossible' : 'Cannot connect',
+  quota: fr ? 'Quota TURN mensuel atteint : plus de tunnel relayé, les chemins directs restent ouverts.' : 'Monthly TURN quota reached: no relayed tunnel, the direct paths stay open.',
+  sponsor: fr ? 'le lever (Supporter)' : 'lift it (Supporter)',
 }
 // The texts the page shows for what the pod or the identity module answers: the handshake
 // codes (tunnel.Code*) and the error keys of the identity module, the same words as the pod's
@@ -201,6 +203,23 @@ function connecting(step, name) {
 const busy = (line) => draw('busy', h('div', { class: 'spin' }), h('p', { class: 'center muted' }, line))
 // A page of the window that lost its channel: said in the card, without ending the window.
 const notice = (m) => draw('error', h('div', { class: 'err' }, m))
+
+// The monthly TURN quota of the hosted relay is reached: the relay gave no TURN credential, so
+// the tunnel can only take a direct path. The page says it and points at what lifts the quota,
+// it does not stop the attempt — most tunnels do not need TURN.
+function quotaNote(q) {
+  const el = document.getElementById('msg')
+  if (!el || el.querySelector('.quota')) return
+  const size = (n) => {
+    const u = ['o', 'Ko', 'Mo', 'Go']
+    let v = n, i = 0
+    while (v >= 1024 && i < u.length - 1) { v /= 1024; i++ }
+    return (i ? v.toFixed(1) : String(v)) + ' ' + (i ? u[i] : 'o')
+  }
+  el.append(h('p', { class: 'quota muted' },
+    words.quota, ' ', size(q.used), ' / ', size(q.limit), ' ',
+    h('a', { href: 'https://github.com/sponsors/DrSmithFr', target: '_blank', rel: 'noreferrer' }, words.sponsor)))
+}
 
 let failed = false
 let lastError = null
@@ -726,6 +745,7 @@ function connect(key, podId, mode) {
     const m = JSON.parse(e.data)
     if (m.type === 'ice') {
       mark('ice')
+      if (m.quota?.over) quotaNote(m.quota)
       start(t, m).catch((err) => drop(t, err.message))
     } else if (m.type === 'answer') {
       mark('answer')
@@ -794,7 +814,10 @@ async function ensure(key, podId) {
 }
 
 async function start(t, ice) {
-  const pc = new RTCPeerConnection({ iceServers: [{ urls: ice.urls, username: ice.username, credential: ice.credential }] })
+  // Over the monthly quota the relay sent no credential: keep the STUN servers and drop the TURN
+  // ones, which a client cannot use without one (relay.md, Hosted service).
+  const urls = ice.quota?.over ? (ice.urls ?? []).filter((u) => u.startsWith('stun:')) : ice.urls
+  const pc = new RTCPeerConnection({ iceServers: [{ urls, username: ice.username, credential: ice.credential }] })
   t.pc = pc
   window.tunnels = tunnels
   window.tunnel = { pc, session: t.session, pod: t.podId } // read by the e2e suite (getStats)
