@@ -116,12 +116,11 @@ func startEnv(t *testing.T, ident *identity.PodIdentity, route PeerRoute) *testE
 		st.Close()
 	})
 
-	// The pod.
+	// The pod. It registers itself on its link, with the secret it was given: a test that
+	// registered it in the base beforehand would see it "online" before the link exists, and an
+	// offer sent then reaches nothing.
 	s, limits := buildPod(t)
 	podID, secret := "test-pod", "test-secret"
-	if err := st.Register(podID, secret, "test"); err != nil {
-		t.Fatal("register pod:", err)
-	}
 	cli := New(Config{
 		RelayURL:  strings.Replace(httpSrv.URL, "http", "ws", 1),
 		PodID:     podID,

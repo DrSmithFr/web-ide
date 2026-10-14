@@ -112,9 +112,6 @@ func startSecond(t *testing.T, env *testEnv, ident *identity.PodIdentity, podID 
 
 func startSecondSignal(t *testing.T, env *testEnv, ident *identity.PodIdentity, podID, signal string) *Client {
 	t.Helper()
-	if err := env.st.Register(podID, "secret-two", "second"); err != nil {
-		t.Fatal(err)
-	}
 	s, _ := buildPod(t)
 	cli := New(Config{
 		RelayURL:  wsURL(env),
