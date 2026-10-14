@@ -4,9 +4,16 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-10-14
+
 ### Added
 
 - `make deploy-relay`: the hosted relay (antennae.space) updated from the current tree — built for Linux x86_64, installed on the host, its service restarted, and the Service Worker it serves checked against the build. `RELAY_VERSION=v1.11.0` deploys a published release with its checksum, `RELAY_ROLLBACK=1` goes back to the previous binary kept on the host. The data of the relay (its base, its VAPID key, its certificate) is never touched.
+- Phone: the page never zooms. `touch-action` on the document and a guard on the start of a two-finger touch: pinch and double-tap zoom are refused everywhere in the window, the overlays mounted outside the app (menus, modals, popups) included; the doodles and the board keep their own pinch. The pages served by the pod (pairing, *update this pod*, errors of a preview, the bootstrap page of the relay) are fixed too.
+
+### Fixed
+
+- Phone: the chat no longer zooms when the message box is edited. iOS zooms a focused field showing text under 16 px: on a phone every editable (the message box, the editors, the fields, the terminal) takes 16 px at least, a size of code this device chose above that still applying, the gutter of the editor keeping the size of the lines. A zoom the system imposes anyway is undone by re-applying the viewport.
 
 ## [1.11.0] - 2026-10-14
 
