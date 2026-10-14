@@ -56,3 +56,49 @@ func TestStatusCounters(t *testing.T) {
 		t.Fatalf("uptime: %+v", got)
 	}
 }
+
+// TestStatusLoad: the status carries what the relay holds right now — the links it serves and
+// what the process costs — so a load test can read the same numbers it is pushing on.
+func TestStatusLoad(t *testing.T) {
+	ts := newRelay(t)
+	pod := connectPod(t, ts, "pod-a", "secret-1", "laptop")
+	defer pod.close()
+	browser := connectBrowser(t, ts, "pod-a", "sA")
+	defer browser.close()
+
+	r, err := ts.Client().Get(ts.URL + "/_relay/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Body.Close()
+	var got Status
+	if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	l := got.Load
+	if l.Pods != 1 || l.Browsers != 1 {
+		t.Fatalf("load: %+v (one pod link and one browser link expected)", l)
+	}
+	if l.Goroutines < 1 {
+		t.Fatalf("goroutines: %d", l.Goroutines)
+	}
+	// No allocation yet, and a relay with no -turn-ports has no port range to report.
+	if l.Allocations != 0 || l.TurnPorts != -1 {
+		t.Fatalf("turn: %d allocations, %d ports", l.Allocations, l.TurnPorts)
+	}
+}
+
+// TestTurnPortsRange: the size of the relay port range is what the status reports as the wall of
+// the TURN server; without a range, any free port (-1).
+func TestTurnPortsRange(t *testing.T) {
+	st, _ := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
+	t.Cleanup(func() { st.Close() })
+	turn, err := NewTurn(st, TurnConfig{AdvertiseIP: "127.0.0.1", Port: freeTurnPort(t), MinPort: 49160, MaxPort: 49169})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer turn.Close()
+	if alloc, ports := turn.Load(); alloc != 0 || ports != 10 {
+		t.Fatalf("port range 49160-49169: %d allocations, %d ports", alloc, ports)
+	}
+}

@@ -225,6 +225,11 @@ func (s *Server) iceMessage(podID, session string) sigMsg {
 	return m
 }
 
+// wsReadLimit is the largest frame a link may send (#72). Signaling frames are a few hundred
+// bytes; the largest thing a link ever carries is a sync blob, capped at 64 KiB of base64
+// (syncstore.go). Without a limit one client can make the relay hold a frame of its choosing.
+const wsReadLimit = 1 << 20
+
 // servePod is the pod's persistent link: register (pod id + secret), then carry its
 // WebRTC signaling, routed by session id.
 func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
@@ -232,6 +237,7 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
+	ws.SetReadLimit(wsReadLimit)
 	pc := &podConn{ws: ws}
 	defer func() {
 		s.mu.Lock()
@@ -435,6 +441,7 @@ func (s *Server) serveSignal(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
+	ws.SetReadLimit(wsReadLimit)
 	bc := &browserConn{podID: podID, session: session, ws: ws}
 	defer func() {
 		s.mu.Lock()

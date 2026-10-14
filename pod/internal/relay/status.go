@@ -17,6 +17,9 @@ type Status struct {
 	Pods      int    `json:"pods"`   // pods online now
 	Accounts  int    `json:"accounts"`
 	StartedAt int64  `json:"startedAt"`
+	// Load is what the relay holds at this moment (#72): links, TURN allocations, what the
+	// process costs. It is what a load test reads while it ramps.
+	Load Load `json:"load"`
 }
 
 // accountsSeenWindow is how far back an account counts as seen: an account whose pods were
@@ -26,7 +29,7 @@ const accountsSeenWindow = 30 * 24 * time.Hour
 // serveStatus answers the status of the relay, for the uptime check of the hosted one and for
 // anyone wondering whether it is up.
 func (s *Server) serveStatus(w http.ResponseWriter, r *http.Request) {
-	st := Status{Up: true, Version: s.Version, StartedAt: s.startedAt.Unix(), Uptime: int64(time.Since(s.startedAt).Seconds())}
+	st := Status{Up: true, Version: s.Version, StartedAt: s.startedAt.Unix(), Uptime: int64(time.Since(s.startedAt).Seconds()), Load: s.load()}
 	if pods, accounts, err := s.store.Presence(time.Now().Add(-accountsSeenWindow)); err == nil {
 		st.Pods, st.Accounts = pods, accounts
 	}

@@ -90,6 +90,7 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
+	ws.SetReadLimit(wsReadLimit)
 	c := &identityConn{ws: ws}
 	defer func() {
 		s.mu.Lock()

@@ -35,6 +35,7 @@ type Turn struct {
 
 	mu     sync.Mutex
 	active map[string]bool // in-flight short-lived credential usernames
+	allocs int             // allocations open right now (#72: one of them takes one relay port)
 	usage  *usageRegistry
 	quota  int64 // bytes per month per key (0: no limit)
 	supp   func(key string) bool
@@ -518,6 +519,7 @@ func (f *familyGenerator) AllocateConn(conf turnserver.AllocateConnConfig) (net.
 func (t *Turn) onAllocation(src, dst net.Addr, protocol, userID, realm string, relayAddr net.Addr, requestedPort int) {
 	t.mu.Lock()
 	t.active[userID] = true
+	t.allocs++
 	t.mu.Unlock()
 	// The byte counter of that allocation lives in the registry, under the key the credential
 	// names; the flush writes it to the base.
@@ -527,6 +529,9 @@ func (t *Turn) onAllocation(src, dst net.Addr, protocol, userID, realm string, r
 func (t *Turn) onDeallocate(src, dst net.Addr, protocol, userID, realm string) {
 	t.mu.Lock()
 	delete(t.active, userID)
+	if t.allocs > 0 {
+		t.allocs--
+	}
 	t.mu.Unlock()
 	// The allocation is over: its bytes go to the base now, so the quota a key is held to is
 	// what it moved, not what it moved a minute ago.
