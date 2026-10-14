@@ -17,6 +17,7 @@ package relayload
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -24,6 +25,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/coder/websocket"
 )
 
 // Config of one run.
@@ -38,6 +41,33 @@ type Config struct {
 	Workers   int           // static tier: concurrent requests
 	ForceTurn bool          // turn tier: relay candidates only, no direct path
 	Timeout   time.Duration // a session that does not come up within this window is a failure
+	// Insecure accepts the self-signed certificate a relay makes for itself (a test instance
+	// has no domain): the pages, the links and the TLS side of TURN are still measured.
+	Insecure bool
+}
+
+// transport is the HTTP transport of the run, with the certificate check off when Insecure is.
+func (c *Config) transport() *http.Transport {
+	if !c.Insecure {
+		return http.DefaultTransport.(*http.Transport).Clone()
+	}
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	return tr
+}
+
+// client is the HTTP client of the run.
+func (c *Config) client() *http.Client {
+	return &http.Client{Timeout: 20 * time.Second, Transport: c.transport()}
+}
+
+// dialOpts is the WebSocket option set of the run: the same client as the HTTP one, so an
+// insecure run accepts the certificate of the test relay on the links too.
+func (c *Config) dialOpts() *websocket.DialOptions {
+	if !c.Insecure {
+		return nil
+	}
+	return &websocket.DialOptions{HTTPClient: c.client()}
 }
 
 // fill defaults the parts a run does not name.
@@ -68,10 +98,10 @@ func (c *Config) fill() {
 // Status is what the relay says about itself while a run goes on (/_relay/status, #72). The
 // fields are read as they come: a relay older than the load counters simply gives none.
 type Status struct {
-	Version   string `json:"version"`
-	Pods      int    `json:"pods"`
-	Accounts  int    `json:"accounts"`
-	Load      struct {
+	Version  string `json:"version"`
+	Pods     int    `json:"pods"`
+	Accounts int    `json:"accounts"`
+	Load     struct {
 		Pods        int   `json:"pods"`
 		Browsers    int   `json:"browsers"`
 		Identity    int   `json:"identity"`
@@ -85,16 +115,16 @@ type Status struct {
 
 // Report is one run: what came up, how long it took, what the relay reported while it happened.
 type Report struct {
-	Tier    string          `json:"tier"`
-	Pods    int             `json:"pods"`
-	Sessions int            `json:"sessions"`
-	OK      int             `json:"ok"`
-	Failed  int             `json:"failed"`
-	Setup   []time.Duration `json:"setupMs"` // per session: dialed to tunnel (or link) up
-	Bytes   int64           `json:"bytes"`
-	Seconds float64         `json:"seconds"`
-	Status  []Status        `json:"status"`
-	Errors  []string        `json:"errors"`
+	Tier     string          `json:"tier"`
+	Pods     int             `json:"pods"`
+	Sessions int             `json:"sessions"`
+	OK       int             `json:"ok"`
+	Failed   int             `json:"failed"`
+	Setup    []time.Duration `json:"setupMs"` // per session: dialed to tunnel (or link) up
+	Bytes    int64           `json:"bytes"`
+	Seconds  float64         `json:"seconds"`
+	Status   []Status        `json:"status"`
+	Errors   []string        `json:"errors"`
 }
 
 // String is the run as a few lines: the time to bring a session up, what it moved, and the last
@@ -149,7 +179,7 @@ func Run(ctx context.Context, c Config) (*Report, error) {
 	var samples []Status
 	go func() {
 		for {
-			if s, err := readStatus(runCtx, c.RelayURL); err == nil {
+			if s, err := readStatus(runCtx, &c); err == nil {
 				mu.Lock()
 				samples = append(samples, s)
 				mu.Unlock()
@@ -187,13 +217,13 @@ func Run(ctx context.Context, c Config) (*Report, error) {
 }
 
 // readStatus asks the relay what it holds right now.
-func readStatus(ctx context.Context, base string) (Status, error) {
+func readStatus(ctx context.Context, c *Config) (Status, error) {
 	var s Status
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/_relay/status", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.RelayURL+"/_relay/status", nil)
 	if err != nil {
 		return s, err
 	}
-	r, err := http.DefaultClient.Do(req)
+	r, err := c.client().Do(req)
 	if err != nil {
 		return s, err
 	}

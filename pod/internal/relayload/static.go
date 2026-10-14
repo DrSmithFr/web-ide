@@ -16,7 +16,7 @@ var staticFiles = []string{"/", "/sw.js", "/_relay/bootstrap.js", "/_relay/boots
 // runStatic is the cheapest tier: what the relay costs in TLS, HTTP and its own files. It is the
 // baseline a signaling or tunnel run is compared with.
 func runStatic(ctx context.Context, c *Config, rep *Report) error {
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := c.client()
 	deadline := time.Now().Add(c.Hold)
 	var mu sync.Mutex
 	var n int

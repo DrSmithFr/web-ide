@@ -14,20 +14,20 @@ import (
 // msg is one signaling message, as the relay and its clients exchange it (relay.sigMsg on the
 // other side). Only the fields this tool uses are here.
 type msg struct {
-	Type     string          `json:"type"`
-	Session  string            `json:"session,omitempty"`
-	URLs     []string          `json:"urls,omitempty"`
-	Username string            `json:"username,omitempty"`
+	Type       string          `json:"type"`
+	Session    string          `json:"session,omitempty"`
+	URLs       []string        `json:"urls,omitempty"`
+	Username   string          `json:"username,omitempty"`
 	Credential string          `json:"credential,omitempty"`
-	SDP      string            `json:"sdp,omitempty"`
-	Candidate json.RawMessage `json:"candidate,omitempty"`
-	ID       string            `json:"id,omitempty"`
-	Secret   string            `json:"secret,omitempty"`
-	Name     string            `json:"name,omitempty"`
-	Version  string            `json:"version,omitempty"`
-	Protocol int               `json:"protocol,omitempty"`
-	Peers    []string          `json:"peers,omitempty"`
-	Message  string            `json:"message,omitempty"`
+	SDP        string          `json:"sdp,omitempty"`
+	Candidate  json.RawMessage `json:"candidate,omitempty"`
+	ID         string          `json:"id,omitempty"`
+	Secret     string          `json:"secret,omitempty"`
+	Name       string          `json:"name,omitempty"`
+	Version    string          `json:"version,omitempty"`
+	Protocol   int             `json:"protocol,omitempty"`
+	Peers      []string        `json:"peers,omitempty"`
+	Message    string          `json:"message,omitempty"`
 }
 
 // link is one WebSocket link of the relay, with its writes serialized (a pod link carries the
@@ -62,8 +62,8 @@ func (l *link) close() { _ = l.ws.CloseNow() }
 
 // dialPod opens a pod link and registers: the relay marks the pod online, which is what lets a
 // browser open a session of it (and what mints its TURN credentials).
-func dialPod(ctx context.Context, base, id, secret, name string) (*link, error) {
-	ws, _, err := websocket.Dial(ctx, wsURL(base)+"/_relay/pod", nil)
+func dialPod(ctx context.Context, c *Config, id, secret, name string) (*link, error) {
+	ws, _, err := websocket.Dial(ctx, wsURL(c.RelayURL)+"/_relay/pod", c.dialOpts())
 	if err != nil {
 		return nil, fmt.Errorf("dialing the pod link: %w", err)
 	}
@@ -86,8 +86,8 @@ func dialPod(ctx context.Context, base, id, secret, name string) (*link, error) 
 
 // dialBrowser opens the signaling link of one session and waits for the ice message (the ICE
 // servers of the session, TURN credentials included).
-func dialBrowser(ctx context.Context, base, podID, session string) (*link, msg, error) {
-	ws, _, err := websocket.Dial(ctx, wsURL(base)+"/_relay/signal?pod="+podID+"&session="+session, nil)
+func dialBrowser(ctx context.Context, c *Config, podID, session string) (*link, msg, error) {
+	ws, _, err := websocket.Dial(ctx, wsURL(c.RelayURL)+"/_relay/signal?pod="+podID+"&session="+session, c.dialOpts())
 	if err != nil {
 		return nil, msg{}, fmt.Errorf("dialing the browser link: %w", err)
 	}
@@ -166,7 +166,7 @@ func runSignal(ctx context.Context, c *Config, rep *Report, mu *sync.Mutex) erro
 			at := time.Now()
 			pod := pods[i%len(pods)]
 			session := sessionID()
-			b, ice, err := dialBrowser(ctx, c.RelayURL, pod.id, session)
+			b, ice, err := dialBrowser(ctx, c, pod.id, session)
 			if err != nil {
 				mu.Lock()
 				rep.note(err)
@@ -260,7 +260,7 @@ func registerPods(ctx context.Context, c *Config, rep *Report) ([]*podLink, erro
 	var pods []*podLink
 	for i := 0; i < c.Pods; i++ {
 		id := fmt.Sprintf("load-pod-%d", i)
-		p, err := dialPod(ctx, c.RelayURL, id, "secret-"+id, id)
+		p, err := dialPod(ctx, c, id, "secret-"+id, id)
 		if err != nil {
 			for _, q := range pods {
 				q.close()

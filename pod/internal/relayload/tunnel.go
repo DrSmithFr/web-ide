@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"sync"
@@ -74,14 +75,21 @@ func (c *chunk) Close() error {
 	return c.dc.Close()
 }
 
-// gather waits for the ICE candidates to be gathered, so the SDP sent to the relay carries them
-// and no trickling has to be routed.
-func gather(pc *webrtc.PeerConnection) {
-	done := webrtc.GatheringCompletePromise(pc)
-	select {
-	case <-done:
-	case <-time.After(10 * time.Second):
-	}
+// trickle sends every candidate the agent gathers on the link given, the way a browser does: an
+// offer sent before gathering is complete carries none, and the relay routes them as they come.
+// Waiting for the gathering to finish instead costs the slowest candidate of both ends.
+func trickle(pc *webrtc.PeerConnection, send func(*webrtc.ICECandidate)) {
+	pc.OnICECandidate(func(c *webrtc.ICECandidate) {
+		if c != nil {
+			send(c)
+		}
+	})
+}
+
+// candidateMsg is a candidate as the relay carries it.
+func candidateMsg(c *webrtc.ICECandidate) json.RawMessage {
+	b, _ := json.Marshal(c.ToJSON())
+	return b
 }
 
 // runTunnel is the tunnel tier: sessions brought up through TURN, held, and pumped.
@@ -119,8 +127,7 @@ func runTunnel(ctx context.Context, c *Config, rep *Report, mu *sync.Mutex) erro
 				case <-time.After(time.Duration(i) * step):
 				}
 			}
-			at := time.Now()
-			n, err := browserSide(ctx, c, pods[i%len(pods)].id, end)
+			n, setup, err := browserSide(ctx, c, pods[i%len(pods)].id, end)
 			if err != nil {
 				mu.Lock()
 				rep.note(err)
@@ -130,7 +137,7 @@ func runTunnel(ctx context.Context, c *Config, rep *Report, mu *sync.Mutex) erro
 			mu.Lock()
 			rep.OK++
 			rep.Bytes += n
-			rep.Setup = append(rep.Setup, time.Since(at))
+			rep.Setup = append(rep.Setup, setup)
 			mu.Unlock()
 		}(i)
 	}
@@ -140,61 +147,84 @@ func runTunnel(ctx context.Context, c *Config, rep *Report, mu *sync.Mutex) erro
 
 // browserSide is the browser end of one load tunnel: offer, answer, channel open, handshake,
 // payload. It returns the bytes it pushed.
-func browserSide(ctx context.Context, c *Config, podID string, end time.Time) (int64, error) {
+func browserSide(ctx context.Context, c *Config, podID string, end time.Time) (int64, time.Duration, error) {
 	session := sessionID()
-	b, ice, err := dialBrowser(ctx, c.RelayURL, podID, session)
+	at := time.Now()
+	b, ice, err := dialBrowser(ctx, c, podID, session)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	defer b.close()
 
 	pc, err := webrtc.NewPeerConnection(iceConfig(ice, c.ForceTurn))
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	defer pc.Close()
 
 	rpc, err := pc.CreateDataChannel("rpc", nil)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	opened := make(chan struct{})
 	rpc.OnOpen(func() { close(opened) })
 
 	offer, err := pc.CreateOffer(nil)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
+	trickle(pc, func(c *webrtc.ICECandidate) {
+		_ = b.send(msg{Type: "candidate", Session: session, Candidate: candidateMsg(c)})
+	})
 	if err := pc.SetLocalDescription(offer); err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	gather(pc)
 	if err := b.send(msg{Type: "offer", Session: session, SDP: pc.LocalDescription().SDP}); err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 
+	// The signaling keeps being read while the channel comes up: a candidate from the pod may
+	// arrive before its answer does, and pion only accepts them once the remote description is set.
+	var buffered []webrtc.ICECandidateInit
+	var remoteSet bool
 	deadline, cancel := context.WithTimeout(ctx, c.Timeout)
 	defer cancel()
-	for {
-		m, err := b.read(deadline)
-		if err != nil {
-			return 0, fmt.Errorf("session %s: %w", session, err)
-		}
-		if m.Type == "answer" {
-			if err := pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: m.SDP}); err != nil {
-				return 0, err
+	go func() {
+		for {
+			m, err := b.read(deadline)
+			if err != nil {
+				return
 			}
-			break
+			switch m.Type {
+			case "answer":
+				if err := pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: m.SDP}); err != nil {
+					return
+				}
+				remoteSet = true
+				for _, init := range buffered {
+					_ = pc.AddICECandidate(init)
+				}
+				buffered = nil
+			case "candidate":
+				var init webrtc.ICECandidateInit
+				if json.Unmarshal(m.Candidate, &init) != nil {
+					continue
+				}
+				if remoteSet {
+					_ = pc.AddICECandidate(init)
+				} else {
+					buffered = append(buffered, init)
+				}
+			case "bye":
+				return
+			}
 		}
-		if m.Type == "bye" {
-			return 0, fmt.Errorf("session %s: the pod closed", session)
-		}
-	}
+	}()
 
 	select {
 	case <-opened:
 	case <-time.After(c.Timeout):
-		return 0, fmt.Errorf("session %s: the channel did not open", session)
+		return 0, 0, fmt.Errorf("session %s: the channel did not open", session)
 	}
 
 	conn := tunnel.NewFramed(newChunk(rpc), 8*1024*1024)
@@ -203,9 +233,10 @@ func browserSide(ctx context.Context, c *Config, podID string, end time.Time) (i
 	nonce := randHex()
 	if err := tunnel.RunBrowser(conn, loadToken, fpB, fpP, nonce); err != nil {
 		conn.Close()
-		return 0, fmt.Errorf("session %s: %w", session, err)
+		return 0, 0, fmt.Errorf("session %s: %w", session, err)
 	}
 	defer conn.Close()
+	setup := time.Since(at)
 
 	// The payload: chunks of 16 KB, back-pressure left to the framing.
 	total := int64(c.MB) << 20
@@ -217,7 +248,7 @@ func browserSide(ctx context.Context, c *Config, podID string, end time.Time) (i
 			n = total - sent
 		}
 		if err := conn.Write(payload[:n]); err != nil {
-			return sent, fmt.Errorf("session %s: %w", session, err)
+			return sent, setup, fmt.Errorf("session %s: %w", session, err)
 		}
 		sent += n
 	}
@@ -226,33 +257,96 @@ func browserSide(ctx context.Context, c *Config, podID string, end time.Time) (i
 	case <-ctx.Done():
 	case <-time.After(time.Until(end)):
 	}
-	return sent, nil
+	return sent, setup, nil
 }
 
 // podSide is the pod end: it answers the offers its link carries and proves the token on the
 // channel that opens, then reads what the browser pushes (the bytes leave the relay through the
 // TURN allocation, so reading them is what keeps the tunnel honest).
+//
+// The relay sends the ice of a session just before the offer that starts it: the pod end needs
+// those credentials too, since its own address is a private one the TURN server cannot reach.
+// podEnd is one pod link seen from the pod side: the ICE servers the relay told it per session,
+// and the PeerConnection answering each session.
+type podEnd struct {
+	p   *podLink
+	mu  sync.Mutex
+	ice map[string]msg
+	pcs map[string]*webrtc.PeerConnection
+	// A candidate may arrive before the answerer of its session exists (the browser gathers as it
+	// is offered): they wait here until the PeerConnection is there.
+	cands map[string][]webrtc.ICECandidateInit
+}
+
 func podSide(p *podLink) {
+	e := &podEnd{p: p, ice: map[string]msg{}, pcs: map[string]*webrtc.PeerConnection{}, cands: map[string][]webrtc.ICECandidateInit{}}
 	ctx := context.Background()
 	for {
 		m, err := p.read(ctx)
 		if err != nil {
 			return
 		}
-		if m.Type == "offer" {
-			go podAnswer(p, m.Session, m.SDP)
+		switch m.Type {
+		case "ice":
+			e.mu.Lock()
+			e.ice[m.Session] = m
+			e.mu.Unlock()
+		case "offer":
+			e.mu.Lock()
+			srv := e.ice[m.Session]
+			delete(e.ice, m.Session)
+			e.mu.Unlock()
+			go e.answer(m.Session, m.SDP, srv)
+		case "candidate":
+			var init webrtc.ICECandidateInit
+			if json.Unmarshal(m.Candidate, &init) != nil {
+				continue
+			}
+			e.mu.Lock()
+			pc := e.pcs[m.Session]
+			if pc == nil {
+				e.cands[m.Session] = append(e.cands[m.Session], init)
+			}
+			e.mu.Unlock()
+			if pc != nil {
+				_ = pc.AddICECandidate(init)
+			}
+		case "bye":
+			e.mu.Lock()
+			pc := e.pcs[m.Session]
+			delete(e.pcs, m.Session)
+			e.mu.Unlock()
+			if pc != nil {
+				_ = pc.Close()
+			}
 		}
 	}
 }
 
-// podAnswer runs one session of a load pod: the answer, then the handshake, then the read.
-func podAnswer(p *podLink, session, offerSDP string) {
-	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+// answer runs one session of a load pod: the answer, then the handshake, then the read.
+func (e *podEnd) answer(session, offerSDP string, srv msg) {
+	pc, err := webrtc.NewPeerConnection(iceConfig(srv, true))
 	if err != nil {
 		return
 	}
 	defer pc.Close()
+	e.mu.Lock()
+	e.pcs[session] = pc
+	buffered := e.cands[session]
+	delete(e.cands, session)
+	e.mu.Unlock()
+	defer func() {
+		e.mu.Lock()
+		delete(e.pcs, session)
+		e.mu.Unlock()
+	}()
+	for _, init := range buffered {
+		_ = pc.AddICECandidate(init)
+	}
 
+	trickle(pc, func(c *webrtc.ICECandidate) {
+		_ = e.p.send(msg{Type: "candidate", Session: session, Candidate: candidateMsg(c)})
+	})
 	rpcCh := make(chan *webrtc.DataChannel, 1)
 	pc.OnDataChannel(func(dc *webrtc.DataChannel) {
 		if dc.Label() == "rpc" {
@@ -272,8 +366,7 @@ func podAnswer(p *podLink, session, offerSDP string) {
 	if err := pc.SetLocalDescription(answer); err != nil {
 		return
 	}
-	gather(pc)
-	if err := p.send(msg{Type: "answer", Session: session, SDP: pc.LocalDescription().SDP}); err != nil {
+	if err := e.p.send(msg{Type: "answer", Session: session, SDP: pc.LocalDescription().SDP}); err != nil {
 		return
 	}
 

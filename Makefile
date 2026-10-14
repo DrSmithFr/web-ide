@@ -3,7 +3,7 @@ GO ?= $(shell command -v go || echo $(HOME)/sdk/go/bin/go)
 BIN := bin/web-ide-pod
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: build web pod run dev test e2e shots check clean install service deploy-relay relay-build
+.PHONY: build web pod run dev test e2e shots check clean install service deploy-relay relay-build relayload load-relay load-relay-down
 
 build: web pod
 
@@ -90,6 +90,32 @@ deploy-relay:
 
 relay-build: web pod/webdist/dist
 	cd pod && GOOS=linux GOARCH=amd64 $(GO) build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o ../bin/web-ide-pod-relay .
+
+# The load test of the relay (#72): a second relay on the same host, with its own service, data
+# folder and a narrow TURN port range (500 relay ports), driven by pod/internal/relayload over the
+# network. LOAD_TIER is static, signal or turn; LOAD_PODS, LOAD_SESSIONS, LOAD_MB, LOAD_RAMP and
+# LOAD_HOLD size the run. `make load-relay-down` takes the test relay back off.
+LOAD_TIER ?= signal
+LOAD_PODS ?= 20
+LOAD_SESSIONS ?= 100
+LOAD_MB ?= 4
+LOAD_RAMP ?= 30s
+LOAD_HOLD ?= 60s
+LOAD_TLS_PORT ?= 4443
+# The host of the relay, without the user the SSH runs as.
+RELAY_IP = $(lastword $(subst @, ,$(RELAY_HOST)))
+
+relayload: pod/webdist/dist
+	cd pod && $(GO) build -trimpath -o ../bin/relayload ./cmd/relayload
+
+load-relay: relayload relay-build
+	./scripts/relay-load.sh up --binary bin/web-ide-pod-relay
+	./bin/relayload -relay https://$(RELAY_IP):$(LOAD_TLS_PORT) -insecure \
+	  -tier $(LOAD_TIER) -pods $(LOAD_PODS) -sessions $(LOAD_SESSIONS) -mb $(LOAD_MB) \
+	  -ramp $(LOAD_RAMP) -hold $(LOAD_HOLD) $(if $(filter turn,$(LOAD_TIER)),-force-turn,)
+
+load-relay-down:
+	./scripts/relay-load.sh down
 
 clean:
 	rm -rf bin pod/webdist/dist/assets

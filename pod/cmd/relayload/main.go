@@ -27,6 +27,7 @@ func main() {
 	hold := flag.Duration("hold", 10*time.Second, "keeping them open this long once up")
 	workers := flag.Int("workers", 8, "static tier: concurrent requests")
 	forceTurn := flag.Bool("force-turn", false, "turn tier: relay candidates only")
+	insecure := flag.Bool("insecure", false, "accept the self-signed certificate of a test relay")
 	timeout := flag.Duration("timeout", 30*time.Second, "a session not up within this is a failure")
 	jsonOut := flag.Bool("json", false, "the report as JSON")
 	flag.Parse()
@@ -44,6 +45,7 @@ func main() {
 		Workers:   *workers,
 		ForceTurn: *forceTurn,
 		Timeout:   *timeout,
+		Insecure:  *insecure,
 	})
 	if rep != nil && *jsonOut {
 		b, _ := json.MarshalIndent(rep, "", "  ")
