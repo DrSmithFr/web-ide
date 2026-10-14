@@ -328,14 +328,19 @@ func main() {
 	srv.Pods = &podsView{dir: dir, cfg: cfg, st: st, relayCli: &relayCli}
 	srv.Pods.(*podsView).lan = lanMgr
 	onLANChange()
-	remote := ""
-	if cfg.RelayURL != "" {
+	// The link to the relay is a function of its URL: the Settings page turns remote access on or
+	// off while the pod runs (milestone 5), so starting it and ending it live here.
+	var stopRelay func()
+	startRelay := func(url string) error {
 		ids, err := config.Relay(st)
-		check(err)
+		if err != nil {
+			return err
+		}
 		var state atomic.Value
 		state.Store("connecting")
 		srv.RelayStatus = func() server.RelayInfo {
-			info := server.RelayInfo{URL: cfg.RelayURL, PodID: ids.PodID, Link: relayLink(cfg.RelayURL, ids.PodID, token), State: state.Load().(string)}
+			info := server.RelayInfo{URL: url, DefaultURL: config.DefaultRelay, PodID: ids.PodID,
+				Link: relayLink(url, ids.PodID, token), State: state.Load().(string)}
 			if c := relayCli.Load(); c != nil {
 				if q := c.Quota(); q != nil {
 					info.TurnUsed, info.TurnLimit, info.TurnOver, info.TurnSupporter = q.Used, q.Limit, q.Over, q.Supporter
@@ -345,7 +350,7 @@ func main() {
 		}
 
 		cli := relayclient.New(relayclient.Config{
-			RelayURL:  cfg.RelayURL,
+			RelayURL:  url,
 			PodID:     ids.PodID,
 			Secret:    ids.Secret,
 			Name:      hostname(),
@@ -397,14 +402,69 @@ func main() {
 			},
 		})
 		// Push notifications go through the relay, encrypted by the pod for each browser.
-		if subs, err := push.Open(st.Dir()); err != nil {
-			log.Printf("push: %v", err)
-		} else {
-			srv.Push, srv.PushSend = subs, cli.Push
-		}
+		srv.PushSend = cli.Push
 		relayCli.Store(cli)
-		go func() { _ = cli.Run(ctx) }()
-		remote = relayLink(cfg.RelayURL, ids.PodID, token)
+		cctx, cancel := context.WithCancel(ctx)
+		go func() { _ = cli.Run(cctx) }()
+		stopRelay = func() {
+			cancel()
+			relayCli.Store(nil)
+			srv.PushSend = nil
+			// With no link of its own, the pod sends its sync messages through a peer of its site.
+			if hub != nil && lanMgr != nil {
+				hub.SetTransport(lanTransport{m: lanMgr})
+			}
+		}
+		return nil
+	}
+	// Push notifications go through the relay, encrypted by the pod for each browser.
+	if subs, err := push.Open(st.Dir()); err != nil {
+		log.Printf("push: %v", err)
+	} else {
+		srv.Push = subs
+	}
+	remote := ""
+	if cfg.RelayURL != "" {
+		check(startRelay(cfg.RelayURL))
+		remote = srv.RelayStatus().Link
+	} else {
+		// Remote access off: the page still shows the section, with the hosted relay pre-filled,
+		// so the user can turn it on without a command line.
+		srv.RelayStatus = func() server.RelayInfo {
+			return server.RelayInfo{DefaultURL: config.DefaultRelay, State: "off"}
+		}
+	}
+	// Settings > Remote access: the URL of the relay the pod registers with, empty to turn remote
+	// access off. The pod keeps its own link whatever relay it was given, the hosted one is only
+	// what a new pod is offered.
+	srv.RelaySet = func(url string) (server.RelayInfo, error) {
+		url = strings.TrimSuffix(strings.TrimSpace(url), "/")
+		if url != "" && !strings.HasPrefix(url, "ws://") && !strings.HasPrefix(url, "wss://") {
+			return server.RelayInfo{}, i18n.Errorf("the relay must be a ws:// or wss:// URL")
+		}
+		if url == cfg.RelayURL {
+			return srv.RelayStatus(), nil
+		}
+		if stopRelay != nil {
+			stopRelay()
+			stopRelay = nil
+		}
+		cfg.RelayURL = url
+		if err := cfg.Save(st); err != nil {
+			return server.RelayInfo{}, err
+		}
+		srv.RelayURL = url
+		dir.SetRemote(url != "")
+		if url == "" {
+			srv.RelayStatus = func() server.RelayInfo {
+				return server.RelayInfo{DefaultURL: config.DefaultRelay, State: "off"}
+			}
+		} else if err := startRelay(url); err != nil {
+			return server.RelayInfo{}, err
+		}
+		info := srv.RelayStatus()
+		srv.Broadcast("relay.changed", info)
+		return info, nil
 	}
 
 	httpSrv := &http.Server{Addr: cfg.Addr, Handler: srv, ReadHeaderTimeout: 10 * time.Second}
@@ -526,6 +586,13 @@ func relayLink(relayURL, podID, token string) string {
 	u, err := url.Parse(relayURL)
 	if err != nil {
 		return relayURL + "/?pod=" + podID + "&t=" + token
+	}
+	// The link is what the user opens in a browser: the page of the relay, not its websocket.
+	switch u.Scheme {
+	case "ws":
+		u.Scheme = "http"
+	case "wss":
+		u.Scheme = "https"
 	}
 	u.Path = "/"
 	return u.String() + "#pod=" + podID + "&t=" + token

@@ -83,6 +83,9 @@ type Server struct {
 	// RelayStatus reports the state of the remote access (nil: no relay). The page shows it
 	// in Settings > Remote access.
 	RelayStatus func() RelayInfo
+	// RelaySet changes the relay the pod registers with (empty: remote access off), while the pod
+	// runs, and reports the new state (Settings > Remote access).
+	RelaySet func(url string) (RelayInfo, error)
 	// LAN is the link to the pods of the account on the local network (nil: off).
 	LAN LAN
 	// Pods is the view of the other pods of the account (nil: the pod is not paired): the home page

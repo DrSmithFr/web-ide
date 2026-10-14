@@ -34,7 +34,7 @@ type RelayConfig struct {
 	// environment: /etc/antennae/env on the hosted relay.
 	GitHub    GitHubConfig
 	GitHubEnv string
-	App       fs.FS // the front end of the pod: the manifest and the icons of the installable app
+	App       fs.FS  // the front end of the pod: the manifest and the icons of the installable app
 	Version   string // what /_relay/status reports (the version of the relay)
 	// PushSubject is the contact of the VAPID claims (mailto: or https:); PushTestEndpoint lets
 	// the endpoints under this prefix through, for the e2e fake push service.

@@ -1404,6 +1404,8 @@
   "Remote address": "Adresse distante",
   "Remote port": "Port distant",
   "Remote access": "Accès distant",
+  "Remote access is off: this pod stays on your network. Typing a relay and connecting is what opens it from outside.": "L'accès distant est désactivé : ce pod reste sur votre réseau. Saisir un relay puis se connecter est ce qui l'ouvre depuis l'extérieur.",
+  "Turn off": "Désactiver",
   "Relay": "Relay",
   "Pod id": "Id du pod",
   "Link to the relay": "Lien au relay",
