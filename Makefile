@@ -3,7 +3,7 @@ GO ?= $(shell command -v go || echo $(HOME)/sdk/go/bin/go)
 BIN := bin/web-ide-pod
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: build web pod run dev test e2e shots check clean install service
+.PHONY: build web pod run dev test e2e shots check clean install service deploy-relay relay-build
 
 build: web pod
 
@@ -62,6 +62,30 @@ install: build
 # `journalctl --user -u web-ide-pod`, or in ~/.web-ide/token.
 service: build
 	./scripts/install.sh --binary $(BIN)
+
+# The hosted relay (antennae.space): this tree built for the host (Linux x86_64), installed, its
+# service restarted, and the Service Worker it serves checked against this build
+# (scripts/deploy-relay.sh). RELAY_VERSION=v1.11.0 deploys a published release instead of this
+# tree; RELAY_ROLLBACK=1 goes back to the previous binary on the host; RELAY_HOST / RELAY_UNIT /
+# RELAY_URL for another relay. The data of the relay on the host is never touched.
+RELAY_HOST ?= john@5.196.7.104
+RELAY_UNIT ?= antennae-relay
+RELAY_URL ?= https://antennae.space
+RELAY_VERSION ?=
+RELAY_ROLLBACK ?=
+
+deploy-relay:
+	@if [ -n "$(RELAY_ROLLBACK)" ]; then \
+		./scripts/deploy-relay.sh --rollback --host $(RELAY_HOST) --unit $(RELAY_UNIT); \
+	elif [ -n "$(RELAY_VERSION)" ]; then \
+		./scripts/deploy-relay.sh $(RELAY_VERSION) --host $(RELAY_HOST) --unit $(RELAY_UNIT) --url $(RELAY_URL); \
+	else \
+		$(MAKE) -s relay-build && \
+		./scripts/deploy-relay.sh --binary bin/web-ide-pod-relay --host $(RELAY_HOST) --unit $(RELAY_UNIT) --url $(RELAY_URL); \
+	fi
+
+relay-build: web pod/webdist/dist
+	cd pod && GOOS=linux GOARCH=amd64 $(GO) build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o ../bin/web-ide-pod-relay .
 
 clean:
 	rm -rf bin pod/webdist/dist/assets

@@ -133,6 +133,9 @@ make build          # front end (Vite) then pod binary bin/web-ide-pod (front en
 make dev            # pod with -allow-remote on 0.0.0.0:4434 and data in ~/.web-ide-dev + Vite on 0.0.0.0:5173 (hot reload)
 make shots          # pictures of docs/images, replaying e2e/shots/recording.json.gz (see docs/guide.md)
 make service        # this build as a systemd user service started at boot (scripts/install.sh)
+make deploy-relay   # this build on the hosted relay: built for Linux x86_64, installed, service restarted, served Service Worker checked (scripts/deploy-relay.sh)
+make deploy-relay RELAY_VERSION=v1.11.0   # a published release instead of this tree
+make deploy-relay RELAY_ROLLBACK=1        # back to the previous binary on the relay host
 make test           # go vet + go test + tsc + the identity test vectors run in JS
 make e2e            # browser tests, all suites, in parallel workers
 ./e2e/run.sh git    # one suite (the list is in e2e/run.sh); -j 1 runs the suites one by one

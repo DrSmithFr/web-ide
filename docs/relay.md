@@ -191,7 +191,7 @@ Code and review together:
 - **Supporter** (about 4 € a month): TURN without quota (fair use), push notifications, share links, vault sync. Later **Team**: shared sessions and voice.
 - Paid through GitHub Sponsors: the account links a GitHub login (OAuth) and the relay checks the sponsorship. No e-mail is ever asked by the IDE. Paddle may come later for people without GitHub.
 - A self-hosted relay has every feature without limits.
-- One VPS in the EU to start; the relay stays a single binary with SQLite until load says otherwise.
+- One VPS in the EU to start; the relay stays a single binary with SQLite until load says otherwise. `make deploy-relay` puts the current tree on it (Linux x86_64 build, installed to `/usr/local/bin/web-ide-pod`, `antennae-relay` restarted, the Service Worker served checked against the build); `RELAY_VERSION=v1.11.0` deploys a published release with its checksum, `RELAY_ROLLBACK=1` goes back to the previous binary. The data of the relay (its base, its VAPID key, its certificate) is never touched.
 - **Counting**: the relay keeps anonymous counters only (accounts seen in 30 days, pods online); no telemetry in the pod or the page.
 
 ## Milestones

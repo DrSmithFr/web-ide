@@ -2,6 +2,12 @@
 
 All notable changes of Web IDE. The release workflow publishes the section of a version as the notes of its GitHub release.
 
+## [Unreleased]
+
+### Added
+
+- `make deploy-relay`: the hosted relay (antennae.space) updated from the current tree — built for Linux x86_64, installed on the host, its service restarted, and the Service Worker it serves checked against the build. `RELAY_VERSION=v1.11.0` deploys a published release with its checksum, `RELAY_ROLLBACK=1` goes back to the previous binary kept on the host. The data of the relay (its base, its VAPID key, its certificate) is never touched.
+
 ## [1.11.0] - 2026-10-14
 
 ### Added
