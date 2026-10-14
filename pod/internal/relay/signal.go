@@ -471,10 +471,14 @@ func (s *Server) serveSignal(w http.ResponseWriter, r *http.Request) {
 		}
 		switch m.Type {
 		case "offer":
-			s.podOf(podID, func(pc *podConn) {
+			// A pod the store still lists but whose link is gone (it re-dials) cannot answer:
+			// the browser is told, rather than left waiting for an offer that was dropped.
+			if !s.podOf(podID, func(pc *podConn) {
 				pc.send(s.iceMessage(podID, session))
 				pc.send(sigMsg{Type: "offer", Session: session, SDP: m.SDP})
-			})
+			}) {
+				bc.send(sigMsg{Type: "error", Session: session, Message: "the pod is not reachable"})
+			}
 		case "candidate":
 			s.podOf(podID, func(pc *podConn) {
 				pc.send(sigMsg{Type: "candidate", Session: session, Candidate: m.Candidate})
@@ -490,13 +494,16 @@ func (s *Server) serveSignal(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) podOf(podID string, fn func(*podConn)) {
+// podOf runs fn on the live link of a pod, and reports whether there was one.
+func (s *Server) podOf(podID string, fn func(*podConn)) bool {
 	s.mu.Lock()
 	pc := s.pods[podID]
 	s.mu.Unlock()
-	if pc != nil {
-		fn(pc)
+	if pc == nil {
+		return false
 	}
+	fn(pc)
+	return true
 }
 
 func (s *Server) browserOf(session string) *browserConn {

@@ -249,6 +249,20 @@ func sigURL(env *testEnv, session string) string {
 	return strings.Replace(env.httpSrv.URL, "http", "ws", 1) + "/_relay/signal?pod=" + env.podID + "&session=" + session
 }
 
+// waitOnline waits for the relay to report a pod link again: a link that dropped is re-dialled
+// a moment later, and an offer sent in the gap reached nothing.
+func (env *testEnv) waitOnline(t *testing.T, podID string) {
+	t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		if env.st.OnlinePod(podID) {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("the pod %q never came back online", podID)
+}
+
 // connectBrowser signals through the relay (through url, so a test can put a rewriting proxy
 // in front of it), builds a PeerConnection (TURN forced, like the e2e) and opens the "rpc"
 // DataChannel. It returns the live framed channel and the two DTLS fingerprints the handshake
@@ -306,10 +320,19 @@ func connectBrowser(t *testing.T, env *testEnv, session, url string) (*webrtc.Pe
 	sig.send(t, sigMsg{Type: "offer", Session: session, SDP: pc.LocalDescription().SDP})
 
 	// The pod answers (with its candidates, TURN forced). A pod that refuses the offer says so on
-	// the link: that is a refusal the caller can accept, not a message to wait for.
-	answer, err := sig.nextAnswer(t)
-	if err != nil {
-		return pc, nil, fpB, "", err
+	// the link: that is a refusal the caller can accept, not a message to wait for. A pod whose
+	// link was gone a moment ago (it re-dials) is offered again, the way the bootstrap page does.
+	var answer sigMsg
+	for attempt := 0; ; attempt++ {
+		answer, err = sig.nextAnswer(t)
+		if err == nil {
+			break
+		}
+		if !strings.Contains(err.Error(), "not reachable") || attempt >= 2 {
+			return pc, nil, fpB, "", err
+		}
+		env.waitOnline(t, env.podID)
+		sig.send(t, sigMsg{Type: "offer", Session: session, SDP: pc.LocalDescription().SDP})
 	}
 	if err := pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: answer.SDP}); err != nil {
 		t.Fatalf("browser SetRemote(answer): %v", err)
