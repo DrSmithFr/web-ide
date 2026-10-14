@@ -4,6 +4,25 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-10-15
+
+### Added
+
+- The hosted relay at **antennae.space**: a relay you can use without running one. A pod with no relay connects to `wss://antennae.space` (Settings > Remote access, where the URL is edited and the link turned on or off while the pod runs); the page of the relay pairs a device and opens its pods.
+- A monthly TURN quota per account (10 GB on the hosted relay): the bytes relayed are counted per device key and aggregated per month in the base of the relay. Over the quota a browser gets no TURN credential — the bootstrap page says the quota is reached, Settings > Remote access tells the same month, and the pod is told the same figure. `-quota 10GB` sizes it on a self-hosted relay.
+- GitHub Sponsors: a pod account linked to a login on the sponsor list of the repository is shown lifting the quota, and its credentials are issued over it. `-github-env` gives the relay the credentials of the check.
+- `/_relay/status`, anonymous JSON: what the relay answers (up, version, uptime), the pods online, the accounts seen in the last 30 days, and what it carries — pod, browser and identity links, TURN allocations open, the size of its relay port range, resident memory, file descriptors, goroutines.
+- TLS of the relay on both stacks: `-domain antennae.space` gets the certificate from autocert (certbot not needed), the HTTP and HTTPS ports answer on IPv4 and IPv6, and TURN is advertised on both addresses. A strict Content-Security-Policy on every page of the relay, HSTS on the TLS answers.
+- `deploy-relay.sh --setup` brings a host up from nothing (service user, data folder, unit with the flags of the hosted relay, firewall, unattended upgrades, nightly backup timer), idempotently; `scripts/relay-watch.sh` runs off the host — it pulls the backups (30 days kept), checks `/_relay/status`, and installs the two user timers.
+- `make load-relay` / `make load-relay-down` (#72): a load test of a relay. `pod/internal/relayload` drives one over its own protocol — HTTP and WebSocket links, WebRTC tunnels with the token handshake and a payload pumped through them — in three tiers (pages, signaling, TURN), sessions ramped then held, `/_relay/status` read while it happens. `scripts/relay-load.sh` installs a second relay on the same host (its own unit, data folder, ports and a narrow TURN range) so the hosted one is never touched.
+- `deploy-relay.sh --check`: the flags of the unit's `ExecStart` are looked for in the help of the new binary, on the host, before anything is replaced — `Restart=always` turns a binary that does not know a flag into a crash loop.
+
+### Changed
+
+- A tunnel of the load generator comes up in 2.9 s instead of 22.8 s: the offer no longer waits for the ICE gathering to finish, candidates are trickled as a browser sends them, and those that arrive early wait until the peer connection they belong to exists.
+- The pod, browser and identity links refuse a frame over 1 MiB.
+- docs/relay.md describes the hosted service as it runs, docs/self-hosting.md is a guide for running your own (domain and DNS, flags, systemd unit, firewall, backups, moving a pod to another relay).
+
 ## [1.12.0] - 2026-10-14
 
 ### Added
