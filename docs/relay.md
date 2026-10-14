@@ -187,12 +187,16 @@ Code and review together:
 
 ## Hosted service and pricing
 
-- **Free**: relay, pairing, multi-pod, settings sync, TURN within a monthly quota.
-- **Supporter** (about 4 € a month): TURN without quota (fair use), push notifications, share links, vault sync. Later **Team**: shared sessions and voice.
-- Paid through GitHub Sponsors: the account links a GitHub login (OAuth) and the relay checks the sponsorship. No e-mail is ever asked by the IDE. Paddle may come later for people without GitHub.
-- A self-hosted relay has every feature without limits.
-- One VPS in the EU to start; the relay stays a single binary with SQLite until load says otherwise. `make deploy-relay` puts the current tree on it (Linux x86_64 build, installed to `/usr/local/bin/web-ide-pod`, `antennae-relay` restarted, the Service Worker served checked against the build); `RELAY_VERSION=v1.11.0` deploys a published release with its checksum, `RELAY_ROLLBACK=1` goes back to the previous binary. The data of the relay (its base, its VAPID key, its certificate) is never touched.
-- **Counting**: the relay keeps anonymous counters only (accounts seen in 30 days, pods online); no telemetry in the pod or the page.
+The hosted relay runs on one EU VPS (`antennae.space`, OVH VPS-1): `web-ide-pod relay` with its own systemd service, its own user and its own data folder (`/var/lib/antennae`: the base, the VAPID key, the ACME cache). The domain is served by the binary itself — Let's Encrypt through `autocert` (TLS-ALPN-01 on 443, the cache in `<data>/acme`), `:80` redirecting to https — and everything listens on both stacks (IPv4 and IPv6). See [self-hosting](self-hosting.md) for running your own.
+
+- **Free**: relay, pairing, multi-pod, settings sync, push, TURN within a monthly quota (**10 GB per account**).
+- **Supporter** (about 4 € a month): TURN without quota (fair use), share links, vault sync. Later **Team**: shared sessions and voice.
+- Paid through GitHub Sponsors: the account links a GitHub login (an OAuth app asked with **no scope** — it only proves who the person is), and the relay checks the sponsorship against its cached sponsor list (read with the maintainer token once an hour, moved by the `sponsorship` webhook). No e-mail is ever asked by the IDE, and **the relay never keeps a user token**: the link is `account → GitHub id`, nothing else. Paddle may come later for people without GitHub.
+- **The quota counts every TURN allocation of the key**: browser ↔ pod and pod ↔ pod (milestone 3 dials one PeerConnection per window and remote pod). The bytes are counted in the relayed path itself (a counter per allocation, no lock per packet), written to the base per key and month, and read back with what is live right now. Over the quota, the relay issues no TURN credential: the direct and STUN paths keep working, the page and Settings say the quota is reached and point at what lifts it. Credential TTL is 1 h so a supporter is felt quickly and a quota is not outrun by a long session.
+- A self-hosted relay has every feature without limits (`-quota` unset).
+- **Counting**: the relay keeps anonymous counters only — `/_relay/status` answers up, version, uptime, pods online and accounts seen in the last 30 days; no telemetry in the pod or the page.
+- **Deploy**: `make deploy-relay` puts the current tree on it (Linux x86_64 build, installed to `/usr/local/bin/web-ide-pod`, `antennae-relay` restarted, the Service Worker served checked against the build, the previous binary kept for `RELAY_ROLLBACK=1`); `RELAY_VERSION=v1.11.0` deploys a published release with its checksum. `make deploy-relay RELAY_SETUP=1` (`deploy-relay.sh --setup`) writes the host itself — user, data folder, unit with the flags of the hosted relay, firewall, unattended upgrades, nightly backup timer — and is idempotent. The data of the relay is never touched.
+- **Backups and uptime**: the host backs its base up nightly (`sqlite3 .backup` + the data folder, kept 14 days); `scripts/relay-watch.sh --pull`, on a machine of the user, copies them off-site (30 days kept) and `--status` checks `/_relay/status` every 10 minutes (`--timers` installs both).
 
 ## Milestones
 
@@ -200,7 +204,7 @@ Code and review together:
 2. **Done** (`web-ide-pod pair`, `pod/internal/identity`, Settings > Remote access > Devices): phrase, device certificates, pairing, QR, passkeys, revocation. See *Milestone 2* below.
 3. Multi-pod: **done** (#58: proof of possession, sites, gateway election, encrypted project lists, unified home page, entry through a gateway; #59: one origin, one tunnel per pod, routing through the gateway, pod-to-pod WebRTC, failover — see *Routing (one origin)*; #60: protocol versions and *Update this pod* — see *Versions and updates*).
 4. **Done** (`pod/internal/settingsync`, Settings > Remote access > Sync): encrypted blobs, field-by-field merge, per-device layout, vault. See *Settings sync* above.
-5. Hosted relay at `antennae.space`, GitHub Sponsors, quotas, counters.
+5. Hosted relay at `antennae.space`, GitHub Sponsors, quotas, counters: **done** (#29 — see *Hosted service and pricing* above and [self-hosting](self-hosting.md)): the domain served by the binary (autocert, both stacks), TURN counted per key and capped per month, the GitHub link that lifts the cap, `/_relay/status`, the deploy and backup scripts.
 6. **Done**: push notifications. See *Push notifications* above.
 7. Wake-on-LAN and shutdown.
 8. Share links.
@@ -212,7 +216,7 @@ The full IDE on a phone goes on alongside, from the phone layout (#22).
 
 Three pieces, one binary:
 
-- **`web-ide-pod relay`** (`pod/internal/relay`): signaling over WebSocket, STUN and TURN (Pion TURN, UDP and TCP, and TURN over TLS on 443 shared with HTTPS through an ALPN demux, `stun.turn`), the bootstrap page and the Service Worker, a SQLite base (`pods`, `usage`, `PRAGMA user_version`). Short-lived HMAC-SHA1 TURN credentials (12 h), given only to a registered, online pod.
+- **`web-ide-pod relay`** (`pod/internal/relay`): signaling over WebSocket, STUN and TURN (Pion TURN, UDP and TCP, and TURN over TLS on 443 shared with HTTPS through an ALPN demux, `stun.turn`), the bootstrap page and the Service Worker, a SQLite base (`pods`, `usage`, `PRAGMA user_version`). Short-lived HMAC-SHA1 TURN credentials (1 h, so a quota and a supporter change are felt quickly), given only to a registered, online pod.
 - **The pod** (`pod/internal/relayclient`): one outbound WebSocket to its relay (`-relay` flag or `relay` in `config.json`), pod id and secret in `relay.json` (0600) of the data folder, backoff reconnect, one PeerConnection per offer, trickle ICE with the ICE servers announced by the relay. The remote link is printed at startup and shown in Settings > Remote access with its state.
 - **The browser**: the bootstrap page and the Service Worker come from the relay; the app, its assets and the previews come from the pod through the tunnel. The front end talks to a `Transport` (`web/src/pod/transport.ts`): a WebSocket on `127.0.0.1`, or a MessagePort to the bootstrap page. Each project window gets its own connection.
 
