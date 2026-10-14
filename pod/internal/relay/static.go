@@ -60,6 +60,8 @@ func (s *Server) Handler() http.Handler {
 	// format.
 	mux.HandleFunc("/_relay/identity.js", staticJS(identity.ModuleJS()))
 	mux.HandleFunc("/_relay/bip39.txt", s.serveWordlist)
+	// The anonymous status of the relay (status.go): up, version, pods online, accounts seen.
+	mux.HandleFunc("/_relay/status", s.serveStatus)
 	mux.HandleFunc("/_relay/push/key", s.servePushKey)
 	mux.HandleFunc("/_relay/push/subscribe", s.servePushSubscribe)
 	mux.HandleFunc("/_relay/push/unsubscribe", s.servePushUnsubscribe)

@@ -774,7 +774,7 @@ func runRelayCmd(dataDir string, addr string, turnPort int, turnIP, turnIP6, tur
 		TurnMinPort: minPort, TurnMaxPort: maxPort, TLSPort: tlsPort,
 		CertFile: certFile, KeyFile: keyFile, Domain: domain, ACMEStaging: acmeStaging, Quota: bytes,
 		GitHubEnv: githubEnv,
-		App:       app, PushSubject: pushSubject, PushTestEndpoint: pushTest,
+		App:       app, Version: version, PushSubject: pushSubject, PushTestEndpoint: pushTest,
 	}))
 }
 

@@ -35,6 +35,7 @@ type RelayConfig struct {
 	GitHub    GitHubConfig
 	GitHubEnv string
 	App       fs.FS // the front end of the pod: the manifest and the icons of the installable app
+	Version   string // what /_relay/status reports (the version of the relay)
 	// PushSubject is the contact of the VAPID claims (mailto: or https:); PushTestEndpoint lets
 	// the endpoints under this prefix through, for the e2e fake push service.
 	PushSubject      string
@@ -124,6 +125,7 @@ func Run(ctx context.Context, cfg RelayConfig) error {
 
 	srv := New(st, turn)
 	srv.App = cfg.App
+	srv.Version = cfg.Version
 	srv.GitHub = gh
 	if gh != nil {
 		go gh.refreshLoop(ctx)

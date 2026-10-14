@@ -140,6 +140,7 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 			}
 			s.links[c] = true
 			s.mu.Unlock()
+			s.store.TouchAccount(m.Account)
 			list, err := s.store.Revocations(m.Account)
 			if err != nil {
 				_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})

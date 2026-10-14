@@ -100,6 +100,10 @@ type Server struct {
 	// GitHub links the accounts to a GitHub login and holds the sponsor list, which lifts the
 	// TURN quota (github.go); nil: off.
 	GitHub *GitHub
+	// Version is what the status page reports (the relay subcommand).
+	Version string
+	// startedAt is when this relay came up (status.go).
+	startedAt time.Time
 }
 
 // podConn is the pod's persistent link: register (pod id + secret), then carry the
@@ -178,6 +182,7 @@ func New(st *Store, turn *Turn) *Server {
 		siteText:    map[string]string{},
 		sitePods:    map[string][]PodInfo{},
 		grace:       map[string]*graceEntry{},
+		startedAt:   time.Now(),
 	}
 }
 
@@ -304,6 +309,7 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 			}
 			s.mu.Unlock()
 			s.store.Online(m.ID)
+			s.store.TouchAccount(m.Account)
 			list, err := s.store.Revocations(m.Account)
 			if err != nil {
 				pc.send(sigMsg{Type: "error", Message: err.Error()})

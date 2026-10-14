@@ -22,8 +22,10 @@ import (
 // never a private key, a phrase or a sync key; dbVersion 4 adds the push subscriptions
 // (push_store.go); dbVersion 5 replaces the per-allocation usage rows (which held no byte
 // count) with the TURN bytes aggregated per key and month (turn_usage, see turn.go);
-// dbVersion 6 adds the GitHub link of an account and the cached sponsor list (github.go).
-const dbVersion = 6
+// dbVersion 6 adds the GitHub link of an account and the cached sponsor list (github.go);
+// dbVersion 7 adds the anonymous counter of the accounts seen (status.go): an account id and
+// the time it was last seen, nothing else.
+const dbVersion = 7
 
 type Pod struct {
 	ID       string
@@ -115,6 +117,11 @@ func migrate(db *sql.DB) error {
 		return err
 	}
 	if err := migrateGitHub(db); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS accounts_seen (
+			account TEXT PRIMARY KEY,
+			last_seen INTEGER NOT NULL DEFAULT 0)`); err != nil {
 		return err
 	}
 	if ver < dbVersion {
@@ -264,6 +271,34 @@ func (s *Store) TurnUsage(key, month string) (int64, error) {
 		return 0, err
 	}
 	return in + out, nil
+}
+
+// Presence counts what the relay is carrying now: the pods online, and the accounts seen since
+// a moment (the hosted relay counts them over 30 days). The counts are the only thing the
+// status page tells, and they say nothing of who they are.
+func (s *Store) Presence(since time.Time) (pods int, accounts int, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM pods WHERE online=1").Scan(&pods); err != nil {
+		return 0, 0, err
+	}
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM accounts_seen WHERE last_seen>=?", since.Unix()).Scan(&accounts); err != nil {
+		return 0, 0, err
+	}
+	return pods, accounts, nil
+}
+
+// TouchAccount records that a device of this account reached the relay now. Only the fact that
+// the account was seen is kept, with the time: no name, no pod, no device.
+func (s *Store) TouchAccount(account string) {
+	if account == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, _ = s.db.Exec(`INSERT INTO accounts_seen (account, last_seen) VALUES (?,?)
+			ON CONFLICT (account) DO UPDATE SET last_seen=excluded.last_seen`,
+		account, time.Now().Unix())
 }
 
 // Close closes the database.
