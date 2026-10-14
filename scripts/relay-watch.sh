@@ -39,10 +39,11 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# The backups of the host, read-only over SSH: a day of files, 30 days kept here.
+# The backups of the host, read over SSH (the data folder itself is not world-readable, so the
+# tar is made with sudo there): a day of files, 30 days kept here.
 pull() {
   mkdir -p "$DIR"
-  if ! scp -q -r "$HOST:$DATA/backups/" "$DIR/" 2>/dev/null; then
+  if ! ssh "$HOST" "sudo tar -C $DATA -cz backups" | tar -xz -C "$DIR" 2>/dev/null; then
     echo "relay-watch: the backups of $HOST could not be read" >&2
     return 1
   fi
@@ -71,13 +72,19 @@ status() {
 # The two timers, as user services of the machine that watches the relay (astra-1).
 timers() {
   unitdir=$HOME/.config/systemd/user
+  # systemd needs the absolute path of the script, not the one it was called by — and a copy in
+  # ~/.local/bin, so the timers outlive the checkout the script was run from.
+  src=$(CDPATH= cd -- "$(dirname "$0")" && pwd)/$(basename "$0")
+  install -d "$HOME/.local/bin"
+  [ "$src" = "$HOME/.local/bin/relay-watch.sh" ] || install -m755 "$src" "$HOME/.local/bin/relay-watch.sh"
+  script=$HOME/.local/bin/relay-watch.sh
   mkdir -p "$unitdir"
   cat > "$unitdir/relay-watch-pull.service" <<SERVICE
 [Unit]
 Description=Pull the backups of the hosted relay
 [Service]
 Type=oneshot
-ExecStart=$(command -v relay-watch.sh || echo "$0") --pull
+ExecStart=$script --pull
 SERVICE
   cat > "$unitdir/relay-watch-pull.timer" <<TIMER
 [Unit]
@@ -93,7 +100,7 @@ TIMER
 Description=Check the hosted relay answers
 [Service]
 Type=oneshot
-ExecStart=$(command -v relay-watch.sh || echo "$0") --status
+ExecStart=$script --status
 SERVICE
   cat > "$unitdir/relay-watch-status.timer" <<TIMER
 [Unit]

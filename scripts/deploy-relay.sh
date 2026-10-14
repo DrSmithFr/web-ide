@@ -89,7 +89,11 @@ unit=/etc/systemd/system/$UNIT.service
 # The service user and its data folder (the base, the VAPID key, the ACME cache).
 id -u $USER >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin $USER
 install -d -m750 -o $USER -g $USER $DATA
-[ -f $ENV_FILE ] || { echo '# GITHUB_CLIENT_ID=… GITHUB_CLIENT_SECRET=… GITHUB_TOKEN=… GITHUB_WEBHOOK_SECRET=…' | install -m600 -o root -g $USER $ENV_FILE; }
+if [ ! -f $ENV_FILE ]; then
+  install -d -m755 /etc/antennae
+  printf '# GITHUB_CLIENT_ID=… GITHUB_CLIENT_SECRET=… GITHUB_TOKEN=… GITHUB_WEBHOOK_SECRET=…\n' > $ENV_FILE
+  chmod 640 $ENV_FILE; chown root:$USER $ENV_FILE
+fi
 cat > "\$unit.new" <<UNIT
 [Unit]
 Description=Web IDE relay ($DOMAIN)
@@ -102,6 +106,10 @@ ExecStart=$BIN -data $DATA -addr 0.0.0.0:4430 -tls-port 443 -domain $DOMAIN \\
 EnvironmentFile=$ENV_FILE
 User=$USER
 Group=$USER
+# ProtectSystem=strict makes the whole filesystem read-only but the API file systems and this
+# directory: without it the relay cannot write its base.
+StateDirectory=$(basename $DATA)
+ReadWritePaths=$DATA
 Restart=always
 RestartSec=3
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
@@ -126,8 +134,16 @@ fi
 if command -v ufw >/dev/null; then
   ufw status | grep -q Status:.active || ufw --force enable
   for r in 22/tcp 80/tcp 443/tcp 3478/tcp 3478/udp; do ufw status | grep -q "^\$r " || ufw --force allow \$r; done
-  ufw status | grep -q "^$TURN_PORTS/udp " || ufw --force allow $TURN_PORTS/udp
-  ufw status | grep -q "^32768-60999/udp " && ufw --force delete 32768:60999/udp || true
+  # ufw names a port range with a colon, and only accepts it in the long form.
+  range=$(echo $TURN_PORTS | tr '-' ':')
+  ufw status | grep -q "^\$range/udp " || ufw --force allow proto udp from any to any port \$range
+  # The old wide range: ufw only deletes a rule by its number, the highest first so the
+  # numbering of the others does not move under it.
+  while :; do
+    n=\$(ufw status numbered | grep '32768:60999/udp' | head -1 | sed -n 's/^\\[ *\\([0-9]*\\)\\].*/\\1/p')
+    [ -n "\$n" ] || break
+    ufw --force delete "\$n"
+  done
   ufw status verbose
 fi
 # The security updates come by themselves.
@@ -139,7 +155,7 @@ cat > /usr/local/bin/antennae-backup.sh <<'BACKUP'
 #!/bin/sh
 # One backup of the relay: a consistent copy of the base (sqlite3 .backup) and the data folder.
 set -eu
-data=$1
+data=\$1
 keep=\${2:-14}
 day=\$(date -u +%Y-%m-%d)
 mkdir -p "\$data/backups"
@@ -182,9 +198,11 @@ else
   echo "autocert has not served a certificate yet: certbot kept"
 fi
 SETUP
+  # The unit is written but not applied here: the new binary is what knows its flags, and the
+  # install below restarts the service with both. A setup run on its own says what to restart.
   ssh "$HOST" "systemctl is-active $UNIT" >/dev/null 2>&1 || ssh "$HOST" "sudo systemctl restart $UNIT"
   if [ -z "$BINARY" ] && [ -z "$VERSION" ]; then
-    echo "Host set up. Deploy the binary with: make deploy-relay"
+    echo "Host set up. Deploy the binary with: make deploy-relay (it restarts $UNIT)"
     exit 0
   fi
 fi
