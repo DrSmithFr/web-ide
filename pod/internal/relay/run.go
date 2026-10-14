@@ -10,19 +10,25 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
 // RelayConfig is the "web-ide-pod relay" subcommand configuration.
 type RelayConfig struct {
-	DataDir     string // where relay.db lives ("" → ~/.web-ide-relay)
-	Addr        string // HTTP listen address ("" → 127.0.0.1:4430)
-	AdvertiseIP string // STUN/TURN IP given to clients ("" → auto-detect)
-	TurnPort    int    // STUN/TURN control port (0 → 3478)
-	TLSPort     int    // TLS port shared with HTTPS and TURN over TLS (0 → 443)
-	CertFile    string // certificate for TLS (a self-signed one is created on first run)
-	KeyFile     string
-	App         fs.FS // the front end of the pod: the manifest and the icons of the installable app
+	DataDir       string // where relay.db lives ("" → ~/.web-ide-relay)
+	Addr          string // HTTP listen address ("" → 127.0.0.1:4430)
+	AdvertiseIP   string // STUN/TURN IPv4 given to clients ("" → auto-detect)
+	AdvertiseIPv6 string // STUN/TURN IPv6 given to clients ("" → auto-detect, off without a global address)
+	TurnPort      int    // STUN/TURN control port (0 → 3478)
+	TurnMinPort   uint16 // first port of the range the TURN relay sockets are bound in (0 → any free port)
+	TurnMaxPort   uint16 // last port of that range (inclusive)
+	TLSPort       int    // TLS port shared with HTTPS and TURN over TLS (0 → 443)
+	CertFile      string // certificate for TLS (a self-signed one is created on first run)
+	KeyFile       string
+	Domain        string // serve this domain: the certificate comes from Let's Encrypt (autocert)
+	ACMEStaging   bool   // ask the Let's Encrypt test CA instead (bring a domain up without spending the production limits)
+	App           fs.FS  // the front end of the pod: the manifest and the icons of the installable app
 	// PushSubject is the contact of the VAPID claims (mailto: or https:); PushTestEndpoint lets
 	// the endpoints under this prefix through, for the e2e fake push service.
 	PushSubject      string
@@ -42,6 +48,9 @@ func Run(ctx context.Context, cfg RelayConfig) error {
 	if cfg.AdvertiseIP == "" {
 		cfg.AdvertiseIP = detectIP()
 	}
+	if cfg.AdvertiseIPv6 == "" {
+		cfg.AdvertiseIPv6 = detectIPv6()
+	}
 	if cfg.TLSPort == 0 {
 		cfg.TLSPort = 443
 	}
@@ -51,26 +60,44 @@ func Run(ctx context.Context, cfg RelayConfig) error {
 	}
 	defer st.Close()
 
-	// TLS on 443: the same port serves the bootstrap page (https) and TURN over TLS
-	// (RFC 8489), demuxed by the ALPN protocol of the ClientHello. A browser that cannot
-	// reach the control port still reaches TURN there.
-	turnCfg := TurnConfig{AdvertiseIP: cfg.AdvertiseIP, Port: cfg.TurnPort}
+	// TLS on 443: the same port serves the bootstrap page (https), TURN over TLS (RFC 8489)
+	// and the TLS-ALPN-01 checks of Let's Encrypt, demuxed by the ALPN protocol of the
+	// ClientHello. A browser that cannot reach the control port still reaches TURN there.
+	turnCfg := TurnConfig{
+		AdvertiseIP:   cfg.AdvertiseIP,
+		AdvertiseIPv6: cfg.AdvertiseIPv6,
+		Domain:        cfg.Domain,
+		Port:          cfg.TurnPort,
+		TLSPort:       cfg.TLSPort,
+		MinPort:       cfg.TurnMinPort,
+		MaxPort:       cfg.TurnMaxPort,
+	}
 	var demux *Demux
-	if tcfg, err := TLSConfig(dataDir, cfg.CertFile, cfg.KeyFile); err == nil {
-		ln, err := net.Listen("tcp", net.JoinHostPort(cfg.AdvertiseIP, strconv.Itoa(cfg.TLSPort)))
+	tcfg, acme, err := TLSConfig(dataDir, TLSOptions{
+		CertFile: cfg.CertFile, KeyFile: cfg.KeyFile, Domain: cfg.Domain,
+		ACMEStaging: cfg.ACMEStaging, Email: acmeEmail(cfg.PushSubject),
+	})
+	if err != nil {
+		log.Printf("relay: tls: %v", err)
+	} else if lns, err := tlsListeners(cfg); err != nil {
+		hint := ""
+		if cfg.TLSPort < 1024 {
+			hint = " (TURN over TLS is off: a port below 1024 needs root, or use -tls-port)"
+		}
+		log.Printf("relay: tls on %d: %v%s", cfg.TLSPort, err, hint)
+	} else {
+		d, err := NewDemux(tcfg, lns[0])
 		if err != nil {
-			hint := ""
-			if cfg.TLSPort < 1024 {
-				hint = " (TURN over TLS is off: a port below 1024 needs root, or use -tls-port)"
-			}
-			log.Printf("relay: tls on %d: %v%s", cfg.TLSPort, err, hint)
-		} else if d, err := NewDemux(tcfg, ln); err != nil {
 			log.Printf("relay: tls demux on %d: %v", cfg.TLSPort, err)
-			ln.Close()
+			for _, ln := range lns {
+				ln.Close()
+			}
 		} else {
+			for _, ln := range lns[1:] {
+				d.Serve(ln)
+			}
 			demux = d
 			turnCfg.TLSListener = d.Turn
-			turnCfg.TLSURL = "turn:" + net.JoinHostPort(cfg.AdvertiseIP, strconv.Itoa(cfg.TLSPort)) + "?transport=tcp"
 			defer d.Close()
 		}
 	}
@@ -95,13 +122,28 @@ func Run(ctx context.Context, cfg RelayConfig) error {
 		<-ctx.Done()
 		_ = httpSrv.Shutdown(context.Background())
 	}()
-	fmt.Printf("Web IDE relay\n  data      : %s\n  open      : http://%s/#pod=<id>&t=<token>\n  STUN/TURN : %s\n", st.DBPath(), cfg.Addr, turn.ICE())
+	open := "http://" + cfg.Addr
+	if cfg.Domain != "" {
+		open = "https://" + cfg.Domain
+	}
+	fmt.Printf("Web IDE relay\n  data      : %s\n  open      : %s/#pod=<id>&t=<token>\n  STUN/TURN : %s\n", st.DBPath(), open, strings.Join(turn.ICE(), " "))
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- httpSrv.ListenAndServe() }()
 	if demux != nil {
 		httpsSrv := &http.Server{Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
 		go func() { errCh <- httpsSrv.Serve(demux.HTTPS) }()
+	}
+	// A relay with a domain answers on port 80 too: the ACME http-01 challenges, and a redirect
+	// to https for everything else.
+	if acme != nil {
+		http80 := &http.Server{Addr: net.JoinHostPort("0.0.0.0", "80"), Handler: acme.HTTPHandler(nil), ReadHeaderTimeout: 10 * time.Second}
+		go func() {
+			if err := http80.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Printf("relay: http on 80: %v", err)
+			}
+		}()
+		defer http80.Close()
 	}
 
 	select {
@@ -116,6 +158,48 @@ func Run(ctx context.Context, cfg RelayConfig) error {
 	return nil
 }
 
+// tlsListeners opens the TCP listeners of the TLS port: one per address of the machine the
+// relay is advertised at, so the page, TURN over TLS and the ACME checks answer on IPv4 and on
+// IPv6. With no address to name, the port is opened on every address of the machine.
+func tlsListeners(cfg RelayConfig) ([]net.Listener, error) {
+	var lns []net.Listener
+	addrs := []string{cfg.AdvertiseIP}
+	if cfg.AdvertiseIPv6 != "" {
+		addrs = append(addrs, cfg.AdvertiseIPv6)
+	}
+	port := strconv.Itoa(cfg.TLSPort)
+	for _, a := range addrs {
+		if a == "" {
+			continue
+		}
+		ln, err := net.Listen("tcp", net.JoinHostPort(a, port))
+		if err != nil {
+			for _, l := range lns {
+				l.Close()
+			}
+			return nil, err
+		}
+		lns = append(lns, ln)
+	}
+	if len(lns) == 0 {
+		ln, err := net.Listen("tcp", ":"+port)
+		if err != nil {
+			return nil, err
+		}
+		lns = append(lns, ln)
+	}
+	return lns, nil
+}
+
+// acmeEmail is the contact Let's Encrypt may write to: the mailto: of -push-subject, when that
+// subject is one.
+func acmeEmail(subject string) string {
+	if mailto := strings.TrimPrefix(subject, "mailto:"); mailto != subject {
+		return mailto
+	}
+	return ""
+}
+
 // detectIP returns the first non-loopback IPv4 of this machine (the clients reach TURN
 // and STUN here). On a machine with none, 127.0.0.1 is returned (loopback only).
 func detectIP() string {
@@ -127,4 +211,21 @@ func detectIP() string {
 		}
 	}
 	return "127.0.0.1"
+}
+
+// detectIPv6 returns the global IPv6 of this machine, when it has a route to one: a relay on a
+// dual-stack VPS is reached by the IPv6 clients too, and TURN allocates on that address. ""
+// when the machine has no IPv6 (the relay then stays IPv4 only, as before).
+func detectIPv6() string {
+	conn, err := net.Dial("udp", "[2001:4860:4860::8888]:80")
+	if err == nil {
+		defer conn.Close()
+		if addr, ok := conn.LocalAddr().(*net.UDPAddr); ok {
+			ip := addr.IP
+			if !ip.IsLoopback() && !ip.IsLinkLocalUnicast() && ip.IsGlobalUnicast() {
+				return ip.String()
+			}
+		}
+	}
+	return ""
 }

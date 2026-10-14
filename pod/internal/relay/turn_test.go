@@ -3,6 +3,7 @@ package relay
 import (
 	"net"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -47,6 +48,77 @@ func TestTurnCreds(t *testing.T) {
 			t.Fatalf("first ICE URL must be STUN, got %q", u)
 		}
 	}
+}
+
+// TestTurnICEURLs: with a domain, the ICE URLs name it (turns: on the TLS port, the scheme of
+// TURN over TLS); without one, they name the addresses of the machine, IPv4 and IPv6.
+func TestTurnICEURLs(t *testing.T) {
+	urls := iceURLs(TurnConfig{
+		AdvertiseIP: "5.196.7.104", AdvertiseIPv6: "2001:41d0:404:200::a601",
+		Domain: "antennae.space", Port: 3478, TLSPort: 443, TLSListener: &net.TCPListener{},
+	}, []net.IP{net.ParseIP("5.196.7.104"), net.ParseIP("2001:41d0:404:200::a601")})
+	want := []string{
+		"stun:antennae.space:3478",
+		"turn:antennae.space:3478?transport=udp",
+		"turn:antennae.space:3478?transport=tcp",
+		"turns:antennae.space:443?transport=tcp",
+		"stun:5.196.7.104:3478",
+		"turn:[2001:41d0:404:200::a601]:3478?transport=udp",
+		"turns:[2001:41d0:404:200::a601]:443?transport=tcp",
+	}
+	for _, w := range want {
+		if !hasURL(urls, w) {
+			t.Fatalf("the ICE URLs must contain %q, got %v", w, urls)
+		}
+	}
+
+	st, _ := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
+	defer st.Close()
+	plain, err := NewTurn(st, TurnConfig{AdvertiseIP: "127.0.0.1", Port: freeTurnPort(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer plain.Close()
+	for _, u := range plain.ICE() {
+		if strings.HasPrefix(u, "turns:") {
+			t.Fatalf("no TLS side: no turns: URL, got %q", u)
+		}
+	}
+}
+
+func hasURL(urls []string, want string) bool {
+	for _, u := range urls {
+		if u == want {
+			return true
+		}
+	}
+	return false
+}
+
+// TestTurnDualStack: a relay with a global IPv6 binds its control ports on both addresses, so
+// an IPv6 client reaches STUN and TURN there too.
+func TestTurnDualStack(t *testing.T) {
+	st, _ := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
+	defer st.Close()
+	port := freeTurnPort(t)
+	turn, err := NewTurn(st, TurnConfig{AdvertiseIP: "127.0.0.1", AdvertiseIPv6: "::1", Port: port})
+	if err != nil {
+		t.Fatal("the TURN server must bind IPv4 and IPv6:", err)
+	}
+	defer turn.Close()
+	if len(turn.udp) != 2 || len(turn.tcp) != 2 {
+		t.Fatalf("one UDP and one TCP listener per address expected, got %d udp, %d tcp", len(turn.udp), len(turn.tcp))
+	}
+	for _, want := range []string{"stun:127.0.0.1:" + strconv.Itoa(port), "stun:[::1]:" + strconv.Itoa(port)} {
+		if !hasURL(turn.ICE(), want) {
+			t.Fatalf("the ICE URLs must contain %q, got %v", want, turn.ICE())
+		}
+	}
+	c, err := net.Dial("tcp", "[::1]:"+strconv.Itoa(port))
+	if err != nil {
+		t.Fatal("the TURN control port must answer on IPv6:", err)
+	}
+	c.Close()
 }
 
 // freeTurnPort asks the kernel for a free UDP port: the default 3478 may be taken by a relay

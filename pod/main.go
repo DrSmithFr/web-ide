@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -69,8 +70,14 @@ func main() {
 	podVersion := flag.String("pod-version", "", "the version this pod reports (a build of the source tree reports a development version no pod will install: name the release this build stands for)")
 	forceTurn := flag.Bool("force-turn", false, "force the browser through TURN (no direct or STUN path)")
 	turnPort := flag.Int("turn-port", 0, "relay: the STUN/TURN control port (default 3478)")
-	turnIP := flag.String("turn-ip", "", "relay: the STUN/TURN IP given to clients (default: the machine IP)")
+	turnIP := flag.String("turn-ip", "", "relay: the STUN/TURN IPv4 given to clients (default: the machine IP)")
+	turnIP6 := flag.String("turn-ip6", "", "relay: the STUN/TURN IPv6 given to clients (default: the machine global IPv6, off without one)")
+	turnPorts := flag.String("turn-ports", "", "relay: the port range the TURN relay sockets are bound in, 49160-49999 (default: any free port)")
 	tlsPort := flag.Int("tls-port", 0, "relay: the TLS port shared with HTTPS and TURN over TLS (default 443; below 1024 needs root)")
+	certFile := flag.String("cert", "", "relay: certificate for TLS (default: <data>/cert.pem, a self-signed one made on first run)")
+	keyFile := flag.String("key", "", "relay: key of that certificate (default: <data>/key.pem)")
+	domain := flag.String("domain", "", "relay: serve this domain: the certificate is issued and renewed by Let's Encrypt (TLS-ALPN-01), the ICE URLs name the domain")
+	acmeStaging := flag.Bool("acme-staging", false, "relay: ask the Let's Encrypt test CA instead of the production one")
 	pushSubject := flag.String("push-subject", "", "relay: the contact of the Web Push (VAPID) claims, mailto: or https:")
 	pushTest := flag.String("push-test-endpoint", "", "relay: also allow the push endpoints under this prefix (tests only)")
 	showVersion := flag.Bool("version", false, "print the version and exit")
@@ -97,7 +104,7 @@ func main() {
 		if *static != "" {
 			app = os.DirFS(*static)
 		}
-		runRelayCmd(flagValue(flag.CommandLine, "data", ""), *addr, *turnPort, *turnIP, *tlsPort, app, *pushSubject, *pushTest)
+		runRelayCmd(flagValue(flag.CommandLine, "data", ""), *addr, *turnPort, *turnIP, *turnIP6, *turnPorts, *tlsPort, *certFile, *keyFile, *domain, *acmeStaging, app, *pushSubject, *pushTest)
 		return
 	}
 	if len(flag.Args()) > 0 && flag.Arg(0) == "pair" {
@@ -746,9 +753,30 @@ func (v *podsView) Update(ctx context.Context, req *identity.UpdateRequest) (any
 }
 
 // runRelayCmd runs the relay server subcommand until interrupted.
-func runRelayCmd(dataDir string, addr string, turnPort int, turnIP string, tlsPort int, app fs.FS, pushSubject, pushTest string) {
+func runRelayCmd(dataDir string, addr string, turnPort int, turnIP, turnIP6, turnPorts string, tlsPort int, certFile, keyFile, domain string, acmeStaging bool, app fs.FS, pushSubject, pushTest string) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	check(relay.Run(ctx, relay.RelayConfig{DataDir: dataDir, Addr: addr, TurnPort: turnPort, AdvertiseIP: turnIP, TLSPort: tlsPort, App: app,
-		PushSubject: pushSubject, PushTestEndpoint: pushTest}))
+	minPort, maxPort := turnPortRange(turnPorts)
+	check(relay.Run(ctx, relay.RelayConfig{
+		DataDir: dataDir, Addr: addr, TurnPort: turnPort, AdvertiseIP: turnIP, AdvertiseIPv6: turnIP6,
+		TurnMinPort: minPort, TurnMaxPort: maxPort, TLSPort: tlsPort,
+		CertFile: certFile, KeyFile: keyFile, Domain: domain, ACMEStaging: acmeStaging,
+		App: app, PushSubject: pushSubject, PushTestEndpoint: pushTest,
+	}))
+}
+
+// turnPortRange reads the -turn-ports range ("49160-49999"): the ports the TURN relay sockets
+// are bound in, so a firewall can name a range instead of the whole 1024-65535. Empty or
+// malformed: no range, any free port (the default).
+func turnPortRange(s string) (uint16, uint16) {
+	lo, hi, ok := strings.Cut(s, "-")
+	if s == "" || !ok {
+		return 0, 0
+	}
+	a, err1 := strconv.Atoi(strings.TrimSpace(lo))
+	b, err2 := strconv.Atoi(strings.TrimSpace(hi))
+	if err1 != nil || err2 != nil || a <= 0 || b < a || a > 65535 || b > 65535 {
+		return 0, 0
+	}
+	return uint16(a), uint16(b)
 }
