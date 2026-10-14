@@ -155,6 +155,49 @@ func TestGitHubOAuth(t *testing.T) {
 	}
 }
 
+// TestGitHubQuotaLifted: the quota of the hosted relay is what a supporter is freed from — the
+// link of the account to a GitHub login on the sponsor list is enough, and an account that is
+// linked but does not sponsor stays under the quota.
+func TestGitHubQuotaLifted(t *testing.T) {
+	st := newGitHubStore(t)
+	g := NewGitHub(GitHubConfig{ClientID: "id", ClientSecret: "secret"}, st)
+	if err := st.LinkGitHub("acct-sponsor", "77", "drsmith"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.LinkGitHub("acct-plain", "12", "visitor"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SaveSponsors([]Sponsor{{ID: "77", Login: "drsmith"}}); err != nil {
+		t.Fatal(err)
+	}
+	month := usageMonth(time.Now())
+	for _, key := range []string{"acct-sponsor", "acct-plain", "pod-alone"} {
+		if err := st.AddUsage(key, month, 900, 300); err != nil {
+			t.Fatal(err)
+		}
+		if err := st.Register(key, "secret-"+key, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	turn, err := NewTurn(st, TurnConfig{AdvertiseIP: "127.0.0.1", Port: freeTurnPort(t), Quota: 1000, Supporter: g.isSupporter})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer turn.Close()
+	if _, _, err := turn.Creds("acct-sponsor", "acct-sponsor", time.Hour); err != nil {
+		t.Fatalf("a sponsor over the quota: %v", err)
+	}
+	if _, _, err := turn.Creds("acct-plain", "acct-plain", time.Hour); err != errQuota {
+		t.Fatalf("a linked login that does not sponsor stays under the quota: %v", err)
+	}
+	if _, _, err := turn.Creds("pod-alone", "pod-alone", time.Hour); err != errQuota {
+		t.Fatalf("an account with no link: %v", err)
+	}
+	if st := turn.QuotaState("acct-sponsor"); !st.Supporter || st.Over || st.Used != 1200 {
+		t.Fatalf("what the relay tells a sponsor: %+v", st)
+	}
+}
+
 // TestGitHubWebhook: a sponsorship event moves the sponsor list when its HMAC matches, and is
 // refused when it does not.
 func TestGitHubWebhook(t *testing.T) {
