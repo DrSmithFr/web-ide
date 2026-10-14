@@ -64,6 +64,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/_relay/push/subscribe", s.servePushSubscribe)
 	mux.HandleFunc("/_relay/push/unsubscribe", s.servePushUnsubscribe)
 	mux.HandleFunc("/sw.js", staticJS(swJS))
+	// The GitHub link of an account (milestone 5): the relay's own login page, the callback
+	// GitHub sends the browser back to, and the sponsorship webhook. Served only when the relay
+	// was given a GitHub app.
+	if s.GitHub != nil {
+		mux.HandleFunc("/_relay/github/login", s.serveGitHubLogin)
+		mux.HandleFunc("/_relay/github/callback", s.serveGitHubCallback)
+		mux.HandleFunc("/_relay/github/webhook", s.serveGitHubWebhook)
+	}
 	for p := range appFiles {
 		mux.HandleFunc(p, s.serveAppFile)
 	}

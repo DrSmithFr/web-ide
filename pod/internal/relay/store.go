@@ -21,8 +21,9 @@ import (
 // syncstore.go. The relay stores certificates, signed revocation lists and encrypted blobs,
 // never a private key, a phrase or a sync key; dbVersion 4 adds the push subscriptions
 // (push_store.go); dbVersion 5 replaces the per-allocation usage rows (which held no byte
-// count) with the TURN bytes aggregated per key and month (turn_usage, see turn.go).
-const dbVersion = 5
+// count) with the TURN bytes aggregated per key and month (turn_usage, see turn.go);
+// dbVersion 6 adds the GitHub link of an account and the cached sponsor list (github.go).
+const dbVersion = 6
 
 type Pod struct {
 	ID       string
@@ -111,6 +112,9 @@ func migrate(db *sql.DB) error {
 		return err
 	}
 	if err := migratePush(db); err != nil {
+		return err
+	}
+	if err := migrateGitHub(db); err != nil {
 		return err
 	}
 	if ver < dbVersion {

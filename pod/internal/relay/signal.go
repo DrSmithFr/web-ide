@@ -97,6 +97,9 @@ type Server struct {
 	App fs.FS
 	// Push sends the Web Push notifications of the pods (push.go); nil: off.
 	Push *Push
+	// GitHub links the accounts to a GitHub login and holds the sponsor list, which lifts the
+	// TURN quota (github.go); nil: off.
+	GitHub *GitHub
 }
 
 // podConn is the pod's persistent link: register (pod id + secret), then carry the

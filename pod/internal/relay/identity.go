@@ -3,6 +3,7 @@ package relay
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"sync"
 
@@ -46,6 +47,12 @@ type idMsg struct {
 	Site    string    `json:"site,omitempty"`
 	Gateway string    `json:"gateway,omitempty"`
 	Pods    []PodInfo `json:"pods,omitempty"`
+	// GitHub (milestone 5): the login an account is linked to, whether it sponsors the project,
+	// and the URL the panel opens to link it. The relay never holds a user token.
+	GitHubID  string `json:"githubId,omitempty"`
+	Login     string `json:"login,omitempty"`
+	LoginURL  string `json:"loginUrl,omitempty"`
+	Supporter bool   `json:"supporter,omitempty"`
 }
 
 // identityConn is one live pairing/admin link: a browser (or the pod CLI) that pairs a
@@ -218,6 +225,44 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 			_ = c.send(idMsg{Type: "pair", Pairing: p})
 		case "syncKey", "syncKeys", "wrap", "wraps", "wrapGet", "blobGet", "blobPut":
 			s.handleSync(c, m)
+		case "github":
+			// The panel asking what the account is linked to, and whether that login sponsors
+			// the project (which lifts the TURN quota).
+			if s.GitHub == nil {
+				_ = c.send(idMsg{Type: "github", Account: c.account})
+				continue
+			}
+			id, login, err := s.store.GitHubLink(c.account)
+			if err != nil {
+				_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})
+				continue
+			}
+			_ = c.send(idMsg{Type: "github", Account: c.account, GitHubID: id, Login: login,
+				Supporter: s.GitHub.isSupporter(c.account)})
+		case "githubStart":
+			if s.GitHub == nil {
+				_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, errors.New("this relay has no GitHub link"))})
+				continue
+			}
+			target, err := s.githubStart(c)
+			if err != nil {
+				_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})
+				continue
+			}
+			_ = c.send(idMsg{Type: "githubStart", Account: c.account, LoginURL: target})
+		case "githubUnlink":
+			if s.GitHub == nil {
+				continue
+			}
+			if c.key == "" {
+				_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, errors.New("only a device of the account can unlink it"))})
+				continue
+			}
+			if err := s.store.UnlinkGitHub(c.account); err != nil {
+				_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})
+				continue
+			}
+			_ = c.send(idMsg{Type: "github", Account: c.account})
 		case "pairApprove":
 			p, err := s.store.ApprovePairing(m.Code, c.account, m.Cert)
 			if err != nil {

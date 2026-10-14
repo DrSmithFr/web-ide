@@ -29,7 +29,12 @@ type RelayConfig struct {
 	Domain        string // serve this domain: the certificate comes from Let's Encrypt (autocert)
 	ACMEStaging   bool   // ask the Let's Encrypt test CA instead (bring a domain up without spending the production limits)
 	Quota         int64  // bytes one account may move through TURN in a month (0 → no limit)
-	App           fs.FS  // the front end of the pod: the manifest and the icons of the installable app
+	// GitHub: the OAuth app and the maintainer token behind the supporter tier (github.go).
+	// GitHubEnv is a file of KEY=VALUE lines (0600) they can come from instead of the process
+	// environment: /etc/antennae/env on the hosted relay.
+	GitHub    GitHubConfig
+	GitHubEnv string
+	App       fs.FS // the front end of the pod: the manifest and the icons of the installable app
 	// PushSubject is the contact of the VAPID claims (mailto: or https:); PushTestEndpoint lets
 	// the endpoints under this prefix through, for the e2e fake push service.
 	PushSubject      string
@@ -104,6 +109,13 @@ func Run(ctx context.Context, cfg RelayConfig) error {
 		}
 	}
 
+	// The supporter tier: an account linked to a GitHub login that sponsors the project is freed
+	// from its TURN quota. Without a GitHub app the relay has no supporters (a self-hosted one).
+	gh := NewGitHub(githubConfig(cfg), st)
+	if gh != nil {
+		turnCfg.Supporter = gh.isSupporter
+	}
+
 	turn, err := NewTurn(st, turnCfg)
 	if err != nil {
 		return err
@@ -112,6 +124,10 @@ func Run(ctx context.Context, cfg RelayConfig) error {
 
 	srv := New(st, turn)
 	srv.App = cfg.App
+	srv.GitHub = gh
+	if gh != nil {
+		go gh.refreshLoop(ctx)
+	}
 	// Web Push: the VAPID key of the relay, made once in its data folder.
 	if push, err := LoadPush(dataDir, cfg.PushSubject); err != nil {
 		log.Printf("relay: push notifications are off: %v", err)
@@ -191,6 +207,45 @@ func tlsListeners(cfg RelayConfig) ([]net.Listener, error) {
 		lns = append(lns, ln)
 	}
 	return lns, nil
+}
+
+// githubConfig reads what the GitHub link needs: the flags when they were given, else the
+// process environment, else a file of KEY=VALUE lines (-github-env, /etc/antennae/env on the
+// hosted relay, 0600: these are secrets and they never go in a command line, where a `ps`
+// would read them).
+func githubConfig(cfg RelayConfig) GitHubConfig {
+	g := cfg.GitHub
+	file := map[string]string{}
+	if cfg.GitHubEnv != "" {
+		data, err := os.ReadFile(cfg.GitHubEnv)
+		if err != nil {
+			log.Printf("relay: %s: %v", cfg.GitHubEnv, err)
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			k, v, ok := strings.Cut(line, "=")
+			if ok {
+				file[strings.TrimSpace(k)] = strings.TrimSpace(v)
+			}
+		}
+	}
+	pick := func(flagVal, key string) string {
+		if flagVal != "" {
+			return flagVal
+		}
+		if v := file[key]; v != "" {
+			return v
+		}
+		return os.Getenv(key)
+	}
+	g.ClientID = pick(g.ClientID, "WEBIDE_GITHUB_CLIENT")
+	g.ClientSecret = pick(g.ClientSecret, "WEBIDE_GITHUB_SECRET")
+	g.Token = pick(g.Token, "WEBIDE_GITHUB_TOKEN")
+	g.WebhookSecret = pick(g.WebhookSecret, "WEBIDE_GITHUB_WEBHOOK")
+	return g
 }
 
 // acmeEmail is the contact Let's Encrypt may write to: the mailto: of -push-subject, when that
