@@ -596,9 +596,26 @@ function Workspace() {
 
 interface RelayInfo {
   url: string
+  defaultUrl: string
   podId: string
   link: string
   state: string
+  turnUsed: number
+  turnLimit: number
+  turnSupporter?: boolean
+  turnOver?: boolean
+}
+
+/** A byte count as the relay reports it, read the way a person reads a size. */
+function bytes(n: number) {
+  const units = ['B', 'kB', 'MB', 'GB', 'TB']
+  let v = n
+  let u = 0
+  while (v >= 1024 && u < units.length - 1) {
+    v /= 1024
+    u++
+  }
+  return `${u === 0 ? v : v.toFixed(v < 10 ? 1 : 0)} ${units[u]}`
 }
 
 /** Remote access: the relay the pod registers with, the state of its link, and the link the
@@ -607,19 +624,51 @@ interface RelayInfo {
 function RemoteAccess() {
   const [info, setInfo] = createSignal<RelayInfo | null>(null)
   const [error, setError] = createSignal('')
+  const [url, setUrl] = createSignal('')
+  const [saving, setSaving] = createSignal(false)
+  const show = (i: RelayInfo) => {
+    setInfo(i)
+    setUrl(i.url || i.defaultUrl)
+  }
   onMount(() => {
-    request<RelayInfo>('relay.status').then(setInfo, (e) => setError(e instanceof Error ? e.message : String(e)))
-    onPod('relay.changed', (d: RelayInfo) => setInfo(d))
+    request<RelayInfo>('relay.status').then(show, (e) => setError(e instanceof Error ? e.message : String(e)))
+    onPod('relay.changed', show)
   })
+  // Turning remote access on or off: the pod saves the URL and starts or ends its link.
+  const apply = async (u: string) => {
+    setSaving(true)
+    try {
+      show(await request<RelayInfo>('relay.set', { url: u }))
+    } catch (e) {
+      errorToast(e)
+    } finally {
+      setSaving(false)
+    }
+  }
+  const on = () => (info()?.url ?? '') !== ''
   return (
     <section class="form">
       <Show when={error()}>
         <p class="muted small">{error()}</p>
       </Show>
       <Show when={info()}>
+        <div class="field-row">
+          <label class="field grow">
+            <span>{t('Relay')}</span>
+            <input class="mono" value={url()} onInput={(e) => setUrl(e.currentTarget.value)}
+              placeholder="wss://antennae.space" data-testid="relay-url" />
+          </label>
+          <Show when={on()}>
+            <button class="btn" onClick={() => void apply('')} disabled={saving()} data-testid="relay-off">{t('Turn off')}</button>
+          </Show>
+          <Show when={!on()}>
+            <button class="btn" onClick={() => void apply(url())} disabled={saving()} data-testid="relay-on">{t('Connect')}</button>
+          </Show>
+        </div>
+        <Show when={!on()}>
+          <p class="muted small">{t('Remote access is off: this pod stays on your network. Typing a relay and connecting is what opens it from outside.')}</p>
+        </Show>
         <dl class="props">
-          <dt>{t('Relay')}</dt>
-          <dd class="mono">{info()?.url}</dd>
           <dt>{t('Pod id')}</dt>
           <dd class="mono">{info()?.podId}</dd>
           <dt>{t('Link to the relay')}</dt>
@@ -628,7 +677,25 @@ function RemoteAccess() {
           </dd>
           <dt>{t('Open from another device')}</dt>
           <dd class="mono small">{info()?.link}</dd>
+          <Show when={info()!.turnLimit > 0 || info()!.turnUsed > 0}>
+            <dt>{t('TURN traffic this month')}</dt>
+            <dd>
+              {bytes(info()!.turnUsed)}
+              <Show when={info()!.turnLimit > 0}>
+                {' / '}{bytes(info()!.turnLimit)}
+              </Show>
+              <Show when={info()!.turnSupporter}>
+                {' · '}{t('Supporter: no quota')}
+              </Show>
+            </dd>
+          </Show>
         </dl>
+        <Show when={info()!.turnOver}>
+          <p class="muted small">
+            {t('The monthly TURN quota is reached on this account: the direct paths still work, a tunnel relayed through the relay does not. A Supporter lifts it.')}{' '}
+            <a href="https://github.com/sponsors/DrSmithFr" target="_blank" rel="noreferrer">github.com/sponsors/DrSmithFr</a>
+          </p>
+        </Show>
         <div class="field-row">
           <button class="btn" onClick={() => void copyText(info()?.link ?? '')}>{t('Copy the link')}</button>
         </div>

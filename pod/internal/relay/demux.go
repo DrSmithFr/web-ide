@@ -42,6 +42,11 @@ func NewDemux(cfg *tls.Config, ln net.Listener) (*Demux, error) {
 	return d, nil
 }
 
+// Serve feeds one more listener to the same demuxer: a relay reachable on IPv4 and IPv6
+// accepts on both addresses and routes them the same way (the ACME TLS-ALPN-01 connections
+// of Let's Encrypt go to the HTTPS side, like a browser opening the page).
+func (d *Demux) Serve(ln net.Listener) { go d.run(ln) }
+
 func (d *Demux) run(ln net.Listener) {
 	for {
 		conn, err := ln.Accept()

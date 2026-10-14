@@ -178,6 +178,8 @@ run(
     const remote = await app.textContent('.settings-body .props')
     assert(remote.includes(RELAY) && remote.includes(POD_ID), 'Settings shows the relay and the pod id: ' + remote.trim().slice(0, 120))
     assert(await app.isVisible('.settings-body .dot-connected'), 'the link to the relay is connected')
+    assert((await app.inputValue('[data-testid=relay-url]')) === RELAY, 'Settings > Remote access lets the relay URL be edited: ' + (await app.inputValue('[data-testid=relay-url]')))
+    assert(await app.isVisible('[data-testid=relay-off]'), 'a connected pod offers to turn remote access off')
     assert((await app.textContent('.settings-body dd.mono.small')).includes(`#pod=${POD_ID}&t=${TOKEN}`), 'the remote link shown in Settings')
     await app.click('.modal-settings .modal-head button')
 

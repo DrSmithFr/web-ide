@@ -60,15 +60,43 @@ func (s *Server) Handler() http.Handler {
 	// format.
 	mux.HandleFunc("/_relay/identity.js", staticJS(identity.ModuleJS()))
 	mux.HandleFunc("/_relay/bip39.txt", s.serveWordlist)
+	// The anonymous status of the relay (status.go): up, version, pods online, accounts seen.
+	mux.HandleFunc("/_relay/status", s.serveStatus)
 	mux.HandleFunc("/_relay/push/key", s.servePushKey)
 	mux.HandleFunc("/_relay/push/subscribe", s.servePushSubscribe)
 	mux.HandleFunc("/_relay/push/unsubscribe", s.servePushUnsubscribe)
 	mux.HandleFunc("/sw.js", staticJS(swJS))
+	// The GitHub link of an account (milestone 5): the relay's own login page, the callback
+	// GitHub sends the browser back to, and the sponsorship webhook. Served only when the relay
+	// was given a GitHub app.
+	if s.GitHub != nil {
+		mux.HandleFunc("/_relay/github/login", s.serveGitHubLogin)
+		mux.HandleFunc("/_relay/github/callback", s.serveGitHubCallback)
+		mux.HandleFunc("/_relay/github/webhook", s.serveGitHubWebhook)
+	}
 	for p := range appFiles {
 		mux.HandleFunc(p, s.serveAppFile)
 	}
 	mux.HandleFunc("/", s.bootstrapPage)
-	return mux
+	return csp(mux)
+}
+
+// cspPolicy is the Content-Security-Policy of the pages of the relay: everything they load comes
+// from this origin, nothing inline, no object, no framing. The bootstrap page is written to fit
+// it — its styles, its script and its routing module are files of their own.
+const cspPolicy = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; " +
+	"connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+
+// csp puts the policy on every answer of the relay, and HSTS on its TLS answers: the app of the
+// user is opened over https, a downgrade would carry their token.
+func csp(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Security-Policy", cspPolicy)
+		if r.TLS != nil {
+			w.Header().Set("Strict-Transport-Security", "max-age=31536000")
+		}
+		h.ServeHTTP(w, r)
+	})
 }
 
 // bootstrapPage serves the bootstrap HTML for the app routes (no file extension). Asset

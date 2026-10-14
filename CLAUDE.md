@@ -5,7 +5,8 @@ Web IDE: a Go agent (`pod/`) serving a SolidJS front end (`web/`) over a WebSock
 - [docs/spec.md](docs/spec.md): what the IDE does and why.
 - [docs/architecture.md](docs/architecture.md): code layout, protocol, build and test commands, pitfalls.
 - [docs/kanban.md](docs/kanban.md): the kanban and its git workflow.
-- [docs/relay.md](docs/relay.md): remote access through a relay (planned).
+- [docs/relay.md](docs/relay.md): remote access through a relay, and the hosted one at `antennae.space`.
+- [docs/self-hosting.md](docs/self-hosting.md): running your own relay (domain, flags, firewall, backups).
 
 ## Commands
 

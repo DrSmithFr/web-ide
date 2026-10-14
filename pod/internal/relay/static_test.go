@@ -48,6 +48,29 @@ func TestAppFiles(t *testing.T) {
 	}
 }
 
+// TestRelayCSP: every answer of the relay carries the strict policy, so the bootstrap page and
+// the app it loads can only speak to their own origin.
+func TestRelayCSP(t *testing.T) {
+	st, _ := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
+	t.Cleanup(func() { st.Close() })
+	ts := httptest.NewServer(New(st, nil).Handler())
+	t.Cleanup(ts.Close)
+	for _, path := range []string{"/", "/_relay/bootstrap.js", "/sw.js"} {
+		r, err := ts.Client().Get(ts.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.Body.Close()
+		csp := r.Header.Get("Content-Security-Policy")
+		if !strings.Contains(csp, "default-src 'self'") || !strings.Contains(csp, "frame-ancestors 'none'") {
+			t.Fatalf("%s: %q", path, csp)
+		}
+		if r.Header.Get("Strict-Transport-Security") != "" {
+			t.Fatalf("%s: HSTS is for the TLS answers only", path)
+		}
+	}
+}
+
 // TestBootstrapPage: the page, its script and its styles are served, and none of them loads a
 // resource from another origin or carries a script inline (the page must fit a strict CSP).
 func TestBootstrapPage(t *testing.T) {

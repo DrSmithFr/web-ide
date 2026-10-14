@@ -20,8 +20,12 @@ import (
 // pairing.go; dbVersion 3 adds the sync tables (blobs, wraps, published X25519 keys), see
 // syncstore.go. The relay stores certificates, signed revocation lists and encrypted blobs,
 // never a private key, a phrase or a sync key; dbVersion 4 adds the push subscriptions
-// (push_store.go).
-const dbVersion = 4
+// (push_store.go); dbVersion 5 replaces the per-allocation usage rows (which held no byte
+// count) with the TURN bytes aggregated per key and month (turn_usage, see turn.go);
+// dbVersion 6 adds the GitHub link of an account and the cached sponsor list (github.go);
+// dbVersion 7 adds the anonymous counter of the accounts seen (status.go): an account id and
+// the time it was last seen, nothing else.
+const dbVersion = 7
 
 type Pod struct {
 	ID       string
@@ -87,13 +91,21 @@ func migrate(db *sql.DB) error {
 			last_seen INTEGER NOT NULL DEFAULT 0)`); err != nil {
 		return err
 	}
-	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS usage (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			pod_id TEXT NOT NULL,
-			ts INTEGER NOT NULL,
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS turn_usage (
+			key TEXT NOT NULL,
+			month TEXT NOT NULL,
 			in_bytes INTEGER NOT NULL DEFAULT 0,
-			out_bytes INTEGER NOT NULL DEFAULT 0)`); err != nil {
+			out_bytes INTEGER NOT NULL DEFAULT 0,
+			updated INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (key, month))`); err != nil {
 		return err
+	}
+	if ver < dbVersion {
+		// The old usage table held one row per TURN allocation with no byte count: the counting
+		// of #29 replaces it, and nothing of value is lost (it never held a byte nor a name).
+		if _, err := db.Exec(`DROP TABLE IF EXISTS usage`); err != nil {
+			return err
+		}
 	}
 	if err := migrateIdentity(db); err != nil {
 		return err
@@ -102,6 +114,14 @@ func migrate(db *sql.DB) error {
 		return err
 	}
 	if err := migratePush(db); err != nil {
+		return err
+	}
+	if err := migrateGitHub(db); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS accounts_seen (
+			account TEXT PRIMARY KEY,
+			last_seen INTEGER NOT NULL DEFAULT 0)`); err != nil {
 		return err
 	}
 	if ver < dbVersion {
@@ -219,11 +239,66 @@ func (s *Store) OnlinePod(id string) bool {
 	return ok && p.Online
 }
 
-// Usage records a TURN allocation of a pod.
-func (s *Store) Usage(podID string, inBytes, outBytes int64) error {
-	_, err := s.db.Exec("INSERT INTO usage (pod_id, ts, in_bytes, out_bytes) VALUES (?,?,?,?)",
-		podID, time.Now().Unix(), inBytes, outBytes)
+// usageMonth is the month a usage row belongs to ("2026-10"): the quota is monthly.
+func usageMonth(t time.Time) string { return t.UTC().Format("2006-01") }
+
+// AddUsage adds bytes relayed through TURN to the total of a key for a month. The key is the
+// account of a paired device, the pod id otherwise (turn.go): a month per key, one row, written
+// by the flush of the live counters.
+func (s *Store) AddUsage(key, month string, inBytes, outBytes int64) error {
+	if key == "" || (inBytes == 0 && outBytes == 0) {
+		return nil
+	}
+	_, err := s.db.Exec(`INSERT INTO turn_usage (key, month, in_bytes, out_bytes, updated)
+			VALUES (?,?,?,?,?)
+			ON CONFLICT (key, month) DO UPDATE SET
+				in_bytes = in_bytes + excluded.in_bytes,
+				out_bytes = out_bytes + excluded.out_bytes,
+				updated = excluded.updated`,
+		key, month, inBytes, outBytes, time.Now().Unix())
 	return err
+}
+
+// TurnUsage is the number of bytes a key moved through TURN in a month (both directions).
+func (s *Store) TurnUsage(key, month string) (int64, error) {
+	var in, out int64
+	err := s.db.QueryRow("SELECT in_bytes, out_bytes FROM turn_usage WHERE key=? AND month=?", key, month).
+		Scan(&in, &out)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return in + out, nil
+}
+
+// Presence counts what the relay is carrying now: the pods online, and the accounts seen since
+// a moment (the hosted relay counts them over 30 days). The counts are the only thing the
+// status page tells, and they say nothing of who they are.
+func (s *Store) Presence(since time.Time) (pods int, accounts int, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM pods WHERE online=1").Scan(&pods); err != nil {
+		return 0, 0, err
+	}
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM accounts_seen WHERE last_seen>=?", since.Unix()).Scan(&accounts); err != nil {
+		return 0, 0, err
+	}
+	return pods, accounts, nil
+}
+
+// TouchAccount records that a device of this account reached the relay now. Only the fact that
+// the account was seen is kept, with the time: no name, no pod, no device.
+func (s *Store) TouchAccount(account string) {
+	if account == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, _ = s.db.Exec(`INSERT INTO accounts_seen (account, last_seen) VALUES (?,?)
+			ON CONFLICT (account) DO UPDATE SET last_seen=excluded.last_seen`,
+		account, time.Now().Unix())
 }
 
 // Close closes the database.

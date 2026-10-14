@@ -73,10 +73,14 @@ RELAY_UNIT ?= antennae-relay
 RELAY_URL ?= https://antennae.space
 RELAY_VERSION ?=
 RELAY_ROLLBACK ?=
+RELAY_SETUP ?=
 
 deploy-relay:
 	@if [ -n "$(RELAY_ROLLBACK)" ]; then \
 		./scripts/deploy-relay.sh --rollback --host $(RELAY_HOST) --unit $(RELAY_UNIT); \
+	elif [ -n "$(RELAY_SETUP)" ]; then \
+		$(MAKE) -s relay-build && \
+		./scripts/deploy-relay.sh --setup --binary bin/web-ide-pod-relay --host $(RELAY_HOST) --unit $(RELAY_UNIT) --url $(RELAY_URL); \
 	elif [ -n "$(RELAY_VERSION)" ]; then \
 		./scripts/deploy-relay.sh $(RELAY_VERSION) --host $(RELAY_HOST) --unit $(RELAY_UNIT) --url $(RELAY_URL); \
 	else \

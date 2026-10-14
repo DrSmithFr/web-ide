@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -69,8 +70,16 @@ func main() {
 	podVersion := flag.String("pod-version", "", "the version this pod reports (a build of the source tree reports a development version no pod will install: name the release this build stands for)")
 	forceTurn := flag.Bool("force-turn", false, "force the browser through TURN (no direct or STUN path)")
 	turnPort := flag.Int("turn-port", 0, "relay: the STUN/TURN control port (default 3478)")
-	turnIP := flag.String("turn-ip", "", "relay: the STUN/TURN IP given to clients (default: the machine IP)")
+	turnIP := flag.String("turn-ip", "", "relay: the STUN/TURN IPv4 given to clients (default: the machine IP)")
+	turnIP6 := flag.String("turn-ip6", "", "relay: the STUN/TURN IPv6 given to clients (default: the machine global IPv6, off without one)")
+	turnPorts := flag.String("turn-ports", "", "relay: the port range the TURN relay sockets are bound in, 49160-49999 (default: any free port)")
 	tlsPort := flag.Int("tls-port", 0, "relay: the TLS port shared with HTTPS and TURN over TLS (default 443; below 1024 needs root)")
+	certFile := flag.String("cert", "", "relay: certificate for TLS (default: <data>/cert.pem, a self-signed one made on first run)")
+	keyFile := flag.String("key", "", "relay: key of that certificate (default: <data>/key.pem)")
+	domain := flag.String("domain", "", "relay: serve this domain: the certificate is issued and renewed by Let's Encrypt (TLS-ALPN-01), the ICE URLs name the domain")
+	acmeStaging := flag.Bool("acme-staging", false, "relay: ask the Let's Encrypt test CA instead of the production one")
+	quota := flag.String("quota", "", "relay: monthly TURN quota per account, 10GB (default: no limit, what a self-hosted relay wants)")
+	githubEnv := flag.String("github-env", "", "relay: file of KEY=VALUE secrets for the GitHub link (/etc/antennae.env): WEBIDE_GITHUB_CLIENT, _SECRET, _TOKEN (sponsor list), _WEBHOOK")
 	pushSubject := flag.String("push-subject", "", "relay: the contact of the Web Push (VAPID) claims, mailto: or https:")
 	pushTest := flag.String("push-test-endpoint", "", "relay: also allow the push endpoints under this prefix (tests only)")
 	showVersion := flag.Bool("version", false, "print the version and exit")
@@ -97,7 +106,7 @@ func main() {
 		if *static != "" {
 			app = os.DirFS(*static)
 		}
-		runRelayCmd(flagValue(flag.CommandLine, "data", ""), *addr, *turnPort, *turnIP, *tlsPort, app, *pushSubject, *pushTest)
+		runRelayCmd(flagValue(flag.CommandLine, "data", ""), *addr, *turnPort, *turnIP, *turnIP6, *turnPorts, *tlsPort, *certFile, *keyFile, *domain, *acmeStaging, *quota, *githubEnv, app, *pushSubject, *pushTest)
 		return
 	}
 	if len(flag.Args()) > 0 && flag.Arg(0) == "pair" {
@@ -319,18 +328,29 @@ func main() {
 	srv.Pods = &podsView{dir: dir, cfg: cfg, st: st, relayCli: &relayCli}
 	srv.Pods.(*podsView).lan = lanMgr
 	onLANChange()
-	remote := ""
-	if cfg.RelayURL != "" {
+	// The link to the relay is a function of its URL: the Settings page turns remote access on or
+	// off while the pod runs (milestone 5), so starting it and ending it live here.
+	var stopRelay func()
+	startRelay := func(url string) error {
 		ids, err := config.Relay(st)
-		check(err)
+		if err != nil {
+			return err
+		}
 		var state atomic.Value
 		state.Store("connecting")
 		srv.RelayStatus = func() server.RelayInfo {
-			return server.RelayInfo{URL: cfg.RelayURL, PodID: ids.PodID, Link: relayLink(cfg.RelayURL, ids.PodID, token), State: state.Load().(string)}
+			info := server.RelayInfo{URL: url, DefaultURL: config.DefaultRelay, PodID: ids.PodID,
+				Link: relayLink(url, ids.PodID, token), State: state.Load().(string)}
+			if c := relayCli.Load(); c != nil {
+				if q := c.Quota(); q != nil {
+					info.TurnUsed, info.TurnLimit, info.TurnOver, info.TurnSupporter = q.Used, q.Limit, q.Over, q.Supporter
+				}
+			}
+			return info
 		}
 
 		cli := relayclient.New(relayclient.Config{
-			RelayURL:  cfg.RelayURL,
+			RelayURL:  url,
 			PodID:     ids.PodID,
 			Secret:    ids.Secret,
 			Name:      hostname(),
@@ -382,14 +402,69 @@ func main() {
 			},
 		})
 		// Push notifications go through the relay, encrypted by the pod for each browser.
-		if subs, err := push.Open(st.Dir()); err != nil {
-			log.Printf("push: %v", err)
-		} else {
-			srv.Push, srv.PushSend = subs, cli.Push
-		}
+		srv.PushSend = cli.Push
 		relayCli.Store(cli)
-		go func() { _ = cli.Run(ctx) }()
-		remote = relayLink(cfg.RelayURL, ids.PodID, token)
+		cctx, cancel := context.WithCancel(ctx)
+		go func() { _ = cli.Run(cctx) }()
+		stopRelay = func() {
+			cancel()
+			relayCli.Store(nil)
+			srv.PushSend = nil
+			// With no link of its own, the pod sends its sync messages through a peer of its site.
+			if hub != nil && lanMgr != nil {
+				hub.SetTransport(lanTransport{m: lanMgr})
+			}
+		}
+		return nil
+	}
+	// Push notifications go through the relay, encrypted by the pod for each browser.
+	if subs, err := push.Open(st.Dir()); err != nil {
+		log.Printf("push: %v", err)
+	} else {
+		srv.Push = subs
+	}
+	remote := ""
+	if cfg.RelayURL != "" {
+		check(startRelay(cfg.RelayURL))
+		remote = srv.RelayStatus().Link
+	} else {
+		// Remote access off: the page still shows the section, with the hosted relay pre-filled,
+		// so the user can turn it on without a command line.
+		srv.RelayStatus = func() server.RelayInfo {
+			return server.RelayInfo{DefaultURL: config.DefaultRelay, State: "off"}
+		}
+	}
+	// Settings > Remote access: the URL of the relay the pod registers with, empty to turn remote
+	// access off. The pod keeps its own link whatever relay it was given, the hosted one is only
+	// what a new pod is offered.
+	srv.RelaySet = func(url string) (server.RelayInfo, error) {
+		url = strings.TrimSuffix(strings.TrimSpace(url), "/")
+		if url != "" && !strings.HasPrefix(url, "ws://") && !strings.HasPrefix(url, "wss://") {
+			return server.RelayInfo{}, i18n.Errorf("the relay must be a ws:// or wss:// URL")
+		}
+		if url == cfg.RelayURL {
+			return srv.RelayStatus(), nil
+		}
+		if stopRelay != nil {
+			stopRelay()
+			stopRelay = nil
+		}
+		cfg.RelayURL = url
+		if err := cfg.Save(st); err != nil {
+			return server.RelayInfo{}, err
+		}
+		srv.RelayURL = url
+		dir.SetRemote(url != "")
+		if url == "" {
+			srv.RelayStatus = func() server.RelayInfo {
+				return server.RelayInfo{DefaultURL: config.DefaultRelay, State: "off"}
+			}
+		} else if err := startRelay(url); err != nil {
+			return server.RelayInfo{}, err
+		}
+		info := srv.RelayStatus()
+		srv.Broadcast("relay.changed", info)
+		return info, nil
 	}
 
 	httpSrv := &http.Server{Addr: cfg.Addr, Handler: srv, ReadHeaderTimeout: 10 * time.Second}
@@ -511,6 +586,13 @@ func relayLink(relayURL, podID, token string) string {
 	u, err := url.Parse(relayURL)
 	if err != nil {
 		return relayURL + "/?pod=" + podID + "&t=" + token
+	}
+	// The link is what the user opens in a browser: the page of the relay, not its websocket.
+	switch u.Scheme {
+	case "ws":
+		u.Scheme = "http"
+	case "wss":
+		u.Scheme = "https"
 	}
 	u.Path = "/"
 	return u.String() + "#pod=" + podID + "&t=" + token
@@ -746,9 +828,64 @@ func (v *podsView) Update(ctx context.Context, req *identity.UpdateRequest) (any
 }
 
 // runRelayCmd runs the relay server subcommand until interrupted.
-func runRelayCmd(dataDir string, addr string, turnPort int, turnIP string, tlsPort int, app fs.FS, pushSubject, pushTest string) {
+func runRelayCmd(dataDir string, addr string, turnPort int, turnIP, turnIP6, turnPorts string, tlsPort int, certFile, keyFile, domain string, acmeStaging bool, quota, githubEnv string, app fs.FS, pushSubject, pushTest string) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	check(relay.Run(ctx, relay.RelayConfig{DataDir: dataDir, Addr: addr, TurnPort: turnPort, AdvertiseIP: turnIP, TLSPort: tlsPort, App: app,
-		PushSubject: pushSubject, PushTestEndpoint: pushTest}))
+	minPort, maxPort := turnPortRange(turnPorts)
+	bytes, err := parseSize(quota)
+	if err != nil {
+		log.Printf("relay: -quota %q: %v (no limit)", quota, err)
+	}
+	check(relay.Run(ctx, relay.RelayConfig{
+		DataDir: dataDir, Addr: addr, TurnPort: turnPort, AdvertiseIP: turnIP, AdvertiseIPv6: turnIP6,
+		TurnMinPort: minPort, TurnMaxPort: maxPort, TLSPort: tlsPort,
+		CertFile: certFile, KeyFile: keyFile, Domain: domain, ACMEStaging: acmeStaging, Quota: bytes,
+		GitHubEnv: githubEnv,
+		App:       app, Version: version, PushSubject: pushSubject, PushTestEndpoint: pushTest,
+	}))
+}
+
+// parseSize reads a byte count with a unit suffix ("10GB", "1MB", "500k"); empty is no limit.
+func parseSize(s string) (int64, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, nil
+	}
+	units := map[string]int64{"K": 1 << 10, "M": 1 << 20, "G": 1 << 30, "T": 1 << 40}
+	mult := int64(1)
+	// The unit is a letter, with the B of "bytes" allowed on the end: 500k, 1MB, 10GB.
+	s = strings.TrimRight(s, "bB")
+	if s == "" {
+		return 0, fmt.Errorf("not a size")
+	}
+	if last := s[len(s)-1]; last >= 'a' && last <= 'z' || last >= 'A' && last <= 'Z' {
+		key := strings.ToUpper(string(last))
+		u, ok := units[key]
+		if !ok {
+			return 0, fmt.Errorf("unknown unit %q", string(last))
+		}
+		mult = u
+		s = strings.TrimSpace(s[:len(s)-1])
+	}
+	n, err := strconv.ParseFloat(s, 64)
+	if err != nil || n < 0 {
+		return 0, fmt.Errorf("not a number")
+	}
+	return int64(n * float64(mult)), nil
+}
+
+// turnPortRange reads the -turn-ports range ("49160-49999"): the ports the TURN relay sockets
+// are bound in, so a firewall can name a range instead of the whole 1024-65535. Empty or
+// malformed: no range, any free port (the default).
+func turnPortRange(s string) (uint16, uint16) {
+	lo, hi, ok := strings.Cut(s, "-")
+	if s == "" || !ok {
+		return 0, 0
+	}
+	a, err1 := strconv.Atoi(strings.TrimSpace(lo))
+	b, err2 := strconv.Atoi(strings.TrimSpace(hi))
+	if err1 != nil || err2 != nil || a <= 0 || b < a || a > 65535 || b > 65535 {
+		return 0, 0
+	}
+	return uint16(a), uint16(b)
 }

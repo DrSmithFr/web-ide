@@ -13,6 +13,11 @@ import (
 
 const DefaultAddr = "127.0.0.1:4433"
 
+// DefaultRelay is the hosted relay (docs/relay.md): what Settings > Remote access pre-fills for a
+// new pod. Nothing connects to it until the user turns remote access on, and any other relay can
+// be typed in its place.
+const DefaultRelay = "wss://antennae.space"
+
 type Config struct {
 	Addr      string `json:"addr"`
 	Workspace string `json:"workspace"`

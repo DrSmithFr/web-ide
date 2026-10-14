@@ -84,6 +84,9 @@ export function Devices() {
   const [podId, setPodId] = createSignal('')
   const [keys, setKeys] = createSignal<SyncKey[]>([])
   const [wraps, setWraps] = createSignal<Wrap[]>([])
+  // The GitHub link of the account (milestone 5): the login it is linked to, and whether that
+  // login sponsors the project, which lifts the TURN quota.
+  const [gh, setGh] = createSignal<{ login: string; supporter: boolean } | null>(null)
   let link: { send: (m: any) => void; recv: (type?: string) => Promise<any>; close: () => void } | null = null
   let accountKey: CryptoKey | null = null
   let own: any = null
@@ -113,6 +116,31 @@ export function Devices() {
     link.send({ type: 'revocations' })
     link.send({ type: 'syncKeys' })
     link.send({ type: 'wraps' })
+    link.send({ type: 'github' })
+  }
+
+  // The GitHub link of the account: the relay hands out a URL the browser opens on GitHub (no
+  // scope, the relay only asks who the visitor is), GitHub sends it back to the relay which
+  // stores the id of that person, and the window closes itself. The relay never sees a token.
+  function linkGitHub() {
+    link?.send({ type: 'githubStart' })
+  }
+  function openGitHubLink(url: string) {
+    const win = window.open(url, 'webide-github', 'width=520,height=620')
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== location.origin || (e.data && e.data.type !== 'webide.github')) return
+      window.removeEventListener('message', onMessage)
+      link?.send({ type: 'github' })
+    }
+    window.addEventListener('message', onMessage)
+    if (!win) {
+      window.removeEventListener('message', onMessage)
+      errorToast(t('The browser blocked the GitHub window: allow popups for this site.'))
+    }
+  }
+  function unlinkGitHub() {
+    link?.send({ type: 'githubUnlink' })
+    setGh({ login: '', supporter: false })
   }
 
   // The wrap of the key of the epoch for a device: the only way a pod paired without the phrase gets
@@ -199,6 +227,8 @@ export function Devices() {
       } else if (msg.type === 'wraps') setWraps(msg.wraps ?? [])
       else if (msg.type === 'wrap' && msg.wrap) setWraps((w) => [...w.filter((x) => x.device !== msg.wrap.device), msg.wrap])
       else if (msg.type === 'pair' && msg.pairing) setPairings((p) => [...p.filter((x) => x.code !== msg.pairing.code), msg.pairing])
+      else if (msg.type === 'github') setGh({ login: msg.login ?? '', supporter: !!msg.supporter })
+      else if (msg.type === 'githubStart' && msg.loginUrl) openGitHubLink(msg.loginUrl)
       for (const key of [...devices().map((d) => d.key), ...pairings().map((p) => p.key)]) void showFp(key)
     })
     link.send({ type: 'register', account: account(), name: deviceName(), cert: own?.cert ?? null, lang: lang() })
@@ -408,6 +438,28 @@ export function Devices() {
             </p>
           </div>
         </Show>
+
+        <dl class="props" data-testid="github-link">
+          <dt>{t('GitHub')}</dt>
+          <dd>
+            <Show when={gh()?.login}>{'@' + gh()!.login}</Show>
+            <Show when={!gh()?.login}>{t('not linked')}</Show>
+            <Show when={gh()?.supporter}>
+              {' · '}{t('Supporter: no TURN quota')}
+            </Show>
+          </dd>
+        </dl>
+        <div class="field-row">
+          <Show when={!gh()?.login}>
+            <button class="btn small" onClick={() => linkGitHub()}>{t('Link a GitHub account')}</button>
+          </Show>
+          <Show when={gh()?.login}>
+            <button class="btn small" onClick={() => unlinkGitHub()}>{t('Unlink GitHub')}</button>
+          </Show>
+        </div>
+        <p class="muted small">
+          {t('A Supporter of the project on GitHub is freed from the monthly TURN quota of the hosted relay. The relay keeps the GitHub id it was shown, never a token, and no e-mail is asked.')}
+        </p>
 
         <div class="field-row">
           <button class="btn" onClick={() => void inviteDevice()}>{t('Invite a device')}</button>

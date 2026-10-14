@@ -14,12 +14,21 @@ import (
 // RelayInfo is the state of the remote access, shown in Settings > Remote access.
 type RelayInfo struct {
 	// URL of the relay the pod registers with (empty: no relay).
-	URL   string `json:"url"`
-	PodID string `json:"podId"`
+	URL string `json:"url"`
+	// DefaultURL is the hosted relay the page pre-fills when the pod has none.
+	DefaultURL string `json:"defaultUrl"`
+	PodID      string `json:"podId"`
 	// Link the user opens from another network, with its token.
 	Link string `json:"link"`
 	// State of the link to the relay: off, connecting or connected.
 	State string `json:"state"`
+	// The monthly TURN quota the relay applies to this account (milestone 5): what it moved this
+	// month, the limit (0: none, a self-hosted relay), whether the account is freed from it, and
+	// whether the relayed path is closed. 0/0/false when the relay says nothing.
+	TurnUsed      int64 `json:"turnUsed"`
+	TurnLimit     int64 `json:"turnLimit"`
+	TurnSupporter bool  `json:"turnSupporter,omitempty"`
+	TurnOver      bool  `json:"turnOver,omitempty"`
 }
 
 func (s *Server) registerRelay() {
@@ -28,6 +37,19 @@ func (s *Server) registerRelay() {
 			return nil, i18n.New("this pod has no relay")
 		}
 		return s.RelayStatus(), nil
+	})
+	// Settings > Remote access turns the link on or off: the URL of the relay, empty for off.
+	s.handle("relay.set", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		if s.RelaySet == nil {
+			return nil, i18n.New("this pod cannot change its relay")
+		}
+		var a struct {
+			URL string `json:"url"`
+		}
+		if err := json.Unmarshal(p, &a); err != nil {
+			return nil, err
+		}
+		return s.RelaySet(a.URL)
 	})
 }
 

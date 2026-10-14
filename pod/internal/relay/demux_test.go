@@ -40,7 +40,7 @@ func TestDemuxALPN(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ln.Close()
-	cfg, err := TLSConfig(t.TempDir(), "", "")
+	cfg, _, err := TLSConfig(t.TempDir(), TLSOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

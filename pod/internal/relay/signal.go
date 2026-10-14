@@ -15,8 +15,9 @@ import (
 
 // turnTTL is the validity of a short-lived TURN credential: long enough for a whole
 // session (Pion re-checks the expiry on every Refresh, a short one would kill a
-// relayed tunnel mid-way), short enough that a leaked one dies soon.
-const turnTTL = 12 * time.Hour
+// relayed tunnel mid-way), short enough that a leaked one dies soon and the monthly
+// quota is re-checked often.
+const turnTTL = time.Hour
 
 // sigMsg is one signaling message between the relay and a client (pod or browser).
 // Every message carries the session id: a pod may serve several browsers at once, each
@@ -64,6 +65,10 @@ type sigMsg struct {
 	Req     string                  `json:"req,omitempty"`
 	Status  string                  `json:"status,omitempty"`
 	Command string                  `json:"command,omitempty"`
+	// Quota (milestone 5): the TURN month of the account, carried on the ice message (when the
+	// credentials were refused, the relayed path is closed but the direct paths stay open) and
+	// on the ready message of a pod (Settings > Remote access shows it).
+	Quota *QuotaState `json:"quota,omitempty"`
 }
 
 // Server routes signaling between the pods (one persistent link each) and the browsers
@@ -92,6 +97,13 @@ type Server struct {
 	App fs.FS
 	// Push sends the Web Push notifications of the pods (push.go); nil: off.
 	Push *Push
+	// GitHub links the accounts to a GitHub login and holds the sponsor list, which lifts the
+	// TURN quota (github.go); nil: off.
+	GitHub *GitHub
+	// Version is what the status page reports (the relay subcommand).
+	Version string
+	// startedAt is when this relay came up (status.go).
+	startedAt time.Time
 }
 
 // podConn is the pod's persistent link: register (pod id + secret), then carry the
@@ -170,12 +182,47 @@ func New(st *Store, turn *Turn) *Server {
 		siteText:    map[string]string{},
 		sitePods:    map[string][]PodInfo{},
 		grace:       map[string]*graceEntry{},
+		startedAt:   time.Now(),
 	}
 }
 
+// credKey is whose TURN traffic a session of this pod counts under: the account, when the pod
+// is paired (a browser dialing it belongs to the same account, and the quota of #29 is per
+// account), the pod id otherwise.
+func (s *Server) credKey(podID string) string {
+	s.mu.Lock()
+	pc := s.pods[podID]
+	s.mu.Unlock()
+	if pc != nil && pc.account != "" {
+		return pc.account
+	}
+	return podID
+}
+
+// quotaState is the TURN month of a key, or nothing when this relay has no TURN server.
+func (s *Server) quotaState(key string) *QuotaState {
+	if s.turn == nil {
+		return nil
+	}
+	return s.turn.QuotaState(key)
+}
+
+// iceMessage carries the ICE servers of a session and the credentials to use them. When the
+// account is over its monthly quota, no credential is given and the quota travels with the
+// URLs: the direct and STUN candidates still work, only the relayed path is closed, and the
+// page can say why.
 func (s *Server) iceMessage(podID, session string) sigMsg {
-	user, pass, _ := s.turn.Creds(podID, turnTTL)
-	return sigMsg{Type: "ice", Session: session, URLs: s.turn.ICE(), Username: user, Credential: pass}
+	key := s.credKey(podID)
+	if s.turn == nil {
+		return sigMsg{Type: "ice", Session: session}
+	}
+	user, pass, err := s.turn.Creds(podID, key, turnTTL)
+	m := sigMsg{Type: "ice", Session: session, URLs: s.turn.ICE(), Username: user, Credential: pass}
+	if err == errQuota {
+		m.Quota = s.turn.QuotaState(key)
+		m.Message = "quota"
+	}
+	return m
 }
 
 // servePod is the pod's persistent link: register (pod id + secret), then carry its
@@ -262,12 +309,13 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 			}
 			s.mu.Unlock()
 			s.store.Online(m.ID)
+			s.store.TouchAccount(m.Account)
 			list, err := s.store.Revocations(m.Account)
 			if err != nil {
 				pc.send(sigMsg{Type: "error", Message: err.Error()})
 				return
 			}
-			pc.send(sigMsg{Type: "ready", Account: m.Account, List: list})
+			pc.send(sigMsg{Type: "ready", Account: m.Account, List: list, Quota: s.quotaState(s.credKey(m.ID))})
 			if pc.key != "" && !s.recomputeSites(m.Account) {
 				s.sendSites(m.Account, nil, pc)
 			}

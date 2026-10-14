@@ -78,6 +78,19 @@ type sigMsg struct {
 	Req     string                  `json:"req,omitempty"`
 	Status  string                  `json:"status,omitempty"`
 	Command string                  `json:"command,omitempty"`
+	// Quota (milestone 5): the TURN month of the account, told on ready and on the ice messages
+	// (mirrors relay.QuotaState).
+	Quota *QuotaState `json:"quota,omitempty"`
+}
+
+// QuotaState is the monthly TURN quota the relay applies to this pod's account (mirrors
+// relay.QuotaState): the bytes moved this month, the limit (0: none) and whether the account is
+// freed from it.
+type QuotaState struct {
+	Used      int64 `json:"used"`
+	Limit     int64 `json:"limit"`
+	Supporter bool  `json:"supporter,omitempty"`
+	Over      bool  `json:"over,omitempty"`
 }
 
 // PodInfo is one pod of the account as the relay sees it (mirrors relay.PodInfo).
@@ -185,6 +198,9 @@ type Client struct {
 	// updates holds the update requests this pod sent through the relay, by the id the relay gave
 	// the hop: the answer comes back on the same link.
 	updates map[string]chan update.Answer
+	// quota is the TURN month the relay applies to this pod's account (nil: the relay says
+	// nothing, an old one or no quota at all).
+	quota *QuotaState
 }
 
 // New builds a relayclient Client.
@@ -283,6 +299,9 @@ func (c *Client) runOnce(ctx context.Context) error {
 	}
 	c.mu.Lock()
 	c.link = link
+	if m.Quota != nil {
+		c.quota = m.Quota
+	}
 	c.mu.Unlock()
 	defer func() {
 		c.mu.Lock()
@@ -330,6 +349,13 @@ func (c *Client) runOnce(ctx context.Context) error {
 			}
 		case "ice":
 			c.setICE(m.Session, m)
+			if m.Quota != nil {
+				// The relay refused TURN credentials for this session (the month is over): the
+				// page reads it in Settings > Remote access.
+				c.mu.Lock()
+				c.quota = m.Quota
+				c.mu.Unlock()
+			}
 		case "offer":
 			go c.handleOffer(m, link)
 		case "candidate":
@@ -537,10 +563,29 @@ func (c *Client) route(id string, fn func(*session)) {
 }
 
 func (c *Client) setICE(sessionID string, m sigMsg) {
-	srv := webrtc.ICEServer{URLs: m.URLs, Username: m.Username, Credential: m.Credential}
+	urls := m.URLs
+	if m.Quota != nil && m.Quota.Over {
+		// The month is over: no credential came, so the TURN servers are dropped rather than
+		// offered with none. The direct and STUN candidates stay, the tunnel simply has fewer
+		// paths and may fail on a network that needs TURN.
+		urls = nil
+		for _, u := range m.URLs {
+			if strings.HasPrefix(u, "stun:") {
+				urls = append(urls, u)
+			}
+		}
+	}
+	srv := webrtc.ICEServer{URLs: urls, Username: m.Username, Credential: m.Credential}
 	c.iceMu.Lock()
 	c.iceFor[sessionID] = srv
 	c.iceMu.Unlock()
+}
+
+// Quota is the TURN month the relay applies to this pod's account (nil: the relay said nothing).
+func (c *Client) Quota() *QuotaState {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.quota
 }
 
 func (c *Client) ICE(sessionID string) webrtc.ICEServer {
