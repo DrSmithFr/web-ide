@@ -4,7 +4,7 @@
 // Ctrl+Shift+D and sending from the composer of the modal.
 const http = require('http')
 const fs = require('fs')
-const { run, openProject, assert, OUT, WS } = require('../common.cjs')
+const { run, openProject, assert, pinchRefused, OUT, WS } = require('../common.cjs')
 
 const requests = []
 const sse = (res, delta) => res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`)
@@ -184,6 +184,9 @@ run(async ({ page }) => {
     await penStroke(page, 0.45, 0.58, 0.45, 0.68, { eraser: true })
     assert((await paths(page)).length === 1, 'the eraser end of the stylus erases')
     assert(await page.isVisible('[data-testid=dd-pen].on'), 'the tool stays the pen')
+
+    // The drawing surfaces keep their own pinch: the guards of the phone layout let them through.
+    assert((await pinchRefused(page, '[data-testid=dd-canvas]')) === false, 'the doodle canvas keeps its pinch')
 
     // Frame presets.
     await page.selectOption('[data-testid=dd-preset]', 'square')

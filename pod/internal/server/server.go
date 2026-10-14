@@ -191,12 +191,12 @@ func loopback(r *http.Request) bool {
 }
 
 var pairPage = template.Must(template.New("pair").Parse(`<!doctype html>
-<html lang="{{.Lang}}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="{{.Lang}}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
 <title>Web IDE · {{.T "pairing"}}</title>
 <style>
 :root{color-scheme:light dark;--bg:#f6f6f4;--fg:#1d1d1b;--muted:#6b6b66;--line:#d8d8d2;--accent:#2f6fde}
 @media (prefers-color-scheme:dark){:root{--bg:#18191b;--fg:#e6e6e3;--muted:#9a9a95;--line:#34363a;--accent:#6c9cff}}
-body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif}
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif;touch-action:manipulation}
 form{width:min(420px,calc(100vw - 32px));display:grid;gap:12px}
 h1{font-size:20px;margin:0}p{margin:0;color:var(--muted)}
 input{font:14px ui-monospace,monospace;padding:10px;border:1px solid var(--line);border-radius:6px;background:transparent;color:inherit}

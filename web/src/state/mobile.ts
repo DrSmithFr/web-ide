@@ -43,7 +43,15 @@ export function revealCaret() {
 }
 
 // No zoom of the page: pinch and double tap are refused, except on the drawing surfaces
-// (doodles, the board), which zoom their own content.
+// (doodles, the board), which zoom their own content. touchstart is refused too: Chrome
+// begins the pinch there, before any touchmove.
+document.addEventListener(
+  'touchstart',
+  (e) => {
+    if (e.touches.length > 1 && !(e.target as HTMLElement).closest?.('[data-pinch]')) e.preventDefault()
+  },
+  { passive: false },
+)
 document.addEventListener(
   'touchmove',
   (e) => {

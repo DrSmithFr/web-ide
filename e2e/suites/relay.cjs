@@ -71,6 +71,10 @@ run(
     const { installabilityErrors } = await cdp.send('Page.getInstallabilityErrors')
     const pwa = installabilityErrors.map((e) => e.errorId).filter((id) => id !== 'in-incognito')
     assert(pwa.length === 0, 'the bootstrap page is installable: ' + pwa.join(', '))
+    // The pages of the relay and of the pod open on phones too: their viewport never zooms.
+    const bootMeta = await page.getAttribute('meta[name=viewport]', 'content')
+    assert(bootMeta.includes('maximum-scale=1'), 'the bootstrap page does not zoom: ' + bootMeta)
+    assert((await page.evaluate(() => getComputedStyle(document.documentElement).touchAction)) === 'manipulation', 'the bootstrap page refuses pinch and double-tap zoom')
 
     // The app window is the iframe of the bootstrap page; the keyboard of the page types
     // into the element focused inside it.

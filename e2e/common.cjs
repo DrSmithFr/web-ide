@@ -116,6 +116,24 @@ exports.mcp = (name, args = {}) =>
 /** Opens a folded section of the ticket view by its title. */
 exports.unfold = (page, title) => page.click(`.tk-section.folded .tk-section-toggle:has-text("${title}")`)
 
+/** Dispatches a two-finger pinch on an element and tells whether the page refused it (the
+ * guards of the phone layout). A Touch cannot be built with new Touch() in Chromium. */
+exports.pinchRefused = (page, sel) =>
+  page.evaluate((s) => {
+    const el = document.querySelector(s)
+    if (!el) return null
+    const touch = (id, x, y) => new Touch({ identifier: id, target: el, clientX: x, clientY: y, pageX: x, pageY: y, screenX: x, screenY: y })
+    const fire = (type, touches) => {
+      const e = new TouchEvent(type, { bubbles: true, cancelable: true, touches, targetTouches: touches, changedTouches: touches })
+      el.dispatchEvent(e)
+      return e.defaultPrevented
+    }
+    const a = touch(1, 60, 60)
+    const b = touch(2, 160, 60)
+    fire('touchstart', [a, b])
+    return fire('touchmove', [touch(1, 60, 90), touch(2, 160, 30)])
+  }, sel)
+
 const b64u = (b) => Buffer.from(b).toString('base64url')
 
 /** The VAPID token (ES256) verifies with the key the relay sends with it. */

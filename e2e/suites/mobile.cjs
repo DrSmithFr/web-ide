@@ -3,7 +3,7 @@
 // icon or from the Tools menu, the editor back when a file is opened; the line of the caret
 // stays visible when the keyboard shrinks the visible area; the page does not zoom.
 const fs = require('fs')
-const { run, openProject, assert, OUT, WS } = require('../common.cjs')
+const { run, openProject, assert, pinchRefused, OUT, WS } = require('../common.cjs')
 
 fs.writeFileSync(WS + '/demo/long.txt', Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join('\n') + '\n')
 
@@ -20,6 +20,10 @@ run(
     await openProject(page)
     const meta = await page.getAttribute('meta[name=viewport]', 'content')
     assert(meta.includes('maximum-scale=1'), 'the viewport does not zoom: ' + meta)
+    const touchAction = await page.evaluate(() => getComputedStyle(document.documentElement).touchAction)
+    assert(touchAction === 'manipulation', 'the document itself refuses pinch and double-tap zoom: touch-action ' + touchAction)
+    assert((await pinchRefused(page, 'body')) === true, 'a two-finger pinch started on the page is refused')
+    assert((await pinchRefused(page, '.menubar.phone')) === true, 'a pinch started on the bar is refused')
     assert(await visible(page, '[data-testid=phone-bar] .menubar-row'), 'row 1: project and status')
     assert(await visible(page, '[data-testid=phone-bar] .menus .menu-btn'), 'row 2: the menus')
     assert(await visible(page, '[data-testid=mobile-rail]'), 'row 3: the icons of the views')
@@ -34,6 +38,9 @@ run(
     await page.waitForSelector('.ctx-menu')
     const box = await page.$eval('.ctx-menu', (e) => e.getBoundingClientRect().right)
     assert(box <= 375, 'the File menu opens and fits the screen')
+    // The overlays are mounted outside .app (a Portal): the page refuses the pinch there too.
+    assert(!(await page.$eval('.ctx-menu', (e) => !!e.closest('.app'))), 'the menu is a portal outside .app')
+    assert((await pinchRefused(page, '.ctx-menu')) === true, 'a pinch started on a portal is refused')
     await page.keyboard.press('Escape')
 
     // A tool full screen; a file opened brings the editor back.

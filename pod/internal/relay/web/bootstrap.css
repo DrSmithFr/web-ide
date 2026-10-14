@@ -37,7 +37,7 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
-html { background: var(--bg); }
+html { background: var(--bg); touch-action: manipulation; }
 body {
   background: radial-gradient(1200px 600px at 50% -10%, var(--bg2), var(--bg));
   color: var(--text);
