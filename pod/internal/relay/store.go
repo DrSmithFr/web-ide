@@ -56,7 +56,10 @@ func OpenStore(path string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite", path)
+	// busy_timeout: the links of the relay read and write the same base (a pod registering while
+	// the TURN usage of another is flushed). Left plain, such a write fails at once with
+	// SQLITE_BUSY; it waits for the other one instead.
+	db, err := sql.Open("sqlite", path+"?_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, err
 	}

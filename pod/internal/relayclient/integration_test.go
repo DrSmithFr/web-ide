@@ -20,6 +20,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -61,17 +62,36 @@ type testEnv struct {
 	pod     *server.Server
 }
 
+// freeTurnPort picks a port free for UDP and TCP both: the control port of the embedded TURN is
+// served on each, and an ephemeral port found by opening a UDP socket is often taken by a TCP one
+// already — by a test binary of another package running in parallel.
+func freeTurnPort(t *testing.T) int {
+	t.Helper()
+	for i := 0; i < 50; i++ {
+		c, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 0})
+		if err != nil {
+			t.Fatal("no UDP port:", err)
+		}
+		port := c.LocalAddr().(*net.UDPAddr).Port
+		ln, terr := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+		_ = c.Close()
+		if terr != nil {
+			continue
+		}
+		_ = ln.Close()
+		return port
+	}
+	t.Fatal("no free UDP+TCP port found")
+	return 0
+}
+
 // startEnv starts a real relay (signaling + embedded TURN) and a real pod wired to it. The
 // identity is the pod's own: nil keeps the pod unpaired (token mode).
 func startEnv(t *testing.T, ident *identity.PodIdentity, route PeerRoute) *testEnv {
 	t.Helper()
-	// A free UDP port for STUN/TURN.
-	u, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
-	if err != nil {
-		t.Fatal("no UDP port:", err)
-	}
-	turnPort := u.LocalAddr().(*net.UDPAddr).Port
-	u.Close()
+	// A port free for UDP and TCP both: the control port of the embedded TURN is served on each,
+	// and a test binary of another package running in parallel takes ephemeral ports too.
+	turnPort := freeTurnPort(t)
 
 	st, err := relay.OpenStore(filepath.Join(t.TempDir(), "relay.db"))
 	if err != nil {

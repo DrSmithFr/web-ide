@@ -179,10 +179,7 @@ func TestGitHubQuotaLifted(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	turn, err := NewTurn(st, TurnConfig{AdvertiseIP: "127.0.0.1", Port: freeTurnPort(t), Quota: 1000, Supporter: g.isSupporter})
-	if err != nil {
-		t.Fatal(err)
-	}
+	turn, _ := startTurn(t, st, TurnConfig{AdvertiseIP: "127.0.0.1", Quota: 1000, Supporter: g.isSupporter})
 	defer turn.Close()
 	if _, _, err := turn.Creds("acct-sponsor", "acct-sponsor", time.Hour); err != nil {
 		t.Fatalf("a sponsor over the quota: %v", err)

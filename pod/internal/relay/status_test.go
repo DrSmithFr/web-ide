@@ -93,10 +93,7 @@ func TestStatusLoad(t *testing.T) {
 func TestTurnPortsRange(t *testing.T) {
 	st, _ := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
 	t.Cleanup(func() { st.Close() })
-	turn, err := NewTurn(st, TurnConfig{AdvertiseIP: "127.0.0.1", Port: freeTurnPort(t), MinPort: 49160, MaxPort: 49169})
-	if err != nil {
-		t.Fatal(err)
-	}
+	turn, _ := startTurn(t, st, TurnConfig{AdvertiseIP: "127.0.0.1", MinPort: 49160, MaxPort: 49169})
 	defer turn.Close()
 	if alloc, ports := turn.Load(); alloc != 0 || ports != 10 {
 		t.Fatalf("port range 49160-49169: %d allocations, %d ports", alloc, ports)

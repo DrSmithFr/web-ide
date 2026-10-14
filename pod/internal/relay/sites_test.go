@@ -55,7 +55,7 @@ func registerPodProto(t *testing.T, ts *httptest.Server, id, secret string, acco
 	if prove {
 		m := pc.next(t)
 		if m.Type != "challenge" || m.Nonce == "" {
-			t.Fatalf("the relay must send a nonce, got %q", m.Type)
+			t.Fatalf("the relay must send a nonce, got %q (%s)", m.Type, m.Message)
 		}
 		pc.send(t, sigMsg{Type: "proof", Nonce: m.Nonce,
 			Sig: identity.Sign(signWith, []byte(identity.RelayBinding(host(ts), m.Nonce)))})
@@ -220,7 +220,7 @@ func connectIdentityProved(t *testing.T, ts *httptest.Server, account string, ce
 	ci.sendId(t, idMsg{Type: "register", Account: account, Cert: cert, Prove: true})
 	m := ci.nextId(t)
 	if m.Type != "challenge" || m.Nonce == "" {
-		t.Fatalf("the relay must send a nonce, got %q", m.Type)
+		t.Fatalf("the relay must send a nonce, got %q (%s)", m.Type, m.Message)
 	}
 	ci.sendId(t, idMsg{Type: "proof", Nonce: m.Nonce,
 		Sig: identity.Sign(key, []byte(identity.RelayBinding(host(ts), m.Nonce)))})
@@ -377,7 +377,10 @@ func TestSiteGraceFailover(t *testing.T) {
 	// Wait until the site is really there, with A as its gateway.
 	gatewayUntil(t, bPod, func(m sigMsg) bool { return m.Gateway == kA })
 
-	// A drops without a bye: B keeps seeing A as the gateway until the grace ends.
+	// A drops without a bye: B keeps seeing A as the gateway until the grace ends. The window is
+	// opened before the drop: the grace of the relay starts when it notices the link ended, later
+	// than this timer, so a move seen here is a move that happened too early.
+	grace := time.After(siteGrace)
 	aPod.close()
 	quiet := make(chan sigMsg, 8)
 	go func() {
@@ -392,7 +395,6 @@ func TestSiteGraceFailover(t *testing.T) {
 		}
 	}()
 	// Nothing moves during the grace.
-	grace := time.After(siteGrace)
 loop:
 	for {
 		select {

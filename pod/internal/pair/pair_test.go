@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -349,19 +350,27 @@ func waitCode(t *testing.T, out *bytes.Buffer) string {
 	return ""
 }
 
-// freeTurnPort asks the kernel for a free UDP port, so the embedded TURN of this test does
-// not collide with the one the relay package tests bind on 3478.
+// freeTurnPort picks a port free for UDP and TCP both: the control port of the embedded TURN is
+// served on each, and an ephemeral port found by opening a UDP socket is often taken by a TCP one
+// already — by a test binary of another package running in parallel.
 func freeTurnPort(t *testing.T) int {
 	t.Helper()
-	c, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	if err != nil {
-		t.Fatal(err)
+	for i := 0; i < 50; i++ {
+		c, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+		if err != nil {
+			t.Fatal(err)
+		}
+		port := c.LocalAddr().(*net.UDPAddr).Port
+		ln, terr := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+		_ = c.Close()
+		if terr != nil {
+			continue
+		}
+		_ = ln.Close()
+		return port
 	}
-	port := c.LocalAddr().(*net.UDPAddr).Port
-	if err := c.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return port
+	t.Fatal("no free UDP+TCP port found")
+	return 0
 }
 
 func wsURL(ts *httptest.Server, path string) string {

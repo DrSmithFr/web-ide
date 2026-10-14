@@ -14,10 +14,7 @@ import (
 func TestTurnCreds(t *testing.T) {
 	st, _ := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
 	defer st.Close()
-	turn, err := NewTurn(st, TurnConfig{AdvertiseIP: "127.0.0.1", Port: freeTurnPort(t)})
-	if err != nil {
-		t.Fatal("starting the embedded TURN:", err)
-	}
+	turn, _ := startTurn(t, st, TurnConfig{AdvertiseIP: "127.0.0.1"})
 	defer turn.Close()
 
 	// No pod: no credentials.
@@ -61,10 +58,7 @@ func TestTurnCreds(t *testing.T) {
 func TestTurnUsageCounted(t *testing.T) {
 	st, _ := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
 	defer st.Close()
-	turn, err := NewTurn(st, TurnConfig{AdvertiseIP: "127.0.0.1", Port: freeTurnPort(t)})
-	if err != nil {
-		t.Fatal(err)
-	}
+	turn, _ := startTurn(t, st, TurnConfig{AdvertiseIP: "127.0.0.1"})
 	defer turn.Close()
 
 	// The allocation path of the generator, with the credential key it counts under.
@@ -143,13 +137,10 @@ func TestTurnQuota(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	turn, err := NewTurn(st, TurnConfig{
-		AdvertiseIP: "127.0.0.1", Port: freeTurnPort(t), Quota: 1000,
+	turn, _ := startTurn(t, st, TurnConfig{
+		AdvertiseIP: "127.0.0.1", Quota: 1000,
 		Supporter: func(key string) bool { return key == "acct-supporter" },
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	defer turn.Close()
 	for _, id := range []string{"acct-over", "acct-under", "acct-supporter"} {
 		if err := st.Register(id, "secret-"+id, ""); err != nil {
@@ -180,10 +171,7 @@ func TestTurnQuota(t *testing.T) {
 	}
 
 	// No -quota (a self-hosted relay): the same bytes move freely.
-	free, err := NewTurn(st, TurnConfig{AdvertiseIP: "127.0.0.1", Port: freeTurnPort(t)})
-	if err != nil {
-		t.Fatal(err)
-	}
+	free, _ := startTurn(t, st, TurnConfig{AdvertiseIP: "127.0.0.1"})
 	defer free.Close()
 	if _, _, err := free.Creds("acct-over", "acct-over", time.Hour); err != nil {
 		t.Fatalf("a self-hosted relay has no limit: %v", err)
@@ -217,10 +205,7 @@ func TestTurnICEURLs(t *testing.T) {
 
 	st, _ := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
 	defer st.Close()
-	plain, err := NewTurn(st, TurnConfig{AdvertiseIP: "127.0.0.1", Port: freeTurnPort(t)})
-	if err != nil {
-		t.Fatal(err)
-	}
+	plain, _ := startTurn(t, st, TurnConfig{AdvertiseIP: "127.0.0.1"})
 	defer plain.Close()
 	for _, u := range plain.ICE() {
 		if strings.HasPrefix(u, "turns:") {
@@ -243,11 +228,7 @@ func hasURL(urls []string, want string) bool {
 func TestTurnDualStack(t *testing.T) {
 	st, _ := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
 	defer st.Close()
-	port := freeTurnPort(t)
-	turn, err := NewTurn(st, TurnConfig{AdvertiseIP: "127.0.0.1", AdvertiseIPv6: "::1", Port: port})
-	if err != nil {
-		t.Fatal("the TURN server must bind IPv4 and IPv6:", err)
-	}
+	turn, port := startTurn(t, st, TurnConfig{AdvertiseIP: "127.0.0.1", AdvertiseIPv6: "::1"})
 	defer turn.Close()
 	if len(turn.udp) != 2 || len(turn.tcp) != 2 {
 		t.Fatalf("one UDP and one TCP listener per address expected, got %d udp, %d tcp", len(turn.udp), len(turn.tcp))
@@ -264,17 +245,43 @@ func TestTurnDualStack(t *testing.T) {
 	c.Close()
 }
 
-// freeTurnPort asks the kernel for a free UDP port: the default 3478 may be taken by a relay
-// running on the machine, or by the tests of another worktree.
+// startTurn starts the embedded TURN server of a test. A port only probed can be taken before the
+// server binds it — by a test binary running in parallel, or by the server of the test before — so
+// the start is retried on another port. It returns the server and the port it got.
+func startTurn(t *testing.T, st *Store, cfg TurnConfig) (*Turn, int) {
+	t.Helper()
+	var last error
+	for i := 0; i < 20; i++ {
+		cfg.Port = freeTurnPort(t)
+		turn, err := NewTurn(st, cfg)
+		if err == nil {
+			return turn, cfg.Port
+		}
+		last = err
+	}
+	t.Fatalf("starting the embedded TURN: %v", last)
+	return nil, 0
+}
+
+// freeTurnPort picks a port free for UDP and TCP both: the control port of the embedded TURN is
+// served on each, and an ephemeral port found by opening a UDP socket is often taken by a TCP one
+// already.
 func freeTurnPort(t *testing.T) int {
 	t.Helper()
-	c, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	if err != nil {
-		t.Fatal(err)
+	for i := 0; i < 50; i++ {
+		c, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+		if err != nil {
+			t.Fatal(err)
+		}
+		port := c.LocalAddr().(*net.UDPAddr).Port
+		ln, terr := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+		_ = c.Close()
+		if terr != nil {
+			continue
+		}
+		_ = ln.Close()
+		return port
 	}
-	port := c.LocalAddr().(*net.UDPAddr).Port
-	if err := c.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return port
+	t.Fatal("no free UDP+TCP port found")
+	return 0
 }

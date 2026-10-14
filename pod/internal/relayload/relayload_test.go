@@ -22,7 +22,7 @@ func testRelay(t *testing.T) *httptest.Server {
 	}
 	t.Cleanup(func() { st.Close() })
 	port := freePort(t)
-	turn, err := relay.NewTurn(st, relay.TurnConfig{AdvertiseIP: "127.0.0.1", Port: port, MinPort: uint16(port + 1), MaxPort: uint16(port + 20)})
+	turn, err := relay.NewTurn(st, relay.TurnConfig{AdvertiseIP: "127.0.0.1", Port: port, MinPort: uint16(port + 1), MaxPort: uint16(port + 80)})
 	if err != nil {
 		t.Fatal("starting the TURN server:", err)
 	}

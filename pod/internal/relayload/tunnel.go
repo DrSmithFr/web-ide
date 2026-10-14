@@ -274,12 +274,15 @@ type podEnd struct {
 	ice map[string]msg
 	pcs map[string]*webrtc.PeerConnection
 	// A candidate may arrive before the answerer of its session exists (the browser gathers as it
-	// is offered): they wait here until the PeerConnection is there.
+	// is offered), or before its offer is set: pion only accepts a candidate once the remote
+	// description is there, so they wait here until then.
 	cands map[string][]webrtc.ICECandidateInit
+	ready map[string]bool
 }
 
 func podSide(p *podLink) {
-	e := &podEnd{p: p, ice: map[string]msg{}, pcs: map[string]*webrtc.PeerConnection{}, cands: map[string][]webrtc.ICECandidateInit{}}
+	e := &podEnd{p: p, ice: map[string]msg{}, pcs: map[string]*webrtc.PeerConnection{},
+		cands: map[string][]webrtc.ICECandidateInit{}, ready: map[string]bool{}}
 	ctx := context.Background()
 	for {
 		m, err := p.read(ctx)
@@ -303,18 +306,20 @@ func podSide(p *podLink) {
 				continue
 			}
 			e.mu.Lock()
-			pc := e.pcs[m.Session]
-			if pc == nil {
+			pc, ok := e.pcs[m.Session], e.ready[m.Session]
+			if pc == nil || !ok {
 				e.cands[m.Session] = append(e.cands[m.Session], init)
 			}
 			e.mu.Unlock()
-			if pc != nil {
+			if pc != nil && ok {
 				_ = pc.AddICECandidate(init)
 			}
 		case "bye":
 			e.mu.Lock()
 			pc := e.pcs[m.Session]
 			delete(e.pcs, m.Session)
+			delete(e.ready, m.Session)
+			delete(e.cands, m.Session)
 			e.mu.Unlock()
 			if pc != nil {
 				_ = pc.Close()
@@ -332,17 +337,14 @@ func (e *podEnd) answer(session, offerSDP string, srv msg) {
 	defer pc.Close()
 	e.mu.Lock()
 	e.pcs[session] = pc
-	buffered := e.cands[session]
-	delete(e.cands, session)
 	e.mu.Unlock()
 	defer func() {
 		e.mu.Lock()
 		delete(e.pcs, session)
+		delete(e.ready, session)
+		delete(e.cands, session)
 		e.mu.Unlock()
 	}()
-	for _, init := range buffered {
-		_ = pc.AddICECandidate(init)
-	}
 
 	trickle(pc, func(c *webrtc.ICECandidate) {
 		_ = e.p.send(msg{Type: "candidate", Session: session, Candidate: candidateMsg(c)})
@@ -358,6 +360,15 @@ func (e *podEnd) answer(session, offerSDP string, srv msg) {
 	})
 	if err := pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: offerSDP}); err != nil {
 		return
+	}
+	// The offer is in: the candidates that arrived while the answerer did not exist can be added.
+	e.mu.Lock()
+	e.ready[session] = true
+	buffered := e.cands[session]
+	delete(e.cands, session)
+	e.mu.Unlock()
+	for _, init := range buffered {
+		_ = pc.AddICECandidate(init)
 	}
 	answer, err := pc.CreateAnswer(nil)
 	if err != nil {
