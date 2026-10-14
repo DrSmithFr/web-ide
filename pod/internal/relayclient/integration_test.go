@@ -197,7 +197,11 @@ type browserSig struct {
 
 func (b *browserSig) next(t *testing.T) sigMsg {
 	t.Helper()
-	_, r, err := b.c.Read(context.Background())
+	// A deadline on the read: a pod that never answers the offer is a failed test, not a test
+	// that sits on the link until the runner gives up.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	_, r, err := b.c.Read(ctx)
+	cancel()
 	if err != nil {
 		t.Fatalf("reading signaling: %v", err)
 	}

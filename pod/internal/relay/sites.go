@@ -353,8 +353,13 @@ func (s *Server) sitesChanged(account string, gateways map[string]string, infos 
 		b.WriteString(p.Key + "@" + p.Site + ";")
 	}
 	now := b.String()
+	// The text is the state of the server, and two links can recompute the same account at the
+	// same moment (a pod registering while the grace of a gateway ends): it is read and written
+	// under the lock the other maps of the server use.
+	s.mu.Lock()
 	changed := s.siteText[account] != now
 	s.siteText[account] = now
+	s.mu.Unlock()
 	return changed
 }
 
