@@ -7,15 +7,49 @@ const pending = new Map()
 // Which preview each client belongs to: a page opened under /__preview/<id>/ keeps fetching
 // its assets there, even with an absolute path.
 const owners = new Map()
-// Which bootstrap window owns which pod, as the page declared it: {pod, key, keys}. A page that
+// Which bootstrap window owns which pod, as the page declared it: {pod, key, keys, version}. A page that
 // picked its pod itself (no #pod= in the link) has nothing in its URL to be recognised by, and a
 // page of a pod reached through a gateway is served by the window that opened that gateway.
 const ownPods = new Map()
+// The assets a pod says are immutable are kept here: a reload of the page answers them from this
+// origin instead of carrying a megabyte of JavaScript through the DataChannel (#71). One cache per
+// pod and per version of that pod, so two pods of the account never share an asset and an updated
+// pod leaves its old bundle behind. The page itself, its /api calls and the previews always go
+// through the tunnel: a cached asset never stands for a live connection.
+const ASSETS = 'webide-assets:' // then <id>:<version>, ':' appears in neither a pod id nor a key
+const CACHE_MAX = 8 * 1024 * 1024 // a phone keeps the app, not the 26 MB speech runtime
+const MAX_AGE = 30 * 24 * 3600 * 1000
+// The Cache API stores no date of its own: each cache carries a marker of when it was made.
+const CREATED = '/_relay/assets-created'
+const versions = new Map() // what each pod was last declared as, to drop its older cache
 
 const appFiles = new Set(['/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png'])
 
+const cacheName = (id, version) => ASSETS + id + ':' + (version ?? '')
+
 self.addEventListener('install', (e) => self.skipWaiting())
-self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()))
+self.addEventListener('activate', (e) => e.waitUntil(Promise.all([self.clients.claim(), dropOldCaches()])))
+
+// A pod that never came back must not leave its assets on the disk of a phone.
+async function dropOldCaches() {
+  for (const name of await caches.keys()) {
+    if (!name.startsWith(ASSETS)) continue
+    try {
+      const r = await (await caches.open(name)).match(CREATED)
+      const at = r ? Number(await r.text()) : 0
+      if (!at || Date.now() - at > MAX_AGE) await caches.delete(name)
+    } catch {}
+  }
+}
+
+// The pod declared a new version: its old cache is worth nothing now (the names of the assets are
+// hashed by the build, so an old one is never asked again — it only takes place).
+async function dropOldVersions(id, version) {
+  const keep = cacheName(id, version)
+  for (const name of await caches.keys()) {
+    if (name.startsWith(ASSETS + id + ':') && name !== keep) await caches.delete(name)
+  }
+}
 
 async function bootstrap(key) {
   const all = await self.clients.matchAll({ type: 'window' })
@@ -33,9 +67,25 @@ async function bootstrap(key) {
 
 self.addEventListener('message', (e) => {
   if (e.data?.kind === 'own' && e.source) {
-    ownPods.set(e.source.id, { pod: e.data.pod || '', key: e.data.key || '', keys: e.data.keys ?? [] })
+    const version = e.data.version ?? ''
+    ownPods.set(e.source.id, { pod: e.data.pod || '', key: e.data.key || '', keys: e.data.keys ?? [], version })
+    const id = e.data.key || e.data.pod || e.source.id
+    const prev = versions.get(id)
+    versions.set(id, version)
+    if (prev !== undefined && prev !== version) void dropOldVersions(id, version)
   }
 })
+
+// Which pod the assets of a window belong to: the key in the URL of the request when there is one
+// (/pod/<key>/ of the relay origin), else the pod the window declared, else the pod in its link
+// (the token mode, where the page has no prefix to be recognised by).
+function owner(win, key) {
+  const own = ownPods.get(win.id) ?? {}
+  if (key || own.key) return { id: key || own.key, version: own.version ?? '' }
+  const m = /[#&]pod=([^&]+)/.exec(win.url ?? '')
+  const pod = own.pod || (m ? decodeURIComponent(m[1]) : '')
+  return { id: pod || win.id, version: own.version ?? '' }
+}
 
 self.addEventListener('fetch', (event) => {
   const req = event.request
@@ -68,6 +118,17 @@ async function handle(req, url, clientId) {
     preview = owners.get(clientId) ?? ''
   }
 
+  // An asset of this pod already carried through the tunnel once: answer it from here, without
+  // waking the tunnel nor the pod. Only a plain GET of a pod page, and only the cache of the pod
+  // that owns this window — two pods of the account never share an entry.
+  const own = owner(win, key)
+  if (own.id && !preview && req.method === 'GET' && !req.headers.has('range')) {
+    try {
+      const hit = await (await caches.open(cacheName(own.id, own.version))).match(req)
+      if (hit) return hit
+    } catch {}
+  }
+
   const id = 'http:' + (pending.size + 1)
   const chan = new MessageChannel()
   const body = req.method === 'GET' || req.method === 'HEAD' ? null : await req.text()
@@ -97,16 +158,51 @@ async function handle(req, url, clientId) {
   const h = await Promise.race([head, new Promise((r) => setTimeout(() => r(null), 60000))])
   if (!h) return new Response('The pod did not answer.', { status: 504 })
 
+  const out = new Headers(h.headers || {})
+  out.set('access-control-allow-origin', '*')
+
+  // Keep a copy of what the pod says is immutable, for the next reload of the page. The copy is
+  // dropped as soon as it goes over the cap: a big file is streamed, never stored.
+  let keep = own.id && !preview && req.method === 'GET' && h.status === 200 && immutable(h.headers) ? [] : null
+  let kept = 0
+  const collect = (b) => {
+    if (!keep) return
+    if (kept + b.length > CACHE_MAX) {
+      keep = null
+      return
+    }
+    keep.push(b)
+    kept += b.length
+  }
+  const store = () => {
+    const parts = keep
+    keep = null
+    if (!parts) return
+    void caches
+      .open(cacheName(own.id, own.version))
+      .then(async (c) => {
+        if (!(await c.match(CREATED))) await c.put(CREATED, new Response(String(Date.now())))
+        await c.put(req.url, new Response(join(parts), { status: h.status, headers: out }))
+      })
+      .catch(() => {})
+  }
+
   const stream = new ReadableStream({
     start(controller) {
-      for (const m of got.slice(1)) controller.enqueue(bytes(m))
+      const push = (m) => {
+        const b = bytes(m)
+        controller.enqueue(b)
+        collect(b)
+      }
+      for (const m of got.slice(1)) push(m)
       chan.port1.onmessage = (e) => {
         if (!e.data) {
           controller.close()
           pending.delete(id)
+          store()
           return
         }
-        controller.enqueue(bytes(e.data))
+        push(e.data)
       }
     },
     cancel() {
@@ -114,9 +210,24 @@ async function handle(req, url, clientId) {
       chan.port1.close()
     },
   })
-  const out = new Headers(h.headers || {})
-  out.set('access-control-allow-origin', '*')
   return new Response(stream, { status: h.status || 200, headers: out })
+}
+
+// The pod names its headers in their canonical form (Go), so cache-control is looked for
+// whatever the case: only an asset the pod says never changes is kept.
+function immutable(headers) {
+  for (const k of Object.keys(headers ?? {})) if (k.toLowerCase() === 'cache-control') return /immutable/i.test(headers[k])
+  return false
+}
+
+function join(parts) {
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0))
+  let at = 0
+  for (const p of parts) {
+    out.set(p, at)
+    at += p.length
+  }
+  return out
 }
 
 function bytes(d) {

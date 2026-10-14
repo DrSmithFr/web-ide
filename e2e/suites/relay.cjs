@@ -82,6 +82,12 @@ run(
     await app.waitForSelector('.menubar')
     await app.waitForTimeout(400)
 
+    // What the first load cost, phase by phase (#71): the e2e report prints it, so a slow
+    // reload can be read where it is paid (the tunnel, the identity link, the assets).
+    const first = await page.evaluate(() => ({ ...window.bootTimings, channels: window.httpChannels, bytes: window.httpBytes }))
+    console.log('first load (ms):', JSON.stringify(first))
+    assert(first.app > 0 && first.ready !== undefined && first.channels > 0, 'the phases of the load are measured: ' + JSON.stringify(first))
+
     // Editing: typing and saving go through the rpc channel, the file lands on disk.
     await page.keyboard.press('Control+Shift+n')
     await app.waitForSelector('.pick-input')
@@ -166,6 +172,65 @@ run(
     assert((await app.textContent('.settings-body dd.mono.small')).includes(`#pod=${POD_ID}&t=${TOKEN}`), 'the remote link shown in Settings')
     await app.click('.modal-settings .modal-head button')
 
+    // The assets the pod says are immutable are kept by the Service Worker (#71): a reload of the
+    // page answers them from this origin instead of carrying them through the tunnel. The page
+    // itself, /api and the previews are never cached: a cached asset never stands for a tunnel.
+    const listed = async () =>
+      await page.evaluate(async () => {
+        const names = (await caches.keys()).filter((n) => n.startsWith('webide-assets'))
+        const urls = []
+        for (const n of names) {
+          const c = await caches.open(n)
+          for (const k of await c.keys()) {
+            if (k.url.includes('/_relay/assets-created')) continue // the marker of the cache itself
+            const r = await c.match(k)
+            urls.push({ url: k.url, size: Number(r?.headers.get('content-length') ?? 0) })
+          }
+        }
+        return { names, urls }
+      })
+    const warm = await listed()
+    const assets = warm.urls.filter((u) => u.url.includes("/assets/"))
+    assert(warm.names.length === 1 && warm.names[0].startsWith('webide-assets:' + POD_ID), 'the pod has its own asset cache: ' + warm.names.join(', '))
+    assert(assets.some((u) => u.url.includes('/assets/index-')), `${assets.length} assets of the app are cached`)
+    assert(!warm.urls.some((u) => u.url.endsWith("/app") || u.url.endsWith("/") || u.url.includes("/api/") || u.url.includes("/__preview/")), 'no page, api nor preview in the cache')
+    assert(warm.urls.every((u) => u.size <= 8 * 1024 * 1024), 'every cached entry stays under the cap')
+
+    // A reload of the page: the same app, far fewer channels and far fewer bytes through the tunnel.
+    const t0 = Date.now()
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await page.waitForSelector('#frame', { timeout: 30000 })
+    const again = page.mainFrame().childFrames()[0]
+    await again.waitForSelector('.home .home-bar', { timeout: 30000 })
+    await again.waitForSelector('.project-list .project-card, .ws-dir')
+    await again.waitForTimeout(400)
+    const re = await page.evaluate(() => ({ ...window.bootTimings, channels: window.httpChannels, bytes: window.httpBytes }))
+    console.log(`  load first:  ${JSON.stringify(first)}`)
+    console.log(`  load reload: ${JSON.stringify(re)} (${Date.now() - t0} ms to the app)`)
+    assert(re.channels < first.channels, `a reload opens fewer tunnel channels: ${first.channels} → ${re.channels}`)
+    assert(re.bytes * 2 < first.bytes, `a reload carries far fewer bytes through the tunnel: ${first.bytes} → ${re.bytes}`)
+
+    // The app works after the reload: the project is opened and its file read again.
+    if (await again.locator('.project-open:has-text("demo")').count()) await again.click('.project-open:has-text("demo")')
+    else await again.click('.ws-dir:has-text("demo")')
+    await again.waitForSelector('.menubar')
+    await again.waitForSelector(`.explorer .tree-row[data-path="${WS}/demo/notes.txt"]`, { timeout: 15000 })
+    await again.dblclick(`.explorer .tree-row[data-path="${WS}/demo/notes.txt"]`)
+    await again.waitForSelector('.pane.active .tab.active:has-text("notes.txt")')
+    assert((await again.textContent('.pane.active .ed-content')).includes('via the relay'), 'the app works after the reload')
+
+    // A pod updated to another version leaves its old cache behind: the Service Worker drops it
+    // when the page declares the new one, and the next asset lands in the cache of that version.
+    const oldName = warm.names[0]
+    const oneAsset = warm.urls.find((u) => u.url.includes('/assets/')).url
+    await page.evaluate((pod) => navigator.serviceWorker.controller.postMessage({ kind: 'own', pod, key: '', keys: [], version: 'v9.9.9' }), POD_ID)
+    await page.waitForTimeout(600)
+    const moved = await page.evaluate(async (u) => {
+      await fetch(u)
+      return (await caches.keys()).filter((n) => n.startsWith('webide-assets'))
+    }, oneAsset)
+    assert(!moved.includes(oldName) && moved.length === 1 && moved[0].endsWith(':v9.9.9'), 'the cache of the old version is dropped: ' + moved.join(', '))
+
     // A wrong token: the pod refuses the proof (the relay never sees the token).
     const bad = await ctx.newPage()
     await bad.goto(link('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef'), { waitUntil: 'domcontentloaded' })
@@ -183,6 +248,12 @@ run(
     const relayPid = Number(process.env.E2E_RELAY_PID)
     if (!relayPid) throw new Error('E2E_RELAY_PID not set (run through e2e/run.sh)')
     process.kill(relayPid)
+
+    // The caches are warm, the relay is gone: the app must not come back out of the cache. The
+    // page of the pod is always carried by the tunnel, so a dead connection never shows an IDE.
+    await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {})
+    await page.waitForTimeout(1500)
+    assert(!(await page.isVisible('#frame')), 'a reload without the relay shows no app, cached assets or not')
     await local.click('.home-head button[title="Settings"]')
     await local.waitForSelector('.settings')
     await local.click('.settings-nav button:has-text("Remote access")')

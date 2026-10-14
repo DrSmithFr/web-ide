@@ -11,6 +11,24 @@
 import * as id from './identity.js'
 import { keyOf, nextGateway, pickGateway, pickSite, routeOf } from './routes.js'
 
+// What a load costs, phase by phase, and how much of the page it carried through the tunnel.
+// A reload cannot keep the tunnel (the PeerConnection dies with the document), so these are the
+// steps a reload pays again: window.bootTimings and window.httpChannels are read by the e2e suite
+// (e2e/suites/relay.cjs), like window.tunnel and window.identity.
+const bootAt = performance.now()
+const timings = {}
+const http = { channels: 0, bytes: 0 }
+function publish() {
+  window.bootTimings = timings
+  window.httpChannels = http.channels
+  window.httpBytes = http.bytes
+}
+// The first time a phase is reached: a later channel of another pod must not rename it.
+function mark(name) {
+  if (timings[name] === undefined) timings[name] = Math.round(performance.now() - bootAt)
+  publish()
+}
+
 const params = new URLSearchParams(location.hash.slice(1) || location.search.slice(1))
 // The pod of the link, else the last one opened here: the installed app (PWA) starts at /.
 let pod = params.get('pod') || (params.get('join') ? null : remembered())
@@ -561,9 +579,11 @@ async function enter(mode) {
   entryMode = mode
   const l = await id.link(onPush, lang)
   link = l
+  mark('link')
   if (account) {
     const err = await applyRevocations(l)
     if (err) return err
+    mark('revocations')
     if (!pod) {
       const err = await enterSite(l)
       if (err) return err
@@ -571,6 +591,7 @@ async function enter(mode) {
       await firstPods(l)
     }
   }
+  mark('pods')
   if (!pod) return fail(words.nopod)
   const p = pods.find((p) => p.podId === pod)
   entryKey = p?.key ?? ''
@@ -623,6 +644,7 @@ async function main() {
     await reg.ready
     if (!reg.active) await reg.update()
     await reg.ready
+    mark('sw')
   } catch (e) {
     fail(words.sw + e.message)
   }
@@ -667,6 +689,7 @@ async function main() {
       return
     }
   }
+  mark('device')
   await enter(rec?.cert ? 'cert' : 'token')
 }
 
@@ -686,11 +709,16 @@ function connect(key, podId, mode) {
   const url = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/_relay/signal?pod=' + encodeURIComponent(podId) + '&session=' + t.session
   const sig = new WebSocket(url)
   t.sig = sig
+  sig.onopen = () => mark('signal')
   sig.onmessage = (e) => {
     const m = JSON.parse(e.data)
-    if (m.type === 'ice') start(t, m).catch((err) => drop(t, err.message))
-    else if (m.type === 'answer') t.pc?.setRemoteDescription({ type: 'answer', sdp: m.sdp }).catch(() => {})
-    else if (m.type === 'candidate') { try { t.pc?.addIceCandidate(JSON.parse(m.candidate)) } catch {} }
+    if (m.type === 'ice') {
+      mark('ice')
+      start(t, m).catch((err) => drop(t, err.message))
+    } else if (m.type === 'answer') {
+      mark('answer')
+      t.pc?.setRemoteDescription({ type: 'answer', sdp: m.sdp }).catch(() => {})
+    } else if (m.type === 'candidate') { try { t.pc?.addIceCandidate(JSON.parse(m.candidate)) } catch {} }
     else if (m.type === 'error') drop(t, text(m.message))
     else if (m.type === 'bye') {
       // The pod is gone: the relay says so on the signaling link. A refusal also travels on the
@@ -789,6 +817,7 @@ async function start(t, ice) {
 // (a routed pod) is bound to the fingerprints of the tunnel it rides on.
 async function handshake(t, dc, mode, want, fpB, fpP) {
   await opened(dc)
+  mark('dc')
   if (t.key === entryKey && dc === t.rpc) connecting(2)
   fpB = fpB ?? fingerprint(t.pc.localDescription)
   fpP = fpP ?? fingerprint(t.pc.remoteDescription)
@@ -818,6 +847,7 @@ async function handshake(t, dc, mode, want, fpB, fpP) {
     send(dc, { id: 0, method: '$auth', params: { sig: await id.sign(key, id.binding('browser', fpB, fpP, nonceB, hp.nonce)) } })
   }
   const ready = JSON.parse(decode(await rd.next()) ?? '{}')
+  if (ready.method === '$ready') mark('ready')
   return ready.method === '$ready' ? { ok: true, rd } : { error: lastError ?? words.failed }
 }
 
@@ -935,6 +965,7 @@ async function refreshPods() {
 // installed app never leaves it.
 function openApp() {
   busy(words.loading)
+  mark('app')
   const f = document.getElementById('frame')
   f.style.display = 'block'
   f.src = (shownKey ? '/pod/' + shownKey : '') + (openPath ?? '/app')
@@ -957,11 +988,13 @@ function appPath() {
 }
 
 // What the Service Worker needs to know to answer the fetches of this window: which pod its frame
-// shows, and which pods it can reach.
+// shows, which pods it can reach, and which version that pod runs — the Service Worker keeps the
+// assets of a pod under that version and drops them when the pod is updated (#71).
 function declare() {
   try {
+    const at = pods.find((x) => x.key === shownKey) ?? pods.find((x) => x.key === entryKey)
     navigator.serviceWorker?.controller?.postMessage({
-      kind: 'own', pod: entryPod, key: shownKey, keys: [...tunnels.keys(), shownKey],
+      kind: 'own', pod: entryPod, key: shownKey, keys: [...tunnels.keys(), shownKey], version: at?.version ?? '',
     })
   } catch {}
 }
@@ -1072,6 +1105,8 @@ async function routedRPC(t, prefix) {
 function httpFetch(t, d, prefix) {
   const dc = t.pc.createDataChannel((prefix ?? '') + d.id, { ordered: true })
   held(t, true)
+  http.channels++
+  publish()
   const sendReq = () => {
     if (dc.readyState !== 'open') return setTimeout(sendReq, 200)
     frame(dc, new TextEncoder().encode(JSON.stringify({
@@ -1093,11 +1128,13 @@ function httpFetch(t, d, prefix) {
         d.port.postMessage({ head })
         continue
       }
+      http.bytes += m.length
       d.port.postMessage(m)
     }
     d.port.postMessage(null)
     dc.close()
     held(t, false)
+    publish()
   })()
 }
 
