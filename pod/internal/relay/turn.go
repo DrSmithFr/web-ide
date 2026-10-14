@@ -4,10 +4,12 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pion/logging"
@@ -33,6 +35,67 @@ type Turn struct {
 
 	mu     sync.Mutex
 	active map[string]bool // in-flight short-lived credential usernames
+	usage  *usageRegistry
+	stop   chan struct{}
+}
+
+// usageRegistry holds the bytes relayed by the live allocations, keyed by the key the TURN
+// credential names (the account of a paired device, the pod id otherwise). The counters are
+// atomic — a relayed packet only adds to one number — and flushed to the base once a minute,
+// aggregated per key and month.
+type usageRegistry struct {
+	mu      sync.Mutex
+	entries map[string]*usageCount
+}
+
+type usageCount struct{ in, out atomic.Int64 }
+
+func newUsageRegistry() *usageRegistry {
+	return &usageRegistry{entries: map[string]*usageCount{}}
+}
+
+// count returns the counter of a key, creating it on the first allocation.
+func (r *usageRegistry) count(key string) *usageCount {
+	if key == "" {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	c, ok := r.entries[key]
+	if !ok {
+		c = &usageCount{}
+		r.entries[key] = c
+	}
+	return c
+}
+
+// drain takes the counters accumulated since the last flush and resets them: the base keeps
+// one row per key and month, whatever the number of allocations behind it.
+func (r *usageRegistry) drain() map[string][2]int64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := map[string][2]int64{}
+	for key, c := range r.entries {
+		in, sent := c.in.Swap(0), c.out.Swap(0)
+		if in != 0 || sent != 0 {
+			out[key] = [2]int64{in, sent}
+		}
+	}
+	return out
+}
+
+// usageFlushEvery is how often the live counters reach the base: coarse enough that a relay
+// writes a handful of rows a minute, fine enough that a quota is not exceeded by more than a
+// minute of traffic.
+const usageFlushEvery = time.Minute
+
+// flushUsage writes what the allocations relayed since last time into the base.
+func (t *Turn) flushUsage() {
+	for key, bytes := range t.usage.drain() {
+		if err := t.store.AddUsage(key, usageMonth(time.Now()), bytes[0], bytes[1]); err != nil {
+			log.Printf("relay: usage of %s: %v", key, err)
+		}
+	}
 }
 
 // TurnConfig picks the ports and addresses the TURN server uses.
@@ -79,12 +142,13 @@ func NewTurn(st *Store, cfg TurnConfig) (*Turn, error) {
 		addrs = []net.IP{net.ParseIP("127.0.0.1")}
 	}
 	gens := map[string]turnserver.RelayAddressGenerator{}
+	usage := newUsageRegistry()
 	for _, ip := range addrs {
 		family := "4"
 		if ip.To4() == nil {
 			family = "6"
 		}
-		gens[family] = &turnGenerator{ip: ip, minPort: cfg.MinPort, maxPort: cfg.MaxPort}
+		gens[family] = &turnGenerator{ip: ip, minPort: cfg.MinPort, maxPort: cfg.MaxPort, usage: usage}
 	}
 	t := &Turn{
 		store:  st,
@@ -93,6 +157,8 @@ func NewTurn(st *Store, cfg TurnConfig) (*Turn, error) {
 		logger: logging.NewDefaultLoggerFactory(),
 		gens:   gens,
 		active: map[string]bool{},
+		usage:  usage,
+		stop:   make(chan struct{}),
 	}
 	t.ice = iceURLs(cfg, addrs)
 
@@ -156,7 +222,23 @@ func NewTurn(st *Store, cfg TurnConfig) (*Turn, error) {
 		return nil, err
 	}
 	t.srv = srv
+	go t.flushLoop()
 	return t, nil
+}
+
+// flushLoop writes the live byte counters to the base once a minute: the base holds one row per
+// key and month, not one per allocation.
+func (t *Turn) flushLoop() {
+	ticker := time.NewTicker(usageFlushEvery)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			t.flushUsage()
+		case <-t.stop:
+			return
+		}
+	}
 }
 
 // iceURLs are the STUN and TURN URLs the clients are told to reach: one per address of the
@@ -187,11 +269,14 @@ func iceURLs(cfg TurnConfig, addrs []net.IP) []string {
 }
 
 // turnGenerator allocates the relay socket of an allocation on one address of the relay, in a
-// port range when the relay was given one (-turn-ports) so a firewall can name fewer ports.
+// port range when the relay was given one (-turn-ports) so a firewall can name fewer ports. It
+// wraps what it allocates with the byte counter of the key the credential names, which is how
+// the relay counts the TURN traffic of an account (see usageRegistry).
 type turnGenerator struct {
 	ip       net.IP
 	minPort  uint16
 	maxPort  uint16
+	usage    *usageRegistry
 	inner    turnserver.RelayAddressGenerator
 	innerSet bool
 }
@@ -213,15 +298,87 @@ func (g *turnGenerator) generator() turnserver.RelayAddressGenerator {
 }
 
 func (g *turnGenerator) AllocatePacketConn(conf turnserver.AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
-	return g.generator().AllocatePacketConn(conf)
+	conn, addr, err := g.generator().AllocatePacketConn(conf)
+	if err != nil {
+		return nil, nil, err
+	}
+	if c := g.usage.count(conf.UserID); c != nil {
+		conn = &countedPacketConn{PacketConn: conn, usage: c}
+	}
+	return conn, addr, nil
 }
 
 func (g *turnGenerator) AllocateListener(conf turnserver.AllocateListenerConfig) (net.Listener, net.Addr, error) {
-	return g.generator().AllocateListener(conf)
+	ln, addr, err := g.generator().AllocateListener(conf)
+	if err != nil {
+		return nil, nil, err
+	}
+	if c := g.usage.count(conf.UserID); c != nil {
+		ln = &countedListener{Listener: ln, usage: c}
+	}
+	return ln, addr, nil
 }
 
 func (g *turnGenerator) AllocateConn(conf turnserver.AllocateConnConfig) (net.Conn, error) {
-	return g.generator().AllocateConn(conf)
+	conn, err := g.generator().AllocateConn(conf)
+	if err != nil {
+		return nil, err
+	}
+	if c := g.usage.count(conf.UserID); c != nil {
+		conn = &countedConn{Conn: conn, usage: c}
+	}
+	return conn, nil
+}
+
+// countedPacketConn counts the bytes one UDP relay socket moved. The counters are atomic: a
+// relayed packet costs one add, no lock.
+type countedPacketConn struct {
+	net.PacketConn
+	usage *usageCount
+}
+
+func (c *countedPacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
+	n, addr, err := c.PacketConn.ReadFrom(p)
+	c.usage.in.Add(int64(n))
+	return n, addr, err
+}
+
+func (c *countedPacketConn) WriteTo(p []byte, addr net.Addr) (int, error) {
+	n, err := c.PacketConn.WriteTo(p, addr)
+	c.usage.out.Add(int64(n))
+	return n, err
+}
+
+// countedListener counts the bytes of the TCP relay sockets it accepts, and of the outbound
+// connections of a TURN Connect (RFC 6062).
+type countedListener struct {
+	net.Listener
+	usage *usageCount
+}
+
+func (l *countedListener) Accept() (net.Conn, error) {
+	c, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	return &countedConn{Conn: c, usage: l.usage}, nil
+}
+
+type countedConn struct {
+	net.Conn
+	usage *usageCount
+}
+
+func (c *countedConn) Read(b []byte) (int, error) {
+	n, err := c.Conn.Read(b)
+	c.usage.in.Add(int64(n))
+	return n, err
+}
+
+func (c *countedConn) Write(b []byte) (int, error) {
+	n, err := c.Conn.Write(b)
+	c.usage.out.Add(int64(n))
+	return n, err
 }
 
 // familyGenerator serves the TLS listener, which carries both families: it hands each
@@ -282,9 +439,9 @@ func (t *Turn) onAllocation(src, dst net.Addr, protocol, userID, realm string, r
 	t.mu.Lock()
 	t.active[userID] = true
 	t.mu.Unlock()
-	if userID != "" {
-		_ = t.store.Usage(userID, 0, 0)
-	}
+	// The byte counter of that allocation lives in the registry, under the key the credential
+	// names; the flush writes it to the base.
+	t.usage.count(userID)
 }
 
 func (t *Turn) onDeallocate(src, dst net.Addr, protocol, userID, realm string) {
@@ -296,14 +453,19 @@ func (t *Turn) onDeallocate(src, dst net.Addr, protocol, userID, realm string) {
 // ICE returns the STUN and TURN URLs the clients are told to reach (no credentials).
 func (t *Turn) ICE() []string { return t.ice }
 
-// Creds issues short-lived TURN credentials (username and password) for an online pod.
-// The username is a timestamp plus the pod id; the password is the HMAC-SHA1 long-term
-// credential over the shared secret. It fails for a pod that is not registered online.
-func (t *Turn) Creds(podID string, ttl time.Duration) (user, pass string, err error) {
+// Creds issues short-lived TURN credentials for a session of an online pod. The username is
+// <expiry>:<key>, the key naming whose traffic the allocations count: the account of a paired
+// pod or browser, the pod id otherwise (a browser gets the account of the pod it dials). The
+// password is the HMAC-SHA1 long-term credential over the shared secret. It fails for a pod
+// that is not registered online.
+func (t *Turn) Creds(podID, key string, ttl time.Duration) (user, pass string, err error) {
 	if !t.store.OnlinePod(podID) {
 		return "", "", errors.New("relay: no TURN credentials for an offline pod")
 	}
-	user, pass, err = turnserver.GenerateLongTermTURNRESTCredentials(string(t.secret), podID, ttl)
+	if key == "" {
+		key = podID
+	}
+	user, pass, err = turnserver.GenerateLongTermTURNRESTCredentials(string(t.secret), key, ttl)
 	if err != nil {
 		return "", "", err
 	}
@@ -313,8 +475,16 @@ func (t *Turn) Creds(podID string, ttl time.Duration) (user, pass string, err er
 	return user, pass, nil
 }
 
-// Close stops the TURN server and its listeners.
+// Close stops the TURN server, its listeners, and the flush of the byte counters (what was
+// relayed is written before the relay stops).
 func (t *Turn) Close() error {
+	if t.stop != nil {
+		select {
+		case <-t.stop:
+		default:
+			close(t.stop)
+		}
+	}
 	if t.srv != nil {
 		_ = t.srv.Close()
 	}
@@ -323,6 +493,9 @@ func (t *Turn) Close() error {
 	}
 	for _, ln := range t.tcp {
 		_ = ln.Close()
+	}
+	if t.usage != nil {
+		t.flushUsage()
 	}
 	return nil
 }

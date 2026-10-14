@@ -173,8 +173,21 @@ func New(st *Store, turn *Turn) *Server {
 	}
 }
 
+// credKey is whose TURN traffic a session of this pod counts under: the account, when the pod
+// is paired (a browser dialing it belongs to the same account, and the quota of #29 is per
+// account), the pod id otherwise.
+func (s *Server) credKey(podID string) string {
+	s.mu.Lock()
+	pc := s.pods[podID]
+	s.mu.Unlock()
+	if pc != nil && pc.account != "" {
+		return pc.account
+	}
+	return podID
+}
+
 func (s *Server) iceMessage(podID, session string) sigMsg {
-	user, pass, _ := s.turn.Creds(podID, turnTTL)
+	user, pass, _ := s.turn.Creds(podID, s.credKey(podID), turnTTL)
 	return sigMsg{Type: "ice", Session: session, URLs: s.turn.ICE(), Username: user, Credential: pass}
 }
 

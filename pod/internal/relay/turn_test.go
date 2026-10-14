@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	turnserver "github.com/pion/turn/v5"
 )
 
 func TestTurnCreds(t *testing.T) {
@@ -19,23 +21,27 @@ func TestTurnCreds(t *testing.T) {
 	defer turn.Close()
 
 	// No pod: no credentials.
-	if _, _, err := turn.Creds("nobody", time.Minute); err == nil {
+	if _, _, err := turn.Creds("nobody", "", time.Minute); err == nil {
 		t.Fatal("an unknown pod must not get TURN credentials")
 	}
 
 	if err := st.Register("pod-a", "secret-1", ""); err != nil {
 		t.Fatal(err)
 	}
-	user, pass, err := turn.Creds("pod-a", time.Minute)
+	user, pass, err := turn.Creds("pod-a", "acct-1", time.Minute)
 	if err != nil {
 		t.Fatal("an online pod must get TURN credentials:", err)
 	}
 	if user == "" || pass == "" {
 		t.Fatal("credentials must be non-empty")
 	}
-	// The username encodes the pod id (short-lived TURN-REST credentials).
-	if !strings.Contains(user, "pod-a") {
-		t.Fatalf("username %q must encode the pod id", user)
+	// The username encodes the key the allocations are counted under (short-lived TURN-REST
+	// credentials): <expiry>:<key>.
+	if !strings.Contains(user, "acct-1") {
+		t.Fatalf("username %q must encode the account key", user)
+	}
+	if user, _, err := turn.Creds("pod-a", "", time.Minute); err != nil || !strings.Contains(user, "pod-a") {
+		t.Fatalf("an unpaired pod is counted under its own id: %q, %v", user, err)
 	}
 
 	// The TURN/STUN URLs advertise the control port.
@@ -47,6 +53,80 @@ func TestTurnCreds(t *testing.T) {
 		if !strings.HasPrefix(u, "stun:") {
 			t.Fatalf("first ICE URL must be STUN, got %q", u)
 		}
+	}
+}
+
+// TestTurnUsageCounted: the relay socket of an allocation is wrapped with the byte counter of
+// the key its credential names; the flush writes it to the base, aggregated per key and month.
+func TestTurnUsageCounted(t *testing.T) {
+	st, _ := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
+	defer st.Close()
+	turn, err := NewTurn(st, TurnConfig{AdvertiseIP: "127.0.0.1", Port: freeTurnPort(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer turn.Close()
+
+	// The allocation path of the generator, with the credential key it counts under.
+	gen, ok := turn.gens["4"].(*turnGenerator)
+	if !ok {
+		t.Fatal("the IPv4 generator is missing")
+	}
+	conn, _, err := gen.AllocatePacketConn(turnserver.AllocateListenerConfig{Network: "udp4", UserID: "acct-1"})
+	if err != nil {
+		t.Fatal("allocating a relay socket:", err)
+	}
+	defer conn.Close()
+	peer := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 65001}
+	if _, err := conn.WriteTo([]byte("hello through TURN"), peer); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.WriteTo([]byte("12345"), peer); err != nil {
+		t.Fatal(err)
+	}
+
+	turn.flushUsage()
+	month := usageMonth(time.Now())
+	got, err := st.TurnUsage("acct-1", month)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := int64(len("hello through TURN") + len("12345")); got != want {
+		t.Fatalf("the relay counted %d bytes for acct-1, expected %d", got, want)
+	}
+	if other, _ := st.TurnUsage("acct-2", month); other != 0 {
+		t.Fatalf("another account must not be charged: %d", other)
+	}
+
+	// A second flush adds to the month rather than replacing it.
+	turn.usage.count("acct-1").in.Add(7)
+	turn.flushUsage()
+	if got, _ := st.TurnUsage("acct-1", month); got != 23+7 {
+		t.Fatalf("the month accumulates, got %d, expected %d", got, 23+7)
+	}
+}
+
+// TestStoreUsageMonths: one row per key and month, the quota being monthly.
+func TestStoreUsageMonths(t *testing.T) {
+	st, _ := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
+	defer st.Close()
+	if err := st.AddUsage("acct-1", "2026-10", 100, 50); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddUsage("acct-1", "2026-10", 1, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddUsage("acct-1", "2026-11", 9, 9); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := st.TurnUsage("acct-1", "2026-10"); got != 151 {
+		t.Fatalf("October: %d, expected 151", got)
+	}
+	if got, _ := st.TurnUsage("acct-1", "2026-11"); got != 18 {
+		t.Fatalf("November: %d, expected 18", got)
+	}
+	if got, _ := st.TurnUsage("nobody", "2026-10"); got != 0 {
+		t.Fatalf("an account with no row: %d, expected 0", got)
 	}
 }
 

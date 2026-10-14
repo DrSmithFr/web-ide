@@ -20,8 +20,9 @@ import (
 // pairing.go; dbVersion 3 adds the sync tables (blobs, wraps, published X25519 keys), see
 // syncstore.go. The relay stores certificates, signed revocation lists and encrypted blobs,
 // never a private key, a phrase or a sync key; dbVersion 4 adds the push subscriptions
-// (push_store.go).
-const dbVersion = 4
+// (push_store.go); dbVersion 5 replaces the per-allocation usage rows (which held no byte
+// count) with the TURN bytes aggregated per key and month (turn_usage, see turn.go).
+const dbVersion = 5
 
 type Pod struct {
 	ID       string
@@ -87,13 +88,21 @@ func migrate(db *sql.DB) error {
 			last_seen INTEGER NOT NULL DEFAULT 0)`); err != nil {
 		return err
 	}
-	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS usage (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			pod_id TEXT NOT NULL,
-			ts INTEGER NOT NULL,
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS turn_usage (
+			key TEXT NOT NULL,
+			month TEXT NOT NULL,
 			in_bytes INTEGER NOT NULL DEFAULT 0,
-			out_bytes INTEGER NOT NULL DEFAULT 0)`); err != nil {
+			out_bytes INTEGER NOT NULL DEFAULT 0,
+			updated INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (key, month))`); err != nil {
 		return err
+	}
+	if ver < dbVersion {
+		// The old usage table held one row per TURN allocation with no byte count: the counting
+		// of #29 replaces it, and nothing of value is lost (it never held a byte nor a name).
+		if _, err := db.Exec(`DROP TABLE IF EXISTS usage`); err != nil {
+			return err
+		}
 	}
 	if err := migrateIdentity(db); err != nil {
 		return err
@@ -219,11 +228,38 @@ func (s *Store) OnlinePod(id string) bool {
 	return ok && p.Online
 }
 
-// Usage records a TURN allocation of a pod.
-func (s *Store) Usage(podID string, inBytes, outBytes int64) error {
-	_, err := s.db.Exec("INSERT INTO usage (pod_id, ts, in_bytes, out_bytes) VALUES (?,?,?,?)",
-		podID, time.Now().Unix(), inBytes, outBytes)
+// usageMonth is the month a usage row belongs to ("2026-10"): the quota is monthly.
+func usageMonth(t time.Time) string { return t.UTC().Format("2006-01") }
+
+// AddUsage adds bytes relayed through TURN to the total of a key for a month. The key is the
+// account of a paired device, the pod id otherwise (turn.go): a month per key, one row, written
+// by the flush of the live counters.
+func (s *Store) AddUsage(key, month string, inBytes, outBytes int64) error {
+	if key == "" || (inBytes == 0 && outBytes == 0) {
+		return nil
+	}
+	_, err := s.db.Exec(`INSERT INTO turn_usage (key, month, in_bytes, out_bytes, updated)
+			VALUES (?,?,?,?,?)
+			ON CONFLICT (key, month) DO UPDATE SET
+				in_bytes = in_bytes + excluded.in_bytes,
+				out_bytes = out_bytes + excluded.out_bytes,
+				updated = excluded.updated`,
+		key, month, inBytes, outBytes, time.Now().Unix())
 	return err
+}
+
+// TurnUsage is the number of bytes a key moved through TURN in a month (both directions).
+func (s *Store) TurnUsage(key, month string) (int64, error) {
+	var in, out int64
+	err := s.db.QueryRow("SELECT in_bytes, out_bytes FROM turn_usage WHERE key=? AND month=?", key, month).
+		Scan(&in, &out)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return in + out, nil
 }
 
 // Close closes the database.
