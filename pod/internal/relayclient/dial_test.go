@@ -185,10 +185,7 @@ func TestDialPodToPod(t *testing.T) {
 	if err := ch.Write(q); err != nil {
 		t.Fatal(err)
 	}
-	head, err := ch.Read()
-	if err != nil {
-		t.Fatal(err)
-	}
+	head := readFrame(t, ch, 30*time.Second)
 	var h struct {
 		Status int `json:"status"`
 	}
@@ -197,10 +194,7 @@ func TestDialPodToPod(t *testing.T) {
 	}
 	var page []byte
 	for {
-		b, err := ch.Read()
-		if err != nil {
-			t.Fatal(err)
-		}
+		b := readFrame(t, ch, 30*time.Second)
 		if len(b) == 0 {
 			break
 		}

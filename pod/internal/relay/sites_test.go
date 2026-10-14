@@ -369,18 +369,21 @@ func TestSiteGraceFailover(t *testing.T) {
 	kA, kB := identity.KeyID(podDevice(t, a, "A").key), identity.KeyID(podDevice(t, a, "B").key)
 
 	aPod := registerPod(t, ts, "A", "s1", a.ID, podDevice(t, a, "A").cert, true, podDevice(t, a, "A").key, false)
+	ready(t, aPod)
+	// A reports its LAN peer before B registers: the site forms as B comes up, so B is never
+	// pushed as the gateway of a one-pod site — a message about the state before the site would
+	// otherwise sit on the link and be read as if it were about the drop watched here.
+	aPod.send(t, sigMsg{Type: "site", Peers: []string{kB}})
 	bPod := registerPod(t, ts, "B", "s2", a.ID, podDevice(t, a, "B").cert, true, podDevice(t, a, "B").key, false)
 	defer bPod.close()
-	ready(t, aPod)
 	ready(t, bPod)
-	aPod.send(t, sigMsg{Type: "site", Peers: []string{kB}})
-	// Wait until the site is really there, with A as its gateway.
+	// Wait until the site is really there, with A (the oldest link) as its gateway.
 	gatewayUntil(t, bPod, func(m sigMsg) bool { return m.Gateway == kA })
 
-	// A drops without a bye: B keeps seeing A as the gateway until the grace ends. The window is
-	// opened before the drop: the grace of the relay starts when it notices the link ended, later
-	// than this timer, so a move seen here is a move that happened too early.
-	grace := time.After(siteGrace)
+	// A drops without a bye: B keeps seeing A as the gateway until the grace ends. The window
+	// watched is half of the grace: the relay starts its own clock when it notices the drop, a
+	// hair after this timer, and a move seen right at its end would be a tie between the two.
+	grace := time.After(siteGrace / 2)
 	aPod.close()
 	quiet := make(chan sigMsg, 8)
 	go func() {

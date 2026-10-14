@@ -422,10 +422,7 @@ func TestIntegrationRelay(t *testing.T) {
 	if err := httpCh.Write(q); err != nil {
 		t.Fatalf("http write: %v", err)
 	}
-	head, err := httpCh.Read()
-	if err != nil {
-		t.Fatalf("http head read: %v", err)
-	}
+	head := readFrame(t, httpCh, 30*time.Second)
 	var h struct {
 		Status  int               `json:"status"`
 		Headers map[string]string `json:"headers"`
@@ -435,10 +432,7 @@ func TestIntegrationRelay(t *testing.T) {
 	}
 	var page []byte
 	for {
-		b, err := httpCh.Read()
-		if err != nil {
-			t.Fatalf("http body read: %v", err)
-		}
+		b := readFrame(t, httpCh, 30*time.Second)
 		if len(b) == 0 {
 			break
 		}
@@ -523,6 +517,31 @@ func readEnvelope(t *testing.T, rpc *tunnel.Framed, d time.Duration) envelope {
 	return envelope{}
 }
 
+// readFrame reads one frame off a channel, with a deadline: a channel that stops answering is a
+// failed test, not a test that sits there until the 10 minute timeout of the runner.
+func readFrame(t *testing.T, ch tunnel.MsgConn, d time.Duration) []byte {
+	t.Helper()
+	type r struct {
+		b   []byte
+		err error
+	}
+	done := make(chan r, 1)
+	go func() {
+		b, err := ch.Read()
+		done <- r{b, err}
+	}()
+	select {
+	case res := <-done:
+		if res.err != nil {
+			t.Fatalf("channel read: %v", res.err)
+		}
+		return res.b
+	case <-time.After(d):
+		t.Fatalf("no frame on the channel within %s", d)
+	}
+	return nil
+}
+
 // TestHTTPChannelOrder: a static file bigger than one 64 KB chunk must arrive byte for
 // byte, in order. The pod writes the body in chunks of 64 KB; each chunk must be copied out
 // of the writer's buffer, else the caller (io.Copy, which reuses its buffer) overwrites the
@@ -542,10 +561,7 @@ func TestHTTPChannelOrder(t *testing.T) {
 	if err := httpCh.Write(q); err != nil {
 		t.Fatal("http write:", err)
 	}
-	head, err := httpCh.Read()
-	if err != nil {
-		t.Fatal("head read:", err)
-	}
+	head := readFrame(t, httpCh, 30*time.Second)
 	var h struct {
 		Status  int               `json:"status"`
 		Headers map[string]string `json:"headers"`
@@ -555,10 +571,7 @@ func TestHTTPChannelOrder(t *testing.T) {
 	}
 	var got []byte
 	for {
-		b, err := httpCh.Read()
-		if err != nil {
-			t.Fatal("body read:", err)
-		}
+		b := readFrame(t, httpCh, 30*time.Second)
 		if len(b) == 0 {
 			break
 		}

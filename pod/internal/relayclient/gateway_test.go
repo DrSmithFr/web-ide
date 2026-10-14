@@ -224,10 +224,7 @@ func TestGatewayRouting(t *testing.T) {
 	if err := httpCh.Write(q); err != nil {
 		t.Fatalf("http write: %v", err)
 	}
-	head, err := httpCh.Read()
-	if err != nil {
-		t.Fatal(err)
-	}
+	head := readFrame(t, httpCh, 30*time.Second)
 	var h struct {
 		Status int `json:"status"`
 	}
@@ -236,10 +233,7 @@ func TestGatewayRouting(t *testing.T) {
 	}
 	var page []byte
 	for {
-		b, err := httpCh.Read()
-		if err != nil {
-			t.Fatal(err)
-		}
+		b := readFrame(t, httpCh, 30*time.Second)
 		if len(b) == 0 {
 			break
 		}
