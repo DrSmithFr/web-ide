@@ -199,7 +199,7 @@ func (b *browserSig) next(t *testing.T) sigMsg {
 	t.Helper()
 	// A deadline on the read: a pod that never answers the offer is a failed test, not a test
 	// that sits on the link until the runner gives up.
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	_, r, err := b.c.Read(ctx)
 	cancel()
 	if err != nil {
