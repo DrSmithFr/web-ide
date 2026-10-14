@@ -91,6 +91,20 @@ func wsURL(env *testEnv) string {
 
 // startSecond starts another pod of the account on the relay of the env, with its own device key
 // and pod id, and waits until the relay sees it online.
+// onlineUntil waits for a pod link the relay reports online again: a tunnel that ends takes the
+// link of the pod it reached with it, and the pod re-dials a moment later.
+func onlineUntil(t *testing.T, env *testEnv, podID string) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		if env.st.OnlinePod(podID) {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("the pod %q never came back online", podID)
+}
+
 func startSecond(t *testing.T, env *testEnv, ident *identity.PodIdentity, podID string) *Client {
 	t.Helper()
 	return startSecondSignal(t, env, ident, podID, "")
@@ -289,7 +303,9 @@ func TestDialSwappedOffer(t *testing.T) {
 		t.Fatal("a swapped offer was accepted")
 	}
 	// The same pod, dialled straight at the relay, is reached: the refusal comes from the
-	// rewritten offer, not from the certificates.
+	// rewritten offer, not from the certificates. The refused tunnel took the link of the pod it
+	// reached with it: the pod is waited back online before dialling there again.
+	onlineUntil(t, env, "bravo-pod")
 	peer, err := dialTry(ctx, env.cli, "bravo-pod", podB.ID())
 	if err != nil {
 		t.Fatalf("the same pod, dialled straight: %v", err)

@@ -222,6 +222,20 @@ func (b *browserSig) nextType(t *testing.T, want string) sigMsg {
 	}
 }
 
+// nextAnswer waits for the answer of the pod, and turns the refusal the relay reports into an
+// error: a pod that will not answer this offer is a refusal, not a message that never comes.
+func (b *browserSig) nextAnswer(t *testing.T) (sigMsg, error) {
+	for {
+		m := b.next(t)
+		switch m.Type {
+		case "answer":
+			return m, nil
+		case "error":
+			return sigMsg{}, fmt.Errorf("the pod refused the offer: %s", m.Message)
+		}
+	}
+}
+
 func (b *browserSig) send(t *testing.T, m sigMsg) {
 	t.Helper()
 	r, _ := json.Marshal(m)
@@ -291,8 +305,12 @@ func connectBrowser(t *testing.T, env *testEnv, session, url string) (*webrtc.Pe
 	fpB := tunnel.Fingerprint(pc.LocalDescription().SDP)
 	sig.send(t, sigMsg{Type: "offer", Session: session, SDP: pc.LocalDescription().SDP})
 
-	// The pod answers (with its candidates, TURN forced).
-	answer := sig.nextType(t, "answer")
+	// The pod answers (with its candidates, TURN forced). A pod that refuses the offer says so on
+	// the link: that is a refusal the caller can accept, not a message to wait for.
+	answer, err := sig.nextAnswer(t)
+	if err != nil {
+		return pc, nil, fpB, "", err
+	}
 	if err := pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: answer.SDP}); err != nil {
 		t.Fatalf("browser SetRemote(answer): %v", err)
 	}
