@@ -853,7 +853,12 @@ func parseSize(s string) (int64, error) {
 	}
 	units := map[string]int64{"K": 1 << 10, "M": 1 << 20, "G": 1 << 30, "T": 1 << 40}
 	mult := int64(1)
-	if last := s[len(s)-1]; last >= 'a' && last <= 'z' {
+	// The unit is a letter, with the B of "bytes" allowed on the end: 500k, 1MB, 10GB.
+	s = strings.TrimRight(s, "bB")
+	if s == "" {
+		return 0, fmt.Errorf("not a size")
+	}
+	if last := s[len(s)-1]; last >= 'a' && last <= 'z' || last >= 'A' && last <= 'Z' {
 		key := strings.ToUpper(string(last))
 		u, ok := units[key]
 		if !ok {

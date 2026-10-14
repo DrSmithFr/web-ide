@@ -211,10 +211,10 @@ function quotaNote(q) {
   const el = document.getElementById('msg')
   if (!el || el.querySelector('.quota')) return
   const size = (n) => {
-    const u = ['o', 'Ko', 'Mo', 'Go']
+    const u = fr ? ['o', 'Ko', 'Mo', 'Go'] : ['B', 'kB', 'MB', 'GB']
     let v = n, i = 0
     while (v >= 1024 && i < u.length - 1) { v /= 1024; i++ }
-    return (i ? v.toFixed(1) : String(v)) + ' ' + (i ? u[i] : 'o')
+    return (i ? v.toFixed(1) : String(v)) + ' ' + (i ? u[i] : u[0])
   }
   el.append(h('p', { class: 'quota muted' },
     words.quota, ' ', size(q.used), ' / ', size(q.limit), ' ',

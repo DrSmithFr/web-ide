@@ -60,19 +60,26 @@ func (t *Turn) isSupporter(key string) bool {
 	return t.supp != nil && t.supp(key)
 }
 
-// QuotaState reads the month of a key from the base. An account over its quota is told so
-// before it dials, not after a failed tunnel.
+// used is what a key moved this month: what the base already holds, plus what its live
+// allocations are relaying right now. A quota is therefore felt as it is crossed, not a flush
+// later.
+func (t *Turn) used(key string) int64 {
+	if key == "" {
+		return 0
+	}
+	n := t.usage.total(key)
+	if stored, err := t.store.TurnUsage(key, usageMonth(time.Now())); err == nil {
+		n += stored
+	}
+	return n
+}
+
+// QuotaState reads the month of a key. An account over its quota is told so before it dials,
+// not after a failed tunnel.
 func (t *Turn) QuotaState(key string) *QuotaState {
 	st := &QuotaState{Limit: t.quota, Supporter: t.isSupporter(key)}
-	if key == "" {
-		return st
-	}
-	used, err := t.store.TurnUsage(key, usageMonth(time.Now()))
-	if err != nil {
-		return st
-	}
-	st.Used = used
-	st.Over = st.Limit > 0 && !st.Supporter && used >= st.Limit
+	st.Used = t.used(key)
+	st.Over = st.Limit > 0 && !st.Supporter && st.Used >= st.Limit
 	return st
 }
 
@@ -121,9 +128,37 @@ func (r *usageRegistry) drain() map[string][2]int64 {
 	return out
 }
 
+// total is what a key has relayed since the last flush, without resetting it.
+func (r *usageRegistry) total(key string) int64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	c, ok := r.entries[key]
+	if !ok {
+		return 0
+	}
+	return c.in.Load() + c.out.Load()
+}
+
+// release takes the bytes one key moved since the last flush, and resets it: an allocation that
+// ends writes its traffic to the base at once.
+func (r *usageRegistry) release(key string) ([2]int64, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	c, ok := r.entries[key]
+	if !ok {
+		return [2]int64{}, false
+	}
+	in, sent := c.in.Swap(0), c.out.Swap(0)
+	if in == 0 && sent == 0 {
+		return [2]int64{}, false
+	}
+	return [2]int64{in, sent}, true
+}
+
 // usageFlushEvery is how often the live counters reach the base: coarse enough that a relay
 // writes a handful of rows a minute, fine enough that a quota is not exceeded by more than a
-// minute of traffic.
+// minute of traffic. An allocation that ends is written at once: the next credential asked by
+// that key is checked against what it really moved.
 const usageFlushEvery = time.Minute
 
 // flushUsage writes what the allocations relayed since last time into the base.
@@ -493,6 +528,24 @@ func (t *Turn) onDeallocate(src, dst net.Addr, protocol, userID, realm string) {
 	t.mu.Lock()
 	delete(t.active, userID)
 	t.mu.Unlock()
+	// The allocation is over: its bytes go to the base now, so the quota a key is held to is
+	// what it moved, not what it moved a minute ago.
+	if key := usageKeyOf(userID); key != "" {
+		if bytes, ok := t.usage.release(key); ok {
+			if err := t.store.AddUsage(key, usageMonth(time.Now()), bytes[0], bytes[1]); err != nil {
+				log.Printf("relay: usage of %s: %v", key, err)
+			}
+		}
+	}
+}
+
+// usageKeyOf is the key an allocation belongs to, read back from the username of the credential
+// that opened it (<expiry>:<key>).
+func usageKeyOf(userID string) string {
+	if _, key, ok := strings.Cut(userID, ":"); ok {
+		return key
+	}
+	return userID
 }
 
 // ICE returns the STUN and TURN URLs the clients are told to reach (no credentials).
@@ -514,7 +567,7 @@ func (t *Turn) Creds(podID, key string, ttl time.Duration) (user, pass string, e
 	// self-hosted relay has none (Quota 0). Refusing here only closes the relayed path — the
 	// browser and the pod still try their direct and STUN candidates.
 	if t.quota > 0 && !t.isSupporter(key) {
-		if used, err := t.store.TurnUsage(key, usageMonth(time.Now())); err == nil && used >= t.quota {
+		if t.used(key) >= t.quota {
 			return "", "", errQuota
 		}
 	}
