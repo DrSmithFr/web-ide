@@ -35,6 +35,20 @@ if (vv) {
   fit()
 }
 
+// iOS still zooms on its own sometimes (a field it focuses, an autofill): the page is brought
+// back to scale 1. Re-applying the viewport meta is the only way to reset the zoom, and it is
+// re-applied only when its content changes: the two spellings mean the same thing.
+const meta = document.querySelector<HTMLMetaElement>('meta[name=viewport]')
+if (vv && meta) {
+  const [a, b] = [meta.content, meta.content.replace(/=1(?![\d.])/g, '=1.0')]
+  const reset = () => {
+    if (vv.scale === 1) return
+    meta.content = meta.content === a ? b : a
+  }
+  vv.addEventListener('scalechange', reset)
+  vv.addEventListener('resize', reset)
+}
+
 /** Scrolls the line of the caret of the active editor into view. */
 export function revealCaret() {
   if (mobileView() !== 'editor') return

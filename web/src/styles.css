@@ -614,6 +614,14 @@ button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 .phone .zone .detach { display: none; }
 .phone .zone:focus { outline: none; }
 
+/* iOS zooms the page when it focuses a field showing text under 16 px: on a phone every
+   editable takes 16 px at least (a code size this device chose above that still applies). The
+   other parts of the editor take the same size, so the gutter stays aligned with the lines. */
+@media (max-width: 720px) {
+  input, select, textarea, [contenteditable], .xterm-helper-textarea,
+  .ed-gutter, .ed-gutter-nums, .ed-ws, .ed-hint, .ed-placeholder { font-size: max(16px, var(--font-size-code)); }
+}
+
 @media (max-width: 720px) {
   .menus { display: none; }
   .side { position: absolute; top: 0; bottom: 0; z-index: 30; box-shadow: 0 0 24px rgb(0 0 0 / 0.4); }

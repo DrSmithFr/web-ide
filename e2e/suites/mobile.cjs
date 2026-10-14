@@ -24,6 +24,18 @@ run(
     assert(touchAction === 'manipulation', 'the document itself refuses pinch and double-tap zoom: touch-action ' + touchAction)
     assert((await pinchRefused(page, 'body')) === true, 'a two-finger pinch started on the page is refused')
     assert((await pinchRefused(page, '.menubar.phone')) === true, 'a pinch started on the bar is refused')
+    // iOS still zooms on its own sometimes (a field it focuses, an autofill): the page is
+    // brought back to scale 1 by re-applying the viewport meta.
+    const zoom = await page.evaluate(() => {
+      const vv = window.visualViewport, m = document.querySelector('meta[name=viewport]')
+      const before = m.content
+      Object.defineProperty(vv, 'scale', { get: () => 2, configurable: true })
+      vv.dispatchEvent(new Event('scalechange'))
+      const after = m.content
+      Object.defineProperty(vv, 'scale', { get: () => 1, configurable: true })
+      return { before, after }
+    })
+    assert(zoom.after !== zoom.before && zoom.after.includes('maximum-scale=1'), 'a zoom put by the system is undone: ' + zoom.after)
     assert(await visible(page, '[data-testid=phone-bar] .menubar-row'), 'row 1: project and status')
     assert(await visible(page, '[data-testid=phone-bar] .menus .menu-btn'), 'row 2: the menus')
     assert(await visible(page, '[data-testid=mobile-rail]'), 'row 3: the icons of the views')
@@ -51,6 +63,14 @@ run(
     await page.click('.tree-row:has-text("long.txt")')
     await page.waitForFunction(() => document.querySelector('.phone-body > .center:not(.hidden) .tab.active')?.textContent.includes('long.txt'))
     assert((await view(page)) === 'editor' && (await active(page)) === 'editor', 'opening a file brings the editor to the front')
+    // iOS zooms on a focused field showing text under 16 px: on a phone the editing text is
+    // never smaller, and the gutter keeps the size of the lines.
+    await page.waitForSelector('.pane.active .ed-content')
+    const sizes = await page.evaluate(() => {
+      const f = (s) => { const e = document.querySelector(s); return e ? parseFloat(getComputedStyle(e).fontSize) : null }
+      return { code: f('.pane.active .ed-content'), gutter: f('.pane.active .ed-gutter-nums') }
+    })
+    assert(sizes.code >= 16 && sizes.gutter === sizes.code, 'the editor text is 16 px or more, gutter aligned: ' + JSON.stringify(sizes))
 
     // The Tools menu shows a tool the same way; the icon of the view follows.
     await page.click('.menubar .menu-btn:has-text("Tools")')
@@ -60,6 +80,8 @@ run(
     await page.click('[data-testid=mobile-rail] [data-id=assistant]')
     await page.waitForSelector('.phone-body > .zone[data-tool=assistant]')
     assert((await view(page)) === 'assistant', 'the assistant full screen')
+    const composer = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.ai-composer .ed-content')).fontSize))
+    assert(composer >= 16, 'the message box is 16 px or more, iOS does not zoom on it: ' + composer)
     await page.screenshot({ path: OUT + '/mobile-assistant.png' })
 
     // No field takes the focus by itself (the keyboard would open): the user touches it.
