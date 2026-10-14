@@ -84,7 +84,12 @@ run(
 
     // What the first load cost, phase by phase (#71): the e2e report prints it, so a slow
     // reload can be read where it is paid (the tunnel, the identity link, the assets).
-    const first = await page.evaluate(() => ({ ...window.bootTimings, channels: window.httpChannels, bytes: window.httpBytes }))
+    const first = await page.evaluate(() => ({
+      ...window.bootTimings,
+      channels: window.httpChannels,
+      bytes: window.httpBytes,
+      total: Math.round(performance.now()),
+    }))
     console.log('first load (ms):', JSON.stringify(first))
     assert(first.app > 0 && first.ready !== undefined && first.channels > 0, 'the phases of the load are measured: ' + JSON.stringify(first))
 
@@ -204,7 +209,7 @@ run(
     await again.waitForSelector('.home .home-bar', { timeout: 30000 })
     await again.waitForSelector('.project-list .project-card, .ws-dir')
     await again.waitForTimeout(400)
-    const re = await page.evaluate(() => ({ ...window.bootTimings, channels: window.httpChannels, bytes: window.httpBytes }))
+    const re = await page.evaluate(() => ({ ...window.bootTimings, channels: window.httpChannels, bytes: window.httpBytes, total: Math.round(performance.now()) }))
     console.log(`  load first:  ${JSON.stringify(first)}`)
     console.log(`  load reload: ${JSON.stringify(re)} (${Date.now() - t0} ms to the app)`)
     assert(re.channels < first.channels, `a reload opens fewer tunnel channels: ${first.channels} → ${re.channels}`)

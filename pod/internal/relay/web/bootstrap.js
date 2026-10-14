@@ -300,6 +300,7 @@ let entryKey = '' // its device key, and the pod id the relay knows it by
 let entryPod = ''
 let entrySite = ''
 let shownKey = '' // the pod the frame shows (a pod of the site, not always the gateway)
+let swReady = null // the Service Worker of this origin, started at once and awaited by openApp
 let appPort = null
 let entryMode = 'token'
 let pods = [] // the pods the relay reports: {key, podId, name, site, gateway, preferred}
@@ -632,25 +633,36 @@ function syncSite() {
   if (e?.site) entrySite = e.site
 }
 
-async function main() {
-  drawBrand()
-  const missing = await id.support()
-  if (missing.length) return fail(words.needs + missing.join(', '))
-
+// The Service Worker is what answers the fetches of the app, so the page cannot open before it
+// is active. Its activation is the slow part of a first visit (Chromium starts one per browser
+// profile: ~2 s there, a millisecond on the next loads) — so it is started here and waited for
+// only when the app is about to open: it overlaps the device and the tunnel instead of adding to
+// them (see window.bootTimings, e2e/suites/relay.cjs).
+async function startSW() {
   try {
     const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' })
-    // The app is loaded through the Service Worker: wait until it controls the page, else
-    // the first fetch goes to the relay and answers 404.
+    mark('swreg')
     await reg.ready
     if (!reg.active) await reg.update()
     await reg.ready
     mark('sw')
+    return true
   } catch (e) {
     fail(words.sw + e.message)
+    return false
   }
+}
+
+async function main() {
+  drawBrand()
+  const missing = await id.support()
+  if (missing.length) return fail(words.needs + missing.join(', '))
+  mark('support')
+  swReady = startSW()
 
   db = await id.openStore()
   const wl = await id.wordlist()
+  mark('words')
 
   // An invite link carries the pod its author was on: the joining device pairs first, then
   // opens that pod. Without a pod it stops at the pairing.
@@ -963,8 +975,11 @@ async function refreshPods() {
 // The app runs in an iframe of the same origin: its fetches are answered by the Service Worker,
 // and its rpc channel is a DataChannel of the tunnel of its pod. One origin for every pod: the
 // installed app never leaves it.
-function openApp() {
+async function openApp() {
   busy(words.loading)
+  // The fetches of the app go through the Service Worker: opening the frame before it is active
+  // would answer them from the relay, which does not know them.
+  if (!(await swReady)) return
   mark('app')
   const f = document.getElementById('frame')
   f.style.display = 'block'
