@@ -6,6 +6,8 @@
 #   deploy-relay.sh v1.11.0           a published release (its sha256 is checked)
 #   deploy-relay.sh --rollback        back to the previous binary on the host
 #   deploy-relay.sh --setup           bring the host up: service, firewall, backups (idempotent)
+#   deploy-relay.sh --check           only ask the host whether the binary knows the flags the
+#                                     service runs with (nothing is installed)
 #   --host <user@host>                the relay host (RELAY_HOST)
 #   --unit <service>                  the service to restart (RELAY_UNIT)
 #   --url <https://…>                 what it serves, for the check (RELAY_URL)
@@ -36,6 +38,7 @@ VERSION=
 BINARY=
 ROLLBACK=
 SETUP=
+CHECK=
 ENV_SRC=
 
 while [ $# -gt 0 ]; do
@@ -47,7 +50,8 @@ while [ $# -gt 0 ]; do
     --env) ENV_SRC=$2; shift 2 ;;
     --rollback) ROLLBACK=1; shift ;;
     --setup) SETUP=1; shift ;;
-    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    --check) CHECK=1; shift ;;
+    -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
     v*) VERSION=$1; shift ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -56,6 +60,40 @@ done
 # sha256sum on Linux, shasum on macOS.
 sha() {
   if command -v sha256sum >/dev/null; then sha256sum "$@"; else shasum -a 256 "$@"; fi
+}
+
+# The flags the service runs with, read off its unit file (an ExecStart spread over several lines
+# is joined). Empty when the host has no such file: the caller falls back on systemd.
+unitFlags() {
+  ssh "$HOST" "cat /etc/systemd/system/$UNIT.service 2>/dev/null" |
+    awk '/^ExecStart=/ { sub(/^ExecStart=/, ""); s = $0
+      while (s ~ /\\$/) { sub(/\\$/, "", s); if ((getline n) > 0) s = s " " n }
+      print s }'
+}
+
+# A binary that does not know a flag the service runs with crash-loops it: Restart=always keeps
+# trying a command that fails at once. The help of the new binary is asked on the host (it is built
+# for that system) and every flag of the unit is looked for in it, before anything is replaced.
+checkFlags() { # $1: the binary about to replace $BIN
+  scp -q "$1" "$HOST:/tmp/web-ide-pod.check"
+  help=$(ssh "$HOST" "/tmp/web-ide-pod.check -h 2>&1 || true")
+  ssh "$HOST" "rm -f /tmp/web-ide-pod.check"
+  argv=$(unitFlags)
+  if [ -z "$argv" ]; then
+    argv=$(ssh "$HOST" "systemctl show -p ExecStart $UNIT" | sed -n 's/.*argv\[\]=\([^;]*\);.*/\1/p')
+  fi
+  bad=""
+  for f in $argv; do
+    case $f in
+      -*) name=${f%%=*}
+          echo "$help" | grep -qE "^  +$name( |\$)" || bad="$bad $name" ;;
+    esac
+  done
+  if [ -n "$bad" ]; then
+    echo "$UNIT runs with flags this binary does not know:$bad" >&2
+    echo "the branch deployed is not the branch of this build: merge it first (the binary in place is untouched)" >&2
+    exit 1
+  fi
 }
 
 if [ -n "$ROLLBACK" ]; then
@@ -223,6 +261,13 @@ if [ -z "$BINARY" ]; then
   BINARY=$TMP/web-ide-pod
 fi
 [ -f "$BINARY" ] || { echo "no such binary: $BINARY" >&2; exit 2; }
+
+# The flags before anything is replaced.
+checkFlags "$BINARY"
+if [ -n "$CHECK" ]; then
+  echo "$HOST: $UNIT runs with flags this binary knows"
+  exit 0
+fi
 
 # The host runs the new file before it replaces the one it serves: a binary built for another
 # system, or one that cannot even print its version, never stops the relay.
