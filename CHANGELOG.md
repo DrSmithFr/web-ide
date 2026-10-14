@@ -2,7 +2,7 @@
 
 All notable changes of Web IDE. The release workflow publishes the section of a version as the notes of its GitHub release.
 
-## [Unreleased]
+## [1.11.0] - 2026-10-14
 
 ### Added
 
@@ -17,10 +17,13 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 - Kanban: a *Development agent* setting (assistant, or Claude Code / opencode / pi of the Agents tool). With an agent, *Start development* opens one session per ticket in its worktree, briefed with the ticket; corrections go to the same session; the ticket opens it; removing the worktree ends it. Every agent session gets the MCP server of the IDE (kanban tools), and `kanban_get` / `kanban_conversation` / `/review-dev` read the session.
 - Questions tool: every question waiting for you (permissions and forms of the Agents sessions — Claude's AskUserQuestion included —, `ask_user` of the assistant, and a new MCP `ask_user` for the CLI agents) in one list, and a modal with the last message of the agent that opens by itself when the question is not on screen (a setting, an override per session); a push notification on a new question.
 - Agents tool: a follow mode per session (the eye of the message box) opens in the editor each file the agent edits, for Claude Code, opencode and pi.
+- The Service Worker of the relay keeps the assets a pod serves as immutable: one cache per pod and per version of that pod, read before a fetch is carried through the tunnel, written under a cap of 8 MB per entry, dropped when the pod declares another version or after a month. A reload of the page no longer carries the app: 1.5 MB and 4 channels become 1.7 kB and 2. The page itself, its `/api` calls and the previews always go through the tunnel, so a cached asset never stands for a live connection.
+- What a load of the relay page costs is measurable: `window.bootTimings` (the Service Worker, the device, the identity link, the signaling, the handshake, the app) and `window.httpChannels` / `window.httpBytes`, printed by the `relay` suite on the first load and on a reload.
 
 ### Changed
 
 - A project of another pod of the LAN opens under `/_lan/pod/<key>/` of the local pod, not on a port of its own: it stays in the window of the installed app, with no warning bar of an outside site.
+- On the relay page, the tunnel and the Service Worker start together: the page no longer waits for the (slow, once per browser) activation of the Service Worker before dialling the pod. A first load reaches the tunnel in 32 ms instead of 2011 ms, a reload opens the app in about 650 ms.
 
 ### Fixed
 
