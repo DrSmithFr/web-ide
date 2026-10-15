@@ -1890,6 +1890,7 @@
   "the checksum of the phrase does not match": "la somme de contrôle de la phrase ne correspond pas",
   "The pod at {addr} runs another version: update this pod.": "Le pod à {addr} a une autre version : mettez ce pod à jour.",
   "Pods": "Pods",
+  "this pod": "ce pod",
   "Pod": "Pod",
   "Fingerprint of the pod": "Empreinte du pod",
   "offline": "hors ligne",

@@ -120,6 +120,9 @@ run(async ({ page }) => {
     assert((await page.textContent('.project-card[data-pod=bravo] [data-testid=project-pod]')).includes('bravo'), 'a project of bravo carries its badge')
     const names = await page.$$eval('[data-testid=pod-block]', (els) => els.map((e) => e.dataset.name))
     assert(names.sort().join() === 'bravo,echo', 'only the pods of the account have a line: ' + names)
+    const own = await page.waitForSelector('.home-pods > [data-testid=pod-own][data-name=alpha]')
+    assert((await own.textContent()).includes('this pod'), 'this pod has its line too, first: ' + (await own.textContent()))
+    assert(await page.$eval('.home-pods > .pod-row', (e) => e.dataset.name === 'alpha'), 'the line of this pod comes first')
 
     // 4. echo is revoked offline (phrase typed): alpha drops it, and bravo gets the list
     // from alpha, with no relay.

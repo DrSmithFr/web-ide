@@ -326,7 +326,7 @@ func main() {
 	// under its own origin too (pod/internal/multipod.RemoteGateway).
 	dir.SetRemote(cfg.RelayURL != "")
 	dir.SetEmitter(srv.PodsChanged)
-	srv.Pods = &podsView{dir: dir, cfg: cfg, st: st, relayCli: &relayCli}
+	srv.Pods = &podsView{dir: dir, cfg: cfg, st: st, relayCli: &relayCli, id: podID}
 	srv.Pods.(*podsView).lan = lanMgr
 	onLANChange()
 	// The link to the relay is a function of its URL: the Settings page turns remote access on or
@@ -793,13 +793,22 @@ type podsView struct {
 	st       *store.Store
 	lan      *lan.Manager
 	relayCli *atomic.Pointer[relayclient.Client]
+	id       *identity.PodIdentity
 }
 
 func (v *podsView) List() any { return v.dir.List() }
 func (v *podsView) Gateway() string {
 	return v.dir.Gateway()
 }
-func (v *podsView) Site() string    { return v.dir.Site() }
+func (v *podsView) Site() string { return v.dir.Site() }
+
+// Own is the device key of this pod, paired ("" otherwise): known without a relay or a sync key.
+func (v *podsView) Own() string {
+	if v.id == nil || !v.id.Paired() {
+		return ""
+	}
+	return v.id.ID()
+}
 func (v *podsView) Preferred() bool { return v.cfg.Gateway.Preferred }
 
 func (v *podsView) SetPreferred(on bool) error {

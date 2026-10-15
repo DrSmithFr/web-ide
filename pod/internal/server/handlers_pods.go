@@ -22,6 +22,8 @@ type Pods interface {
 	// nothing), and Site the site this pod belongs to.
 	Gateway() string
 	Site() string
+	// Own is the device key of this pod: the home page lists it among the pods.
+	Own() string
 	// Update carries a signed update request to the pod it names and answers what that pod said
 	// (running, not_service, refused).
 	Update(ctx context.Context, req *identity.UpdateRequest) (any, error)
@@ -67,8 +69,12 @@ func (s *Server) registerPods() {
 		if s.Pods == nil {
 			return nil, i18n.New("the pod is not paired")
 		}
-		return map[string]any{"site": s.Pods.Site(), "gateway": s.Pods.Gateway(), "preferred": s.Pods.Preferred(),
-			"canUpdate": s.Pods.CanUpdate()}, nil
+		out := map[string]any{"site": s.Pods.Site(), "gateway": s.Pods.Gateway(), "preferred": s.Pods.Preferred(),
+			"canUpdate": s.Pods.CanUpdate()}
+		if own := s.Pods.Own(); own != "" {
+			out["key"], out["fingerprint"] = own, identity.Fingerprint(own)
+		}
+		return out, nil
 	})
 }
 

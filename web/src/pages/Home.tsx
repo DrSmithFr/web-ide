@@ -159,7 +159,7 @@ export function Home() {
           </For>
         </div>
         <Show when={(pods() ?? []).length}>
-          <Pods pods={pods()!} />
+          <Pods pods={pods()!} name={ws()?.name ?? ''} version={ws()?.version ?? ''} />
         </Show>
         <OpenTunnels />
         <Show when={available().length}>
@@ -264,14 +264,22 @@ function RemoteCard(props: { pod: PodInfo; p: PodProject }) {
   )
 }
 
-/** The other pods of the account, one line each: what the list cannot say about their projects —
- * offline, gateway, another version (with *Update this pod*), no sync key yet, LAN one-way. */
-function Pods(props: { pods: PodInfo[] }) {
+/** The pods of the account, one line each, this pod first: what the list cannot say about their
+ * projects — offline, gateway, another version (with *Update this pod*), no sync key yet, LAN
+ * one-way. */
+function Pods(props: { pods: PodInfo[]; name: string; version: string }) {
   const [lan] = useLan()
   const outdated = () => (lan()?.failed ?? []).filter((f) => f.error === 'version')
+  const [self] = createResource(() => request<{ key?: string; fingerprint?: string; gateway: string }>('pods.self').catch(() => null))
+  const own = (): PodInfo | null => {
+    const s = self()
+    if (!s?.key) return null
+    return { key: s.key, name: props.name, version: props.version, fingerprint: s.fingerprint ?? '', online: true, gateway: s.gateway === s.key }
+  }
   return (
     <section class="home-pods">
       <h3 class="home-sub">{t('Pods')}</h3>
+      <Show when={own()}>{(o) => <PodRow pod={o()} self />}</Show>
       <For each={props.pods}>{(pod) => <PodRow pod={pod} />}</For>
       <For each={outdated()}>
         {(f) => (
@@ -284,7 +292,7 @@ function Pods(props: { pods: PodInfo[] }) {
   )
 }
 
-function PodRow(props: { pod: PodInfo }) {
+function PodRow(props: { pod: PodInfo; self?: boolean }) {
   const p = () => props.pod
   const seen = () => {
     const at = p().seen
@@ -319,10 +327,15 @@ function PodRow(props: { pod: PodInfo }) {
       ? t('This pod cannot reach {name} on the local network, only {name} reaches this pod: {name} is reached through the relay.', { name: p().name })
       : t('This pod cannot reach {name} on the local network, only {name} reaches this pod (a NAT, WSL2): without the relay, {name} cannot be opened from here.', { name: p().name })
   return (
-    <div class="pod-row" classList={{ offline: !p().online }} data-testid="pod-block" data-name={p().name}>
+    <div class="pod-row" classList={{ offline: !p().online }} data-testid={props.self ? 'pod-own' : 'pod-block'} data-name={p().name}>
       <div class="home-bar">
         <span class="pod-dot" classList={{ on: p().online }} />
         <strong>{p().name}</strong>
+        <Show when={props.self}>
+          <span class="badge pod-badge" data-testid="pod-self">
+            {t('this pod')}
+          </span>
+        </Show>
         <span class="muted small" title={t('Fingerprint of the pod')}>
           {p().fingerprint}
         </span>
