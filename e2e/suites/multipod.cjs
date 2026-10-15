@@ -342,6 +342,14 @@ run(
       assert((await app.textContent('.project-card[data-pod=bravo] [data-testid=project-pod]')).includes('bravo'), 'a project shows the badge of its pod')
       const href = await app.getAttribute('.project-card[data-pod=bravo] [data-testid=pod-project]', 'href')
       assert(href && href.startsWith('/pod/' + keyB), 'on the relay origin, the page of a pod of the site runs under /pod/: ' + href)
+      // A project of bravo is edited from this home page: the request rides a side channel routed
+      // through the gateway, and bravo saves it.
+      await app.click('.project-card[data-pod=bravo] [data-testid=project-edit]')
+      await app.fill('.modal textarea', 'edited through the relay')
+      await app.click('.modal button[type=submit]')
+      const regB = () => JSON.parse(fs.readFileSync(path.join(dataB, 'projects.json'), 'utf8'))
+      assert(await waitFor(() => (regB().some((p) => p.description === 'edited through the relay') ? true : null), 20000), 'bravo saved the change asked through the relay: ' + JSON.stringify(regB()))
+      await app.waitForSelector('.project-card[data-pod=bravo]:has-text("edited through the relay")', { timeout: 30000 })
 
       // 5. Notifications are enabled on this device, on the page of alpha: every pod of the
       // account gets the subscription, not only the one the window shows (a project of charlie

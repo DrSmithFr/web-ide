@@ -20,7 +20,8 @@ function Swatches(props: { value: string; onPick: (c: string) => void; testid: s
   )
 }
 
-export function IconEditor(props: { id: string; name: string; spec: IconSpec | null; onClose: () => void }) {
+/** save stores the icon: on this pod by default, on the pod that holds the project otherwise. */
+export function IconEditor(props: { id: string; name: string; spec: IconSpec | null; onClose: () => void; save?: (spec: IconSpec, svg: string) => Promise<void> }) {
   const [spec, setSpec] = createStore<IconSpec>(structuredClone(props.spec ?? defaultSpec(props.id, props.name)))
   const [glyphs] = createResource(() => import('./glyphs').then((m) => m.glyphs))
   const [query, setQuery] = createSignal('')
@@ -31,7 +32,7 @@ export function IconEditor(props: { id: string; name: string; spec: IconSpec | n
     try {
       const s = structuredClone(unwrap(spec))
       if (s.kind === 'glyph' && !s.glyph) s.kind = 'text'
-      await saveIcon(props.id, s, svg())
+      await (props.save ?? ((sp: IconSpec, v: string) => saveIcon(props.id, sp, v)))(s, svg())
       props.onClose()
     } catch (e) {
       errorToast(e)

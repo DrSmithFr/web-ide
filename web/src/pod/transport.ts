@@ -13,11 +13,13 @@ export interface Channel {
   openChannel?(label: string): Promise<Channel | null>
 }
 
-export function wsChannel(): Channel {
+/** The WebSocket of the pod the page runs on, or of the pod served under base (another pod of
+ * the account, through this one). */
+export function wsChannel(base = pageBase): Channel {
   const handlers = { open: () => {}, close: () => {}, message: (_: string) => {} }
   let sock: WebSocket | null = null
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  sock = new WebSocket(`${proto}//${location.host}${pageBase}/ws`)
+  sock = new WebSocket(`${proto}//${location.host}${base}/ws`)
   sock.onopen = () => handlers.open()
   sock.onmessage = (ev) => handlers.message(ev.data as string)
   sock.onclose = () => handlers.close()

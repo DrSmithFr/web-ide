@@ -20,6 +20,7 @@ import { OpenTunnels } from '../docker/OpenTunnels'
 import { useLan } from '../state/lan'
 import { podOpenable, podURL, usePods, type PodInfo, type PodProject } from '../state/pods'
 import { askUpdate, updateOffer, type UpdateAnswer } from '../pod/update'
+import { type Call, podCall } from '../pod/remote'
 
 interface Project {
   id: string
@@ -36,7 +37,8 @@ export function Home() {
   const [projects, { refetch }] = createResource(() => request<Project[]>('projects.list'))
   const [ws, { refetch: refetchWs }] = createResource(() => request('workspace.get'))
   const [dirs, { refetch: refetchDirs }] = createResource(() => request('workspace.dirs', {}).catch(() => null))
-  const [editing, setEditing] = createSignal<Partial<Project> | null>(null)
+  // The project form: a project of this pod (pod null) or of another one, which saves it itself.
+  const [editing, setEditing] = createSignal<{ p: Partial<Project>; pod: PodInfo | null } | null>(null)
   const off = onPod('projects.changed', () => {
     refetch()
     refetchDirs()
@@ -52,10 +54,39 @@ export function Home() {
     // The home page shows its projects: the end of a load through the relay (#75).
     if (list) requestAnimationFrame(() => traceBoot('home'))
   })
-  const [iconFor, setIconFor] = createSignal<{ p: Project; spec: IconSpec | null } | null>(null)
+  const [iconFor, setIconFor] = createSignal<{ p: { id: string; name: string }; spec: IconSpec | null; save?: (spec: IconSpec, svg: string) => Promise<void> } | null>(null)
   const editIcon = async (p: Project) => {
     try {
       setIconFor({ p, spec: (await loadIcon(p.id)).spec })
+    } catch (e) {
+      errorToast(e)
+    }
+  }
+  // The actions on a project of another pod: the request goes to that pod, which checks it as it
+  // checks its own windows; its list comes back by pods.changed.
+  const remoteEdit = async (pod: PodInfo, id: string) => {
+    try {
+      const list = await podCall(pod)<Project[]>('projects.list')
+      const p = list.find((x) => x.id === id)
+      if (!p) throw new Error(t('{name} no longer holds this project', { name: pod.name }))
+      setEditing({ p: structuredClone(p), pod })
+    } catch (e) {
+      errorToast(e)
+    }
+  }
+  const remoteIcon = async (pod: PodInfo, p: PodProject) => {
+    const call = podCall(pod)
+    try {
+      const r = await call<{ spec: IconSpec | null }>('projects.icon', { id: p.id })
+      setIconFor({ p, spec: r.spec, save: (spec, svg) => call('projects.icon.save', { id: p.id, spec, svg }) })
+    } catch (e) {
+      errorToast(e)
+    }
+  }
+  const remoteRemove = async (pod: PodInfo, p: PodProject) => {
+    if (!confirm(t('Remove “{name}” from the list of {pod}? The files are not deleted.', { name: p.name, pod: pod.name }))) return
+    try {
+      await podCall(pod)('projects.delete', { id: p.id })
     } catch (e) {
       errorToast(e)
     }
@@ -117,7 +148,7 @@ export function Home() {
             {t('Workspace:')} <span class="mono">{ws()?.workspace}</span>
           </span>
           <span class="grow" />
-          <button class="btn primary" onClick={() => setEditing({ type: 'local', path: ws()?.workspace ? ws().workspace + '/' : '' })}>
+          <button class="btn primary" onClick={() => setEditing({ p: { type: 'local' }, pod: null })}>
             <Icon name="plus" size={14} /> {t('New project')}
           </button>
         </div>
@@ -125,7 +156,7 @@ export function Home() {
           <For each={entries()} fallback={<p class="muted">{projects.loading ? t('Loading…') : t('No project. Create one, or add a folder of the workspace below.')}</p>}>
             {(e) =>
               e.pod ? (
-                <RemoteCard pod={e.pod} p={e.p as PodProject} />
+                <RemoteCard pod={e.pod} p={e.p as PodProject} onEdit={remoteEdit} onIcon={remoteIcon} onRemove={remoteRemove} />
               ) : (
                 <article class="project-card" data-pod={ws()?.name}>
                   <a
@@ -146,7 +177,7 @@ export function Home() {
                     <button class="icon-btn" title={t('Change the icon')} onClick={() => editIcon(e.p as Project)} data-testid="project-icon-edit">
                       <Icon name="sparkle" />
                     </button>
-                    <button class="icon-btn" title={t('Edit')} onClick={() => setEditing(structuredClone(e.p as Project))}>
+                    <button class="icon-btn" title={t('Edit')} onClick={() => setEditing({ p: structuredClone(e.p as Project), pod: null })}>
                       <Icon name="edit" />
                     </button>
                     <button class="icon-btn" title={t('Remove from the list')} onClick={() => remove(e.p as Project)}>
@@ -177,15 +208,23 @@ export function Home() {
         </Show>
       </main>
       <Show when={iconFor()}>
-        {(f) => <IconEditor id={f().p.id} name={f().p.name} spec={f().spec} onClose={() => setIconFor(null)} />}
+        {(f) => <IconEditor id={f().p.id} name={f().p.name} spec={f().spec} save={f().save} onClose={() => setIconFor(null)} />}
       </Show>
       <Show when={editing()}>
         <ProjectForm
-          initial={editing()!}
-          workspace={ws()?.workspace ?? ''}
+          initial={editing()!.p}
+          pod={editing()!.pod}
+          pods={(pods() ?? []).filter(reachable)}
+          ownName={ws()?.name ?? ''}
           onClose={() => setEditing(null)}
-          onSaved={(p, isNew) => {
+          onSaved={(p, isNew, pod) => {
             setEditing(null)
+            if (pod) {
+              // A project of another pod opens with the front end of that pod.
+              if (isNew) location.assign(podURL(pod, `/project/${p.id}`))
+              else toast(t('Project saved on {pod}', { pod: pod.name }), 'ok')
+              return
+            }
             refetch()
             refetchWs()
             if (isNew) navigate(`/project/${p.id}`)
@@ -227,8 +266,18 @@ function ProjectInfo(props: { p: { name: string; type: string; description?: str
   )
 }
 
-/** A project of another pod: it opens with the front end of that pod, in this window. */
-function RemoteCard(props: { pod: PodInfo; p: PodProject }) {
+/** Another pod can be asked from here: online, and speaking the protocol of this one. */
+const reachable = (p: PodInfo) => p.online && podOpenable(p)
+
+/** A project of another pod: it opens with the front end of that pod, in this window, and its
+ * actions are requests to that pod. */
+function RemoteCard(props: {
+  pod: PodInfo
+  p: PodProject
+  onEdit: (pod: PodInfo, id: string) => void
+  onIcon: (pod: PodInfo, p: PodProject) => void
+  onRemove: (pod: PodInfo, p: PodProject) => void
+}) {
   const pod = () => props.pod
   const icon = () => props.p.icon || renderIcon(defaultSpec(props.p.id, props.p.name))
   const why = () =>
@@ -246,7 +295,7 @@ function RemoteCard(props: { pod: PodInfo; p: PodProject }) {
   return (
     <article class="project-card" classList={{ offline: !pod().online }} data-pod={pod().name}>
       <Show
-        when={pod().online && podOpenable(pod())}
+        when={reachable(pod())}
         fallback={
           <div class="project-open" title={why()} data-testid="pod-project">
             {body()}
@@ -259,6 +308,15 @@ function RemoteCard(props: { pod: PodInfo; p: PodProject }) {
       </Show>
       <div class="project-actions">
         <span class="muted small">{props.p.openedAt ? new Date(props.p.openedAt).toLocaleDateString() : ''}</span>
+        <button class="icon-btn" title={reachable(pod()) ? t('Change the icon') : why()} disabled={!reachable(pod())} onClick={() => props.onIcon(pod(), props.p)} data-testid="project-icon-edit">
+          <Icon name="sparkle" />
+        </button>
+        <button class="icon-btn" title={reachable(pod()) ? t('Edit') : why()} disabled={!reachable(pod())} onClick={() => props.onEdit(pod(), props.p.id)} data-testid="project-edit">
+          <Icon name="edit" />
+        </button>
+        <button class="icon-btn" title={reachable(pod()) ? t('Remove from the list') : why()} disabled={!reachable(pod())} onClick={() => props.onRemove(pod(), props.p)} data-testid="project-remove">
+          <Icon name="close" />
+        </button>
       </div>
     </article>
   )
@@ -390,7 +448,53 @@ function PodRow(props: { pod: PodInfo; self?: boolean }) {
   )
 }
 
-function ProjectForm(props: { initial: Partial<Project>; workspace: string; onClose: () => void; onSaved: (p: Project, isNew: boolean) => void }) {
+/** The form of a project: saved by the pod that holds it. A new project picks its pod among this
+ * one and the pods it can ask (pods); the folder, the workspace and the SSH hosts are that pod's. */
+function ProjectForm(props: {
+  initial: Partial<Project>
+  pod: PodInfo | null
+  pods: PodInfo[]
+  ownName: string
+  onClose: () => void
+  onSaved: (p: Project, isNew: boolean, pod: PodInfo | null) => void
+}) {
+  const isNew = !props.initial.id
+  const [target, setTarget] = createSignal<PodInfo | null>(props.pod)
+  const call = (): Call => {
+    const pod = target()
+    return pod ? podCall(pod) : request
+  }
+  // Keyed by its source: a pod chosen, then null for this pod, must fetch again.
+  const [ws] = createResource(() => ({ pod: target() }), () => call()<{ workspace: string }>('workspace.get').catch(() => ({ workspace: '' })))
+  return (
+    <Modal title={isNew ? t('New project') : t('Edit · {name}', { name: props.initial.name ?? '' })} onClose={props.onClose}>
+      <Show when={isNew && props.pods.length}>
+        <label class="field">
+          <span>{t('Pod')}</span>
+          <select data-testid="project-pod-select" value={target()?.key ?? ''} onChange={(e) => setTarget(props.pods.find((p) => p.key === e.currentTarget.value) ?? null)}>
+            <option value="">{t('{name} (this pod)', { name: props.ownName })}</option>
+            <For each={props.pods}>{(p) => <option value={p.key}>{p.name}</option>}</For>
+          </select>
+        </label>
+      </Show>
+      {/* Everything below is the chosen pod's: a new form once its workspace is known. */}
+      <Show when={!ws.loading && ws()} keyed>
+        {(w) => (
+          <ProjectFields
+            initial={isNew ? { ...props.initial, path: w.workspace ? w.workspace + '/' : '' } : props.initial}
+            isNew={isNew}
+            workspace={w.workspace}
+            call={call()}
+            onClose={props.onClose}
+            onSaved={(p) => props.onSaved(p, isNew, target())}
+          />
+        )}
+      </Show>
+    </Modal>
+  )
+}
+
+function ProjectFields(props: { initial: Partial<Project>; isNew: boolean; workspace: string; call: Call; onClose: () => void; onSaved: (p: Project) => void }) {
   const [p, setP] = createStore<Project>({
     id: '',
     name: '',
@@ -404,8 +508,8 @@ function ProjectForm(props: { initial: Partial<Project>; workspace: string; onCl
   } as Project)
   const [browse, setBrowse] = createSignal(false)
   const [remote, setRemote] = createSignal('')
-  const [sshInfo] = createResource(() => request('ssh.info'))
-  const isNew = !props.initial.id
+  const [sshInfo] = createResource(() => props.call('ssh.info'))
+  const isNew = props.isNew
 
   const save = async (e: Event) => {
     e.preventDefault()
@@ -413,111 +517,109 @@ function ProjectForm(props: { initial: Partial<Project>; workspace: string; onCl
     if (p.type === 'ssh') body.ssh = { ...p.ssh }
     if (isNew) body.remote = remote()
     try {
-      const v = await request(isNew ? 'projects.create' : 'projects.update', body)
+      const v = await props.call(isNew ? 'projects.create' : 'projects.update', body)
       if (v.gitError) toast(t('git init failed: {error}', { error: v.gitError }), 'error')
-      props.onSaved(v, isNew)
+      props.onSaved(v)
     } catch (err) {
       errorToast(err)
     }
   }
 
   return (
-    <Modal title={isNew ? t('New project') : t('Edit · {name}', { name: props.initial.name ?? '' })} onClose={props.onClose}>
-      <form class="form" onSubmit={save}>
-        <div class="segmented" role="radiogroup">
-          <button type="button" role="radio" aria-checked={p.type === 'local'} classList={{ on: p.type === 'local' }} onClick={() => setP('type', 'local')}>
-            {t('Local')}
-          </button>
-          <button type="button" role="radio" aria-checked={p.type === 'ssh'} classList={{ on: p.type === 'ssh' }} onClick={() => setP({ type: 'ssh', path: p.type === 'ssh' ? p.path : '~' })}>
-            SSH
-          </button>
+    <form class="form" onSubmit={save}>
+      <div class="segmented" role="radiogroup">
+        <button type="button" role="radio" aria-checked={p.type === 'local'} classList={{ on: p.type === 'local' }} onClick={() => setP('type', 'local')}>
+          {t('Local')}
+        </button>
+        <button type="button" role="radio" aria-checked={p.type === 'ssh'} classList={{ on: p.type === 'ssh' }} onClick={() => setP({ type: 'ssh', path: p.type === 'ssh' ? p.path : '~' })}>
+          SSH
+        </button>
+      </div>
+      <Show when={p.type === 'local'}>
+        <label class="field">
+          <span>{t('Folder')}</span>
+          <div class="field-row">
+            <input class="grow mono" value={p.path} placeholder={props.workspace + '/my-project'} onInput={(e) => setP('path', e.currentTarget.value)} required />
+            <button type="button" class="btn" onClick={() => setBrowse(!browse())}>
+              {t('Browse')}
+            </button>
+          </div>
+        </label>
+        <Show when={browse()}>
+          <FolderBrowser start={p.path.replace(/\/$/, '') || props.workspace} call={props.call} onPick={(d) => setP('path', d)} />
+        </Show>
+      </Show>
+      <Show when={p.type === 'ssh'}>
+        <div class="field-row">
+          <label class="field grow">
+            <span>{t('Host (or alias of ~/.ssh/config)')}</span>
+            <input list="home-ssh-hosts" value={p.ssh!.host} onInput={(e) => setP('ssh', 'host', e.currentTarget.value)} required />
+            <datalist id="home-ssh-hosts">
+              <For each={sshInfo()?.hosts ?? []}>{(h: any) => <option value={h.alias}>{h.hostName}</option>}</For>
+            </datalist>
+          </label>
+          <label class="field w-port">
+            <span>{t('Port')}</span>
+            <input type="number" value={p.ssh!.port} onInput={(e) => setP('ssh', 'port', parseInt(e.currentTarget.value, 10) || 22)} />
+          </label>
         </div>
-        <Show when={p.type === 'local'}>
-          <label class="field">
-            <span>{t('Folder')}</span>
-            <div class="field-row">
-              <input class="grow mono" value={p.path} placeholder={props.workspace + '/my-project'} onInput={(e) => setP('path', e.currentTarget.value)} required />
-              <button type="button" class="btn" onClick={() => setBrowse(!browse())}>
-                {t('Browse')}
-              </button>
-            </div>
+        <div class="field-row">
+          <label class="field grow">
+            <span>{t('User')}</span>
+            <input value={p.ssh!.user} placeholder={t('local user by default')} onInput={(e) => setP('ssh', 'user', e.currentTarget.value)} />
           </label>
-          <Show when={browse()}>
-            <FolderBrowser start={p.path.replace(/\/$/, '') || props.workspace} onPick={(d) => setP('path', d)} />
-          </Show>
-        </Show>
-        <Show when={p.type === 'ssh'}>
-          <div class="field-row">
-            <label class="field grow">
-              <span>{t('Host (or alias of ~/.ssh/config)')}</span>
-              <input list="home-ssh-hosts" value={p.ssh!.host} onInput={(e) => setP('ssh', 'host', e.currentTarget.value)} required />
-              <datalist id="home-ssh-hosts">
-                <For each={sshInfo()?.hosts ?? []}>{(h: any) => <option value={h.alias}>{h.hostName}</option>}</For>
-              </datalist>
-            </label>
-            <label class="field w-port">
-              <span>{t('Port')}</span>
-              <input type="number" value={p.ssh!.port} onInput={(e) => setP('ssh', 'port', parseInt(e.currentTarget.value, 10) || 22)} />
-            </label>
-          </div>
-          <div class="field-row">
-            <label class="field grow">
-              <span>{t('User')}</span>
-              <input value={p.ssh!.user} placeholder={t('local user by default')} onInput={(e) => setP('ssh', 'user', e.currentTarget.value)} />
-            </label>
-            <label class="field">
-              <span>{t('Authentication')}</span>
-              <select value={p.ssh!.auth} onChange={(e) => setP('ssh', 'auth', e.currentTarget.value as any)}>
-                <option value="agent">{t('Agent + default keys')}</option>
-                <option value="key">{t('Dedicated key')}</option>
-                <option value="password">{t('Password (asked when opening)')}</option>
-              </select>
-            </label>
-          </div>
-          <Show when={p.ssh!.auth === 'key'}>
-            <label class="field">
-              <span>{t('Private key')}</span>
-              <input list="home-ssh-keys" class="mono" value={p.ssh!.keyPath ?? ''} onInput={(e) => setP('ssh', 'keyPath', e.currentTarget.value)} />
-              <datalist id="home-ssh-keys">
-                <For each={sshInfo()?.keys ?? []}>{(k: string) => <option value={k} />}</For>
-              </datalist>
-            </label>
-          </Show>
           <label class="field">
-            <span>{t('Remote folder (absolute, or relative to home)')}</span>
-            <input class="mono" value={p.path} onInput={(e) => setP('path', e.currentTarget.value)} />
+            <span>{t('Authentication')}</span>
+            <select value={p.ssh!.auth} onChange={(e) => setP('ssh', 'auth', e.currentTarget.value as any)}>
+              <option value="agent">{t('Agent + default keys')}</option>
+              <option value="key">{t('Dedicated key')}</option>
+              <option value="password">{t('Password (asked when opening)')}</option>
+            </select>
           </label>
-        </Show>
-        <Show when={isNew}>
+        </div>
+        <Show when={p.ssh!.auth === 'key'}>
           <label class="field">
-            <span>{t('Git remote (optional, added as origin)')}</span>
-            <input class="mono" value={remote()} placeholder="git@github.com:me/project.git" onInput={(e) => setRemote(e.currentTarget.value)} data-testid="project-remote" />
+            <span>{t('Private key')}</span>
+            <input list="home-ssh-keys" class="mono" value={p.ssh!.keyPath ?? ''} onInput={(e) => setP('ssh', 'keyPath', e.currentTarget.value)} />
+            <datalist id="home-ssh-keys">
+              <For each={sshInfo()?.keys ?? []}>{(k: string) => <option value={k} />}</For>
+            </datalist>
           </label>
         </Show>
         <label class="field">
-          <span>{t('Title (optional: derived from the path or the host)')}</span>
-          <input value={p.title} onInput={(e) => setP('title', e.currentTarget.value)} />
+          <span>{t('Remote folder (absolute, or relative to home)')}</span>
+          <input class="mono" value={p.path} onInput={(e) => setP('path', e.currentTarget.value)} />
         </label>
+      </Show>
+      <Show when={isNew}>
         <label class="field">
-          <span>{t('Description (optional)')}</span>
-          <textarea rows="2" value={p.description} onInput={(e) => setP('description', e.currentTarget.value)} />
+          <span>{t('Git remote (optional, added as origin)')}</span>
+          <input class="mono" value={remote()} placeholder="git@github.com:me/project.git" onInput={(e) => setRemote(e.currentTarget.value)} data-testid="project-remote" />
         </label>
-        <div class="form-actions">
-          <button type="button" class="btn" onClick={props.onClose}>
-            {t('Cancel')}
-          </button>
-          <button type="submit" class="btn primary">
-            {isNew ? t('Create and open') : t('Save')}
-          </button>
-        </div>
-      </form>
-    </Modal>
+      </Show>
+      <label class="field">
+        <span>{t('Title (optional: derived from the path or the host)')}</span>
+        <input value={p.title} onInput={(e) => setP('title', e.currentTarget.value)} />
+      </label>
+      <label class="field">
+        <span>{t('Description (optional)')}</span>
+        <textarea rows="2" value={p.description} onInput={(e) => setP('description', e.currentTarget.value)} />
+      </label>
+      <div class="form-actions">
+        <button type="button" class="btn" onClick={props.onClose}>
+          {t('Cancel')}
+        </button>
+        <button type="submit" class="btn primary">
+          {isNew ? t('Create and open') : t('Save')}
+        </button>
+      </div>
+    </form>
   )
 }
 
-function FolderBrowser(props: { start: string; onPick: (dir: string) => void }) {
+function FolderBrowser(props: { start: string; call: Call; onPick: (dir: string) => void }) {
   const [dir, setDir] = createSignal(props.start)
-  const [data] = createResource(dir, (d) => request('workspace.dirs', { path: d }).catch((e) => ({ error: (e as Error).message })))
+  const [data] = createResource(dir, (d) => props.call('workspace.dirs', { path: d }).catch((e) => ({ error: (e as Error).message })))
   return (
     <div class="folder-browser">
       <div class="folder-path">

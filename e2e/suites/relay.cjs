@@ -123,7 +123,8 @@ run(
     await app.waitForSelector('.xterm', { timeout: 15000 })
     await page.keyboard.type('echo relay-$((6*7))\n')
     await app.waitForTimeout(1200)
-    assert((await app.textContent('.xterm-rows')).includes('relay-42'), 'terminal echo through its channel')
+    const xrows = await app.textContent('.xterm-rows')
+    assert(xrows.includes('relay-42'), 'terminal echo through its channel: ' + xrows.slice(-300))
 
     // A big file: over the size of one message, so the request goes on xfer:<n>. It is
     // created by the terminal, so the pod knows it (a file written from outside would not

@@ -205,6 +205,49 @@ run(async ({ page }) => {
     await page.waitForSelector('.project-card[data-pod=bravo]')
     assert(true, 'the home page of bravo through the gateway is the one of alpha')
 
+    // 7b. The projects of bravo are edited from the home page of alpha: each request goes to
+    // bravo, which saves it in its own registry.
+    const bravoCard = '.project-card[data-pod=bravo]:has-text("bravo-app")'
+    await page.click(`${bravoCard} [data-testid=project-edit]`)
+    await page.fill('.modal label.field:has-text("Title") input', 'bravo renamed')
+    await page.click('.modal button[type=submit]')
+    await page.waitForSelector('.project-card[data-pod=bravo]:has-text("bravo renamed")', { timeout: 15000 })
+    const reg = () => JSON.parse(fs.readFileSync(path.join(bravo.data, 'projects.json'), 'utf8'))
+    assert(reg().some((p) => p.title === 'bravo renamed'), 'the new title is saved by bravo: ' + JSON.stringify(reg().map((p) => p.title)))
+    await page.click('.project-card[data-pod=bravo]:has-text("bravo renamed") [data-testid=project-icon-edit]')
+    await page.click('.ie-shape[data-shape=hexagon]')
+    await page.click('[data-testid=icon-save]')
+    await page.waitForSelector('.modal', { state: 'detached' })
+    let icon = {}
+    for (let i = 0; i < 40 && icon.shape !== 'hexagon'; i++) {
+      await sleep(100)
+      try {
+        icon = JSON.parse(fs.readFileSync(path.join(bravo.ws, 'bravo-app', '.ide', 'icon.json'), 'utf8'))
+      } catch {}
+    }
+    assert(icon.shape === 'hexagon', 'the icon is saved by bravo: ' + JSON.stringify(icon))
+
+    // A new project on bravo: its folders, then its page.
+    fs.mkdirSync(path.join(bravo.ws, 'made-from-alpha'))
+    await page.click('.home-bar button:has-text("New project")')
+    await page.selectOption('[data-testid=project-pod-select]', { label: 'bravo' })
+    await page.waitForFunction((ws) => document.querySelector('.modal input.grow.mono')?.value === ws + '/', bravo.ws, { timeout: 10000 })
+    await page.click('.modal button:has-text("Browse")')
+    await page.waitForSelector('.modal .folder-item:has-text("bravo-app")', { timeout: 10000 })
+    assert(true, 'the folders listed are the ones of bravo')
+    await page.fill('.modal label.field:has-text("Folder") input', path.join(bravo.ws, 'made-from-alpha'))
+    await page.click('.modal button[type=submit]')
+    await page.waitForSelector('.menubar', { timeout: 20000 })
+    assert(new URL(page.url()).pathname.startsWith(prefix + '/project/'), 'the new project opens on bravo: ' + page.url())
+    assert(fs.existsSync(path.join(bravo.ws, 'made-from-alpha', '.git')), 'bravo created the repository of the new project')
+    await page.click('.menubar button[title="Projects"]')
+    const made = '.project-card[data-pod=bravo]:has-text("made-from-alpha")'
+    await page.waitForSelector(made, { timeout: 15000 })
+    page.once('dialog', (d) => d.accept())
+    await page.click(`${made} [data-testid=project-remove]`)
+    await page.waitForSelector(made, { state: 'detached', timeout: 15000 })
+    assert(!reg().some((p) => p.path.endsWith('made-from-alpha')), 'bravo removed it from its registry')
+
     // 8. golf dials alpha but listens where alpha cannot dial it back (a pod behind a NAT, WSL2):
     // with no relay, its block says "LAN one-way" and why, rather than a bare "offline".
     await startPod('golf', 6, 'join', { lanHost: '127.0.0.2', peers: [`127.0.0.1:${LAN_PORT}`] })
