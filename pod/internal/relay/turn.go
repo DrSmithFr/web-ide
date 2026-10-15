@@ -178,9 +178,8 @@ type TurnConfig struct {
 	// AdvertiseIPv6: the IPv6 given to clients, when the machine has a global one. Without it
 	// the relay is reachable on IPv4 only, and an IPv6 client falls back to the IPv4 address.
 	AdvertiseIPv6 string
-	// Domain: when the relay has one, the ICE URLs name it instead of the addresses, so the
-	// client reaches STUN and TURN wherever the domain points (the addresses stay the fallback
-	// for a client that cannot resolve it).
+	// Domain: when the relay has one, the ICE URLs name it alone, so the client reaches STUN and
+	// TURN wherever the domain points, with one allocation per transport (see iceURLs).
 	Domain  string
 	Port    int // STUN/TURN control port (0 = 3478)
 	TLSPort int // TLS port of the relay, for TURN over TLS (0 = none)
@@ -322,28 +321,34 @@ func (t *Turn) flushLoop() {
 	}
 }
 
-// iceURLs are the STUN and TURN URLs the clients are told to reach: one per address of the
-// machine, and the domain when the relay has one (turns: on the TLS port, the scheme of TURN
-// over TLS).
+// iceURLs are the STUN and TURN URLs the clients are told to reach. Each TURN URL costs an
+// allocation (a relay port) on each end of a tunnel, taken while ICE gathers, so the list is kept
+// short (#72). With a domain, the domain alone: TURN over UDP, and TURN over TLS on the TLS port
+// as the fallback of a network that blocks UDP — it passes where TCP 3478 is blocked too. With
+// no domain, one name per address of the machine, over UDP and TCP (turns: there only when a
+// TLS side exists, a certificate rarely names an address).
 func iceURLs(cfg TurnConfig, addrs []net.IP) []string {
-	var urls []string
-	names := make([]string, 0, len(addrs)+1)
-	if cfg.Domain != "" {
-		names = append(names, cfg.Domain)
-	}
-	for _, ip := range addrs {
-		names = append(names, ip.String())
-	}
 	port := strconv.Itoa(cfg.Port)
-	for _, n := range names {
+	tls := cfg.TLSListener != nil && cfg.TLSPort != 0
+	if cfg.Domain != "" {
+		urls := []string{"stun:" + net.JoinHostPort(cfg.Domain, port),
+			"turn:" + net.JoinHostPort(cfg.Domain, port) + "?transport=udp"}
+		if tls {
+			return append(urls, "turns:"+net.JoinHostPort(cfg.Domain, strconv.Itoa(cfg.TLSPort))+"?transport=tcp")
+		}
+		return append(urls, "turn:"+net.JoinHostPort(cfg.Domain, port)+"?transport=tcp")
+	}
+	var urls []string
+	for _, ip := range addrs {
+		n := ip.String()
 		urls = append(urls, "stun:"+net.JoinHostPort(n, port),
 			"turn:"+net.JoinHostPort(n, port)+"?transport=udp",
 			"turn:"+net.JoinHostPort(n, port)+"?transport=tcp")
 	}
-	if cfg.TLSListener != nil && cfg.TLSPort != 0 {
+	if tls {
 		tlsPort := strconv.Itoa(cfg.TLSPort)
-		for _, n := range names {
-			urls = append(urls, "turns:"+net.JoinHostPort(n, tlsPort)+"?transport=tcp")
+		for _, ip := range addrs {
+			urls = append(urls, "turns:"+net.JoinHostPort(ip.String(), tlsPort)+"?transport=tcp")
 		}
 	}
 	return urls

@@ -49,13 +49,18 @@ So the capacity of a relay is `relay ports / 4` simultaneous relayed tunnels:
 - the hosted relay today, 840 ports: **about 210 tunnels**;
 - 500 simultaneous sessions need a range of **at least 2000 ports** (`-turn-ports 49160-51999`).
 
-Two ways to lift it, in order of what they cost:
+Two ways to lift it, both done:
 
 1. **Widen the range.** `-turn-ports` is a flag; the firewall must carry the range. Nothing else
-   changes, and the ports are the cheapest resource a VPS has.
-2. **Halve the allocations per session.** The TCP transport of TURN is only a fallback for a
-   client whose UDP is blocked; refusing it on the relay's ICE URLs would leave 2 allocations per
-   session, doubling the tunnels for the same range.
+   changes, and the ports are the cheapest resource a VPS has. The hosted relay now runs with
+   `-turn-ports 49160-51999`: 2840 ports.
+2. **Advertise fewer TURN URLs.** Each TURN URL is an allocation per end, taken while ICE gathers
+   — even for a tunnel that ends direct. With a domain, the hosted relay used to name the domain,
+   its IPv4 and its IPv6, each over UDP, TCP 3478 and TLS 443: up to 9 TURN URLs per end, about 6
+   of them on the IPv4 range (one range per address family). It now names the domain alone, over
+   UDP and over TLS on 443 — the fallback of a network that blocks UDP, which passes where TCP
+   3478 is blocked too: **2 allocations per end, 4 per session**, about 710 sessions with 2840
+   ports.
 
 ## What the relay was doing at 500 sessions
 

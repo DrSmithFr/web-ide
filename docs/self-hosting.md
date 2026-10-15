@@ -41,8 +41,10 @@ web-ide-pod relay -data /var/lib/antennae \
 Without `-domain` and without `-cert/-key`, the relay makes a **self-signed** certificate on first
 run: fine on a tailnet, a browser will complain.
 
-The ICE URLs name the domain when the relay has one — `turns:relay.example.org:443?transport=tcp`,
-`turn:relay.example.org:3478` — so a client behind a restrictive network reaches TURN on 443.
+The ICE URLs name the domain alone when the relay has one — `turn:relay.example.org:3478` over UDP
+and `turns:relay.example.org:443?transport=tcp` — so a client behind a restrictive network reaches
+TURN on 443. Each TURN URL costs a relay port on each end of a tunnel (see [load.md](load.md)):
+the addresses and TCP 3478 are only named when there is no domain.
 
 ## systemd
 

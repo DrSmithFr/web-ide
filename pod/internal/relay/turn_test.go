@@ -181,25 +181,37 @@ func TestTurnQuota(t *testing.T) {
 	}
 }
 
-// TestTurnICEURLs: with a domain, the ICE URLs name it (turns: on the TLS port, the scheme of
-// TURN over TLS); without one, they name the addresses of the machine, IPv4 and IPv6.
+// TestTurnICEURLs: with a domain, the ICE URLs name it alone, over UDP and over TLS on the TLS
+// port (each TURN URL is an allocation per end, #72); without one, they name the addresses of the
+// machine, IPv4 and IPv6, over UDP and TCP.
 func TestTurnICEURLs(t *testing.T) {
+	addrs := []net.IP{net.ParseIP("5.196.7.104"), net.ParseIP("2001:41d0:404:200::a601")}
 	urls := iceURLs(TurnConfig{
 		AdvertiseIP: "5.196.7.104", AdvertiseIPv6: "2001:41d0:404:200::a601",
 		Domain: "antennae.space", Port: 3478, TLSPort: 443, TLSListener: &net.TCPListener{},
-	}, []net.IP{net.ParseIP("5.196.7.104"), net.ParseIP("2001:41d0:404:200::a601")})
+	}, addrs)
 	want := []string{
 		"stun:antennae.space:3478",
 		"turn:antennae.space:3478?transport=udp",
-		"turn:antennae.space:3478?transport=tcp",
 		"turns:antennae.space:443?transport=tcp",
-		"stun:5.196.7.104:3478",
-		"turn:[2001:41d0:404:200::a601]:3478?transport=udp",
-		"turns:[2001:41d0:404:200::a601]:443?transport=tcp",
 	}
-	for _, w := range want {
+	if strings.Join(urls, " ") != strings.Join(want, " ") {
+		t.Fatalf("with a domain, the ICE URLs must be %v, got %v", want, urls)
+	}
+	// A domain with no TLS side keeps TCP 3478 as the fallback of a network that blocks UDP.
+	urls = iceURLs(TurnConfig{Domain: "antennae.space", Port: 3478}, addrs)
+	if !hasURL(urls, "turn:antennae.space:3478?transport=tcp") || len(urls) != 3 {
+		t.Fatalf("a domain without TLS falls back on TCP 3478, got %v", urls)
+	}
+
+	urls = iceURLs(TurnConfig{Port: 3478}, addrs)
+	for _, w := range []string{
+		"stun:5.196.7.104:3478",
+		"turn:5.196.7.104:3478?transport=tcp",
+		"turn:[2001:41d0:404:200::a601]:3478?transport=udp",
+	} {
 		if !hasURL(urls, w) {
-			t.Fatalf("the ICE URLs must contain %q, got %v", w, urls)
+			t.Fatalf("without a domain, the ICE URLs must contain %q, got %v", w, urls)
 		}
 	}
 
