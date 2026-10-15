@@ -4,6 +4,14 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+## [1.13.1] - 2026-10-15
+
+### Changed
+
+- A relay with a domain advertises the domain alone in its ICE URLs: TURN over UDP on 3478, and TURN over TLS on 443 as the fallback of a network that blocks UDP. Each TURN URL costs a relay port on each end of a tunnel; the hosted relay advertised its domain, IPv4 and IPv6, each over UDP, TCP and TLS — up to 9 per end. A session now costs 4, about 710 simultaneous sessions on the hosted relay instead of about 236. A relay without a domain is unchanged.
+- The hosted relay relays on 2840 ports (`-turn-ports 49160-51999`, was 840), and `deploy-relay.sh --setup` writes a firewall rule ufw accepts for the range (it refused `--force` with a range), replacing the old one.
+- docs/load.md: the numbers of the relay under load (#72) — pages, signaling and TURN tunnels up to 500 sessions — and the wall it runs into first, its relay ports.
+
 ## [1.13.0] - 2026-10-15
 
 ### Added
