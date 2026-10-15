@@ -205,6 +205,7 @@ function draw(name, ...nodes) {
   el.replaceChildren(...nodes.flat())
   drawFoot()
   drawTrace()
+  if (quotaSeen && (name === 'connecting' || name === 'error' || name === 'busy')) quotaNote()
 }
 // The words of a fingerprint, each in its own box: easier to compare from one screen to another.
 const fpWords = (fp, big) => h('div', { class: big ? 'fp big' : 'fp' }, (fp ?? '').split(' ').flatMap((w, i) => (i ? [' ', h('span', {}, w)] : [h('span', {}, w)])))
@@ -381,7 +382,12 @@ const notice = (m) => draw('error', h('div', { class: 'err' }, m))
 // The monthly TURN quota of the hosted relay is reached: the relay gave no TURN credential, so
 // the tunnel can only take a direct path. The page says it and points at what lifts the quota,
 // it does not stop the attempt — most tunnels do not need TURN.
+// The note stays through the redraws of the card: the ICE servers can come before the last one (#75).
+let quotaSeen = null
 function quotaNote(q) {
+  quotaSeen = q ?? quotaSeen
+  if (!quotaSeen) return
+  q = quotaSeen
   const el = document.getElementById('msg')
   if (!el || el.querySelector('.quota')) return
   const size = (n) => {
@@ -776,6 +782,7 @@ async function enter(mode) {
   linkEarly = null
   if (!l?.isOpen()) {
     // Not opened early, or it failed or closed while the page waited for the user.
+    earlySession = null
     l = await id.link(onPush, lang)
     mark('link')
     trace(words.tLink)
@@ -823,6 +830,11 @@ async function enter(mode) {
   shownKey = entryKey
   connecting(1, p?.name || pod)
   while (early?.successor) early = early.successor // it fell back to the token mode
+  if (earlySession) {
+    // Nobody took the session that opened with the link: the relay forgets it.
+    l.adopt?.(earlySession.session, () => {}).close()
+    earlySession = null
+  }
   if (early && !early.dropped && early.podId === pod) {
     // The early tunnel is the one: it takes its key, and its handshake checks it.
     if (tunnels.get('') === early) tunnels.delete('')
@@ -903,7 +915,10 @@ async function main() {
   // The identity link opens now, beside the store, the wordlist and the device (#75): enter takes
   // it. An invite link pairs on a link of its own.
   if (!join) {
-    linkEarly = id.link(onPush, lang).then((l) => {
+    // The pod of the link, or the one opened last, gets its session with the link: its ICE
+    // servers come without a round trip of their own.
+    earlySession = pod ? { pod, session: rand() } : null
+    linkEarly = id.link(onPush, lang, earlySession).then((l) => {
       mark('link')
       trace(words.tLink)
       return l
@@ -958,6 +973,7 @@ async function main() {
 }
 
 let linkEarly = null // the identity link main opened at once, for enter
+let earlySession = null // the session that opened with it, until a tunnel takes it
 
 // --- one tunnel per pod ---
 
@@ -1004,7 +1020,13 @@ function connect(key, podId, mode, want) {
   if (link?.signal && link.isOpen()) {
     mark('signal')
     watch('signal', words.tSignalLink)
-    t.sig = link.signal(t.session, podId, onSignal)
+    if (earlySession?.pod === podId && link.adopt) {
+      t.session = earlySession.session
+      earlySession = null
+      t.sig = link.adopt(t.session, onSignal)
+    } else {
+      t.sig = link.signal(t.session, podId, onSignal)
+    }
     return t.ready
   }
   watch('signal', words.tSignal)

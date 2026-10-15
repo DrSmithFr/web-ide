@@ -156,6 +156,11 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 		_ = ws.CloseNow()
 	}()
 	signal := func(b []byte) bool { return s.identitySignal(c, b) }
+	// A page that knows its pod names it in the URL of the link (#75): the session opens with the
+	// link, and its ICE servers come without a round trip of their own.
+	if q := r.URL.Query(); q.Get("pod") != "" && q.Get("session") != "" {
+		signal(mustJSON(sigMsg{Type: "signal", Pod: q.Get("pod"), Session: q.Get("session")}))
+	}
 
 	for {
 		_, b, err := ws.Read(context.Background())

@@ -402,12 +402,27 @@ export async function prove(l, key, origin) {
 // The language is given with the register message, so the relay answers its errors in it. The
 // texts the module itself returns (a certificate that does not verify) are English keys: each
 // page translates them with its own catalog.
-export function link(onPush, lang) {
-  const ws = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/_relay/identity')
+// early {pod, session}: a tunnel to that pod opens with the link (#75) — its ICE servers come with
+// the link, kept until the tunnel takes the session (adopt).
+export function link(onPush, lang, early) {
+  const q = early ? '?pod=' + encodeURIComponent(early.pod) + '&session=' + encodeURIComponent(early.session) : ''
+  const ws = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/_relay/identity' + q)
   const waiters = []
   // The tunnels the page signals on this link (relay.md, #75): a message of a session goes to its
   // tunnel, never to a waiter of the link.
   const sessions = new Map()
+  const held = []
+  if (early) sessions.set(early.session, (m) => held.push(m))
+  const handle = (session) => ({
+    send: (m) => ws.send(JSON.stringify({ ...m, session })),
+    open: () => ws.readyState === WebSocket.OPEN,
+    close: () => {
+      if (!sessions.delete(session)) return
+      try {
+        ws.send(JSON.stringify({ type: 'bye', session }))
+      } catch {}
+    },
+  })
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data)
     if (m.session) {
@@ -431,16 +446,13 @@ export function link(onPush, lang) {
       signal: (session, pod, onMsg) => {
         sessions.set(session, onMsg)
         ws.send(JSON.stringify({ type: 'signal', pod, session }))
-        return {
-          send: (m) => ws.send(JSON.stringify({ ...m, session })),
-          open: () => ws.readyState === WebSocket.OPEN,
-          close: () => {
-            if (!sessions.delete(session)) return
-            try {
-              ws.send(JSON.stringify({ type: 'bye', session }))
-            } catch {}
-          },
-        }
+        return handle(session)
+      },
+      // The session opened with the link (early): its tunnel takes it, with what came already.
+      adopt: (session, onMsg) => {
+        sessions.set(session, onMsg)
+        for (const m of held.splice(0)) onMsg(m)
+        return handle(session)
       },
       isOpen: () => ws.readyState === WebSocket.OPEN,
     })

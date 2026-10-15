@@ -614,3 +614,28 @@ func TestIdentityLinkSignal(t *testing.T) {
 		cand = cand || m.Type == "candidate"
 	}
 }
+
+// TestIdentityLinkEarlySession: a page that knows its pod names it in the URL of its identity
+// link (#75): the ICE servers of the session are the first thing the link says, before anything
+// is sent on it.
+func TestIdentityLinkEarlySession(t *testing.T) {
+	ts := newRelay(t)
+	a := testAccount(t)
+	p := podDevice(t, a, "laptop")
+	pod := registerPod(t, ts, "laptop", "s3cret", a.ID, p.cert, true, p.key, false)
+	defer pod.close()
+	ready(t, pod)
+	conn, _, err := websocket.Dial(context.Background(), wsURL(ts, "/_relay/identity?pod=laptop&session=s9"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &wsClient{conn}
+	defer c.close()
+	if m := c.next(t); m.Type != "ice" || m.Session != "s9" {
+		t.Fatalf("the link opens with the ICE servers of its session, got %q %q", m.Type, m.Session)
+	}
+	c.send(t, sigMsg{Type: "offer", Session: "s9", SDP: "v=0 early"})
+	if o := nextUntil(t, pod, "offer"); o.Session != "s9" || o.SDP != "v=0 early" {
+		t.Fatalf("the offer of the early session reaches the pod: %+v", o)
+	}
+}
