@@ -1,5 +1,7 @@
-// Home page: project list, creation of local or SSH projects, workspace folders not yet added.
-import { podPath } from '../app/base'
+// Home page: one list of the projects of every pod of the account, the state of those pods,
+// creation of local or SSH projects, workspace folders not yet added.
+import { base, podPath } from '../app/base'
+import { homeBase } from '../app/home'
 import { createEffect, createResource, createSignal, For, onCleanup, onMount, Show } from 'solid-js'
 import { createStore } from 'solid-js/store'
 import { on as onPod, request } from '../pod/rpc'
@@ -12,11 +14,11 @@ import { Icon } from '../ui/icons'
 import { PodStatus } from './ProjectPage'
 import { openSettings } from '../settings/SettingsModal'
 import { t } from '../i18n'
-import { iconOf, iconURL, type IconSpec, loadIcon, loadIcons, setFavicon } from '../ui/projectIcon'
+import { defaultSpec, iconOf, iconURL, type IconSpec, loadIcon, loadIcons, renderIcon, setFavicon } from '../ui/projectIcon'
 import { IconEditor } from '../ui/IconEditor'
 import { OpenTunnels } from '../docker/OpenTunnels'
-import { gateway, gatewayHome, useLan } from '../state/lan'
-import { podOpenable, podURL, usePods, type PodInfo } from '../state/pods'
+import { useLan } from '../state/lan'
+import { podOpenable, podURL, usePods, type PodInfo, type PodProject } from '../state/pods'
 import { askUpdate, updateOffer, type UpdateAnswer } from '../pod/update'
 
 interface Project {
@@ -59,6 +61,21 @@ export function Home() {
     }
   }
 
+  // One list for every pod of the account, the last opened first: the projects of this pod, and
+  // those the other pods published (a project never opened, or of a pod that tells no date, last).
+  const [pods] = usePods()
+  const entries = (): Entry[] => {
+    const all: Entry[] = (projects() ?? []).map((p) => ({ pod: null, p, opened: Date.parse(p.openedAt) || 0 }))
+    for (const pod of pods() ?? []) for (const p of pod.projects ?? []) all.push({ pod, p, opened: Date.parse(p.openedAt ?? '') || 0 })
+    return all.sort((a, b) => b.opened - a.opened || a.p.name.localeCompare(b.p.name))
+  }
+  // The home page of a pod served under a prefix is the one of the window's entry pod.
+  onMount(() => {
+    void homeBase().then((to) => {
+      if (to !== base) location.replace(to + '/')
+    })
+  })
+
   const available = () => {
     const used = new Set((projects() ?? []).filter((p) => p.type === 'local').map((p) => p.path))
     return (dirs()?.dirs ?? []).filter((d: any) => !used.has(d.path))
@@ -87,13 +104,6 @@ export function Home() {
       <header class="home-head">
         <h1>Web IDE</h1>
         <span class="muted small mono" data-testid="pod-version">{ws()?.version}</span>
-        <Show when={gateway()}>
-          {(g) => (
-            <a class="btn small" href={gatewayHome} data-testid="lan-back">
-              {t('← Back to {name}', { name: g().name })}
-            </a>
-          )}
-        </Show>
         <span class="grow" />
         <button class="icon-btn" title={t('Settings')} onClick={() => openSettings('workspace')}>
           <Icon name="gear" />
@@ -112,48 +122,44 @@ export function Home() {
           </button>
         </div>
         <div class="project-list">
-          <For each={projects() ?? []} fallback={<p class="muted">{projects.loading ? t('Loading…') : t('No project. Create one, or add a folder of the workspace below.')}</p>}>
-            {(p) => (
-              <article class="project-card">
-                <a
-                  class="project-open"
-                  href={podPath(`/project/${p.id}`)}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    navigate(`/project/${p.id}`)
-                  }}
-                >
-                  <Show when={iconOf(p.id)} fallback={<span class="project-icon" />}>
-                    <img class="project-icon" src={iconURL(iconOf(p.id))} alt="" data-testid="project-icon" />
-                  </Show>
-                  <div class="project-info">
-                    <div class="project-title">
-                      {p.name} <span class="badge">{p.type === 'ssh' ? 'SSH' : 'local'}</span>
-                    </div>
-                    <Show when={p.description}>
-                      <div class="project-desc">{p.description}</div>
+          <For each={entries()} fallback={<p class="muted">{projects.loading ? t('Loading…') : t('No project. Create one, or add a folder of the workspace below.')}</p>}>
+            {(e) =>
+              e.pod ? (
+                <RemoteCard pod={e.pod} p={e.p as PodProject} />
+              ) : (
+                <article class="project-card" data-pod={ws()?.name}>
+                  <a
+                    class="project-open"
+                    href={podPath(`/project/${e.p.id}`)}
+                    onClick={(ev) => {
+                      ev.preventDefault()
+                      navigate(`/project/${e.p.id}`)
+                    }}
+                  >
+                    <Show when={iconOf(e.p.id)} fallback={<span class="project-icon" />}>
+                      <img class="project-icon" src={iconURL(iconOf(e.p.id))} alt="" data-testid="project-icon" />
                     </Show>
-                    <div class="muted small mono ellipsis">{p.type === 'ssh' ? `${p.ssh?.user ? p.ssh.user + '@' : ''}${p.ssh?.host}:${p.path}` : p.path}</div>
+                    <ProjectInfo p={e.p} pod={(pods() ?? []).length ? ws()?.name : undefined} where={where(e.p as Project)} />
+                  </a>
+                  <div class="project-actions">
+                    <span class="muted small">{e.p.openedAt ? new Date(e.p.openedAt).toLocaleDateString() : ''}</span>
+                    <button class="icon-btn" title={t('Change the icon')} onClick={() => editIcon(e.p as Project)} data-testid="project-icon-edit">
+                      <Icon name="sparkle" />
+                    </button>
+                    <button class="icon-btn" title={t('Edit')} onClick={() => setEditing(structuredClone(e.p as Project))}>
+                      <Icon name="edit" />
+                    </button>
+                    <button class="icon-btn" title={t('Remove from the list')} onClick={() => remove(e.p as Project)}>
+                      <Icon name="close" />
+                    </button>
                   </div>
-                </a>
-                <div class="project-actions">
-                  <span class="muted small">{p.openedAt ? new Date(p.openedAt).toLocaleDateString() : ''}</span>
-                  <button class="icon-btn" title={t('Change the icon')} onClick={() => editIcon(p)} data-testid="project-icon-edit">
-                    <Icon name="sparkle" />
-                  </button>
-                  <button class="icon-btn" title={t('Edit')} onClick={() => setEditing(structuredClone(p))}>
-                    <Icon name="edit" />
-                  </button>
-                  <button class="icon-btn" title={t('Remove from the list')} onClick={() => remove(p)}>
-                    <Icon name="close" />
-                  </button>
-                </div>
-              </article>
-            )}
+                </article>
+              )
+            }
           </For>
         </div>
-        <Show when={!gateway()}>
-          <OtherPods />
+        <Show when={(pods() ?? []).length}>
+          <Pods pods={pods()!} />
         </Show>
         <OpenTunnels />
         <Show when={available().length}>
@@ -191,16 +197,82 @@ export function Home() {
   )
 }
 
-/** One Projects block per pod of the account: the pods of the local network first (their page runs
- * through this pod), then the pods the relay reports, then the pods whose encrypted list the relay
- * cached — greyed, with the time they published it. */
-function OtherPods() {
-  const [pods] = usePods()
+interface Entry {
+  /** The pod that holds the project, null for this pod. */
+  pod: PodInfo | null
+  p: Project | PodProject
+  opened: number
+}
+
+const where = (p: Project) => (p.type === 'ssh' ? `${p.ssh?.user ? p.ssh.user + '@' : ''}${p.ssh?.host}:${p.path}` : p.path)
+
+/** The text of a project card: its name, its kind, the pod that holds it (when the account has
+ * several), its description and its path. */
+function ProjectInfo(props: { p: { name: string; type: string; description?: string }; pod?: string; where: string }) {
+  return (
+    <div class="project-info">
+      <div class="project-title">
+        <span class="ellipsis">{props.p.name}</span> <span class="badge">{props.p.type === 'ssh' ? 'SSH' : 'local'}</span>
+        <Show when={props.pod}>
+          <span class="badge pod-badge" data-testid="project-pod" title={t('Pod')}>
+            {props.pod}
+          </span>
+        </Show>
+      </div>
+      <Show when={props.p.description}>
+        <div class="project-desc">{props.p.description}</div>
+      </Show>
+      <div class="muted small mono ellipsis">{props.where}</div>
+    </div>
+  )
+}
+
+/** A project of another pod: it opens with the front end of that pod, in this window. */
+function RemoteCard(props: { pod: PodInfo; p: PodProject }) {
+  const pod = () => props.pod
+  const icon = () => props.p.icon || renderIcon(defaultSpec(props.p.id, props.p.name))
+  const why = () =>
+    pod().mismatch
+      ? t('{name} runs another multi-pod protocol: update it', { name: pod().name })
+      : !pod().online
+        ? t('This pod is offline.')
+        : t('Opening the projects of another site comes with the next version')
+  const body = () => (
+    <>
+      <img class="project-icon" src={iconURL(icon())} alt="" />
+      <ProjectInfo p={props.p} pod={pod().name} where={props.p.path} />
+    </>
+  )
+  return (
+    <article class="project-card" classList={{ offline: !pod().online }} data-pod={pod().name}>
+      <Show
+        when={pod().online && podOpenable(pod())}
+        fallback={
+          <div class="project-open" title={why()} data-testid="pod-project">
+            {body()}
+          </div>
+        }
+      >
+        <a class="project-open" href={podURL(pod(), `/project/${props.p.id}`)} data-testid="pod-project">
+          {body()}
+        </a>
+      </Show>
+      <div class="project-actions">
+        <span class="muted small">{props.p.openedAt ? new Date(props.p.openedAt).toLocaleDateString() : ''}</span>
+      </div>
+    </article>
+  )
+}
+
+/** The other pods of the account, one line each: what the list cannot say about their projects —
+ * offline, gateway, another version (with *Update this pod*), no sync key yet, LAN one-way. */
+function Pods(props: { pods: PodInfo[] }) {
   const [lan] = useLan()
   const outdated = () => (lan()?.failed ?? []).filter((f) => f.error === 'version')
   return (
-    <>
-      <For each={pods() ?? []}>{(pod) => <PodBlock pod={pod} />}</For>
+    <section class="home-pods">
+      <h3 class="home-sub">{t('Pods')}</h3>
+      <For each={props.pods}>{(pod) => <PodRow pod={pod} />}</For>
       <For each={outdated()}>
         {(f) => (
           <p class="muted small" data-testid="lan-outdated">
@@ -208,11 +280,11 @@ function OtherPods() {
           </p>
         )}
       </For>
-    </>
+    </section>
   )
 }
 
-function PodBlock(props: { pod: PodInfo }) {
+function PodRow(props: { pod: PodInfo }) {
   const p = () => props.pod
   const seen = () => {
     const at = p().seen
@@ -242,10 +314,15 @@ function PodBlock(props: { pod: PodInfo }) {
       setBusy(false)
     }
   }
+  const oneway = () =>
+    p().online
+      ? t('This pod cannot reach {name} on the local network, only {name} reaches this pod: {name} is reached through the relay.', { name: p().name })
+      : t('This pod cannot reach {name} on the local network, only {name} reaches this pod (a NAT, WSL2): without the relay, {name} cannot be opened from here.', { name: p().name })
   return (
-    <section class="lan-pod" classList={{ offline: !p().online }} data-testid="pod-block" data-name={p().name}>
+    <div class="pod-row" classList={{ offline: !p().online }} data-testid="pod-block" data-name={p().name}>
       <div class="home-bar">
-        <h2>{t('Projects of {name}', { name: p().name })}</h2>
+        <span class="pod-dot" classList={{ on: p().online }} />
+        <strong>{p().name}</strong>
         <span class="muted small" title={t('Fingerprint of the pod')}>
           {p().fingerprint}
         </span>
@@ -260,15 +337,7 @@ function PodBlock(props: { pod: PodInfo }) {
           </span>
         </Show>
         <Show when={p().oneway}>
-          <span
-            class="badge"
-            data-testid="pod-oneway"
-            title={
-              p().online
-                ? t('This pod cannot reach {name} on the local network, only {name} reaches this pod: {name} is reached through the relay.', { name: p().name })
-                : t('This pod cannot reach {name} on the local network, only {name} reaches this pod (a NAT, WSL2): without the relay, {name} cannot be opened from here.', { name: p().name })
-            }
-          >
+          <span class="badge" data-testid="pod-oneway" title={oneway()}>
             {t('LAN one-way')}
           </span>
         </Show>
@@ -276,7 +345,7 @@ function PodBlock(props: { pod: PodInfo }) {
           <span class="badge">{t('offline')}</span>
         </Show>
         <Show when={p().nokey}>
-          <span class="badge" data-testid="pod-nokey">
+          <span class="badge" data-testid="pod-nokey" title={t('This pod has not published its projects yet.')}>
             {t('waiting for the sync key')}
           </span>
         </Show>
@@ -285,63 +354,17 @@ function PodBlock(props: { pod: PodInfo }) {
           <span class="muted small">{seen()}</span>
         </Show>
         <span class="muted small mono">{p().version}</span>
+        <Show when={outdated()}>
+          <span data-testid="pod-update">
+            <button class="btn small" disabled={busy()} onClick={runUpdate}>
+              {t('Update this pod')}
+            </button>{' '}
+            <span class="muted small">{t('to {version}', { version: offer()!.version })}</span>
+          </span>
+        </Show>
       </div>
-      <div class="project-list">
-        <For
-          each={p().projects ?? []}
-          fallback={
-            <p class="muted">
-              {p().nokey
-                ? t('This pod has not published its projects yet.')
-                : p().online
-                  ? t('Loading…')
-                  : p().oneway
-                    ? t('This pod cannot reach {name} on the local network, only {name} reaches this pod (a NAT, WSL2): without the relay, {name} cannot be opened from here.', { name: p().name })
-                    : t('This pod is offline.')}
-            </p>
-          }
-        >
-          {(pr) => (
-            <article class="project-card">
-              <Show
-                when={podOpenable(p())}
-                fallback={
-                  <div class="project-open" title={p().mismatch ? t('{name} runs another multi-pod protocol: update it', { name: p().name }) : t('Opening the projects of another site comes with the next version')} data-testid="pod-project">
-                    <span class="project-icon" />
-                    <div class="project-info">
-                      <div class="project-title">
-                        {pr.name} <span class="badge">{pr.type === 'ssh' ? 'SSH' : 'local'}</span>
-                      </div>
-                      <Show when={pr.description}>
-                        <div class="project-desc">{pr.description}</div>
-                      </Show>
-                      <div class="muted small mono ellipsis">{pr.path}</div>
-                    </div>
-                  </div>
-                }
-              >
-                <a class="project-open" href={podURL(p(), `/project/${pr.id}`)} data-testid="pod-project">
-                  <span class="project-icon" />
-                  <div class="project-info">
-                    <div class="project-title">
-                      {pr.name} <span class="badge">{pr.type === 'ssh' ? 'SSH' : 'local'}</span>
-                    </div>
-                    <Show when={pr.description}>
-                      <div class="project-desc">{pr.description}</div>
-                    </Show>
-                    <div class="muted small mono ellipsis">{pr.path}</div>
-                  </div>
-                </a>
-              </Show>
-            </article>
-          )}
-        </For>
-      </div>
-      <Show when={outdated()}>
-        <div class="home-bar" data-testid="pod-update">
-          <button class="btn" disabled={busy()} onClick={runUpdate}>{t('Update this pod')}</button>
-          <span class="muted small">{t('to {version}', { version: offer()!.version })}</span>
-        </div>
+      <Show when={p().oneway && !p().online}>
+        <p class="muted small">{oneway()}</p>
       </Show>
       <Show when={answer()?.status === 'not_service'}>
         <div data-testid="pod-update-cmd">
@@ -350,7 +373,7 @@ function PodBlock(props: { pod: PodInfo }) {
           <button class="btn small" onClick={() => void copyText(answer()!.command ?? '')}>{t('Copy')}</button>
         </div>
       </Show>
-    </section>
+    </div>
   )
 }
 

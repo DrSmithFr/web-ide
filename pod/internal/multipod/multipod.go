@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 	"github.com/DrSmithFr/web-ide/pod/internal/lan"
@@ -215,6 +216,9 @@ type Project struct {
 	Type        string `json:"type"`
 	Path        string `json:"path"`
 	Icon        string `json:"icon,omitempty"`
+	// Opened is the last time the project was opened (Unix seconds): the unified home page sorts
+	// the projects of every pod by it.
+	Opened int64 `json:"opened,omitempty"`
 }
 
 // List returns the merged view: the pods of the LAN first (they work with the relay down and their
@@ -238,16 +242,18 @@ func (d *Directory) List() []PodView {
 		for _, p := range d.lan.Status().Peers {
 			if p.OneWay {
 				oneway[p.ID] = true
-				// A LAN peer this pod cannot dial back is not offline when the relay sees it: its
-				// view comes from the relay, as a pod of another network.
-				if online[p.ID] {
-					continue
-				}
+			}
+			// A LAN peer this pod cannot dial back, or whose link is down (it restarted, the
+			// network moved), is not offline when the relay sees it: its view comes from the relay,
+			// as a pod of another network.
+			if (p.OneWay || !p.Online) && online[p.ID] {
+				continue
 			}
 			v := PodView{Key: p.ID, Name: p.Name, Version: p.Version, Fingerprint: p.Fingerprint,
 				Online: p.Online, Path: p.Path, Projects: p.Projects, Protocol: p.Protocol, OneWay: p.OneWay}
 			if l := d.lists[p.ID]; l != nil {
 				v.Name, v.Version = first(l.Name, v.Name), first(l.Version, v.Version)
+				v.Projects = withIcons(v.Projects, l)
 			}
 			seen[p.ID] = true
 			rank[p.ID] = 0
@@ -346,10 +352,39 @@ func (d *Directory) fill(v *PodView, key, name string) {
 	v.Seen = d.seen[key]
 	projects := []map[string]string{}
 	for _, p := range l.Projects {
-		projects = append(projects, map[string]string{"id": p.ID, "name": p.Title, "description": p.Description, "type": p.Type, "path": p.Path})
+		e := map[string]string{"id": p.ID, "name": p.Title, "description": p.Description, "type": p.Type, "path": p.Path, "icon": p.Icon}
+		if p.Opened > 0 {
+			e["openedAt"] = time.Unix(p.Opened, 0).UTC().Format(time.RFC3339)
+		}
+		projects = append(projects, e)
 	}
 	b, _ := json.Marshal(projects)
 	v.Projects = b
+}
+
+// withIcons adds to the live list of a LAN peer (its projects.list, which carries no icon) the
+// icons of the list it published.
+func withIcons(raw json.RawMessage, l *List) json.RawMessage {
+	var projects []map[string]any
+	if len(raw) == 0 || json.Unmarshal(raw, &projects) != nil {
+		return raw
+	}
+	icons := map[string]string{}
+	for _, p := range l.Projects {
+		if p.Icon != "" {
+			icons[p.ID] = p.Icon
+		}
+	}
+	for _, p := range projects {
+		if id, _ := p["id"].(string); icons[id] != "" {
+			p["icon"] = icons[id]
+		}
+	}
+	b, err := json.Marshal(projects)
+	if err != nil {
+		return raw
+	}
+	return b
 }
 
 func first(a, b string) string {

@@ -170,8 +170,9 @@ const appOf = (page) => page.mainFrame().childFrames()[0]
  * pod: a file edited here lands on that pod, and a terminal runs in its folder. keep: the
  * terminal is left open (the caller types in it afterwards). */
 async function openProject(page, app, name, ws, label, own = false, { keep = false } = {}) {
-  // A pod's own projects are the first block of its home page; another pod's are its own block.
-  await app.click(own ? `a.project-open:has-text("${name}-app")` : `[data-testid=pod-block][data-name=${name}] [data-testid=pod-project]:has-text("${name}-app")`)
+  // One list for every pod: a project of the entry pod opens within the page, another pod's
+  // project carries the badge of its pod.
+  await app.click(own ? `a.project-open:has-text("${name}-app")` : `.project-card[data-pod=${name}] [data-testid=pod-project]:has-text("${name}-app")`)
   await app.waitForSelector('.menubar', { timeout: 60000 })
   const row = `.explorer .tree-row[data-path="${path.join(ws, name + '-app', 'hello.txt')}"]`
   await app.waitForSelector(row, { timeout: 30000 })
@@ -322,10 +323,10 @@ run(
       const rows = await app.$$eval('[data-testid=devices] [data-testid=device-list] tr', (els) => els.map((e) => e.textContent))
       assert(rows.filter((r) => r.includes('pod')).length === 2 && rows.some((r) => r.includes('browser')), 'the account lists its two pods and this browser: ' + rows.join(' / ').slice(0, 300))
 
-      // 4. One Projects block per pod. Bravo has no link to the relay: it is listed through the
+      // 4. One list of the projects of every pod, each with the badge of its pod. Bravo has no link to the relay: it is listed through the
       // LAN link of alpha. Charlie is on another site: its list comes from the cache of the relay,
-      // which only ever holds ciphertext — so the block appears once the pod published it.
-      await app.waitForSelector('[data-testid=pod-block][data-name=bravo] [data-testid=pod-project]:has-text("bravo-app")', { timeout: 90000 })
+      // which only ever holds ciphertext — so its projects appear once the pod published it.
+      await app.waitForSelector('.project-card[data-pod=bravo] [data-testid=pod-project]:has-text("bravo-app")', { timeout: 90000 })
       const written = () => py("select count(*) from blobs where kind like 'projects:%'").trim() === '2'
       for (let i = 0; i < 60 && !written(); i++) await sleep(1000)
       assert(written(), 'each pod published its list under its own kind')
@@ -333,10 +334,13 @@ run(
       await page.waitForSelector('#frame', { timeout: 40000 })
       app = appOf(page)
       await app.waitForSelector('.home .home-bar', { timeout: 40000 })
-      await app.waitForSelector('[data-testid=pod-block][data-name=charlie] [data-testid=pod-project]:has-text("charlie-app")', { timeout: 60000 })
+      await app.waitForSelector('.project-card[data-pod=charlie] [data-testid=pod-project]:has-text("charlie-app")', { timeout: 60000 })
       const blocks = await app.$$eval('[data-testid=pod-block]', (els) => els.map((e) => e.dataset.name))
       assert(blocks.includes('bravo') && blocks.includes('charlie'), 'the home page lists the other pods: ' + blocks.join(','))
-      const href = await app.getAttribute('[data-testid=pod-block][data-name=bravo] [data-testid=pod-project]', 'href')
+      const cards = await app.$$eval('.home main > .project-list .project-card', (els) => els.map((e) => e.dataset.pod))
+      assert(cards.includes('alpha') && cards.includes('bravo') && cards.includes('charlie'), 'one list holds the projects of every pod: ' + cards.join(','))
+      assert((await app.textContent('.project-card[data-pod=bravo] [data-testid=project-pod]')).includes('bravo'), 'a project shows the badge of its pod')
+      const href = await app.getAttribute('.project-card[data-pod=bravo] [data-testid=pod-project]', 'href')
       assert(href && href.startsWith('/pod/' + keyB), 'on the relay origin, the page of a pod of the site runs under /pod/: ' + href)
 
       // 5. Notifications are enabled on this device, on the page of alpha: every pod of the
@@ -365,10 +369,11 @@ run(
       for (const name of ['alpha-app', 'bravo-app', 'charlie-app'])
         assert(!dump.includes(name), `the relay base holds no project name (${name})`)
 
-      // 8. Charlie stops: its block turns grey, its cached list stays. Started again, it is online.
+      // 8. Charlie stops: it turns grey, its cached list stays, greyed. Started again, it is online.
       await stop(charlie)
       await app.waitForSelector('[data-testid=pod-block][data-name=charlie].offline', { timeout: 30000 })
-      assert((await app.textContent('[data-testid=pod-block][data-name=charlie]')).includes('charlie-app'), 'an offline pod keeps its list')
+      await app.waitForSelector('.project-card.offline[data-pod=charlie]:has-text("charlie-app")', { timeout: 10000 })
+      assert(!(await app.$('.project-card[data-pod=charlie] a.project-open')), 'an offline pod keeps its list, not openable')
       charlie = await startPod('charlie', dataC, portC, { relay: true })
       await app.waitForSelector('[data-testid=pod-block][data-name=charlie]:not(.offline)', { timeout: 30000 })
 
@@ -377,7 +382,7 @@ run(
       const local = await ctx.newPage()
       await local.goto(`http://127.0.0.1:${PORT_A}/?token=${TOKEN}`)
       await local.waitForSelector('.home .home-bar', { timeout: 40000 })
-      await local.waitForSelector('[data-testid=pod-block][data-name=bravo] [data-testid=pod-project]:has-text("bravo-app")', { timeout: 30000 })
+      await local.waitForSelector('.project-card[data-pod=bravo] [data-testid=pod-project]:has-text("bravo-app")', { timeout: 30000 })
       await local.waitForSelector('[data-testid=pod-block][data-name=charlie]', { timeout: 30000 })
       const keyC = deviceKey(dataC)
       // Bravo is a peer of the LAN of alpha: its page runs under /_lan/pod/ of alpha. Charlie is
@@ -395,10 +400,15 @@ run(
       const keyA = deviceKey(DATA)
       await openProject(page, app, 'alpha', WS, 'alpha', true)
       assert(new URL(app.url()).pathname === `/pod/${keyA}/project/alpha-app`, 'the project of alpha runs under its own path: ' + app.url())
-      await app.goto(`${ORIGIN}/pod/${keyC}/`, { waitUntil: 'domcontentloaded' })
+      // The home page of the window is the one of its entry, whatever pod a page comes from.
+      await app.click('.menubar button[title="Projects"]')
       await app.waitForSelector('.home .home-bar', { timeout: 40000 })
-      assert((await app.textContent('.home-bar')).includes(path.join(TMP, 'mp-charlie', 'ws')), 'the home page of charlie comes from charlie: ' + (await app.textContent('.home-bar')))
-      await openProject(page, app, 'charlie', path.join(TMP, 'mp-charlie', 'ws'), 'charlie', true)
+      assert(new URL(app.url()).pathname === `/pod/${keyA}/`, 'the home button of alpha stays on alpha: ' + app.url())
+      await app.goto(`${ORIGIN}/pod/${keyC}/`, { waitUntil: 'domcontentloaded' })
+      await app.waitForFunction((k) => location.pathname === `/pod/${k}/`, keyA, { timeout: 40000 })
+      await app.waitForSelector('.home .home-bar', { timeout: 40000 })
+      assert((await app.textContent('.home-bar')).includes(WS), 'the home page of charlie is the one of the entry, alpha: ' + (await app.textContent('.home-bar')))
+      await openProject(page, app, 'charlie', path.join(TMP, 'mp-charlie', 'ws'), 'charlie')
       assert(new URL(app.url()).pathname === `/pod/${keyC}/project/charlie-app`, 'the project of charlie runs under its own path: ' + app.url())
       const direct = await tunnelKeys(page)
       for (const k of [keyA, keyC]) assert(direct.includes(k), `${k} has its own tunnel: ` + direct.join(','))
@@ -444,10 +454,10 @@ run(
       const block = '[data-testid=pod-block][data-name=charlie]'
       const badge = await app.waitForSelector(`${block} [data-testid=pod-mismatch]`, { timeout: 40000 })
       assert((await badge.textContent()).includes('older version'), 'charlie runs an older multi-pod protocol: ' + (await badge.textContent()))
-      const card = await waitFor(() => app.$(`${block} [data-testid=pod-project]`), 40000)
-      assert(card, 'the projects of charlie are listed: ' + (await app.textContent(block)))
+      const card = await waitFor(() => app.$('.project-card[data-pod=charlie] [data-testid=pod-project]'), 40000)
+      assert(card, 'the projects of charlie are listed: ' + (await app.textContent('.home main')))
       assert((await card.getAttribute('title')).includes('multi-pod protocol'), 'its projects are not openable: ' + (await card.getAttribute('title')))
-      assert(!(await app.$(`${block} a.project-open`)), 'no link opens a pod of another protocol')
+      assert(!(await app.$('.project-card[data-pod=charlie] a.project-open')), 'no link opens a pod of another protocol')
       await app.click(`${block} [data-testid=pod-update] button`)
       assert(await waitFor(() => (fs.existsSync(marker) ? true : null), 30000), 'charlie ran the installer with the request signed by the device key of the browser')
 

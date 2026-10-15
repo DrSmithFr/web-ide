@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 	"github.com/DrSmithFr/web-ide/pod/internal/lan"
@@ -87,8 +88,14 @@ func blobOf(t *testing.T, a *identity.Account, device string, epoch int64, seq i
 // blobOfProto seals the list of a pod that tells the protocol proto (0: it tells none).
 func blobOfProto(t *testing.T, a *identity.Account, device string, epoch int64, seq int64, name string, proto int, titles ...string) *identity.BlobRecord {
 	t.Helper()
+	return blobOfList(t, a, device, epoch, seq, List{V: 1, Name: name, Version: "1.0", Protocol: proto, Projects: projects(titles...)})
+}
+
+// blobOfList seals a whole list.
+func blobOfList(t *testing.T, a *identity.Account, device string, epoch int64, seq int64, l List) *identity.BlobRecord {
+	t.Helper()
 	kind := identity.ProjectsKind(device)
-	content, err := json.Marshal(List{V: 1, Name: name, Version: "1.0", Protocol: proto, Projects: projects(titles...)})
+	content, err := json.Marshal(l)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,5 +272,54 @@ func TestDirectoryOneWay(t *testing.T) {
 	out = d.List()
 	if len(out) != 1 || !out[0].Online || !out[0].OneWay || out[0].Seen != 333 {
 		t.Fatalf("the relay sees the one-way peer online, with its cached list: %+v", out)
+	}
+}
+
+// TestDirectoryIconsAndOpened: the unified home page shows the icon of every project and sorts them
+// by their last opening — from the cached list, and for a LAN peer, whose live projects.list carries
+// no icon, from the list it published.
+func TestDirectoryIconsAndOpened(t *testing.T) {
+	hub, p, a := hubOf(t)
+	d := New(hub, fakeLAN{st: lan.Status{Peers: []lan.PeerView{{ID: "devL", Name: "lantern", Online: true,
+		Path: "/_lan/pod/devL", Projects: json.RawMessage(`[{"id":"l1","name":"live","openedAt":"2026-10-01T10:00:00Z"}]`)}}}})
+	if err := hub.SetWrap(wrapFor(t, a, p, 0)); err != nil {
+		t.Fatal(err)
+	}
+	hub.SetOther(func(m settingsync.Msg) { d.HandleBlob(m) })
+	d.HandleBlob(settingsync.Msg{Type: "blob", Blob: blobOfList(t, a, "devL", 0, 1, List{V: 1, Name: "lantern",
+		Projects: []Project{{ID: "l1", Title: "live", Icon: "<svg>L</svg>"}}})})
+	d.HandleBlob(settingsync.Msg{Type: "blob", Blob: blobOfList(t, a, "devO", 0, 2, List{V: 1, Name: "far",
+		Projects: []Project{{ID: "o1", Title: "cached", Icon: "<svg>O</svg>", Opened: 1790000000}}})})
+
+	by := map[string][]map[string]string{}
+	for _, v := range d.List() {
+		var got []map[string]string
+		_ = json.Unmarshal(v.Projects, &got)
+		by[v.Key] = got
+	}
+	if l := by["devL"]; len(l) != 1 || l[0]["icon"] != "<svg>L</svg>" || l[0]["openedAt"] != "2026-10-01T10:00:00Z" {
+		t.Fatalf("the live list of a LAN peer keeps its fields and gets the published icons: %v", l)
+	}
+	if o := by["devO"]; len(o) != 1 || o[0]["icon"] != "<svg>O</svg>" || o[0]["openedAt"] != time.Unix(1790000000, 0).UTC().Format(time.RFC3339) {
+		t.Fatalf("a cached list carries the icon and the last opening: %v", o)
+	}
+}
+
+// TestDirectoryLANDownRelayUp: a LAN peer whose link is down while the relay sees it online is
+// listed online, from the relay: its projects stay openable through the relay.
+func TestDirectoryLANDownRelayUp(t *testing.T) {
+	hub, p, a := hubOf(t)
+	d := New(hub, fakeLAN{st: lan.Status{Peers: []lan.PeerView{{ID: "devD", Name: "down"}}}})
+	if err := hub.SetWrap(wrapFor(t, a, p, 0)); err != nil {
+		t.Fatal(err)
+	}
+	hub.SetOther(func(m settingsync.Msg) { d.HandleBlob(m) })
+	if out := d.List(); len(out) != 1 || out[0].Online {
+		t.Fatalf("with no relay, a LAN peer whose link is down is offline: %+v", out)
+	}
+	d.RelayPods([]relayclient.PodInfo{{Key: "devD", Name: "down", Site: "devD"}})
+	out := d.List()
+	if len(out) != 1 || !out[0].Online || out[0].Site != "devD" {
+		t.Fatalf("the relay sees it: it is online, from the relay: %+v", out)
 	}
 }

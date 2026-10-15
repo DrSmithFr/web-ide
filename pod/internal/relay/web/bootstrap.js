@@ -1411,6 +1411,13 @@ async function onMessage(d) {
     } catch {}
     return
   }
+  // The app asks which pod's home page is the window's: the entry pod, which a failover moves.
+  if (d?.kind === 'entry') {
+    try {
+      d.port?.postMessage(entryKey ? '/pod/' + entryKey : '')
+    } catch {}
+    return
+  }
   // A notification clicked: the Service Worker moves the app of this window to its path.
   if (d?.kind === 'open') {
     const p = safePath(d.url)

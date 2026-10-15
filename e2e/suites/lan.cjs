@@ -113,17 +113,19 @@ run(async ({ page }) => {
     await page.click('.modal-head button[title^="Close"]')
     await page.waitForSelector('.modal', { state: 'detached' })
 
-    // 3. The home page shows one block per pod of the account, with its projects.
-    await page.waitForSelector('[data-testid=pod-block][data-name=bravo] [data-testid=pod-project]:has-text("bravo-app")', { timeout: 15000 })
-    await page.waitForSelector('[data-testid=pod-block][data-name=echo] [data-testid=pod-project]:has-text("echo-app")')
+    // 3. The home page shows the projects of every pod of the account in one list, each with the
+    // badge of its pod, and one line per other pod.
+    await page.waitForSelector('.project-card[data-pod=bravo] [data-testid=pod-project]:has-text("bravo-app")', { timeout: 15000 })
+    await page.waitForSelector('.project-card[data-pod=echo] [data-testid=pod-project]:has-text("echo-app")')
+    assert((await page.textContent('.project-card[data-pod=bravo] [data-testid=project-pod]')).includes('bravo'), 'a project of bravo carries its badge')
     const names = await page.$$eval('[data-testid=pod-block]', (els) => els.map((e) => e.dataset.name))
-    assert(names.sort().join() === 'bravo,echo', 'only the pods of the account have a block: ' + names)
+    assert(names.sort().join() === 'bravo,echo', 'only the pods of the account have a line: ' + names)
 
     // 4. echo is revoked offline (phrase typed): alpha drops it, and bravo gets the list
     // from alpha, with no relay.
     const out = pair(DATA, ['revoke', deviceKey(echo.data)], PHRASE + '\n')
     assert(out.includes('revocations : seq 1'), 'pair revoke signs the list: ' + out.replace(/\n/g, ' | '))
-    await page.waitForFunction(() => !document.querySelector('[data-testid=pod-block][data-name=echo]'), null, { timeout: 15000 })
+    await page.waitForFunction(() => !document.querySelector('[data-testid=pod-block][data-name=echo], .project-card[data-pod=echo]'), null, { timeout: 15000 })
     assert(true, 'the revoked pod leaves the home page')
     let bravoStatus = ''
     for (let i = 0; i < 40 && !bravoStatus.includes('revocations'); i++) {
@@ -164,7 +166,7 @@ run(async ({ page }) => {
     // 6. A project of bravo opens through alpha, under /_lan/pod/<key>/ of its origin: its
     // page comes from bravo.
     const home = page.url()
-    await page.click('[data-testid=pod-block][data-name=bravo] [data-testid=pod-project]')
+    await page.click('.project-card[data-pod=bravo] [data-testid=pod-project]')
     await page.waitForSelector('.menubar', { timeout: 20000 })
     const url = new URL(page.url())
     const prefix = url.pathname.match(/^\/_lan\/pod\/[\w-]+/)?.[0]
@@ -190,14 +192,15 @@ run(async ({ page }) => {
     await page.waitForFunction((d) => document.querySelector('.xterm-rows')?.textContent.includes(d), path.join(bravo.ws, 'bravo-app'), { timeout: 5000 })
     assert(true, 'a terminal runs in the folder of bravo')
 
-    // 7. The home page of bravo, through the gateway, leads back to alpha.
+    // 7. One home page: the home button of a project of bravo goes back to alpha's, and the home
+    // page of bravo, through the gateway, is alpha's too.
+    await page.click('.menubar button[title="Projects"]')
+    await page.waitForSelector('.project-card[data-pod=bravo]', { timeout: 15000 })
+    assert(new URL(page.url()).pathname === '/', 'the home button of a project of bravo leads to the home page of alpha: ' + page.url())
     await page.goto(`${url.origin}${prefix}/`)
-    await page.waitForSelector('[data-testid=lan-back]')
-    assert((await page.textContent('[data-testid=lan-back]')).includes('alpha'), 'the page of bravo links back to alpha')
-    assert(!(await page.$('[data-testid=pod-block]')), 'the page of bravo shows no LAN blocks of its own')
-    await page.click('[data-testid=lan-back]')
-    await page.waitForSelector('[data-testid=pod-block][data-name=bravo]')
-    assert(new URL(page.url()).pathname === '/', 'back on the home page of alpha')
+    await page.waitForFunction(() => location.pathname === '/', null, { timeout: 15000 })
+    await page.waitForSelector('.project-card[data-pod=bravo]')
+    assert(true, 'the home page of bravo through the gateway is the one of alpha')
 
     // 8. golf dials alpha but listens where alpha cannot dial it back (a pod behind a NAT, WSL2):
     // with no relay, its block says "LAN one-way" and why, rather than a bare "offline".

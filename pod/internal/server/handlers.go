@@ -55,7 +55,7 @@ func (s *Server) registerGlobal() {
 	})
 	s.handle("workspace.get", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 		home, _ := os.UserHomeDir()
-		return map[string]string{"workspace": s.Cfg.Workspace, "home": home, "dataDir": s.Store.Dir(), "version": s.Version}, nil
+		return map[string]string{"workspace": s.Cfg.Workspace, "home": home, "dataDir": s.Store.Dir(), "version": s.Version, "name": s.Name}, nil
 	})
 	s.handle("workspace.set", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 		a, err := bind[struct{ Path string }](p)
@@ -359,6 +359,10 @@ func (s *Server) registerProject() {
 		}
 		s.Projects.Touch(a.ID)
 		v, _ := s.Projects.Get(a.ID)
+		if v.Parent == "" {
+			// The home pages of every pod sort the projects by their last opening.
+			s.broadcast("projects.changed", nil, nil)
+		}
 		return map[string]any{
 			"project":  projects.View{Project: v, DisplayName: v.Name()},
 			"root":     rt.Root,

@@ -551,8 +551,15 @@ button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 .home-tunnels .home-bar { margin-bottom: 6px; }
 .home-tunnels .home-sub { margin: 0; }
 .home-tunnel { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; margin-bottom: 6px; background: var(--bg-2); }
-.lan-pod { margin-top: 28px; }
-.lan-pod.offline .project-card { opacity: 0.55; }
+.project-card.offline { opacity: 0.55; }
+.pod-badge { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
+.home-pods { margin-top: 28px; }
+.pod-row { padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; margin-bottom: 6px; background: var(--bg-2); }
+.pod-row .home-bar { margin-bottom: 0; gap: 10px; }
+.pod-row p { margin: 4px 0 0; }
+.pod-row.offline { opacity: 0.7; }
+.pod-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--fg-muted); flex: none; }
+.pod-dot.on { background: var(--ok); }
 .project-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .project-card { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-2); min-width: 0; }
 .project-card:hover { border-color: var(--accent); }

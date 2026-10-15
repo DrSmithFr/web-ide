@@ -75,6 +75,8 @@ type Server struct {
 	AllowRemote bool
 	// Version of the pod, shown by the page.
 	Version string
+	// Name of the pod (-name, the host name by default): the badge of its projects on the home page.
+	Name string
 	// MCPBase is the address the agents of the Agents tool reach the pod at (default: from
 	// Cfg.Addr), for its MCP endpoint.
 	MCPBase string

@@ -11,7 +11,7 @@ import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, togg
 import { focusEditor, focusPart, setFocusPart, trackFocus } from '../state/focus'
 import { focusEditorQuietly, isTyping, lockEditor, mobileView, phone, revealCaret, setMobileView } from '../state/mobile'
 import { settings, updateSettings } from '../state/settings'
-import { navigate } from '../app/router'
+import { goHome } from '../app/home'
 import { EditorArea } from '../ui/EditorArea'
 import { ConsoleTool, ProblemsTool, navigateConsoles, newConsole, problemCount, refreshConsoles, setConsoleList } from '../console/consoles'
 import { loadCommands } from '../console/commands'
@@ -276,7 +276,7 @@ function MenuBar() {
   // Phone: three rows, the project and the status, the menus, the icons of the views.
   const head = () => (
     <>
-      <button class="icon-btn" title={t('Projects')} onClick={() => navigate('/')}>
+      <button class="icon-btn" title={t('Projects')} onClick={() => void goHome()}>
         <Icon name="home" />
       </button>
       <ProjectBar />
@@ -646,7 +646,7 @@ export function ProjectPage(props: { id: string }) {
     onPod('project.closed', (e: { id: string }) => {
       if (e.id !== home()?.id) return
       toast(t('The project was closed (changed or deleted)'), 'warn')
-      navigate('/')
+      void goHome()
     }),
   ]
   document.addEventListener('keydown', escapeToEditor)
@@ -663,7 +663,7 @@ export function ProjectPage(props: { id: string }) {
         <div class="center-msg">
           <Show when={error()} fallback={<p class="muted">{t('Opening the project…')}</p>}>
             <p class="danger">{error()}</p>
-            <button class="btn" onClick={() => navigate('/')}>
+            <button class="btn" onClick={() => void goHome()}>
               {t('Back to the projects')}
             </button>
           </Show>

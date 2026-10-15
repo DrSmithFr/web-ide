@@ -12,6 +12,10 @@ export interface PodProject {
   description?: string
   type: 'local' | 'ssh'
   path: string
+  /** The SVG of its icon, as the pod published it. */
+  icon?: string
+  /** Its last opening (ISO): the home page lists every pod's projects by it. */
+  openedAt?: string
 }
 
 export interface PodInfo {

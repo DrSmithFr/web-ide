@@ -106,3 +106,20 @@ export function bootJournal(): Promise<string> {
     window.parent.postMessage({ kind: 'journal', port: chan.port2 }, '*', [chan.port2])
   })
 }
+
+/** The base of the entry pod of the bootstrap page ('/pod/<key>', '' when it has none): its home
+ * page is the one of the window. Null outside the relay origin, or from a bootstrap page that
+ * does not answer. */
+export function entryBase(): Promise<string | null> {
+  if (!inTunnel()) return Promise.resolve(null)
+  const chan = new MessageChannel()
+  return new Promise((resolve) => {
+    const done = setTimeout(() => resolve(null), 1500)
+    chan.port1.onmessage = (e) => {
+      clearTimeout(done)
+      resolve(typeof e.data === 'string' ? e.data : null)
+      chan.port1.close()
+    }
+    window.parent.postMessage({ kind: 'entry', port: chan.port2 }, '*', [chan.port2])
+  })
+}
