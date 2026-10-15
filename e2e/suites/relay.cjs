@@ -98,7 +98,7 @@ run(
     // The journal runs to the end of the load (#75): the app tells its start, its first message
     // from the pod and its home page, and the journal stays readable once the app is open.
     const boot = await page.evaluate(() => window.bootJournal)
-    for (const line of ['Signaling link open', 'Opening the IDE', 'The IDE starts', 'The IDE talks to the pod', 'Home page shown'])
+    for (const line of ['Signaling on the identity link', 'Opening the IDE', 'The IDE starts', 'The IDE talks to the pod', 'Home page shown'])
       assert(boot.includes(line), `the journal of the load says "${line}":\n${boot}`)
     console.log(boot)
     assert(first.app > 0 && first.ready !== undefined && first.channels > 0, 'the phases of the load are measured: ' + JSON.stringify(first))
@@ -251,6 +251,8 @@ run(
     console.log(`  load first:  ${JSON.stringify(first)}`)
     console.log(`  load reload: ${JSON.stringify(re)} (${Date.now() - t0} ms to the app)`)
     assert(re.channels < first.channels, `a reload opens fewer tunnel channels: ${first.channels} → ${re.channels}`)
+    // One WebSocket (#75): the offer leaves on the identity link as soon as it is open.
+    assert(re.signal <= re.link + 5, `the signaling starts with the identity link: link ${re.link} ms, signal ${re.signal} ms`)
     assert(re.bytes * 2 < first.bytes, `a reload carries far fewer bytes through the tunnel: ${first.bytes} → ${re.bytes}`)
     assert(fromNet.length === 0, 'a reload fetches nothing of the shell from the relay: ' + fromNet.join(' '))
     assert(!re.paths.some((p) => p === '/app' || p.includes('/assets/')), 'a reload carries no page nor asset through the tunnel: ' + re.paths.join(' '))
@@ -285,7 +287,7 @@ run(
     // through TURN, and the pod refused the proof.
     assert(await bad.isVisible('#trace-lines'), 'a failed connection shows its Details panel, open')
     const journal = await bad.textContent('#trace-lines')
-    for (const line of ['Signaling link open', 'TURN credentials received', 'Answer of the pod received', 'ICE: connected', 'Path relayed by TURN', 'Error: '])
+    for (const line of ['Signaling on the identity link', 'TURN credentials received', 'Answer of the pod received', 'ICE: connected', 'Path relayed by TURN', 'Error: '])
       assert(journal.includes(line), `the journal says "${line}":\n${journal}`)
     assert(!journal.includes(TOKEN) && !journal.includes('deadbeef'), 'the journal holds no token')
     await bad.screenshot({ path: OUT + '/relay-journal.png' })
@@ -304,7 +306,8 @@ run(
     // A pod that never answers the offer (#74): the line under the step says what it waits for,
     // and after 15 s the page says the pod does not answer, with Retry, while it keeps waiting.
     const stuck = await ctx.newPage()
-    await stuck.routeWebSocket(/\/_relay\/signal/, (ws) => {
+    // The signaling rides the identity link (#75): its answers are the ones dropped.
+    await stuck.routeWebSocket(/\/_relay\/identity/, (ws) => {
       const server = ws.connectToServer()
       server.onMessage((m) => {
         if (!String(m).includes('"answer"')) ws.send(m)

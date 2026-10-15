@@ -103,6 +103,8 @@ const words = {
   tPods: fr ? 'Pods en ligne sur le relay : {n}' : 'Pods online at the relay: {n}',
   tSignal: fr ? 'Ouverture du lien de signalisation…' : 'Opening the signaling link…',
   tSignalOpen: fr ? 'Lien de signalisation ouvert' : 'Signaling link open',
+  tSignalLink: fr ? 'Signalisation sur le lien d’identité (pas de second WebSocket)' : 'Signaling on the identity link (no second WebSocket)',
+  tEarlyDropped: fr ? 'Le pod demandé d’avance n’est pas l’entrée : nouveau tunnel' : 'The pod asked early is not the entry: a new tunnel',
   tIce: fr ? 'Identifiants TURN reçus ({n} serveurs)' : 'TURN credentials received ({n} servers)',
   tIceQuota: fr ? 'Aucun identifiant TURN (quota atteint) : chemins directs seulement' : 'No TURN credential (quota reached): direct paths only',
   tOffer: fr ? 'Offre envoyée, en attente de la réponse du pod…' : 'Offer sent, waiting for the pod to answer…',
@@ -772,27 +774,61 @@ async function enter(mode) {
   link = l
   mark('link')
   trace(words.tLink)
+  // The pod of the link, or the one opened last, is asked at once (#75): its tunnel comes up while
+  // the link proves itself and reads the revocation list and the pods. Its handshake waits for the
+  // pods list to know which device key must answer, and the tunnel is dropped if that list names
+  // another entry: never slower than asking after it.
+  let early = null
+  if (pod) {
+    let settle
+    connecting(1, pod)
+    connect('', pod, mode, new Promise((r) => (settle = r)))
+    early = tunnels.get('')
+    early.early = true
+    early.settle = settle
+  }
+  const giveUp = (err) => {
+    if (early) {
+      early.settle(null)
+      close(early)
+      if (tunnels.get('') === early) tunnels.delete('')
+    }
+    return err
+  }
   if (account) {
     const err = await applyRevocations(l)
-    if (err) return err
+    if (err) return giveUp(err)
     mark('revocations')
     if (!pod) {
       const err = await enterSite(l)
-      if (err) return err
+      if (err) return giveUp(err)
     } else {
       await firstPods(l)
     }
   }
   mark('pods')
   if (account) trace(fmt(words.tPods, { n: pods.length }))
-  if (!pod) return fail(words.nopod)
+  if (!pod) return giveUp(fail(words.nopod))
   const p = pods.find((p) => p.podId === pod)
   entryKey = p?.key ?? ''
   entryPod = pod
   entrySite = p?.site ?? ''
   shownKey = entryKey
   connecting(1, p?.name || pod)
-  entry = await connect(entryKey, pod, mode)
+  while (early?.successor) early = early.successor // it fell back to the token mode
+  if (early && !early.dropped && early.podId === pod) {
+    // The early tunnel is the one: it takes its key, and its handshake checks it.
+    if (tunnels.get('') === early) tunnels.delete('')
+    early.key = entryKey
+    early.early = false
+    tunnels.set(entryKey, early)
+    early.settle(entryKey)
+    entry = await early.ready
+  } else {
+    if (early) trace(words.tEarlyDropped)
+    giveUp()
+    entry = await connect(entryKey, pod, mode)
+  }
   openApp()
   return ''
 }
@@ -908,26 +944,18 @@ async function main() {
 // The tunnel of a pod registered at the relay: a PeerConnection of its own, with the handshake v2
 // run inside it (the proof is bound to both DTLS fingerprints, so the relay never sees the token
 // nor can it swap the SDP). A pod the relay does not see rides the tunnel of its gateway.
-function connect(key, podId, mode) {
-  const t = { key, podId, mode, session: rand(), chans: new Map() }
+// want is the device key its handshake must meet, when it is known only later (enter, #75).
+function connect(key, podId, mode, want) {
+  const t = { key, podId, mode, want: want ?? key, session: rand(), chans: new Map() }
   tunnels.set(key, t)
   t.ready = new Promise((resolve, reject) => {
     t.resolve = resolve
     t.reject = reject
   })
   t.ready.catch(() => {}) // a tunnel nobody waited for must not shout in the console
-  const url = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/_relay/signal?pod=' + encodeURIComponent(podId) + '&session=' + t.session
   // The sub-steps of the tunnel the page waits for are shown; the others go to the journal only.
   const watch = (name, line) => (t.key === entryKey && !t.done ? phaseOf(name, line) : trace(line))
-  watch('signal', words.tSignal)
-  const sig = new WebSocket(url)
-  t.sig = sig
-  sig.onopen = () => {
-    mark('signal')
-    trace(words.tSignalOpen)
-  }
-  sig.onmessage = (e) => {
-    const m = JSON.parse(e.data)
+  const onSignal = (m) => {
     if (m.type === 'ice') {
       mark('ice')
       trace(m.quota?.over ? words.tIceQuota : fmt(words.tIce, { n: (m.urls ?? []).length }))
@@ -943,7 +971,7 @@ function connect(key, podId, mode) {
       // A pod trickles its later candidates as a JSON string (#75); a candidate object is read too.
       try { t.pc?.addIceCandidate(typeof m.candidate === 'string' ? JSON.parse(m.candidate) : m.candidate).catch(() => {}) } catch {}
     }
-    else if (m.type === 'error') drop(t, text(m.message))
+    else if (m.type === 'error') drop(t, m.message === 'offline' ? words.offline : text(m.message))
     else if (m.type === 'bye') {
       trace(words.tBye)
       // The pod is gone: the relay says so on the signaling link. A refusal also travels on the
@@ -951,7 +979,28 @@ function connect(key, podId, mode) {
       setTimeout(() => { if (!t.dropped) drop(t, lastError ?? words.closed) }, 600)
     }
   }
-  sig.onerror = () => drop(t, words.offline)
+  // The signaling rides the identity link when it is open (#75): no second WebSocket, no second
+  // TLS handshake. Else a WebSocket of its own (the token mode before its link, an old flow).
+  if (link?.signal && link.isOpen()) {
+    mark('signal')
+    watch('signal', words.tSignalLink)
+    t.sig = link.signal(t.session, podId, onSignal)
+    return t.ready
+  }
+  watch('signal', words.tSignal)
+  const url = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/_relay/signal?pod=' + encodeURIComponent(podId) + '&session=' + t.session
+  const ws = new WebSocket(url)
+  t.sig = {
+    send: (m) => ws.send(JSON.stringify({ ...m, session: t.session })),
+    open: () => ws.readyState === WebSocket.OPEN,
+    close: () => ws.close(),
+  }
+  ws.onopen = () => {
+    mark('signal')
+    trace(words.tSignalOpen)
+  }
+  ws.onmessage = (e) => onSignal(JSON.parse(e.data))
+  ws.onerror = () => drop(t, words.offline)
   return t.ready
 }
 
@@ -1035,9 +1084,9 @@ async function start(t, ice, watch) {
   }
   const offer = await pc.createOffer()
   await pc.setLocalDescription(offer)
-  t.sig.send(JSON.stringify({ type: 'offer', session: t.session, sdp: offer.sdp }))
+  t.sig.send({ type: 'offer', sdp: offer.sdp })
   watch('answer', words.tOffer)
-  const r = await handshake(t, rpc, t.mode, t.key, undefined, undefined, watch)
+  const r = await handshake(t, rpc, t.mode, t.want, undefined, undefined, watch)
   if (r.ok) {
     trace(words.tReady)
     t.done = true
@@ -1049,9 +1098,15 @@ async function start(t, ice, watch) {
     return
   }
   if (r.unpaired && token) {
-    // The pod has no account: fall back to the token mode, on a fresh session.
+    // The pod has no account: fall back to the token mode, on a fresh session. Whoever waits for
+    // this tunnel gets the new one, and an early tunnel (enter) stays early through it.
     close(t)
-    return connect(t.key, t.podId, 'token').then(() => {}, () => {})
+    const next = connect(t.key, t.podId, 'token', t.want)
+    const nt = tunnels.get(t.key)
+    nt.early = t.early
+    nt.settle = t.settle
+    t.successor = nt
+    return next.then(t.resolve, t.reject)
   }
   drop(t, r.error)
 }
@@ -1089,6 +1144,9 @@ async function handshake(t, dc, mode, want, fpB, fpP, watch) {
   } else {
     const err = await id.verifyCert(hp.cert, account, revoked)
     if (err) return { error: text(err) }
+    // An early tunnel learns the key it must meet from the pods list (enter): null, it was dropped.
+    want = await want
+    if (want === null) return { error: words.closed }
     if (want && hp.cert?.key !== want) return { error: words.wrongpod }
     // The proof is signed by the device key of the peer, the one its certificate carries.
     if (!(await id.verify(hp.cert.key, hp.sig, id.binding('pod', fpB, fpP, nonceB, hp.nonce)))) return { error: words.failed }
@@ -1118,8 +1176,8 @@ async function pathOf(pc) {
 }
 
 function sendCandidate(t, c) {
-  if (!c || !t.sig || t.sig.readyState !== WebSocket.OPEN) return
-  t.sig.send(JSON.stringify({ type: 'candidate', session: t.session, candidate: c }))
+  if (!c || !t.sig || !t.sig.open()) return
+  t.sig.send({ type: 'candidate', candidate: c })
 }
 
 function close(t) {
@@ -1167,6 +1225,8 @@ function drop(t, msg) {
   close(t)
   if (tunnels.get(t.key) === t) tunnels.delete(t.key)
   t.reject?.(new Error(msg))
+  // An early tunnel that failed before the pods list came is left to enter, which asks again.
+  if (t.early) return
   if (t.key === entryKey) void failover()
   else if (shownKey === t.key) notice(msg)
 }

@@ -10,6 +10,7 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ### Changed
 
+- The relay page signals its tunnels on its identity link (#75): one WebSocket and one TLS handshake instead of two, and the offer to the pod of the link (or the one opened last) leaves as soon as the link is open, while it proves itself and reads the revocation list and the pods. The handshake still checks the device key the pods list names, and the early tunnel is dropped for a new one when that list names another entry. `/_relay/signal` stays for the token mode and the other clients.
 - A pod answers a tunnel at once and trickles its later candidates (#75): the answer leaves with the candidates gathered within 250 ms, and a TURN allocation that takes longer follows as a `candidate` message. It used to wait for the whole gathering, up to 8 s. A pod dialing another one does the same with its offer and keeps reading the candidates of the other until the channel opens; a candidate of a browser that comes before its offer is set is kept until then.
 
 ### Added

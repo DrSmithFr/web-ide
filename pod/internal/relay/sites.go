@@ -81,15 +81,27 @@ func relayNonce() string {
 //
 // The caller checked the certificate against the account; this checks that the link holds the
 // private half. The link is read here, in order, right after the challenge was sent.
-func (s *Server) proofOfPossession(ws *websocket.Conn, origin string, c *identity.Cert, nonce string) error {
+//
+// other takes a message that came before the proof and is not one (nil: none may come): the
+// identity link of a page signals its tunnel while it proves itself (#75).
+func (s *Server) proofOfPossession(ws *websocket.Conn, origin string, c *identity.Cert, nonce string, other func([]byte) bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), proofTimeout)
 	defer cancel()
-	_, b, err := ws.Read(ctx)
-	if err != nil {
-		return err
-	}
 	var m sigMsg
-	if json.Unmarshal(b, &m) != nil || m.Type != "proof" || m.Nonce != nonce {
+	for {
+		_, b, err := ws.Read(ctx)
+		if err != nil {
+			return err
+		}
+		m = sigMsg{}
+		if json.Unmarshal(b, &m) == nil && m.Type == "proof" {
+			break
+		}
+		if other == nil || !other(b) {
+			return errNoProof
+		}
+	}
+	if m.Nonce != nonce {
 		return errNoProof
 	}
 	if err := identity.VerifySig(c.Key, m.Sig, identity.RelayBinding(origin, nonce)); err != nil {

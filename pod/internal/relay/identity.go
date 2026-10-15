@@ -67,6 +67,16 @@ type identityConn struct {
 	device string
 	// The device key this link proved possession of (empty: it did not, so it gets no presence).
 	key string
+	// The tunnels the page signals on this link (#75), by session: read and written by the loop
+	// of the link only.
+	sessions map[string]*browserConn
+}
+
+// writeRaw writes one message the link carries for a tunnel of its page.
+func (c *identityConn) writeRaw(b []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.ws.Write(context.Background(), websocket.MessageText, b)
 }
 
 func (c *identityConn) send(m idMsg) error {
@@ -74,6 +84,48 @@ func (c *identityConn) send(m idMsg) error {
 	defer c.mu.Unlock()
 	b, _ := json.Marshal(m)
 	return c.ws.Write(context.Background(), websocket.MessageText, b)
+}
+
+// identitySignal carries the signaling of a tunnel of the page on its identity link (#75): one
+// WebSocket instead of two, and the offer can leave while the link proves itself. "signal" opens a
+// session to a pod (the ICE servers come back), then offer, candidate and bye go as on
+// /_relay/signal, and every answer of the pod carries the session. It needs no proof, as
+// /_relay/signal does not. Reports whether the message was one.
+func (s *Server) identitySignal(c *identityConn, b []byte) bool {
+	var m sigMsg
+	if json.Unmarshal(b, &m) != nil || m.Session == "" {
+		return false
+	}
+	switch m.Type {
+	case "signal":
+		if !s.store.OnlinePod(m.Pod) {
+			_ = c.writeRaw(mustJSON(sigMsg{Type: "error", Session: m.Session, Message: "offline"}))
+			return true
+		}
+		bc := &browserConn{podID: m.Pod, session: m.Session, write: c.writeRaw}
+		if prev := c.sessions[m.Session]; prev != nil {
+			s.dropBrowser(prev)
+		}
+		c.sessions[m.Session] = bc
+		s.openBrowser(bc)
+	case "offer", "candidate", "bye":
+		bc := c.sessions[m.Session]
+		if bc == nil {
+			return true
+		}
+		s.browserSignal(bc, m)
+		if m.Type == "bye" {
+			delete(c.sessions, m.Session)
+		}
+	default:
+		return false
+	}
+	return true
+}
+
+func mustJSON(v any) []byte {
+	b, _ := json.Marshal(v)
+	return b
 }
 
 // serveIdentity is the pairing rendezvous and the device list of an account:
@@ -91,20 +143,27 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ws.SetReadLimit(wsReadLimit)
-	c := &identityConn{ws: ws}
+	c := &identityConn{ws: ws, sessions: map[string]*browserConn{}}
 	defer func() {
 		s.mu.Lock()
 		if s.links[c] {
 			delete(s.links, c)
 		}
 		s.mu.Unlock()
+		for _, bc := range c.sessions {
+			s.dropBrowser(bc)
+		}
 		_ = ws.CloseNow()
 	}()
+	signal := func(b []byte) bool { return s.identitySignal(c, b) }
 
 	for {
 		_, b, err := ws.Read(context.Background())
 		if err != nil {
 			return
+		}
+		if signal(b) {
+			continue
 		}
 		var m idMsg
 		if err := json.Unmarshal(b, &m); err != nil {
@@ -127,7 +186,7 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 					if err := c.send(idMsg{Type: "challenge", Nonce: nonce}); err != nil {
 						return
 					}
-					if err := s.proofOfPossession(ws, r.Host, m.Cert, nonce); err != nil {
+					if err := s.proofOfPossession(ws, r.Host, m.Cert, nonce, signal); err != nil {
 						_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})
 						return
 					}

@@ -405,8 +405,15 @@ export async function prove(l, key, origin) {
 export function link(onPush, lang) {
   const ws = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/_relay/identity')
   const waiters = []
+  // The tunnels the page signals on this link (relay.md, #75): a message of a session goes to its
+  // tunnel, never to a waiter of the link.
+  const sessions = new Map()
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data)
+    if (m.session) {
+      sessions.get(m.session)?.(m)
+      return
+    }
     if (onPush) onPush(m)
     const i = waiters.findIndex((w) => !w.type || w.type === m.type)
     if (i >= 0) waiters.splice(i, 1)[0].resolve(m)
@@ -419,6 +426,23 @@ export function link(onPush, lang) {
       recv: (type) => new Promise((r) => waiters.push({ type: type ?? '', resolve: r })),
       close: () => ws.close(),
       lang: lang ?? '',
+      // The signaling of one tunnel to a pod on this link: its messages come to onMsg, and the
+      // relay answers "signal" with the ICE servers of the session.
+      signal: (session, pod, onMsg) => {
+        sessions.set(session, onMsg)
+        ws.send(JSON.stringify({ type: 'signal', pod, session }))
+        return {
+          send: (m) => ws.send(JSON.stringify({ ...m, session })),
+          open: () => ws.readyState === WebSocket.OPEN,
+          close: () => {
+            if (!sessions.delete(session)) return
+            try {
+              ws.send(JSON.stringify({ type: 'bye', session }))
+            } catch {}
+          },
+        }
+      },
+      isOpen: () => ws.readyState === WebSocket.OPEN,
     })
     ws.onerror = () => reject(new Error('the relay is not reachable'))
   })

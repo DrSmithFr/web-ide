@@ -553,3 +553,64 @@ func TestSiteForeignEdge(t *testing.T) {
 		t.Fatalf("A must stay a site of its own: %+v", m.Pods)
 	}
 }
+
+// TestIdentityLinkSignal: a page signals its tunnel on its identity link (#75), and opens the
+// session before it proved itself: the relay carries the signaling while it waits for the proof,
+// and the proof still lands. An offline pod is said so on the session.
+func TestIdentityLinkSignal(t *testing.T) {
+	ts := newRelay(t)
+	a := testAccount(t)
+	p := podDevice(t, a, "laptop")
+	pod := registerPod(t, ts, "laptop", "s3cret", a.ID, p.cert, true, p.key, false)
+	defer pod.close()
+	ready(t, pod)
+
+	dev := identity.KeyFromSeed(identity.DeviceSeed(a.Seed))
+	cert := identity.NewCert(a, dev, "phone", identity.KindBrowser)
+	conn, _, err := websocket.Dial(context.Background(), wsURL(ts, "/_relay/identity"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &wsClient{conn}
+	defer c.close()
+	c.sendId(t, idMsg{Type: "register", Account: a.ID, Cert: cert, Prove: true})
+	// The tunnel is opened at once, before the challenge is even read.
+	c.send(t, sigMsg{Type: "signal", Pod: "laptop", Session: "s1"})
+	c.send(t, sigMsg{Type: "offer", Session: "s1", SDP: "v=0 offer"})
+	c.send(t, sigMsg{Type: "signal", Pod: "nobody", Session: "s2"})
+
+	var nonce string
+	var ice, offline bool
+	for nonce == "" || !ice || !offline {
+		m := c.next(t)
+		switch {
+		case m.Type == "challenge":
+			nonce = m.Nonce
+		case m.Type == "ice" && m.Session == "s1":
+			ice = true
+		case m.Type == "error" && m.Session == "s2" && m.Message == "offline":
+			offline = true
+		default:
+			t.Fatalf("unexpected %q (%s) on the link", m.Type, m.Message)
+		}
+	}
+	if o := nextUntil(t, pod, "offer"); o.Session != "s1" || o.SDP != "v=0 offer" {
+		t.Fatalf("the pod gets the offer of the session: %+v", o)
+	}
+	c.sendId(t, idMsg{Type: "proof", Nonce: nonce, Sig: identity.Sign(dev, []byte(identity.RelayBinding(host(ts), nonce)))})
+	if m := nextIdUntil(t, c, "ready"); m.Account != a.ID {
+		t.Fatalf("the link proved itself after its signaling: %+v", m)
+	}
+	// The pod answers and trickles: both reach the page on its identity link, with the session.
+	pod.send(t, sigMsg{Type: "answer", Session: "s1", SDP: "v=0 answer"})
+	pod.send(t, sigMsg{Type: "candidate", Session: "s1", Candidate: []byte(`"{\"candidate\":\"c\"}"`)})
+	var answer, cand bool
+	for !answer || !cand {
+		m := c.next(t)
+		if m.Session != "s1" {
+			continue // the pods list of the account
+		}
+		answer = answer || (m.Type == "answer" && m.SDP == "v=0 answer")
+		cand = cand || m.Type == "candidate"
+	}
+}

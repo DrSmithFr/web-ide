@@ -23,20 +23,23 @@ const turnTTL = time.Hour
 // Every message carries the session id: a pod may serve several browsers at once, each
 // in its own session.
 type sigMsg struct {
-	Type       string                `json:"type"`
-	Session    string                `json:"session,omitempty"`
-	URLs       []string              `json:"urls,omitempty"`
-	Username   string                `json:"username,omitempty"`
-	Credential string                `json:"credential,omitempty"`
-	SDP        string                `json:"sdp,omitempty"`
-	Candidate  json.RawMessage       `json:"candidate,omitempty"`
-	ID         string                `json:"id,omitempty"`
-	Secret     string                `json:"secret,omitempty"`
-	Name       string                `json:"name,omitempty"`
-	Account    string                `json:"account,omitempty"`
-	Device     string                `json:"device,omitempty"`
-	Cert       *identity.Cert        `json:"cert,omitempty"`
-	List       *identity.Revocations `json:"list,omitempty"` // pushed to the pods of an account
+	Type       string          `json:"type"`
+	Session    string          `json:"session,omitempty"`
+	URLs       []string        `json:"urls,omitempty"`
+	Username   string          `json:"username,omitempty"`
+	Credential string          `json:"credential,omitempty"`
+	SDP        string          `json:"sdp,omitempty"`
+	Candidate  json.RawMessage `json:"candidate,omitempty"`
+	// Pod is the pod a session of the identity link signals to (#75): its "signal" message opens
+	// the session, as /_relay/signal?pod= does.
+	Pod     string                `json:"pod,omitempty"`
+	ID      string                `json:"id,omitempty"`
+	Secret  string                `json:"secret,omitempty"`
+	Name    string                `json:"name,omitempty"`
+	Account string                `json:"account,omitempty"`
+	Device  string                `json:"device,omitempty"`
+	Cert    *identity.Cert        `json:"cert,omitempty"`
+	List    *identity.Revocations `json:"list,omitempty"` // pushed to the pods of an account
 	// Sync (milestone 4): the pod publishes its X25519 key, reads the wrap of the epoch key made
 	// for it, and exchanges encrypted blobs. The relay cannot read a blob, it only checks the
 	// signature against the device that wrote it.
@@ -152,19 +155,66 @@ type updateHop struct {
 // that asked (relayclient.UpdateWait), an answer after that reaches nothing.
 const updateHopTTL = 30 * time.Second
 
-// browserConn is one active browser signaling to a pod, in one session.
+// browserConn is one active browser signaling to a pod, in one session. It rides its own
+// WebSocket (/_relay/signal), or the identity link of its page (#75): write and end are that
+// link's.
 type browserConn struct {
 	podID   string
 	session string
-	ws      *websocket.Conn
 	mu      sync.Mutex
+	write   func([]byte) error
+	end     func() // a fresh session took its place: its own WebSocket is closed
 }
 
 func (bc *browserConn) send(m sigMsg) error {
 	bc.mu.Lock()
 	defer bc.mu.Unlock()
 	b, _ := json.Marshal(m)
-	return bc.ws.Write(context.Background(), websocket.MessageText, b)
+	return bc.write(b)
+}
+
+// openBrowser takes the session of a browser — a fresh one replaces the previous — and gives it
+// its ICE servers, with fresh credentials.
+func (s *Server) openBrowser(bc *browserConn) {
+	s.mu.Lock()
+	if prev := s.browsers[bc.session]; prev != nil && prev != bc && prev.end != nil {
+		prev.end()
+	}
+	s.browsers[bc.session] = bc
+	s.mu.Unlock()
+	bc.send(s.iceMessage(bc.podID, bc.session))
+}
+
+// dropBrowser forgets a session, unless a fresh one took its place.
+func (s *Server) dropBrowser(bc *browserConn) {
+	s.mu.Lock()
+	if cur := s.browsers[bc.session]; cur == bc {
+		delete(s.browsers, bc.session)
+	}
+	s.mu.Unlock()
+}
+
+// browserSignal carries one message of a browser session to its pod, whichever link it came on.
+func (s *Server) browserSignal(bc *browserConn, m sigMsg) {
+	podID, session := bc.podID, bc.session
+	switch m.Type {
+	case "offer":
+		// A pod the store still lists but whose link is gone (it re-dials) cannot answer:
+		// the browser is told, rather than left waiting for an offer that was dropped.
+		if !s.podOf(podID, func(pc *podConn) {
+			pc.send(s.iceMessage(podID, session))
+			pc.send(sigMsg{Type: "offer", Session: session, SDP: m.SDP})
+		}) {
+			bc.send(sigMsg{Type: "error", Session: session, Message: "the pod is not reachable"})
+		}
+	case "candidate":
+		s.podOf(podID, func(pc *podConn) {
+			pc.send(sigMsg{Type: "candidate", Session: session, Candidate: m.Candidate})
+		})
+	case "bye":
+		s.podOf(podID, func(pc *podConn) { pc.send(sigMsg{Type: "bye", Session: session}) })
+		s.dropBrowser(bc)
+	}
 }
 
 // New builds a relay Server over the given store and TURN server.
@@ -301,7 +351,7 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 					if err := pc.send(sigMsg{Type: "challenge", Nonce: nonce}); err != nil {
 						return
 					}
-					if err := s.proofOfPossession(ws, r.Host, m.Cert, nonce); err != nil {
+					if err := s.proofOfPossession(ws, r.Host, m.Cert, nonce, nil); err != nil {
 						pc.send(sigMsg{Type: "error", Message: err.Error()})
 						return
 					}
@@ -444,24 +494,15 @@ func (s *Server) serveSignal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ws.SetReadLimit(wsReadLimit)
-	bc := &browserConn{podID: podID, session: session, ws: ws}
+	bc := &browserConn{podID: podID, session: session,
+		write: func(b []byte) error { return ws.Write(context.Background(), websocket.MessageText, b) },
+		end:   func() { _ = ws.CloseNow() }}
 	defer func() {
-		s.mu.Lock()
-		if cur := s.browsers[session]; cur == bc {
-			delete(s.browsers, session)
-		}
-		s.mu.Unlock()
+		s.dropBrowser(bc)
 		_ = ws.CloseNow()
 	}()
-	// A fresh session replaces the previous one on this socket: close it.
-	s.mu.Lock()
-	if prev := s.browsers[session]; prev != nil && prev != bc {
-		_ = prev.ws.CloseNow()
-	}
-	s.browsers[session] = bc
-	s.mu.Unlock()
 	// Fresh credentials, then the offer to the pod.
-	bc.send(s.iceMessage(podID, session))
+	s.openBrowser(bc)
 	for {
 		_, b, err := ws.Read(context.Background())
 		if err != nil {
@@ -471,28 +512,7 @@ func (s *Server) serveSignal(w http.ResponseWriter, r *http.Request) {
 		if err := json.Unmarshal(b, &m); err != nil {
 			continue
 		}
-		switch m.Type {
-		case "offer":
-			// A pod the store still lists but whose link is gone (it re-dials) cannot answer:
-			// the browser is told, rather than left waiting for an offer that was dropped.
-			if !s.podOf(podID, func(pc *podConn) {
-				pc.send(s.iceMessage(podID, session))
-				pc.send(sigMsg{Type: "offer", Session: session, SDP: m.SDP})
-			}) {
-				bc.send(sigMsg{Type: "error", Session: session, Message: "the pod is not reachable"})
-			}
-		case "candidate":
-			s.podOf(podID, func(pc *podConn) {
-				pc.send(sigMsg{Type: "candidate", Session: session, Candidate: m.Candidate})
-			})
-		case "bye":
-			s.podOf(podID, func(pc *podConn) { pc.send(sigMsg{Type: "bye", Session: session}) })
-			s.mu.Lock()
-			if cur := s.browsers[session]; cur == bc {
-				delete(s.browsers, session)
-			}
-			s.mu.Unlock()
-		}
+		s.browserSignal(bc, m)
 	}
 }
 
