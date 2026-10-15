@@ -43,6 +43,9 @@ type PodView struct {
 	// NoKey: this pod published nothing the pod can read — it has no sync key yet, or it never
 	// published. The page says "waiting for the sync key".
 	NoKey bool `json:"nokey,omitempty"`
+	// OneWay: the pod reaches this pod on the LAN but this pod cannot reach it back (lan.PeerView).
+	// The page says so, rather than a bare "offline".
+	OneWay bool `json:"oneway,omitempty"`
 }
 
 // Directory merges the three views of the pods of the account and answers pods.list.
@@ -226,10 +229,23 @@ func (d *Directory) List() []PodView {
 	// this pod, with the relay down or not), then the pods the relay reports, then the ones only
 	// known by a cached list. Inside a rank, by name.
 	rank := map[string]int{}
+	online := map[string]bool{}
+	for _, p := range d.relay {
+		online[p.Key] = true
+	}
+	oneway := map[string]bool{}
 	if d.lan != nil {
 		for _, p := range d.lan.Status().Peers {
+			if p.OneWay {
+				oneway[p.ID] = true
+				// A LAN peer this pod cannot dial back is not offline when the relay sees it: its
+				// view comes from the relay, as a pod of another network.
+				if online[p.ID] {
+					continue
+				}
+			}
 			v := PodView{Key: p.ID, Name: p.Name, Version: p.Version, Fingerprint: p.Fingerprint,
-				Online: p.Online, Path: p.Path, Projects: p.Projects, Protocol: p.Protocol}
+				Online: p.Online, Path: p.Path, Projects: p.Projects, Protocol: p.Protocol, OneWay: p.OneWay}
 			if l := d.lists[p.ID]; l != nil {
 				v.Name, v.Version = first(l.Name, v.Name), first(l.Version, v.Version)
 			}
@@ -243,7 +259,7 @@ func (d *Directory) List() []PodView {
 			continue
 		}
 		v := PodView{Key: p.Key, Name: p.Name, Version: p.Version, Fingerprint: identity.Fingerprint(p.Key),
-			Site: p.Site, Gateway: p.Gateway, Online: true, Protocol: p.Protocol}
+			Site: p.Site, Gateway: p.Gateway, Online: true, Protocol: p.Protocol, OneWay: oneway[p.Key]}
 		if d.remote {
 			// Reachable pod to pod: its page runs under this pod's origin too.
 			v.Path = lan.PeerPrefix + p.Key

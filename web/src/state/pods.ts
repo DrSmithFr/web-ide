@@ -37,6 +37,8 @@ export interface PodInfo {
   projects?: PodProject[] | null
   /** The pod published nothing this pod can read: it has no sync key yet. */
   nokey?: boolean
+  /** The pod reaches this pod on the LAN, but this pod cannot reach it back (a NAT, WSL2). */
+  oneway?: boolean
 }
 
 /** The pods of the account, kept up to date while the calling component lives (null: not paired). */

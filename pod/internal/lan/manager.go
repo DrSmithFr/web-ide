@@ -862,6 +862,9 @@ type PeerView struct {
 	Protocol int    `json:"protocol"`
 	Addr     string `json:"addr"`
 	Online   bool   `json:"online"`
+	// OneWay: the peer dialed this pod but this pod cannot dial it back (a pod behind a NAT, WSL2
+	// for one): it is not reachable on the LAN from here, only through the relay if it has one.
+	OneWay bool `json:"oneway,omitempty"`
 	// Path is where the page of the peer is served through this pod (empty: offline).
 	Path     string          `json:"path"`
 	Projects json.RawMessage `json:"projects,omitempty"`
@@ -895,7 +898,7 @@ func (m *Manager) Status() Status {
 		if m.cfg.Identity.PeerError(p.cert) != nil {
 			continue
 		}
-		v := PeerView{ID: key, Name: p.name, Fingerprint: identity.Fingerprint(key), Version: p.version, Protocol: p.protocol, Online: p.out != nil, Projects: p.projects}
+		v := PeerView{ID: key, Name: p.name, Fingerprint: identity.Fingerprint(key), Version: p.version, Protocol: p.protocol, Online: p.out != nil, OneWay: p.out == nil && len(p.links) > 0, Projects: p.projects}
 		if p.out != nil {
 			v.Addr = p.out.addr
 		}

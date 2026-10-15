@@ -244,3 +244,26 @@ func TestDirectoryMergesSources(t *testing.T) {
 		}
 	}
 }
+
+// TestDirectoryOneWay: a LAN peer that dialed this pod but cannot be dialed back is shown by the
+// relay when the relay sees it online (with its cached list), and keeps the one-way mark; with no
+// relay it stays a LAN peer, offline, still marked one-way.
+func TestDirectoryOneWay(t *testing.T) {
+	hub, p, a := hubOf(t)
+	d := New(hub, fakeLAN{st: lan.Status{Peers: []lan.PeerView{{ID: "devW", Name: "wsl", OneWay: true}}}})
+	if err := hub.SetWrap(wrapFor(t, a, p, 0)); err != nil {
+		t.Fatal(err)
+	}
+	hub.SetOther(func(m settingsync.Msg) { d.HandleBlob(m) })
+	d.HandleBlob(settingsync.Msg{Type: "blob", Blob: blobOf(t, a, "devW", 0, 1, "wsl", "behind nat"), Updated: 333})
+
+	out := d.List()
+	if len(out) != 1 || out[0].Online || !out[0].OneWay {
+		t.Fatalf("without the relay, a one-way peer is offline and marked: %+v", out)
+	}
+	d.RelayPods([]relayclient.PodInfo{{Key: "devW", Name: "wsl", Site: "devW"}})
+	out = d.List()
+	if len(out) != 1 || !out[0].Online || !out[0].OneWay || out[0].Seen != 333 {
+		t.Fatalf("the relay sees the one-way peer online, with its cached list: %+v", out)
+	}
+}

@@ -2011,5 +2011,8 @@
   "{name} updates: it comes back in a moment.": "{name} se met à jour : il revient dans un instant.",
   "the pod refused the request": "le pod a refusé la demande",
   "That pod does not run as the service: run this command there, then restart it:": "Ce pod ne tourne pas comme service : lancez cette commande sur sa machine, puis redémarrez-le :",
-  "This browser is not paired on this origin, or its passkey was not unlocked.": "Ce navigateur n’est pas appairé sur cette origine, ou sa clé d’accès n’a pas été déverrouillée."
+  "This browser is not paired on this origin, or its passkey was not unlocked.": "Ce navigateur n’est pas appairé sur cette origine, ou sa clé d’accès n’a pas été déverrouillée.",
+  "LAN one-way": "LAN à sens unique",
+  "This pod cannot reach {name} on the local network, only {name} reaches this pod: {name} is reached through the relay.": "Ce pod ne peut pas joindre {name} sur le réseau local, seul {name} joint ce pod : {name} est joint par le relay.",
+  "This pod cannot reach {name} on the local network, only {name} reaches this pod (a NAT, WSL2): without the relay, {name} cannot be opened from here.": "Ce pod ne peut pas joindre {name} sur le réseau local, seul {name} joint ce pod (un NAT, WSL2) : sans le relay, {name} ne peut pas être ouvert d'ici."
 }

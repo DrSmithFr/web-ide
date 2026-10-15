@@ -23,8 +23,9 @@ const pair = (data, args, input = '') => execFileSync(BIN, ['-data', data, 'pair
 
 const pods = []
 
-/** Starts a pod on loopback with a project <name>-app holding hello.txt. */
-async function startPod(name, n, mode) {
+/** Starts a pod on loopback with a project <name>-app holding hello.txt; lanHost is the address
+ * of its LAN port, peers the LAN addresses it dials itself. */
+async function startPod(name, n, mode, { lanHost = '127.0.0.1', peers } = {}) {
   const dir = path.join(TMP, 'lan-' + name)
   const data = path.join(dir, 'data')
   const ws = path.join(dir, 'ws')
@@ -36,9 +37,10 @@ async function startPod(name, n, mode) {
   fs.writeFileSync(path.join(data, 'projects.json'), JSON.stringify([{ id: name + '-app', title: name + '-app', description: '', type: 'local', path: app, createdAt: now, openedAt: now }]))
   if (mode === 'join') execFileSync(BIN, ['-data', data, '-name', name, 'pair', 'join', '--phrase'], { input: PHRASE + '\n' })
   if (mode === 'foreign') execFileSync(BIN, ['-data', data, '-name', name, 'pair', 'restore'], { input: OTHER + '\n' })
+  if (peers) fs.writeFileSync(path.join(data, 'config.json'), JSON.stringify({ lan: { peers } }))
   const port = LAN_PORT + 10 + 2 * n
   const log = fs.openSync(path.join(dir, 'pod.log'), 'a')
-  const proc = spawn(BIN, ['-addr', `127.0.0.1:${port}`, '-data', data, '-workspace', ws, '-static', STATIC, '-lan', `127.0.0.1:${port + 1}`, '-mdns=false', '-name', name, '-keeper', 'off'], {
+  const proc = spawn(BIN, ['-addr', `127.0.0.1:${port}`, '-data', data, '-workspace', ws, '-static', STATIC, '-lan', `${lanHost}:${port + 1}`, '-mdns=false', '-name', name, '-keeper', 'off'], {
     stdio: ['ignore', log, log],
   })
   pods.push(proc)
@@ -46,7 +48,7 @@ async function startPod(name, n, mode) {
     if (await fetch(`http://127.0.0.1:${port}/`).then(() => true, () => false)) break
     await sleep(100)
   }
-  return { name, data, ws, lan: `127.0.0.1:${port + 1}` }
+  return { name, data, ws, lan: `${lanHost}:${port + 1}` }
 }
 
 const VA = {
@@ -196,10 +198,17 @@ run(async ({ page }) => {
     await page.click('[data-testid=lan-back]')
     await page.waitForSelector('[data-testid=pod-block][data-name=bravo]')
     assert(new URL(page.url()).pathname === '/', 'back on the home page of alpha')
+
+    // 8. golf dials alpha but listens where alpha cannot dial it back (a pod behind a NAT, WSL2):
+    // with no relay, its block says "LAN one-way" and why, rather than a bare "offline".
+    await startPod('golf', 6, 'join', { lanHost: '127.0.0.2', peers: [`127.0.0.1:${LAN_PORT}`] })
+    await page.waitForSelector('[data-testid=pod-block][data-name=golf] [data-testid=pod-oneway]', { timeout: 20000 })
+    const golf = await page.textContent('[data-testid=pod-block][data-name=golf]')
+    assert(golf.includes('offline') && golf.includes('only golf reaches this pod'), 'a one-way LAN peer says why it is unreachable: ' + golf)
   } finally {
     for (const p of pods) p.kill()
     // The logs of the extra pods, next to the screenshot of a failure.
-    for (const n of ['bravo', 'charlie', 'delta', 'echo', 'foxtrot']) {
+    for (const n of ['bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf']) {
       try {
         fs.copyFileSync(path.join(TMP, 'lan-' + n, 'pod.log'), path.join(process.env.E2E_OUT, 'lan-' + n + '.log'))
       } catch {}

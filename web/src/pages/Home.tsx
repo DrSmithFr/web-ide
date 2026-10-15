@@ -259,6 +259,19 @@ function PodBlock(props: { pod: PodInfo }) {
             {p().mismatch === 'outdated' ? t('older version') : t('newer version')}
           </span>
         </Show>
+        <Show when={p().oneway}>
+          <span
+            class="badge"
+            data-testid="pod-oneway"
+            title={
+              p().online
+                ? t('This pod cannot reach {name} on the local network, only {name} reaches this pod: {name} is reached through the relay.', { name: p().name })
+                : t('This pod cannot reach {name} on the local network, only {name} reaches this pod (a NAT, WSL2): without the relay, {name} cannot be opened from here.', { name: p().name })
+            }
+          >
+            {t('LAN one-way')}
+          </span>
+        </Show>
         <Show when={!p().online}>
           <span class="badge">{t('offline')}</span>
         </Show>
@@ -278,7 +291,13 @@ function PodBlock(props: { pod: PodInfo }) {
           each={p().projects ?? []}
           fallback={
             <p class="muted">
-              {p().nokey ? t('This pod has not published its projects yet.') : p().online ? t('Loading…') : t('This pod is offline.')}
+              {p().nokey
+                ? t('This pod has not published its projects yet.')
+                : p().online
+                  ? t('Loading…')
+                  : p().oneway
+                    ? t('This pod cannot reach {name} on the local network, only {name} reaches this pod (a NAT, WSL2): without the relay, {name} cannot be opened from here.', { name: p().name })
+                    : t('This pod is offline.')}
             </p>
           }
         >
