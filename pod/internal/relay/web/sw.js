@@ -25,14 +25,49 @@ const versions = new Map() // what each pod was last declared as, to drop its ol
 
 const appFiles = new Set(['/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png'])
 
+// The shell of the relay: the bootstrap page, its scripts and the installable app. It is kept here,
+// so a reload pays the connection only, not the page (#73). The relay writes into SHELL a hash of
+// these files: a deploy that changes one of them changes this script, so the browser installs a
+// new Service Worker, which fetches the new shell while the old one keeps answering.
+const SHELL = '__SHELL__'
+const SHELL_CACHE = 'webide-shell:'
+const shellFiles = ['/', '/_relay/bootstrap.js', '/_relay/bootstrap.css', '/_relay/routes.js', '/_relay/identity.js', '/_relay/bip39.txt', ...appFiles]
+const inShell = new Set(shellFiles)
+
 const cacheName = (id, version) => ASSETS + id + ':' + (version ?? '')
 
-self.addEventListener('install', (e) => self.skipWaiting())
+// The first Service Worker of this browser takes over at once. A newer one waits while a page runs
+// on the old shell: the page offers to reload (bootstrap.js), and only then is it told to skip —
+// a reload cuts the tunnels of the page, the user chooses when.
+self.addEventListener('install', (e) =>
+  e.waitUntil(
+    (async () => {
+      const c = await caches.open(SHELL_CACHE + SHELL)
+      const fresh = (p) => new Request(p, { cache: 'reload' })
+      // The page and its scripts or nothing: a half shell must not replace a whole one. The
+      // installable app is kept when the relay has it (a relay without a front end has not).
+      await c.addAll(shellFiles.filter((p) => !appFiles.has(p)).map(fresh))
+      await Promise.all([...appFiles].map((p) => c.add(fresh(p)).catch(() => {})))
+      if (!self.registration.active) await self.skipWaiting()
+    })(),
+  ),
+)
 self.addEventListener('activate', (e) => e.waitUntil(Promise.all([self.clients.claim(), dropOldCaches()])))
+
+// The shell, from the cache of this Service Worker; the network when it is not there (a cache
+// the browser evicted).
+async function shell(req, path) {
+  try {
+    const hit = await (await caches.open(SHELL_CACHE + SHELL)).match(path)
+    if (hit) return hit
+  } catch {}
+  return fetch(req)
+}
 
 // A pod that never came back must not leave its assets on the disk of a phone.
 async function dropOldCaches() {
   for (const name of await caches.keys()) {
+    if (name.startsWith(SHELL_CACHE) && name !== SHELL_CACHE + SHELL) await caches.delete(name)
     if (!name.startsWith(ASSETS)) continue
     try {
       const r = await (await caches.open(name)).match(CREATED)
@@ -66,9 +101,13 @@ async function bootstrap(key) {
 }
 
 self.addEventListener('message', (e) => {
+  if (e.data?.kind === 'skip') void self.skipWaiting()
   if (e.data?.kind === 'own' && e.source) {
-    const version = e.data.version ?? ''
-    ownPods.set(e.source.id, { pod: e.data.pod || '', key: e.data.key || '', keys: e.data.keys ?? [], version })
+    // The build of the pod's front end names its cache when the pod told it (#73): a development
+    // rebuild keeps its version, never its build. Else the version, as before.
+    const build = e.data.build ?? ''
+    const version = build || (e.data.version ?? '')
+    ownPods.set(e.source.id, { pod: e.data.pod || '', key: e.data.key || '', keys: e.data.keys ?? [], version, build })
     const id = e.data.key || e.data.pod || e.source.id
     const prev = versions.get(id)
     versions.set(id, version)
@@ -81,10 +120,10 @@ self.addEventListener('message', (e) => {
 // (the token mode, where the page has no prefix to be recognised by).
 function owner(win, key) {
   const own = ownPods.get(win.id) ?? {}
-  if (key || own.key) return { id: key || own.key, version: own.version ?? '' }
+  if (key || own.key) return { id: key || own.key, version: own.version ?? '', build: own.build ?? '' }
   const m = /[#&]pod=([^&]+)/.exec(win.url ?? '')
   const pod = own.pod || (m ? decodeURIComponent(m[1]) : '')
-  return { id: pod || win.id, version: own.version ?? '' }
+  return { id: pod || win.id, version: own.version ?? '', build: own.build ?? '' }
 }
 
 self.addEventListener('fetch', (event) => {
@@ -92,8 +131,11 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url)
   // The bootstrap page and the Service Worker itself come from the relay: the tunnel is not
   // open yet when the bootstrap page is loaded, so answering it from the pod would hang.
-  // The manifest and the icons of the installable app come from the relay as well.
-  if (url.pathname.startsWith('/_relay') || url.pathname === '/sw.js' || url.pathname === '/' || url.pathname === '/index.html' || appFiles.has(url.pathname)) return
+  // The manifest and the icons of the installable app come from the relay as well. The shell is
+  // answered from the cache of this Service Worker (#73), the rest of /_relay is the network.
+  const path = url.pathname === '/index.html' ? '/' : url.pathname
+  if (url.origin === self.location.origin && req.method === 'GET' && inShell.has(path)) return event.respondWith(shell(req, path))
+  if (url.pathname.startsWith('/_relay') || url.pathname === '/sw.js' || url.pathname === '/') return
   event.respondWith(handle(req, url, event.clientId))
 })
 
@@ -120,7 +162,8 @@ async function handle(req, url, clientId) {
 
   // An asset of this pod already carried through the tunnel once: answer it from here, without
   // waking the tunnel nor the pod. Only a plain GET of a pod page, and only the cache of the pod
-  // that owns this window — two pods of the account never share an entry.
+  // that owns this window — two pods of the account never share an entry. The page of the pod is
+  // there too, under the URL it was answered for, once the pod named the build it belongs to.
   const own = owner(win, key)
   if (own.id && !preview && req.method === 'GET' && !req.headers.has('range')) {
     try {
@@ -161,9 +204,12 @@ async function handle(req, url, clientId) {
   const out = new Headers(h.headers || {})
   out.set('access-control-allow-origin', '*')
 
-  // Keep a copy of what the pod says is immutable, for the next reload of the page. The copy is
-  // dropped as soon as it goes over the cap: a big file is streamed, never stored.
-  let keep = own.id && !preview && req.method === 'GET' && h.status === 200 && immutable(h.headers) ? [] : null
+  // Keep a copy of what the pod says is immutable, for the next reload of the page, and of its
+  // page when it names the build this window declared: the same build serves the same page for
+  // the same URL. The copy is dropped as soon as it goes over the cap: a big file is streamed,
+  // never stored.
+  const page = own.build && header(h.headers, 'x-webide-build') === own.build
+  let keep = own.id && !preview && req.method === 'GET' && h.status === 200 && (immutable(h.headers) || page) ? [] : null
   let kept = 0
   const collect = (b) => {
     if (!keep) return
@@ -216,8 +262,12 @@ async function handle(req, url, clientId) {
 // The pod names its headers in their canonical form (Go), so cache-control is looked for
 // whatever the case: only an asset the pod says never changes is kept.
 function immutable(headers) {
-  for (const k of Object.keys(headers ?? {})) if (k.toLowerCase() === 'cache-control') return /immutable/i.test(headers[k])
-  return false
+  return /immutable/i.test(header(headers, 'cache-control'))
+}
+
+function header(headers, name) {
+  for (const k of Object.keys(headers ?? {})) if (k.toLowerCase() === name) return String(headers[k])
+  return ''
 }
 
 function join(parts) {

@@ -51,7 +51,7 @@ func registerPodProto(t *testing.T, ts *httptest.Server, id, secret string, acco
 	}
 	pc := &wsClient{c}
 	pc.send(t, sigMsg{Type: "register", ID: id, Secret: secret, Name: id, Account: account,
-		Cert: cert, Prove: prove, Version: "1.10.0", Protocol: proto, Preferred: preferred})
+		Cert: cert, Prove: prove, Version: "1.10.0", Build: "build-" + id, Protocol: proto, Preferred: preferred})
 	if prove {
 		m := pc.next(t)
 		if m.Type != "challenge" || m.Nonce == "" {
@@ -301,6 +301,11 @@ func TestSiteElection(t *testing.T) {
 	}
 	var abGateway string
 	for _, p := range pods {
+		// The build of each pod's front end reaches the browsers: their Service Worker keeps the
+		// page of a pod under it (#73).
+		if p.Build != "build-"+p.PodID {
+			t.Fatalf("the pods list carries the build of each pod: %+v", p)
+		}
 		if p.PodID == "C" {
 			if p.Site != kC || !p.Gateway {
 				t.Fatalf("C is a site of its own, its own gateway: %+v", p)

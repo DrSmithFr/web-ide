@@ -66,6 +66,7 @@ type sigMsg struct {
 	Nonce     string    `json:"nonce,omitempty"`
 	Sig       string    `json:"sig,omitempty"`
 	Version   string    `json:"version,omitempty"`
+	Build     string    `json:"build,omitempty"` // the fingerprint of the front end (server.Build)
 	Protocol  int       `json:"protocol,omitempty"`
 	Preferred bool      `json:"preferred,omitempty"`
 	Peers     []string  `json:"peers,omitempty"`
@@ -103,6 +104,14 @@ type PodInfo struct {
 	Site     string `json:"site"`
 	Gateway  bool   `json:"gateway"`
 	Since    int64  `json:"since"`
+}
+
+// build is the fingerprint of the front end the pod serves, told to the relay with its version.
+func (c *Client) build() string {
+	if c.cfg.Server == nil {
+		return ""
+	}
+	return c.cfg.Server.Build()
 }
 
 // toSync turns the sync part of a signaling message into the message the sync loop reads.
@@ -261,9 +270,9 @@ func (c *Client) runOnce(ctx context.Context) error {
 	if c.cfg.Identity != nil && c.cfg.Identity.Paired() {
 		account, cert, _ := c.cfg.Identity.State()
 		reg = sigMsg{Type: "register", ID: c.cfg.PodID, Secret: c.cfg.Secret, Name: c.cfg.Name,
-			Account: account, Cert: cert, Prove: true, Version: c.cfg.Version, Protocol: c.cfg.Protocol, Preferred: c.cfg.Preferred}
+			Account: account, Cert: cert, Prove: true, Version: c.cfg.Version, Build: c.build(), Protocol: c.cfg.Protocol, Preferred: c.cfg.Preferred}
 	} else {
-		reg = sigMsg{Type: "register", ID: c.cfg.PodID, Secret: c.cfg.Secret, Name: c.cfg.Name, Version: c.cfg.Version, Protocol: c.cfg.Protocol}
+		reg = sigMsg{Type: "register", ID: c.cfg.PodID, Secret: c.cfg.Secret, Name: c.cfg.Name, Version: c.cfg.Version, Build: c.build(), Protocol: c.cfg.Protocol}
 	}
 	if err := link.send(reg); err != nil {
 		return err
@@ -798,6 +807,7 @@ func (s *session) serveRPC() {
 		FPBrowser: tunnel.Fingerprint(offer.SDP),
 		FPPod:     tunnel.Fingerprint(answer.SDP),
 		Limits:    s.client.limits,
+		Build:     s.client.build(),
 	}
 	if err := hs.Run(conn); err != nil {
 		log.Printf("relayclient: handshake: %v (fpB=%s fpP=%s)", err, hs.FPBrowser, hs.FPPod)

@@ -473,3 +473,18 @@ func TestHandshakeCertBothSides(t *testing.T) {
 		t.Fatal("the cert handshake must complete:", err)
 	}
 }
+
+// TestHandshakeBuild: the pod tells the build of its front end in its $hello, in both modes: the
+// browser declares it to the Service Worker of the relay, which keeps the page under it (#73).
+func TestHandshakeBuild(t *testing.T) {
+	p := newPipe()
+	go func() { _ = (&Handshake{Token: "tok", FPBrowser: "A", FPPod: "B", Build: "0123456789abcdef"}).Run(p.a) }()
+	p.send("$hello", map[string]string{"protocol": Protocol, "version": VersionToken, "nonce": nonce()})
+	var env testEnv
+	_ = json.Unmarshal(p.b.read(2*time.Second), &env)
+	var pod helloParams
+	_ = json.Unmarshal(env.Params, &pod)
+	if pod.Build != "0123456789abcdef" {
+		t.Fatalf("the $hello of the pod carries its build: %s", env.Params)
+	}
+}

@@ -1,10 +1,15 @@
 package relay
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"io"
 	"io/fs"
+	"maps"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
@@ -65,7 +70,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/_relay/push/key", s.servePushKey)
 	mux.HandleFunc("/_relay/push/subscribe", s.servePushSubscribe)
 	mux.HandleFunc("/_relay/push/unsubscribe", s.servePushUnsubscribe)
-	mux.HandleFunc("/sw.js", staticJS(swJS))
+	mux.HandleFunc("/sw.js", staticJS(s.serviceWorker()))
 	// The GitHub link of an account (milestone 5): the relay's own login page, the callback
 	// GitHub sends the browser back to, and the sponsorship webhook. Served only when the relay
 	// was given a GitHub app.
@@ -131,6 +136,24 @@ func (s *Server) serveAppFile(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", appFiles[r.URL.Path])
 	_, _ = w.Write(b)
+}
+
+// serviceWorker is sw.js with the hash of the shell it keeps (#73): the bootstrap page, its
+// scripts, the identity module, the wordlist and the installable app. A relay whose shell changed
+// serves another Service Worker, so the browser installs it and fetches the new shell.
+func (s *Server) serviceWorker() []byte {
+	h := sha256.New()
+	for _, b := range [][]byte{bootstrapHTML, bootstrapJS, bootstrapCSS, routesJS, identity.ModuleJS(), identity.WordlistBytes()} {
+		h.Write(b)
+	}
+	for _, p := range slices.Sorted(maps.Keys(appFiles)) {
+		if s.App != nil {
+			b, _ := fs.ReadFile(s.App, strings.TrimPrefix(p, "/"))
+			h.Write(b)
+		}
+	}
+	shell := hex.EncodeToString(h.Sum(nil)[:8])
+	return bytes.Replace(swJS, []byte("'__SHELL__'"), []byte("'"+shell+"'"), 1)
 }
 
 func staticJS(b []byte) http.HandlerFunc {

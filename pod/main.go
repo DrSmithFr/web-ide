@@ -542,6 +542,7 @@ func startLAN(ctx context.Context, st *store.Store, cfg *config.Config, srv *ser
 		Identity:    podID,
 		Name:        hostname(),
 		Version:     version,
+		Build:       srv.Build(),
 		Protocol:    protocol,
 		Handler:     http.HandlerFunc(srv.ServeTrusted),
 		ServeTunnel: srv.ServeTunnel,

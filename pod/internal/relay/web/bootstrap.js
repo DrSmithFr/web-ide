@@ -17,11 +17,12 @@ import { keyOf, nextGateway, pickGateway, pickSite, routeOf } from './routes.js'
 // (e2e/suites/relay.cjs), like window.tunnel and window.identity.
 const bootAt = performance.now()
 const timings = {}
-const http = { channels: 0, bytes: 0 }
+const http = { channels: 0, bytes: 0, paths: [] }
 function publish() {
   window.bootTimings = timings
   window.httpChannels = http.channels
   window.httpBytes = http.bytes
+  window.httpPaths = http.paths
 }
 // The first time a phase is reached: a later channel of another pod must not rename it.
 function mark(name) {
@@ -90,6 +91,10 @@ const words = {
   oops: fr ? 'Connexion impossible' : 'Cannot connect',
   quota: fr ? 'Quota TURN mensuel atteint : plus de tunnel relayé, les chemins directs restent ouverts.' : 'Monthly TURN quota reached: no relayed tunnel, the direct paths stay open.',
   sponsor: fr ? 'le lever (Supporter)' : 'lift it (Supporter)',
+  updated: fr ? 'Une nouvelle version de cette page est prête.' : 'A new version of this page is ready.',
+  reload: fr ? 'Recharger' : 'Reload',
+  install: fr ? 'Installer l’app' : 'Install the app',
+  installIOS: fr ? 'Pour l’installer : Partager › Sur l’écran d’accueil.' : 'To install it: Share › Add to Home Screen.',
 }
 // The texts the page shows for what the pod or the identity module answers: the handshake
 // codes (tunnel.Code*) and the error keys of the identity module, the same words as the pod's
@@ -170,8 +175,64 @@ function drawFoot() {
   f.hidden = false
   f.replaceChildren(
     h('span', {}, location.host),
-    unlocked ? h('button', { class: 'link', type: 'button', onclick: () => void lockNow() }, words.lock) : '',
+    h('span', { class: 'foot-actions' },
+      installable() ? h('button', { class: 'link', type: 'button', 'data-testid': 'install', onclick: () => void install() }, words.install) : '',
+      unlocked ? h('button', { class: 'link', type: 'button', onclick: () => void lockNow() }, words.lock) : ''),
   )
+}
+
+// The installable app (PWA): Chromium hands the page its install prompt, which the footer offers
+// as a button; Safari on iOS has no prompt, so the button says where its menu installs it. An app
+// already installed (standalone) offers nothing.
+let installPrompt = null
+let iosHint = false
+const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true
+const ios = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+const installable = () => !standalone() && (!!installPrompt || ios())
+window.addEventListener('beforeinstallprompt', (e) => {
+  installPrompt = e
+  drawFoot()
+})
+window.addEventListener('appinstalled', () => {
+  installPrompt = null
+  drawFoot()
+})
+async function install() {
+  if (!installPrompt) {
+    if (iosHint) return
+    iosHint = true
+    document.getElementById('foot')?.after(h('p', { class: 'muted small install-hint' }, words.installIOS))
+    return
+  }
+  const p = installPrompt
+  installPrompt = null // a prompt is shown once
+  await p.prompt()
+  drawFoot()
+}
+
+// A new shell of the relay was installed by the Service Worker while this page runs on the old one
+// (#73): a bar offers to reload. It waits for the user — a reload cuts the tunnels of the page —
+// and only then tells the new Service Worker to take over.
+function watchUpdate(reg) {
+  const offer = (w) => {
+    if (!w || !navigator.serviceWorker.controller || document.getElementById('update').childElementCount) return
+    const bar = document.getElementById('update')
+    bar.replaceChildren(
+      h('span', {}, words.updated),
+      h('button', { class: 'btn primary', type: 'button', onclick: () => {
+        navigator.serviceWorker.addEventListener('controllerchange', () => location.reload())
+        w.postMessage({ kind: 'skip' })
+      } }, words.reload),
+    )
+    bar.hidden = false
+  }
+  if (reg.waiting) offer(reg.waiting)
+  reg.addEventListener('updatefound', () => {
+    const w = reg.installing
+    w?.addEventListener('statechange', () => {
+      if (w.state === 'installed') offer(w)
+    })
+  })
 }
 
 // The brand: antennae.space shows its name, a relay of one's own its host.
@@ -660,6 +721,7 @@ function syncSite() {
 async function startSW() {
   try {
     const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' })
+    watchUpdate(reg)
     mark('swreg')
     await reg.ready
     if (!reg.active) await reg.update()
@@ -833,6 +895,7 @@ async function start(t, ice) {
   if (r.ok) {
     t.done = true
     t.rpcReader = r.rd
+    t.build = r.build
     t.resolve(t)
     if (t.key === entryKey) entry = t
     declare()
@@ -883,7 +946,8 @@ async function handshake(t, dc, mode, want, fpB, fpP) {
   }
   const ready = JSON.parse(decode(await rd.next()) ?? '{}')
   if (ready.method === '$ready') mark('ready')
-  return ready.method === '$ready' ? { ok: true, rd } : { error: lastError ?? words.failed }
+  // The pod tells the build of its front end (#73): the Service Worker keeps its page under it.
+  return ready.method === '$ready' ? { ok: true, rd, build: typeof hp.build === 'string' ? hp.build : '' } : { error: lastError ?? words.failed }
 }
 
 function sendCandidate(t, c) {
@@ -1004,12 +1068,21 @@ async function openApp() {
   // would answer them from the relay, which does not know them.
   if (!(await swReady)) return
   mark('app')
+  // Declared before the frame asks for its page: the Service Worker answers it from the build of
+  // that pod it already holds (#73). A pod reached through a gateway tells its build on its routed
+  // rpc channel, which the first fetch of the frame would open anyway: open it first.
+  if (shownKey) {
+    try {
+      const r = await route(shownKey)
+      if (r?.prefix) await routedRPC(r.t, r.prefix)
+    } catch {}
+  }
+  declare()
   const f = document.getElementById('frame')
   f.style.display = 'block'
   f.src = (shownKey ? '/pod/' + shownKey : '') + (openPath ?? '/app')
   document.getElementById('status').style.display = 'none'
   remember(entryPod)
-  declare()
 }
 
 // The path the app of this window is on, without the /pod/<key>/ prefix: on a failover the page
@@ -1026,15 +1099,25 @@ function appPath() {
 }
 
 // What the Service Worker needs to know to answer the fetches of this window: which pod its frame
-// shows, which pods it can reach, and which version that pod runs — the Service Worker keeps the
-// assets of a pod under that version and drops them when the pod is updated (#71).
+// shows, which pods it can reach, and which version and build that pod runs — the Service Worker
+// keeps the assets of a pod under them and drops them when the pod is updated (#71), and keeps its
+// page under the build (#73).
 function declare() {
   try {
     const at = pods.find((x) => x.key === shownKey) ?? pods.find((x) => x.key === entryKey)
     navigator.serviceWorker?.controller?.postMessage({
-      kind: 'own', pod: entryPod, key: shownKey, keys: [...tunnels.keys(), shownKey], version: at?.version ?? '',
+      kind: 'own', pod: entryPod, key: shownKey, keys: [...tunnels.keys(), shownKey], version: at?.version ?? '', build: buildOf(shownKey) || at?.build || '',
     })
   } catch {}
+}
+
+// The build a pod told in its handshake: on its own tunnel, or on the channel routed to it through
+// a gateway; the entry pod when the frame names none.
+function buildOf(k) {
+  if (!k) return entry?.build ?? ''
+  if (tunnels.get(k)?.build) return tunnels.get(k).build
+  for (const t of tunnels.values()) if (t.routed?.get(k)?.build) return t.routed.get(k).build
+  return ''
 }
 
 // The app (in its iframe) and the Service Worker ask the bootstrap for channels: the
@@ -1129,7 +1212,7 @@ async function routedRPC(t, prefix) {
   const dc = t.pc.createDataChannel(prefix + 'rpc', { ordered: true })
   const r = await handshake(t, dc, 'cert', key, t.fpB, t.fpP)
   if (!r.ok) throw new Error(r.error)
-  const e = { dc, rd: r.rd, used: Date.now() }
+  const e = { dc, rd: r.rd, used: Date.now(), build: r.build }
   t.routed.set(key, e)
   dc.onclose = () => {
     t.routed.delete(key)
@@ -1144,6 +1227,7 @@ function httpFetch(t, d, prefix) {
   const dc = t.pc.createDataChannel((prefix ?? '') + d.id, { ordered: true })
   held(t, true)
   http.channels++
+  if (http.paths.length < 200) http.paths.push(d.url)
   publish()
   const sendReq = () => {
     if (dc.readyState !== 'open') return setTimeout(sendReq, 200)

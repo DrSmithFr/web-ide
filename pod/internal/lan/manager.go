@@ -32,6 +32,7 @@ type Config struct {
 	Identity *identity.PodIdentity
 	Name     string // told to the peers (the host name)
 	Version  string // the pod version, told to the peers
+	Build    string // the fingerprint of its front end, told to a bridged window (#73)
 	Protocol int    // the multi-pod protocol of this pod (multipod.Protocol), told to the peers
 	// Handler serves a request of a trusted peer as a request of the machine itself
 	// (server.ServeTrusted): the peer proved it is a device of the account.

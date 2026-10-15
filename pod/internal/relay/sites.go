@@ -44,6 +44,9 @@ type PodInfo struct {
 	PodID   string `json:"podId"`
 	Name    string `json:"name"`
 	Version string `json:"version"`
+	// Build is the fingerprint of its front end: the Service Worker keeps the page of the pod
+	// under it (#73).
+	Build string `json:"build,omitempty"`
 	// Protocol is the multi-pod protocol the pod told at register (0: a pod older than #60).
 	Protocol int    `json:"protocol"`
 	Site     string `json:"site"`
@@ -263,7 +266,7 @@ func (s *Server) recomputeSites(account string) bool {
 			if pc == nil {
 				continue
 			}
-			infos = append(infos, PodInfo{Key: k, PodID: pc.id, Name: pc.name, Version: pc.version,
+			infos = append(infos, PodInfo{Key: k, PodID: pc.id, Name: pc.name, Version: pc.version, Build: pc.build,
 				Protocol: pc.protocol, Mismatch: protocolMismatch(pc.protocol, proto),
 				Site: site, Gateway: gateways[site] == k, Preferred: pc.preferred, Since: s.since[k].Unix()})
 		}

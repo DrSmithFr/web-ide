@@ -142,6 +142,18 @@ code, .code {
 .err { background: var(--err-soft); color: var(--err); border-radius: 10px; padding: 12px 14px; font-weight: 550; }
 .notice { display: flex; gap: 10px; align-items: flex-start; }
 
+/* A new shell is ready (#73): a bar over the app, until the user reloads. */
+#update {
+  position: fixed; left: 16px; right: 16px; bottom: 40px; margin: 0 auto; z-index: 10;
+  display: flex; align-items: center; gap: 12px; width: max-content; max-width: calc(100% - 32px);
+  padding: 8px 8px 8px 16px; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--card); color: var(--text); box-shadow: var(--shadow); font-size: 14px;
+}
+#update[hidden] { display: none; }
+#update .btn { min-height: 34px; flex: none; }
+.foot-actions { display: flex; gap: 14px; }
+.install-hint { margin: 10px 0 0; text-align: center; }
+
 footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
 
 @media (max-width: 420px) {

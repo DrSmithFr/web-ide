@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -45,6 +46,37 @@ func TestAppFiles(t *testing.T) {
 	}
 	if _, _, body := get("/"); !strings.Contains(body, `rel="manifest"`) {
 		t.Fatal("the bootstrap page links the manifest")
+	}
+}
+
+// TestShellHash: the Service Worker names the shell it keeps by a hash of its files (#73), so a
+// relay whose page, scripts or installable app changed serves another Service Worker.
+func TestShellHash(t *testing.T) {
+	st, _ := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
+	t.Cleanup(func() { st.Close() })
+	sw := func(app fstest.MapFS) string {
+		srv := New(st, nil)
+		srv.App = app
+		ts := httptest.NewServer(srv.Handler())
+		defer ts.Close()
+		r, err := http.Get(ts.URL + "/sw.js")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer r.Body.Close()
+		b, _ := io.ReadAll(r.Body)
+		m := regexp.MustCompile(`const SHELL = '([0-9a-f]{16})'`).FindStringSubmatch(string(b))
+		if m == nil {
+			t.Fatalf("sw.js names no shell: %.200s", b)
+		}
+		return m[1]
+	}
+	one := sw(fstest.MapFS{"manifest.webmanifest": {Data: []byte(`{"name":"Web IDE"}`)}})
+	if again := sw(fstest.MapFS{"manifest.webmanifest": {Data: []byte(`{"name":"Web IDE"}`)}}); again != one {
+		t.Fatalf("the same shell, the same hash: %s %s", one, again)
+	}
+	if other := sw(fstest.MapFS{"manifest.webmanifest": {Data: []byte(`{"name":"Web IDE 2"}`)}}); other == one {
+		t.Fatal("a changed manifest changes the Service Worker")
 	}
 }
 

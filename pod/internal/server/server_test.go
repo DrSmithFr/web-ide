@@ -180,6 +180,26 @@ func TestPageBase(t *testing.T) {
 	}
 }
 
+// The page names the build of the front end it belongs to: the Service Worker of the relay keeps
+// it under that build (#73). Another index.html is another build.
+func TestPageBuild(t *testing.T) {
+	s, ts := newServer(t)
+	req, _ := http.NewRequest("GET", ts.URL+"/app", nil)
+	req.Header.Set("Cookie", cookieName+"="+s.Token)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if b := res.Header.Get("X-Webide-Build"); len(b) != 16 || b != s.Build() {
+		t.Fatalf("the page names its build: %q (Build %q)", b, s.Build())
+	}
+	other := &Server{Static: fstest.MapFS{"index.html": {Data: []byte(`<script src="./assets/app-2.js"></script>`)}}}
+	if other.Build() == s.Build() || (&Server{}).Build() != "" {
+		t.Fatal("another front end, another build; none without a front end")
+	}
+}
+
 func TestProjectFilesAndRemoteChanges(t *testing.T) {
 	_, ts := newServer(t)
 	a, err := dial(t, ts, "secret-token-0123456789abcdef0123")

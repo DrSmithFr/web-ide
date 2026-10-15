@@ -103,6 +103,7 @@ func (m *Manager) serveTunnel(w http.ResponseWriter, r *http.Request, fp string)
 		FPBrowser: q.Get("fpb"),
 		FPPod:     q.Get("fpp"),
 		Limits:    m.limits,
+		Build:     m.cfg.Build,
 	}
 	if err := hs.Run(conn); err != nil {
 		log.Printf("lan: bridged window %s: handshake: %v", window, err)

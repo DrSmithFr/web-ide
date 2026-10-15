@@ -304,9 +304,11 @@ fi
 # one of this build, not an older one held by a proxy.
 SW=pod/internal/relay/web/sw.js
 if [ -f "$SW" ] && curl -fsSL --max-time 15 -o /tmp/relay-sw.js "$URL/sw.js" 2>/dev/null; then
+  # The relay writes the hash of its shell into the Service Worker (#73): compare the rest.
+  sed "s/^const SHELL = '[0-9a-f]*'/const SHELL = '__SHELL__'/" /tmp/relay-sw.js > /tmp/relay-sw.norm.js
   want=$(sha "$SW" | cut -d' ' -f1)
-  got=$(sha /tmp/relay-sw.js | cut -d' ' -f1)
-  rm -f /tmp/relay-sw.js
+  got=$(sha /tmp/relay-sw.norm.js | cut -d' ' -f1)
+  rm -f /tmp/relay-sw.js /tmp/relay-sw.norm.js
   if [ "$want" = "$got" ]; then
     echo "$URL serves the Service Worker of this build"
   else

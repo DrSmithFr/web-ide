@@ -4,7 +4,9 @@ package server
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"github.com/DrSmithFr/web-ide/pod/internal/clipboard"
@@ -101,6 +103,9 @@ type Server struct {
 
 	// stopped: the pod stops (Shutdown); the runs are left as they are, to be taken back.
 	stopped atomic.Bool
+	// build is the fingerprint of the front end (Build), computed once.
+	buildOnce sync.Once
+	build     string
 
 	mu       sync.Mutex
 	clients  map[*Client]struct{}
@@ -352,7 +357,26 @@ func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request) {
 	data = bytes.ReplaceAll(data, []byte(`="./`), []byte(`="/`))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
+	// The Service Worker of the relay keeps this page for the build it names (#73): a reload
+	// through the tunnel then carries no static file at all.
+	w.Header().Set("X-Webide-Build", s.Build())
 	_, _ = w.Write(data)
+}
+
+// Build is the fingerprint of the front end: a hash of its index.html, which names every asset by
+// the hash of its content. The pod tells it to the relay, and the Service Worker keeps the page of
+// a pod under it: a development rebuild keeps its version, never its build.
+func (s *Server) Build() string {
+	s.buildOnce.Do(func() {
+		if s.Static == nil {
+			return
+		}
+		if b, err := fs.ReadFile(s.Static, "index.html"); err == nil {
+			sum := sha256.Sum256(b)
+			s.build = hex.EncodeToString(sum[:8])
+		}
+	})
+	return s.build
 }
 
 // ---------- WebSocket ----------

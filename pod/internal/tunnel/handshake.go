@@ -102,8 +102,11 @@ type helloParams struct {
 	Sig      string         `json:"sig,omitempty"`   // cert mode
 	// Via: the certificate of a browser the peer showing this $hello vouches for — a pod that
 	// reached another pod through this one. The pod reading it checks it against its own list.
-	Via   *identity.Cert `json:"via,omitempty"`
-	Error string         `json:"error,omitempty"`
+	Via *identity.Cert `json:"via,omitempty"`
+	// Build: the fingerprint of the pod's front end (#73), told to the browser, whose Service
+	// Worker keeps the page of the pod under it.
+	Build string `json:"build,omitempty"`
+	Error string `json:"error,omitempty"`
 }
 
 type authParams struct {
@@ -132,6 +135,9 @@ type Handshake struct {
 	PeerCert *identity.Cert
 	// Via is the certificate of the browser a peer vouches for, when the peer sent one.
 	Via *identity.Cert
+	// Build is the fingerprint of the front end this pod serves (server.Build), told in its
+	// $hello: the Service Worker of the relay keeps the page of the pod under it (#73).
+	Build string
 }
 
 // deadline returns the bounded window for the handshake reads.
@@ -183,7 +189,7 @@ func (h *Handshake) runToken(conn MsgConn, hi helloParams) error {
 	nonceP := nonce()
 	proof := MAC(RolePod, h.Token, h.FPBrowser, h.FPPod, hi.Nonce, nonceP)
 	// pod -> $hello{protocol, version, nonce, proof}
-	if err := h.send(conn, "$hello", helloParams{Protocol: Protocol, Version: VersionToken, Nonce: nonceP, Proof: proof}); err != nil {
+	if err := h.send(conn, "$hello", helloParams{Protocol: Protocol, Version: VersionToken, Nonce: nonceP, Proof: proof, Build: h.Build}); err != nil {
 		return err
 	}
 	// browser -> $auth{proof}
@@ -245,7 +251,7 @@ func (h *Handshake) runCert(conn MsgConn, hi helloParams) error {
 	sig := identity.Sign(h.Identity.Key(), []byte(Binding(RolePod, h.FPBrowser, h.FPPod, hi.Nonce, nonceP)))
 	_, own, _ := h.Identity.State()
 	// pod -> $hello{protocol, version, nonce, cert, sig}
-	if err := h.send(conn, "$hello", helloParams{Protocol: Protocol, Version: Version, Nonce: nonceP, Cert: own, Sig: sig}); err != nil {
+	if err := h.send(conn, "$hello", helloParams{Protocol: Protocol, Version: Version, Nonce: nonceP, Cert: own, Sig: sig, Build: h.Build}); err != nil {
 		return err
 	}
 	// browser -> $auth{sig}

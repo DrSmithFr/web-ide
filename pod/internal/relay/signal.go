@@ -53,6 +53,7 @@ type sigMsg struct {
 	Nonce     string    `json:"nonce,omitempty"`
 	Sig       string    `json:"sig,omitempty"`
 	Version   string    `json:"version,omitempty"`
+	Build     string    `json:"build,omitempty"` // the fingerprint of the pod's front end (#73)
 	Protocol  int       `json:"protocol,omitempty"`
 	Preferred bool      `json:"preferred,omitempty"`
 	Peers     []string  `json:"peers,omitempty"`
@@ -120,7 +121,8 @@ type podConn struct {
 	// link came up, and whether it ended cleanly (a bye).
 	key       string
 	version   string
-	protocol  int // the multi-pod protocol the pod told (0: one older than #60, or none told)
+	build     string // the fingerprint of its front end (#73)
+	protocol  int    // the multi-pod protocol the pod told (0: one older than #60, or none told)
 	preferred bool
 	peers     []string
 	clean     bool
@@ -274,7 +276,7 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			pc.id, pc.name, pc.account = m.ID, m.Name, m.Account
-			pc.version, pc.preferred, pc.protocol = m.Version, m.Preferred, m.Protocol
+			pc.version, pc.build, pc.preferred, pc.protocol = m.Version, m.Build, m.Preferred, m.Protocol
 			// A paired pod sends its certificate: it must verify against the account it
 			// claims, which only a device holding the account key can sign.
 			if m.Cert != nil {

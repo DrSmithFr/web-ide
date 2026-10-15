@@ -183,9 +183,22 @@ run(
     assert((await app.textContent('.settings-body dd.mono.small')).includes(`#pod=${POD_ID}&t=${TOKEN}`), 'the remote link shown in Settings')
     await app.click('.modal-settings .modal-head button')
 
+    // The shell of the relay is kept by the Service Worker (#73): the bootstrap page, its scripts,
+    // the identity module, the wordlist and the installable app, under the hash the relay wrote
+    // into sw.js.
+    const shellPaths = ['/', '/_relay/bootstrap.js', '/_relay/bootstrap.css', '/_relay/routes.js', '/_relay/identity.js', '/_relay/bip39.txt', '/manifest.webmanifest']
+    const shell = await page.evaluate(async () => {
+      const names = (await caches.keys()).filter((n) => n.startsWith('webide-shell:'))
+      const paths = names.length ? (await (await caches.open(names[0])).keys()).map((r) => new URL(r.url).pathname) : []
+      return { names, paths }
+    })
+    assert(shell.names.length === 1 && /^webide-shell:[0-9a-f]{16}$/.test(shell.names[0]), 'the shell has one cache, named by its hash: ' + shell.names.join(', '))
+    assert(shellPaths.every((p) => shell.paths.includes(p)), 'the shell is cached: ' + shell.paths.join(' '))
+
     // The assets the pod says are immutable are kept by the Service Worker (#71): a reload of the
-    // page answers them from this origin instead of carrying them through the tunnel. The page
-    // itself, /api and the previews are never cached: a cached asset never stands for a tunnel.
+    // page answers them from this origin instead of carrying them through the tunnel. The page of
+    // the pod is kept too, under the build its handshake told (#73). /api and the previews are
+    // never cached.
     const listed = async () =>
       await page.evaluate(async () => {
         const names = (await caches.keys()).filter((n) => n.startsWith('webide-assets'))
@@ -203,11 +216,20 @@ run(
     const warm = await listed()
     const assets = warm.urls.filter((u) => u.url.includes("/assets/"))
     assert(warm.names.length === 1 && warm.names[0].startsWith('webide-assets:' + POD_ID), 'the pod has its own asset cache: ' + warm.names.join(', '))
+    assert(/:[0-9a-f]{16}$/.test(warm.names[0]), 'the cache of the pod is named by its build: ' + warm.names[0])
     assert(assets.some((u) => u.url.includes('/assets/index-')), `${assets.length} assets of the app are cached`)
-    assert(!warm.urls.some((u) => u.url.endsWith("/app") || u.url.endsWith("/") || u.url.includes("/api/") || u.url.includes("/__preview/")), 'no page, api nor preview in the cache')
+    assert(warm.urls.some((u) => new URL(u.url).pathname === '/app'), 'the page of the pod is cached under its build')
+    assert(!warm.urls.some((u) => u.url.includes("/api/") || u.url.includes("/__preview/")), 'no api nor preview in the cache')
     assert(warm.urls.every((u) => u.size <= 8 * 1024 * 1024), 'every cached entry stays under the cap')
 
-    // A reload of the page: the same app, far fewer channels and far fewer bytes through the tunnel.
+    // A reload of the page: the same app, far fewer channels and far fewer bytes through the tunnel,
+    // and the shell answered by the Service Worker, never by the relay (#73).
+    const fromNet = []
+    const onResponse = (r) => {
+      const u = new URL(r.url())
+      if (u.origin === RELAY && shellPaths.includes(u.pathname) && !r.fromServiceWorker()) fromNet.push(u.pathname)
+    }
+    page.on('response', onResponse)
     const t0 = Date.now()
     await page.reload({ waitUntil: 'domcontentloaded' })
     await page.waitForSelector('#frame', { timeout: 30000 })
@@ -215,11 +237,14 @@ run(
     await again.waitForSelector('.home .home-bar', { timeout: 30000 })
     await again.waitForSelector('.project-list .project-card, .ws-dir')
     await again.waitForTimeout(400)
-    const re = await page.evaluate(() => ({ ...window.bootTimings, channels: window.httpChannels, bytes: window.httpBytes, total: Math.round(performance.now()) }))
+    page.off('response', onResponse)
+    const re = await page.evaluate(() => ({ ...window.bootTimings, channels: window.httpChannels, bytes: window.httpBytes, paths: window.httpPaths, total: Math.round(performance.now()) }))
     console.log(`  load first:  ${JSON.stringify(first)}`)
     console.log(`  load reload: ${JSON.stringify(re)} (${Date.now() - t0} ms to the app)`)
     assert(re.channels < first.channels, `a reload opens fewer tunnel channels: ${first.channels} → ${re.channels}`)
     assert(re.bytes * 2 < first.bytes, `a reload carries far fewer bytes through the tunnel: ${first.bytes} → ${re.bytes}`)
+    assert(fromNet.length === 0, 'a reload fetches nothing of the shell from the relay: ' + fromNet.join(' '))
+    assert(!re.paths.some((p) => p === '/app' || p.includes('/assets/')), 'a reload carries no page nor asset through the tunnel: ' + re.paths.join(' '))
 
     // The app works after the reload: the project is opened and its file read again.
     if (await again.locator('.project-open:has-text("demo")').count()) await again.click('.project-open:has-text("demo")')
@@ -247,6 +272,16 @@ run(
     await bad.goto(link('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef'), { waitUntil: 'domcontentloaded' })
     await bad.waitForSelector('.err', { timeout: 30000 })
     assert((await bad.textContent('.err')).includes('connection could not be established'), 'a wrong token is refused by the pod')
+    // The install prompt Chromium hands the page is offered in its footer (#73). The tests run in
+    // an incognito context, where Chromium hands none: the event is the test's.
+    assert(!(await bad.isVisible('[data-testid=install]')), 'no install button without a prompt')
+    await bad.evaluate(() => {
+      const e = new Event('beforeinstallprompt')
+      e.prompt = async () => (window.prompted = true)
+      window.dispatchEvent(e)
+    })
+    await bad.click('[data-testid=install]')
+    assert(await bad.evaluate(() => window.prompted === true), 'the install button shows the prompt of the browser')
     await bad.close()
 
     // The relay stopped: the pod keeps working on 127.0.0.1, and Settings shows the link as
@@ -265,6 +300,8 @@ run(
     await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {})
     await page.waitForTimeout(1500)
     assert(!(await page.isVisible('#frame')), 'a reload without the relay shows no app, cached assets or not')
+    // The shell itself is cached (#73): the page of the relay says what failed, not the browser.
+    assert(await page.isVisible('#status .card'), 'a reload without the relay shows the cached bootstrap page')
     await local.click('.home-head button[title="Settings"]')
     await local.waitForSelector('.settings')
     await local.click('.settings-nav button:has-text("Remote access")')
@@ -277,15 +314,36 @@ run(
 
     // The relay comes back: the pod reconnects by itself (backoff), and the link shows
     // connected again.
+    // It comes back as a deploy would, with another shell (#73): its installable app changed.
     const { spawn } = require('child_process')
-    const relay = spawn(process.env.E2E_BIN, ['-data', process.env.E2E_RELAY_DATA, '-addr', '127.0.0.1:' + process.env.E2E_RELAY_PORT, '-turn-ip', '127.0.0.1', '-turn-port', process.env.E2E_TURN_PORT, 'relay'], { stdio: 'ignore' })
+    const dist = require('path').join(__dirname, '../../pod/webdist/dist')
+    const shellDir = fs.mkdtempSync(require('os').tmpdir() + '/relay-app-')
+    fs.cpSync(dist, shellDir, { recursive: true })
+    fs.writeFileSync(shellDir + '/manifest.webmanifest', fs.readFileSync(shellDir + '/manifest.webmanifest', 'utf8').replace('"Web IDE"', '"Web IDE "'))
+    const relay = spawn(process.env.E2E_BIN, ['-data', process.env.E2E_RELAY_DATA, '-addr', '127.0.0.1:' + process.env.E2E_RELAY_PORT, '-turn-ip', '127.0.0.1', '-turn-port', process.env.E2E_TURN_PORT, '-static', shellDir, 'relay'], { stdio: 'ignore' })
     await local.click('.home-head button[title="Settings"]')
     await local.waitForSelector('.settings')
     await local.click('.settings-nav button:has-text("Remote access")')
     // The backoff of the pod can reach 30 s between two dial attempts.
     for (let i = 0; i < 140 && !(await local.isVisible('.settings-body .dot-connected')); i++) await local.waitForTimeout(500)
     assert(await local.isVisible('.settings-body .dot-connected'), 'the pod reconnects to the relay after it is restarted')
+
+    // The page still runs on the old shell: the browser installs the new Service Worker in the
+    // background, the page offers to reload, and the reload runs on the new shell — the old one is
+    // dropped.
+    await page.evaluate(() => navigator.serviceWorker.getRegistration().then((r) => r.update()))
+    await page.waitForSelector('#update:not([hidden]) button', { timeout: 20000 })
+    await Promise.all([page.waitForEvent('framenavigated', { predicate: (f) => f === page.mainFrame(), timeout: 20000 }), page.click('#update button')])
+    await page.waitForSelector('#frame', { state: 'visible', timeout: 30000 })
+    const renewed = await page.evaluate(async () => (await caches.keys()).filter((n) => n.startsWith('webide-shell:')))
+    assert(renewed.length === 1 && renewed[0] !== shell.names[0], `the reload runs on the new shell: ${shell.names[0]} → ${renewed.join(', ')}`)
+    assert((await page.evaluate(() => fetch('/manifest.webmanifest').then((r) => r.text()))).includes('"Web IDE "'), 'the new shell is the one of the relay')
     relay.kill()
+    fs.rmSync(shellDir, { recursive: true, force: true })
+    // The cached shell of the page kept trying the relay while it was down: those refusals were
+    // the point of the test, not an error of the page.
+    const down = RELAY.replace(/^http/, 'ws') + '/_relay/'
+    for (let i = errors.length - 1; i >= 0; i--) if (errors[i].includes(down) && errors[i].includes('ERR_CONNECTION_REFUSED')) errors.splice(i, 1)
     await local.close()
 
     assert(!errors.some((e) => e.includes('404')), 'no missing asset through the Service Worker')

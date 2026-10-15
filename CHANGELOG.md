@@ -4,6 +4,11 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+### Added
+
+- The page of the relay is kept by its Service Worker (#73): the bootstrap page, its scripts, the identity module, the wordlist and the installable app are precached, and the page of a pod is kept under the build of its front end (a hash the pod tells in its handshake). A reload through the relay fetches no static file — it pays the connection only. A new shell on the relay installs in the background and the page offers a **Reload** bar; with the relay down, the cached page says so.
+- The footer of the relay page offers **Install the app** where the browser hands it its install prompt, and the Share › Add to Home Screen hint on iOS.
+
 ## [1.13.1] - 2026-10-15
 
 ### Changed
