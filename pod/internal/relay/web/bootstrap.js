@@ -95,6 +95,39 @@ const words = {
   reload: fr ? 'Recharger' : 'Reload',
   install: fr ? 'Installer l’app' : 'Install the app',
   installIOS: fr ? 'Pour l’installer : Partager › Sur l’écran d’accueil.' : 'To install it: Share › Add to Home Screen.',
+  // What the connection does, sub-step by sub-step (#74).
+  details: fr ? 'Détails' : 'Details',
+  copy: fr ? 'Copier' : 'Copy',
+  copied: fr ? 'Copié' : 'Copied',
+  tLink: fr ? 'Lien d’identité avec le relay ouvert' : 'Identity link to the relay open',
+  tPods: fr ? 'Pods en ligne sur le relay : {n}' : 'Pods online at the relay: {n}',
+  tSignal: fr ? 'Ouverture du lien de signalisation…' : 'Opening the signaling link…',
+  tSignalOpen: fr ? 'Lien de signalisation ouvert' : 'Signaling link open',
+  tIce: fr ? 'Identifiants TURN reçus ({n} serveurs)' : 'TURN credentials received ({n} servers)',
+  tIceQuota: fr ? 'Aucun identifiant TURN (quota atteint) : chemins directs seulement' : 'No TURN credential (quota reached): direct paths only',
+  tOffer: fr ? 'Offre envoyée, en attente de la réponse du pod (il collecte ses candidats, jusqu’à 8 s)…' : 'Offer sent, waiting for the pod to answer (it gathers its candidates, up to 8 s)…',
+  tAnswer: fr ? 'Réponse du pod reçue' : 'Answer of the pod received',
+  tPath: fr ? 'Recherche d’un chemin réseau (ICE)…' : 'Looking for a network path (ICE)…',
+  tCands: fr ? '{l} candidats de ce navigateur, {r} du pod' : '{l} candidates from this browser, {r} from the pod',
+  tIceState: fr ? 'ICE : {s}' : 'ICE: {s}',
+  tPathDirect: fr ? 'Chemin direct ({l} ↔ {r})' : 'Direct path ({l} ↔ {r})',
+  tPathTurn: fr ? 'Chemin relayé par TURN ({p})' : 'Path relayed by TURN ({p})',
+  tDtls: fr ? 'Ouverture du canal chiffré (DTLS)…' : 'Opening the encrypted channel (DTLS)…',
+  tHello: fr ? 'Canal ouvert, preuve d’identité échangée avec le pod…' : 'Channel open, proving identities with the pod…',
+  tProved: fr ? 'Le pod a prouvé son identité' : 'The pod proved its identity',
+  tReady: fr ? 'Liaison chiffrée établie' : 'Secure handshake done',
+  tApp: fr ? 'Ouverture de l’IDE' : 'Opening the IDE',
+  tBye: fr ? 'Le relay signale que le pod est parti' : 'The relay says the pod left',
+  tError: fr ? 'Erreur : ' : 'Error: ',
+  stallTitle: fr ? 'Cette étape ne progresse plus.' : 'This step is not moving.',
+  stall: {
+    signal: fr ? 'Le relay n’ouvre pas le lien de signalisation : le réseau ou le relay est lent.' : 'The relay does not open the signaling link: the network or the relay is slow.',
+    answer: fr ? 'Le pod ne répond pas à l’offre : il redémarre peut-être, ou son lien avec le relay est rompu (il se reconnecte seul en moins d’une minute).' : 'The pod does not answer the offer: it may be restarting, or its link to the relay is broken (it reconnects by itself within a minute).',
+    ice: fr ? 'Aucun chemin réseau entre ce navigateur et le pod : un pare-feu bloque peut-être UDP et TURN.' : 'No network path between this browser and the pod: a firewall may block UDP and TURN.',
+    dtls: fr ? 'Le chemin est trouvé mais le canal chiffré ne s’ouvre pas.' : 'The path is found but the encrypted channel does not open.',
+    hello: fr ? 'Le pod ne termine pas la poignée de main : il est peut-être surchargé.' : 'The pod does not finish the handshake: it may be overloaded.',
+  },
+  stallWait: fr ? 'La page continue d’attendre.' : 'The page keeps waiting.',
 }
 // The texts the page shows for what the pod or the identity module answers: the handshake
 // codes (tunnel.Code*) and the error keys of the identity module, the same words as the pod's
@@ -163,6 +196,7 @@ function draw(name, ...nodes) {
   if (!el) return
   el.replaceChildren(...nodes.flat())
   drawFoot()
+  drawTrace()
 }
 // The words of a fingerprint, each in its own box: easier to compare from one screen to another.
 const fpWords = (fp, big) => h('div', { class: big ? 'fp big' : 'fp' }, (fp ?? '').split(' ').flatMap((w, i) => (i ? [' ', h('span', {}, w)] : [h('span', {}, w)])))
@@ -258,8 +292,75 @@ function connecting(step, name) {
     h('h1', {}, words.connecting),
     h('ol', { class: 'steps' }, labels.map((l, i) =>
       h('li', { class: i < stepAt ? 'done' : i === stepAt ? 'now' : '' },
-        h('span', { class: 'dot' }), h('span', {}, l, i === 1 && stepPod ? h('b', {}, stepPod) : '')))),
+        h('span', { class: 'dot' }),
+        h('span', { class: 'label' }, h('span', {}, l, i === 1 && stepPod ? h('b', {}, stepPod) : ''),
+          i === stepAt ? h('span', { class: 'sub', id: 'sub' }) : '')))),
+    h('div', { id: 'stall' }),
   )
+  refreshSub()
+}
+
+// What the connection does, sub-step by sub-step (#74): the line under the current step says what
+// it waits for and since when, the Details panel keeps every event with its time, and a sub-step
+// that waits too long says what blocks it. Nothing secret goes in: no token, no key, no SDP.
+const journal = []
+let phase = null // {name, text, since, warned}
+const cands = { local: 0, remote: 0 }
+// How long a sub-step may wait before the page says it is stuck (it keeps waiting).
+const STALL = { signal: 10000, answer: 15000, ice: 30000, dtls: 15000, hello: 15000 }
+function trace(line) {
+  if (journal.at(-1)?.line === line) return // a drop then its failure say the same error
+  journal.push({ at: Math.round(performance.now() - bootAt), line })
+  drawTrace()
+}
+function phaseOf(name, line) {
+  phase = { name, text: line, since: performance.now(), warned: false }
+  trace(line)
+  const st = document.getElementById('stall')
+  if (st) st.replaceChildren()
+  refreshSub()
+}
+function refreshSub() {
+  const el = document.getElementById('sub')
+  if (!el || !phase) return
+  const secs = Math.floor((performance.now() - phase.since) / 1000)
+  el.replaceChildren(
+    h('span', {}, phase.text + (secs ? ' · ' + secs + ' s' : '')),
+    phase.name === 'ice' ? h('span', {}, fmt(words.tCands, { l: cands.local, r: cands.remote })) : '',
+  )
+  const limit = STALL[phase.name]
+  if (limit && !phase.warned && performance.now() - phase.since > limit) {
+    phase.warned = true
+    trace(words.stallTitle + ' ' + (words.stall[phase.name] ?? ''))
+    document.getElementById('stall')?.replaceChildren(h('div', { class: 'stall', 'data-testid': 'stall' },
+      h('b', {}, words.stallTitle), ' ', words.stall[phase.name] ?? '', ' ', words.stallWait,
+      h('div', { class: 'actions' }, h('button', { class: 'btn', type: 'button', onclick: () => location.reload() }, words.retry))))
+  }
+}
+setInterval(refreshSub, 1000)
+
+// The Details panel: under the card while the page connects, fails or reconnects; gone with the
+// card once the app opens. Its open state lives in the element, so a redraw keeps it.
+function drawTrace() {
+  const box = document.getElementById('trace')
+  if (!box) return
+  box.hidden = !journal.length || !['connecting', 'busy', 'error', 'offline'].includes(view)
+  const pre = document.getElementById('trace-lines')
+  if (pre) {
+    pre.textContent = journalText()
+    pre.scrollTop = pre.scrollHeight // the last event in view
+  }
+}
+function journalText() {
+  return journal.map((e) => (e.at / 1000).toFixed(2).padStart(6) + '  ' + e.line).join('\n')
+}
+async function copyJournal(btn) {
+  const head = location.host + ' · ' + new Date().toISOString() + ' · ' + navigator.userAgent
+  try {
+    await navigator.clipboard.writeText(head + '\n' + journalText())
+    btn.textContent = words.copied
+    setTimeout(() => (btn.textContent = words.copy), 1500)
+  } catch {}
 }
 const busy = (line) => draw('busy', h('div', { class: 'spin' }), h('p', { class: 'center muted' }, line))
 // A page of the window that lost its channel: said in the card, without ending the window.
@@ -289,6 +390,7 @@ let lastError = null
 function fail(m) {
   failed = true
   lastError = m
+  trace(words.tError + m)
   const revokedNow = m === text('revoked') || m === text('device revoked')
   if (revokedNow) void id.lock()
   draw('error',
@@ -661,6 +763,7 @@ async function enter(mode) {
   const l = await id.link(onPush, lang)
   link = l
   mark('link')
+  trace(words.tLink)
   if (account) {
     const err = await applyRevocations(l)
     if (err) return err
@@ -673,6 +776,7 @@ async function enter(mode) {
     }
   }
   mark('pods')
+  if (account) trace(fmt(words.tPods, { n: pods.length }))
   if (!pod) return fail(words.nopod)
   const p = pods.find((p) => p.podId === pod)
   entryKey = p?.key ?? ''
@@ -736,6 +840,10 @@ async function startSW() {
 
 async function main() {
   drawBrand()
+  document.getElementById('trace-sum').textContent = words.details
+  const copy = document.getElementById('trace-copy')
+  copy.textContent = words.copy
+  copy.addEventListener('click', () => void copyJournal(copy))
   const missing = await id.support()
   if (missing.length) return fail(words.needs + missing.join(', '))
   mark('support')
@@ -800,21 +908,34 @@ function connect(key, podId, mode) {
   })
   t.ready.catch(() => {}) // a tunnel nobody waited for must not shout in the console
   const url = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/_relay/signal?pod=' + encodeURIComponent(podId) + '&session=' + t.session
+  // The sub-steps of the tunnel the page waits for are shown; the others go to the journal only.
+  const watch = (name, line) => (t.key === entryKey && !t.done ? phaseOf(name, line) : trace(line))
+  watch('signal', words.tSignal)
   const sig = new WebSocket(url)
   t.sig = sig
-  sig.onopen = () => mark('signal')
+  sig.onopen = () => {
+    mark('signal')
+    trace(words.tSignalOpen)
+  }
   sig.onmessage = (e) => {
     const m = JSON.parse(e.data)
     if (m.type === 'ice') {
       mark('ice')
+      trace(m.quota?.over ? words.tIceQuota : fmt(words.tIce, { n: (m.urls ?? []).length }))
       if (m.quota?.over) quotaNote(m.quota)
-      start(t, m).catch((err) => drop(t, err.message))
+      start(t, m, watch).catch((err) => drop(t, err.message))
     } else if (m.type === 'answer') {
       mark('answer')
+      trace(words.tAnswer)
+      watch('ice', words.tPath)
       t.pc?.setRemoteDescription({ type: 'answer', sdp: m.sdp }).catch(() => {})
-    } else if (m.type === 'candidate') { try { t.pc?.addIceCandidate(JSON.parse(m.candidate)) } catch {} }
+    } else if (m.type === 'candidate') {
+      if (t.key === entryKey) cands.remote++
+      try { t.pc?.addIceCandidate(JSON.parse(m.candidate)) } catch {}
+    }
     else if (m.type === 'error') drop(t, text(m.message))
     else if (m.type === 'bye') {
+      trace(words.tBye)
       // The pod is gone: the relay says so on the signaling link. A refusal also travels on the
       // DataChannel (the handshake error), which can arrive first: give it that moment.
       setTimeout(() => { if (!t.dropped) drop(t, lastError ?? words.closed) }, 600)
@@ -875,7 +996,7 @@ async function ensure(key, podId) {
   }
 }
 
-async function start(t, ice) {
+async function start(t, ice, watch) {
   // Over the monthly quota the relay sent no credential: keep the STUN servers and drop the TURN
   // ones, which a client cannot use without one (relay.md, Hosted service).
   const urls = ice.quota?.over ? (ice.urls ?? []).filter((u) => u.startsWith('stun:')) : ice.urls
@@ -886,13 +1007,29 @@ async function start(t, ice) {
   const rpc = pc.createDataChannel('rpc', { ordered: true })
   t.rpc = rpc
   rpc.onclose = () => drop(t, words.closed)
-  pc.oniceconnectionstatechange = () => { if (pc.iceConnectionState === 'failed') drop(t, words.failed) }
-  pc.onicecandidate = (e) => sendCandidate(t, e.candidate)
+  pc.oniceconnectionstatechange = () => {
+    const st = pc.iceConnectionState
+    trace(fmt(words.tIceState, { s: st }))
+    if (st === 'connected' || st === 'completed') {
+      if (!t.pathTold) {
+        t.pathTold = true
+        void pathOf(pc).then((p) => p && trace(p))
+      }
+      if (!t.dcOpen) watch('dtls', words.tDtls)
+    }
+    if (st === 'failed') drop(t, words.failed)
+  }
+  pc.onicecandidate = (e) => {
+    if (e.candidate && t.key === entryKey) cands.local++
+    sendCandidate(t, e.candidate)
+  }
   const offer = await pc.createOffer()
   await pc.setLocalDescription(offer)
   t.sig.send(JSON.stringify({ type: 'offer', session: t.session, sdp: offer.sdp }))
-  const r = await handshake(t, rpc, t.mode, t.key)
+  watch('answer', words.tOffer)
+  const r = await handshake(t, rpc, t.mode, t.key, undefined, undefined, watch)
   if (r.ok) {
+    trace(words.tReady)
     t.done = true
     t.rpcReader = r.rd
     t.build = r.build
@@ -913,10 +1050,12 @@ async function start(t, ice) {
 // a tunnel must not answer with another pod of the account, even one the relay routed it to.
 // fpB/fpP are the DTLS fingerprints the proof is bound to; a channel that rides another tunnel
 // (a routed pod) is bound to the fingerprints of the tunnel it rides on.
-async function handshake(t, dc, mode, want, fpB, fpP) {
+async function handshake(t, dc, mode, want, fpB, fpP, watch) {
   await opened(dc)
   mark('dc')
+  t.dcOpen = true
   if (t.key === entryKey && dc === t.rpc) connecting(2)
+  watch?.('hello', words.tHello)
   fpB = fpB ?? fingerprint(t.pc.localDescription)
   fpP = fpP ?? fingerprint(t.pc.remoteDescription)
   // A channel that rides this tunnel is bound to the fingerprints of the tunnel itself.
@@ -933,6 +1072,7 @@ async function handshake(t, dc, mode, want, fpB, fpP) {
   if (hp.error === 'version') return { error: words.update }
   if (hp.error === 'unpaired' && token) return { unpaired: true }
   if (hp.error) return { error: text(hp.error) }
+  if (watch) trace(words.tProved)
   if (mode === 'token') {
     if ((await mac('pod', fpB, fpP, nonceB, hp.nonce)) !== hp.proof) return { error: words.failed }
     send(dc, { id: 0, method: '$auth', params: { proof: await mac('browser', fpB, fpP, nonceB, hp.nonce) } })
@@ -948,6 +1088,23 @@ async function handshake(t, dc, mode, want, fpB, fpP) {
   if (ready.method === '$ready') mark('ready')
   // The pod tells the build of its front end (#73): the Service Worker keeps its page under it.
   return ready.method === '$ready' ? { ok: true, rd, build: typeof hp.build === 'string' ? hp.build : '' } : { error: lastError ?? words.failed }
+}
+
+// The path ICE chose, in words: direct (and between which kinds of candidates) or relayed by TURN
+// (and over which transport the browser reaches the relay).
+async function pathOf(pc) {
+  try {
+    const r = await pc.getStats()
+    const by = new Map([...r.values()].map((s) => [s.id, s]))
+    const pair = [...r.values()].find((s) => s.type === 'candidate-pair' && (s.nominated || s.selected) && s.state === 'succeeded')
+    if (!pair) return ''
+    const l = by.get(pair.localCandidateId)
+    const rm = by.get(pair.remoteCandidateId)
+    if (l?.candidateType === 'relay' || rm?.candidateType === 'relay') return fmt(words.tPathTurn, { p: l?.relayProtocol || l?.protocol || rm?.protocol || '?' })
+    return fmt(words.tPathDirect, { l: l?.candidateType ?? '?', r: rm?.candidateType ?? '?' })
+  } catch {
+    return ''
+  }
 }
 
 function sendCandidate(t, c) {
@@ -995,6 +1152,7 @@ setInterval(() => {
 function drop(t, msg) {
   if (t.dropped) return
   t.dropped = true
+  trace(words.tError + msg)
   lastError = msg
   close(t)
   if (tunnels.get(t.key) === t) tunnels.delete(t.key)
@@ -1068,6 +1226,8 @@ async function openApp() {
   // would answer them from the relay, which does not know them.
   if (!(await swReady)) return
   mark('app')
+  phase = null
+  trace(words.tApp)
   // Declared before the frame asks for its page: the Service Worker answers it from the build of
   // that pod it already holds (#73). A pod reached through a gateway tells its build on its routed
   // rpc channel, which the first fetch of the frame would open anyway: open it first.

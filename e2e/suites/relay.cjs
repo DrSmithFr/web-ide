@@ -272,6 +272,15 @@ run(
     await bad.goto(link('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef'), { waitUntil: 'domcontentloaded' })
     await bad.waitForSelector('.err', { timeout: 30000 })
     assert((await bad.textContent('.err')).includes('connection could not be established'), 'a wrong token is refused by the pod')
+    // The Details panel tells what the connection did, step by step (#74): the tunnel came up
+    // through TURN, and the pod refused the proof.
+    assert(await bad.isVisible('#trace'), 'a failed connection shows its Details panel')
+    await bad.click('#trace summary')
+    const journal = await bad.textContent('#trace-lines')
+    for (const line of ['Signaling link open', 'TURN credentials received', 'Answer of the pod received', 'ICE: connected', 'Path relayed by TURN', 'Error: '])
+      assert(journal.includes(line), `the journal says "${line}":\n${journal}`)
+    assert(!journal.includes(TOKEN) && !journal.includes('deadbeef'), 'the journal holds no token')
+    await bad.screenshot({ path: OUT + '/relay-journal.png' })
     // The install prompt Chromium hands the page is offered in its footer (#73). The tests run in
     // an incognito context, where Chromium hands none: the event is the test's.
     assert(!(await bad.isVisible('[data-testid=install]')), 'no install button without a prompt')
@@ -283,6 +292,26 @@ run(
     await bad.click('[data-testid=install]')
     assert(await bad.evaluate(() => window.prompted === true), 'the install button shows the prompt of the browser')
     await bad.close()
+
+    // A pod that never answers the offer (#74): the line under the step says what it waits for,
+    // and after 15 s the page says the pod does not answer, with Retry, while it keeps waiting.
+    const stuck = await ctx.newPage()
+    await stuck.routeWebSocket(/\/_relay\/signal/, (ws) => {
+      const server = ws.connectToServer()
+      server.onMessage((m) => {
+        if (!String(m).includes('"answer"')) ws.send(m)
+      })
+      ws.onMessage((m) => server.send(m))
+    })
+    await stuck.goto(link(TOKEN), { waitUntil: 'domcontentloaded' })
+    await stuck.waitForFunction(() => document.getElementById('sub')?.textContent.includes('waiting for the pod to answer'), null, { timeout: 15000 })
+    await stuck.waitForSelector('[data-testid=stall]', { timeout: 25000 })
+    assert((await stuck.textContent('[data-testid=stall]')).includes('does not answer the offer'), 'a pod that does not answer is said so')
+    assert(await stuck.isVisible('[data-testid=stall] button'), 'a stalled step offers Retry')
+    await stuck.click('#trace summary')
+    await stuck.setViewportSize({ width: 390, height: 900 })
+    await stuck.screenshot({ path: OUT + '/relay-stall.png' })
+    await stuck.close()
 
     // The relay stopped: the pod keeps working on 127.0.0.1, and Settings shows the link as
     // disconnected (the pod notices it and reconnects with backoff when the relay comes back).

@@ -629,6 +629,9 @@ func (c *Client) handleOffer(m sigMsg, link *podLink) {
 		routed: make(chan routedConn, 16), authed: make(chan struct{})}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	c.addSession(m.Session, s)
+	// One line per step of a tunnel (#74): what a page stuck on its connection waits for can be
+	// read in the log of the pod. The session id is the browser's random one, cut short.
+	log.Printf("relayclient: tunnel %s: offer received", s.short())
 	if err := s.setupOffer(m); err != nil {
 		log.Printf("relayclient: offer: %v", err)
 		link.send(sigMsg{Type: "error", Session: m.Session, Message: err.Error()})
@@ -745,6 +748,12 @@ func (s *session) setupOffer(m sigMsg) error {
 		s.chans <- tunnel.LabeledConn{Label: dc.Label(), Conn: conn}
 	})
 	pc.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
+		switch state {
+		case webrtc.ICEConnectionStateConnected:
+			log.Printf("relayclient: tunnel %s: ICE connected, %s", s.short(), selectedPair(pc))
+		case webrtc.ICEConnectionStateDisconnected, webrtc.ICEConnectionStateFailed:
+			log.Printf("relayclient: tunnel %s: ICE %s", s.short(), state)
+		}
 		if state == webrtc.ICEConnectionStateFailed {
 			s.close()
 		}
@@ -765,9 +774,11 @@ func (s *session) setupOffer(m sigMsg) error {
 	}
 	// A candidate gathering that stalls (a TURN allocation that never answers) must not hold the
 	// answer forever: what was gathered is sent, and the tunnel is made of that.
+	asked := time.Now()
 	select {
 	case <-gather:
 	case <-time.After(8 * time.Second):
+		log.Printf("relayclient: tunnel %s: candidate gathering still running after 8 s, answering with what it found", s.short())
 	}
 	// The final answer SDP carries the pod's DTLS fingerprint (the handshake binds it);
 	// the raw CreateAnswer SDP may not have it yet.
@@ -775,7 +786,30 @@ func (s *session) setupOffer(m sigMsg) error {
 	s.mu.Lock()
 	s.answer = *lc
 	s.mu.Unlock()
+	log.Printf("relayclient: tunnel %s: answer sent after %s, %d candidates", s.short(), time.Since(asked).Round(time.Millisecond), strings.Count(lc.SDP, "a=candidate:"))
 	return s.link.send(sigMsg{Type: "answer", Session: s.id, SDP: lc.SDP})
+}
+
+// short is the session id cut for the log: enough to follow one tunnel, nothing to reuse.
+func (s *session) short() string {
+	if len(s.id) > 6 {
+		return s.id[:6]
+	}
+	return s.id
+}
+
+// selectedPair names the path ICE chose: both candidate types (host, srflx, relay) and the
+// protocol, so a tunnel that went through TURN is told from a direct one.
+func selectedPair(pc *webrtc.PeerConnection) string {
+	sctp := pc.SCTP()
+	if sctp == nil || sctp.Transport() == nil || sctp.Transport().ICETransport() == nil {
+		return "path unknown"
+	}
+	p, err := sctp.Transport().ICETransport().GetSelectedCandidatePair()
+	if err != nil || p == nil || p.Local == nil || p.Remote == nil {
+		return "path unknown"
+	}
+	return fmt.Sprintf("pod %s/%s ↔ browser %s/%s", p.Local.Typ, p.Local.Protocol, p.Remote.Typ, p.Remote.Protocol)
 }
 
 func (s *session) addBrowserCandidate(raw json.RawMessage) {
@@ -820,6 +854,11 @@ func (s *session) serveRPC() {
 		return
 	}
 	s.browserCert, s.fpBrowser, s.fpPod = hs.PeerCert, hs.FPBrowser, hs.FPPod
+	mode := "token"
+	if hs.PeerCert != nil {
+		mode = "device " + hs.PeerCert.Name
+	}
+	log.Printf("relayclient: tunnel %s: handshake done (%s)", s.short(), mode)
 	close(s.authed)
 	s.client.cfg.Server.ServeTunnel(s.ctx, conn, s.chans)
 	// ServeTunnel returned: the browser closed the tunnel.

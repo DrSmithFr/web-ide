@@ -135,6 +135,24 @@ code, .code {
 .steps li.now { color: var(--text); font-weight: 550; }
 .steps li.now .dot { border-color: var(--accent); border-top-color: transparent; animation: spin 0.9s linear infinite; }
 
+/* What the current step waits for (#74), under its label. */
+.steps li .label { display: flex; flex-direction: column; min-width: 0; }
+.steps li .sub { display: flex; flex-direction: column; font-size: 13px; font-weight: 400; color: var(--muted); }
+.stall { margin-top: 12px; padding: 12px 14px; border-radius: 10px; background: var(--err-soft); color: var(--text); font-size: 14px; }
+.stall b { color: var(--err); }
+.stall .actions { margin-top: 10px; }
+
+/* The journal of the connection: every event with its time, to read or to copy. */
+#trace { margin-top: 16px; border-top: 1px solid var(--line); border-bottom: 0; }
+#trace[hidden] { display: none; }
+#trace summary { padding: 10px 0 4px; font-size: 13px; color: var(--muted); }
+#trace pre {
+  margin: 6px 0 10px; padding: 8px 10px; max-height: 220px; overflow: auto;
+  background: var(--code); border: 1px solid var(--line); border-radius: 8px;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word;
+}
+#trace .btn { min-height: 32px; font-size: 13px; }
+
 .spin { width: 26px; height: 26px; margin: 8px auto 14px; border: 2.5px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(1turn); } }
 @media (prefers-reduced-motion: reduce) { .spin, .steps li.now .dot { animation-duration: 3s; } }
