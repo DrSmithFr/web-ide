@@ -29,7 +29,7 @@ web-ide-pod relay -data /var/lib/antennae \
 | --- | --- |
 | `-data` | where `relay.db`, the VAPID key and the ACME cache live (default `~/.web-ide-relay`) |
 | `-addr` | the plain HTTP listener (the page, the signaling, the Service Worker) |
-| `-tls-port` | the TLS port: HTTPS, TURN over TLS (RFC 8489) and the ACME check, demuxed by ALPN |
+| `-tls-port` | the TLS port: HTTPS, TURN over TLS (RFC 8489) and the ACME check, demuxed by ALPN (a client without ALPN — Pion — is read after the handshake: STUN goes to TURN) |
 | `-domain` | serve this domain: the certificate comes from Let's Encrypt (`-acme-staging` for the test CA) |
 | `-cert`, `-key` | a certificate of your own instead (reloaded when the files change, no restart) |
 | `-turn-ip`, `-turn-ip6` | the addresses named in the ICE URLs (auto-detected when unset) |

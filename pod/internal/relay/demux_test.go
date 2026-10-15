@@ -106,11 +106,13 @@ func TestAlpnOf(t *testing.T) {
 	if got := alpnOf(clientHello(alpnTurn)[5:]); got != alpnTurn {
 		t.Fatalf("alpnOf read %q, expected %q", got, alpnTurn)
 	}
-	if got := alpnOf(clientHello("h2")[5:]); got != "" {
-		t.Fatalf("a hello with h2 must not be TURN, got %q", got)
+	// Another protocol is named, so the connection is HTTPS; no protocol at all is read after the
+	// handshake (#74).
+	if got := alpnOf(clientHello("h2")[5:]); got != "h2" {
+		t.Fatalf("a hello with h2 must name h2, got %q", got)
 	}
 	if got := alpnOf(clientHello("")[5:]); got != "" {
-		t.Fatalf("a hello without ALPN must not be TURN, got %q", got)
+		t.Fatalf("a hello without ALPN names nothing, got %q", got)
 	}
 }
 

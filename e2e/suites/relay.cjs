@@ -274,8 +274,7 @@ run(
     assert((await bad.textContent('.err')).includes('connection could not be established'), 'a wrong token is refused by the pod')
     // The Details panel tells what the connection did, step by step (#74): the tunnel came up
     // through TURN, and the pod refused the proof.
-    assert(await bad.isVisible('#trace'), 'a failed connection shows its Details panel')
-    await bad.click('#trace summary')
+    assert(await bad.isVisible('#trace-lines'), 'a failed connection shows its Details panel, open')
     const journal = await bad.textContent('#trace-lines')
     for (const line of ['Signaling link open', 'TURN credentials received', 'Answer of the pod received', 'ICE: connected', 'Path relayed by TURN', 'Error: '])
       assert(journal.includes(line), `the journal says "${line}":\n${journal}`)
@@ -308,7 +307,7 @@ run(
     await stuck.waitForSelector('[data-testid=stall]', { timeout: 25000 })
     assert((await stuck.textContent('[data-testid=stall]')).includes('does not answer the offer'), 'a pod that does not answer is said so')
     assert(await stuck.isVisible('[data-testid=stall] button'), 'a stalled step offers Retry')
-    await stuck.click('#trace summary')
+    assert(await stuck.isVisible('#trace-lines'), 'the Details panel is open while the page connects')
     await stuck.setViewportSize({ width: 390, height: 900 })
     await stuck.screenshot({ path: OUT + '/relay-stall.png' })
     await stuck.close()

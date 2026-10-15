@@ -1,11 +1,14 @@
 package relay
 
 import (
+	"bytes"
 	"crypto/tls"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -204,5 +207,66 @@ func TestDemuxACME(t *testing.T) {
 	case cc := <-turnConn:
 		cc.Close()
 		t.Fatal("an acme-tls/1 hello must not reach the TURN listener")
+	}
+}
+
+// TestDemuxNoALPN: a client that names no protocol is read after the handshake (#74). Pion dials
+// TURN over TLS without ALPN: its STUN message reaches the TURN side, intact; a plain HTTP request
+// without ALPN still reaches the page.
+func TestDemuxNoALPN(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	cfg, _, err := TLSConfig(t.TempDir(), TLSOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := NewDemux(cfg, ln)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	// A STUN Binding request header: type 0x0001, length 0, the magic cookie, a transaction id.
+	stun := append([]byte{0x00, 0x01, 0x00, 0x00, 0x21, 0x12, 0xA4, 0x42}, []byte("0123456789ab")...)
+	httpReq := []byte("GET / HTTP/1.1\r\nHost: x\r\n\r\n")
+	read := func(l net.Listener, n int) chan []byte {
+		got := make(chan []byte, 1)
+		go func() {
+			c, err := l.Accept()
+			if err != nil {
+				got <- nil
+				return
+			}
+			b := make([]byte, n)
+			_, _ = io.ReadFull(c, b)
+			got <- b
+		}()
+		return got
+	}
+	for _, tc := range []struct {
+		name string
+		msg  []byte
+		to   net.Listener
+	}{{"stun", stun, d.Turn}, {"http", httpReq, d.HTTPS}} {
+		got := read(tc.to, len(tc.msg))
+		c, err := tls.Dial("tcp", ln.Addr().String(), &tls.Config{InsecureSkipVerify: true, ServerName: "localhost"})
+		if err != nil {
+			t.Fatal(tc.name, err)
+		}
+		if _, err := c.Write(tc.msg); err != nil {
+			t.Fatal(tc.name, err)
+		}
+		select {
+		case b := <-got:
+			if !bytes.Equal(b, tc.msg) {
+				t.Fatalf("%s: the listener read %q", tc.name, b)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s: never reached its listener", tc.name)
+		}
+		c.Close()
 	}
 }

@@ -339,8 +339,9 @@ function refreshSub() {
 }
 setInterval(refreshSub, 1000)
 
-// The Details panel: under the card while the page connects, fails or reconnects; gone with the
-// card once the app opens. Its open state lives in the element, so a redraw keeps it.
+// The Details panel, open by default: under the card while the page connects, fails or
+// reconnects; gone with the card once the app opens. Its open state lives in the element, so a
+// redraw keeps it.
 function drawTrace() {
   const box = document.getElementById('trace')
   if (!box) return

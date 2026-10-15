@@ -1,12 +1,14 @@
 package relay
 
 import (
+	"bytes"
 	"crypto/tls"
 	"encoding/binary"
 	"errors"
 	"io"
 	"net"
 	"sync"
+	"time"
 )
 
 // alpnTurn is the ALPN protocol of TURN over TLS (RFC 8489). A browser that connects to the
@@ -17,6 +19,11 @@ const alpnTurn = "stun.turn"
 // Demux accepts TLS connections on one listener and routes each one by the ALPN protocol of
 // its ClientHello: TURN to the TURN listener, everything else to HTTPS. One port, 443, is
 // enough for both, which is what a browser behind a restrictive firewall needs.
+//
+// A client that names no protocol at all is read instead (#74): Pion, the WebRTC stack of the
+// pods, dials TURN over TLS without ALPN. The demuxer runs the TLS handshake itself and looks at
+// the first bytes the client sends — a STUN header goes to TURN, anything else to HTTPS. A
+// browser always names its protocol, so the page never pays for it.
 type Demux struct {
 	Turn  net.Listener
 	HTTPS net.Listener
@@ -54,19 +61,58 @@ func (d *Demux) run(ln net.Listener) {
 			d.setErr(err)
 			return
 		}
-		pc := &prefixConn{Conn: conn}
-		alpn, err := peekALPN(pc)
-		if err != nil {
-			conn.Close()
-			continue
-		}
-		if alpn == alpnTurn {
-			d.Turn.(*chanListener).push(pc)
-		} else {
-			d.HTTPS.(*chanListener).push(pc)
-		}
+		// Each connection is read on its own: a client slow to send its hello must not hold the
+		// others.
+		go d.route(conn)
 	}
 }
+
+// routeTimeout bounds the hello, and for a client without ALPN the handshake and its first bytes.
+const routeTimeout = 10 * time.Second
+
+func (d *Demux) route(conn net.Conn) {
+	_ = conn.SetDeadline(time.Now().Add(routeTimeout))
+	pc := &prefixConn{Conn: conn}
+	alpn, err := peekALPN(pc)
+	if err != nil {
+		conn.Close()
+		return
+	}
+	switch alpn {
+	case alpnTurn:
+		_ = conn.SetDeadline(time.Time{})
+		d.Turn.(*chanListener).push(pc)
+	case "":
+		d.sniff(pc)
+	default:
+		_ = conn.SetDeadline(time.Time{})
+		d.HTTPS.(*chanListener).push(pc)
+	}
+}
+
+// sniff serves a client that named no protocol: the TLS handshake here, then its first bytes —
+// a STUN message (RFC 8489: the two top bits zero, the magic cookie at bytes 4 to 8) is TURN.
+func (d *Demux) sniff(pc *prefixConn) {
+	tc := tls.Server(pc, d.cfg)
+	head := make([]byte, 8)
+	if err := tc.Handshake(); err != nil {
+		tc.Close()
+		return
+	}
+	if _, err := io.ReadFull(tc, head); err != nil {
+		tc.Close()
+		return
+	}
+	_ = pc.Conn.SetDeadline(time.Time{})
+	c := &prefixConn{Conn: tc, buf: head}
+	if head[0]&0xC0 == 0 && bytes.Equal(head[4:8], stunCookie) {
+		d.Turn.(*chanListener).pushTLS(c)
+	} else {
+		d.HTTPS.(*chanListener).pushTLS(c)
+	}
+}
+
+var stunCookie = []byte{0x21, 0x12, 0xA4, 0x42}
 
 func (d *Demux) setErr(err error) {
 	d.mu.Lock()
@@ -90,8 +136,8 @@ func (d *Demux) Close() error {
 	return nil
 }
 
-// peekALPN reads the ClientHello and returns the ALPN protocol the client asks for ("" when
-// it does not ask for one). The bytes stay in front of the connection so the TLS handshake
+// peekALPN reads the ClientHello and returns the ALPN protocol the client asks for: stun.turn
+// when it is in the list, else the first one ("" when it asks for none). The bytes stay in front of the connection so the TLS handshake
 // can still run on it.
 func peekALPN(pc *prefixConn) (string, error) {
 	head := make([]byte, 5)
@@ -165,17 +211,22 @@ func alpnOf(rec []byte) string {
 		if total > elen-2 {
 			return ""
 		}
+		first := ""
 		for q := p + 2; q < p+2+total; {
 			l := int(rec[q])
 			if q+1+l > end {
-				return ""
+				return first
 			}
-			if string(rec[q+1:q+1+l]) == alpnTurn {
+			name := string(rec[q+1 : q+1+l])
+			if name == alpnTurn {
 				return alpnTurn
+			}
+			if first == "" {
+				first = name
 			}
 			q += 1 + l
 		}
-		return ""
+		return first
 	}
 	return ""
 }
@@ -210,12 +261,19 @@ func newChanListener(cfg *tls.Config) *chanListener {
 	return &chanListener{cfg: cfg, conns: make(chan net.Conn, 64), closed: make(chan struct{})}
 }
 
-func (l *chanListener) push(c net.Conn) {
-	tlsConn := tls.Server(c, l.cfg)
+func (l *chanListener) push(c net.Conn) { l.pushTLS(tls.Server(c, l.cfg)) }
+
+// pushTLS hands over a connection whose TLS side already runs (the demuxer sniffed it).
+func (l *chanListener) pushTLS(c net.Conn) {
+	defer func() {
+		if recover() != nil { // the listener closed while this one was routed
+			c.Close()
+		}
+	}()
 	select {
-	case l.conns <- tlsConn:
+	case l.conns <- c:
 	case <-l.closed:
-		tlsConn.Close()
+		c.Close()
 	}
 }
 
