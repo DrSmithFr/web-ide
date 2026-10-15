@@ -31,7 +31,9 @@ DOMAIN=${RELAY_DOMAIN:-antennae.space}
 DATA=${RELAY_DATA:-/var/lib/antennae}
 USER=${RELAY_USER:-antennae}
 QUOTA=${RELAY_QUOTA:-10GB}
-TURN_PORTS=${RELAY_TURN_PORTS:-49160-49999}
+# One relayed session costs four TURN allocations (see docs/load.md): the range is the capacity
+# of the relay, 2040 ports carry about 500 simultaneous tunnels.
+TURN_PORTS=${RELAY_TURN_PORTS:-49160-51999}
 PUSH_SUBJECT=${RELAY_PUSH_SUBJECT:-mailto:contact@antennae.space}
 ENV_FILE=/etc/antennae/env
 VERSION=
@@ -174,7 +176,15 @@ if command -v ufw >/dev/null; then
   for r in 22/tcp 80/tcp 443/tcp 3478/tcp 3478/udp; do ufw status | grep -q "^\$r " || ufw --force allow \$r; done
   # ufw names a port range with a colon, and only accepts it in the long form.
   range=$(echo $TURN_PORTS | tr '-' ':')
-  ufw status | grep -q "^\$range/udp " || ufw --force allow proto udp from any to any port \$range
+  # A range is added in the short form, without --force: ufw rejects --force with "first:last".
+  ufw status | grep -q "^\$range/udp " || ufw allow "\$range/udp" >/dev/null
+  # A range the relay used before (a wider or narrower one) goes away: ufw only deletes a rule by
+  # its number, the highest first so the numbering of the others does not move under it.
+  while :; do
+    n=\$(ufw status numbered | grep -E '49160:[0-9]+/udp' | grep -v "\$range/udp" | head -1 | sed -n 's/^\\[ *\\([0-9]*\\)\\].*/\\1/p')
+    [ -n "\$n" ] || break
+    ufw --force delete "\$n"
+  done
   # The old wide range: ufw only deletes a rule by its number, the highest first so the
   # numbering of the others does not move under it.
   while :; do
