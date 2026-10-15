@@ -115,20 +115,26 @@ func (c *Client) Dial(ctx context.Context, podID, key string, via *identity.Cert
 	if err != nil {
 		return nil, err
 	}
+	// The offer leaves with the candidates gathered within earlyWait, the later ones are trickled
+	// after it (#75): it used to wait for the whole gathering, up to 8 s.
+	tr := trickle(pc, func(c json.RawMessage) {
+		_ = sig.Write(context.Background(), websocket.MessageText, []byte(mustSignal(sigMsg{Type: "candidate", Session: session, Candidate: c})))
+	})
 	gather := webrtc.GatheringCompletePromise(pc)
 	if err := pc.SetLocalDescription(offer); err != nil {
 		return nil, err
 	}
-	select {
-	case <-gather:
-	case <-time.After(8 * time.Second):
-	}
-	if err := sig.Write(ctx, websocket.MessageText, []byte(mustSignal(sigMsg{Type: "offer", Session: session, SDP: pc.LocalDescription().SDP}))); err != nil {
+	desc, _ := tr.describe(pc, gather)
+	if err := sig.Write(ctx, websocket.MessageText, []byte(mustSignal(sigMsg{Type: "offer", Session: session, SDP: desc.SDP}))); err != nil {
 		return nil, err
 	}
+	tr.sent()
 
-	// The pod answers a full SDP (its candidates embedded) and may trickle candidates.
-	for {
+	// The pod answers with the candidates it gathered quickly and trickles the others, before and
+	// after its answer: the ones that come first wait for the answer, the later ones are read
+	// until the link closes.
+	var early []webrtc.ICECandidateInit
+	for pc.RemoteDescription() == nil {
 		m, err := readSignal(ctx, sig)
 		if err != nil {
 			return nil, err
@@ -138,20 +144,33 @@ func (c *Client) Dial(ctx context.Context, podID, key string, via *identity.Cert
 			if err := pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: m.SDP}); err != nil {
 				return nil, err
 			}
+			for _, c := range early {
+				_ = pc.AddICECandidate(c)
+			}
 		case "candidate":
-			var init webrtc.ICECandidateInit
-			if json.Unmarshal(m.Candidate, &init) == nil {
-				_ = pc.AddICECandidate(init)
+			if init, ok := candidateInit(m.Candidate); ok {
+				early = append(early, init)
 			}
 		case "bye":
 			return nil, errors.New("the pod closed the tunnel")
 		case "error":
 			return nil, errors.New("the pod refused the tunnel: " + m.Message)
 		}
-		if pc.RemoteDescription() != nil {
-			break
-		}
 	}
+	go func() {
+		for {
+			m, err := readSignal(context.Background(), sig)
+			if err != nil {
+				return
+			}
+			if m.Type != "candidate" {
+				continue
+			}
+			if init, ok := candidateInit(m.Candidate); ok {
+				_ = pc.AddICECandidate(init)
+			}
+		}
+	}()
 
 	select {
 	case <-opened:

@@ -105,7 +105,7 @@ const words = {
   tSignalOpen: fr ? 'Lien de signalisation ouvert' : 'Signaling link open',
   tIce: fr ? 'Identifiants TURN reçus ({n} serveurs)' : 'TURN credentials received ({n} servers)',
   tIceQuota: fr ? 'Aucun identifiant TURN (quota atteint) : chemins directs seulement' : 'No TURN credential (quota reached): direct paths only',
-  tOffer: fr ? 'Offre envoyée, en attente de la réponse du pod (il collecte ses candidats, jusqu’à 8 s)…' : 'Offer sent, waiting for the pod to answer (it gathers its candidates, up to 8 s)…',
+  tOffer: fr ? 'Offre envoyée, en attente de la réponse du pod…' : 'Offer sent, waiting for the pod to answer…',
   tAnswer: fr ? 'Réponse du pod reçue' : 'Answer of the pod received',
   tPath: fr ? 'Recherche d’un chemin réseau (ICE)…' : 'Looking for a network path (ICE)…',
   tCands: fr ? '{l} candidats de ce navigateur, {r} du pod' : '{l} candidates from this browser, {r} from the pod',
@@ -940,7 +940,8 @@ function connect(key, podId, mode) {
       t.pc?.setRemoteDescription({ type: 'answer', sdp: m.sdp }).catch(() => {})
     } else if (m.type === 'candidate') {
       if (t.key === entryKey) cands.remote++
-      try { t.pc?.addIceCandidate(JSON.parse(m.candidate)) } catch {}
+      // A pod trickles its later candidates as a JSON string (#75); a candidate object is read too.
+      try { t.pc?.addIceCandidate(typeof m.candidate === 'string' ? JSON.parse(m.candidate) : m.candidate).catch(() => {}) } catch {}
     }
     else if (m.type === 'error') drop(t, text(m.message))
     else if (m.type === 'bye') {

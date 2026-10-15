@@ -8,6 +8,10 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 - TURN over TLS on 443 now works for a client that names no ALPN protocol (#74). Pion, the WebRTC stack of the pods, dials it without one: the relay sent it to HTTPS, the allocation never came, and a pod held its answer to every browser for the 8 s cap of its candidate gathering. The relay now reads such a connection after the TLS handshake — a STUN message goes to TURN, anything else to HTTPS — and routes each connection off its accept loop. The answer of a pod comes in about 150 ms instead of 8 s.
 
+### Changed
+
+- A pod answers a tunnel at once and trickles its later candidates (#75): the answer leaves with the candidates gathered within 250 ms, and a TURN allocation that takes longer follows as a `candidate` message. It used to wait for the whole gathering, up to 8 s. A pod dialing another one does the same with its offer and keeps reading the candidates of the other until the channel opens; a candidate of a browser that comes before its offer is set is kept until then.
+
 ### Added
 
 - The page of the relay is kept by its Service Worker (#73): the bootstrap page, its scripts, the identity module, the wordlist and the installable app are precached, and the page of a pod is kept under the build of its front end (a hash the pod tells in its handshake). A reload through the relay fetches no static file — it pays the connection only. A new shell on the relay installs in the background and the page offers a **Reload** bar; with the relay down, the cached page says so.

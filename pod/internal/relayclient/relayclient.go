@@ -366,7 +366,7 @@ func (c *Client) runOnce(ctx context.Context) error {
 				c.mu.Unlock()
 			}
 		case "offer":
-			go c.handleOffer(m, link)
+			go c.handleOffer(c.newSession(m.Session, link), m, link)
 		case "candidate":
 			c.route(m.Session, func(s *session) { s.addBrowserCandidate(m.Candidate) })
 		case "bye":
@@ -623,12 +623,9 @@ func (c *Client) dropSession(id string) {
 
 // handleOffer sets up one PeerConnection for a browser session, answers the offer, and
 // serves the tunnel. It runs in its own goroutine (per session), so one handshake does
-// not block the signaling loop.
-func (c *Client) handleOffer(m sigMsg, link *podLink) {
-	s := &session{client: c, link: link, id: m.Session, rpcCh: make(chan *dataChannelChunk, 1), chans: make(chan tunnel.LabeledConn, 64),
-		routed: make(chan routedConn, 16), authed: make(chan struct{})}
-	s.ctx, s.cancel = context.WithCancel(context.Background())
-	c.addSession(m.Session, s)
+// not block the signaling loop; its session is made before (newSession), so a candidate the
+// browser sends right after its offer finds it.
+func (c *Client) handleOffer(s *session, m sigMsg, link *podLink) {
 	// One line per step of a tunnel (#74): what a page stuck on its connection waits for can be
 	// read in the log of the pod. The session id is the browser's random one, cut short.
 	log.Printf("relayclient: tunnel %s: offer received", s.short())
@@ -642,6 +639,14 @@ func (c *Client) handleOffer(m sigMsg, link *podLink) {
 	// s.rpcCh, registered synchronously) and runs the handshake and the tunnel.
 	go s.serveRPC()
 	go s.serveRouted()
+}
+
+func (c *Client) newSession(id string, link *podLink) *session {
+	s := &session{client: c, link: link, id: id, rpcCh: make(chan *dataChannelChunk, 1), chans: make(chan tunnel.LabeledConn, 64),
+		routed: make(chan routedConn, 16), authed: make(chan struct{})}
+	s.ctx, s.cancel = context.WithCancel(context.Background())
+	c.addSession(id, s)
+	return s
 }
 
 // podLink is one pod's persistent WebSocket to the relay; writes are serialized.
@@ -699,6 +704,9 @@ type session struct {
 	// rpcConn is the framed rpc channel, so the pod can answer on it (terminal output).
 	rpcConn *tunnel.Framed
 	closed  bool
+	// The candidates of the browser that came before its offer was set: added then (#75).
+	remote bool
+	early  []webrtc.ICECandidateInit
 }
 
 // routedConn is one channel of another pod asked on this window.
@@ -761,33 +769,38 @@ func (s *session) setupOffer(m sigMsg) error {
 	if err := pc.SetRemoteDescription(s.offer); err != nil {
 		return err
 	}
+	s.mu.Lock()
+	s.remote = true
+	early := s.early
+	s.early = nil
+	s.mu.Unlock()
+	for _, c := range early {
+		_ = pc.AddICECandidate(c)
+	}
 	answer, err := pc.CreateAnswer(nil)
 	if err != nil {
 		return err
 	}
-	// Non-trickle: wait for the pod's ICE candidates to be gathered, then send the full
-	// answer SDP (with the candidates embedded). The browser trickles its own, or embeds
-	// them in the offer; either way the pod has them from SetRemoteDescription.
+	// The answer leaves with the candidates gathered within earlyWait (host and reflexive ones,
+	// a TURN allocation when it is quick); the later ones are trickled after it (#75). It used to
+	// wait for the whole gathering, up to 8 s.
+	tr := trickle(pc, func(c json.RawMessage) { _ = s.link.send(sigMsg{Type: "candidate", Session: s.id, Candidate: c}) })
 	gather := webrtc.GatheringCompletePromise(pc)
 	if err := pc.SetLocalDescription(answer); err != nil {
 		return err
 	}
-	// A candidate gathering that stalls (a TURN allocation that never answers) must not hold the
-	// answer forever: what was gathered is sent, and the tunnel is made of that.
 	asked := time.Now()
-	select {
-	case <-gather:
-	case <-time.After(8 * time.Second):
-		log.Printf("relayclient: tunnel %s: candidate gathering still running after 8 s, answering with what it found", s.short())
-	}
-	// The final answer SDP carries the pod's DTLS fingerprint (the handshake binds it);
-	// the raw CreateAnswer SDP may not have it yet.
-	lc := pc.LocalDescription()
+	// The answer SDP carries the pod's DTLS fingerprint (the handshake binds it).
+	lc, n := tr.describe(pc, gather)
 	s.mu.Lock()
-	s.answer = *lc
+	s.answer = lc
 	s.mu.Unlock()
-	log.Printf("relayclient: tunnel %s: answer sent after %s, %d candidates", s.short(), time.Since(asked).Round(time.Millisecond), strings.Count(lc.SDP, "a=candidate:"))
-	return s.link.send(sigMsg{Type: "answer", Session: s.id, SDP: lc.SDP})
+	log.Printf("relayclient: tunnel %s: answer sent after %s, %d candidates (the later ones trickled)", s.short(), time.Since(asked).Round(time.Millisecond), n)
+	if err := s.link.send(sigMsg{Type: "answer", Session: s.id, SDP: lc.SDP}); err != nil {
+		return err
+	}
+	tr.sent()
+	return nil
 }
 
 // short is the session id cut for the log: enough to follow one tunnel, nothing to reuse.
@@ -813,16 +826,20 @@ func selectedPair(pc *webrtc.PeerConnection) string {
 }
 
 func (s *session) addBrowserCandidate(raw json.RawMessage) {
-	var init webrtc.ICECandidateInit
-	if err := json.Unmarshal(raw, &init); err != nil {
+	init, ok := candidateInit(raw)
+	if !ok {
 		return
 	}
 	s.mu.Lock()
 	pc := s.pc
-	s.mu.Unlock()
-	if pc != nil {
-		_ = pc.AddICECandidate(init)
+	if pc == nil || !s.remote {
+		// Before the offer is set, pion refuses a candidate: keep it for then.
+		s.early = append(s.early, init)
+		s.mu.Unlock()
+		return
 	}
+	s.mu.Unlock()
+	_ = pc.AddICECandidate(init)
 }
 
 // serveRPC runs the handshake on the "rpc" channel (created by the browser), then hands
