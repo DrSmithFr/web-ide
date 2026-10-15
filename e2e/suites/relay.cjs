@@ -251,8 +251,10 @@ run(
     console.log(`  load first:  ${JSON.stringify(first)}`)
     console.log(`  load reload: ${JSON.stringify(re)} (${Date.now() - t0} ms to the app)`)
     assert(re.channels < first.channels, `a reload opens fewer tunnel channels: ${first.channels} → ${re.channels}`)
-    // One WebSocket (#75): the offer leaves on the identity link as soon as it is open.
-    assert(re.signal <= re.link + 5, `the signaling starts with the identity link: link ${re.link} ms, signal ${re.signal} ms`)
+    // One WebSocket (#75): the identity link opens beside the device, and the offer leaves on it
+    // as soon as both are ready.
+    assert(re.link <= re.device + 5, `the identity link opens beside the device: device ${re.device} ms, link ${re.link} ms`)
+    assert(re.signal <= Math.max(re.link, re.device) + 5, `the signaling starts once the link and the device are ready: link ${re.link} ms, device ${re.device} ms, signal ${re.signal} ms`)
     assert(re.bytes * 2 < first.bytes, `a reload carries far fewer bytes through the tunnel: ${first.bytes} → ${re.bytes}`)
     assert(fromNet.length === 0, 'a reload fetches nothing of the shell from the relay: ' + fromNet.join(' '))
     assert(!re.paths.some((p) => p === '/app' || p.includes('/assets/')), 'a reload carries no page nor asset through the tunnel: ' + re.paths.join(' '))

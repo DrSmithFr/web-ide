@@ -100,6 +100,8 @@ const words = {
   copy: fr ? 'Copier' : 'Copy',
   copied: fr ? 'Copié' : 'Copied',
   tLink: fr ? 'Lien d’identité avec le relay ouvert' : 'Identity link to the relay open',
+  tDevice: fr ? 'Appareil prêt (session reprise ou déverrouillée)' : 'Device ready (session resumed or unlocked)',
+  tNoDevice: fr ? 'Aucun appareil apparié : mode token' : 'No paired device: token mode',
   tPods: fr ? 'Pods en ligne sur le relay : {n}' : 'Pods online at the relay: {n}',
   tSignal: fr ? 'Ouverture du lien de signalisation…' : 'Opening the signaling link…',
   tSignalOpen: fr ? 'Lien de signalisation ouvert' : 'Signaling link open',
@@ -770,10 +772,15 @@ async function lockNow() {
 // reports, and — when the link named no pod — the gateway this browser enters through.
 async function enter(mode) {
   entryMode = mode
-  const l = await id.link(onPush, lang)
+  let l = linkEarly ? await linkEarly.catch(() => null) : null
+  linkEarly = null
+  if (!l?.isOpen()) {
+    // Not opened early, or it failed or closed while the page waited for the user.
+    l = await id.link(onPush, lang)
+    mark('link')
+    trace(words.tLink)
+  }
   link = l
-  mark('link')
-  trace(words.tLink)
   // The pod of the link, or the one opened last, is asked at once (#75): its tunnel comes up while
   // the link proves itself and reads the revocation list and the pods. Its handshake waits for the
   // pods list to know which device key must answer, and the tunnel is dropped if that list names
@@ -893,6 +900,16 @@ async function main() {
   if (missing.length) return fail(words.needs + missing.join(', '))
   mark('support')
   swReady = startSW()
+  // The identity link opens now, beside the store, the wordlist and the device (#75): enter takes
+  // it. An invite link pairs on a link of its own.
+  if (!join) {
+    linkEarly = id.link(onPush, lang).then((l) => {
+      mark('link')
+      trace(words.tLink)
+      return l
+    })
+    linkEarly.catch(() => {})
+  }
 
   db = await id.openStore()
   const wl = await id.wordlist()
@@ -936,8 +953,11 @@ async function main() {
     }
   }
   mark('device')
+  trace(rec ? words.tDevice : words.tNoDevice)
   await enter(rec?.cert ? 'cert' : 'token')
 }
+
+let linkEarly = null // the identity link main opened at once, for enter
 
 // --- one tunnel per pod ---
 

@@ -12,8 +12,9 @@ import (
 // (#75). Host and server-reflexive candidates come in a few milliseconds and ride in the SDP, so a
 // peer that reads no trickled candidate (a page or a pod older than this) still has them; a TURN
 // allocation that comes later is trickled. It replaces a wait for the whole gathering, capped at
-// 8 s: one slow TURN server held every tunnel that long.
-const earlyWait = 250 * time.Millisecond
+// 8 s: one slow TURN server held every tunnel that long. 50 ms: an iPhone through antennae.space
+// saw the TURN allocations of the pod take ~180 ms, all of it on the answer at 250 ms.
+const earlyWait = 50 * time.Millisecond
 
 // trickler sends the candidates a PeerConnection gathers after its description left: the ones
 // gathered before are in that description already.
