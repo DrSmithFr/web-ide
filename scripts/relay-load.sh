@@ -91,7 +91,8 @@ if command -v ufw >/dev/null; then
   for rule in "$TLS_PORT/tcp" "$TURN_PORT/tcp" "$TURN_PORT/udp"; do
     ufw status | grep -q "^\$rule " || ufw allow "\$rule" >/dev/null
   done
-  ufw status | grep -q "^$TURN_FIRST:$TURN_LAST/udp " || ufw --force allow $TURN_FIRST:$TURN_LAST/udp
+  # A range is added without --force: ufw rejects --force together with "first:last/udp".
+  ufw status | grep -q "^$TURN_FIRST:$TURN_LAST/udp " || ufw allow "$TURN_FIRST:$TURN_LAST/udp" >/dev/null
 fi
 LOAD
   echo "Test relay up on $HOST: http://${HOST#*@}:$HTTP_PORT · https://${HOST#*@}:$TLS_PORT · TURN $TURN_PORT, relay ports $TURN_RANGE"
