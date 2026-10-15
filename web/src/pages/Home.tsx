@@ -3,6 +3,7 @@ import { podPath } from '../app/base'
 import { createEffect, createResource, createSignal, For, onCleanup, onMount, Show } from 'solid-js'
 import { createStore } from 'solid-js/store'
 import { on as onPod, request } from '../pod/rpc'
+import { traceBoot } from '../pod/transport'
 import { navigate } from '../app/router'
 import { Modal } from '../ui/overlay'
 import { errorToast, toast } from '../ui/toast'
@@ -46,6 +47,8 @@ export function Home() {
   createEffect(() => {
     const list = projects()
     if (list) loadIcons(list)
+    // The home page shows its projects: the end of a load through the relay (#75).
+    if (list) requestAnimationFrame(() => traceBoot('home'))
   })
   const [iconFor, setIconFor] = createSignal<{ p: Project; spec: IconSpec | null } | null>(null)
   const editIcon = async (p: Project) => {

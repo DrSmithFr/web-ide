@@ -95,6 +95,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .props { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; }
 .props dt { color: var(--fg-muted); }
 .props dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+/* Settings > Remote access: the journal of the connection through the relay (#75). */
+.connection-journal summary { cursor: pointer; color: var(--fg-muted); padding: 4px 0; }
+.connection-journal pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 6px 0; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-2); }
 .lan-peers { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 4px; }
 .card { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 10px; }
 .card h3 { margin: 0 0 8px; font-size: 1em; }

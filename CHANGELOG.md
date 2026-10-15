@@ -11,6 +11,7 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 ### Added
 
 - The page of the relay is kept by its Service Worker (#73): the bootstrap page, its scripts, the identity module, the wordlist and the installable app are precached, and the page of a pod is kept under the build of its front end (a hash the pod tells in its handshake). A reload through the relay fetches no static file — it pays the connection only. A new shell on the relay installs in the background and the page offers a **Reload** bar; with the relay down, the cached page says so.
+- The journal of a connection through the relay runs to the home page of the app (#75): the app tells its start, its first message from the pod and its home page, and the journal stays readable once the app is open — Settings > Remote access > Connection journal, with Copy.
 - The connection card of the relay page says what each step does (#74): the sub-step it waits for and since when, the candidates and the path ICE chose, and a **Details** journal with times and a Copy button. A sub-step that stalls says what blocks and why, with Retry. The pod logs one line per tunnel step (offer, answer, ICE, handshake).
 - The footer of the relay page offers **Install the app** where the browser hands it its install prompt, and the Share › Add to Home Screen hint on iOS.
 

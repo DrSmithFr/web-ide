@@ -95,6 +95,12 @@ run(
       total: Math.round(performance.now()),
     }))
     console.log('first load (ms):', JSON.stringify(first))
+    // The journal runs to the end of the load (#75): the app tells its start, its first message
+    // from the pod and its home page, and the journal stays readable once the app is open.
+    const boot = await page.evaluate(() => window.bootJournal)
+    for (const line of ['Signaling link open', 'Opening the IDE', 'The IDE starts', 'The IDE talks to the pod', 'Home page shown'])
+      assert(boot.includes(line), `the journal of the load says "${line}":\n${boot}`)
+    console.log(boot)
     assert(first.app > 0 && first.ready !== undefined && first.channels > 0, 'the phases of the load are measured: ' + JSON.stringify(first))
 
     // Editing: typing and saving go through the rpc channel, the file lands on disk.
@@ -181,6 +187,9 @@ run(
     assert((await app.inputValue('[data-testid=relay-url]')) === RELAY, 'Settings > Remote access lets the relay URL be edited: ' + (await app.inputValue('[data-testid=relay-url]')))
     assert(await app.isVisible('[data-testid=relay-off]'), 'a connected pod offers to turn remote access off')
     assert((await app.textContent('.settings-body dd.mono.small')).includes(`#pod=${POD_ID}&t=${TOKEN}`), 'the remote link shown in Settings')
+    await app.click('[data-testid=connection-journal] summary')
+    await app.waitForFunction(() => document.querySelector('[data-testid=connection-journal] pre')?.textContent.includes('Home page shown'))
+    assert(true, 'Settings > Remote access shows the journal of the connection')
     await app.click('.modal-settings .modal-head button')
 
     // The shell of the relay is kept by the Service Worker (#73): the bootstrap page, its scripts,

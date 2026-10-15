@@ -117,6 +117,10 @@ const words = {
   tProved: fr ? 'Le pod a prouvé son identité' : 'The pod proved its identity',
   tReady: fr ? 'Liaison chiffrée établie' : 'Secure handshake done',
   tApp: fr ? 'Ouverture de l’IDE' : 'Opening the IDE',
+  tSw: fr ? 'Service Worker actif (sa première installation prend ~2 s, une seule fois)' : 'Service Worker active (its first install takes ~2 s, once)',
+  tAppStart: fr ? 'L’IDE démarre (script chargé)' : 'The IDE starts (script loaded)',
+  tAppRpc: fr ? 'L’IDE parle au pod (premier message)' : 'The IDE talks to the pod (first message)',
+  tAppHome: fr ? 'Accueil affiché' : 'Home page shown',
   tBye: fr ? 'Le relay signale que le pod est parti' : 'The relay says the pod left',
   tError: fr ? 'Erreur : ' : 'Error: ',
   stallTitle: fr ? 'Cette étape ne progresse plus.' : 'This step is not moving.',
@@ -352,6 +356,9 @@ function drawTrace() {
     pre.scrollTop = pre.scrollHeight // the last event in view
   }
 }
+// The journal stays readable once the app opens: in the console, and from Settings > Remote
+// access of the app (its 'journal' message).
+Object.defineProperty(window, 'bootJournal', { get: () => journalText() })
 function journalText() {
   return journal.map((e) => (e.at / 1000).toFixed(2).padStart(6) + '  ' + e.line).join('\n')
 }
@@ -832,6 +839,7 @@ async function startSW() {
     if (!reg.active) await reg.update()
     await reg.ready
     mark('sw')
+    trace(words.tSw)
     return true
   } catch (e) {
     fail(words.sw + e.message)
@@ -1285,6 +1293,21 @@ function buildOf(k) {
 // bootstrap owns the PeerConnections. The app posts on the parent window; the messages of
 // the Service Worker arrive on navigator.serviceWorker, not on window.
 async function onMessage(d) {
+  // The app tells the moments of its start, and asks for the journal to show it (#75).
+  if (d?.kind === 'trace') {
+    const line = { start: words.tAppStart, rpc: words.tAppRpc, home: words.tAppHome }[d.step]
+    if (line) {
+      mark('app-' + d.step)
+      trace(line)
+    }
+    return
+  }
+  if (d?.kind === 'journal') {
+    try {
+      d.port?.postMessage(journalText())
+    } catch {}
+    return
+  }
   // A notification clicked: the Service Worker moves the app of this window to its path.
   if (d?.kind === 'open') {
     const p = safePath(d.url)

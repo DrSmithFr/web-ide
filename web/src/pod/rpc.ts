@@ -4,7 +4,7 @@
 // relay through the bootstrap page.
 import { createSignal } from 'solid-js'
 import { lang, onLangChange, t } from '../i18n'
-import { askPort, type Channel, wsChannel } from './transport'
+import { askPort, type Channel, traceBoot, wsChannel } from './transport'
 
 export type { Channel }
 
@@ -118,7 +118,10 @@ function attach(c: Channel) {
     c.send(JSON.stringify({ id: 0, method: 'client.lang', params: { lang: lang() } }))
     for (const m of queue.splice(0)) send(m)
   })
-  c.onMessage(handleMessage)
+  c.onMessage((m) => {
+    traceBoot('rpc') // the first message of the pod: the rpc channel works end to end
+    handleMessage(m)
+  })
   c.onClose(() => {
     if (chan !== c) return
     chan = null

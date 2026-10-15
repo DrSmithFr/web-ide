@@ -80,3 +80,29 @@ export function askPort(label: string, base = pageBase, side = false): Promise<C
 export function inTunnel(): boolean {
   return window.parent !== window
 }
+
+/** The moments of its start the app tells the journal of the bootstrap page (#75): the page
+ * writes them with its own clock and its own words, so a load is read from end to end. */
+export type BootStep = 'start' | 'rpc' | 'home'
+const told = new Set<BootStep>()
+export function traceBoot(step: BootStep) {
+  if (!inTunnel() || told.has(step)) return
+  told.add(step)
+  window.parent.postMessage({ kind: 'trace', step }, '*')
+}
+
+/** The journal of the connection, as the bootstrap page kept it: '' outside the relay origin,
+ * or from a bootstrap page older than #75 (it does not answer). */
+export function bootJournal(): Promise<string> {
+  if (!inTunnel()) return Promise.resolve('')
+  const chan = new MessageChannel()
+  return new Promise((resolve) => {
+    const done = setTimeout(() => resolve(''), 1500)
+    chan.port1.onmessage = (e) => {
+      clearTimeout(done)
+      resolve(String(e.data ?? ''))
+      chan.port1.close()
+    }
+    window.parent.postMessage({ kind: 'journal', port: chan.port2 }, '*', [chan.port2])
+  })
+}
