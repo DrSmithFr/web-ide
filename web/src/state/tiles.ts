@@ -46,11 +46,15 @@ export function openEmptyTile(): string {
 
 // ---------- resize ----------
 
-const step = 0.05
+/** Pixels of a resize step (Shift: four steps). */
+const step = 12
 
-/** Grows (or shrinks, delta < 0) the focused tile: its width (row) or its height (col). */
-export function resizeTile(axis: 'row' | 'col', delta = step) {
-  resizePane(session.activePane, axis, delta)
+/** Grows (or shrinks, px < 0) the focused tile: its width (row) or its height (col). */
+export function resizeTile(axis: 'row' | 'col', px = step) {
+  resizePane(session.activePane, axis, px, (id) => {
+    const r = document.querySelector(`.split[data-split="${id}"]`)?.getBoundingClientRect()
+    return r ? (axis === 'row' ? r.width : r.height) : 0
+  })
 }
 
 const [resizing, setResizing] = createSignal(false)
@@ -64,7 +68,7 @@ export function startResize() {
   setResizing(true)
   captureKeys((e) => {
     if (e.type !== 'keydown' || ['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return
-    const d = e.shiftKey ? step * 3 : step
+    const d = e.shiftKey ? step * 4 : step
     if (e.key === 'ArrowRight') resizeTile('row', d)
     else if (e.key === 'ArrowLeft') resizeTile('row', -d)
     else if (e.key === 'ArrowDown') resizeTile('col', d)

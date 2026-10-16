@@ -448,10 +448,11 @@ export function swapPanes(a: string, b: string) {
 }
 
 /**
- * Resizes a pane along an axis (row: its width, col: its height) by a fraction of its split:
- * the nearest split of that direction holding it gives or takes the space of a neighbour.
+ * Resizes a pane along an axis (row: its width, col: its height) by px pixels: the nearest
+ * split of that direction holding it gives or takes the space of a neighbour; measure gives
+ * the size of a split in pixels.
  */
-export function resizePane(paneId: string, axis: 'row' | 'col', delta: number) {
+export function resizePane(paneId: string, axis: 'row' | 'col', px: number, measure: (splitId: string) => number) {
   mutate((s) => {
     let child: string = paneId
     let p = parentOf(s.layout, child)
@@ -463,8 +464,10 @@ export function resizePane(paneId: string, axis: 'row' | 'col', delta: number) {
     const i = p.children.findIndex((c) => c.id === child)
     const j = i + 1 < p.children.length ? i + 1 : i - 1
     if (j < 0) return
+    const total = measure(p.id)
+    if (!total) return
     const min = 0.08
-    const d = Math.max(min - p.sizes[i], Math.min(delta, p.sizes[j] - min))
+    const d = Math.max(min - p.sizes[i], Math.min(px / total, p.sizes[j] - min))
     p.sizes[i] += d
     p.sizes[j] -= d
   })

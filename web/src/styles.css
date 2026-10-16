@@ -369,6 +369,9 @@ button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 .tool-tabbar { padding-right: 30px; }
 .zone :is(.panel-head, .tool-tabbar) { padding-right: 54px; }
 .tile-tool :is(.panel-head, .tool-tabbar) { padding-right: 10px; }
+.pane.bare > .tabbar { display: none; }
+.pane.bare .tile-tool :is(.panel-head, .tool-tabbar) { padding-right: 30px; }
+.tile-close { position: absolute; top: 5px; right: 6px; z-index: 2; }
 .tool-tabbar .tab.active { background: var(--bg-2); }
 .tool-tabbar .tab.active::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--fg); }
 .zone.focused .tool-tabbar .tab.active::after, .tool-full .tool-tabbar .tab.active::after { background: var(--accent); }

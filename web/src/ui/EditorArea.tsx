@@ -91,7 +91,7 @@ function Split(props: { node: Extract<LayoutNode, { type: 'split' }> }) {
     window.addEventListener('pointerup', up)
   }
   return (
-    <div ref={el} class={`split split-${props.node.dir}`}>
+    <div ref={el} class={`split split-${props.node.dir}`} data-split={props.node.id}>
       <For each={props.node.children}>
         {(child, i) => (
           <>
@@ -169,11 +169,15 @@ function Pane(props: { id: string }) {
         : []),
     ])
 
+  // A tool alone in its tile has its own head: no tab bar, a close button in the corner.
+  const bare = () => leaf()?.tabs.length === 1 && active()?.kind === 'tool'
+
   return (
     <div
       class="pane"
       data-pane={props.id}
-      classList={{ active: isActivePane(), focused: isActivePane() && focusPart() === 'editor', [`next-${nextSplit()}`]: isActivePane() && gridMode(), resizing: isActivePane() && resizing() }} onMouseDown={(e) => e.button < 3 && setActivePane(props.id)}>
+      classList={{ active: isActivePane(), focused: isActivePane() && focusPart() === 'editor', [`next-${nextSplit()}`]: isActivePane() && gridMode(), resizing: isActivePane() && resizing(), bare: bare() }}
+      onMouseDown={(e) => e.button < 3 && setActivePane(props.id)}>
       <div
         ref={tabbar}
         class="tabbar"
@@ -306,6 +310,11 @@ function Pane(props: { id: string }) {
               </Match>
               <Match when={tab.kind === 'tool'}>
                 <div class="tile-tool panel-tile" data-tool={tab.tool}>
+                  <Show when={bare()}>
+                    <button class="icon-btn tile-close" title={`${t('Close')} (${shortcutOf('view.closeTab')})`} onClick={() => closeTab(props.id, tab.id)} onContextMenu={(e) => tabMenu(e, tab)} data-testid="tile-close">
+                      <Icon name="close" size={13} />
+                    </button>
+                  </Show>
                   <Show when={tileTools[tab.tool!]} keyed fallback={<div class="tile-gone">{tab.tool}</div>}>
                     {(p) => <Dynamic component={p.component} />}
                   </Show>

@@ -129,6 +129,7 @@ run(async ({ ctx, page }) => {
   await launch('Git')
   await page.waitForSelector('.pane .tile-tool[data-tool=git] .panel')
   assert((await panes()) === 1, 'the first tile takes the empty pane')
+  assert(!(await page.isVisible('.pane:has([data-tool=git]) > .tabbar')) && (await page.isVisible('[data-tool=git] [data-testid=tile-close]')), 'a tool alone in its tile has no tab bar, a close button instead')
   await launch('New terminal')
   await page.waitForSelector('.pane .tile-console .xterm')
   assert((await panes()) === 2 && (await activeTool()) === 'console', 'a terminal opens in a new tile beside')
@@ -176,6 +177,8 @@ run(async ({ ctx, page }) => {
   await page.keyboard.press('Control+Alt+Shift+KeyR')
   await page.waitForSelector('[data-testid=tile-resizing]')
   await page.keyboard.press('ArrowLeft')
+  await page.waitForTimeout(150)
+  const step = w0 - (await width())
   await page.keyboard.press('Shift+ArrowLeft')
   await page.waitForTimeout(200)
   const w1 = await width()
@@ -183,7 +186,7 @@ run(async ({ ctx, page }) => {
   await page.waitForSelector('[data-testid=tile-resizing]', { state: 'detached' })
   await page.keyboard.press('ArrowLeft') // a plain key again, not a resize
   await page.waitForTimeout(200)
-  assert(w1 < w0 - 100 && Math.abs((await width()) - w1) < 2, `resize mode: the arrows resize the tile, Escape ends it (${w0} → ${w1})`)
+  assert(Math.abs(step - 12) < 2 && Math.abs(w0 - w1 - 60) < 3 && Math.abs((await width()) - w1) < 2, `resize mode: 12 px per arrow, 48 with Shift, Escape ends it (${w0} → ${w0 - step} → ${w1})`)
 
   // Closing a tile; the desk is restored after a reload.
   await page.keyboard.press('Alt+w')
