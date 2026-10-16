@@ -4,6 +4,12 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+## [1.16.1] - 2026-10-16
+
+### Fixed
+
+- Wake-on-LAN from a pod running under WSL (a Windows machine that stays on): the pod reads the networks of Windows and sends the magic packet through `powershell.exe`, since a broadcast does not leave the WSL 2 virtual machine. It publishes no card of its own, the ones it sees being virtual.
+
 ## [1.16.0] - 2026-10-16
 
 ### Changed
