@@ -4,7 +4,8 @@
 import { batch, createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show } from 'solid-js'
 import { Portal } from 'solid-js/web'
 import { request } from '../pod/rpc'
-import { activeTab, basename, openFile, relPath, session } from '../state/project'
+import { activeTab, basename, openFile, relPath } from '../state/project'
+import { desks } from '../state/desks'
 import { actionLabel, allActions, isCapturingKeys, runAction, shortcutOf } from '../keys/bindings'
 import { lspLanguage } from '../editor/languages'
 import * as lspc from '../lsp/client'
@@ -47,8 +48,11 @@ const [open, setOpen] = createSignal(false)
 const [tab, setTab] = createSignal<SearchTab>('all')
 let lastQuery = ''
 
-/** Opens the popup on a tab; already open, switches to it. */
-export function searchEverywhere(on: SearchTab = 'all') {
+let onClosed: (() => void) | undefined
+
+/** Opens the popup on a tab; already open, switches to it. onClose runs once it closes (a choice run or not). */
+export function searchEverywhere(on: SearchTab = 'all', opts: { onClose?: () => void } = {}) {
+  onClosed = opts.onClose
   batch(() => {
     setTab(on)
     setOpen(true)
@@ -68,7 +72,7 @@ const fileHit = (f: string): Hit => ({ label: basename(f), detail: relPath(f), p
 async function findFiles(q: string, max: number) {
   const list = await projectFiles()
   // Without a query, the recent files come first.
-  if (!q) return [...new Set([...session.recent, ...list])].slice(0, max).map(fileHit)
+  if (!q) return [...new Set([...desks.recent, ...list])].slice(0, max).map(fileHit)
   return list
     .map((f) => ({ f, s: fuzzy(q, basename(f)) * 2 + fuzzy(q, relPath(f)) }))
     .filter((x) => x.s > 0)
@@ -203,6 +207,9 @@ export function SearchEverywhereHost() {
     setOpen(false)
     restoreFocus()
     hit?.run()
+    const f = onClosed
+    onClosed = undefined
+    f?.()
   }
 
   createEffect(

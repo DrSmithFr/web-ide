@@ -116,6 +116,26 @@ export const actions: ActionDef[] = [
   { id: 'menu.open', label: 'Open the menu bar', category: 'General', inTerminal: true },
   { id: 'console.new', label: 'New terminal', category: 'Consoles', inTerminal: true },
   { id: 'sql.execute', label: 'Run the active statement', category: 'Database' },
+  { id: 'tile.launcher', label: 'Open in a new tile…', category: 'Desks', inTerminal: true },
+  { id: 'tile.toggleSplit', label: 'New tiles: right / below', category: 'Desks', inTerminal: true },
+  { id: 'tile.resize', label: 'Resize the tile (arrows, Esc)', category: 'Desks', inTerminal: true },
+  { id: 'tile.growWidth', label: 'Wider tile', category: 'Desks', inTerminal: true },
+  { id: 'tile.shrinkWidth', label: 'Narrower tile', category: 'Desks', inTerminal: true },
+  { id: 'tile.growHeight', label: 'Taller tile', category: 'Desks', inTerminal: true },
+  { id: 'tile.shrinkHeight', label: 'Shorter tile', category: 'Desks', inTerminal: true },
+  { id: 'tile.column.left', label: 'Move the column left', category: 'Desks', inTerminal: true },
+  { id: 'tile.column.right', label: 'Move the column right', category: 'Desks', inTerminal: true },
+  { id: 'tile.column.width', label: 'Next width of the column', category: 'Desks', inTerminal: true },
+  { id: 'tile.stack', label: 'Stack the tile in the column on the left', category: 'Desks', inTerminal: true },
+  { id: 'tile.unstack', label: 'Take the tile out to a column of its own', category: 'Desks', inTerminal: true },
+  ...(['left', 'right', 'up', 'down'] as const).flatMap((d) => [
+    { id: `tile.focus.${d}`, label: `Focus the tile ${d === 'left' ? 'on the left' : d === 'right' ? 'on the right' : d === 'up' ? 'above' : 'below'}`, category: 'Desks', inTerminal: true },
+    { id: `tile.swap.${d}`, label: `Swap with the tile ${d === 'left' ? 'on the left' : d === 'right' ? 'on the right' : d === 'up' ? 'above' : 'below'}`, category: 'Desks', inTerminal: true },
+  ]),
+  ...[1, 2, 3, 4, 5, 6, 7, 8, 9].flatMap((n) => [
+    { id: `desk.go.${n}`, label: 'Go to desk {n}', params: { n: String(n) }, category: 'Desks', inTerminal: true },
+    { id: `desk.send.${n}`, label: 'Send the tab to desk {n}', params: { n: String(n) }, category: 'Desks' },
+  ]),
 ]
 
 // Dynamic actions: built from data of the project (its saved commands), no default shortcut.
@@ -197,6 +217,8 @@ const comboIndex = createRoot(() =>
 export function comboFromEvent(e: KeyboardEvent): string | null {
   if (['ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight', 'AltGraph'].includes(e.code)) return null
   if (!e.code) return null
+  // AltGr typing a character (Ctrl+Alt on Windows: @ # { [ | of an AZERTY) is text, not a shortcut.
+  if (e.getModifierState?.('AltGraph') && e.key.length === 1) return null
   let s = ''
   if (e.ctrlKey) s += 'Ctrl+'
   if (e.altKey) s += 'Alt+'

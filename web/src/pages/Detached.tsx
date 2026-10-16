@@ -1,10 +1,10 @@
 // Detached windows: one panel alone, without the rest of the chrome. Each window is one more
 // WebSocket client of the same pod session; the shared buffers keep them in sync.
-import { createSignal, onCleanup, onMount, Show } from 'solid-js'
+import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js'
 import { Dynamic } from 'solid-js/web'
 import { project, closeProject, reopenProject, panelAliases } from '../state/project'
 import { EditorArea } from '../ui/EditorArea'
-import { setConsoleList } from '../console/consoles'
+import { consoles, setConsoleList, TermView } from '../console/consoles'
 import { NewTicketHost } from '../kanban/Board'
 import { openWithAuth, toolPanels, useProjectActions, PodStatus } from './ProjectPage'
 import { on as onPod, request } from '../pod/rpc'
@@ -74,6 +74,24 @@ export function DetachedTool(props: { id: string; toolId: string }) {
           <Dynamic component={tool()!.component} />
         </div>
         <NewTicketHost />
+      </Show>
+    </Frame>
+  )
+}
+
+/** One console alone (a console tile opened in a window). */
+export function DetachedConsole(props: { id: string; consoleId: string }) {
+  const s = useProject(props.id, () => t('Console'))
+  const info = () => consoles().find((c) => c.id === props.consoleId)
+  createEffect(() => {
+    if (info()) document.title = `${info()!.title} · ${project()?.name ?? ''}`
+  })
+  return (
+    <Frame title={`${info()?.title ?? t('Console')} · ${project()?.name ?? ''}`} ready={s.ready()} error={s.error()}>
+      <Show when={info()} fallback={<p class="muted pad">{t('This console is closed')}</p>}>
+        <div class="tile-console detached-console">
+          <TermView id={props.consoleId} focus />
+        </div>
       </Show>
     </Frame>
   )

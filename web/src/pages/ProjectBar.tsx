@@ -13,6 +13,8 @@ import { iconOf, iconURL, useProjectIcon, withBadge } from '../ui/projectIcon'
 import { IconEditor } from '../ui/IconEditor'
 import { newConsole } from '../console/consoles'
 import { t } from '../i18n'
+import { DeskSwitcher } from './DeskSwitcher'
+import { desk, desks, deskLabel } from '../state/desks'
 
 interface Worktree {
   path: string
@@ -35,7 +37,8 @@ export function ProjectBar() {
   const branch = () => gitStatus()?.branch ?? ''
   createEffect(() => {
     const name = owner()?.name ?? project()?.name
-    if (name) document.title = [name, ticket() ? `#${ticket()}` : branch()].filter(Boolean).join(' · ')
+    const d = desks.desks.find((x) => x.n === desk())
+    if (name) document.title = [name, ticket() ? `#${ticket()}` : branch(), d && (d.n !== 1 || d.name) ? deskLabel(d) : ''].filter(Boolean).join(' · ')
   })
 
   const open = async (e: MouseEvent) => {
@@ -191,6 +194,7 @@ export function ProjectBar() {
         </Show>
         <Icon name="chevron" size={10} />
       </button>
+      <DeskSwitcher />
       <Show when={editing() && owner()}>
         <IconEditor id={owner()!.owner} name={owner()!.name} spec={owner()!.spec} onClose={() => setEditing(false)} />
       </Show>

@@ -13,8 +13,9 @@ import { t, tn } from '../i18n'
 import { normalizePlacement, type Zone } from './zones'
 import { deviceId, layoutFor } from './device'
 import { settings } from './settings'
+import { closeDesks, desk, loadDesks, showDesk, touchRecent, type DeskList } from './desks'
 
-export type TabKind = 'file' | 'sql' | 'table' | 'text' | 'diff' | 'kanban' | 'ticket'
+export type TabKind = 'file' | 'sql' | 'table' | 'text' | 'diff' | 'kanban' | 'ticket' | 'tool' | 'console'
 
 export interface TabState {
   id: string
@@ -33,11 +34,15 @@ export interface TabState {
   from?: string
   /** Number of the kanban ticket shown (kind ticket). */
   ticket?: number
+  /** A tool shown as a tab or a tile (kind tool: id of the tool) or a console (kind console: its id). */
+  tool?: string
+  console?: string
 }
 
+/** width: a column of the Scroll mode, its width as a fraction of the view (unset: one column in sight). */
 export type LayoutNode =
-  | { type: 'leaf'; id: string; tabs: string[]; active: string | null }
-  | { type: 'split'; id: string; dir: 'row' | 'col'; children: LayoutNode[]; sizes: number[] }
+  | { type: 'leaf'; id: string; tabs: string[]; active: string | null; width?: number }
+  | { type: 'split'; id: string; dir: 'row' | 'col'; children: LayoutNode[]; sizes: number[]; width?: number }
 
 export interface Cursor {
   anchor: number
@@ -54,8 +59,6 @@ export interface SessionData {
   tabs: Record<string, TabState>
   activePane: string
   cursors: Record<string, Cursor>
-  /** Files last shown, the most recent first (Recent Files). */
-  recent: string[]
   left: { panel: string | null; width: number }
   right: { panel: string | null; width: number }
   /** Tools of each zone of the icon rails (state/zones). */
@@ -75,6 +78,8 @@ export interface SessionData {
   worktree?: string
   /** Panel sizes per device (state/device.ts): each device keeps its own, the others are not moved. */
   sizes: Record<string, PanelSizes>
+  /** Side where a new tile opens: right of the focused one (row) or below it (col). */
+  split?: 'row' | 'col'
 }
 
 export interface PanelSizes {
@@ -111,7 +116,6 @@ function emptySession(): SessionData {
     tabs: {},
     activePane: leaf,
     cursors: {},
-    recent: [],
     left: { panel: 'explorer', width: 260 },
     right: { panel: null, width: 300 },
     bottom: { left: null, right: null, height: 240, split: 0.5, active: null, order: [], problemsTab: 'problems' },
@@ -193,10 +197,10 @@ export function setSize(part: keyof PanelSizes, value: number) {
   })
 }
 
-on('session.changed', (data: SessionData, from?: string) => {
-  if (!data || !project() || (from && from !== home()?.id)) return
+on('session.changed', (e: { session: SessionData; desk: number }, from?: string) => {
+  if (!e?.session || !project() || (from && from !== home()?.id) || e.desk !== desk()) return
   applyingRemote = true
-  setSession(reconcile(normalize(data)))
+  setSession(reconcile(normalize(e.session)))
   applyingRemote = false
   syncDocsWithTabs()
 })
@@ -211,7 +215,8 @@ function normalize(raw: any): SessionData {
   }
   if (s.right.panel && panelAliases[s.right.panel]) s.right.panel = panelAliases[s.right.panel]
   s.placement = normalizePlacement(raw.placement)
-  if (!Array.isArray(s.recent)) s.recent = []
+  // The Recent Files moved to the desk list (state/desks.ts), shared by the desks.
+  delete (s as any).recent
   if (!Array.isArray(s.attached)) s.attached = []
   // Former bottom panel: consoles, problems and output in one strip.
   if (raw.bottom && 'open' in raw.bottom) {
@@ -289,9 +294,15 @@ export function activateTab(paneId: string, tabId: string) {
   })
 }
 
+/** Picks the pane a tab opens in (state/tiles.ts: a document in a group of files, a tool alone). */
+let placeTab = (_tab: Omit<TabState, 'id'>, paneId: string) => paneId
+export function setTabPlacer(f: typeof placeTab) {
+  placeTab = f
+}
+
 /** Adds a tab to a pane, or activates the tab already showing the same thing. */
 export function openTab(tab: Omit<TabState, 'id'>, paneId = session.activePane): string {
-  const leaf = findLeaf(session.layout, paneId) ?? activeLeaf()
+  const leaf = findLeaf(session.layout, placeTab(tab, paneId)) ?? activeLeaf()
   const same = leaf.tabs.find((id) => {
     const t = session.tabs[id]
     if (!t || t.kind !== tab.kind) return false
@@ -300,6 +311,8 @@ export function openTab(tab: Omit<TabState, 'id'>, paneId = session.activePane):
     if (tab.kind === 'diff') return t.path === tab.path && !!t.staged === !!tab.staged && !!t.head === !!tab.head && t.rev === tab.rev
     if (tab.kind === 'kanban') return true
     if (tab.kind === 'ticket') return t.ticket === tab.ticket
+    if (tab.kind === 'tool') return t.tool === tab.tool
+    if (tab.kind === 'console') return t.console === tab.console
     return false
   })
   if (same) {
@@ -354,6 +367,7 @@ function removeLeaf(s: SessionData, id: string) {
   parent.sizes = parent.sizes.map((x) => x / total)
   if (parent.children.length === 1) {
     const only = parent.children[0]
+    if (parent.width) only.width = parent.width
     const gp = parentOf(s.layout, parent.id)
     if (!gp) s.layout = only
     else gp.children[gp.children.findIndex((c) => c.id === parent.id)] = only
@@ -387,14 +401,178 @@ export function splitPane(paneId: string, dir: 'row' | 'col') {
       parent.children.splice(i + 1, 0, fresh)
       parent.sizes.splice(i + 1, 0, half)
     } else {
-      const copy = { ...l, tabs: [...l.tabs] }
-      const split: LayoutNode = { type: 'split', id: uid(), dir, children: [copy, fresh], sizes: [0.5, 0.5] }
+      const { width, ...copy } = { ...l, tabs: [...l.tabs] }
+      const split: LayoutNode = { type: 'split', id: uid(), dir, children: [copy, fresh], sizes: [0.5, 0.5], width }
       if (!parent) s.layout = split
       else parent.children[parent.children.findIndex((c) => c.id === paneId)] = split
     }
     s.activePane = newId
   })
   syncDocsWithTabs()
+}
+
+/** Adds an empty pane beside another one (a new tile), made active; answers its id. */
+export function splitEmpty(paneId: string, dir: 'row' | 'col'): string {
+  const newId = uid()
+  mutate((s) => {
+    const l = findLeaf(s.layout, paneId) ?? firstLeaf(s.layout)
+    const fresh: LayoutNode = { type: 'leaf', id: newId, tabs: [], active: null }
+    const parent = parentOf(s.layout, l.id)
+    if (parent && parent.dir === dir) {
+      const i = parent.children.findIndex((c) => c.id === l.id)
+      const half = parent.sizes[i] / 2
+      parent.sizes[i] = half
+      parent.children.splice(i + 1, 0, fresh)
+      parent.sizes.splice(i + 1, 0, half)
+    } else {
+      const { width, ...copy } = { ...l, tabs: [...l.tabs] }
+      const split: LayoutNode = { type: 'split', id: uid(), dir, children: [copy, fresh], sizes: [0.5, 0.5], width }
+      if (!parent) s.layout = split
+      else parent.children[parent.children.findIndex((c) => c.id === l.id)] = split
+    }
+    s.activePane = newId
+  })
+  return newId
+}
+
+/** Removes an empty pane (a tile closed before anything opened in it). */
+export function closeEmptyPane(paneId: string) {
+  mutate((s) => {
+    const l = findLeaf(s.layout, paneId)
+    if (l && !l.tabs.length) removeLeaf(s, paneId)
+  })
+}
+
+/** Exchanges the tabs of two panes (a tile swapped with its neighbour); the focus follows the content. */
+export function swapPanes(a: string, b: string) {
+  mutate((s) => {
+    const x = findLeaf(s.layout, a)
+    const y = findLeaf(s.layout, b)
+    if (!x || !y) return
+    ;[x.tabs, y.tabs] = [y.tabs, x.tabs]
+    ;[x.active, y.active] = [y.active, x.active]
+    s.activePane = b
+  })
+}
+
+/**
+ * Resizes a pane along an axis (row: its width, col: its height) by px pixels: the nearest
+ * split of that direction holding it gives or takes the space of a neighbour; measure gives
+ * the size of a split in pixels.
+ */
+export function resizePane(paneId: string, axis: 'row' | 'col', px: number, measure: (splitId: string) => number) {
+  mutate((s) => {
+    let child: string = paneId
+    let p = parentOf(s.layout, child)
+    while (p && p.dir !== axis) {
+      child = p.id
+      p = parentOf(s.layout, child)
+    }
+    if (!p) return
+    const i = p.children.findIndex((c) => c.id === child)
+    const j = i + 1 < p.children.length ? i + 1 : i - 1
+    if (j < 0) return
+    const total = measure(p.id)
+    if (!total) return
+    const min = 0.08
+    const d = Math.max(min - p.sizes[i], Math.min(px / total, p.sizes[j] - min))
+    p.sizes[i] += d
+    p.sizes[j] -= d
+  })
+}
+
+// ---------- columns (Scroll mode) ----------
+
+/** The columns of the Scroll mode: the children of a row split at the root, else the root alone. */
+export function columnsOf(n: LayoutNode = session.layout): LayoutNode[] {
+  return n.type === 'split' && n.dir === 'row' ? n.children : [n]
+}
+
+/** Index of the column holding a pane. */
+export function columnOf(paneId: string, n: LayoutNode = session.layout) {
+  return Math.max(0, columnsOf(n).findIndex((c) => !!findLeaf(c, paneId)))
+}
+
+/** Puts a node as the column i; the root becomes a row split when it is a single column. */
+function insertColumn(s: SessionData, node: LayoutNode, i: number) {
+  if (s.layout.type !== 'split' || s.layout.dir !== 'row') s.layout = { type: 'split', id: uid(), dir: 'row', children: [unwrap(s.layout)], sizes: [1] }
+  const root = s.layout as Extract<LayoutNode, { type: 'split' }>
+  root.children.splice(i, 0, node)
+  // The Grid mode shares the columns out evenly.
+  root.sizes = root.children.map(() => 1 / root.children.length)
+}
+
+/** Adds an empty column right of the one holding a pane, made active; answers its pane id. */
+export function addColumn(paneId: string): string {
+  const id = uid()
+  mutate((s) => {
+    insertColumn(s, { type: 'leaf', id, tabs: [], active: null }, columnOf(paneId, s.layout) + 1)
+    s.activePane = id
+  })
+  return id
+}
+
+/** Moves the column holding a pane one place left (-1) or right (1). */
+export function moveColumn(paneId: string, d: -1 | 1) {
+  mutate((s) => {
+    const cols = columnsOf(s.layout)
+    const i = columnOf(paneId, s.layout)
+    const j = i + d
+    if (cols.length < 2 || j < 0 || j >= cols.length) return
+    const [a, b] = [unwrap(cols[i]), unwrap(cols[j])]
+    cols[i] = b
+    cols[j] = a
+  })
+}
+
+/** Sets the width of the column holding a pane (a fraction of the view). */
+export function setColumnWidth(paneId: string, width: number) {
+  mutate((s) => {
+    const c = columnsOf(s.layout)[columnOf(paneId, s.layout)]
+    if (c) c.width = width
+  })
+}
+
+/** Stacks a tile at the bottom of the column on its left (its own column goes if empty). */
+export function stackLeft(paneId: string) {
+  mutate((s) => {
+    const i = columnOf(paneId, s.layout)
+    if (i === 0) return
+    const target = unwrap(columnsOf(s.layout)[i - 1])
+    const leaf = findLeaf(s.layout, paneId)
+    if (!leaf) return
+    const fresh: LayoutNode = { type: 'leaf', id: paneId, tabs: [...leaf.tabs], active: leaf.active }
+    removeLeaf(s, paneId)
+    const cols = columnsOf(s.layout)
+    const k = cols.findIndex((c) => c.id === target.id)
+    const col = cols[k]
+    if (col.type === 'split' && col.dir === 'col') {
+      col.children.push(fresh)
+      col.sizes = col.children.map(() => 1 / col.children.length)
+    } else {
+      const { width, ...inner } = unwrap(col)
+      const stack: LayoutNode = { type: 'split', id: uid(), dir: 'col', children: [inner as LayoutNode, fresh], sizes: [0.5, 0.5], width }
+      // The last two columns made one: the column is the root.
+      if (s.layout.id === col.id) s.layout = stack
+      else cols[k] = stack
+    }
+    s.activePane = paneId
+  })
+}
+
+/** Takes a tile out of its column into a column of its own, on the right. */
+export function unstack(paneId: string) {
+  mutate((s) => {
+    const i = columnOf(paneId, s.layout)
+    const col = columnsOf(s.layout)[i]
+    if (!col || col.type === 'leaf') return
+    const leaf = findLeaf(s.layout, paneId)
+    if (!leaf) return
+    const fresh: LayoutNode = { type: 'leaf', id: paneId, tabs: [...leaf.tabs], active: leaf.active }
+    removeLeaf(s, paneId)
+    insertColumn(s, fresh, i + 1)
+    s.activePane = paneId
+  })
 }
 
 export function moveTab(fromPane: string, tabId: string, toPane: string, index: number) {
@@ -470,7 +648,7 @@ export function projectOfPath(path: string): string | undefined {
 // except those of the window itself (its session, its database connections) and of the
 // repository (worktrees).
 const byPath = /^(fs|git|lsp|buffer|folders)\./
-const ownMethods = /^(session|project|worktrees|db)\./
+const ownMethods = /^(session|project|worktrees|db|desks?)\./
 function pathOf(params: any): string | undefined {
   const p = params?.path ?? params?.params?.textDocument?.uri
   if (typeof p !== 'string') return undefined
@@ -756,22 +934,6 @@ on('lsp.diagnostics', (e: { params: { uri: string; diagnostics: LspDiagnostic[] 
 
 // ---------- recent files ----------
 
-const maxRecent = 50
-
-/** Puts a file at the top of the recent files. */
-function touchRecent(path: string) {
-  if (session.recent[0] === path) return
-  mutate((s) => {
-    s.recent = [path, ...s.recent.filter((p) => p !== path)].slice(0, maxRecent)
-  })
-}
-
-export function forgetRecent(path: string) {
-  mutate((s) => {
-    s.recent = s.recent.filter((p) => p !== path)
-  })
-}
-
 createRoot(() =>
   createEffect(
     track(
@@ -898,8 +1060,9 @@ export function navigate(dir: -1 | 1) {
 
 // ---------- project lifecycle ----------
 
-export async function openProject(id: string, creds?: { password?: string; passphrase?: string }) {
-  const r = await request('project.open', { id, creds })
+export async function openProject(id: string, creds?: { password?: string; passphrase?: string }, desk = 1) {
+  const r = await request('project.open', { id, creds, desk })
+  loadDesks(id, r.desks as DeskList, r.desk ?? 1)
   batch(() => {
     setHome(r.project)
     setAttached(reconcile({ [id]: { project: r.project, root: r.root, local: r.local } }))
@@ -922,7 +1085,55 @@ async function reattach() {
   if (gone.length) mutate((s) => (s.attached = s.attached.filter((x) => !gone.includes(x))))
   const w = session.worktree
   if (w && attached[w]) await showWorktree(w)
-  else if (w) mutate((s) => (s.worktree = undefined))
+  else {
+    if (w) mutate((s) => (s.worktree = undefined))
+    if (project()?.id !== home()?.id) await showWorktree(home()!.id)
+  }
+}
+
+/** Sends the session now if a change waits (before the window leaves its desk). */
+async function flushSession() {
+  if (pushTimer === undefined) return
+  clearTimeout(pushTimer)
+  pushTimer = undefined
+  await request('session.update', { session: unwrap(session) })
+}
+
+/** Shows another desk of the project in the window: its session replaces this one, the open documents stay. */
+export async function switchDesk(n: number) {
+  if (!home() || n === desk()) return
+  await flushSession()
+  const r = await request('desk.switch', { desk: n })
+  batch(() => {
+    showDesk(r.desk)
+    applyingRemote = true
+    setSession(reconcile(normalize(r.session)))
+    applyingRemote = false
+  })
+  await reattach()
+  syncDocsWithTabs()
+}
+
+/** Sends a tab to another desk: it opens there in the active pane and closes here. */
+export async function moveTabToDesk(paneId: string, tabId: string, n: number) {
+  const tab = session.tabs[tabId]
+  if (!tab || n === desk()) return
+  const target = normalize(await request('session.get', { desk: n }))
+  const pane = findLeaf(target.layout, target.activePane) ?? firstLeaf(target.layout)
+  const same = Object.values(target.tabs).find((x) => x.kind === tab.kind && x.path && x.path === tab.path && !x.staged && !x.head && !x.rev && !tab.staged && !tab.head && !tab.rev)
+  if (same) {
+    const l = leaves(target.layout).find((x) => x.tabs.includes(same.id))!
+    l.active = same.id
+    target.activePane = l.id
+  } else {
+    target.tabs[tabId] = structuredClone(unwrap(tab))
+    if (session.sqlText[tabId] !== undefined) target.sqlText[tabId] = session.sqlText[tabId]
+    if (tab.path && session.cursors[tab.path]) target.cursors[tab.path] = structuredClone(unwrap(session.cursors[tab.path]))
+    pane.tabs.push(tabId)
+    pane.active = tabId
+  }
+  await request('session.put', { desk: n, session: target })
+  closeTab(paneId, tabId, true)
 }
 
 /** After a reconnection: reopen the project and catch up with changes made meanwhile. */
@@ -930,7 +1141,7 @@ export async function reopenProject() {
   const p = home()
   if (!p) return
   try {
-    await request('project.open', { id: p.id })
+    await request('project.open', { id: p.id, desk: desk() })
     for (const w of Object.keys(attached)) if (w !== p.id) await request('project.attach', { id: w }).catch(() => dropWorktree(w))
   } catch {
     return
@@ -954,6 +1165,7 @@ export function closeProject() {
   setProject(null)
   setRoot('')
   setSession(reconcile(emptySession()))
+  closeDesks()
 }
 
 /** Virtual (non file) tab: DDL, index definition, LSP hover. */

@@ -236,6 +236,96 @@
     ],
     "menu.open": [
       "F10"
+    ],
+    "desk.go.1": [
+      "Ctrl+Alt+Digit1"
+    ],
+    "desk.send.1": [
+      "Ctrl+Alt+Shift+Digit1"
+    ],
+    "desk.go.2": [
+      "Ctrl+Alt+Digit2"
+    ],
+    "desk.send.2": [
+      "Ctrl+Alt+Shift+Digit2"
+    ],
+    "desk.go.3": [
+      "Ctrl+Alt+Digit3"
+    ],
+    "desk.send.3": [
+      "Ctrl+Alt+Shift+Digit3"
+    ],
+    "desk.go.4": [
+      "Ctrl+Alt+Digit4"
+    ],
+    "desk.send.4": [
+      "Ctrl+Alt+Shift+Digit4"
+    ],
+    "desk.go.5": [
+      "Ctrl+Alt+Digit5"
+    ],
+    "desk.send.5": [
+      "Ctrl+Alt+Shift+Digit5"
+    ],
+    "desk.go.6": [
+      "Ctrl+Alt+Digit6"
+    ],
+    "desk.send.6": [
+      "Ctrl+Alt+Shift+Digit6"
+    ],
+    "desk.go.7": [
+      "Ctrl+Alt+Digit7"
+    ],
+    "desk.send.7": [
+      "Ctrl+Alt+Shift+Digit7"
+    ],
+    "desk.go.8": [
+      "Ctrl+Alt+Digit8"
+    ],
+    "desk.send.8": [
+      "Ctrl+Alt+Shift+Digit8"
+    ],
+    "desk.go.9": [
+      "Ctrl+Alt+Digit9"
+    ],
+    "desk.send.9": [
+      "Ctrl+Alt+Shift+Digit9"
+    ],
+    "tile.launcher": [
+      "Ctrl+Alt+Enter"
+    ],
+    "tile.focus.left": [
+      "Ctrl+Alt+Shift+ArrowLeft"
+    ],
+    "tile.focus.right": [
+      "Ctrl+Alt+Shift+ArrowRight"
+    ],
+    "tile.focus.up": [
+      "Ctrl+Alt+Shift+ArrowUp"
+    ],
+    "tile.focus.down": [
+      "Ctrl+Alt+Shift+ArrowDown"
+    ],
+    "tile.toggleSplit": [
+      "Ctrl+Alt+KeyV"
+    ],
+    "tile.resize": [
+      "Ctrl+Alt+Shift+KeyR"
+    ],
+    "tile.column.left": [
+      "Ctrl+Alt+Shift+PageUp"
+    ],
+    "tile.column.right": [
+      "Ctrl+Alt+Shift+PageDown"
+    ],
+    "tile.column.width": [
+      "Ctrl+Alt+Shift+KeyF"
+    ],
+    "tile.stack": [
+      "Ctrl+Alt+Shift+KeyS"
+    ],
+    "tile.unstack": [
+      "Ctrl+Alt+Shift+KeyU"
     ]
   }
 }

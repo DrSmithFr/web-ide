@@ -1,12 +1,16 @@
 // Main window of a project: menu bar, icon rails, side panels, editor area, bottom tools.
 import { podPath } from '../app/base'
-import { createEffect, createSignal, For, type JSX, onCleanup, onMount, Show } from 'solid-js'
+import { createEffect, createSignal, For, type JSX, on as track, onCleanup, onMount, Show } from 'solid-js'
 import { Dynamic } from 'solid-js/web'
 import { RpcError, formatRate, on as onPod, podRates, podState } from '../pod/rpc'
 import {
   activeLeaf, activeTab, closeTab, conflictedDocs, cycleTab, docsVersion, home, mutate, navigate as navHistory, openProject, project, relPath, reopenProject, root,
-  openFile, saveAll, session, setConflictOpener, setSize, sizesFor, splitPane, closeProject,
+  openFile, closeEmptyPane, saveAll, session, setConflictOpener, setSize, sizesFor, splitPane, closeProject, moveTabToDesk, switchDesk,
 } from '../state/project'
+import { desk, desks, onDeskGone } from '../state/desks'
+import { cycleWidth, focusDirection, moveColumnBy, scrollMode, stackTile, tileMode, unstackTile, openTile, registerTileTools, resizeTile, showToolTile, startResize, swapDirection, toggleSplit } from '../state/tiles'
+import { tileLauncher } from '../ui/tileLauncher'
+import { deskPath, navigate, route } from '../app/router'
 import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, toggleTool, toolsIn, zoneOf, zones, type Zone } from '../state/zones'
 import { focusEditor, focusPart, setFocusPart, trackFocus } from '../state/focus'
 import { focusEditorQuietly, isTyping, lockEditor, mobileView, phone, revealCaret, setMobileView } from '../state/mobile'
@@ -68,12 +72,14 @@ export const toolPanels: Record<string, { label: string; icon: string; component
   info: { label: 'Infos', icon: 'info', component: InfoTool },
 }
 
+registerTileTools(toolPanels)
+
 /** Opens a project, asking for the SSH password / passphrase when the pod needs one. */
-export async function openWithAuth(id: string) {
+export async function openWithAuth(id: string, desk = 1) {
   let creds: { password?: string; passphrase?: string } | undefined
   for (;;) {
     try {
-      const r = await openProject(id, creds)
+      const r = await openProject(id, creds, desk)
       setConsoleList(r.consoles)
       refreshConnections()
       offerIdeUntrack(r.ideTracked)
@@ -100,6 +106,7 @@ export function useProjectActions() {
     registerAction('view.closeTab', () => {
       const l = activeLeaf()
       if (l.active) closeTab(l.id, l.active)
+      else closeEmptyPane(l.id) // an empty tile
     }),
     registerAction('view.closeOthers', () => {
       const l = activeLeaf()
@@ -187,6 +194,8 @@ function keepZoneFocus(zone: Zone, frames: number) {
 
 /** Shortcut of a tool: shows it and gives it the focus; hides it when it has the focus already. */
 function toggleToolFocus(id: string) {
+  // A Grid desk has no zones: the tool is a tile.
+  if (tileMode() && !phone()) return showToolTile(id)
   const z = zoneOf(session, id)
   if (!z) return false
   if (shownIn(session, z) === id && focusPart() === z) {
@@ -571,9 +580,14 @@ export function ProjectPage(props: { id: string }) {
   const [error, setError] = createSignal('')
   const [ready, setReady] = createSignal(false)
 
+  // The desk of the URL (the home page links to the desk last shown on this device).
+  const urlDesk = () => {
+    const r = route()
+    return r.name === 'project' ? (r.desk ?? 1) : 1
+  }
   onMount(async () => {
     try {
-      await openWithAuth(props.id)
+      await openWithAuth(props.id, urlDesk())
       // Opened from a ticket to run its conversation: show the assistant.
       if (new URLSearchParams(location.search).has('assistant')) {
         mutate((s) => (s.right.panel = 'assistant'))
@@ -606,6 +620,8 @@ export function ProjectPage(props: { id: string }) {
         const [, path, line] = /^(.*?)(?::(\d+))?$/.exec(open)!
         void openFile(Number(line) > 0 ? { path, line: Number(line) - 1 } : path)
       }
+      // The URL names the desk shown (a removed desk of an old link opened desk 1).
+      if (urlDesk() !== desk()) navigate(deskPath(props.id, desk()), true)
       setReady(true)
       refreshGit(0)
       void loadCommands() // their shortcuts and Search Everywhere entries
@@ -615,6 +631,29 @@ export function ProjectPage(props: { id: string }) {
     }
   })
   useProjectActions()
+  // The URL is the desk shown: a desk link, the history or a shortcut switches the window.
+  createEffect(
+    track(urlDesk, (n) => {
+      if (!ready() || n === desk()) return
+      switchDesk(n).catch((e) => {
+        toast((e as Error).message, 'warn')
+        navigate(deskPath(props.id, desk()), true)
+      })
+    }),
+  )
+  onDeskGone(() => {
+    toast(t('This desk was removed: back to desk 1'), 'warn')
+    navigate(deskPath(props.id, 1), true)
+  })
+  const goDesk = (n: number) => {
+    if (!desks.desks.some((d) => d.n === n)) return false
+    navigate(deskPath(props.id, n))
+  }
+  const sendToDesk = (n: number) => {
+    const l = activeLeaf()
+    if (!l?.active || n === desk() || !desks.desks.some((d) => d.n === n)) return false
+    void moveTabToDesk(l.id, l.active, n).catch((e) => toast((e as Error).message, 'warn'))
+  }
   // A closed zone gives the focus back to the editor.
   createEffect(() => {
     const part = focusPart()
@@ -628,7 +667,25 @@ export function ProjectPage(props: { id: string }) {
     registerAction('view.focusOutline', () => updateSettings((s) => (s.focusOutline = !s.focusOutline), 'Focus outline')),
     registerAction('view.focusDim', () => updateSettings((s) => (s.focusDim = !s.focusDim), 'Dim out of focus')),
     registerAction('view.whitespace', () => updateSettings((s) => (s.editor.showWhitespace = !s.editor.showWhitespace), 'Whitespace')),
-    registerAction('console.new', () => void newConsole()),
+    registerAction('console.new', () => {
+      if (tileMode() && !phone()) void newConsole({ show: false }).then((c) => c && openTile({ kind: 'console', console: c.id }))
+      else void newConsole()
+    }),
+    registerAction('tile.launcher', () => void tileLauncher()),
+    registerAction('tile.toggleSplit', () => toggleSplit()),
+    registerAction('tile.resize', () => startResize()),
+    registerAction('tile.growWidth', () => resizeTile('row')),
+    registerAction('tile.shrinkWidth', () => resizeTile('row', -12)),
+    registerAction('tile.growHeight', () => resizeTile('col')),
+    registerAction('tile.shrinkHeight', () => resizeTile('col', -12)),
+    // The columns of the Scroll mode.
+    registerAction('tile.column.left', () => scrollMode() && moveColumnBy(-1)),
+    registerAction('tile.column.right', () => scrollMode() && moveColumnBy(1)),
+    registerAction('tile.column.width', () => scrollMode() && cycleWidth()),
+    registerAction('tile.stack', () => scrollMode() && stackTile()),
+    registerAction('tile.unstack', () => scrollMode() && unstackTile()),
+    ...(['left', 'right', 'up', 'down'] as const).flatMap((d) => [registerAction(`tile.focus.${d}`, () => focusDirection(d)), registerAction(`tile.swap.${d}`, () => swapDirection(d))]),
+    ...[1, 2, 3, 4, 5, 6, 7, 8, 9].flatMap((n) => [registerAction(`desk.go.${n}`, () => goDesk(n)), registerAction(`desk.send.${n}`, () => sendToDesk(n))]),
     registerAction('view.toggleBottom', () => mutate((s) => toggleTool(s, 'console'))),
     ...Object.keys(toolPanels).map((id) => registerAction(`tool.${id}`, () => toggleToolFocus(id))),
     registerAction('search.global', () => {
@@ -689,7 +746,15 @@ export function ProjectPage(props: { id: string }) {
             <Show when={mobileView() !== 'editor' && zoneOf(session, mobileView())}>{(z) => <ZonePanel zone={z()} />}</Show>
           </div>
         </Show>
-        <Show when={!phone()}>
+        <Show when={!phone() && tileMode()}>
+          {/* Grid desk: the tree of tiles is the whole window (state/tiles.ts). */}
+          <div class="workbench grid-desk" onPointerDown={trackFocus} onFocusIn={trackFocus}>
+            <main class="center" data-focus="editor">
+              <EditorArea />
+            </main>
+          </div>
+        </Show>
+        <Show when={!phone() && !tileMode()}>
         <div class="workbench" onPointerDown={trackFocus} onFocusIn={trackFocus}>
           <Rail side="left" />
           <div class="work">

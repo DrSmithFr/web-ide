@@ -4,7 +4,8 @@
 // releasing the modifier opens the selected entry.
 import { batch, createEffect, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js'
 import { Portal } from 'solid-js/web'
-import { activeTab, basename, forgetRecent, getDoc, openFile, relPath, session } from '../state/project'
+import { activeTab, basename, getDoc, openFile, relPath } from '../state/project'
+import { desks, forgetRecent } from '../state/desks'
 import { fileState } from '../state/git'
 import { fuzzy } from '../ui/overlay'
 import { Icon } from '../ui/icons'
@@ -34,7 +35,7 @@ const changed = (p: string) => !!getDoc(p)?.dirty() || !!fileState(p)
 
 function files() {
   const q = query().trim()
-  const list = session.recent.filter((p) => !changedOnly() || changed(p))
+  const list = desks.recent.filter((p) => !changedOnly() || changed(p))
   return q ? list.filter((p) => fuzzy(q, basename(p)) > 0) : list
 }
 
@@ -73,7 +74,7 @@ export function recentFiles(mode: 'recent' | 'switcher') {
     setSwitcher(mode === 'switcher')
     setChangedOnly(false)
     setQuery('')
-    setColumn(session.recent.length ? 'files' : 'tools')
+    setColumn(desks.recent.length ? 'files' : 'tools')
     setIndex(firstFile())
     setOpen(true)
   })

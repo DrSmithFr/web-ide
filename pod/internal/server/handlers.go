@@ -17,6 +17,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
 	"github.com/DrSmithFr/web-ide/pod/internal/search"
+	"github.com/DrSmithFr/web-ide/pod/internal/sessions"
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
 )
 
@@ -330,6 +331,7 @@ func (s *Server) registerProject() {
 		a, err := bind[struct {
 			ID    string
 			Creds sshx.Creds
+			Desk  int
 		}](p)
 		if err != nil {
 			return nil, err
@@ -348,6 +350,12 @@ func (s *Server) registerProject() {
 		held := c.attached[a.ID] // already counted as an attached worktree
 		delete(c.attached, a.ID)
 		c.project = a.ID
+		// A desk removed meanwhile (an old link): the window opens desk 1.
+		desk := a.Desk
+		if !s.Sessions.HasDesk(a.ID, desk) {
+			desk = 1
+		}
+		c.desk = desk
 		s.mu.Unlock()
 		if !same {
 			if prev != nil {
@@ -367,7 +375,9 @@ func (s *Server) registerProject() {
 			"project":  projects.View{Project: v, DisplayName: v.Name()},
 			"root":     rt.Root,
 			"local":    rt.Local,
-			"session":  s.Sessions.Get(a.ID),
+			"session":  s.Sessions.Get(sessions.Key(a.ID, desk)),
+			"desk":     desk,
+			"desks":    s.Sessions.Desks(a.ID),
 			"consoles": rt.Consoles.List(),
 			// Files of .ide still tracked by git: the page offers to untrack them once.
 			"ideTracked": s.ideTracked(ctx, v, rt),
@@ -381,10 +391,18 @@ func (s *Server) registerProject() {
 		if c.project == "" {
 			return nil, i18n.New("no open project")
 		}
-		s.Sessions.Put(c.project, a.Session)
-		s.emitter(c.project)("session.changed", a.Session, c.id)
+		s.mu.Lock()
+		desk := c.desk
+		s.mu.Unlock()
+		// A desk removed by another window is not written back.
+		if !s.Sessions.HasDesk(c.project, desk) {
+			return nil, nil
+		}
+		s.Sessions.Put(sessions.Key(c.project, desk), a.Session)
+		s.emitDesk(c.project, desk, "session.changed", map[string]any{"session": a.Session, "desk": desk}, c.id)
 		return nil, nil
 	})
+	s.registerDesks()
 
 	withRT := func(f func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error)) handler {
 		return func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {

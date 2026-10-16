@@ -123,6 +123,30 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .mb-ticket { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
 .mb-branch.wt { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); background: color-mix(in srgb, var(--warn) 10%, transparent); color: var(--fg); max-width: 420px; }
 .mb-branch.wt:hover { border-color: var(--warn); }
+.mb-desks { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+.mb-desk { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 6px; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--fg-muted); font-size: 12px; text-decoration: none; cursor: pointer; white-space: nowrap; max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+.mb-desk:hover { color: var(--fg); border-color: var(--line); }
+.mb-desk.active { color: var(--fg); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); font-weight: 600; }
+.mb-desk.over { border-style: dashed; border-color: var(--accent); }
+.mb-desk.add { font-size: 14px; }
+.mb-resizing { margin-left: 6px; padding: 1px 8px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--fg); font-size: 12px; white-space: nowrap; }
+/* Grid desk: the side of the active tile where the next tile opens, as the split marker of i3. */
+.pane.next-row::before, .pane.next-col::before { content: ''; position: absolute; z-index: 21; pointer-events: none; background: var(--accent); opacity: 0.8; }
+.pane.next-row::before { top: 0; bottom: 0; right: 0; width: 3px; }
+.pane.next-col::before { left: 0; right: 0; bottom: 0; height: 3px; }
+/* Scroll mode (ui/ScrollArea.tsx): columns wider than the window, a strip of marks under them. */
+.scroll-desk { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.scroll-strip { flex: 1; display: flex; position: relative; min-height: 0; overflow-x: auto; overflow-y: hidden; container-type: inline-size; scroll-snap-type: x proximity; scrollbar-width: none; }
+.scroll-strip::-webkit-scrollbar { display: none; }
+.scroll-col { flex: none; display: flex; position: relative; min-height: 0; box-sizing: border-box; border-right: 1px solid var(--line); scroll-snap-align: start; }
+.scroll-handle { position: absolute; top: 0; bottom: 0; right: -3px; width: 6px; z-index: 22; cursor: col-resize; }
+.scroll-col:last-child > .scroll-handle { right: 0; width: 4px; }
+.scroll-handle:hover { background: var(--accent); }
+.scroll-overview { flex: none; display: flex; position: relative; height: 8px; padding: 1px 0; gap: 2px; background: var(--bg-2); border-top: 1px solid var(--line); }
+.scroll-mark { flex: none; height: 100%; padding: 0; border: 0; border-radius: 2px; background: var(--bg-3); cursor: pointer; }
+.scroll-mark.active { background: var(--accent); opacity: 0.7; }
+.scroll-sight { position: absolute; top: 0; bottom: 0; border: 1px solid var(--fg-muted); border-radius: 3px; pointer-events: none; transition: left 0.1s; }
+.pane.resizing { outline: 2px dashed var(--accent); outline-offset: -2px; }
 .pod-status { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--fg-muted); font-variant-numeric: tabular-nums; }
 .pod-status .rate { min-width: 58px; text-align: right; }
 .workbench { display: flex; flex: 1; min-height: 0; }
@@ -216,6 +240,7 @@ button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 .split-row { flex-direction: row; }
 .split-col { flex-direction: column; }
 .split-cell { display: flex; min-width: 0; min-height: 0; }
+.split-cell.hidden { display: none; }
 .split-handle { flex: none; background: var(--line); }
 .split-row > .split-handle { width: 3px; cursor: col-resize; }
 .split-col > .split-handle { height: 3px; cursor: row-resize; }
@@ -354,6 +379,16 @@ button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 
 /* ---------- bottom panel ---------- */
 .tool-tabbar { padding-right: 30px; }
+.zone :is(.panel-head, .tool-tabbar) { padding-right: 30px; }
+.tile-tool :is(.panel-head, .tool-tabbar) { padding-right: 10px; }
+.pane.bare > .tabbar { display: none; }
+.pane.bare .tile-tool :is(.panel-head, .tool-tabbar) { padding-right: 54px; }
+.tile-corner { position: absolute; top: 5px; right: 6px; z-index: 3; display: flex; gap: 2px; }
+/* Over a terminal the corner stays discreet until the tile is hovered. */
+.tile-console { position: relative; }
+.tile-console .tile-corner { opacity: 0.35; transition: opacity 0.12s; background: var(--bg-2); border-radius: 6px; }
+.tile-console:hover .tile-corner, .tile-console .tile-corner:focus-within { opacity: 1; }
+.detached-console { flex: 1; min-height: 0; }
 .tool-tabbar .tab.active { background: var(--bg-2); }
 .tool-tabbar .tab.active::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--fg); }
 .zone.focused .tool-tabbar .tab.active::after, .tool-full .tool-tabbar .tab.active::after { background: var(--accent); }
@@ -363,6 +398,11 @@ button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 .tool-body { flex: 1; min-height: 0; position: relative; }
 .term-slot { position: absolute; inset: 0; padding: 4px 0 0 8px; background: var(--bg-2); }
 .term-container, .term-host { width: 100%; height: 100%; }
+.term-container:empty::before { content: attr(data-elsewhere); display: flex; height: 100%; align-items: center; justify-content: center; color: var(--fg-muted); font-size: 12px; cursor: pointer; }
+.tile-tool { position: relative; background: var(--bg-2); display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
+.tile-tool > * { flex: 1 1 auto; min-height: 0; }
+.tile-console { height: 100%; padding: 4px 0 0 6px; background: var(--bg-2); }
+.tile-gone { display: flex; flex-direction: column; gap: 10px; height: 100%; align-items: center; justify-content: center; color: var(--fg-muted); }
 .problems { height: 100%; overflow: auto; }
 .problem { display: flex; gap: 10px; align-items: baseline; padding: 3px 10px; cursor: pointer; font-size: 12.5px; }
 .problem:hover { background: var(--bg-hover); }

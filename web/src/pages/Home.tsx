@@ -6,7 +6,8 @@ import { createEffect, createResource, createSignal, For, onCleanup, onMount, Sh
 import { createStore } from 'solid-js/store'
 import { on as onPod, request } from '../pod/rpc'
 import { traceBoot } from '../pod/transport'
-import { navigate } from '../app/router'
+import { deskPath, navigate } from '../app/router'
+import { lastDesk } from '../state/desks'
 import { contextMenu, Modal } from '../ui/overlay'
 import { errorToast, toast } from '../ui/toast'
 import { copyText } from '../ui/clipboard'
@@ -162,10 +163,10 @@ export function Home() {
                 <article class="project-card" data-pod={ws()?.name}>
                   <a
                     class="project-open"
-                    href={podPath(`/project/${e.p.id}`)}
+                    href={podPath(deskPath(e.p.id, lastDesk(e.p.id)))}
                     onClick={(ev) => {
                       ev.preventDefault()
-                      navigate(`/project/${e.p.id}`)
+                      navigate(deskPath(e.p.id, lastDesk(e.p.id)))
                     }}
                   >
                     <Show when={iconOf(e.p.id)} fallback={<span class="project-icon" />}>

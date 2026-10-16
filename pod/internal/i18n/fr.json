@@ -58,6 +58,7 @@
   "no language server for %s (install %s)": "pas de serveur de langage pour %s (installer %s)",
   "no model chosen": "aucun modèle choisi",
   "no open project": "aucun projet ouvert",
+  "desk not found": "bureau introuvable",
   "no open transaction": "aucune transaction ouverte",
   "no project open on this connection": "aucun projet ouvert sur cette connexion",
   "no rebase or merge in progress": "aucun rebase ni fusion en cours",

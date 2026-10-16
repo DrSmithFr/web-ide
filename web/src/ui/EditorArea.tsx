@@ -3,7 +3,7 @@
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from 'solid-js'
 import {
   activateTab, basename, closeTab, docError, findLeaf, getDoc, loadDoc, moveTab, openFile, relPath, reveal, saveCursor,
-  saveDoc, session, setActivePane, setSplitSizes, splitPane, diagnostics, type LayoutNode, type TabState, docsVersion, mutate,
+  saveDoc, session, setActivePane, setSplitSizes, splitPane, diagnostics, type LayoutNode, type TabState, docsVersion, mutate, moveTabToDesk,
 } from '../state/project'
 import { distinctDirs } from './tabNames'
 import { showTool } from '../state/zones'
@@ -16,7 +16,7 @@ import { FindBar } from '../editor/FindBar'
 import { grammarGeneration, languageName } from '../editor/languages'
 import { fontFor, settings } from '../state/settings'
 import { actions, registerAction, runAction, shortcutOf } from '../keys/bindings'
-import { contextMenu, pick, prompt } from './overlay'
+import { contextMenu, pick, prompt, type MenuItem } from './overlay'
 import { openConflict } from '../conflict/ConflictDialog'
 import { request } from '../pod/rpc'
 import * as lspc from '../lsp/client'
@@ -38,13 +38,21 @@ import { dropClasses, dropIndex, setDropAt } from './tabDrop'
 import { focusPart } from '../state/focus'
 import { copyText } from './clipboard'
 import { WorktreeChip } from './WorktreeChip'
+import { addDesk, desk, deskLabel, desks } from '../state/desks'
+import { route } from '../app/router'
+import { detachTab, hiddenTools, tileMode, nextSplit, resizing, scrollMode, tileTools } from '../state/tiles'
+import { ScrollArea } from './ScrollArea'
+import { consoles, TermView } from '../console/consoles'
+import { Dynamic } from 'solid-js/web'
 import { isMarkdownPath, MarkdownView, showRaw, shownRaw, type MarkdownViewApi } from './MarkdownView'
 
 export function EditorArea(props: { detached?: boolean }) {
   return (
     <div class="editor-area">
       <div class="editor-panes">
-        <Node node={session.layout} detached={props.detached} />
+        <Show when={scrollMode() && !props.detached} fallback={<Node node={session.layout} detached={props.detached} />}>
+          <ScrollArea cell={(c) => <Node node={c} />} />
+        </Show>
       </div>
       <StatusBar />
     </div>
@@ -86,14 +94,15 @@ function Split(props: { node: Extract<LayoutNode, { type: 'split' }> }) {
     window.addEventListener('pointerup', up)
   }
   return (
-    <div ref={el} class={`split split-${props.node.dir}`}>
+    <div ref={el} class={`split split-${props.node.dir}`} data-split={props.node.id}>
       <For each={props.node.children}>
         {(child, i) => (
           <>
-            <Show when={i() > 0}>
+            {/* A hidden pane of tools (Full mode) takes no room, nor its handle. */}
+            <Show when={i() > 0 && !hiddenTools(child) && props.node.children.slice(0, i()).some((c) => !hiddenTools(c))}>
               <div class="split-handle" onPointerDown={(e) => drag(i() - 1, e)} />
             </Show>
-            <div class="split-cell" style={{ flex: `${props.node.sizes[i()] ?? 1} 1 0` }}>
+            <div class="split-cell" classList={{ hidden: hiddenTools(child) }} style={{ flex: `${props.node.sizes[i()] ?? 1} 1 0` }}>
               <Node node={child} />
             </div>
           </>
@@ -104,14 +113,28 @@ function Split(props: { node: Extract<LayoutNode, { type: 'split' }> }) {
 }
 
 let dragged: { pane: string; tab: string } | null = null
+/** The tab being dragged (a desk of the project bar takes it). */
+export const draggedTab = () => dragged
 
-function tabTitle(t: TabState) {
-  if (t.kind === 'file') return basename(t.path ?? '')
-  if (t.kind === 'ticket') {
-    const s = summary(t.ticket!)
-    return s ? `#${s.id} ${s.title.length > 28 ? s.title.slice(0, 27) + '…' : s.title}` : `#${t.ticket}`
+/** Items of the tab menu sending the tab to another desk, or to a new one. */
+function deskItems(pane: string, tab: string): MenuItem[] {
+  const send = (n: number) => void moveTabToDesk(pane, tab, n).catch((e) => toast((e as Error).message, 'warn'))
+  return [
+    { separator: true, label: '' },
+    ...desks.desks.filter((d) => d.n !== desk()).map((d) => ({ label: t('Move to desk {name}', { name: deskLabel(d) }), hint: shortcutOf(`desk.send.${d.n}`), action: () => send(d.n) })),
+    { label: t('Move to a new desk'), action: () => void addDesk().then(send) },
+  ]
+}
+
+function tabTitle(tab: TabState) {
+  if (tab.kind === 'file') return basename(tab.path ?? '')
+  if (tab.kind === 'ticket') {
+    const s = summary(tab.ticket!)
+    return s ? `#${s.id} ${s.title.length > 28 ? s.title.slice(0, 27) + '…' : s.title}` : `#${tab.ticket}`
   }
-  return t.title ?? t.kind
+  if (tab.kind === 'tool') return tileTools[tab.tool!] ? t(tileTools[tab.tool!].label) : tab.tool!
+  if (tab.kind === 'console') return consoles().find((c) => c.id === tab.console)?.title ?? t('Console')
+  return tab.title ?? tab.kind
 }
 
 function Pane(props: { id: string }) {
@@ -140,6 +163,8 @@ function Pane(props: { id: string }) {
       { separator: true, label: '' },
       { label: t('Split right'), hint: shortcutOf('view.splitRight'), action: () => (activateTab(props.id, tab.id), splitPane(props.id, 'row')) },
       { label: t('Split down'), hint: shortcutOf('view.splitDown'), action: () => (activateTab(props.id, tab.id), splitPane(props.id, 'col')) },
+      ...(tab.kind === 'tool' || tab.kind === 'console' ? [{ label: t('Open in a window'), action: () => detachTab(tab) }] : []),
+      ...(route().name === 'project' ? deskItems(props.id, tab.id) : []),
       ...(tab.kind === 'file'
         ? [
             { separator: true, label: '' },
@@ -149,8 +174,35 @@ function Pane(props: { id: string }) {
         : []),
     ])
 
+  // A tool or a console alone in its tile has no tab bar: its buttons go in the corner.
+  const bare = () => leaf()?.tabs.length === 1 && (active()?.kind === 'tool' || active()?.kind === 'console')
+  const corner = (tab: TabState) => (
+    <div class="tile-corner">
+      <button class="icon-btn" title={t('Open in a window')} onClick={() => detachTab(tab)} data-testid="tile-detach">
+        <Icon name="external" size={13} />
+      </button>
+      <button class="icon-btn" title={`${t('Close')} (${shortcutOf('view.closeTab')})`} onClick={() => closeTab(props.id, tab.id)} onContextMenu={(e) => tabMenu(e, tab)} data-testid="tile-close">
+        <Icon name="close" size={13} />
+      </button>
+    </div>
+  )
+
+  // A tile whose console closed (or whose tool is gone) says so and closes.
+  const gone = (tab: TabState, text: string) => (
+    <div class="tile-gone" data-testid="tile-gone">
+      <span>{text}</span>
+      <button class="btn" onClick={() => closeTab(props.id, tab.id)}>
+        {t('Close the tile')}
+      </button>
+    </div>
+  )
+
   return (
-    <div class="pane" classList={{ active: isActivePane(), focused: isActivePane() && focusPart() === 'editor' }} onMouseDown={(e) => e.button < 3 && setActivePane(props.id)}>
+    <div
+      class="pane"
+      data-pane={props.id}
+      classList={{ active: isActivePane(), focused: isActivePane() && focusPart() === 'editor', [`next-${nextSplit()}`]: isActivePane() && tileMode(), resizing: isActivePane() && resizing(), bare: bare() }}
+      onMouseDown={(e) => e.button < 3 && setActivePane(props.id)}>
       <div
         ref={tabbar}
         class="tabbar"
@@ -258,28 +310,44 @@ function Pane(props: { id: string }) {
           <LockLayer />
         </Show>
         <Show when={active()} keyed fallback={<EmptyPane />}>
-          {(t) => (
+          {(tab) => (
             <Switch>
-              <Match when={t.kind === 'file'}>
-                <FileEditor tab={t} paneId={props.id} />
+              <Match when={tab.kind === 'file'}>
+                <FileEditor tab={tab} paneId={props.id} />
               </Match>
-              <Match when={t.kind === 'sql'}>
-                <SqlConsole tab={t} paneId={props.id} />
+              <Match when={tab.kind === 'sql'}>
+                <SqlConsole tab={tab} paneId={props.id} />
               </Match>
-              <Match when={t.kind === 'table'}>
-                <TableView tab={t} paneId={props.id} />
+              <Match when={tab.kind === 'table'}>
+                <TableView tab={tab} paneId={props.id} />
               </Match>
-              <Match when={t.kind === 'text'}>
-                <TextViewer tab={t} paneId={props.id} />
+              <Match when={tab.kind === 'text'}>
+                <TextViewer tab={tab} paneId={props.id} />
               </Match>
-              <Match when={t.kind === 'diff'}>
-                <DiffView tab={t} paneId={props.id} />
+              <Match when={tab.kind === 'diff'}>
+                <DiffView tab={tab} paneId={props.id} />
               </Match>
-              <Match when={t.kind === 'kanban'}>
+              <Match when={tab.kind === 'kanban'}>
                 <Board />
               </Match>
-              <Match when={t.kind === 'ticket'}>
-                <TicketView tab={t} paneId={props.id} />
+              <Match when={tab.kind === 'ticket'}>
+                <TicketView tab={tab} paneId={props.id} />
+              </Match>
+              <Match when={tab.kind === 'tool'}>
+                <div class="tile-tool panel-tile" data-tool={tab.tool}>
+                  <Show when={bare()}>{corner(tab)}</Show>
+                  <Show when={tileTools[tab.tool!]} keyed fallback={gone(tab, tab.tool!)}>
+                    {(p) => <Dynamic component={p.component} />}
+                  </Show>
+                </div>
+              </Match>
+              <Match when={tab.kind === 'console'}>
+                <Show when={consoles().some((c) => c.id === tab.console)} fallback={gone(tab, t('This console is closed'))}>
+                  <div class="tile-console">
+                    <Show when={bare()}>{corner(tab)}</Show>
+                    <TermView id={tab.console!} focus={isActivePane()} />
+                  </div>
+                </Show>
               </Match>
             </Switch>
           )}
