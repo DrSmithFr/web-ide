@@ -78,19 +78,40 @@ A section of the home page, and the same list as a popup in a project:
 - On Linux each desk is a **cgroup** (a `systemd-run --user --scope`, or a cgroup v2 made by the keeper): ending the desk kills the whole cgroup, including what left with `setsid` or `nohup` (the `npm run dev &` of an agent, the shells of its Bash). The same cgroup gives the CPU and memory of the card, and could cap a runaway agent (`MemoryMax`).
 - Without systemd and on SSH projects: process groups, best effort.
 
+## Confinement
+
+The binding of an agent to its desk holds for the tools of the IDE only: Claude Code's own Bash, Read and Edit, and those of opencode and pi, reach the whole disk as the user. The keeper confines the agent process when it starts it, and the confinement holds for every descendant.
+
+- **One rule per desk**: the paths it writes (its worktree, a `tmp` and caches of the desk), the paths it reads (toolchains such as `~/sdk/go`, the rest of the repository), nothing else of `~` (`~/.ssh`, `~/.config`…); the TCP ports it may listen on; no signal or ptrace towards processes outside the desk.
+- **One confiner per system** translates it:
+
+| System | Confiner | Files | Ports | Signals |
+|---|---|---|---|---|
+| Linux | Landlock (`go-landlock`, no root, no other user) | yes | bind TCP by port | yes (scoping) |
+| macOS | Seatbelt (`sandbox-exec` with a generated profile) | yes | `network-bind` by local port | yes |
+| WSL2 | Landlock, if the kernel of WSL has it | | | |
+| Others, SSH projects | none | | | |
+
+- **Best effort, shown**: the confiner applies what the kernel offers; the card of the desk says *confined*, *partial* or *not confined*.
+- **Internet stays open** (npm, `go mod`, the API of the model).
+- **Deferred execution** is the real hole: what the user runs later, outside any confinement. `.git/hooks` and `~/.claude` stay read-only to the agent; Claude Code gets its own `CLAUDE_CONFIG_DIR` per desk (its OAuth credentials refresh: copied in, or an API key). The files of the worktree (a `Makefile`, `package.json`, `.envrc`) are what the review reads.
+- **Ports**: an MCP tool `reserve_ports(n)` takes free ports from a range for the desk, released when it ends; the consoles of the desk get `PORT`, `PORT_1`…; the card shows them and the confiner enforces them, so two worktrees no longer collide. Later, maybe: a network namespace per desk (`pasta`, rootless), each desk with its own `localhost:3000`, previews through the keeper.
+- Claude Code's own sandbox, where present, adds to it at no cost.
+- **Rejected for now**: a dedicated Unix user (needs root to create and sudo to switch, shared group or ACLs for the review, `safe.directory`; a git worktree must write to the `.git` of the main repository, so it would need a clone instead) and containers (a CI to build).
+
 ## Order (if decided)
 
 1. **Ownership**: `owner` on the processes of the keeper, a cgroup per owner, the Activity list with its kills. Useful at once, without desks.
 2. **User desks** in Full mode: a session per desk, URL, switcher, migration of `sessions/<project>.json` (the current session becomes desk 1).
-3. **Agent desks**: one per development session, MCP scoped by desk, follow mode in its desk, conversation as a view.
+3. **Agent desks**: one per development session, MCP scoped by desk, follow mode in its desk, conversation as a view, confinement and reserved ports.
 4. **Tiles** (tools outside zones), then the **Grid** mode.
 5. **Scroll** mode, then the phone on top of it.
 
 ## Open questions
 
 1. **The Orchestrator**: its own desk, or the conversation shown on a desk of the user?
-2. **Confinement**: the binding to the worktree holds for the tools of the IDE; Claude Code's own Bash can still write elsewhere. Rely on its permissions (`additionalDirectories`, its sandbox), or confine the cgroup of the desk (mount namespace, bubblewrap)?
+2. **Docker for agents**: the socket is root in all but name, so an agent with Docker escapes any confinement. None, or through a proxy of the socket limited to the Compose project of its worktree?
 3. **Desk per device**: which desk a window opens by default, the last one of this device?
 4. **Desks in the session file**: one file per desk, or one file per project holding the desks?
 5. **Waiting agents**: a badge on the desk in the switcher and a push notification when an agent desk waits for an answer?
-6. **Ports**: agents of several worktrees starting the same dev server collide; the [services](relay.md) work and the ports shown on the cards may answer it.
+6. **Ports of the user**: the reserved ports answer for the agents; should the consoles of user desks take reserved ports too, and how they meet the [services](relay.md) shared between pods.
