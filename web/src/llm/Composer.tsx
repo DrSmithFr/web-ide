@@ -1,7 +1,8 @@
 // Message box of the assistant: a Markdown editor that grows with its content (Enter adds a
 // line, Ctrl+S or Ctrl+Enter sends), attachments, dictation, model picker, options menu,
 // context gauge, send / stop. The draft survives panel switches.
-import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js'
+import { createEffect, createSignal, For, on, onCleanup, onMount, Show, type JSX } from 'solid-js'
+import { home } from '../state/project'
 import { Icon } from '../ui/icons'
 import { errorToast, toast } from '../ui/toast'
 import { loadPromptContext, promptContext } from './prompt'
@@ -52,6 +53,24 @@ const modeTitles = {
 import { t, tn } from '../i18n'
 
 const [draft, setDraft] = createSignal('')
+// The draft is also kept in the session of the tab (#76): a phone that discards a tab in the
+// background reloads it whole, and what was being typed must still be there.
+const draftKey = () => 'webide.llm.draft.' + (home()?.id ?? '')
+function keepDraft(text: string) {
+  try {
+    if (text) sessionStorage.setItem(draftKey(), text)
+    else sessionStorage.removeItem(draftKey())
+  } catch {
+    /* storage unavailable */
+  }
+}
+function savedDraft() {
+  try {
+    return sessionStorage.getItem(draftKey()) ?? ''
+  } catch {
+    return ''
+  }
+}
 const [pending, setPending] = createSignal<Prepared[]>([])
 const [preparing, setPreparing] = createSignal(0)
 /** The editor of the message box last shown (the doodle modal has its own over the panel's). */
@@ -480,6 +499,8 @@ export function Composer(props: {
 }) {
   let fileInput!: HTMLInputElement
   const [view, setView] = createSignal<EditorView>()
+  if (!draft()) setDraft(savedDraft())
+  createEffect(on(draft, keepDraft, { defer: true }))
   // A message prepared by the Orchestrator for the conversation it opened.
   createEffect(() => {
     const text = incomingDraft()

@@ -177,6 +177,56 @@ run(
     assert((await tab.textContent('body')).includes('webide_token='), 'the preview app sees the cookie of the IDE through the tunnel')
     await tab.close()
 
+    // A page back from sleep (#76): the pod closed the tunnel while the phone slept, and the
+    // browser still holds it as alive. When the page shows again the app asks the pod, gets no
+    // answer, and the bootstrap page dials the same pod again: the frame is not reloaded and what
+    // is being typed stays in the box.
+    const replies = () => app.locator('.ai-msg.assistant').count()
+    const sendAndWait = async (text) => {
+      const n = await replies()
+      await app.fill('.ai-composer .ed-content', text)
+      await app.click('[data-testid=send]')
+      await app.waitForFunction((n) => document.querySelectorAll('.ai-msg.assistant').length > n, n, { timeout: 20000 })
+    }
+    await app.evaluate(() => (window.sameFrame = true))
+    await app.fill('.ai-composer .ed-content', 'typed while asleep')
+    assert(await app.evaluate(() => Object.keys(sessionStorage).some((k) => k.startsWith('webide.llm.draft.') && sessionStorage.getItem(k) === 'typed while asleep')),
+      'the draft of the message box is kept in the session of the tab')
+    const pcBefore = await page.evaluate(() => (window.pcBefore = window.tunnel.pc, true))
+    // Deaf: what the window sends on the tunnel is lost, as when the pod side is gone.
+    await page.evaluate(() => {
+      for (const t of window.tunnels.values()) if (t.pc === window.tunnel.pc) t.rpc.send = () => {}
+    })
+    const visibility = (state) => app.evaluate((state) => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state })
+      document.dispatchEvent(new Event('visibilitychange'))
+    }, state)
+    await visibility('hidden')
+    await page.waitForTimeout(5500)
+    const woke = Date.now()
+    await visibility('visible')
+    await page.waitForFunction(() => window.bootJournal.includes('Reconnected to the same pod'), null, { timeout: 20000 })
+    const took = Date.now() - woke
+    const journal76 = await page.evaluate(() => window.bootJournal)
+    assert(pcBefore && journal76.includes('The pod does not answer any more'), 'a deaf tunnel is dropped when the page shows again:\n' + journal76.slice(-600))
+    assert(took < 12000, `the tunnel is replaced within seconds of the wake: ${took} ms`)
+    assert(await page.evaluate(() => window.tunnel.pc !== window.pcBefore), 'a new tunnel to the same pod')
+    assert(await app.evaluate(() => window.sameFrame === true), 'the frame of the app is not reloaded')
+    assert((await app.textContent('.ai-composer .ed-content')).includes('typed while asleep'), 'the text being typed stays in the box')
+    await sendAndWait('after the wake')
+    assert(true, 'the app talks to the pod on the new tunnel')
+
+    // The rpc channel of the tunnel closes (the pod side ends it): the page dials again, without
+    // reloading the frame either.
+    await page.evaluate(() => {
+      window.pcBefore = window.tunnel.pc
+      for (const t of window.tunnels.values()) if (t.pc === window.tunnel.pc) t.rpc.close()
+    })
+    await page.waitForFunction(() => window.tunnel.pc !== window.pcBefore && window.bootJournal.split('Reconnected to the same pod').length > 2, null, { timeout: 20000 })
+    assert(await app.evaluate(() => window.sameFrame === true), 'a closed rpc channel reconnects without reloading the frame')
+    await sendAndWait('after the close')
+    assert(true, 'the app talks to the pod after its rpc channel was closed')
+
     // Settings > Remote access: the relay, the pod id, the state of the link.
     await app.click('.menubar button[title^="Settings"]')
     await app.waitForSelector('.settings')

@@ -40,11 +40,19 @@ export function portChannel(port: MessagePort): Channel {
   // A port is open from the start, unlike a WebSocket: the open callback must still reach
   // the handler registered after the channel was created (rpc.ts calls onOpen later).
   let opened = false
-  port.onmessage = (e) => handlers.message(e.data as string)
+  let ended = false
+  const end = () => {
+    if (ended) return
+    ended = true
+    handlers.close()
+  }
+  // The bootstrap page tells the end of the channel with a null message before it closes the
+  // port (#76): WebKit may not dispatch the close event.
+  port.onmessage = (e) => (e.data === null ? end() : handlers.message(e.data as string))
   // The close event is not in the DOM types of MessagePort, but the browser dispatches it
   // when the other end closes.
   const p = port as any
-  p.addEventListener('close', () => handlers.close())
+  p.addEventListener('close', end)
   opened = true
   return {
     send: (text) => port.postMessage(text),

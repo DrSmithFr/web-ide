@@ -4,7 +4,8 @@
 // relay through the bootstrap page.
 import { createSignal } from 'solid-js'
 import { lang, onLangChange, t } from '../i18n'
-import { askPort, type Channel, traceBoot, wsChannel } from './transport'
+import { base as pageBase } from '../app/base'
+import { askPort, type Channel, inTunnel, traceBoot, wsChannel } from './transport'
 
 export type { Channel }
 
@@ -135,6 +136,36 @@ function attach(c: Channel) {
     setTimeout(connect, Math.min(5000, 300 * 2 ** Math.min(retry, 4)))
   })
 }
+
+// A page back from sleep (#76): the tunnel may look alive to the browser while the pod closed it
+// long ago, and WebKit notices late — the user is typing by then. A light request tells: no answer
+// within 4 s, the bootstrap page drops the tunnel and opens another one; the window keeps its page
+// and takes its channels again. Old pods answer client.lang too.
+const WAKE_HIDDEN = 5000
+const WAKE_TIMEOUT = 4000
+let hiddenAt = 0
+async function checkLink() {
+  const c = chan
+  if (!inTunnel() || !c || state() !== 'connected') return
+  const late = setTimeout(() => {
+    if (chan === c) window.parent.postMessage({ kind: 'stale', base: pageBase }, '*')
+  }, WAKE_TIMEOUT)
+  try {
+    await request('client.lang', { lang: lang() })
+  } catch {
+    /* the channel ended: the reconnection runs */
+  } finally {
+    clearTimeout(late)
+  }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') hiddenAt = Date.now()
+  else if (hiddenAt && Date.now() - hiddenAt >= WAKE_HIDDEN) void checkLink()
+})
+window.addEventListener('pageshow', (e) => {
+  if (e.persisted) void checkLink()
+})
+window.addEventListener('online', () => void checkLink())
 
 function send(text: string, on?: Channel) {
   const c = on ?? chan

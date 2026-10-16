@@ -48,6 +48,7 @@ const words = {
   update: fr ? 'Mettez ce pod à jour : les versions ne correspondent pas.' : 'Update this pod: the versions do not match.',
   failed: fr ? 'La connexion n’a pas pu être établie.' : 'The connection could not be established.',
   closed: fr ? 'Ce pod a fermé la connexion.' : 'This pod closed the connection.',
+  stale: fr ? 'Le pod ne répond plus (page sortie de veille)' : 'The pod does not answer any more (page back from sleep)',
   reconnecting: fr ? 'Reconnexion par ' : 'Reconnecting through ',
   wrongpod: fr ? 'Ce pod n’est pas celui demandé.' : 'This pod is not the one asked for.',
   sw: fr ? 'Service Worker : ' : 'Service Worker: ',
@@ -126,6 +127,7 @@ const words = {
   tAppRpc: fr ? 'L’IDE parle au pod (premier message)' : 'The IDE talks to the pod (first message)',
   tAppHome: fr ? 'Accueil affiché' : 'Home page shown',
   tBye: fr ? 'Le relay signale que le pod est parti' : 'The relay says the pod left',
+  tKept: fr ? 'Reconnecté au même pod : l’IDE reprend ses canaux sans recharger' : 'Reconnected to the same pod: the IDE takes its channels again without reloading',
   tError: fr ? 'Erreur : ' : 'Error: ',
   stallTitle: fr ? 'Cette étape ne progresse plus.' : 'This step is not moving.',
   stall: {
@@ -529,14 +531,16 @@ function reader(dc) {
       r(m)
     } else q.push(m)
   }
-  dc.onclose = () => {
+  // A listener, not onclose: the close handler the channel already has (the drop of the tunnel
+  // on its rpc channel) must still run (#76).
+  dc.addEventListener('close', () => {
     closed = true
     if (wait) {
       const r = wait
       wait = null
       r(null)
     }
-  }
+  })
   return {
     next: () =>
       closed
@@ -1264,6 +1268,9 @@ function drop(t, msg) {
   t.dropped = true
   trace(words.tError + msg)
   lastError = msg
+  // The channels of the app end here and now: closing the PeerConnection may not end their
+  // readers, and the app asks them again from the next tunnel.
+  for (const port of [...(t.ports ?? [])]) endPort(t, port)
   close(t)
   if (tunnels.get(t.key) === t) tunnels.delete(t.key)
   t.reject?.(new Error(msg))
@@ -1279,9 +1286,11 @@ async function failover() {
   if (failed) return
   busy(words.reconnecting.trim())
   for (let i = 0; i < 6; i++) {
-    await refreshPods()
+    // The pod is still at the relay when only its tunnel dropped (a page back from sleep): it is
+    // dialled again at once, without waiting for a pods list that has nothing new to say.
+    if (i || !pods.some((p) => p.key === entryKey)) await refreshPods()
     // The relay has not elected one yet: the pod this window was on is worth another try.
-    const g = entryGateway()
+    const g = entryGateway(i === 0)
     if (g) {
       const old = entryKey
       entryKey = g.key
@@ -1289,8 +1298,15 @@ async function failover() {
       rememberSite(g.site)
       busy(words.reconnecting + (g.name || g.podId))
       try {
-        entry = await connect(g.key, g.podId, entryMode)
-        if (shownKey === old) {
+        // The app may have asked its channels again before: the tunnel it opened is the one.
+        const have = tunnels.get(g.key)
+        entry = have && !have.dropped ? await have.ready : await connect(g.key, g.podId, entryMode)
+        if (g.key === old) {
+          // The same pod, on a new tunnel (a page back from sleep): the app keeps its page, what
+          // is typed in it and its state, and takes its channels again by itself (#76).
+          trace(words.tKept)
+          declare()
+        } else if (shownKey === old) {
           // This window showed the pod that left: the same path, on the new gateway. A page
           // reached on its own tunnel is left alone: the app asks its channels again, and a page
           // of a pod of the site rides the new gateway under its own /pod/<key>/.
@@ -1311,7 +1327,12 @@ async function failover() {
 // The gateway to reconnect through (routes.js). A pod the relay does not report would refuse the
 // signaling link: only the pods list is worth dialling, except when it says nothing at all (the
 // link of the account is not up yet).
-function entryGateway() {
+// first: the first try goes back to the pod this window entered through when the relay still lists
+// it (its tunnel dropped, not the pod); the next ones follow the gateway rules, as a gateway that
+// left stays listed while its role is held in grace.
+function entryGateway(first) {
+  const self = first && pods.find((p) => p.key === entryKey)
+  if (self) return self
   return nextGateway(pods, podsPrev, entrySite, entryKey) ??
     (pods.length || !entryPod ? null : { key: entryKey, podId: entryPod, site: entrySite })
 }
@@ -1411,6 +1432,14 @@ async function onMessage(d) {
     } catch {}
     return
   }
+  // The app got no answer from its pod after the page came back from sleep (#76): the tunnel
+  // looks alive here but the pod closed it, so it is dropped now rather than when WebKit notices.
+  if (d?.kind === 'stale') {
+    const { via } = routeOf(pods, keyOf(d.base) || entryKey, entryKey)
+    const t = tunnels.get(via ?? entryKey)
+    if (t?.done && !t.dropped) drop(t, words.stale)
+    return
+  }
   // The app asks which pod's home page is the window's: the entry pod, which a failover moves.
   if (d?.kind === 'entry') {
     try {
@@ -1467,6 +1496,7 @@ async function bridge(t, label, port, prefix, side) {
   const dc = own ? t.rpc : routed ? routed.dc : t.pc.createDataChannel(label, { ordered: true })
   const pending = []
   held(t, true)
+  ;(t.ports ??= new Set()).add(port)
   const write = (text) => {
     const bytes = new TextEncoder().encode(typeof text === 'string' ? text : JSON.stringify(text))
     if (dc.readyState === 'open') frame(dc, bytes)
@@ -1492,6 +1522,14 @@ async function bridge(t, label, port, prefix, side) {
     port.postMessage(decode(m))
   }
   held(t, false)
+  endPort(t, port)
+}
+
+// The end of a channel, told to the app by a null message before the port closes: WebKit may not
+// fire the close event of a MessagePort (#76).
+function endPort(t, port) {
+  if (!t.ports?.delete(port)) return
+  try { port.postMessage(null) } catch {}
   port.close()
 }
 
