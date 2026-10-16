@@ -146,7 +146,7 @@ echo
 echo "The pod runs: systemctl --user status web-ide-pod web-ide-keeper"
 [ -s "$TOKEN_FILE" ] && echo "Open: http://$ADDR/?token=$(cat "$TOKEN_FILE")"
 # Shut down and reboot from the home page of another device: off until root allows it (relay.md, *Power*).
-[ -f /etc/polkit-1/rules.d/50-web-ide.rules ] || echo "To shut down and reboot this machine from the IDE: sudo $BIN_DIR/web-ide-pod allow-shutdown"
+[ -f /etc/web-ide/allow-shutdown ] || echo "To shut down and reboot this machine from the IDE: sudo $BIN_DIR/web-ide-pod allow-shutdown"
 if [ -n "$TAILSCALE" ]; then
   HOST=$(tailscale status --self --json 2>/dev/null | sed -n 's/.*"DNSName": *"\([^"]*\)\.".*/\1/p' | head -n1)
   [ -n "$HOST" ] && [ -s "$TOKEN_FILE" ] && echo "On the tailnet: https://$HOST/?token=$(cat "$TOKEN_FILE")"

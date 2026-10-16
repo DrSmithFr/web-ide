@@ -16,6 +16,10 @@ import (
 // logind asks polkit whether that user may power the machine off.
 const RulePath = "/etc/polkit-1/rules.d/50-web-ide.rules"
 
+// MarkerPath names the user the rule is for, readable by everyone: the folder of the rules is
+// polkit's only, so the pod reads this one to know whether to offer Shut down.
+const MarkerPath = "/etc/web-ide/allow-shutdown"
+
 // actions are the logind actions the rule allows: power off and reboot, also with other sessions
 // open and with an inhibitor taken (the pod runs systemctl -i: the user asked from the page).
 var actions = []string{
@@ -65,8 +69,10 @@ func AllowShutdown(user string, remove bool, out io.Writer) error {
 		return i18n.New("run it as root: sudo web-ide-pod allow-shutdown")
 	}
 	if remove {
-		if err := os.Remove(RulePath); err != nil && !os.IsNotExist(err) {
-			return err
+		for _, p := range []string{RulePath, MarkerPath} {
+			if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+				return err
+			}
 		}
 		fmt.Fprintf(out, "Removed %s: the pod can no longer power this machine off.\n", RulePath)
 		return nil
@@ -82,6 +88,12 @@ func AllowShutdown(user string, remove bool, out io.Writer) error {
 		return err
 	}
 	if err := os.WriteFile(RulePath, []byte(rule), 0o644); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(MarkerPath), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(MarkerPath, []byte(user+"\n"), 0o644); err != nil {
 		return err
 	}
 	fmt.Fprintf(out, "Wrote %s: the pod of %s may shut down and reboot this machine.\n", RulePath, user)

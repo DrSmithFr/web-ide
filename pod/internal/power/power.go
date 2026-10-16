@@ -3,6 +3,8 @@ package power
 import (
 	"log"
 	"os"
+	"os/user"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,7 +27,8 @@ const (
 )
 
 // PowerCmdEnv replaces the command of an action in the browser tests (WEBIDE_POWER_ACTION names
-// it), and AllowedEnv stands for the polkit rule.
+// it), and AllowedEnv stands for the polkit rule: 1 as if it were there, 0 as if it were not (the
+// tests run on machines that may have it).
 const (
 	PowerCmdEnv = "WEBIDE_POWER_CMD"
 	ActionEnv   = "WEBIDE_POWER_ACTION"
@@ -33,13 +36,21 @@ const (
 )
 
 // Allowed reports whether this machine lets the pod power it off and reboot it: the rule of
-// `web-ide-pod allow-shutdown` is installed.
+// `web-ide-pod allow-shutdown` is installed for the user the pod runs as. The pod cannot read the
+// rule (polkit keeps its folder to itself), so it reads the marker written beside it.
 func Allowed() bool {
-	if os.Getenv(AllowedEnv) == "1" {
+	switch os.Getenv(AllowedEnv) {
+	case "1":
 		return true
+	case "0":
+		return false
 	}
-	_, err := os.Stat(RulePath)
-	return err == nil
+	b, err := os.ReadFile(MarkerPath)
+	if err != nil {
+		return false
+	}
+	u, err := user.Current()
+	return err == nil && strings.TrimSpace(string(b)) == u.Username
 }
 
 // Handler runs the power requests that reach one pod.

@@ -111,7 +111,8 @@ async function startPod(name, data, port, { lan = null, relay = false, protocol 
   const env = { ...process.env }
   if (updateCmd) env.WEBIDE_UPDATE_CMD = updateCmd
   if (powerCmd) env.WEBIDE_POWER_CMD = powerCmd
-  if (powerAllowed) env.WEBIDE_POWER_ALLOWED = '1'
+  // 0 when not allowed: the machine running the suite may have the rule itself.
+  env.WEBIDE_POWER_ALLOWED = powerAllowed ? '1' : '0'
   if (wake) env.WEBIDE_WAKE_IFACES = wake
   const proc = spawn(BIN, args.flat(), { stdio: ['ignore', log, log], env })
   procs.push(proc)

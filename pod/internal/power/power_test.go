@@ -270,3 +270,15 @@ func TestRunWake(t *testing.T) {
 		t.Fatalf("this pod is awake: %+v", ans)
 	}
 }
+
+// TestAllowedEnv: the tests say whether the rule is there, whatever the machine has.
+func TestAllowedEnv(t *testing.T) {
+	t.Setenv(AllowedEnv, "1")
+	if !Allowed() {
+		t.Fatal("1: allowed")
+	}
+	t.Setenv(AllowedEnv, "0")
+	if Allowed() {
+		t.Fatal("0: not allowed, even with the rule installed")
+	}
+}
