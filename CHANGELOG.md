@@ -4,6 +4,18 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-10-16
+
+### Changed
+
+- No passkey for Wake, Shut down, Reboot and Restart on the LAN: a window on the pod itself (its token, or `127.0.0.1`) already holds the terminals of the machine, so the pod signs the action with its own key. Through the relay the browser still signs with its passkey.
+- Links to the IDE given to Claude Code work without Tailscale: with no `publicUrl` set, a paired pod with a relay gives its page on the relay origin (`https://<relay>/pod/<key>`), and the local address (`http://127.0.0.1:<port>`) beside it.
+
+### Fixed
+
+- A page of a pod on the relay origin opened in a tab of its own (a link, a new tab) opens in the bootstrap page instead of a blank page, also before the Service Worker is installed.
+- The Service Worker of the relay carries the query string of a request to the pod (it was dropped: `/open?path=` and previews with a query) and follows the redirects of the pod.
+
 ## [1.15.0] - 2026-10-16
 
 ### Added
