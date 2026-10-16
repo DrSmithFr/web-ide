@@ -1,5 +1,6 @@
 // Minimal router: /, /project/:id (desk 1), /project/:id/desk/:n, and the detached panels
-// /project/:id/editor, /project/:id/tool/:toolId; under the base path of the page.
+// /project/:id/editor, /project/:id/tool/:toolId, /project/:id/console/:consoleId; under the
+// base path of the page.
 import { createSignal } from 'solid-js'
 import { base, podPath } from './base'
 
@@ -21,6 +22,7 @@ export type Route =
   | { name: 'project'; id: string; desk?: number }
   | { name: 'editor'; id: string }
   | { name: 'tool'; id: string; toolId: string }
+  | { name: 'console'; id: string; consoleId: string }
 
 export function route(): Route {
   const parts = path().split('/').filter(Boolean).map(decodeURIComponent)
@@ -28,6 +30,7 @@ export function route(): Route {
   const id = parts[1]
   if (parts[2] === 'editor') return { name: 'editor', id }
   if (parts[2] === 'tool' && parts[3]) return { name: 'tool', id, toolId: parts[3] }
+  if (parts[2] === 'console' && parts[3]) return { name: 'console', id, consoleId: parts[3] }
   const n = parts[2] === 'desk' ? parseInt(parts[3], 10) : NaN
   return n > 0 ? { name: 'project', id, desk: n } : { name: 'project', id }
 }

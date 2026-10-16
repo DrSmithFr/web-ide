@@ -370,8 +370,13 @@ button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 .zone :is(.panel-head, .tool-tabbar) { padding-right: 54px; }
 .tile-tool :is(.panel-head, .tool-tabbar) { padding-right: 10px; }
 .pane.bare > .tabbar { display: none; }
-.pane.bare .tile-tool :is(.panel-head, .tool-tabbar) { padding-right: 30px; }
-.tile-close { position: absolute; top: 5px; right: 6px; z-index: 2; }
+.pane.bare .tile-tool :is(.panel-head, .tool-tabbar) { padding-right: 54px; }
+.tile-corner { position: absolute; top: 5px; right: 6px; z-index: 3; display: flex; gap: 2px; }
+/* Over a terminal the corner stays discreet until the tile is hovered. */
+.tile-console { position: relative; }
+.tile-console .tile-corner { opacity: 0.35; transition: opacity 0.12s; background: var(--bg-2); border-radius: 6px; }
+.tile-console:hover .tile-corner, .tile-console .tile-corner:focus-within { opacity: 1; }
+.detached-console { flex: 1; min-height: 0; }
 .tool-tabbar .tab.active { background: var(--bg-2); }
 .tool-tabbar .tab.active::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--fg); }
 .zone.focused .tool-tabbar .tab.active::after, .tool-full .tool-tabbar .tab.active::after { background: var(--accent); }

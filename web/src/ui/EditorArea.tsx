@@ -40,7 +40,7 @@ import { copyText } from './clipboard'
 import { WorktreeChip } from './WorktreeChip'
 import { addDesk, desk, deskLabel, desks } from '../state/desks'
 import { route } from '../app/router'
-import { gridMode, nextSplit, resizing, tileTools } from '../state/tiles'
+import { detachTab, gridMode, nextSplit, resizing, tileTools } from '../state/tiles'
 import { consoles, TermView } from '../console/consoles'
 import { Dynamic } from 'solid-js/web'
 import { isMarkdownPath, MarkdownView, showRaw, shownRaw, type MarkdownViewApi } from './MarkdownView'
@@ -159,6 +159,7 @@ function Pane(props: { id: string }) {
       { separator: true, label: '' },
       { label: t('Split right'), hint: shortcutOf('view.splitRight'), action: () => (activateTab(props.id, tab.id), splitPane(props.id, 'row')) },
       { label: t('Split down'), hint: shortcutOf('view.splitDown'), action: () => (activateTab(props.id, tab.id), splitPane(props.id, 'col')) },
+      ...(tab.kind === 'tool' || tab.kind === 'console' ? [{ label: t('Open in a window'), action: () => detachTab(tab) }] : []),
       ...(route().name === 'project' ? deskItems(props.id, tab.id) : []),
       ...(tab.kind === 'file'
         ? [
@@ -169,8 +170,18 @@ function Pane(props: { id: string }) {
         : []),
     ])
 
-  // A tool alone in its tile has its own head: no tab bar, a close button in the corner.
-  const bare = () => leaf()?.tabs.length === 1 && active()?.kind === 'tool'
+  // A tool or a console alone in its tile has no tab bar: its buttons go in the corner.
+  const bare = () => leaf()?.tabs.length === 1 && (active()?.kind === 'tool' || active()?.kind === 'console')
+  const corner = (tab: TabState) => (
+    <div class="tile-corner">
+      <button class="icon-btn" title={t('Open in a window')} onClick={() => detachTab(tab)} data-testid="tile-detach">
+        <Icon name="external" size={13} />
+      </button>
+      <button class="icon-btn" title={`${t('Close')} (${shortcutOf('view.closeTab')})`} onClick={() => closeTab(props.id, tab.id)} onContextMenu={(e) => tabMenu(e, tab)} data-testid="tile-close">
+        <Icon name="close" size={13} />
+      </button>
+    </div>
+  )
 
   return (
     <div
@@ -310,11 +321,7 @@ function Pane(props: { id: string }) {
               </Match>
               <Match when={tab.kind === 'tool'}>
                 <div class="tile-tool panel-tile" data-tool={tab.tool}>
-                  <Show when={bare()}>
-                    <button class="icon-btn tile-close" title={`${t('Close')} (${shortcutOf('view.closeTab')})`} onClick={() => closeTab(props.id, tab.id)} onContextMenu={(e) => tabMenu(e, tab)} data-testid="tile-close">
-                      <Icon name="close" size={13} />
-                    </button>
-                  </Show>
+                  <Show when={bare()}>{corner(tab)}</Show>
                   <Show when={tileTools[tab.tool!]} keyed fallback={<div class="tile-gone">{tab.tool}</div>}>
                     {(p) => <Dynamic component={p.component} />}
                   </Show>
@@ -323,6 +330,7 @@ function Pane(props: { id: string }) {
               <Match when={tab.kind === 'console'}>
                 <Show when={consoles().some((c) => c.id === tab.console)} fallback={<div class="tile-gone">{t('This console is closed')}</div>}>
                   <div class="tile-console">
+                    <Show when={bare()}>{corner(tab)}</Show>
                     <TermView id={tab.console!} focus={isActivePane()} />
                   </div>
                 </Show>

@@ -1,10 +1,12 @@
 // Tiles (docs/desks.md): a tool or a console shown in a pane of the editor tree, as a tab. In
-// the Grid mode of a desk they are the whole window, like i3: a new tile splits the focused
-// one along its longest side, the keyboard moves the focus and swaps tiles by direction.
+// the Grid mode of a desk they are the whole window, like i3: a new tile opens on the right
+// of the focused one or below it, the keyboard moves the focus, swaps and resizes tiles.
 import { createSignal, type JSX } from 'solid-js'
-import { activateTab, activeLeaf, closeEmptyPane, leaves, mutate, openTab, resizePane, session, setActivePane, splitEmpty, swapPanes, type TabState } from './project'
+import { activateTab, activeLeaf, closeEmptyPane, leaves, mutate, openTab, project, resizePane, session, setActivePane, splitEmpty, swapPanes, type TabState } from './project'
 import { desk, desks } from './desks'
 import { captureKeys } from '../keys/bindings'
+import { podPath } from '../app/base'
+import { consoles } from '../console/consoles'
 
 export interface TileTool {
   label: string
@@ -143,4 +145,15 @@ export function swapDirection(dir: Direction) {
   if (!id) return false
   swapPanes(session.activePane, id)
   focusPane(id)
+}
+
+/** Opens a tool or a console tab in a window of its own (as the button of a zone). */
+export function detachTab(tab: TabState) {
+  if (tab.kind === 'tool' && tab.tool) {
+    const id = tab.tool
+    window.open(podPath(`/project/${project()!.id}/tool/${id}`), `tool-${id}`, id === 'assistant' ? 'popup,width=1100,height=820' : 'popup,width=420,height=760')
+  } else if (tab.kind === 'console' && tab.console) {
+    const owner = consoles().find((c) => c.id === tab.console)?.project ?? project()!.id
+    window.open(podPath(`/project/${owner}/console/${tab.console}`), `console-${tab.console}`, 'popup,width=900,height=560')
+  }
 }
