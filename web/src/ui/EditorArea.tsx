@@ -3,7 +3,7 @@
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from 'solid-js'
 import {
   activateTab, basename, closeTab, docError, findLeaf, getDoc, loadDoc, moveTab, openFile, relPath, reveal, saveCursor,
-  saveDoc, session, setActivePane, setSplitSizes, splitPane, diagnostics, type LayoutNode, type TabState, docsVersion, mutate,
+  saveDoc, session, setActivePane, setSplitSizes, splitPane, diagnostics, type LayoutNode, type TabState, docsVersion, mutate, moveTabToDesk,
 } from '../state/project'
 import { distinctDirs } from './tabNames'
 import { showTool } from '../state/zones'
@@ -16,7 +16,7 @@ import { FindBar } from '../editor/FindBar'
 import { grammarGeneration, languageName } from '../editor/languages'
 import { fontFor, settings } from '../state/settings'
 import { actions, registerAction, runAction, shortcutOf } from '../keys/bindings'
-import { contextMenu, pick, prompt } from './overlay'
+import { contextMenu, pick, prompt, type MenuItem } from './overlay'
 import { openConflict } from '../conflict/ConflictDialog'
 import { request } from '../pod/rpc'
 import * as lspc from '../lsp/client'
@@ -38,6 +38,8 @@ import { dropClasses, dropIndex, setDropAt } from './tabDrop'
 import { focusPart } from '../state/focus'
 import { copyText } from './clipboard'
 import { WorktreeChip } from './WorktreeChip'
+import { addDesk, desk, deskLabel, desks } from '../state/desks'
+import { route } from '../app/router'
 import { isMarkdownPath, MarkdownView, showRaw, shownRaw, type MarkdownViewApi } from './MarkdownView'
 
 export function EditorArea(props: { detached?: boolean }) {
@@ -104,6 +106,18 @@ function Split(props: { node: Extract<LayoutNode, { type: 'split' }> }) {
 }
 
 let dragged: { pane: string; tab: string } | null = null
+/** The tab being dragged (a desk of the project bar takes it). */
+export const draggedTab = () => dragged
+
+/** Items of the tab menu sending the tab to another desk, or to a new one. */
+function deskItems(pane: string, tab: string): MenuItem[] {
+  const send = (n: number) => void moveTabToDesk(pane, tab, n).catch((e) => toast((e as Error).message, 'warn'))
+  return [
+    { separator: true, label: '' },
+    ...desks.desks.filter((d) => d.n !== desk()).map((d) => ({ label: t('Move to desk {name}', { name: deskLabel(d) }), hint: shortcutOf(`desk.send.${d.n}`), action: () => send(d.n) })),
+    { label: t('Move to a new desk'), action: () => void addDesk().then(send) },
+  ]
+}
 
 function tabTitle(t: TabState) {
   if (t.kind === 'file') return basename(t.path ?? '')
@@ -140,6 +154,7 @@ function Pane(props: { id: string }) {
       { separator: true, label: '' },
       { label: t('Split right'), hint: shortcutOf('view.splitRight'), action: () => (activateTab(props.id, tab.id), splitPane(props.id, 'row')) },
       { label: t('Split down'), hint: shortcutOf('view.splitDown'), action: () => (activateTab(props.id, tab.id), splitPane(props.id, 'col')) },
+      ...(route().name === 'project' ? deskItems(props.id, tab.id) : []),
       ...(tab.kind === 'file'
         ? [
             { separator: true, label: '' },

@@ -403,7 +403,9 @@ type window struct {
 	ctx context.Context
 	// attached are the worktree projects of the window besides its own (under srv.mu).
 	attached map[string]bool
-	cancels  sync.Map
+	// desk is the desk of its project the window shows (under srv.mu): its session.
+	desk    int
+	cancels sync.Map
 	// streams holds the stop functions of the log streams of the window, by id.
 	streams sync.Map
 	// lang is the language of the window (messages are translated for it).

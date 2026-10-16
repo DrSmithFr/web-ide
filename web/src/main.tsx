@@ -40,8 +40,9 @@ function App() {
         <Match when={route().name === 'home'}>
           <Home />
         </Match>
-        <Match when={route().name === 'project' && route()} keyed>
-          {(r) => <ProjectPage id={(r as any).id} />}
+        {/* Keyed on the id only: switching desks keeps the page (and its buffers). */}
+        <Match when={route().name === 'project' && (route() as { id: string }).id} keyed>
+          {(id) => <ProjectPage id={id} />}
         </Match>
         <Match when={route().name === 'editor' && route()} keyed>
           {(r) => <DetachedEditor id={(r as any).id} />}

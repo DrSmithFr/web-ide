@@ -116,6 +116,10 @@ export const actions: ActionDef[] = [
   { id: 'menu.open', label: 'Open the menu bar', category: 'General', inTerminal: true },
   { id: 'console.new', label: 'New terminal', category: 'Consoles', inTerminal: true },
   { id: 'sql.execute', label: 'Run the active statement', category: 'Database' },
+  ...[1, 2, 3, 4, 5, 6, 7, 8, 9].flatMap((n) => [
+    { id: `desk.go.${n}`, label: 'Go to desk {n}', params: { n: String(n) }, category: 'Desks', inTerminal: true },
+    { id: `desk.send.${n}`, label: 'Send the tab to desk {n}', params: { n: String(n) }, category: 'Desks' },
+  ]),
 ]
 
 // Dynamic actions: built from data of the project (its saved commands), no default shortcut.
@@ -197,6 +201,8 @@ const comboIndex = createRoot(() =>
 export function comboFromEvent(e: KeyboardEvent): string | null {
   if (['ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight', 'AltGraph'].includes(e.code)) return null
   if (!e.code) return null
+  // AltGr typing a character (Ctrl+Alt on Windows: @ # { [ | of an AZERTY) is text, not a shortcut.
+  if (e.getModifierState?.('AltGraph') && e.key.length === 1) return null
   let s = ''
   if (e.ctrlKey) s += 'Ctrl+'
   if (e.altKey) s += 'Alt+'

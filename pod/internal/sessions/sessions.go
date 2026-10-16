@@ -1,5 +1,6 @@
 // Package sessions stores the active context of each project (open files, cursors,
-// consoles, split layout) in ~/.web-ide/sessions/<project>.json.
+// consoles, split layout) in ~/.web-ide/sessions/<project>.json. A project has desks
+// (desks.go): desk 1 is that file, desk N is <project>@N.json.
 package sessions
 
 import (
@@ -15,10 +16,11 @@ type Sessions struct {
 	st      *store.Store
 	data    map[string]json.RawMessage
 	pending map[string]*time.Timer
+	desks   map[string]*DeskList
 }
 
 func New(st *store.Store) *Sessions {
-	return &Sessions{st: st, data: map[string]json.RawMessage{}, pending: map[string]*time.Timer{}}
+	return &Sessions{st: st, data: map[string]json.RawMessage{}, pending: map[string]*time.Timer{}, desks: map[string]*DeskList{}}
 }
 
 func name(id string) string { return "sessions/" + id + ".json" }
@@ -56,7 +58,21 @@ func (s *Sessions) flush(id string) {
 	_ = s.st.WriteJSON(name(id), raw)
 }
 
+// Delete removes the session of a project and those of its desks.
 func (s *Sessions) Delete(id string) {
+	for _, d := range s.Desks(id).Desks {
+		if d.N != 1 {
+			s.drop(Key(id, d.N))
+		}
+	}
+	s.mu.Lock()
+	delete(s.desks, id)
+	s.mu.Unlock()
+	_ = s.st.Remove(desksName(id))
+	s.drop(id)
+}
+
+func (s *Sessions) drop(id string) {
 	s.mu.Lock()
 	delete(s.data, id)
 	if t, ok := s.pending[id]; ok {

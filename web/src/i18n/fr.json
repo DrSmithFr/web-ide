@@ -2044,5 +2044,20 @@
   "that pod does not answer: it may be older than this one": "ce pod ne répond pas : il est peut-être plus ancien que celui-ci",
   "the pod is not online at the relay": "le pod n'est pas en ligne sur le relais",
   "this request was already run": "cette demande a déjà été exécutée",
-  "the request is too old": "la requête est trop ancienne"
+  "the request is too old": "la requête est trop ancienne",
+  "Go to desk {n}": "Aller au bureau {n}",
+  "Send the tab to desk {n}": "Envoyer l'onglet au bureau {n}",
+  "Desks": "Bureaux",
+  "This desk was removed: back to desk 1": "Ce bureau a été supprimé : retour au bureau 1",
+  "Move to desk {name}": "Déplacer vers le bureau {name}",
+  "Move to a new desk": "Déplacer vers un nouveau bureau",
+  "Open in a new tab": "Ouvrir dans un nouvel onglet",
+  "Rename the desk": "Renommer le bureau",
+  "Name of desk {n}": "Nom du bureau {n}",
+  "Remove the desk": "Supprimer le bureau",
+  "Desk 1 stays": "Le bureau 1 reste",
+  "Remove the desk {name}? Its tabs close, the files stay open on the other desks.": "Supprimer le bureau {name} ? Ses onglets se ferment, les fichiers restent ouverts sur les autres bureaux.",
+  "Desk {n}: {name}": "Bureau {n} : {name}",
+  "Desk {n}": "Bureau {n}",
+  "New desk": "Nouveau bureau"
 }

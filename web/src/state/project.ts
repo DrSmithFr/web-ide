@@ -13,6 +13,7 @@ import { t, tn } from '../i18n'
 import { normalizePlacement, type Zone } from './zones'
 import { deviceId, layoutFor } from './device'
 import { settings } from './settings'
+import { closeDesks, desk, loadDesks, showDesk, touchRecent, type DeskList } from './desks'
 
 export type TabKind = 'file' | 'sql' | 'table' | 'text' | 'diff' | 'kanban' | 'ticket'
 
@@ -54,8 +55,6 @@ export interface SessionData {
   tabs: Record<string, TabState>
   activePane: string
   cursors: Record<string, Cursor>
-  /** Files last shown, the most recent first (Recent Files). */
-  recent: string[]
   left: { panel: string | null; width: number }
   right: { panel: string | null; width: number }
   /** Tools of each zone of the icon rails (state/zones). */
@@ -111,7 +110,6 @@ function emptySession(): SessionData {
     tabs: {},
     activePane: leaf,
     cursors: {},
-    recent: [],
     left: { panel: 'explorer', width: 260 },
     right: { panel: null, width: 300 },
     bottom: { left: null, right: null, height: 240, split: 0.5, active: null, order: [], problemsTab: 'problems' },
@@ -193,10 +191,10 @@ export function setSize(part: keyof PanelSizes, value: number) {
   })
 }
 
-on('session.changed', (data: SessionData, from?: string) => {
-  if (!data || !project() || (from && from !== home()?.id)) return
+on('session.changed', (e: { session: SessionData; desk: number }, from?: string) => {
+  if (!e?.session || !project() || (from && from !== home()?.id) || e.desk !== desk()) return
   applyingRemote = true
-  setSession(reconcile(normalize(data)))
+  setSession(reconcile(normalize(e.session)))
   applyingRemote = false
   syncDocsWithTabs()
 })
@@ -211,7 +209,8 @@ function normalize(raw: any): SessionData {
   }
   if (s.right.panel && panelAliases[s.right.panel]) s.right.panel = panelAliases[s.right.panel]
   s.placement = normalizePlacement(raw.placement)
-  if (!Array.isArray(s.recent)) s.recent = []
+  // The Recent Files moved to the desk list (state/desks.ts), shared by the desks.
+  delete (s as any).recent
   if (!Array.isArray(s.attached)) s.attached = []
   // Former bottom panel: consoles, problems and output in one strip.
   if (raw.bottom && 'open' in raw.bottom) {
@@ -470,7 +469,7 @@ export function projectOfPath(path: string): string | undefined {
 // except those of the window itself (its session, its database connections) and of the
 // repository (worktrees).
 const byPath = /^(fs|git|lsp|buffer|folders)\./
-const ownMethods = /^(session|project|worktrees|db)\./
+const ownMethods = /^(session|project|worktrees|db|desks?)\./
 function pathOf(params: any): string | undefined {
   const p = params?.path ?? params?.params?.textDocument?.uri
   if (typeof p !== 'string') return undefined
@@ -756,22 +755,6 @@ on('lsp.diagnostics', (e: { params: { uri: string; diagnostics: LspDiagnostic[] 
 
 // ---------- recent files ----------
 
-const maxRecent = 50
-
-/** Puts a file at the top of the recent files. */
-function touchRecent(path: string) {
-  if (session.recent[0] === path) return
-  mutate((s) => {
-    s.recent = [path, ...s.recent.filter((p) => p !== path)].slice(0, maxRecent)
-  })
-}
-
-export function forgetRecent(path: string) {
-  mutate((s) => {
-    s.recent = s.recent.filter((p) => p !== path)
-  })
-}
-
 createRoot(() =>
   createEffect(
     track(
@@ -898,8 +881,9 @@ export function navigate(dir: -1 | 1) {
 
 // ---------- project lifecycle ----------
 
-export async function openProject(id: string, creds?: { password?: string; passphrase?: string }) {
-  const r = await request('project.open', { id, creds })
+export async function openProject(id: string, creds?: { password?: string; passphrase?: string }, desk = 1) {
+  const r = await request('project.open', { id, creds, desk })
+  loadDesks(id, r.desks as DeskList, r.desk ?? 1)
   batch(() => {
     setHome(r.project)
     setAttached(reconcile({ [id]: { project: r.project, root: r.root, local: r.local } }))
@@ -922,7 +906,55 @@ async function reattach() {
   if (gone.length) mutate((s) => (s.attached = s.attached.filter((x) => !gone.includes(x))))
   const w = session.worktree
   if (w && attached[w]) await showWorktree(w)
-  else if (w) mutate((s) => (s.worktree = undefined))
+  else {
+    if (w) mutate((s) => (s.worktree = undefined))
+    if (project()?.id !== home()?.id) await showWorktree(home()!.id)
+  }
+}
+
+/** Sends the session now if a change waits (before the window leaves its desk). */
+async function flushSession() {
+  if (pushTimer === undefined) return
+  clearTimeout(pushTimer)
+  pushTimer = undefined
+  await request('session.update', { session: unwrap(session) })
+}
+
+/** Shows another desk of the project in the window: its session replaces this one, the open documents stay. */
+export async function switchDesk(n: number) {
+  if (!home() || n === desk()) return
+  await flushSession()
+  const r = await request('desk.switch', { desk: n })
+  batch(() => {
+    showDesk(r.desk)
+    applyingRemote = true
+    setSession(reconcile(normalize(r.session)))
+    applyingRemote = false
+  })
+  await reattach()
+  syncDocsWithTabs()
+}
+
+/** Sends a tab to another desk: it opens there in the active pane and closes here. */
+export async function moveTabToDesk(paneId: string, tabId: string, n: number) {
+  const tab = session.tabs[tabId]
+  if (!tab || n === desk()) return
+  const target = normalize(await request('session.get', { desk: n }))
+  const pane = findLeaf(target.layout, target.activePane) ?? firstLeaf(target.layout)
+  const same = Object.values(target.tabs).find((x) => x.kind === tab.kind && x.path && x.path === tab.path && !x.staged && !x.head && !x.rev && !tab.staged && !tab.head && !tab.rev)
+  if (same) {
+    const l = leaves(target.layout).find((x) => x.tabs.includes(same.id))!
+    l.active = same.id
+    target.activePane = l.id
+  } else {
+    target.tabs[tabId] = structuredClone(unwrap(tab))
+    if (session.sqlText[tabId] !== undefined) target.sqlText[tabId] = session.sqlText[tabId]
+    if (tab.path && session.cursors[tab.path]) target.cursors[tab.path] = structuredClone(unwrap(session.cursors[tab.path]))
+    pane.tabs.push(tabId)
+    pane.active = tabId
+  }
+  await request('session.put', { desk: n, session: target })
+  closeTab(paneId, tabId, true)
 }
 
 /** After a reconnection: reopen the project and catch up with changes made meanwhile. */
@@ -930,7 +962,7 @@ export async function reopenProject() {
   const p = home()
   if (!p) return
   try {
-    await request('project.open', { id: p.id })
+    await request('project.open', { id: p.id, desk: desk() })
     for (const w of Object.keys(attached)) if (w !== p.id) await request('project.attach', { id: w }).catch(() => dropWorktree(w))
   } catch {
     return
@@ -954,6 +986,7 @@ export function closeProject() {
   setProject(null)
   setRoot('')
   setSession(reconcile(emptySession()))
+  closeDesks()
 }
 
 /** Virtual (non file) tab: DDL, index definition, LSP hover. */

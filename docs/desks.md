@@ -39,8 +39,10 @@ Each desk picks its mode. The Full mode keeps the rails and tool zones; the two 
 
 ## User desks
 
+Done in #81 (see [spec.md](spec.md#9-session-and-persistence)):
+
 - Numbered `1 2 3 +` in the project bar; a desk may get a name.
-- The URL carries the desk: `/project/:id/desk/2`. A click switches the window; a middle click opens it in a new tab (a plain `<a href>`). Two windows on the same desk mirror each other, as today.
+- The URL carries the desk: `/project/:id/desk/2`, `/project/:id` being desk 1. A click switches the window; a middle click opens it in a new tab (a plain `<a href>`). Two windows on the same desk mirror each other, as today. The home page opens the last desk of the device.
 - `Ctrl+Alt+1…9` goes to desk N, `Ctrl+Alt+Shift+N` sends the active tab or tile there (Super is not caught by a browser). A tab dragged on a desk number moves there; the tab menu has *Move to desk N*.
 - Maybe: *Open on screen 2* through the Window Management API (`getScreenDetails`, Chromium), full screen on the chosen screen.
 
@@ -111,7 +113,5 @@ The binding of an agent to its desk holds for the tools of the IDE only: Claude 
 
 1. **The Orchestrator**: its own desk, or the conversation shown on a desk of the user?
 2. **Docker for agents**: the socket is root in all but name, so an agent with Docker escapes any confinement. None, or through a proxy of the socket limited to the Compose project of its worktree?
-3. **Desk per device**: which desk a window opens by default, the last one of this device?
-4. **Desks in the session file**: one file per desk, or one file per project holding the desks?
-5. **Waiting agents**: a badge on the desk in the switcher and a push notification when an agent desk waits for an answer?
-6. **Ports of the user**: the reserved ports answer for the agents; should the consoles of user desks take reserved ports too, and how they meet the [services](relay.md) shared between pods.
+3. **Waiting agents**: a badge on the desk in the switcher and a push notification when an agent desk waits for an answer?
+4. **Ports of the user**: the reserved ports answer for the agents; should the consoles of user desks take reserved ports too, and how they meet the [services](relay.md) shared between pods.

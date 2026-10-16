@@ -123,6 +123,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .mb-ticket { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
 .mb-branch.wt { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); background: color-mix(in srgb, var(--warn) 10%, transparent); color: var(--fg); max-width: 420px; }
 .mb-branch.wt:hover { border-color: var(--warn); }
+.mb-desks { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+.mb-desk { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 6px; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--fg-muted); font-size: 12px; text-decoration: none; cursor: pointer; white-space: nowrap; max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+.mb-desk:hover { color: var(--fg); border-color: var(--line); }
+.mb-desk.active { color: var(--fg); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); font-weight: 600; }
+.mb-desk.over { border-style: dashed; border-color: var(--accent); }
+.mb-desk.add { font-size: 14px; }
 .pod-status { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--fg-muted); font-variant-numeric: tabular-nums; }
 .pod-status .rate { min-width: 58px; text-align: right; }
 .workbench { display: flex; flex: 1; min-height: 0; }

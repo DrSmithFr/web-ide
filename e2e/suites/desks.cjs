@@ -1,0 +1,105 @@
+// Desks (docs/desks.md): each desk of a project has its own layout; the URL names the desk; two
+// windows on two desks do not touch each other, two on the same desk mirror; a tab moves to
+// another desk; desks are renamed and removed; the home page opens the last desk of the device.
+const { run, openProject, open, assert, OUT } = require('../common.cjs')
+
+const tabs = (p) => p.$$eval('.pane .tab .tab-title', (e) => e.map((x) => x.textContent.trim()))
+const path = (p) => new URL(p.url()).pathname
+
+run(async ({ ctx, page }) => {
+  page.on('dialog', (d) => d.accept())
+  await openProject(page)
+  await open(page, 'main.go')
+  await open(page, 'notes.txt')
+  const base = path(page)
+  assert(!base.includes('/desk/'), 'desk 1 is the project path: ' + base)
+  assert((await page.getAttribute('[data-testid=desk-1]', 'href')).endsWith(base), 'desk 1 is a link to the project path')
+  assert((await page.getAttribute('[data-testid=desk-1]', 'aria-current')) === 'page', 'desk 1 is marked as shown')
+
+  // A new desk: empty layout, its own URL; the page is not reloaded.
+  await page.evaluate(() => (window.__kept = true))
+  await page.click('[data-testid=desk-add]')
+  await page.waitForFunction(() => location.pathname.endsWith('/desk/2'))
+  await page.waitForFunction(() => !document.querySelector('.pane .tab'))
+  assert((await tabs(page)).length === 0, 'desk 2 starts with no tab')
+  assert(await page.evaluate(() => window.__kept === true), 'switching desks does not reload the page')
+  await open(page, 'app.php')
+  await page.screenshot({ path: OUT + '/desks-2.png' })
+
+  // A second window on desk 1: its own layout, untouched by desk 2.
+  const other = await ctx.newPage()
+  other.on('dialog', (d) => d.accept())
+  await other.goto(new URL(base, page.url()).href)
+  await other.waitForSelector('.menubar')
+  await other.waitForFunction(() => document.querySelectorAll('.pane .tab').length === 2)
+  let t1 = await tabs(other)
+  assert(t1.includes('main.go') && t1.includes('notes.txt') && !t1.includes('app.php'), 'desk 1 keeps its tabs: ' + t1)
+  await open(other, 'go.mod')
+  await page.waitForTimeout(800)
+  assert(JSON.stringify(await tabs(page)) === JSON.stringify(['app.php']), 'a window on desk 2 is not touched by desk 1')
+
+  // Back to desk 1 by its link: the change of the other window is there; the history goes back.
+  await page.click('[data-testid=desk-1]')
+  await page.waitForFunction(() => document.querySelectorAll('.pane .tab').length === 3)
+  assert(path(page) === base, 'the link of desk 1 switches the window')
+  await page.goBack()
+  await page.waitForFunction(() => location.pathname.endsWith('/desk/2') && document.querySelectorAll('.pane .tab').length === 1)
+  assert(true, 'back in the history returns to desk 2')
+
+  // Two windows on the same desk mirror each other.
+  await page.click('[data-testid=desk-1]')
+  await page.waitForFunction(() => document.querySelectorAll('.pane .tab').length === 3)
+  await other.hover('.pane .tab:has-text("go.mod")')
+  await other.click('.pane .tab:has-text("go.mod") .tab-close')
+  await other.waitForFunction(() => document.querySelectorAll('.pane .tab').length === 2, null, { timeout: 5000 }).catch(() => {})
+  await page.waitForFunction(() => document.querySelectorAll('.pane .tab').length === 2, null, { timeout: 5000 }).catch(() => {})
+  assert((await tabs(page)).length === 2, 'two windows on desk 1 mirror a closed tab: ' + (await tabs(page)))
+
+  // A middle click opens the desk in a new tab.
+  const [popup] = await Promise.all([ctx.waitForEvent('page'), page.click('[data-testid=desk-2]', { button: 'middle' })])
+  await popup.waitForSelector('.menubar')
+  await popup.waitForFunction(() => document.querySelectorAll('.pane .tab').length === 1)
+  assert(path(popup).endsWith('/desk/2') && (await tabs(popup))[0] === 'app.php', 'middle click opens desk 2 in a new tab')
+  await popup.close()
+
+  // Ctrl+Alt+2 goes to desk 2.
+  await page.click('.pane .ed-content')
+  await page.keyboard.press('Control+Alt+Digit2')
+  await page.waitForFunction(() => location.pathname.endsWith('/desk/2') && document.querySelectorAll('.pane .tab').length === 1, null, { timeout: 5000 }).catch(() => {})
+  assert((await tabs(page))[0] === 'app.php', 'Ctrl+Alt+2 shows desk 2: ' + path(page) + ' ' + (await tabs(page)))
+
+  // The tab menu sends a tab to desk 1: it leaves here and shows there at once.
+  await page.click('.pane .tab:has-text("app.php")', { button: 'right' })
+  await page.click('.ctx-menu >> text=Move to desk 1')
+  await page.waitForFunction(() => !document.querySelector('.pane .tab'))
+  await other.waitForFunction(() => [...document.querySelectorAll('.pane .tab')].some((t) => t.textContent.includes('app.php')), null, { timeout: 5000 }).catch(() => {})
+  assert((await tabs(other)).includes('app.php'), 'the tab moved to desk 1 shows in its window: ' + (await tabs(other)))
+
+  // A desk keeps its layout after a reload; the home page opens the last desk of the device.
+  await open(page, 'notes.txt')
+  await page.waitForTimeout(800)
+  await page.reload()
+  await page.waitForSelector('.menubar')
+  await page.waitForFunction(() => document.querySelectorAll('.pane .tab').length === 1)
+  assert(path(page).endsWith('/desk/2') && (await tabs(page))[0] === 'notes.txt', 'desk 2 restored after a reload')
+  const home = await ctx.newPage()
+  await home.goto(new URL('/', page.url()).href)
+  await home.waitForSelector('.project-open:has-text("demo")')
+  assert((await home.getAttribute('.project-open:has-text("demo")', 'href')).endsWith('/desk/2'), 'the home page links to the last desk of the device')
+  await home.close()
+
+  // Rename desk 2 from the other window: every window shows the name.
+  await other.click('[data-testid=desk-2]', { button: 'right' })
+  await other.click('.ctx-menu >> text=Rename…')
+  await other.fill('.modal input', 'Review')
+  await other.keyboard.press('Enter')
+  await page.waitForFunction(() => document.querySelector('[data-testid=desk-2]')?.textContent.trim() === 'Review')
+  assert(true, 'a renamed desk shows its name in every window')
+
+  // Remove desk 2 from desk 1: the window on it goes back to desk 1.
+  await other.click('[data-testid=desk-2]', { button: 'right' })
+  await other.click('.ctx-menu >> text=Remove the desk')
+  await page.waitForFunction(() => !location.pathname.includes('/desk/'), null, { timeout: 5000 })
+  assert(!(await page.$('[data-testid=desk-2]')), 'a removed desk leaves the switcher and its window goes to desk 1')
+  await page.screenshot({ path: OUT + '/desks-removed.png' })
+})

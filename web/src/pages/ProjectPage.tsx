@@ -1,12 +1,14 @@
 // Main window of a project: menu bar, icon rails, side panels, editor area, bottom tools.
 import { podPath } from '../app/base'
-import { createEffect, createSignal, For, type JSX, onCleanup, onMount, Show } from 'solid-js'
+import { createEffect, createSignal, For, type JSX, on as track, onCleanup, onMount, Show } from 'solid-js'
 import { Dynamic } from 'solid-js/web'
 import { RpcError, formatRate, on as onPod, podRates, podState } from '../pod/rpc'
 import {
   activeLeaf, activeTab, closeTab, conflictedDocs, cycleTab, docsVersion, home, mutate, navigate as navHistory, openProject, project, relPath, reopenProject, root,
-  openFile, saveAll, session, setConflictOpener, setSize, sizesFor, splitPane, closeProject,
+  openFile, saveAll, session, setConflictOpener, setSize, sizesFor, splitPane, closeProject, moveTabToDesk, switchDesk,
 } from '../state/project'
+import { desk, desks, onDeskGone } from '../state/desks'
+import { deskPath, navigate, route } from '../app/router'
 import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, toggleTool, toolsIn, zoneOf, zones, type Zone } from '../state/zones'
 import { focusEditor, focusPart, setFocusPart, trackFocus } from '../state/focus'
 import { focusEditorQuietly, isTyping, lockEditor, mobileView, phone, revealCaret, setMobileView } from '../state/mobile'
@@ -69,11 +71,11 @@ export const toolPanels: Record<string, { label: string; icon: string; component
 }
 
 /** Opens a project, asking for the SSH password / passphrase when the pod needs one. */
-export async function openWithAuth(id: string) {
+export async function openWithAuth(id: string, desk = 1) {
   let creds: { password?: string; passphrase?: string } | undefined
   for (;;) {
     try {
-      const r = await openProject(id, creds)
+      const r = await openProject(id, creds, desk)
       setConsoleList(r.consoles)
       refreshConnections()
       offerIdeUntrack(r.ideTracked)
@@ -571,9 +573,14 @@ export function ProjectPage(props: { id: string }) {
   const [error, setError] = createSignal('')
   const [ready, setReady] = createSignal(false)
 
+  // The desk of the URL (the home page links to the desk last shown on this device).
+  const urlDesk = () => {
+    const r = route()
+    return r.name === 'project' ? (r.desk ?? 1) : 1
+  }
   onMount(async () => {
     try {
-      await openWithAuth(props.id)
+      await openWithAuth(props.id, urlDesk())
       // Opened from a ticket to run its conversation: show the assistant.
       if (new URLSearchParams(location.search).has('assistant')) {
         mutate((s) => (s.right.panel = 'assistant'))
@@ -606,6 +613,8 @@ export function ProjectPage(props: { id: string }) {
         const [, path, line] = /^(.*?)(?::(\d+))?$/.exec(open)!
         void openFile(Number(line) > 0 ? { path, line: Number(line) - 1 } : path)
       }
+      // The URL names the desk shown (a removed desk of an old link opened desk 1).
+      if (urlDesk() !== desk()) navigate(deskPath(props.id, desk()), true)
       setReady(true)
       refreshGit(0)
       void loadCommands() // their shortcuts and Search Everywhere entries
@@ -615,6 +624,29 @@ export function ProjectPage(props: { id: string }) {
     }
   })
   useProjectActions()
+  // The URL is the desk shown: a desk link, the history or a shortcut switches the window.
+  createEffect(
+    track(urlDesk, (n) => {
+      if (!ready() || n === desk()) return
+      switchDesk(n).catch((e) => {
+        toast((e as Error).message, 'warn')
+        navigate(deskPath(props.id, desk()), true)
+      })
+    }),
+  )
+  onDeskGone(() => {
+    toast(t('This desk was removed: back to desk 1'), 'warn')
+    navigate(deskPath(props.id, 1), true)
+  })
+  const goDesk = (n: number) => {
+    if (!desks.desks.some((d) => d.n === n)) return false
+    navigate(deskPath(props.id, n))
+  }
+  const sendToDesk = (n: number) => {
+    const l = activeLeaf()
+    if (!l?.active || n === desk() || !desks.desks.some((d) => d.n === n)) return false
+    void moveTabToDesk(l.id, l.active, n).catch((e) => toast((e as Error).message, 'warn'))
+  }
   // A closed zone gives the focus back to the editor.
   createEffect(() => {
     const part = focusPart()
@@ -629,6 +661,7 @@ export function ProjectPage(props: { id: string }) {
     registerAction('view.focusDim', () => updateSettings((s) => (s.focusDim = !s.focusDim), 'Dim out of focus')),
     registerAction('view.whitespace', () => updateSettings((s) => (s.editor.showWhitespace = !s.editor.showWhitespace), 'Whitespace')),
     registerAction('console.new', () => void newConsole()),
+    ...[1, 2, 3, 4, 5, 6, 7, 8, 9].flatMap((n) => [registerAction(`desk.go.${n}`, () => goDesk(n)), registerAction(`desk.send.${n}`, () => sendToDesk(n))]),
     registerAction('view.toggleBottom', () => mutate((s) => toggleTool(s, 'console'))),
     ...Object.keys(toolPanels).map((id) => registerAction(`tool.${id}`, () => toggleToolFocus(id))),
     registerAction('search.global', () => {
