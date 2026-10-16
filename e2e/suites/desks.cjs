@@ -1,7 +1,8 @@
 // Desks (docs/desks.md): each desk of a project has its own layout; the URL names the desk; two
 // windows on two desks do not touch each other, two on the same desk mirror; a tab moves to
 // another desk; desks are renamed and removed; the home page opens the last desk of the device.
-// A desk in Grid mode is a tree of tiles (files, tools, consoles) driven by the keyboard.
+// A desk in Grid mode is a tree of tiles (files, tools, consoles) driven by the keyboard; in
+// Scroll mode its columns go side by side in a strip, 1 to 3 in sight.
 const { run, openProject, open, assert, OUT } = require('../common.cjs')
 
 const tabs = (p) => p.$$eval('.pane .tab .tab-title', (e) => e.map((x) => x.textContent.trim()))
@@ -224,4 +225,108 @@ run(async ({ ctx, page }) => {
   await page.waitForSelector('.zone[data-tool=git] .panel')
   assert((await page.$$('[data-tool=git] .panel')).length === 2, 'a tool shows in its zone and as a tab at the same time')
   await page.screenshot({ path: OUT + '/desks-tool-twice.png' })
+
+  // ---- Scroll mode: columns side by side, 3 in sight on a desktop, 2 on a tablet.
+  await page.click('[data-testid=desk-add]')
+  await page.waitForFunction((d) => /\/desk\/\d+$/.test(location.pathname) && !location.pathname.endsWith('/' + d), gridDesk)
+  const scrollDesk = path(page).split('/').pop()
+  await page.click(`[data-testid=desk-${scrollDesk}]`, { button: 'right' })
+  await page.click('.ctx-menu >> text=Scrolling columns')
+  await page.waitForSelector('[data-testid=scroll-strip]')
+  assert(!(await page.$('.rail-left')), 'a Scroll desk has no rails')
+  const cols = () => page.$$eval('.scroll-col', (l) => l.length)
+  const strip = () => page.$eval('[data-testid=scroll-strip]', (s) => ({ left: s.scrollLeft, width: s.clientWidth }))
+  const colOf = () => page.evaluate(() => {
+    const c = document.querySelector('.pane.active')?.closest('.scroll-col')
+    return c ? { i: [...c.parentElement.children].indexOf(c), width: c.getBoundingClientRect().width, left: c.getBoundingClientRect().left, right: c.getBoundingClientRect().right } : null
+  })
+  const inSight = () => page.evaluate(() => {
+    const s = document.querySelector('[data-testid=scroll-strip]').getBoundingClientRect()
+    const c = document.querySelector('.pane.active')?.closest('.scroll-col')?.getBoundingClientRect()
+    return !!c && c.left >= s.left - 2 && c.right <= s.right + 2
+  })
+  await launch('Git')
+  await page.waitForSelector('.scroll-col [data-tool=git] .panel')
+  await launch('New terminal')
+  await page.waitForFunction(() => document.querySelectorAll('.scroll-col .tile-console').length === 1)
+  await launch('New terminal')
+  await page.waitForFunction(() => document.querySelectorAll('.scroll-col .tile-console').length === 2)
+  const third = (await strip()).width / 3
+  const c3 = await colOf()
+  assert((await cols()) === 3 && Math.abs(c3.width - third) < 2 && (await strip()).left === 0, `three tiles make three columns, each a third of the view, all in sight (${c3.width} of ${(await strip()).width}, scrolled ${(await strip()).left})`)
+  await launch('New terminal')
+  await page.waitForFunction(() => document.querySelectorAll('.scroll-col').length === 4)
+  await page.waitForFunction(() => document.querySelector('[data-testid=scroll-strip]').scrollLeft > 0)
+  await page.waitForTimeout(400) // smooth scroll
+  assert((await colOf()).i === 3 && (await inSight()), 'a fourth tile opens a column on the right and scrolls it into view')
+  await page.waitForFunction(() => document.activeElement?.classList.contains('xterm-helper-textarea') && document.querySelector('.pane.active')?.contains(document.activeElement), null, { timeout: 3000 }).catch(() => {})
+  assert(await page.evaluate(() => document.activeElement?.classList.contains('xterm-helper-textarea')), 'the new terminal has the keyboard, not the buttons of its corner')
+  assert(await page.isVisible('[data-testid=scroll-overview] .scroll-sight'), 'the overview strip shows when the columns overflow')
+  await page.screenshot({ path: OUT + '/desks-scroll.png' })
+
+  // Tablet width: two columns in sight, live.
+  await page.setViewportSize({ width: 1000, height: 800 })
+  await page.waitForFunction(() => {
+    const s = document.querySelector('[data-testid=scroll-strip]')
+    return Math.abs(s.querySelector('.scroll-col').getBoundingClientRect().width - s.clientWidth / 2) < 2
+  })
+  assert(true, 'at 1000 px two columns are in sight')
+
+  // The keyboard focus moves the view back to the first column.
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Control+Alt+Shift+ArrowLeft')
+  await page.waitForFunction(() => document.querySelector('.pane.active [data-tool=git]'))
+  await page.waitForFunction(() => document.querySelector('[data-testid=scroll-strip]').scrollLeft === 0)
+  assert((await colOf()).i === 0, 'focusing the column on the left scrolls it into view')
+
+  // Width cycle: a half of the view, then two thirds.
+  await page.keyboard.press('Control+Alt+Shift+KeyF')
+  await page.waitForFunction(() => {
+    const s = document.querySelector('[data-testid=scroll-strip]')
+    return Math.abs(document.querySelector('.pane.active').closest('.scroll-col').getBoundingClientRect().width - (s.clientWidth * 2) / 3) < 2
+  })
+  assert(true, 'Ctrl+Alt+Shift+F gives the column the next width (2/3 of the view)')
+
+  // Move the column right, stack its tile in the column on the left, take it out again.
+  await page.keyboard.press('Control+Alt+Shift+PageDown')
+  await page.waitForFunction(() => {
+    const c = document.querySelector('.pane.active [data-tool=git]')?.closest('.scroll-col')
+    return c && [...c.parentElement.children].indexOf(c) === 1
+  })
+  assert(true, 'Ctrl+Alt+Shift+PageDown moves the column right')
+  await page.keyboard.press('Control+Alt+Shift+KeyS')
+  await page.waitForFunction(() => document.querySelectorAll('.scroll-col').length === 3 && document.querySelectorAll('.pane').length === 4)
+  assert((await colOf()).i === 0 && (await page.$$eval('.scroll-col:first-child .pane', (l) => l.length)) === 2, 'Ctrl+Alt+Shift+S stacks the tile under the column on its left')
+  await page.keyboard.press('Control+Alt+Shift+KeyU')
+  await page.waitForFunction(() => document.querySelectorAll('.scroll-col').length === 4)
+  assert((await colOf()).i === 1 && (await activeTool()) === 'git', 'Ctrl+Alt+Shift+U takes it out to a column of its own')
+
+  // A mark of the overview focuses its column.
+  await page.click('[data-testid=scroll-overview] .scroll-mark:nth-child(4)')
+  await page.waitForFunction(() => document.querySelector('.scroll-mark:nth-child(4)').classList.contains('active'))
+  await page.waitForTimeout(400)
+  assert((await colOf()).i === 3 && (await inSight()), 'a mark of the overview brings its column into view')
+
+  // Dragging the right edge of a column widens it.
+  const w2 = (await colOf()).width
+  const h = await page.$eval('.scroll-col:nth-child(4) > .scroll-handle', (e) => { const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })
+  await page.mouse.move(h.x, h.y)
+  await page.mouse.down()
+  await page.mouse.move(h.x - 120, h.y, { steps: 4 })
+  await page.mouse.move(h.x + 100, h.y, { steps: 4 })
+  await page.mouse.up()
+  assert(Math.abs((await colOf()).width - w2 - 100) < 3, `dragging the edge of a column changes its width (${w2} → ${(await colOf()).width})`)
+
+  // Saved with the desk; Grid and back keeps every tile.
+  await page.waitForTimeout(800)
+  await page.reload()
+  await page.waitForSelector('[data-testid=scroll-strip] .tile-console .xterm')
+  assert((await cols()) === 4, 'the Scroll desk and its columns are restored after a reload')
+  await page.click(`[data-testid=desk-${scrollDesk}]`, { button: 'right' })
+  await page.click('.ctx-menu >> text=Grid of tiles')
+  await page.waitForSelector('.workbench.grid-desk .split')
+  assert(!(await page.$('[data-testid=scroll-strip]')) && (await panes()) === 4, 'switching to Grid keeps the four tiles')
+  await page.click(`[data-testid=desk-${scrollDesk}]`, { button: 'right' })
+  await page.click('.ctx-menu >> text=Scrolling columns')
+  await page.waitForSelector('[data-testid=scroll-strip]')
+  assert((await cols()) === 4, 'and back to Scroll gives the same columns')
 })

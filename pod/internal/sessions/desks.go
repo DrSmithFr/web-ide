@@ -11,7 +11,7 @@ import (
 type Desk struct {
 	N    int    `json:"n"`
 	Name string `json:"name,omitempty"`
-	// Mode is the layout mode: full (rails and tool zones) or grid (tiles only).
+	// Mode is the layout mode: full (rails and tool zones), grid or scroll (tiles only).
 	Mode string `json:"mode,omitempty"`
 }
 
@@ -105,7 +105,7 @@ func normalize(d DeskList) DeskList {
 		out.Desks = append(out.Desks, x)
 	}
 	for i := range out.Desks {
-		if m := out.Desks[i].Mode; m != "full" && m != "grid" {
+		if m := out.Desks[i].Mode; m != "full" && m != "grid" && m != "scroll" {
 			out.Desks[i].Mode = "full"
 		}
 	}

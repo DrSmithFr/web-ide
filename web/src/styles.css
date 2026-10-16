@@ -134,6 +134,18 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .pane.next-row::before, .pane.next-col::before { content: ''; position: absolute; z-index: 21; pointer-events: none; background: var(--accent); opacity: 0.8; }
 .pane.next-row::before { top: 0; bottom: 0; right: 0; width: 3px; }
 .pane.next-col::before { left: 0; right: 0; bottom: 0; height: 3px; }
+/* Scroll mode (ui/ScrollArea.tsx): columns wider than the window, a strip of marks under them. */
+.scroll-desk { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.scroll-strip { flex: 1; display: flex; position: relative; min-height: 0; overflow-x: auto; overflow-y: hidden; container-type: inline-size; scroll-snap-type: x proximity; scrollbar-width: none; }
+.scroll-strip::-webkit-scrollbar { display: none; }
+.scroll-col { flex: none; display: flex; position: relative; min-height: 0; box-sizing: border-box; border-right: 1px solid var(--line); scroll-snap-align: start; }
+.scroll-handle { position: absolute; top: 0; bottom: 0; right: -3px; width: 6px; z-index: 22; cursor: col-resize; }
+.scroll-col:last-child > .scroll-handle { right: 0; width: 4px; }
+.scroll-handle:hover { background: var(--accent); }
+.scroll-overview { flex: none; display: flex; position: relative; height: 8px; padding: 1px 0; gap: 2px; background: var(--bg-2); border-top: 1px solid var(--line); }
+.scroll-mark { flex: none; height: 100%; padding: 0; border: 0; border-radius: 2px; background: var(--bg-3); cursor: pointer; }
+.scroll-mark.active { background: var(--accent); opacity: 0.7; }
+.scroll-sight { position: absolute; top: 0; bottom: 0; border: 1px solid var(--fg-muted); border-radius: 3px; pointer-events: none; transition: left 0.1s; }
 .pane.resizing { outline: 2px dashed var(--accent); outline-offset: -2px; }
 .pod-status { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--fg-muted); font-variant-numeric: tabular-nums; }
 .pod-status .rate { min-width: 58px; text-align: right; }

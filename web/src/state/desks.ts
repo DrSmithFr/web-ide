@@ -9,8 +9,8 @@ import { notify, on, request } from '../pod/rpc'
 export interface Desk {
   n: number
   name?: string
-  /** Full: rails and tool zones; Grid: tiles only (state/tiles.ts). */
-  mode: 'full' | 'grid'
+  /** Full: rails and tool zones; Grid and Scroll: tiles only (state/tiles.ts). */
+  mode: 'full' | 'grid' | 'scroll'
 }
 
 export interface DeskList {

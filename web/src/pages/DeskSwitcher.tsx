@@ -5,7 +5,7 @@ import { podPath } from '../app/base'
 import { deskPath, navigate } from '../app/router'
 import { home, moveTabToDesk, switchDesk } from '../state/project'
 import { addDesk, desk, deskLabel, desks, removeDesk, renameDesk, setDeskMode, type Desk } from '../state/desks'
-import { gridMode, nextSplit, resizing, toggleSplit } from '../state/tiles'
+import { tileMode, nextSplit, resizing, toggleSplit } from '../state/tiles'
 import { tileLauncher } from '../ui/tileLauncher'
 import { Icon } from '../ui/icons'
 import { draggedTab } from '../ui/EditorArea'
@@ -35,6 +35,7 @@ export function DeskSwitcher() {
       { separator: true, label: '' },
       { label: t('Full layout'), title: t('Rails and tool zones'), checked: d.mode !== 'grid', action: () => setDeskMode(d.n, 'full') },
       { label: t('Grid of tiles'), title: t('Tiles only, like i3'), checked: d.mode === 'grid', action: () => setDeskMode(d.n, 'grid') },
+      { label: t('Scrolling columns'), title: t('Columns of tiles side by side, like niri'), checked: d.mode === 'scroll', action: () => setDeskMode(d.n, 'scroll') },
       { separator: true, label: '' },
       { label: t('Remove the desk'), disabled: d.n === 1, title: d.n === 1 ? t('Desk 1 stays') : undefined, danger: true, action: () => remove(d) },
     ])
@@ -89,7 +90,7 @@ export function DeskSwitcher() {
       <button class="mb-desk add" title={t('New desk')} onClick={add} data-testid="desk-add">
         +
       </button>
-      <Show when={gridMode()}>
+      <Show when={tileMode()}>
         <button
           class="mb-desk tile-add"
           title={[t('Open in a new tile…'), shortcutOf('tile.launcher')].filter(Boolean).join(' · ')}

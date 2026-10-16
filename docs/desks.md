@@ -26,7 +26,7 @@ Project (or worktree)
 
 ## Layout modes
 
-Full and Grid are done in #82 (see [spec.md](spec.md#9-session-and-persistence)). Each desk picks its mode. The Full mode keeps the rails and tool zones; the two others need **tiles**: a file, a console, a tool (Git, kanban…), a conversation, a preview, each shown outside a zone. The detached routes prove a tool renders alone; it is the *Tab view / Tool* contribution point of the plugins.
+Full and Grid are done in #82, Scroll in #83 (see [spec.md](spec.md#9-session-and-persistence)). Each desk picks its mode. The Full mode keeps the rails and tool zones; the two others need **tiles**: a file, a console, a tool (Git, kanban…), a conversation, a preview, each shown outside a zone. The detached routes prove a tool renders alone; it is the *Tab view / Tool* contribution point of the plugins.
 
 | Mode | Unit | Rails | Like |
 |---|---|---|---|
@@ -35,6 +35,7 @@ Full and Grid are done in #82 (see [spec.md](spec.md#9-session-and-persistence))
 | Grid | split tree whose leaves are tiles | no | i3, sway |
 
 - Grid is the current `LayoutNode` tree with tools allowed as leaves.
+- Scroll is the same tree read as columns: the children of a row split at the root, each a stack of tiles with its own width. Grid ↔ Scroll keeps every tile.
 - Scroll at one column is what the phone layout (`state/mobile.ts`) already does; it may replace it.
 
 ## User desks

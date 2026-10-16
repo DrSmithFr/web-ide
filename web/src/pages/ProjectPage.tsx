@@ -8,7 +8,7 @@ import {
   openFile, openTab, closeEmptyPane, saveAll, session, setConflictOpener, setSize, sizesFor, splitPane, closeProject, moveTabToDesk, switchDesk,
 } from '../state/project'
 import { desk, desks, onDeskGone } from '../state/desks'
-import { focusDirection, gridMode, openTile, registerTileTools, resizeTile, showToolTile, startResize, swapDirection, toggleSplit } from '../state/tiles'
+import { cycleWidth, focusDirection, moveColumnBy, scrollMode, stackTile, tileMode, unstackTile, openTile, registerTileTools, resizeTile, showToolTile, startResize, swapDirection, toggleSplit } from '../state/tiles'
 import { tileLauncher } from '../ui/tileLauncher'
 import { deskPath, navigate, route } from '../app/router'
 import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, toggleTool, toolsIn, zoneOf, zones, type Zone } from '../state/zones'
@@ -195,7 +195,7 @@ function keepZoneFocus(zone: Zone, frames: number) {
 /** Shortcut of a tool: shows it and gives it the focus; hides it when it has the focus already. */
 function toggleToolFocus(id: string) {
   // A Grid desk has no zones: the tool is a tile.
-  if (gridMode() && !phone()) return showToolTile(id)
+  if (tileMode() && !phone()) return showToolTile(id)
   const z = zoneOf(session, id)
   if (!z) return false
   if (shownIn(session, z) === id && focusPart() === z) {
@@ -678,7 +678,7 @@ export function ProjectPage(props: { id: string }) {
     registerAction('view.focusDim', () => updateSettings((s) => (s.focusDim = !s.focusDim), 'Dim out of focus')),
     registerAction('view.whitespace', () => updateSettings((s) => (s.editor.showWhitespace = !s.editor.showWhitespace), 'Whitespace')),
     registerAction('console.new', () => {
-      if (gridMode() && !phone()) void newConsole({ show: false }).then((c) => c && openTile({ kind: 'console', console: c.id }))
+      if (tileMode() && !phone()) void newConsole({ show: false }).then((c) => c && openTile({ kind: 'console', console: c.id }))
       else void newConsole()
     }),
     registerAction('tile.launcher', () => void tileLauncher()),
@@ -688,6 +688,12 @@ export function ProjectPage(props: { id: string }) {
     registerAction('tile.shrinkWidth', () => resizeTile('row', -12)),
     registerAction('tile.growHeight', () => resizeTile('col')),
     registerAction('tile.shrinkHeight', () => resizeTile('col', -12)),
+    // The columns of the Scroll mode.
+    registerAction('tile.column.left', () => scrollMode() && moveColumnBy(-1)),
+    registerAction('tile.column.right', () => scrollMode() && moveColumnBy(1)),
+    registerAction('tile.column.width', () => scrollMode() && cycleWidth()),
+    registerAction('tile.stack', () => scrollMode() && stackTile()),
+    registerAction('tile.unstack', () => scrollMode() && unstackTile()),
     ...(['left', 'right', 'up', 'down'] as const).flatMap((d) => [registerAction(`tile.focus.${d}`, () => focusDirection(d)), registerAction(`tile.swap.${d}`, () => swapDirection(d))]),
     ...[1, 2, 3, 4, 5, 6, 7, 8, 9].flatMap((n) => [registerAction(`desk.go.${n}`, () => goDesk(n)), registerAction(`desk.send.${n}`, () => sendToDesk(n))]),
     registerAction('view.toggleBottom', () => mutate((s) => toggleTool(s, 'console'))),
@@ -750,7 +756,7 @@ export function ProjectPage(props: { id: string }) {
             <Show when={mobileView() !== 'editor' && zoneOf(session, mobileView())}>{(z) => <ZonePanel zone={z()} />}</Show>
           </div>
         </Show>
-        <Show when={!phone() && gridMode()}>
+        <Show when={!phone() && tileMode()}>
           {/* Grid desk: the tree of tiles is the whole window (state/tiles.ts). */}
           <div class="workbench grid-desk" onPointerDown={trackFocus} onFocusIn={trackFocus}>
             <main class="center" data-focus="editor">
@@ -758,7 +764,7 @@ export function ProjectPage(props: { id: string }) {
             </main>
           </div>
         </Show>
-        <Show when={!phone() && !gridMode()}>
+        <Show when={!phone() && !tileMode()}>
         <div class="workbench" onPointerDown={trackFocus} onFocusIn={trackFocus}>
           <Rail side="left" />
           <div class="work">

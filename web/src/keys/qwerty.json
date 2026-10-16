@@ -283,6 +283,21 @@
     ],
     "tile.resize": [
       "Ctrl+Alt+Shift+KeyR"
+    ],
+    "tile.column.left": [
+      "Ctrl+Alt+Shift+PageUp"
+    ],
+    "tile.column.right": [
+      "Ctrl+Alt+Shift+PageDown"
+    ],
+    "tile.column.width": [
+      "Ctrl+Alt+Shift+KeyF"
+    ],
+    "tile.stack": [
+      "Ctrl+Alt+Shift+KeyS"
+    ],
+    "tile.unstack": [
+      "Ctrl+Alt+Shift+KeyU"
     ]
   }
 }

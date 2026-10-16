@@ -123,6 +123,11 @@ export const actions: ActionDef[] = [
   { id: 'tile.shrinkWidth', label: 'Narrower tile', category: 'Desks', inTerminal: true },
   { id: 'tile.growHeight', label: 'Taller tile', category: 'Desks', inTerminal: true },
   { id: 'tile.shrinkHeight', label: 'Shorter tile', category: 'Desks', inTerminal: true },
+  { id: 'tile.column.left', label: 'Move the column left', category: 'Desks', inTerminal: true },
+  { id: 'tile.column.right', label: 'Move the column right', category: 'Desks', inTerminal: true },
+  { id: 'tile.column.width', label: 'Next width of the column', category: 'Desks', inTerminal: true },
+  { id: 'tile.stack', label: 'Stack the tile in the column on the left', category: 'Desks', inTerminal: true },
+  { id: 'tile.unstack', label: 'Take the tile out to a column of its own', category: 'Desks', inTerminal: true },
   ...(['left', 'right', 'up', 'down'] as const).flatMap((d) => [
     { id: `tile.focus.${d}`, label: `Focus the tile ${d === 'left' ? 'on the left' : d === 'right' ? 'on the right' : d === 'up' ? 'above' : 'below'}`, category: 'Desks', inTerminal: true },
     { id: `tile.swap.${d}`, label: `Swap with the tile ${d === 'left' ? 'on the left' : d === 'right' ? 'on the right' : d === 'up' ? 'above' : 'below'}`, category: 'Desks', inTerminal: true },

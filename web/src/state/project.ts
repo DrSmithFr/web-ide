@@ -39,9 +39,10 @@ export interface TabState {
   console?: string
 }
 
+/** width: a column of the Scroll mode, its width as a fraction of the view (unset: one column in sight). */
 export type LayoutNode =
-  | { type: 'leaf'; id: string; tabs: string[]; active: string | null }
-  | { type: 'split'; id: string; dir: 'row' | 'col'; children: LayoutNode[]; sizes: number[] }
+  | { type: 'leaf'; id: string; tabs: string[]; active: string | null; width?: number }
+  | { type: 'split'; id: string; dir: 'row' | 'col'; children: LayoutNode[]; sizes: number[]; width?: number }
 
 export interface Cursor {
   anchor: number
@@ -360,6 +361,7 @@ function removeLeaf(s: SessionData, id: string) {
   parent.sizes = parent.sizes.map((x) => x / total)
   if (parent.children.length === 1) {
     const only = parent.children[0]
+    if (parent.width) only.width = parent.width
     const gp = parentOf(s.layout, parent.id)
     if (!gp) s.layout = only
     else gp.children[gp.children.findIndex((c) => c.id === parent.id)] = only
@@ -393,8 +395,8 @@ export function splitPane(paneId: string, dir: 'row' | 'col') {
       parent.children.splice(i + 1, 0, fresh)
       parent.sizes.splice(i + 1, 0, half)
     } else {
-      const copy = { ...l, tabs: [...l.tabs] }
-      const split: LayoutNode = { type: 'split', id: uid(), dir, children: [copy, fresh], sizes: [0.5, 0.5] }
+      const { width, ...copy } = { ...l, tabs: [...l.tabs] }
+      const split: LayoutNode = { type: 'split', id: uid(), dir, children: [copy, fresh], sizes: [0.5, 0.5], width }
       if (!parent) s.layout = split
       else parent.children[parent.children.findIndex((c) => c.id === paneId)] = split
     }
@@ -417,8 +419,8 @@ export function splitEmpty(paneId: string, dir: 'row' | 'col'): string {
       parent.children.splice(i + 1, 0, fresh)
       parent.sizes.splice(i + 1, 0, half)
     } else {
-      const copy = { ...l, tabs: [...l.tabs] }
-      const split: LayoutNode = { type: 'split', id: uid(), dir, children: [copy, fresh], sizes: [0.5, 0.5] }
+      const { width, ...copy } = { ...l, tabs: [...l.tabs] }
+      const split: LayoutNode = { type: 'split', id: uid(), dir, children: [copy, fresh], sizes: [0.5, 0.5], width }
       if (!parent) s.layout = split
       else parent.children[parent.children.findIndex((c) => c.id === l.id)] = split
     }
@@ -470,6 +472,100 @@ export function resizePane(paneId: string, axis: 'row' | 'col', px: number, meas
     const d = Math.max(min - p.sizes[i], Math.min(px / total, p.sizes[j] - min))
     p.sizes[i] += d
     p.sizes[j] -= d
+  })
+}
+
+// ---------- columns (Scroll mode) ----------
+
+/** The columns of the Scroll mode: the children of a row split at the root, else the root alone. */
+export function columnsOf(n: LayoutNode = session.layout): LayoutNode[] {
+  return n.type === 'split' && n.dir === 'row' ? n.children : [n]
+}
+
+/** Index of the column holding a pane. */
+export function columnOf(paneId: string, n: LayoutNode = session.layout) {
+  return Math.max(0, columnsOf(n).findIndex((c) => !!findLeaf(c, paneId)))
+}
+
+/** Puts a node as the column i; the root becomes a row split when it is a single column. */
+function insertColumn(s: SessionData, node: LayoutNode, i: number) {
+  if (s.layout.type !== 'split' || s.layout.dir !== 'row') s.layout = { type: 'split', id: uid(), dir: 'row', children: [unwrap(s.layout)], sizes: [1] }
+  const root = s.layout as Extract<LayoutNode, { type: 'split' }>
+  root.children.splice(i, 0, node)
+  // The Grid mode shares the columns out evenly.
+  root.sizes = root.children.map(() => 1 / root.children.length)
+}
+
+/** Adds an empty column right of the one holding a pane, made active; answers its pane id. */
+export function addColumn(paneId: string): string {
+  const id = uid()
+  mutate((s) => {
+    insertColumn(s, { type: 'leaf', id, tabs: [], active: null }, columnOf(paneId, s.layout) + 1)
+    s.activePane = id
+  })
+  return id
+}
+
+/** Moves the column holding a pane one place left (-1) or right (1). */
+export function moveColumn(paneId: string, d: -1 | 1) {
+  mutate((s) => {
+    const cols = columnsOf(s.layout)
+    const i = columnOf(paneId, s.layout)
+    const j = i + d
+    if (cols.length < 2 || j < 0 || j >= cols.length) return
+    const [a, b] = [unwrap(cols[i]), unwrap(cols[j])]
+    cols[i] = b
+    cols[j] = a
+  })
+}
+
+/** Sets the width of the column holding a pane (a fraction of the view). */
+export function setColumnWidth(paneId: string, width: number) {
+  mutate((s) => {
+    const c = columnsOf(s.layout)[columnOf(paneId, s.layout)]
+    if (c) c.width = width
+  })
+}
+
+/** Stacks a tile at the bottom of the column on its left (its own column goes if empty). */
+export function stackLeft(paneId: string) {
+  mutate((s) => {
+    const i = columnOf(paneId, s.layout)
+    if (i === 0) return
+    const target = unwrap(columnsOf(s.layout)[i - 1])
+    const leaf = findLeaf(s.layout, paneId)
+    if (!leaf) return
+    const fresh: LayoutNode = { type: 'leaf', id: paneId, tabs: [...leaf.tabs], active: leaf.active }
+    removeLeaf(s, paneId)
+    const cols = columnsOf(s.layout)
+    const k = cols.findIndex((c) => c.id === target.id)
+    const col = cols[k]
+    if (col.type === 'split' && col.dir === 'col') {
+      col.children.push(fresh)
+      col.sizes = col.children.map(() => 1 / col.children.length)
+    } else {
+      const { width, ...inner } = unwrap(col)
+      const stack: LayoutNode = { type: 'split', id: uid(), dir: 'col', children: [inner as LayoutNode, fresh], sizes: [0.5, 0.5], width }
+      // The last two columns made one: the column is the root.
+      if (s.layout.id === col.id) s.layout = stack
+      else cols[k] = stack
+    }
+    s.activePane = paneId
+  })
+}
+
+/** Takes a tile out of its column into a column of its own, on the right. */
+export function unstack(paneId: string) {
+  mutate((s) => {
+    const i = columnOf(paneId, s.layout)
+    const col = columnsOf(s.layout)[i]
+    if (!col || col.type === 'leaf') return
+    const leaf = findLeaf(s.layout, paneId)
+    if (!leaf) return
+    const fresh: LayoutNode = { type: 'leaf', id: paneId, tabs: [...leaf.tabs], active: leaf.active }
+    removeLeaf(s, paneId)
+    insertColumn(s, fresh, i + 1)
+    s.activePane = paneId
   })
 }
 

@@ -29,7 +29,7 @@ func TestDesks(t *testing.T) {
 	}
 
 	// A known mode is kept, another one is full.
-	if d := s.PutDesks("p", DeskList{Desks: []Desk{{N: 2, Mode: "grid"}, {N: 3, Mode: "tiled"}}}); d.Desks[1].Mode != "grid" || d.Desks[2].Mode != "full" {
+	if d := s.PutDesks("p", DeskList{Desks: []Desk{{N: 2, Mode: "grid"}, {N: 3, Mode: "tiled"}, {N: 4, Mode: "scroll"}}}); d.Desks[1].Mode != "grid" || d.Desks[2].Mode != "full" || d.Desks[3].Mode != "scroll" {
 		t.Fatalf("modes: %+v", d.Desks)
 	}
 

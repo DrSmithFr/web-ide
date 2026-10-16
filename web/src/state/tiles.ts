@@ -1,8 +1,10 @@
 // Tiles (docs/desks.md): a tool or a console shown in a pane of the editor tree, as a tab. In
 // the Grid mode of a desk they are the whole window, like i3: a new tile opens on the right
-// of the focused one or below it, the keyboard moves the focus, swaps and resizes tiles.
+// of the focused one or below it, the keyboard moves the focus, swaps and resizes tiles. In
+// the Scroll mode, like niri, the columns of the tree go side by side in a strip wider than
+// the window: a new tile opens a column (or stacks in the focused one), 1 to 3 are in sight.
 import { createSignal, type JSX } from 'solid-js'
-import { activateTab, activeLeaf, closeEmptyPane, leaves, mutate, openTab, project, resizePane, session, setActivePane, splitEmpty, swapPanes, type TabState } from './project'
+import { activateTab, activeLeaf, addColumn, closeEmptyPane, columnOf, columnsOf, leaves, moveColumn, mutate, openTab, project, resizePane, session, setActivePane, setColumnWidth, splitEmpty, stackLeft, swapPanes, unstack, type TabState } from './project'
 import { desk, desks } from './desks'
 import { captureKeys } from '../keys/bindings'
 import { podPath } from '../app/base'
@@ -20,8 +22,31 @@ export function registerTileTools(list: Record<string, TileTool>) {
   Object.assign(tileTools, list)
 }
 
-/** Whether the desk shown is in Grid mode (no rails nor zones: tools open as tiles). */
-export const gridMode = () => desks.desks.find((d) => d.n === desk())?.mode === 'grid'
+const mode = () => desks.desks.find((d) => d.n === desk())?.mode ?? 'full'
+/** Whether the desk shown is made of tiles only (Grid or Scroll: no rails nor zones, tools open as tiles). */
+export const tileMode = () => mode() !== 'full'
+export const scrollMode = () => mode() === 'scroll'
+
+const [viewWidth, setViewWidth] = createSignal(window.innerWidth)
+window.addEventListener('resize', () => setViewWidth(window.innerWidth))
+/** Columns in sight in the Scroll mode: 1 on a phone, 2 on a tablet, 3 on a desktop. */
+export const columnsInSight = () => (viewWidth() <= 720 ? 1 : viewWidth() <= 1280 ? 2 : 3)
+
+/** Widths a column takes in turn (fractions of the view), those at least one column wide. */
+const presets = [1 / 3, 1 / 2, 2 / 3, 1]
+/** Width of a column: its own, never narrower than one column in sight. */
+export const columnWidth = (w: number | undefined) => Math.max(w ?? 0, 1 / columnsInSight())
+
+/** Gives the focused column the next preset width. */
+export function cycleWidth() {
+  const w = columnWidth(columnsOf()[columnOf(session.activePane)]?.width)
+  const next = presets.filter((p) => p >= 1 / columnsInSight() - 1e-6).find((p) => p > w + 1e-6) ?? 1 / columnsInSight()
+  setColumnWidth(session.activePane, next)
+}
+
+export const moveColumnBy = (d: -1 | 1) => moveColumn(session.activePane, d)
+export const stackTile = () => stackLeft(session.activePane)
+export const unstackTile = () => unstack(session.activePane)
 
 const paneEl = (id: string) => document.querySelector<HTMLElement>(`.pane[data-pane="${id}"]`)
 
@@ -36,14 +61,17 @@ export function openTile(tab: Omit<TabState, 'id'>) {
   const from = activeLeaf()
   // A first tile goes in the empty pane of the desk.
   if (!from.tabs.length) return openTab(tab, from.id)
-  return openTab(tab, splitEmpty(from.id, nextSplit()))
+  return openTab(tab, newPane(from.id))
 }
+
+/** A new pane beside another: a new column in the Scroll mode, unless tiles stack (below). */
+const newPane = (from: string) => (scrollMode() && nextSplit() === 'row' ? addColumn(from) : splitEmpty(from, nextSplit()))
 
 /** Opens a new empty tile (Go to file fills it); it goes away if nothing opens in it. */
 export function openEmptyTile(): string {
   const from = activeLeaf()
   if (!from.tabs.length) return from.id
-  return splitEmpty(from.id, nextSplit())
+  return newPane(from.id)
 }
 
 // ---------- resize ----------
@@ -53,6 +81,13 @@ const step = 12
 
 /** Grows (or shrinks, px < 0) the focused tile: its width (row) or its height (col). */
 export function resizeTile(axis: 'row' | 'col', px = step) {
+  // A column of the Scroll mode has its own width, a fraction of the view.
+  if (scrollMode() && axis === 'row') {
+    const strip = document.querySelector('.scroll-strip')?.clientWidth
+    const w = columnWidth(columnsOf()[columnOf(session.activePane)]?.width)
+    if (strip) setColumnWidth(session.activePane, Math.max(1 / columnsInSight(), Math.min(1, w + px / strip)))
+    return
+  }
   resizePane(session.activePane, axis, px, (id) => {
     const r = document.querySelector(`.split[data-split="${id}"]`)?.getBoundingClientRect()
     return r ? (axis === 'row' ? r.width : r.height) : 0
@@ -128,8 +163,13 @@ export function focusPane(id: string) {
   requestAnimationFrame(() => {
     // A popup opened meanwhile (the launcher again) keeps the keyboard.
     if (document.activeElement?.closest('.pick, .modal, .ctx-menu')) return
-    const el = paneEl(id)?.querySelector<HTMLElement>('.md-file-view, .ed-content, .xterm-helper-textarea, .pane-body input, .pane-body textarea, .pane-body [tabindex="0"], .pane-body button')
-    el?.focus()
+    // In this order: the buttons of the corner come before the content in the page.
+    const pane = paneEl(id)
+    const sels = ['.md-file-view', '.ed-content', '.xterm-helper-textarea', '.pane-body input, .pane-body textarea, .pane-body [tabindex="0"]', '.pane-body button']
+    for (const sel of sels) {
+      const el = pane?.querySelector<HTMLElement>(sel)
+      if (el) return el.focus()
+    }
   })
 }
 

@@ -40,7 +40,8 @@ import { copyText } from './clipboard'
 import { WorktreeChip } from './WorktreeChip'
 import { addDesk, desk, deskLabel, desks } from '../state/desks'
 import { route } from '../app/router'
-import { detachTab, gridMode, nextSplit, resizing, tileTools } from '../state/tiles'
+import { detachTab, tileMode, nextSplit, resizing, scrollMode, tileTools } from '../state/tiles'
+import { ScrollArea } from './ScrollArea'
 import { consoles, TermView } from '../console/consoles'
 import { Dynamic } from 'solid-js/web'
 import { isMarkdownPath, MarkdownView, showRaw, shownRaw, type MarkdownViewApi } from './MarkdownView'
@@ -49,7 +50,9 @@ export function EditorArea(props: { detached?: boolean }) {
   return (
     <div class="editor-area">
       <div class="editor-panes">
-        <Node node={session.layout} detached={props.detached} />
+        <Show when={scrollMode() && !props.detached} fallback={<Node node={session.layout} detached={props.detached} />}>
+          <ScrollArea cell={(c) => <Node node={c} />} />
+        </Show>
       </div>
       <StatusBar />
     </div>
@@ -187,7 +190,7 @@ function Pane(props: { id: string }) {
     <div
       class="pane"
       data-pane={props.id}
-      classList={{ active: isActivePane(), focused: isActivePane() && focusPart() === 'editor', [`next-${nextSplit()}`]: isActivePane() && gridMode(), resizing: isActivePane() && resizing(), bare: bare() }}
+      classList={{ active: isActivePane(), focused: isActivePane() && focusPart() === 'editor', [`next-${nextSplit()}`]: isActivePane() && tileMode(), resizing: isActivePane() && resizing(), bare: bare() }}
       onMouseDown={(e) => e.button < 3 && setActivePane(props.id)}>
       <div
         ref={tabbar}
