@@ -1,10 +1,13 @@
 // Desks of the project in the menu bar (docs/desks.md): 1 2 3 +. A desk is a link: a click
 // switches the window, a middle click opens it in a new tab. A tab dropped on a desk moves there.
-import { createSignal, For } from 'solid-js'
+import { createSignal, For, Show } from 'solid-js'
 import { podPath } from '../app/base'
 import { deskPath, navigate } from '../app/router'
 import { home, moveTabToDesk, switchDesk } from '../state/project'
-import { addDesk, desk, deskLabel, desks, removeDesk, renameDesk, type Desk } from '../state/desks'
+import { addDesk, desk, deskLabel, desks, removeDesk, renameDesk, setDeskMode, type Desk } from '../state/desks'
+import { gridMode } from '../state/tiles'
+import { tileLauncher } from '../ui/tileLauncher'
+import { Icon } from '../ui/icons'
 import { draggedTab } from '../ui/EditorArea'
 import { shortcutOf } from '../keys/bindings'
 import { contextMenu, prompt } from '../ui/overlay'
@@ -29,6 +32,10 @@ export function DeskSwitcher() {
           if (v !== null) renameDesk(d.n, v)
         },
       },
+      { separator: true, label: '' },
+      { label: t('Full layout'), title: t('Rails and tool zones'), checked: d.mode !== 'grid', action: () => setDeskMode(d.n, 'full') },
+      { label: t('Grid of tiles'), title: t('Tiles only, like i3'), checked: d.mode === 'grid', action: () => setDeskMode(d.n, 'grid') },
+      { separator: true, label: '' },
       { label: t('Remove the desk'), disabled: d.n === 1, title: d.n === 1 ? t('Desk 1 stays') : undefined, danger: true, action: () => remove(d) },
     ])
   const remove = async (d: Desk) => {
@@ -82,6 +89,19 @@ export function DeskSwitcher() {
       <button class="mb-desk add" title={t('New desk')} onClick={add} data-testid="desk-add">
         +
       </button>
+      <Show when={gridMode()}>
+        <button
+          class="mb-desk tile-add"
+          title={[t('Open in a new tile…'), shortcutOf('tile.launcher')].filter(Boolean).join(' · ')}
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect()
+            void tileLauncher({ left: r.left, top: r.bottom + 2 })
+          }}
+          data-testid="tile-launcher"
+        >
+          <Icon name="split" size={13} />
+        </button>
+      </Show>
     </nav>
   )
 }

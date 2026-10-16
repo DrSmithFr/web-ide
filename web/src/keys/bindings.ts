@@ -116,6 +116,11 @@ export const actions: ActionDef[] = [
   { id: 'menu.open', label: 'Open the menu bar', category: 'General', inTerminal: true },
   { id: 'console.new', label: 'New terminal', category: 'Consoles', inTerminal: true },
   { id: 'sql.execute', label: 'Run the active statement', category: 'Database' },
+  { id: 'tile.launcher', label: 'Open in a new tile…', category: 'Desks', inTerminal: true },
+  ...(['left', 'right', 'up', 'down'] as const).flatMap((d) => [
+    { id: `tile.focus.${d}`, label: `Focus the tile ${d === 'left' ? 'on the left' : d === 'right' ? 'on the right' : d === 'up' ? 'above' : 'below'}`, category: 'Desks', inTerminal: true },
+    { id: `tile.swap.${d}`, label: `Swap with the tile ${d === 'left' ? 'on the left' : d === 'right' ? 'on the right' : d === 'up' ? 'above' : 'below'}`, category: 'Desks', inTerminal: true },
+  ]),
   ...[1, 2, 3, 4, 5, 6, 7, 8, 9].flatMap((n) => [
     { id: `desk.go.${n}`, label: 'Go to desk {n}', params: { n: String(n) }, category: 'Desks', inTerminal: true },
     { id: `desk.send.${n}`, label: 'Send the tab to desk {n}', params: { n: String(n) }, category: 'Desks' },

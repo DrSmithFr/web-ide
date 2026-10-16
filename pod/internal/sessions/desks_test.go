@@ -28,6 +28,11 @@ func TestDesks(t *testing.T) {
 		t.Fatal("keys")
 	}
 
+	// A known mode is kept, another one is full.
+	if d := s.PutDesks("p", DeskList{Desks: []Desk{{N: 2, Mode: "grid"}, {N: 3, Mode: "tiled"}}}); d.Desks[1].Mode != "grid" || d.Desks[2].Mode != "full" {
+		t.Fatalf("modes: %+v", d.Desks)
+	}
+
 	// Desk 1 cannot go, duplicates are dropped.
 	d = s.PutDesks("p", DeskList{Desks: []Desk{{N: 2, Name: "Review"}, {N: 2}, {N: 3}}, Recent: d.Recent})
 	if len(d.Desks) != 3 || d.Desks[0].N != 1 || d.Desks[1].Name != "Review" {

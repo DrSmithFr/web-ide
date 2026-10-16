@@ -1,6 +1,7 @@
 // Desks (docs/desks.md): each desk of a project has its own layout; the URL names the desk; two
 // windows on two desks do not touch each other, two on the same desk mirror; a tab moves to
 // another desk; desks are renamed and removed; the home page opens the last desk of the device.
+// A desk in Grid mode is a tree of tiles (files, tools, consoles) driven by the keyboard.
 const { run, openProject, open, assert, OUT } = require('../common.cjs')
 
 const tabs = (p) => p.$$eval('.pane .tab .tab-title', (e) => e.map((x) => x.textContent.trim()))
@@ -102,4 +103,89 @@ run(async ({ ctx, page }) => {
   await page.waitForFunction(() => !location.pathname.includes('/desk/'), null, { timeout: 5000 })
   assert(!(await page.$('[data-testid=desk-2]')), 'a removed desk leaves the switcher and its window goes to desk 1')
   await page.screenshot({ path: OUT + '/desks-removed.png' })
+
+  // ---- Grid mode: a new desk of tiles, no rails nor zones.
+  await other.close()
+  await page.click('[data-testid=desk-add]')
+  await page.waitForFunction(() => /\/desk\/\d+$/.test(location.pathname))
+  const gridDesk = path(page).split('/').pop()
+  await page.click(`[data-testid=desk-${gridDesk}]`, { button: 'right' })
+  await page.click('.ctx-menu >> text=Grid of tiles')
+  await page.waitForSelector('.workbench.grid-desk')
+  assert(!(await page.$('.rail-left')) && (await page.isVisible('[data-testid=tile-launcher]')), 'a Grid desk has no rails and offers the tile launcher')
+
+  const panes = () => page.$$eval('.pane', (l) => l.length)
+  const activeTool = () => page.evaluate(() => {
+    const p = document.querySelector('.pane.active')
+    return p?.querySelector('[data-tool]')?.getAttribute('data-tool') ?? (p?.querySelector('.tile-console') ? 'console' : p?.querySelector('.ed-content') ? 'file' : '')
+  })
+  const launch = async (label) => {
+    await page.keyboard.press('Control+Alt+Enter')
+    await page.waitForSelector('.pick-input')
+    await page.keyboard.type(label)
+    await page.waitForFunction((l) => document.querySelector('.pick-input')?.value === l && document.querySelector('.pick-item.selected')?.textContent.includes(l), label)
+    await page.keyboard.press('Enter')
+  }
+  await launch('Git')
+  await page.waitForSelector('.pane .tile-tool[data-tool=git] .panel')
+  assert((await panes()) === 1, 'the first tile takes the empty pane')
+  await launch('New terminal')
+  await page.waitForSelector('.pane .tile-console .xterm')
+  assert((await panes()) === 2 && (await activeTool()) === 'console', 'a terminal opens in a new tile beside')
+  await launch('File')
+  await page.waitForSelector('.pick.se')
+  await page.keyboard.type('main.go')
+  await page.waitForSelector('.pick-item.selected:has-text("main.go")')
+  await page.keyboard.press('Enter')
+  await page.waitForFunction(() => document.querySelectorAll('.pane').length === 3 && document.querySelector('.pane.active .tab.active')?.textContent.includes('main.go'))
+  assert(true, 'a file chosen in the launcher opens in a third tile')
+  await page.waitForTimeout(500) // the editor of the file takes the focus once loaded
+  await page.screenshot({ path: OUT + '/desks-grid.png' })
+
+  // Directional focus: the file is below the terminal, the terminal right of Git.
+  await page.keyboard.press('Control+Alt+Shift+ArrowUp')
+  await page.waitForFunction(() => document.querySelector('.pane.active .tile-console'))
+  await page.keyboard.press('Control+Alt+Shift+ArrowLeft')
+  await page.waitForFunction(() => document.querySelector('.pane.active [data-tool=git]') && document.querySelector('.pane.active')?.contains(document.activeElement))
+  assert((await activeTool()) === 'git', 'Ctrl+Alt+Shift+arrows move the focus between tiles')
+
+  // Swap with the tile on the right (from Search Everywhere: no default shortcut).
+  const before = await page.$eval('.pane.active', (p) => p.getBoundingClientRect().left)
+  await page.keyboard.press('Shift')
+  await page.keyboard.press('Shift')
+  await page.waitForSelector('.pick.se')
+  await page.keyboard.type('Swap with the tile on the right')
+  await page.waitForSelector('.pick-item.selected:has-text("Swap with the tile on the right")')
+  await page.keyboard.press('Enter')
+  await page.waitForFunction((x) => {
+    const p = document.querySelector('.pane.active')
+    return p?.querySelector('[data-tool=git]') && p.getBoundingClientRect().left > x
+  }, before, { timeout: 5000 }).catch(() => {})
+  assert((await activeTool()) === 'git' && (await page.$eval('.pane.active', (p) => p.getBoundingClientRect().left)) > before, 'a tile swaps with its neighbour and keeps the focus')
+
+  // Closing a tile; the desk is restored after a reload.
+  await page.keyboard.press('Alt+w')
+  await page.waitForFunction(() => document.querySelectorAll('.pane').length === 2)
+  assert(!(await page.$('[data-tool=git]')), 'closing the tab of a tile closes the tile')
+  await page.waitForTimeout(800)
+  await page.reload()
+  await page.waitForSelector('.workbench.grid-desk .pane .tile-console .xterm')
+  assert((await panes()) === 2, 'the Grid desk and its tiles are restored after a reload')
+
+  // Back to Full: rails and zones again, the tiles stay as tabs.
+  await page.click(`[data-testid=desk-${gridDesk}]`, { button: 'right' })
+  await page.click('.ctx-menu >> text=Full layout')
+  await page.waitForSelector('.rail-left')
+  assert((await panes()) === 2 && !!(await page.$('.pane .tile-console')), 'switching to Full keeps the tiles as tabs')
+
+  // A tool leaves its zone for a tab, and can show in its zone at the same time.
+  await page.click('.rail .rail-btn[title="Git"]')
+  await page.waitForSelector('.zone[data-tool=git] .panel')
+  await page.click('.zone[data-tool=git] [data-testid=zone-as-tab]')
+  await page.waitForSelector('.pane .tile-tool[data-tool=git] .panel')
+  assert(!(await page.$('.zone[data-tool=git]')), 'Open as a tab moves the tool from its zone to a tab')
+  await page.click('.rail .rail-btn[title="Git"]')
+  await page.waitForSelector('.zone[data-tool=git] .panel')
+  assert((await page.$$('[data-tool=git] .panel')).length === 2, 'a tool shows in its zone and as a tab at the same time')
+  await page.screenshot({ path: OUT + '/desks-tool-twice.png' })
 })

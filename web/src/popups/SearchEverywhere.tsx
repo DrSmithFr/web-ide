@@ -48,8 +48,11 @@ const [open, setOpen] = createSignal(false)
 const [tab, setTab] = createSignal<SearchTab>('all')
 let lastQuery = ''
 
-/** Opens the popup on a tab; already open, switches to it. */
-export function searchEverywhere(on: SearchTab = 'all') {
+let onClosed: (() => void) | undefined
+
+/** Opens the popup on a tab; already open, switches to it. onClose runs once it closes (a choice run or not). */
+export function searchEverywhere(on: SearchTab = 'all', opts: { onClose?: () => void } = {}) {
+  onClosed = opts.onClose
   batch(() => {
     setTab(on)
     setOpen(true)
@@ -204,6 +207,9 @@ export function SearchEverywhereHost() {
     setOpen(false)
     restoreFocus()
     hit?.run()
+    const f = onClosed
+    onClosed = undefined
+    f?.()
   }
 
   createEffect(

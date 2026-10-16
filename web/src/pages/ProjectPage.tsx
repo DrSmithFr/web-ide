@@ -5,9 +5,11 @@ import { Dynamic } from 'solid-js/web'
 import { RpcError, formatRate, on as onPod, podRates, podState } from '../pod/rpc'
 import {
   activeLeaf, activeTab, closeTab, conflictedDocs, cycleTab, docsVersion, home, mutate, navigate as navHistory, openProject, project, relPath, reopenProject, root,
-  openFile, saveAll, session, setConflictOpener, setSize, sizesFor, splitPane, closeProject, moveTabToDesk, switchDesk,
+  openFile, openTab, closeEmptyPane, saveAll, session, setConflictOpener, setSize, sizesFor, splitPane, closeProject, moveTabToDesk, switchDesk,
 } from '../state/project'
 import { desk, desks, onDeskGone } from '../state/desks'
+import { focusDirection, gridMode, openTile, registerTileTools, showToolTile, swapDirection } from '../state/tiles'
+import { tileLauncher } from '../ui/tileLauncher'
 import { deskPath, navigate, route } from '../app/router'
 import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, toggleTool, toolsIn, zoneOf, zones, type Zone } from '../state/zones'
 import { focusEditor, focusPart, setFocusPart, trackFocus } from '../state/focus'
@@ -70,6 +72,8 @@ export const toolPanels: Record<string, { label: string; icon: string; component
   info: { label: 'Infos', icon: 'info', component: InfoTool },
 }
 
+registerTileTools(toolPanels)
+
 /** Opens a project, asking for the SSH password / passphrase when the pod needs one. */
 export async function openWithAuth(id: string, desk = 1) {
   let creds: { password?: string; passphrase?: string } | undefined
@@ -102,6 +106,7 @@ export function useProjectActions() {
     registerAction('view.closeTab', () => {
       const l = activeLeaf()
       if (l.active) closeTab(l.id, l.active)
+      else closeEmptyPane(l.id) // an empty tile
     }),
     registerAction('view.closeOthers', () => {
       const l = activeLeaf()
@@ -189,6 +194,8 @@ function keepZoneFocus(zone: Zone, frames: number) {
 
 /** Shortcut of a tool: shows it and gives it the focus; hides it when it has the focus already. */
 function toggleToolFocus(id: string) {
+  // A Grid desk has no zones: the tool is a tile.
+  if (gridMode() && !phone()) return showToolTile(id)
   const z = zoneOf(session, id)
   if (!z) return false
   if (shownIn(session, z) === id && focusPart() === z) {
@@ -534,10 +541,20 @@ function ZonePanel(props: { zone: Zone; width?: number; style?: JSX.CSSPropertie
   const id = () => shownIn(session, props.zone)!
   const detach = () => window.open(podPath(`/project/${project()!.id}/tool/${id()}`), `tool-${id()}`, id() === 'assistant' ? 'popup,width=1100,height=820' : 'popup,width=420,height=760')
   const side = props.zone === 'left' || props.zone === 'right'
+  // The tool leaves its zone for a tab of the active pane.
+  const asTab = () => {
+    const tool = id()
+    mutate((s) => toggleTool(s, tool))
+    openTab({ kind: 'tool', tool })
+    setFocusPart('editor')
+  }
   return (
     <aside class={`zone zone-${props.zone}`} classList={{ side, [`side-${props.zone}`]: side, focused: focusPart() === props.zone }} data-tool={id()} data-focus={props.zone} tabIndex={phone() ? -1 : undefined} style={props.width ? { width: `${props.width}px` } : props.style}>
       <button class="icon-btn detach" title={t('Open in a window')} onClick={detach}>
         <Icon name="external" size={13} />
+      </button>
+      <button class="icon-btn as-tab" title={t('Open as a tab')} onClick={asTab} data-testid="zone-as-tab">
+        <Icon name="split" size={13} />
       </button>
       <Show when={toolPanels[id()]} keyed>
         {(p) => <Dynamic component={p.component} />}
@@ -660,7 +677,12 @@ export function ProjectPage(props: { id: string }) {
     registerAction('view.focusOutline', () => updateSettings((s) => (s.focusOutline = !s.focusOutline), 'Focus outline')),
     registerAction('view.focusDim', () => updateSettings((s) => (s.focusDim = !s.focusDim), 'Dim out of focus')),
     registerAction('view.whitespace', () => updateSettings((s) => (s.editor.showWhitespace = !s.editor.showWhitespace), 'Whitespace')),
-    registerAction('console.new', () => void newConsole()),
+    registerAction('console.new', () => {
+      if (gridMode() && !phone()) void newConsole({ show: false }).then((c) => c && openTile({ kind: 'console', console: c.id }))
+      else void newConsole()
+    }),
+    registerAction('tile.launcher', () => void tileLauncher()),
+    ...(['left', 'right', 'up', 'down'] as const).flatMap((d) => [registerAction(`tile.focus.${d}`, () => focusDirection(d)), registerAction(`tile.swap.${d}`, () => swapDirection(d))]),
     ...[1, 2, 3, 4, 5, 6, 7, 8, 9].flatMap((n) => [registerAction(`desk.go.${n}`, () => goDesk(n)), registerAction(`desk.send.${n}`, () => sendToDesk(n))]),
     registerAction('view.toggleBottom', () => mutate((s) => toggleTool(s, 'console'))),
     ...Object.keys(toolPanels).map((id) => registerAction(`tool.${id}`, () => toggleToolFocus(id))),
@@ -722,7 +744,15 @@ export function ProjectPage(props: { id: string }) {
             <Show when={mobileView() !== 'editor' && zoneOf(session, mobileView())}>{(z) => <ZonePanel zone={z()} />}</Show>
           </div>
         </Show>
-        <Show when={!phone()}>
+        <Show when={!phone() && gridMode()}>
+          {/* Grid desk: the tree of tiles is the whole window (state/tiles.ts). */}
+          <div class="workbench grid-desk" onPointerDown={trackFocus} onFocusIn={trackFocus}>
+            <main class="center" data-focus="editor">
+              <EditorArea />
+            </main>
+          </div>
+        </Show>
+        <Show when={!phone() && !gridMode()}>
         <div class="workbench" onPointerDown={trackFocus} onFocusIn={trackFocus}>
           <Rail side="left" />
           <div class="work">

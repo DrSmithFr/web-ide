@@ -26,7 +26,7 @@ Project (or worktree)
 
 ## Layout modes
 
-Each desk picks its mode. The Full mode keeps the rails and tool zones; the two others need **tiles**: a file, a console, a tool (Git, kanban…), a conversation, a preview, each shown outside a zone. The detached routes prove a tool renders alone; it is the *Tab view / Tool* contribution point of the plugins.
+Full and Grid are done in #82 (see [spec.md](spec.md#9-session-and-persistence)). Each desk picks its mode. The Full mode keeps the rails and tool zones; the two others need **tiles**: a file, a console, a tool (Git, kanban…), a conversation, a preview, each shown outside a zone. The detached routes prove a tool renders alone; it is the *Tab view / Tool* contribution point of the plugins.
 
 | Mode | Unit | Rails | Like |
 |---|---|---|---|

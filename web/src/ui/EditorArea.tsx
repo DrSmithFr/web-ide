@@ -40,6 +40,9 @@ import { copyText } from './clipboard'
 import { WorktreeChip } from './WorktreeChip'
 import { addDesk, desk, deskLabel, desks } from '../state/desks'
 import { route } from '../app/router'
+import { tileTools } from '../state/tiles'
+import { consoles, TermView } from '../console/consoles'
+import { Dynamic } from 'solid-js/web'
 import { isMarkdownPath, MarkdownView, showRaw, shownRaw, type MarkdownViewApi } from './MarkdownView'
 
 export function EditorArea(props: { detached?: boolean }) {
@@ -119,13 +122,15 @@ function deskItems(pane: string, tab: string): MenuItem[] {
   ]
 }
 
-function tabTitle(t: TabState) {
-  if (t.kind === 'file') return basename(t.path ?? '')
-  if (t.kind === 'ticket') {
-    const s = summary(t.ticket!)
-    return s ? `#${s.id} ${s.title.length > 28 ? s.title.slice(0, 27) + '…' : s.title}` : `#${t.ticket}`
+function tabTitle(tab: TabState) {
+  if (tab.kind === 'file') return basename(tab.path ?? '')
+  if (tab.kind === 'ticket') {
+    const s = summary(tab.ticket!)
+    return s ? `#${s.id} ${s.title.length > 28 ? s.title.slice(0, 27) + '…' : s.title}` : `#${tab.ticket}`
   }
-  return t.title ?? t.kind
+  if (tab.kind === 'tool') return tileTools[tab.tool!] ? t(tileTools[tab.tool!].label) : tab.tool!
+  if (tab.kind === 'console') return consoles().find((c) => c.id === tab.console)?.title ?? t('Console')
+  return tab.title ?? tab.kind
 }
 
 function Pane(props: { id: string }) {
@@ -165,7 +170,7 @@ function Pane(props: { id: string }) {
     ])
 
   return (
-    <div class="pane" classList={{ active: isActivePane(), focused: isActivePane() && focusPart() === 'editor' }} onMouseDown={(e) => e.button < 3 && setActivePane(props.id)}>
+    <div class="pane" data-pane={props.id} classList={{ active: isActivePane(), focused: isActivePane() && focusPart() === 'editor' }} onMouseDown={(e) => e.button < 3 && setActivePane(props.id)}>
       <div
         ref={tabbar}
         class="tabbar"
@@ -273,28 +278,42 @@ function Pane(props: { id: string }) {
           <LockLayer />
         </Show>
         <Show when={active()} keyed fallback={<EmptyPane />}>
-          {(t) => (
+          {(tab) => (
             <Switch>
-              <Match when={t.kind === 'file'}>
-                <FileEditor tab={t} paneId={props.id} />
+              <Match when={tab.kind === 'file'}>
+                <FileEditor tab={tab} paneId={props.id} />
               </Match>
-              <Match when={t.kind === 'sql'}>
-                <SqlConsole tab={t} paneId={props.id} />
+              <Match when={tab.kind === 'sql'}>
+                <SqlConsole tab={tab} paneId={props.id} />
               </Match>
-              <Match when={t.kind === 'table'}>
-                <TableView tab={t} paneId={props.id} />
+              <Match when={tab.kind === 'table'}>
+                <TableView tab={tab} paneId={props.id} />
               </Match>
-              <Match when={t.kind === 'text'}>
-                <TextViewer tab={t} paneId={props.id} />
+              <Match when={tab.kind === 'text'}>
+                <TextViewer tab={tab} paneId={props.id} />
               </Match>
-              <Match when={t.kind === 'diff'}>
-                <DiffView tab={t} paneId={props.id} />
+              <Match when={tab.kind === 'diff'}>
+                <DiffView tab={tab} paneId={props.id} />
               </Match>
-              <Match when={t.kind === 'kanban'}>
+              <Match when={tab.kind === 'kanban'}>
                 <Board />
               </Match>
-              <Match when={t.kind === 'ticket'}>
-                <TicketView tab={t} paneId={props.id} />
+              <Match when={tab.kind === 'ticket'}>
+                <TicketView tab={tab} paneId={props.id} />
+              </Match>
+              <Match when={tab.kind === 'tool'}>
+                <div class="tile-tool panel-tile" data-tool={tab.tool}>
+                  <Show when={tileTools[tab.tool!]} keyed fallback={<div class="tile-gone">{tab.tool}</div>}>
+                    {(p) => <Dynamic component={p.component} />}
+                  </Show>
+                </div>
+              </Match>
+              <Match when={tab.kind === 'console'}>
+                <Show when={consoles().some((c) => c.id === tab.console)} fallback={<div class="tile-gone">{t('This console is closed')}</div>}>
+                  <div class="tile-console">
+                    <TermView id={tab.console!} focus={isActivePane()} />
+                  </div>
+                </Show>
               </Match>
             </Switch>
           )}

@@ -15,7 +15,7 @@ import { deviceId, layoutFor } from './device'
 import { settings } from './settings'
 import { closeDesks, desk, loadDesks, showDesk, touchRecent, type DeskList } from './desks'
 
-export type TabKind = 'file' | 'sql' | 'table' | 'text' | 'diff' | 'kanban' | 'ticket'
+export type TabKind = 'file' | 'sql' | 'table' | 'text' | 'diff' | 'kanban' | 'ticket' | 'tool' | 'console'
 
 export interface TabState {
   id: string
@@ -34,6 +34,9 @@ export interface TabState {
   from?: string
   /** Number of the kanban ticket shown (kind ticket). */
   ticket?: number
+  /** A tool shown as a tab or a tile (kind tool: id of the tool) or a console (kind console: its id). */
+  tool?: string
+  console?: string
 }
 
 export type LayoutNode =
@@ -299,6 +302,8 @@ export function openTab(tab: Omit<TabState, 'id'>, paneId = session.activePane):
     if (tab.kind === 'diff') return t.path === tab.path && !!t.staged === !!tab.staged && !!t.head === !!tab.head && t.rev === tab.rev
     if (tab.kind === 'kanban') return true
     if (tab.kind === 'ticket') return t.ticket === tab.ticket
+    if (tab.kind === 'tool') return t.tool === tab.tool
+    if (tab.kind === 'console') return t.console === tab.console
     return false
   })
   if (same) {
@@ -394,6 +399,50 @@ export function splitPane(paneId: string, dir: 'row' | 'col') {
     s.activePane = newId
   })
   syncDocsWithTabs()
+}
+
+/** Adds an empty pane beside another one (a new tile), made active; answers its id. */
+export function splitEmpty(paneId: string, dir: 'row' | 'col'): string {
+  const newId = uid()
+  mutate((s) => {
+    const l = findLeaf(s.layout, paneId) ?? firstLeaf(s.layout)
+    const fresh: LayoutNode = { type: 'leaf', id: newId, tabs: [], active: null }
+    const parent = parentOf(s.layout, l.id)
+    if (parent && parent.dir === dir) {
+      const i = parent.children.findIndex((c) => c.id === l.id)
+      const half = parent.sizes[i] / 2
+      parent.sizes[i] = half
+      parent.children.splice(i + 1, 0, fresh)
+      parent.sizes.splice(i + 1, 0, half)
+    } else {
+      const copy = { ...l, tabs: [...l.tabs] }
+      const split: LayoutNode = { type: 'split', id: uid(), dir, children: [copy, fresh], sizes: [0.5, 0.5] }
+      if (!parent) s.layout = split
+      else parent.children[parent.children.findIndex((c) => c.id === l.id)] = split
+    }
+    s.activePane = newId
+  })
+  return newId
+}
+
+/** Removes an empty pane (a tile closed before anything opened in it). */
+export function closeEmptyPane(paneId: string) {
+  mutate((s) => {
+    const l = findLeaf(s.layout, paneId)
+    if (l && !l.tabs.length) removeLeaf(s, paneId)
+  })
+}
+
+/** Exchanges the tabs of two panes (a tile swapped with its neighbour); the focus follows the content. */
+export function swapPanes(a: string, b: string) {
+  mutate((s) => {
+    const x = findLeaf(s.layout, a)
+    const y = findLeaf(s.layout, b)
+    if (!x || !y) return
+    ;[x.tabs, y.tabs] = [y.tabs, x.tabs]
+    ;[x.active, y.active] = [y.active, x.active]
+    s.activePane = b
+  })
 }
 
 export function moveTab(fromPane: string, tabId: string, toPane: string, index: number) {

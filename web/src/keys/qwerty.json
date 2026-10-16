@@ -262,6 +262,21 @@
     ],
     "desk.send.9": [
       "Ctrl+Alt+Shift+Digit9"
+    ],
+    "tile.launcher": [
+      "Ctrl+Alt+Enter"
+    ],
+    "tile.focus.left": [
+      "Ctrl+Alt+Shift+ArrowLeft"
+    ],
+    "tile.focus.right": [
+      "Ctrl+Alt+Shift+ArrowRight"
+    ],
+    "tile.focus.up": [
+      "Ctrl+Alt+Shift+ArrowUp"
+    ],
+    "tile.focus.down": [
+      "Ctrl+Alt+Shift+ArrowDown"
     ]
   }
 }

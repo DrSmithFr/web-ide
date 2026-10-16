@@ -7,7 +7,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 import { notifyIn, notifyOn, on as onPod, openChannel, request, requestIn } from '../pod/rpc'
 import type { Channel } from '../pod/rpc'
-import { attached, diagnostics, home, mutate, openFile, project, relPath, root, session } from '../state/project'
+import { attached, diagnostics, home, mutate, openFile, openTab, project, relPath, root, session } from '../state/project'
 import { WorktreeChip } from '../ui/WorktreeChip'
 import { showTool } from '../state/zones'
 import { dropClasses, dropIndex, moveItem, setDropAt } from '../ui/tabDrop'
@@ -219,12 +219,22 @@ createEffect(
   ),
 )
 
-/** Shows a console in a container element and keeps it fitted. */
+/**
+ * Shows a console in a container element and keeps it fitted. A console has one terminal per
+ * window: shown in two places (the Console tool and a tile), the last one mounted has it and
+ * the other offers to bring it back with a click.
+ */
 export function TermView(props: { id: string; focus?: boolean }) {
   let host!: HTMLDivElement
+  let claim = () => {}
   onMount(() => {
     const t = getTerm(props.id)
     host.appendChild(t.el)
+    claim = () => {
+      if (t.el.parentElement === host) return
+      host.appendChild(t.el)
+      requestAnimationFrame(fit)
+    }
     const fit = () => {
       if (host.offsetWidth > 0 && host.offsetHeight > 0) {
         try {
@@ -238,24 +248,26 @@ export function TermView(props: { id: string; focus?: boolean }) {
     ro.observe(host)
     requestAnimationFrame(() => {
       fit()
-      if (props.focus) t.term.focus()
+      // A popup opened meanwhile (a launcher) keeps the keyboard.
+      if (props.focus && !document.activeElement?.closest('.pick, .modal, .ctx-menu')) t.term.focus()
     })
     onCleanup(() => {
       ro.disconnect()
-      t.el.remove()
+      if (t.el.parentElement === host) t.el.remove()
     })
   })
-  return <div class="term-container" ref={host} />
+  return <div class="term-container" ref={host} data-elsewhere={t('Shown in another place: click to bring it here')} onPointerDown={() => claim()} />
 }
 
 // ---------- actions ----------
 
-export async function newConsole(o: { cwd?: string; command?: string[]; title?: string; kind?: 'terminal' | 'task' } = {}) {
+/** Starts a console; it shows in the Console tool unless show is false (a tile takes it). */
+export async function newConsole(o: { cwd?: string; command?: string[]; title?: string; kind?: 'terminal' | 'task'; show?: boolean } = {}) {
   try {
     const info: ConsoleInfo = { ...(await request('console.create', { kind: o.kind ?? 'terminal', title: o.title, command: o.command, cwd: o.cwd, cols: 120, rows: 30 })), project: project()?.id }
     setConsoles((l) => (l.some((x) => x.id === info.id) ? l : [...l, info]))
     mutate((s) => {
-      showTool(s, 'console')
+      if (o.show !== false) showTool(s, 'console')
       s.bottom.active = info.id
     })
     return info
@@ -467,6 +479,13 @@ export function ConsoleTool() {
               title={c.command?.join(' ') ?? c.title}
               onClick={() => setActive(c.id)}
               onDblClick={() => renameConsole(c)}
+              onContextMenu={(e) =>
+                contextMenu(e, [
+                  { label: t('Open as a tab'), action: () => openTab({ kind: 'console', console: c.id }) },
+                  { label: t('Rename…'), action: () => void renameConsole(c) },
+                  { label: t('Close'), action: () => void closeConsole(c.id) },
+                ])
+              }
               onMouseDown={(e) => e.button === 1 && (e.preventDefault(), closeConsole(c.id))}
             >
               <Icon name={c.kind === 'task' ? 'play' : 'terminal'} size={13} />

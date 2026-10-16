@@ -9,7 +9,8 @@ import { notify, on, request } from '../pod/rpc'
 export interface Desk {
   n: number
   name?: string
-  mode: 'full'
+  /** Full: rails and tool zones; Grid: tiles only (state/tiles.ts). */
+  mode: 'full' | 'grid'
 }
 
 export interface DeskList {
@@ -96,6 +97,13 @@ export function renameDesk(n: number, name: string) {
   changeDesks((d) => {
     const x = d.desks.find((x) => x.n === n)
     if (x) x.name = name.trim() || undefined
+  }, true)
+}
+
+export function setDeskMode(n: number, mode: Desk['mode']) {
+  changeDesks((d) => {
+    const x = d.desks.find((x) => x.n === n)
+    if (x) x.mode = mode
   }, true)
 }
 
