@@ -508,12 +508,20 @@ run(
       assert(shutC, 'Shut down is offered for charlie, whose machine allows it')
       await shutC.click()
       assert(await waitFor(() => (fs.existsSync(powerMark('charlie') + 'shutdown') ? true : null), 30000), 'charlie shut down on the request of the browser, carried by the relay')
-      const shutB = await powerItem('bravo', 'Shut down')
+      // On 127.0.0.1 of alpha, where this browser is not paired, no passkey is asked: the window
+      // holds the token of alpha, which signs the action with its own key for bravo.
+      const lan = await ctx.newPage()
+      lan.on('dialog', (d) => d.accept())
+      await lan.goto(`http://127.0.0.1:${PORT_A}/?token=${TOKEN}`)
+      await lan.waitForSelector('.home .home-bar', { timeout: 40000 })
+      await lan.click('[data-testid=pod-block][data-name=bravo] [data-testid=pod-power]', { timeout: 30000 })
+      const shutB = await lan.waitForSelector('.ctx-menu .ctx-item:has-text("Shut down")')
       assert(await shutB.isDisabled(), 'Shut down is disabled for bravo: its machine has no rule')
       assert(((await shutB.getAttribute('title')) || '').includes('allow-shutdown'), 'the tooltip gives the command: ' + (await shutB.getAttribute('title')))
-      await app.click('.ctx-menu .ctx-item:has-text("Restart the pod")')
-      assert(await waitFor(() => (fs.existsSync(powerMark('bravo') + 'restart') ? true : null), 30000), 'bravo restarted its pod on the request carried over the LAN link')
+      await lan.click('.ctx-menu .ctx-item:has-text("Restart the pod")')
+      assert(await waitFor(() => (fs.existsSync(powerMark('bravo') + 'restart') ? true : null), 30000), 'bravo restarted its pod on the request of a LAN window, signed by alpha')
       assert(!fs.existsSync(powerMark('bravo') + 'shutdown'), 'bravo never shut down')
+      await lan.close()
 
       // 13. Failover. Bravo takes its own link to the relay, a project of bravo is opened on the
       // page, a terminal runs in it. Then alpha, the gateway this window entered through, is

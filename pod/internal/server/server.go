@@ -420,6 +420,10 @@ type window struct {
 	// with a visible window gets no push notification (push.go).
 	pushDevice atomic.Value
 	visible    atomic.Bool
+	// local is a window on the WebSocket of the pod itself (its token, or 127.0.0.1), not one
+	// that came through the relay or a gateway: whoever holds it has the terminals of this machine
+	// already, so the pod signs its power requests without the passkey of the browser.
+	local bool
 }
 
 // transport is one whole-message connection of a window: the rpc channel, or an extra
@@ -677,6 +681,7 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 	c := newClient(s, ctx)
+	c.local = true
 	c.rpc = newTransport(c, &wsConn{c: conn})
 	c.rpc.ws = conn
 	s.addClient(c)

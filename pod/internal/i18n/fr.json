@@ -239,6 +239,7 @@
   "blob too large (%d characters max)": "blob trop gros (%d caractères au maximum)",
   "wrap too large (%d characters max)": "enveloppe trop grosse (%d caractères au maximum)",
   "the pod is not paired": "le pod n'est pas appairé",
+  "the request must be signed by this browser": "la demande doit être signée par ce navigateur",
   "no wrap": "pas d'enveloppe",
   "wrap of another account": "enveloppe d'un autre compte",
   "wrap made for another device": "enveloppe faite pour un autre appareil",

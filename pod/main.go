@@ -866,6 +866,18 @@ func (v *podsView) Update(ctx context.Context, req *identity.UpdateRequest) (any
 // CanPower: the machine of this pod lets it shut down and reboot (the rule of allow-shutdown).
 func (v *podsView) CanPower() bool { return power.Allowed() }
 
+// SignPower signs a request with the key of this pod: a window on its own origin (LAN, 127.0.0.1)
+// asks without the passkey, and the pod that acts checks this pod's certificate instead.
+func (v *podsView) SignPower(req *identity.PowerRequest) error {
+	_, cert, _ := v.id.State()
+	if cert == nil {
+		return i18n.New("the pod is not paired")
+	}
+	req.V, req.Created, req.Cert = 1, time.Now().UnixMilli(), cert
+	req.Sig = identity.SignPower(v.id.Key(), req)
+	return nil
+}
+
 // Power carries a signed power request (relay.md, *Power*). A request for this pod runs here. A
 // wake runs here too when this pod shares a network with the machine that sleeps; otherwise the
 // relay asks the other pods of the account (a LAN peer is on this pod's network, it would not do

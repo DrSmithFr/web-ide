@@ -34,6 +34,8 @@ type Pods interface {
 	// pod that acted on it said; CanPower says whether this machine lets its pod power it off.
 	Power(ctx context.Context, req *identity.PowerRequest) (any, error)
 	CanPower() bool
+	// SignPower signs a power request with the key of this pod, for a window on its own origin.
+	SignPower(req *identity.PowerRequest) error
 }
 
 func (s *Server) registerPods() {
@@ -80,6 +82,16 @@ func (s *Server) registerPods() {
 			return nil, err
 		}
 		req.V = 1
+		// No passkey on the LAN: a window on the origin of the pod sends the action unsigned and
+		// the pod signs it. A window of the relay must sign it with the key of its browser.
+		if req.Sig == "" {
+			if !c.local {
+				return nil, i18n.New("the request must be signed by this browser")
+			}
+			if err := s.Pods.SignPower(&req); err != nil {
+				return nil, err
+			}
+		}
 		return s.Pods.Power(ctx, &req)
 	})
 	s.handle("pods.self", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
@@ -87,7 +99,7 @@ func (s *Server) registerPods() {
 			return nil, i18n.New("the pod is not paired")
 		}
 		out := map[string]any{"site": s.Pods.Site(), "gateway": s.Pods.Gateway(), "preferred": s.Pods.Preferred(),
-			"canUpdate": s.Pods.CanUpdate(), "power": s.Pods.CanPower()}
+			"canUpdate": s.Pods.CanUpdate(), "power": s.Pods.CanPower(), "local": c.local}
 		if own := s.Pods.Own(); own != "" {
 			out["key"], out["fingerprint"] = own, identity.Fingerprint(own)
 		}
