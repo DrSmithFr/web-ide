@@ -2095,5 +2095,6 @@
   "Move the column right": "Déplacer la colonne à droite",
   "Next width of the column": "Largeur suivante de la colonne",
   "Stack the tile in the column on the left": "Empiler la tuile dans la colonne de gauche",
-  "Take the tile out to a column of its own": "Sortir la tuile dans sa propre colonne"
+  "Take the tile out to a column of its own": "Sortir la tuile dans sa propre colonne",
+  "Close the tile": "Fermer la tuile"
 }

@@ -187,6 +187,16 @@ function Pane(props: { id: string }) {
     </div>
   )
 
+  // A tile whose console closed (or whose tool is gone) says so and closes.
+  const gone = (tab: TabState, text: string) => (
+    <div class="tile-gone" data-testid="tile-gone">
+      <span>{text}</span>
+      <button class="btn" onClick={() => closeTab(props.id, tab.id)}>
+        {t('Close the tile')}
+      </button>
+    </div>
+  )
+
   return (
     <div
       class="pane"
@@ -326,13 +336,13 @@ function Pane(props: { id: string }) {
               <Match when={tab.kind === 'tool'}>
                 <div class="tile-tool panel-tile" data-tool={tab.tool}>
                   <Show when={bare()}>{corner(tab)}</Show>
-                  <Show when={tileTools[tab.tool!]} keyed fallback={<div class="tile-gone">{tab.tool}</div>}>
+                  <Show when={tileTools[tab.tool!]} keyed fallback={gone(tab, tab.tool!)}>
                     {(p) => <Dynamic component={p.component} />}
                   </Show>
                 </div>
               </Match>
               <Match when={tab.kind === 'console'}>
-                <Show when={consoles().some((c) => c.id === tab.console)} fallback={<div class="tile-gone">{t('This console is closed')}</div>}>
+                <Show when={consoles().some((c) => c.id === tab.console)} fallback={gone(tab, t('This console is closed'))}>
                   <div class="tile-console">
                     <Show when={bare()}>{corner(tab)}</Show>
                     <TermView id={tab.console!} focus={isActivePane()} />

@@ -350,4 +350,20 @@ run(async ({ ctx, page }) => {
   await page.waitForFunction(() => document.querySelectorAll('.scroll-col').length === 6)
   const counts = await page.$$eval('.pane', (l) => l.map((p) => p.querySelectorAll(':scope > .tabbar .tab').length).sort())
   assert(JSON.stringify(counts) === JSON.stringify([1, 1, 1, 1, 1, 2]), 'back in Scroll the kanban board leaves the group of files for a column of its own: ' + JSON.stringify(counts))
+
+  // A console closed from the Console tool leaves its tile a message and a button to close it.
+  await launch('Console')
+  await page.waitForSelector('.pane.active [data-tool=console] .tab')
+  // The consoles are those of the project: close them until a tile of this desk loses its own.
+  for (let i = 0; i < 10 && !(await page.$('[data-testid=tile-gone]')); i++) {
+    await page.click('.pane.active [data-tool=console] .tab', { button: 'right' })
+    await page.click('.ctx-menu >> text=Close')
+    await page.waitForTimeout(300)
+  }
+  await page.waitForSelector('[data-testid=tile-gone]')
+  const goneBefore = await page.$$eval('[data-testid=tile-gone]', (l) => l.length)
+  const panesBefore = await panes()
+  await page.click('[data-testid=tile-gone] button')
+  await page.waitForFunction((n) => document.querySelectorAll('.pane').length === n, panesBefore - 1, { timeout: 5000 }).catch(() => {})
+  assert((await panes()) === panesBefore - 1 && (await page.$$eval('[data-testid=tile-gone]', (l) => l.length)) === goneBefore - 1, 'the tile of a closed console closes with its button')
 })
