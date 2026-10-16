@@ -21,7 +21,9 @@ USER=${RELAY_USER:-antennae}
 HTTP_PORT=${RELAY_TEST_HTTP_PORT:-4431}
 TLS_PORT=${RELAY_TEST_TLS_PORT:-4443}
 TURN_PORT=${RELAY_TEST_TURN_PORT:-3479}
-TURN_RANGE=${RELAY_TEST_TURN_PORTS:-50000-50499}
+# Apart from the range of the hosted relay (20000-22839) and below the ephemeral one: two relays
+# that share ports take them from each other. RELAY_TEST_TURN_PORTS=23000-25999 for 3000 ports.
+TURN_RANGE=${RELAY_TEST_TURN_PORTS:-23000-23499}
 BINARY=
 
 while [ $# -gt 0 ]; do

@@ -32,8 +32,9 @@ DATA=${RELAY_DATA:-/var/lib/antennae}
 USER=${RELAY_USER:-antennae}
 QUOTA=${RELAY_QUOTA:-10GB}
 # One relayed session costs four TURN allocations (see docs/load.md): the range is the capacity
-# of the relay, 2040 ports carry about 500 simultaneous tunnels.
-TURN_PORTS=${RELAY_TURN_PORTS:-49160-51999}
+# of the relay, 2840 ports carry about 710 simultaneous tunnels. It stays below the ephemeral
+# range of the kernel (32768-60999), whose outgoing connections would take its ports.
+TURN_PORTS=${RELAY_TURN_PORTS:-20000-22839}
 PUSH_SUBJECT=${RELAY_PUSH_SUBJECT:-mailto:contact@antennae.space}
 ENV_FILE=/etc/antennae/env
 VERSION=
@@ -134,6 +135,8 @@ if [ ! -f $ENV_FILE ]; then
   printf '# GITHUB_CLIENT_ID=… GITHUB_CLIENT_SECRET=… GITHUB_TOKEN=… GITHUB_WEBHOOK_SECRET=…\n' > $ENV_FILE
   chmod 640 $ENV_FILE; chown root:$USER $ENV_FILE
 fi
+# The range the unit ran with until now: its firewall rule goes once the new one is written.
+old=\$(grep -o -- '-turn-ports [0-9]*-[0-9]*' "\$unit" 2>/dev/null | cut -d' ' -f2 | tr '-' ':')
 cat > "\$unit.new" <<UNIT
 [Unit]
 Description=Web IDE relay ($DOMAIN)
@@ -178,10 +181,10 @@ if command -v ufw >/dev/null; then
   range=$(echo $TURN_PORTS | tr '-' ':')
   # A range is added in the short form, without --force: ufw rejects --force with "first:last".
   ufw status | grep -q "^\$range/udp " || ufw allow "\$range/udp" >/dev/null
-  # A range the relay used before (a wider or narrower one) goes away: ufw only deletes a rule by
-  # its number, the highest first so the numbering of the others does not move under it.
-  while :; do
-    n=\$(ufw status numbered | grep -E '49160:[0-9]+/udp' | grep -v "\$range/udp" | head -1 | sed -n 's/^\\[ *\\([0-9]*\\)\\].*/\\1/p')
+  # The range the relay used before goes away: ufw only deletes a rule by its number, the
+  # highest first so the numbering of the others does not move under it.
+  while [ -n "\$old" ] && [ "\$old" != "\$range" ]; do
+    n=\$(ufw status numbered | grep "\$old/udp" | tail -1 | sed -n 's/^\\[ *\\([0-9]*\\)\\].*/\\1/p')
     [ -n "\$n" ] || break
     ufw --force delete "\$n"
   done

@@ -22,7 +22,7 @@ pod or in a passkey, only the URL of the relay.
 ```sh
 web-ide-pod relay -data /var/lib/antennae \
   -addr 0.0.0.0:4430 -tls-port 443 -domain relay.example.org \
-  -turn-ports 49160-49999 -push-subject mailto:you@example.org
+  -turn-ports 20000-20999 -push-subject mailto:you@example.org
 ```
 
 | Flag | What it does |
@@ -33,7 +33,7 @@ web-ide-pod relay -data /var/lib/antennae \
 | `-domain` | serve this domain: the certificate comes from Let's Encrypt (`-acme-staging` for the test CA) |
 | `-cert`, `-key` | a certificate of your own instead (reloaded when the files change, no restart) |
 | `-turn-ip`, `-turn-ip6` | the addresses named in the ICE URLs (auto-detected when unset) |
-| `-turn-ports` | the range the TURN relay sockets are bound in, e.g. `49160-49999` (any free port when unset) |
+| `-turn-ports` | the range the TURN relay sockets are bound in, e.g. `20000-20999` (any free port when unset). Keep it below the ephemeral range of the kernel (`32768-60999` on Linux), whose outgoing connections would take its ports. A relayed session costs four of them |
 | `-quota` | bytes one account may move through TURN per month (`10GB`); **unset: no limit** |
 | `-push-subject` | the contact of the Web Push claims (`mailto:` or `https:`) |
 | `-github-env` | a `KEY=VALUE` file (0600) with `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_TOKEN`, `GITHUB_WEBHOOK_SECRET`: without them the relay has no GitHub link and no supporters |
@@ -57,7 +57,7 @@ Wants=network-online.target
 
 [Service]
 ExecStart=/usr/local/bin/web-ide-pod -data /var/lib/relay -addr 0.0.0.0:4430 -tls-port 443 \
-  -domain relay.example.org -turn-ports 49160-49999 -push-subject mailto:you@example.org relay
+  -domain relay.example.org -turn-ports 20000-20999 -push-subject mailto:you@example.org relay
 User=relay
 Group=relay
 Restart=always
@@ -82,7 +82,7 @@ running it again changes nothing.
 ```
 22, 80, 443 tcp          # ssh, the redirect, the page + TURN over TLS + ACME
 3478 tcp, 3478 udp       # STUN and TURN control
-49160-49999 udp          # the TURN relay sockets (-turn-ports)
+20000-20999 udp          # the TURN relay sockets (-turn-ports)
 ```
 
 ## Backups
