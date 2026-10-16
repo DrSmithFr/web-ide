@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"maps"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -109,6 +110,12 @@ func csp(h http.Handler) http.Handler {
 func (s *Server) bootstrapPage(w http.ResponseWriter, r *http.Request) {
 	if p := r.URL.Path; strings.Contains(p[strings.LastIndexByte(p, '/')+1:], ".") {
 		http.NotFound(w, r)
+		return
+	}
+	// A link to a page of a pod in a browser whose Service Worker is not installed yet: the
+	// bootstrap page opens that path in its frame once the tunnel is up.
+	if strings.HasPrefix(r.URL.Path, "/pod/") {
+		http.Redirect(w, r, "/#open="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

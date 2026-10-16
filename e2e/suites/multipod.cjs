@@ -439,6 +439,19 @@ run(
       const direct = await tunnelKeys(page)
       for (const k of [keyA, keyC]) assert(direct.includes(k), `${k} has its own tunnel: ` + direct.join(','))
 
+      // 10b. The public link Claude Code gives (relay origin, /pod/<key>/open) opened in a tab of
+      // its own: the bootstrap page takes it (the session of the device, no passkey), and its
+      // frame shows the file in the project page of alpha.
+      const linked = await ctx.newPage()
+      const helloA = path.join(WS, 'alpha-app', 'hello.txt')
+      await linked.goto(`${ORIGIN}/pod/${keyA}/open?path=${encodeURIComponent(helloA)}&line=1`, { waitUntil: 'domcontentloaded' })
+      await linked.waitForSelector('#frame', { timeout: 40000 })
+      const linkedApp = await waitFor(() => appOf(linked) ?? null, 20000)
+      await linkedApp.waitForSelector('.pane .tab.active:has-text("hello.txt")', { timeout: 40000 })
+      assert(new URL(linkedApp.url()).pathname === `/pod/${keyA}/project/alpha-app`, 'the link opens the project page of alpha in the frame: ' + linkedApp.url())
+      assert(new URL(linked.url()).pathname === '/', 'the tab is the bootstrap page: ' + linked.url())
+      await linked.close()
+
       // 11. An agent turn on charlie, on a window that shows no pod: the browser is notified by
       // charlie, which got the subscription from the fan-out of section 5, not from a panel it
       // ever opened on that pod.

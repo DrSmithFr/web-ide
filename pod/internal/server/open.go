@@ -52,8 +52,14 @@ func (s *Server) serveOpen(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no project of the IDE holds "+path, http.StatusNotFound)
 		return
 	}
-	n := s.pushOpen(p.ID, path, line)
 	target := "/project/" + url.PathEscape(p.ID) + "?open=" + url.QueryEscape(path+":"+strconv.Itoa(line))
+	// A link of the relay origin opened the bootstrap page, whose frame asks this: the file opens
+	// there, in the project page under the path of this pod, not in the windows of other devices.
+	if base := baseOf(r.Context()); base != "" && r.Method != http.MethodPost {
+		http.Redirect(w, r, base+target, http.StatusFound)
+		return
+	}
+	n := s.pushOpen(p.ID, path, line)
 	if r.Method == http.MethodPost {
 		writeJSON(w, map[string]any{"opened": n > 0, "project": p.ID, "url": s.publicURL() + target})
 		return

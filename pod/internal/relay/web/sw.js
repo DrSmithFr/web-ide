@@ -148,6 +148,11 @@ async function handle(req, url, clientId) {
     key = path.split('/')[2] ?? ''
     path = path.slice(('/pod/' + key).length) || '/'
   }
+  // A page of a pod opened on its own (a new tab, a link Claude Code gave): the app only runs in
+  // the frame of the bootstrap page, which opens that path there. A preview runs on its own.
+  if (key && req.mode === 'navigate' && req.destination === 'document' && !path.startsWith('/__preview/')) {
+    return Response.redirect(self.location.origin + '/#open=' + encodeURIComponent(url.pathname + url.search), 302)
+  }
   const win = await bootstrap(key)
   if (!win) return new Response('The bootstrap page is not open.', { status: 503 })
 
@@ -194,7 +199,7 @@ async function handle(req, url, clientId) {
     }
   })
   win.postMessage(
-    { kind: 'http', id, key, base: key ? '/pod/' + key : '', url: path, preview, method: req.method, headers, body, port: chan.port2 },
+    { kind: 'http', id, key, base: key ? '/pod/' + key : '', url: path + url.search, preview, method: req.method, headers, body, port: chan.port2 },
     [chan.port2],
   )
 
@@ -203,6 +208,13 @@ async function handle(req, url, clientId) {
 
   const out = new Headers(h.headers || {})
   out.set('access-control-allow-origin', '*')
+  // A redirect of the pod (/open sends the frame to the project page) is one the browser follows.
+  const to = out.get('location')
+  if (to && [301, 302, 303, 307, 308].includes(h.status)) {
+    chan.port1.close()
+    pending.delete(id)
+    return Response.redirect(new URL(to, url).href, h.status)
+  }
 
   // Keep a copy of what the pod says is immutable, for the next reload of the page, and of its
   // page when it names the build this window declared: the same build serves the same page for

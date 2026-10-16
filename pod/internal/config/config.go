@@ -21,8 +21,8 @@ const DefaultRelay = "wss://antennae.space"
 type Config struct {
 	Addr      string `json:"addr"`
 	Workspace string `json:"workspace"`
-	// PublicURL is the address the user opens the IDE at (a Tailscale name…), for the
-	// links given to Claude Code; empty: http://<addr>.
+	// PublicURL is the address the user opens the IDE at from anywhere, for the links given to
+	// Claude Code; empty: the page of the pod on its relay (paired), else http://<addr>.
 	PublicURL string `json:"publicUrl,omitempty"`
 	// RelayURL is the relay the pod registers with (a ws:// or wss:// URL); empty: no relay.
 	RelayURL string `json:"relayUrl,omitempty"`

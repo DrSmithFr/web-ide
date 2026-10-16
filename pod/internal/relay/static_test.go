@@ -138,3 +138,21 @@ func TestBootstrapPage(t *testing.T) {
 		}
 	}
 }
+
+// TestPodLink: a link to a page of a pod, in a browser without the Service Worker yet, goes to
+// the bootstrap page with that path to open in its frame.
+func TestPodLink(t *testing.T) {
+	st, _ := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
+	t.Cleanup(func() { st.Close() })
+	ts := httptest.NewServer(New(st, nil).Handler())
+	t.Cleanup(ts.Close)
+	c := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	r, err := c.Get(ts.URL + "/pod/abc/open?path=%2Fa%2Fb.go&line=3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Body.Close()
+	if loc := r.Header.Get("Location"); r.StatusCode != http.StatusFound || loc != "/#open=%2Fpod%2Fabc%2Fopen%3Fpath%3D%252Fa%252Fb.go%26line%3D3" {
+		t.Fatalf("%d %q", r.StatusCode, loc)
+	}
+}

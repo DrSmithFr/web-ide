@@ -540,6 +540,10 @@ func (s *Server) httpHandler(req httpRequest) (http.Handler, bool) {
 			s.LAN.ServeGateway(w, r, baseOf(r.Context()))
 		}), true
 	}
+	// A link to a file the relay origin opened in the frame of its bootstrap page.
+	if path, _, _ := strings.Cut(req.Path, "?"); path == openPath {
+		return http.HandlerFunc(s.serveOpen), true
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { s.serveStatic(w, r) }), true
 }
 

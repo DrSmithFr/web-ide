@@ -29,6 +29,11 @@ When a choice is the user's, ask_user puts your questions in the Questions tool 
 Your changes are shown as written by Claude. Keep descriptions under 1500 characters and notes under 1000: notes are for decisions, not reports.
 When you mention a file of the project to the user, write it as a Markdown link to the IDE: [path:line](` + "<ide>" + `/open?path=<absolute path>&line=<line>), so that a click opens it in the IDE.`
 
+// mcpLocal is added to the instructions when the public address is not the local one: the user
+// may click from anywhere (the relay) or on the machine of the pod (no relay needed).
+const mcpLocal = `
+The IDE has two addresses: ` + "<ide>" + ` from anywhere, ` + "<local>" + ` on this machine. Give both for a link to it: [path:line](` + "<ide>" + `/open?path=<absolute path>&line=<line>) ([local](` + "<local>" + `/open?path=<absolute path>&line=<line>)), and the same for the pages of the IDE the tools give.`
+
 type mcpMessage struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id,omitempty"`
@@ -126,7 +131,7 @@ func (s *Server) mcpCall(ctx context.Context, m mcpMessage) mcpReply {
 			"protocolVersion": version,
 			"capabilities":    map[string]any{"tools": map[string]any{}, "prompts": map[string]any{}},
 			"serverInfo":      map[string]any{"name": "web-ide", "title": "Web IDE", "version": s.Version},
-			"instructions":    strings.ReplaceAll(mcpInstructions, "<ide>", s.publicURL()),
+			"instructions":    s.mcpInstructions(),
 		}
 	case "ping":
 		reply.Result = map[string]any{}
@@ -183,12 +188,47 @@ func (s *Server) mcpCall(ctx context.Context, m mcpMessage) mcpReply {
 	return reply
 }
 
-// publicURL is the address the user opens the IDE at: the configured one (a Tailscale
-// name…), else the address of the pod as a local client reaches it.
+// mcpInstructions names the addresses of the IDE: the public one, and the local one beside it.
+func (s *Server) mcpInstructions() string {
+	text := mcpInstructions
+	if pub, local := s.publicURL(), s.localURL(); pub != local {
+		text += strings.ReplaceAll(mcpLocal, "<local>", local)
+	}
+	return strings.ReplaceAll(text, "<ide>", s.publicURL())
+}
+
+// publicURL is the address the user opens the IDE at from anywhere: the configured one, else the
+// page of this pod on the origin of its relay, else the local one.
 func (s *Server) publicURL() string {
 	if s.Cfg.PublicURL != "" {
 		return strings.TrimSuffix(s.Cfg.PublicURL, "/")
 	}
+	if u := s.relayPage(); u != "" {
+		return u
+	}
+	return s.localURL()
+}
+
+// relayPage is the path of this pod on the origin of its relay (https://<relay>/pod/<device key>),
+// for a paired pod: a link there opens the bootstrap page, which shows it in its frame.
+func (s *Server) relayPage() string {
+	if s.RelayStatus == nil || s.Pods == nil {
+		return ""
+	}
+	key, u := s.Pods.Own(), s.RelayStatus().URL
+	if key == "" || u == "" {
+		return ""
+	}
+	if rest, ok := strings.CutPrefix(u, "wss://"); ok {
+		u = "https://" + rest
+	} else if rest, ok := strings.CutPrefix(u, "ws://"); ok {
+		u = "http://" + rest
+	}
+	return strings.TrimSuffix(u, "/") + "/pod/" + key
+}
+
+// localURL is the address of the pod as a client of this machine reaches it.
+func (s *Server) localURL() string {
 	addr := s.Cfg.Addr
 	if strings.HasPrefix(addr, ":") || strings.HasPrefix(addr, "0.0.0.0:") {
 		addr = "127.0.0.1:" + addr[strings.LastIndex(addr, ":")+1:]

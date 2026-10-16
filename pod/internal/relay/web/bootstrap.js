@@ -1373,7 +1373,8 @@ async function openApp() {
   declare()
   const f = document.getElementById('frame')
   f.style.display = 'block'
-  f.src = (shownKey ? '/pod/' + shownKey : '') + (openPath ?? '/app')
+  // A path that names its pod (the link of a page of a pod, opened on its own) is taken as is.
+  f.src = openPath?.startsWith('/pod/') ? openPath : (shownKey ? '/pod/' + shownKey : '') + (openPath ?? '/app')
   document.getElementById('status').style.display = 'none'
   remember(entryPod)
 }

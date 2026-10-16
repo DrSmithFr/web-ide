@@ -2,6 +2,9 @@ package server
 
 import (
 	"context"
+	"net/url"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
@@ -66,5 +69,40 @@ func TestPowerLocal(t *testing.T) {
 	p.call(t, 3, "pods.power", map[string]any{"pod": "bravo", "action": "shutdown", "sig": "signed-by-the-browser"})
 	if len(pods.got) != 2 || pods.got[1].Sig != "signed-by-the-browser" {
 		t.Fatalf("the signature of the browser is carried: %+v", pods.got)
+	}
+}
+
+// TestRelayLinks: a paired pod with a relay gives Claude Code its page on the relay origin, and
+// the local address beside it; /open asked through the tunnel sends the frame to the project page
+// under the path of the pod.
+func TestRelayLinks(t *testing.T) {
+	s, ts := newServer(t)
+	s.Pods = &fakePods{}
+	s.RelayStatus = func() RelayInfo { return RelayInfo{URL: "wss://relay.example"} }
+	text := s.mcpInstructions()
+	local := s.localURL()
+	for _, want := range []string{"(https://relay.example/pod/own/open?path=", "([local](" + local + "/open?path="} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q in:\n%s", want, text)
+		}
+	}
+	if !strings.HasPrefix(local, "http://") || strings.Contains(local, "relay") {
+		t.Fatalf("local address: %q", local)
+	}
+
+	a, _ := dial(t, ts, s.Token)
+	dir := t.TempDir()
+	id := a.call("projects.create", map[string]any{"type": "local", "path": dir})["result"].(map[string]any)["id"].(string)
+	p := newMsgPipe()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	chans := make(chan tunnel.LabeledConn, 1)
+	go s.ServeTunnel(ctx, p.server, chans)
+	file := filepath.Join(dir, "a.go")
+	head, _ := httpChan(t, chans, 1, map[string]any{"path": "/open?path=" + url.QueryEscape(file) + "&line=3", "base": "/pod/own", "method": "GET"})
+	hs, _ := head["headers"].(map[string]any)
+	want := "/pod/own/project/" + url.PathEscape(id) + "?open=" + url.QueryEscape(file+":3")
+	if head["status"] != float64(302) || hs["Location"] != want {
+		t.Fatalf("/open through the tunnel: %v (want %s)", head, want)
 	}
 }
