@@ -110,11 +110,12 @@ rm -f /etc/systemd/system/$UNIT.service
 systemctl daemon-reload
 if command -v ufw >/dev/null; then
   for rule in "$TLS_PORT/tcp" "$TURN_PORT/tcp" "$TURN_PORT/udp"; do
-    ufw status | grep -q "^\$rule " && ufw delete "\$rule" >/dev/null || true
+    ufw status | grep -q "^\$rule " && ufw delete allow "\$rule" >/dev/null || true
   done
-  # ufw only deletes a rule by its number, the highest first so the numbers stay valid.
-  for n in $(ufw status numbered | grep "$TURN_FIRST:$TURN_LAST/udp" | sed -n 's/^\[ *\([0-9]*\)\].*/\1/p' | sort -rn); do
-    ufw --force delete "$n"
+  # ufw only deletes a rule by its number, the highest first so the numbers stay valid. Escaped:
+  # the host runs it, not the machine that sends the script.
+  for n in \$(ufw status numbered | grep "$TURN_FIRST:$TURN_LAST/udp" | sed -n 's/^\[ *\([0-9]*\)\].*/\1/p' | sort -rn); do
+    ufw --force delete "\$n"
   done
 fi
 UNLOAD
