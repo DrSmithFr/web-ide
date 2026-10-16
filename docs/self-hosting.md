@@ -103,6 +103,11 @@ their keys, but the *sync* key wraps live in the base of the old relay — a fre
 `relayclient: sync: no wrap` until an admin device of the account wraps them again (Settings >
 Remote access > Sync), or until the base of the old relay is restored.
 
+**Power** (Wake, Reboot, Shut down from the home page, relay.md *Power*): the relay carries the
+signed requests between the pods of an account, and asks every online pod of the account to send a
+wake. A relay older than milestone 7 drops these messages: the LAN path still works, the page says
+the pod does not answer otherwise. Update the relay with the pods.
+
 ## What a self-hosted relay does not do
 
 Nothing is missing: no quota, no GitHub link needed, no supporter tier. The relay never holds a
