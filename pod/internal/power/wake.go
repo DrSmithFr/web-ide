@@ -30,10 +30,14 @@ const (
 var skipped = []string{"docker", "br-", "veth", "virbr", "tailscale", "tun", "wg", "zt"}
 
 // Interfaces lists the cards of this machine that a magic packet could wake: up, not the loopback,
-// with a MAC, not a virtual one, with an IPv4 network.
+// with a MAC, not a virtual one, with an IPv4 network. Under WSL there is none: the cards the pod
+// sees are the ones of its virtual machine.
 func Interfaces() []Target {
 	if env := os.Getenv(WakeIfacesEnv); env != "" {
 		return parseTargets(env)
+	}
+	if inWSL() {
+		return []Target{}
 	}
 	ifs, err := netInterfaces()
 	if err != nil {
@@ -108,13 +112,16 @@ func MagicPacket(mac string) ([]byte, error) {
 }
 
 // localNets are the IPv4 networks of this machine, the loopback included: the networks it can send
-// a broadcast on.
+// a broadcast on. Under WSL, the ones of Windows too.
 func localNets() []*net.IPNet {
+	var out []*net.IPNet
+	if inWSL() {
+		out = windowsNets()
+	}
 	ifs, err := net.Interfaces()
 	if err != nil {
-		return nil
+		return out
 	}
-	var out []*net.IPNet
 	for _, i := range ifs {
 		if i.Flags&net.FlagUp == 0 {
 			continue
@@ -170,8 +177,11 @@ func port() int {
 }
 
 // Send sends the magic packet of each target to the broadcast address of its network and to
-// 255.255.255.255. It reports an error when no packet left at all.
+// 255.255.255.255. It reports an error when no packet left at all. Under WSL, Windows sends them.
 func Send(targets []Target) error {
+	if inWSL() {
+		return sendWindows(targets)
+	}
 	sent := 0
 	var last error
 	for _, t := range targets {
