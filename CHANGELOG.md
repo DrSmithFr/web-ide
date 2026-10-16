@@ -4,6 +4,14 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-10-16
+
+### Added
+
+- Power from the home page (relay milestone 7): **Wake** a pod that sleeps, and **Restart the pod**, **Reboot** or **Shut down** one that runs, from any device of the account — a phone through the relay included. The browser signs each request with its device key, and the pod it is for checks it (account, revocation list, freshness, no replay). Each action is confirmed first.
+- `sudo web-ide-pod allow-shutdown` lets the pod of a user shut down and reboot its machine (a polkit rule, `-remove` takes it back), and tells the Wake-on-LAN state of the wired cards with the command that keeps it on. Without it, Reboot and Shut down are disabled with the command in their tooltip. `install.sh` prints the command.
+- Wake-on-LAN: each pod tells the other pods the cards of its machine; a pod on the network of a sleeping one sends the magic packet, and when the pod of the page is not on it, the relay asks every other online pod of the account. The hosted relay carries the new messages from this version on.
+
 ## [1.14.0] - 2026-10-16
 
 ### Fixed
