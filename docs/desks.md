@@ -1,6 +1,6 @@
 # Desks (draft)
 
-Status: **under discussion**, nothing is developed and no ticket exists. This page records the direction chosen on 2026-10-16 and the questions still open. It goes with [plugins.md](plugins.md): both treat the IDE as a window manager.
+Status: **under discussion**. User desks and the layout modes are planned in tickets #81 (desks in Full mode), #82 (tiles and Grid), #83 (Scroll) and #84 (phone on Scroll), one lineage; the rest has no ticket. This page records the direction chosen on 2026-10-16 and the questions still open. It goes with [plugins.md](plugins.md): both treat the IDE as a window manager.
 
 ## Why
 
