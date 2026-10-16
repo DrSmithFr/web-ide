@@ -294,9 +294,15 @@ export function activateTab(paneId: string, tabId: string) {
   })
 }
 
+/** Picks the pane a tab opens in (state/tiles.ts: a document in a group of files, a tool alone). */
+let placeTab = (_tab: Omit<TabState, 'id'>, paneId: string) => paneId
+export function setTabPlacer(f: typeof placeTab) {
+  placeTab = f
+}
+
 /** Adds a tab to a pane, or activates the tab already showing the same thing. */
 export function openTab(tab: Omit<TabState, 'id'>, paneId = session.activePane): string {
-  const leaf = findLeaf(session.layout, paneId) ?? activeLeaf()
+  const leaf = findLeaf(session.layout, placeTab(tab, paneId)) ?? activeLeaf()
   const same = leaf.tabs.find((id) => {
     const t = session.tabs[id]
     if (!t || t.kind !== tab.kind) return false

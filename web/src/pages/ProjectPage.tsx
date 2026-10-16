@@ -5,7 +5,7 @@ import { Dynamic } from 'solid-js/web'
 import { RpcError, formatRate, on as onPod, podRates, podState } from '../pod/rpc'
 import {
   activeLeaf, activeTab, closeTab, conflictedDocs, cycleTab, docsVersion, home, mutate, navigate as navHistory, openProject, project, relPath, reopenProject, root,
-  openFile, openTab, closeEmptyPane, saveAll, session, setConflictOpener, setSize, sizesFor, splitPane, closeProject, moveTabToDesk, switchDesk,
+  openFile, closeEmptyPane, saveAll, session, setConflictOpener, setSize, sizesFor, splitPane, closeProject, moveTabToDesk, switchDesk,
 } from '../state/project'
 import { desk, desks, onDeskGone } from '../state/desks'
 import { cycleWidth, focusDirection, moveColumnBy, scrollMode, stackTile, tileMode, unstackTile, openTile, registerTileTools, resizeTile, showToolTile, startResize, swapDirection, toggleSplit } from '../state/tiles'
@@ -541,20 +541,10 @@ function ZonePanel(props: { zone: Zone; width?: number; style?: JSX.CSSPropertie
   const id = () => shownIn(session, props.zone)!
   const detach = () => window.open(podPath(`/project/${project()!.id}/tool/${id()}`), `tool-${id()}`, id() === 'assistant' ? 'popup,width=1100,height=820' : 'popup,width=420,height=760')
   const side = props.zone === 'left' || props.zone === 'right'
-  // The tool leaves its zone for a tab of the active pane.
-  const asTab = () => {
-    const tool = id()
-    mutate((s) => toggleTool(s, tool))
-    openTab({ kind: 'tool', tool })
-    setFocusPart('editor')
-  }
   return (
     <aside class={`zone zone-${props.zone}`} classList={{ side, [`side-${props.zone}`]: side, focused: focusPart() === props.zone }} data-tool={id()} data-focus={props.zone} tabIndex={phone() ? -1 : undefined} style={props.width ? { width: `${props.width}px` } : props.style}>
       <button class="icon-btn detach" title={t('Open in a window')} onClick={detach}>
         <Icon name="external" size={13} />
-      </button>
-      <button class="icon-btn as-tab" title={t('Open as a tab')} onClick={asTab} data-testid="zone-as-tab">
-        <Icon name="split" size={13} />
       </button>
       <Show when={toolPanels[id()]} keyed>
         {(p) => <Dynamic component={p.component} />}

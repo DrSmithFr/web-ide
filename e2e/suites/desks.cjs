@@ -209,22 +209,18 @@ run(async ({ ctx, page }) => {
   await page.waitForSelector('.workbench.grid-desk .pane .tile-console .xterm')
   assert((await panes()) === 2, 'the Grid desk and its tiles are restored after a reload')
 
-  // Back to Full: rails and zones again, the tiles stay as tabs.
+  // Back to Full: rails and zones again; the console tile hides and its tool shows in its zone.
   await page.click(`[data-testid=desk-${gridDesk}]`, { button: 'right' })
   await page.click('.ctx-menu >> text=Full layout')
   await page.waitForSelector('.rail-left')
-  assert((await panes()) === 2 && !!(await page.$('.pane .tile-console')), 'switching to Full keeps the tiles as tabs')
-
-  // A tool leaves its zone for a tab, and can show in its zone at the same time.
-  await page.click('.rail .rail-btn[title="Git"]')
-  await page.waitForSelector('.zone[data-tool=git] .panel')
-  await page.click('.zone[data-tool=git] [data-testid=zone-as-tab]')
-  await page.waitForSelector('.pane .tile-tool[data-tool=git] .panel')
-  assert(!(await page.$('.zone[data-tool=git]')), 'Open as a tab moves the tool from its zone to a tab')
-  await page.click('.rail .rail-btn[title="Git"]')
-  await page.waitForSelector('.zone[data-tool=git] .panel')
-  assert((await page.$$('[data-tool=git] .panel')).length === 2, 'a tool shows in its zone and as a tab at the same time')
-  await page.screenshot({ path: OUT + '/desks-tool-twice.png' })
+  await page.waitForSelector('.zone[data-tool=console] .xterm')
+  const shownPanes = () => page.$$eval('.pane', (l) => l.filter((p) => p.getBoundingClientRect().width > 0).length)
+  assert((await shownPanes()) === 1 && (await page.isVisible('.pane.active .ed-content')) && !(await page.isVisible('.pane .tile-console')), 'switching to Full hides the console tile, shows the Console tool in its zone and keeps the file')
+  assert(!(await page.$('[data-testid=zone-as-tab]')), 'a zone has no Open as a tab button')
+  await page.click(`[data-testid=desk-${gridDesk}]`, { button: 'right' })
+  await page.click('.ctx-menu >> text=Grid of tiles')
+  await page.waitForSelector('.workbench.grid-desk .pane .tile-console .xterm')
+  assert((await shownPanes()) === 2, 'back to Grid the console tile is there again')
 
   // ---- Scroll mode: columns side by side, 3 in sight on a desktop, 2 on a tablet.
   await page.click('[data-testid=desk-add]')
@@ -329,4 +325,29 @@ run(async ({ ctx, page }) => {
   await page.click('.ctx-menu >> text=Scrolling columns')
   await page.waitForSelector('[data-testid=scroll-strip]')
   assert((await cols()) === 4, 'and back to Scroll gives the same columns')
+
+  // Files group, tools stay alone: a file opened from a tool makes a group of files, the next one joins it.
+  await page.click('.scroll-col [data-tool=git] .panel')
+  await open(page, 'main.go')
+  assert((await cols()) === 5 && (await page.$$eval('.pane.active .tab', (l) => l.length)) === 1 && (await page.$$eval('.pane:has([data-tool=git]) > .tabbar .tab', (l) => l.length)) === 1, `a file opened while a tool has the focus opens a group of files beside it (${await cols()} columns, ${await page.$$eval('.pane.active .tab', (l) => l.length)} tabs, ${await page.$$eval('.pane:has([data-tool=git]) > .tabbar .tab', (l) => l.length)} beside Git)`)
+  await page.click('.scroll-col [data-tool=git] .panel')
+  await open(page, 'notes.txt')
+  assert((await cols()) === 5 && (await page.$$eval('.pane.active .tab', (l) => l.length)) === 2, 'the next file joins the group of files')
+  await page.click('.pane.active .tab:has-text("notes.txt")', { button: 'right' })
+  assert(!(await page.$('.ctx-menu >> text=Open as a tab')), 'no Open as a tab in the tab menu')
+  await page.keyboard.press('Escape')
+
+  // The kanban board, a tab among the files in Full, gets a tile of its own back in Scroll.
+  await page.click(`[data-testid=desk-${scrollDesk}]`, { button: 'right' })
+  await page.click('.ctx-menu >> text=Full layout')
+  await page.waitForSelector('.rail-left')
+  assert((await shownPanes()) === 1 && (await page.$$eval('.pane.active > .tabbar .tab', (l) => l.length)) === 2, 'in Full only the group of files shows')
+  await page.click('.rail .rail-btn[title="Kanban"]')
+  await page.click('[data-testid=kanban-open-board]')
+  await page.waitForFunction(() => document.querySelectorAll('.pane.active > .tabbar .tab').length === 3)
+  await page.click(`[data-testid=desk-${scrollDesk}]`, { button: 'right' })
+  await page.click('.ctx-menu >> text=Scrolling columns')
+  await page.waitForFunction(() => document.querySelectorAll('.scroll-col').length === 6)
+  const counts = await page.$$eval('.pane', (l) => l.map((p) => p.querySelectorAll(':scope > .tabbar .tab').length).sort())
+  assert(JSON.stringify(counts) === JSON.stringify([1, 1, 1, 1, 1, 2]), 'back in Scroll the kanban board leaves the group of files for a column of its own: ' + JSON.stringify(counts))
 })

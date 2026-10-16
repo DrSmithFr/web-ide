@@ -40,7 +40,7 @@ import { copyText } from './clipboard'
 import { WorktreeChip } from './WorktreeChip'
 import { addDesk, desk, deskLabel, desks } from '../state/desks'
 import { route } from '../app/router'
-import { detachTab, tileMode, nextSplit, resizing, scrollMode, tileTools } from '../state/tiles'
+import { detachTab, hiddenTools, tileMode, nextSplit, resizing, scrollMode, tileTools } from '../state/tiles'
 import { ScrollArea } from './ScrollArea'
 import { consoles, TermView } from '../console/consoles'
 import { Dynamic } from 'solid-js/web'
@@ -98,10 +98,11 @@ function Split(props: { node: Extract<LayoutNode, { type: 'split' }> }) {
       <For each={props.node.children}>
         {(child, i) => (
           <>
-            <Show when={i() > 0}>
+            {/* A hidden pane of tools (Full mode) takes no room, nor its handle. */}
+            <Show when={i() > 0 && !hiddenTools(child) && props.node.children.slice(0, i()).some((c) => !hiddenTools(c))}>
               <div class="split-handle" onPointerDown={(e) => drag(i() - 1, e)} />
             </Show>
-            <div class="split-cell" style={{ flex: `${props.node.sizes[i()] ?? 1} 1 0` }}>
+            <div class="split-cell" classList={{ hidden: hiddenTools(child) }} style={{ flex: `${props.node.sizes[i()] ?? 1} 1 0` }}>
               <Node node={child} />
             </div>
           </>

@@ -7,7 +7,8 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 import { notifyIn, notifyOn, on as onPod, openChannel, request, requestIn } from '../pod/rpc'
 import type { Channel } from '../pod/rpc'
-import { attached, diagnostics, home, mutate, openFile, openTab, project, relPath, root, session } from '../state/project'
+import { attached, diagnostics, home, mutate, openFile, project, relPath, root, session } from '../state/project'
+import { detachTab, openTile, tileMode } from '../state/tiles'
 import { WorktreeChip } from '../ui/WorktreeChip'
 import { showTool } from '../state/zones'
 import { dropClasses, dropIndex, moveItem, setDropAt } from '../ui/tabDrop'
@@ -481,7 +482,8 @@ export function ConsoleTool() {
               onDblClick={() => renameConsole(c)}
               onContextMenu={(e) =>
                 contextMenu(e, [
-                  { label: t('Open as a tab'), action: () => openTab({ kind: 'console', console: c.id }) },
+                  ...(tileMode() ? [{ label: t('Open in a new tile'), action: () => openTile({ kind: 'console', console: c.id }) }] : []),
+                  { label: t('Open in a window'), action: () => detachTab({ id: '', kind: 'console', console: c.id }) },
                   { label: t('Rename…'), action: () => void renameConsole(c) },
                   { label: t('Close'), action: () => void closeConsole(c.id) },
                 ])

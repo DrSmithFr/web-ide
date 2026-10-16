@@ -1,11 +1,12 @@
-// Tiles (docs/desks.md): a tool or a console shown in a pane of the editor tree, as a tab. In
-// the Grid mode of a desk they are the whole window, like i3: a new tile opens on the right
+// Tiles (docs/desks.md): a tool or a console shown alone in a pane of the editor tree, the
+// files in groups of tabs. In the Grid mode of a desk they are the whole window, like i3: a new tile opens on the right
 // of the focused one or below it, the keyboard moves the focus, swaps and resizes tiles. In
 // the Scroll mode, like niri, the columns of the tree go side by side in a strip wider than
 // the window: a new tile opens a column (or stacks in the focused one), 1 to 3 are in sight.
-import { createSignal, type JSX } from 'solid-js'
-import { activateTab, activeLeaf, addColumn, closeEmptyPane, columnOf, columnsOf, leaves, moveColumn, mutate, openTab, project, resizePane, session, setActivePane, setColumnWidth, splitEmpty, stackLeft, swapPanes, unstack, type TabState } from './project'
-import { desk, desks } from './desks'
+import { createEffect, createRoot, createSignal, type JSX } from 'solid-js'
+import { activateTab, activeLeaf, addColumn, closeEmptyPane, columnOf, columnsOf, findLeaf, leaves, moveColumn, moveTab, mutate, openTab, project, resizePane, session, setActivePane, setColumnWidth, setTabPlacer, splitEmpty, stackLeft, swapPanes, unstack, type LayoutNode, type TabState } from './project'
+import { showTool, zoneOf } from './zones'
+import { desk, desks, setDeskMode, type Desk } from './desks'
 import { captureKeys } from '../keys/bindings'
 import { podPath } from '../app/base'
 import { consoles } from '../console/consoles'
@@ -65,13 +66,94 @@ export function openTile(tab: Omit<TabState, 'id'>) {
 }
 
 /** A new pane beside another: a new column in the Scroll mode, unless tiles stack (below). */
-const newPane = (from: string) => (scrollMode() && nextSplit() === 'row' ? addColumn(from) : splitEmpty(from, nextSplit()))
+const newPane = (from: string, side = nextSplit()) => (scrollMode() && side === 'row' ? addColumn(from) : splitEmpty(from, side))
 
 /** Opens a new empty tile (Go to file fills it); it goes away if nothing opens in it. */
 export function openEmptyTile(): string {
   const from = activeLeaf()
   if (!from.tabs.length) return from.id
   return newPane(from.id)
+}
+
+// ---------- groups of files, tools alone ----------
+
+type Leaf = Extract<LayoutNode, { type: 'leaf' }>
+
+/** Tabs alone in their tile: a tool, a console, and the kanban board in a desk of tiles. */
+export const aloneTab = (x: Pick<TabState, 'kind'> | undefined) => !!x && (x.kind === 'tool' || x.kind === 'console' || (x.kind === 'kanban' && tileMode()))
+const toolLeaf = (l: Leaf) => l.tabs.some((x) => aloneTab(session.tabs[x]))
+const sameTool = (a: Omit<TabState, 'id'> | undefined, b: Omit<TabState, 'id'>) => !!a && a.kind === b.kind && a.tool === b.tool && a.console === b.console
+
+/** The group of files focused last: a file opens there when a tool has the focus. */
+let lastFiles = ''
+createRoot(() =>
+  createEffect(() => {
+    const l = findLeaf(session.layout, session.activePane)
+    if (l?.tabs.length && !toolLeaf(l)) lastFiles = l.id
+  }),
+)
+
+setTabPlacer((tab, paneId) => {
+  const target = findLeaf(session.layout, paneId) ?? activeLeaf()
+  if (aloneTab(tab)) {
+    // The Full mode opens no tool as a tab (its zones show them); the kanban board stays a tab there.
+    if (!tileMode()) return target.id
+    const shown = leaves().find((l) => l.tabs.some((x) => sameTool(session.tabs[x], tab)))
+    if (shown) return shown.id
+    return target.tabs.length ? newPane(target.id) : target.id
+  }
+  if (!toolLeaf(target)) return target.id
+  const group = findLeaf(session.layout, lastFiles) ?? leaves().find((l) => !toolLeaf(l))
+  return group && !toolLeaf(group) ? group.id : newPane(target.id)
+})
+
+/** A desk of tiles never mixes: a tool sharing a pane with other tabs goes to a tile of its own, beside. */
+function separate() {
+  const focus = session.activePane
+  for (const l of leaves()) {
+    const tools = l.tabs.filter((x) => aloneTab(session.tabs[x]))
+    if (l.tabs.length < 2 || !tools.length) continue
+    for (const x of tools.length === l.tabs.length ? tools.slice(1) : tools) moveTab(l.id, x, newPane(l.id, 'row'), 0)
+  }
+  if (findLeaf(session.layout, focus)) setActivePane(focus)
+}
+createRoot(() =>
+  createEffect(() => {
+    if (tileMode() && leaves().some((l) => l.tabs.length > 1 && toolLeaf(l))) queueMicrotask(separate)
+  }),
+)
+
+/** In the Full mode a pane of tools (a tile of a desk of tiles) is hidden: its zones show the tools. */
+export function hiddenTools(n: LayoutNode): boolean {
+  if (tileMode()) return false
+  if (n.type === 'split') return n.children.every(hiddenTools)
+  return n.tabs.length > 0 && n.tabs.every((x) => session.tabs[x]?.kind === 'tool' || session.tabs[x]?.kind === 'console')
+}
+
+/**
+ * Changes the layout mode of a desk. Leaving the tiles for Full shows in their zones the tools
+ * that had a tile (the first one of a zone is the one shown) and gives the focus to the files.
+ */
+export function changeMode(n: number, m: Desk['mode']) {
+  const fromTiles = n === desk() && tileMode()
+  setDeskMode(n, m)
+  if (!fromTiles || m !== 'full') return
+  mutate((s) => {
+    const zones = new Set<string>()
+    for (const l of leaves(s.layout))
+      for (const x of l.tabs) {
+        const tab = s.tabs[x]
+        const id = tab?.kind === 'tool' ? tab.tool : tab?.kind === 'console' ? 'console' : null
+        const z = id && zoneOf(s, id)
+        if (!id || !z || zones.has(z)) continue
+        zones.add(z)
+        showTool(s, id)
+        if (tab.kind === 'console') s.bottom.active = tab.console!
+      }
+  })
+  // The editor keeps a pane in sight.
+  const files = leaves().find((l) => !hiddenTools(l))
+  setActivePane(files?.id ?? splitEmpty(session.activePane, 'row'))
 }
 
 // ---------- resize ----------
