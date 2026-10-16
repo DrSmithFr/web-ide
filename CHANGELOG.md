@@ -4,6 +4,19 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-10-16
+
+### Added
+
+- **Desks**: each project has numbered desks (`1 2 3 +` in the menu bar), like the virtual desktops of GNOME or KDE, each with its own layout: tabs, splits, tool zones, panel sizes. A desk has its URL (`/project/<id>/desk/2`, `/project/<id>` being desk 1): a click switches the window, a middle click opens the desk in a new tab, so each screen shows its own desk. `Ctrl+Alt+1…9` goes to a desk, `Ctrl+Alt+Shift+1…9` sends the active tab there, as do *Move to desk N* in the tab menu and dropping a tab on a desk number. Desks are renamed and removed from their menu; the files stay shared, and the Recent Files belong to the project. The current layout becomes desk 1.
+- **Grid of tiles** (a desk's menu), like i3: no rails nor zones, the window is a tree of tiles. A tile is either a group of files with its tabs or one tool alone (Git, a terminal, the kanban board…), with *Open in a window* and *Close* in its corner. `Ctrl+Alt+Enter` opens a file, a tool or a new terminal in a new tile, on the right or below (`Ctrl+Alt+V` switches, a line marks the side); `Ctrl+Alt+Shift+arrows` move the focus; `Ctrl+Alt+Shift+R` resizes with the arrows (12 px, 48 with Shift). A file opens in the group of files focused last.
+- **Scrolling columns** (a desk's menu), like niri or PaperWM: the same tiles in columns side by side, 3 in sight on a desktop, 2 on a tablet, the view following the focus. `Ctrl+Alt+Shift+PageUp/PageDown` move a column, `Ctrl+Alt+Shift+F` cycles its width (or drag its edge), `Ctrl+Alt+Shift+S` / `U` stack a tile in the column on its left or take it out; a strip of marks under the columns shows where you are. Switching between Grid and Scroll keeps every tile; back in Full, the tools of the tiles show in their zones.
+- A console opens alone in a window of its own (`/project/<id>/console/<id>`).
+
+### Changed
+
+- Tools no longer open as tabs of the editor in the Full layout: a zone has *Open in a window* only.
+
 ## [1.16.1] - 2026-10-16
 
 ### Fixed
