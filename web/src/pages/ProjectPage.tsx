@@ -8,7 +8,7 @@ import {
   openFile, openTab, closeEmptyPane, saveAll, session, setConflictOpener, setSize, sizesFor, splitPane, closeProject, moveTabToDesk, switchDesk,
 } from '../state/project'
 import { desk, desks, onDeskGone } from '../state/desks'
-import { focusDirection, gridMode, openTile, registerTileTools, showToolTile, swapDirection } from '../state/tiles'
+import { focusDirection, gridMode, openTile, registerTileTools, resizeTile, showToolTile, startResize, swapDirection, toggleSplit } from '../state/tiles'
 import { tileLauncher } from '../ui/tileLauncher'
 import { deskPath, navigate, route } from '../app/router'
 import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, toggleTool, toolsIn, zoneOf, zones, type Zone } from '../state/zones'
@@ -682,6 +682,12 @@ export function ProjectPage(props: { id: string }) {
       else void newConsole()
     }),
     registerAction('tile.launcher', () => void tileLauncher()),
+    registerAction('tile.toggleSplit', () => toggleSplit()),
+    registerAction('tile.resize', () => startResize()),
+    registerAction('tile.growWidth', () => resizeTile('row')),
+    registerAction('tile.shrinkWidth', () => resizeTile('row', -0.05)),
+    registerAction('tile.growHeight', () => resizeTile('col')),
+    registerAction('tile.shrinkHeight', () => resizeTile('col', -0.05)),
     ...(['left', 'right', 'up', 'down'] as const).flatMap((d) => [registerAction(`tile.focus.${d}`, () => focusDirection(d)), registerAction(`tile.swap.${d}`, () => swapDirection(d))]),
     ...[1, 2, 3, 4, 5, 6, 7, 8, 9].flatMap((n) => [registerAction(`desk.go.${n}`, () => goDesk(n)), registerAction(`desk.send.${n}`, () => sendToDesk(n))]),
     registerAction('view.toggleBottom', () => mutate((s) => toggleTool(s, 'console'))),

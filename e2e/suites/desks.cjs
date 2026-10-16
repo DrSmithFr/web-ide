@@ -132,6 +132,13 @@ run(async ({ ctx, page }) => {
   await launch('New terminal')
   await page.waitForSelector('.pane .tile-console .xterm')
   assert((await panes()) === 2 && (await activeTool()) === 'console', 'a terminal opens in a new tile beside')
+  const xOf = (sel) => page.$eval(sel, (e) => e.getBoundingClientRect().left)
+  assert((await xOf('.pane .tile-console')) > (await xOf('.pane [data-tool=git]')), 'by default a new tile opens on the right')
+  assert(!!(await page.$('.pane.active.next-row')), 'the active tile marks its right side, where the next tile goes')
+  // Ctrl+Alt+V: the next tile opens below; the marker and the bar button follow.
+  await page.keyboard.press('Control+Alt+KeyV')
+  await page.waitForSelector('.pane.active.next-col')
+  assert((await page.getAttribute('[data-testid=tile-split]', 'data-split')) === 'col', 'Ctrl+Alt+V switches new tiles to below')
   await launch('File')
   await page.waitForSelector('.pick.se')
   await page.keyboard.type('main.go')
@@ -162,6 +169,21 @@ run(async ({ ctx, page }) => {
     return p?.querySelector('[data-tool=git]') && p.getBoundingClientRect().left > x
   }, before, { timeout: 5000 }).catch(() => {})
   assert((await activeTool()) === 'git' && (await page.$eval('.pane.active', (p) => p.getBoundingClientRect().left)) > before, 'a tile swaps with its neighbour and keeps the focus')
+
+  // Resize mode: the arrows grow the focused tile, Escape ends it.
+  const width = () => page.$eval('.pane.active', (p) => p.getBoundingClientRect().width)
+  const w0 = await width()
+  await page.keyboard.press('Control+Alt+Shift+KeyR')
+  await page.waitForSelector('[data-testid=tile-resizing]')
+  await page.keyboard.press('ArrowLeft')
+  await page.keyboard.press('Shift+ArrowLeft')
+  await page.waitForTimeout(200)
+  const w1 = await width()
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('[data-testid=tile-resizing]', { state: 'detached' })
+  await page.keyboard.press('ArrowLeft') // a plain key again, not a resize
+  await page.waitForTimeout(200)
+  assert(w1 < w0 - 100 && Math.abs((await width()) - w1) < 2, `resize mode: the arrows resize the tile, Escape ends it (${w0} → ${w1})`)
 
   // Closing a tile; the desk is restored after a reload.
   await page.keyboard.press('Alt+w')

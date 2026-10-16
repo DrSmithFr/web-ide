@@ -117,6 +117,12 @@ export const actions: ActionDef[] = [
   { id: 'console.new', label: 'New terminal', category: 'Consoles', inTerminal: true },
   { id: 'sql.execute', label: 'Run the active statement', category: 'Database' },
   { id: 'tile.launcher', label: 'Open in a new tile…', category: 'Desks', inTerminal: true },
+  { id: 'tile.toggleSplit', label: 'New tiles: right / below', category: 'Desks', inTerminal: true },
+  { id: 'tile.resize', label: 'Resize the tile (arrows, Esc)', category: 'Desks', inTerminal: true },
+  { id: 'tile.growWidth', label: 'Wider tile', category: 'Desks', inTerminal: true },
+  { id: 'tile.shrinkWidth', label: 'Narrower tile', category: 'Desks', inTerminal: true },
+  { id: 'tile.growHeight', label: 'Taller tile', category: 'Desks', inTerminal: true },
+  { id: 'tile.shrinkHeight', label: 'Shorter tile', category: 'Desks', inTerminal: true },
   ...(['left', 'right', 'up', 'down'] as const).flatMap((d) => [
     { id: `tile.focus.${d}`, label: `Focus the tile ${d === 'left' ? 'on the left' : d === 'right' ? 'on the right' : d === 'up' ? 'above' : 'below'}`, category: 'Desks', inTerminal: true },
     { id: `tile.swap.${d}`, label: `Swap with the tile ${d === 'left' ? 'on the left' : d === 'right' ? 'on the right' : d === 'up' ? 'above' : 'below'}`, category: 'Desks', inTerminal: true },

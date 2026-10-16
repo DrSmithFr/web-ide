@@ -77,6 +77,8 @@ export interface SessionData {
   worktree?: string
   /** Panel sizes per device (state/device.ts): each device keeps its own, the others are not moved. */
   sizes: Record<string, PanelSizes>
+  /** Side where a new tile opens: right of the focused one (row) or below it (col). */
+  split?: 'row' | 'col'
 }
 
 export interface PanelSizes {
@@ -442,6 +444,29 @@ export function swapPanes(a: string, b: string) {
     ;[x.tabs, y.tabs] = [y.tabs, x.tabs]
     ;[x.active, y.active] = [y.active, x.active]
     s.activePane = b
+  })
+}
+
+/**
+ * Resizes a pane along an axis (row: its width, col: its height) by a fraction of its split:
+ * the nearest split of that direction holding it gives or takes the space of a neighbour.
+ */
+export function resizePane(paneId: string, axis: 'row' | 'col', delta: number) {
+  mutate((s) => {
+    let child: string = paneId
+    let p = parentOf(s.layout, child)
+    while (p && p.dir !== axis) {
+      child = p.id
+      p = parentOf(s.layout, child)
+    }
+    if (!p) return
+    const i = p.children.findIndex((c) => c.id === child)
+    const j = i + 1 < p.children.length ? i + 1 : i - 1
+    if (j < 0) return
+    const min = 0.08
+    const d = Math.max(min - p.sizes[i], Math.min(delta, p.sizes[j] - min))
+    p.sizes[i] += d
+    p.sizes[j] -= d
   })
 }
 

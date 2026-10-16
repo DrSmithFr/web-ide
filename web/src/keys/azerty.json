@@ -305,6 +305,12 @@
     ],
     "tile.focus.down": [
       "Ctrl+Alt+Shift+ArrowDown"
+    ],
+    "tile.toggleSplit": [
+      "Ctrl+Alt+KeyV"
+    ],
+    "tile.resize": [
+      "Ctrl+Alt+Shift+KeyR"
     ]
   }
 }

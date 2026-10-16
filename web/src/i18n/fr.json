@@ -2078,5 +2078,14 @@
   "Swap with the tile on the left": "Échanger avec la tuile de gauche",
   "Swap with the tile on the right": "Échanger avec la tuile de droite",
   "Swap with the tile above": "Échanger avec la tuile du dessus",
-  "Swap with the tile below": "Échanger avec la tuile du dessous"
+  "Swap with the tile below": "Échanger avec la tuile du dessous",
+  "New tiles: right / below": "Nouvelles tuiles : à droite / en dessous",
+  "Resize the tile (arrows, Esc)": "Redimensionner la tuile (flèches, Échap)",
+  "Wider tile": "Tuile plus large",
+  "Narrower tile": "Tuile plus étroite",
+  "Taller tile": "Tuile plus haute",
+  "Shorter tile": "Tuile moins haute",
+  "New tiles open on the right": "Les nouvelles tuiles s'ouvrent à droite",
+  "New tiles open below": "Les nouvelles tuiles s'ouvrent en dessous",
+  "Resize: arrows, Shift for more, Esc to end": "Redimensionner : flèches, Maj pour plus, Échap pour finir"
 }

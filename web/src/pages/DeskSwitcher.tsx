@@ -5,7 +5,7 @@ import { podPath } from '../app/base'
 import { deskPath, navigate } from '../app/router'
 import { home, moveTabToDesk, switchDesk } from '../state/project'
 import { addDesk, desk, deskLabel, desks, removeDesk, renameDesk, setDeskMode, type Desk } from '../state/desks'
-import { gridMode } from '../state/tiles'
+import { gridMode, nextSplit, resizing, toggleSplit } from '../state/tiles'
 import { tileLauncher } from '../ui/tileLauncher'
 import { Icon } from '../ui/icons'
 import { draggedTab } from '../ui/EditorArea'
@@ -101,6 +101,20 @@ export function DeskSwitcher() {
         >
           <Icon name="split" size={13} />
         </button>
+        <button
+          class="mb-desk tile-split"
+          title={[nextSplit() === 'row' ? t('New tiles open on the right') : t('New tiles open below'), shortcutOf('tile.toggleSplit')].filter(Boolean).join(' · ')}
+          onClick={toggleSplit}
+          data-testid="tile-split"
+          data-split={nextSplit()}
+        >
+          {nextSplit() === 'row' ? '◨' : '⬓'}
+        </button>
+        <Show when={resizing()}>
+          <span class="mb-resizing" data-testid="tile-resizing">
+            {t('Resize: arrows, Shift for more, Esc to end')}
+          </span>
+        </Show>
       </Show>
     </nav>
   )

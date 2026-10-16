@@ -40,7 +40,7 @@ import { copyText } from './clipboard'
 import { WorktreeChip } from './WorktreeChip'
 import { addDesk, desk, deskLabel, desks } from '../state/desks'
 import { route } from '../app/router'
-import { tileTools } from '../state/tiles'
+import { gridMode, nextSplit, resizing, tileTools } from '../state/tiles'
 import { consoles, TermView } from '../console/consoles'
 import { Dynamic } from 'solid-js/web'
 import { isMarkdownPath, MarkdownView, showRaw, shownRaw, type MarkdownViewApi } from './MarkdownView'
@@ -170,7 +170,10 @@ function Pane(props: { id: string }) {
     ])
 
   return (
-    <div class="pane" data-pane={props.id} classList={{ active: isActivePane(), focused: isActivePane() && focusPart() === 'editor' }} onMouseDown={(e) => e.button < 3 && setActivePane(props.id)}>
+    <div
+      class="pane"
+      data-pane={props.id}
+      classList={{ active: isActivePane(), focused: isActivePane() && focusPart() === 'editor', [`next-${nextSplit()}`]: isActivePane() && gridMode(), resizing: isActivePane() && resizing() }} onMouseDown={(e) => e.button < 3 && setActivePane(props.id)}>
       <div
         ref={tabbar}
         class="tabbar"
