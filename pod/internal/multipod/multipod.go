@@ -13,6 +13,7 @@ import (
 
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 	"github.com/DrSmithFr/web-ide/pod/internal/lan"
+	"github.com/DrSmithFr/web-ide/pod/internal/power"
 	"github.com/DrSmithFr/web-ide/pod/internal/relayclient"
 	"github.com/DrSmithFr/web-ide/pod/internal/settingsync"
 )
@@ -47,6 +48,11 @@ type PodView struct {
 	// OneWay: the pod reaches this pod on the LAN but this pod cannot reach it back (lan.PeerView).
 	// The page says so, rather than a bare "offline".
 	OneWay bool `json:"oneway,omitempty"`
+	// Wake: the pod published a card a magic packet can wake (the page offers Wake when it is
+	// offline). Power: whether its machine lets it shut down and reboot; absent for a pod older than
+	// the power requests, which the page offers nothing.
+	Wake  bool  `json:"wake,omitempty"`
+	Power *bool `json:"power,omitempty"`
 }
 
 // Directory merges the three views of the pods of the account and answers pods.list.
@@ -206,6 +212,10 @@ type List struct {
 	Version  string    `json:"version"`
 	Protocol int       `json:"protocol,omitempty"`
 	Projects []Project `json:"projects"`
+	// Wake is the cards of its machine a magic packet can wake, Power whether the machine lets the
+	// pod shut it down (relay.md, *Power*). A pod older than them writes neither.
+	Wake  []power.Target `json:"wake,omitempty"`
+	Power *bool          `json:"power,omitempty"`
 }
 
 // Project is one entry of a published list.
@@ -250,10 +260,16 @@ func (d *Directory) List() []PodView {
 				continue
 			}
 			v := PodView{Key: p.ID, Name: p.Name, Version: p.Version, Fingerprint: p.Fingerprint,
-				Online: p.Online, Path: p.Path, Projects: p.Projects, Protocol: p.Protocol, OneWay: p.OneWay}
+				Online: p.Online, Path: p.Path, Projects: p.Projects, Protocol: p.Protocol, OneWay: p.OneWay,
+				Wake: len(p.Wake) > 0, Power: p.Power}
 			if l := d.lists[p.ID]; l != nil {
 				v.Name, v.Version = first(l.Name, v.Name), first(l.Version, v.Version)
 				v.Projects = withIcons(v.Projects, l)
+				// What the link told is live; the list fills in what an older link did not say.
+				v.Wake = v.Wake || len(l.Wake) > 0
+				if v.Power == nil {
+					v.Power = l.Power
+				}
 			}
 			seen[p.ID] = true
 			rank[p.ID] = 0
@@ -295,6 +311,24 @@ func (d *Directory) List() []PodView {
 		out[i].Mismatch = Mismatch(Protocol, out[i].Protocol)
 	}
 	return out
+}
+
+// Targets are the cards another pod told for a magic packet, on its LAN link or in its list: what
+// an awake pod of its network needs to wake it.
+func (d *Directory) Targets(key string) []power.Target {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if l := d.lists[key]; l != nil && len(l.Wake) > 0 {
+		return l.Wake
+	}
+	if d.lan != nil {
+		for _, p := range d.lan.Status().Peers {
+			if p.ID == key {
+				return p.Wake
+			}
+		}
+	}
+	return nil
 }
 
 // GapOf is what this pod makes of the protocol of another pod, by its device key: -1 when it is
@@ -350,6 +384,7 @@ func (d *Directory) fill(v *PodView, key, name string) {
 	}
 	v.Name, v.Version = first(l.Name, name), first(l.Version, v.Version)
 	v.Seen = d.seen[key]
+	v.Wake, v.Power = len(l.Wake) > 0, l.Power
 	projects := []map[string]string{}
 	for _, p := range l.Projects {
 		e := map[string]string{"id": p.ID, "name": p.Title, "description": p.Description, "type": p.Type, "path": p.Path, "icon": p.Icon}

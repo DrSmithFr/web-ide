@@ -179,6 +179,12 @@ export function canonicalUpdate(r) {
   return `{"v":${r.v},"pod":${JSON.stringify(r.pod)},"version":${JSON.stringify(r.version)},"created":${r.created}}`
 }
 
+// The bytes a power request covers (relay.md, *Power*): the pod it is for, the action, the moment
+// the user asked.
+export function canonicalPower(r) {
+  return `{"v":${r.v},"pod":${JSON.stringify(r.pod)},"action":${JSON.stringify(r.action)},"created":${r.created}}`
+}
+
 export function canonicalRevocations(r) {
   const revoked = [...r.revoked].sort()
   return `{"account":${JSON.stringify(r.account)},"seq":${r.seq},"epoch":${r.epoch},` +

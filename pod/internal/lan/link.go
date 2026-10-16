@@ -11,6 +11,7 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
+	"github.com/DrSmithFr/web-ide/pod/internal/power"
 )
 
 // The path of the control link: the handshake, then the exchange of the pod infos and of
@@ -74,6 +75,11 @@ type info struct {
 	Protocol int `json:"protocol,omitempty"`
 	// Port is the LAN port of the pod: a pod that was dialed learns where to dial back.
 	Port int `json:"port"`
+	// Wake and Power (relay.md, *Power*): the cards of its machine a magic packet wakes, and whether
+	// the machine lets the pod power it off. A peer keeps them once it is offline: that is when a
+	// wake is needed. An older pod tells neither.
+	Wake  []power.Target `json:"wake,omitempty"`
+	Power *bool          `json:"power,omitempty"`
 }
 
 // updateMsg is the body of $update: a signed update request of a browser of the account, carried
@@ -82,6 +88,13 @@ type info struct {
 type updateMsg struct {
 	Req    string                  `json:"req"`
 	Update *identity.UpdateRequest `json:"update"`
+}
+
+// powerMsg is the body of $power: a signed power request (shutdown, reboot, restart) for the
+// pod on the other side, carried like an update request; its answer is a $power.done.
+type powerMsg struct {
+	Req   string                 `json:"req"`
+	Power *identity.PowerRequest `json:"power"`
 }
 
 // updateDone is the answer of the pod the request named, sent before it restarts.

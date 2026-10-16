@@ -65,10 +65,14 @@ type sigMsg struct {
 	Pods      []PodInfo `json:"pods,omitempty"`
 	// Update this pod (#60): the relay is a plain carrier of a signed update request between two
 	// pods of the same account. req is the id of the hop the relay handed out, echoed on the answer.
-	Update  *identity.UpdateRequest `json:"update,omitempty"`
-	Req     string                  `json:"req,omitempty"`
-	Status  string                  `json:"status,omitempty"`
-	Command string                  `json:"command,omitempty"`
+	Update *identity.UpdateRequest `json:"update,omitempty"`
+	// Power (relay.md, *Power*): a signed power request, carried like an update. A wake is for a
+	// machine that sleeps: it goes to every other online pod of the account, and the first that
+	// sent the magic packet answers.
+	Power   *identity.PowerRequest `json:"power,omitempty"`
+	Req     string                 `json:"req,omitempty"`
+	Status  string                 `json:"status,omitempty"`
+	Command string                 `json:"command,omitempty"`
 	// Quota (milestone 5): the TURN month of the account, carried on the ice message (when the
 	// credentials were refused, the relayed path is closed but the direct paths stay open) and
 	// on the ready message of a pod (Settings > Remote access shows it).
@@ -149,6 +153,30 @@ type updateHop struct {
 	pc  *podConn
 	req string
 	at  time.Time
+	// fan is the wake this hop is one branch of (nil for a request to one pod).
+	fan *wakeFan
+}
+
+// wakeFan is a wake asked of every other pod of the account: the first "sent" goes back, and when
+// every pod refused, the refusal does.
+type wakeFan struct {
+	pending int
+	done    bool
+}
+
+// openHop records a request carried for pc and returns the id of the hop. The caller holds s.mu.
+func (s *Server) openHop(pc *podConn, req string, fan *wakeFan) string {
+	hop := relayNonce()
+	if s.updateHops == nil {
+		s.updateHops = map[string]*updateHop{}
+	}
+	for id, h := range s.updateHops {
+		if time.Since(h.at) > updateHopTTL {
+			delete(s.updateHops, id)
+		}
+	}
+	s.updateHops[hop] = &updateHop{pc: pc, req: req, at: time.Now(), fan: fan}
+	return hop
 }
 
 // updateHopTTL is how long a carried request stays open: the pod answers within the wait of the one
@@ -425,16 +453,7 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 			}
 			hop := ""
 			if target != nil {
-				hop = relayNonce()
-				if s.updateHops == nil {
-					s.updateHops = map[string]*updateHop{}
-				}
-				for id, h := range s.updateHops {
-					if time.Since(h.at) > updateHopTTL {
-						delete(s.updateHops, id)
-					}
-				}
-				s.updateHops[hop] = &updateHop{pc: pc, req: m.Req, at: time.Now()}
+				hop = s.openHop(pc, m.Req, nil)
 			}
 			s.mu.Unlock()
 			if target == nil {
@@ -453,6 +472,10 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			_ = h.pc.send(sigMsg{Type: "update.done", Req: h.req, Status: m.Status, Message: m.Message, Command: m.Command})
+		case "power":
+			s.carryPower(pc, m)
+		case "power.done":
+			s.powerDone(m)
 		case "answer":
 			if bc := s.browserOf(m.Session); bc != nil {
 				bc.send(sigMsg{Type: "answer", Session: m.Session, SDP: m.SDP})

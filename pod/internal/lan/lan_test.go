@@ -557,3 +557,38 @@ func TestMDNSAnnounceAndBrowse(t *testing.T) {
 	}
 	t.Skip("the announcement was not heard back (multicast loopback off)")
 }
+
+// TestPowerOverTheLAN: a power request rides $power like an update request, the answer of the pod
+// it names comes back on $power.done.
+func TestPowerOverTheLAN(t *testing.T) {
+	a := account(t, 1)
+	id, dir := podIdentity(t, a, "bravo")
+	var got *identity.PowerRequest
+	bravoMgr, err := New(Config{Dir: dir, Addr: "127.0.0.1:0", Identity: id, Name: "bravo", Version: "test", Protocol: 1,
+		Handler: podHandler("bravo"), Tick: 50 * time.Millisecond, OnPower: func(r *identity.PowerRequest) update.Answer {
+			got = r
+			return update.Answer{Status: update.StatusRefused, Message: "no rule", Command: "sudo web-ide-pod allow-shutdown"}
+		}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bctx, bcancel := context.WithCancel(context.Background())
+	t.Cleanup(bcancel)
+	bravoMgr.Start(bctx)
+	al := startPodProto(t, a, "alpha", 1, bravoMgr.Status().Listen)
+	waitFor(t, al, "alpha sees bravo", func(st Status) bool { return online(st, "bravo") != nil })
+
+	req := &identity.PowerRequest{V: 1, Pod: id.ID(), Action: identity.PowerShutdown, Created: time.Now().UnixMilli(), Sig: "s"}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	ans, err := al.m.SendPower(ctx, identity.KeyID(id.Key()), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || got.Action != identity.PowerShutdown || got.Sig != "s" {
+		t.Fatalf("bravo got the request unchanged: %+v", got)
+	}
+	if ans.Status != update.StatusRefused || ans.Command == "" || ans.Message != "no rule" {
+		t.Fatalf("the answer of bravo comes back whole: %+v", ans)
+	}
+}

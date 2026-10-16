@@ -18,6 +18,7 @@ import (
 
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
+	"github.com/DrSmithFr/web-ide/pod/internal/power"
 	"github.com/DrSmithFr/web-ide/pod/internal/tunnel"
 	"github.com/DrSmithFr/web-ide/pod/internal/update"
 )
@@ -65,6 +66,10 @@ type Config struct {
 	// OnUpdate runs an update request a peer of the site carried to this pod ($update): the pod
 	// checks it itself, whatever brought it.
 	OnUpdate func(*identity.UpdateRequest) update.Answer
+	// OnPower runs a power request a peer carried to this pod ($power), checked the same way.
+	OnPower func(*identity.PowerRequest) update.Answer
+	// Power tells the cards of this machine and whether the pod may power it off, in $info.
+	Power func() ([]power.Target, bool)
 	// Tick is the pace of the dial loop (default 2 s); Browse runs every 5 ticks.
 	Tick time.Duration
 }
@@ -91,7 +96,7 @@ type Manager struct {
 	tunnels   map[string]*tunnelWindow      // windows bridged by a gateway, by window id + peer TLS fp
 	browsers  map[string]*identity.Cert     // certificates of the browsers of the Devices panel
 	idLinks   map[*idLink]bool              // the open links of the Devices panel
-	updates   map[string]chan update.Answer // update requests this pod sent, by request id
+	updates   map[string]chan update.Answer // update and power requests this pod sent, by request id
 	seq       int64                         // the seq of the last revocation list passed on
 	announced string                        // the account announced by mDNS
 	stopAnn   func()
@@ -117,6 +122,8 @@ type peer struct {
 	name     string
 	version  string
 	protocol int // the multi-pod protocol it told in its $info (0: older than #60)
+	wake     []power.Target
+	power    *bool
 	links    map[*link]bool
 	out      *link // the link we dialed: the gateway goes through it
 	projects json.RawMessage
@@ -505,7 +512,12 @@ func (m *Manager) run(l *link, peerFP string) {
 	m.attach(l, peerFP)
 	defer m.detach(l, peerFP)
 	_, _, rev := m.cfg.Identity.State()
-	_ = l.send("$info", info{Name: m.cfg.Name, Version: m.cfg.Version, Protocol: m.cfg.Protocol, Port: m.Port()})
+	in := info{Name: m.cfg.Name, Version: m.cfg.Version, Protocol: m.cfg.Protocol, Port: m.Port()}
+	if m.cfg.Power != nil {
+		wake, allowed := m.cfg.Power()
+		in.Wake, in.Power = wake, &allowed
+	}
+	_ = l.send("$info", in)
 	if rev != nil {
 		_ = l.send("$revocations", rev)
 	}
@@ -582,7 +594,14 @@ func (m *Manager) run(l *link, peerFP string) {
 				ans := m.cfg.OnUpdate(u.Update)
 				_ = l.send("$update.done", updateDone{Req: u.Req, Status: ans.Status, Message: ans.Message, Command: ans.Command})
 			}
-		case "$update.done":
+		case "$power":
+			var u powerMsg
+			if json.Unmarshal(msg.Params, &u) == nil && m.cfg.OnPower != nil {
+				ans := m.cfg.OnPower(u.Power)
+				_ = l.send("$power.done", updateDone{Req: u.Req, Status: ans.Status, Message: ans.Message, Command: ans.Command})
+			}
+		case "$update.done", "$power.done":
+			// Both answers land on the request that asked, by its id.
 			var d updateDone
 			if json.Unmarshal(msg.Params, &d) == nil {
 				m.mu.Lock()
@@ -657,6 +676,7 @@ func (m *Manager) setInfo(l *link, i info) {
 			p.name = i.Name
 		}
 		p.version, p.protocol = i.Version, i.Protocol
+		p.wake, p.power = i.Wake, i.Power
 	}
 	m.mu.Unlock()
 	if l.inbound && i.Port > 0 && l.remoteHost != "" {
@@ -713,6 +733,21 @@ const UpdateWait = 10 * time.Second
 // SendUpdate carries a signed update request to a peer of the site over its control link and waits
 // for its answer. The peer runs the checks itself: what this pod adds is the route, not the trust.
 func (m *Manager) SendUpdate(ctx context.Context, key string, req *identity.UpdateRequest) (*update.Answer, error) {
+	// No answer: the pod on the other side is older than #60. The user runs the command.
+	return m.carry(ctx, key, "$update", func(id string) any { return updateMsg{Req: id, Update: req} },
+		update.Answer{Status: update.StatusNotService, Command: update.Command(req.Version)})
+}
+
+// SendPower carries a signed power request to a peer of the site, as SendUpdate does. A pod that
+// knows no $power never answers: it is refused with that reason.
+func (m *Manager) SendPower(ctx context.Context, key string, req *identity.PowerRequest) (*update.Answer, error) {
+	return m.carry(ctx, key, "$power", func(id string) any { return powerMsg{Req: id, Power: req} },
+		update.Answer{Status: update.StatusRefused, Message: i18n.Translate("en", i18n.New("that pod does not answer: it may be older than this one"))})
+}
+
+// carry sends a request to a peer on the link this pod dialed and waits for the answer of the same
+// id; silent is the answer of a peer that never says anything.
+func (m *Manager) carry(ctx context.Context, key, method string, body func(id string) any, silent update.Answer) (*update.Answer, error) {
 	m.mu.Lock()
 	var l *link
 	if p := m.peers[key]; p != nil && p.out != nil && !p.out.closed() {
@@ -735,15 +770,14 @@ func (m *Manager) SendUpdate(ctx context.Context, key string, req *identity.Upda
 		delete(m.updates, id)
 		m.mu.Unlock()
 	}()
-	if err := l.send("$update", updateMsg{Req: id, Update: req}); err != nil {
+	if err := l.send(method, body(id)); err != nil {
 		return nil, err
 	}
 	select {
 	case a := <-ch:
 		return &a, nil
 	case <-time.After(UpdateWait):
-		// No answer: the pod on the other side is older than this ticket. The user runs the command.
-		return &update.Answer{Status: update.StatusNotService, Command: update.Command(req.Version)}, nil
+		return &silent, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
@@ -868,6 +902,9 @@ type PeerView struct {
 	// Path is where the page of the peer is served through this pod (empty: offline).
 	Path     string          `json:"path"`
 	Projects json.RawMessage `json:"projects,omitempty"`
+	// Wake and Power are what the peer told in its $info (relay.md, *Power*).
+	Wake  []power.Target `json:"wake,omitempty"`
+	Power *bool          `json:"power,omitempty"`
 }
 
 // AddrView is an address that did not lead to a pod of the account.
@@ -898,7 +935,7 @@ func (m *Manager) Status() Status {
 		if m.cfg.Identity.PeerError(p.cert) != nil {
 			continue
 		}
-		v := PeerView{ID: key, Name: p.name, Fingerprint: identity.Fingerprint(key), Version: p.version, Protocol: p.protocol, Online: p.out != nil, OneWay: p.out == nil && len(p.links) > 0, Projects: p.projects}
+		v := PeerView{ID: key, Name: p.name, Fingerprint: identity.Fingerprint(key), Version: p.version, Protocol: p.protocol, Online: p.out != nil, OneWay: p.out == nil && len(p.links) > 0, Projects: p.projects, Wake: p.wake, Power: p.power}
 		if p.out != nil {
 			v.Addr = p.out.addr
 		}

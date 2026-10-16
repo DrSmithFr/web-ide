@@ -311,5 +311,17 @@
   "the installer is not installed: %s": "l'installateur n'est pas installé : %s",
   "the update could not start: %w": "la mise à jour n'a pas pu démarrer : %w",
   "this pod reaches no other pod": "ce pod ne joint aucun autre pod",
-  "no command": "pas de commande"
+  "no command": "pas de commande",
+  "no power request": "pas de demande d'alimentation",
+  "power request version %d": "demande d'alimentation de version %d",
+  "unknown power action %q": "action d'alimentation inconnue %q",
+  "that pod does not answer: it may be older than this one": "ce pod ne répond pas : il est peut-être plus ancien que celui-ci",
+  "not a user name: %q": "pas un nom d'utilisateur : %q",
+  "run it as root: sudo web-ide-pod allow-shutdown": "à lancer en root : sudo web-ide-pod allow-shutdown",
+  "name the user the pod runs as: -user, or run it with sudo from that user": "nommer l'utilisateur du pod : -user, ou lancer avec sudo depuis cet utilisateur",
+  "this pod is awake": "ce pod est éveillé",
+  "this machine does not let the pod power it off: run the command on it": "cette machine ne laisse pas le pod l'éteindre : lancer la commande sur elle",
+  "this pod is not on the network of that machine": "ce pod n'est pas sur le réseau de cette machine",
+  "the magic packet could not be sent: %w": "le paquet magique n'a pas pu partir : %w",
+  "no awake pod is on the network of that machine": "aucun pod éveillé n'est sur le réseau de cette machine"
 }

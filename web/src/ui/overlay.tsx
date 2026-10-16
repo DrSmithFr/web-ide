@@ -275,6 +275,8 @@ export interface MenuItem {
   action?: () => void
   disabled?: boolean
   hint?: string
+  /** The tooltip of the item: why it is disabled, for one. */
+  title?: string
   danger?: boolean
   separator?: boolean
   /** A setting switched by the item: a check box shows its state. */
@@ -373,6 +375,7 @@ function MenuHost() {
                     aria-checked={it.checked}
                     classList={{ danger: it.danger }}
                     disabled={it.disabled}
+                    title={it.title}
                     onClick={() => {
                       close()
                       it.action?.()

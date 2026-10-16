@@ -8,6 +8,7 @@ import (
 
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 	"github.com/DrSmithFr/web-ide/pod/internal/lan"
+	"github.com/DrSmithFr/web-ide/pod/internal/power"
 	"github.com/DrSmithFr/web-ide/pod/internal/relayclient"
 	"github.com/DrSmithFr/web-ide/pod/internal/settings"
 	"github.com/DrSmithFr/web-ide/pod/internal/settingsync"
@@ -321,5 +322,42 @@ func TestDirectoryLANDownRelayUp(t *testing.T) {
 	out := d.List()
 	if len(out) != 1 || !out[0].Online || out[0].Site != "devD" {
 		t.Fatalf("the relay sees it: it is online, from the relay: %+v", out)
+	}
+}
+
+// TestDirectoryPower: what a LAN peer told of its cards and its rule reaches the page, also once it
+// is offline (that is when it is woken); the published list says it for the other pods, and a pod
+// that says nothing is offered nothing.
+func TestDirectoryPower(t *testing.T) {
+	hub, p, a := hubOf(t)
+	yes := true
+	d := New(hub, fakeLAN{st: lan.Status{Peers: []lan.PeerView{
+		{ID: "devL", Name: "lantern", Wake: []power.Target{{MAC: "02:00:00:00:00:0b", Net: "192.168.1.0/24"}}, Power: &yes},
+		{ID: "devO", Name: "old", Online: true},
+	}}})
+	if err := hub.SetWrap(wrapFor(t, a, p, 0)); err != nil {
+		t.Fatal(err)
+	}
+	no := false
+	d.HandleBlob(settingsync.Msg{Type: "blob", Blob: blobOfList(t, a, "devF", 0, 1, List{V: 1, Name: "far", Version: "1.0", Protocol: Protocol,
+		Wake: []power.Target{{MAC: "02:00:00:00:00:0c", Net: "10.0.0.0/24"}}, Power: &no})})
+	views := map[string]PodView{}
+	for _, v := range d.List() {
+		views[v.Key] = v
+	}
+	if v := views["devL"]; v.Online || !v.Wake || v.Power == nil || !*v.Power {
+		t.Fatalf("an offline LAN peer keeps what it told: %+v", v)
+	}
+	if v := views["devF"]; !v.Wake || v.Power == nil || *v.Power {
+		t.Fatalf("the list of a far pod says it: %+v", v)
+	}
+	if v := views["devO"]; v.Wake || v.Power != nil {
+		t.Fatalf("an older pod is offered nothing: %+v", v)
+	}
+	if got := d.Targets("devL"); len(got) != 1 || got[0].MAC != "02:00:00:00:00:0b" {
+		t.Fatalf("targets of a LAN peer: %+v", got)
+	}
+	if got := d.Targets("devF"); len(got) != 1 || got[0].MAC != "02:00:00:00:00:0c" {
+		t.Fatalf("targets of a listed pod: %+v", got)
 	}
 }

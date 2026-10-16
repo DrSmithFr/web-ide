@@ -10,12 +10,13 @@ import { t } from '../i18n'
 // runtime so the browser and the pod agree on every byte the signature covers.
 const IDENTITY_PATH = inTunnel() ? '/_relay/identity.js' : podPath('/_relay/identity.js')
 
-interface Identity {
+export interface Identity {
   openStore(): Promise<IDBDatabase>
   unlock(db: IDBDatabase): Promise<{ rec: any; key: CryptoKey } | null>
   resume(db: IDBDatabase): Promise<{ rec: any; key: CryptoKey } | null>
   sign(key: CryptoKey, msg: string): Promise<string>
   canonicalUpdate(r: { v: number; pod: string; version: string; created: number }): string
+  canonicalPower(r: { v: number; pod: string; action: string; created: number }): string
 }
 
 /** What the pod that was asked answers, before it restarts. */
@@ -31,14 +32,20 @@ export async function updateOffer(): Promise<{ can: boolean; version: string }> 
   return { can: !!self?.canUpdate, version: ws?.version ?? '' }
 }
 
-/** Signs the request with the device key of this browser and gives it to this pod to carry. */
-export async function askUpdate(podKey: string, version: string): Promise<UpdateAnswer> {
+/** Signs a request with the device key of this browser: the request, its certificate and the
+ * signature of the canonical form canon gives (a function of the identity module). */
+export async function signed<R extends object>(req: R, canon: (id: Identity, r: R) => string): Promise<R & { cert: unknown; sig: string }> {
   const id = (await import(/* @vite-ignore */ IDENTITY_PATH)) as unknown as Identity
   // The session of the device (an hour after its last use) signs without asking the passkey.
   const db = await id.openStore()
   const d = (await id.resume(db)) ?? (await id.unlock(db))
   if (!d?.rec?.cert) throw new Error(t('This browser is not paired on this origin, or its passkey was not unlocked.'))
-  const req = { v: 1, pod: podKey, version, created: Date.now() }
-  const sig = await id.sign(d.key, id.canonicalUpdate(req))
-  return request<UpdateAnswer>('pods.update', { ...req, cert: d.rec.cert, sig })
+  const sig = await id.sign(d.key, canon(id, req))
+  return { ...req, cert: d.rec.cert, sig }
+}
+
+/** Signs the request with the device key of this browser and gives it to this pod to carry. */
+export async function askUpdate(podKey: string, version: string): Promise<UpdateAnswer> {
+  const req = await signed({ v: 1, pod: podKey, version, created: Date.now() }, (id, r) => id.canonicalUpdate(r))
+  return request<UpdateAnswer>('pods.update', req)
 }

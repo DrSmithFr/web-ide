@@ -13,6 +13,7 @@
 const fs = require('fs')
 const path = require('path')
 const http = require('http')
+const dgram = require('dgram')
 const { spawn, execFileSync } = require('child_process')
 const { run, assert, text, pushService } = require('../common.cjs')
 
@@ -84,7 +85,7 @@ async function stop(proc) {
 
 /** A pod of its own: its data folder, its workspace with one project <name>-app, paired with the
  * phrase. relay: it registers with the relay; lan: the address of its LAN port (off: none). */
-async function startPod(name, data, port, { lan = null, relay = false, protocol = 1, podVersion = '', updateCmd = '' } = {}) {
+async function startPod(name, data, port, { lan = null, relay = false, protocol = 1, podVersion = '', updateCmd = '', powerCmd = '', powerAllowed = false, wake = '' } = {}) {
   const dir = path.dirname(data)
   const ws = path.join(dir, 'ws')
   const app = path.join(ws, name + '-app')
@@ -106,7 +107,13 @@ async function startPod(name, data, port, { lan = null, relay = false, protocol 
   // no pod installs one of those.
   if (podVersion) args.push('-pod-version', podVersion)
   const log = fs.openSync(path.join(dir, 'pod.log'), 'a')
-  const proc = spawn(BIN, args.flat(), { stdio: ['ignore', log, log], env: { ...process.env, ...(updateCmd ? { WEBIDE_UPDATE_CMD: updateCmd } : {}) } })
+  // The power hooks: a command in place of systemctl, the polkit rule, the cards a packet wakes.
+  const env = { ...process.env }
+  if (updateCmd) env.WEBIDE_UPDATE_CMD = updateCmd
+  if (powerCmd) env.WEBIDE_POWER_CMD = powerCmd
+  if (powerAllowed) env.WEBIDE_POWER_ALLOWED = '1'
+  if (wake) env.WEBIDE_WAKE_IFACES = wake
+  const proc = spawn(BIN, args.flat(), { stdio: ['ignore', log, log], env })
   procs.push(proc)
   for (let i = 0; i < 150; i++) {
     if (await fetch(`http://127.0.0.1:${port}/`).then(() => true, () => false)) break
@@ -262,6 +269,15 @@ run(
         PushManager.prototype.getSubscription = async () => current
       }, { endpoint: push.endpoint, p256dh: push.keys.p256dh, auth: push.keys.auth })
 
+      // The network of the magic packets: alpha sends a wake to the port of this listener (it stands
+      // for port 9), on the loopback network bravo says its card is on.
+      const wakes = []
+      const wakeSock = dgram.createSocket('udp4')
+      wakeSock.on('message', (m) => wakes.push(m))
+      await new Promise((res) => wakeSock.bind(0, '0.0.0.0', res))
+      process.env.WEBIDE_WAKE_PORT = String(wakeSock.address().port)
+      const WAKE_MAC = '02:00:00:00:00:0b'
+
       // 1. Alpha is paired while it runs, and its LAN peers are typed in its config: restart it
       // so it starts paired, with its sync hub and its preferred gateway flag.
       const lanPeerPort = await pickPort(LAN_PORT + 71)
@@ -292,7 +308,8 @@ run(
       dataC = path.join(TMP, 'mp-charlie', 'data')
       const portB = await pickPort(LAN_PORT + 70)
       const portC = await pickPort(LAN_PORT + 72)
-      bravo = await startPod('bravo', dataB, portB, { lan: `127.0.0.1:${lanPeerPort}` })
+      const powerMark = (name) => path.join(TMP, `${name}-power-`)
+      bravo = await startPod('bravo', dataB, portB, { lan: `127.0.0.1:${lanPeerPort}`, powerCmd: `touch ${powerMark('bravo')}$WEBIDE_POWER_ACTION`, wake: `${WAKE_MAC}@127.0.0.0/8` })
       charlie = await startPod('charlie', dataC, portC, { relay: true })
       assert(await waitOnline(process.env.E2E_POD_ID), 'alpha is still online')
       const keyB = deviceKey(dataB)
@@ -455,7 +472,7 @@ run(
       const marker = path.join(TMP, 'charlie-installed')
       fs.rmSync(marker, { force: true })
       await stop(charlie)
-      charlie = await startPod('charlie', dataC, portC, { relay: true, protocol: 0, updateCmd: 'touch ' + marker })
+      charlie = await startPod('charlie', dataC, portC, { relay: true, protocol: 0, updateCmd: 'touch ' + marker, powerCmd: `touch ${powerMark('charlie')}$WEBIDE_POWER_ACTION`, powerAllowed: true })
       assert(await waitOnline('pod-charlie'), 'charlie is registered with the relay')
       await app.goto(`${ORIGIN}/app`, { waitUntil: 'domcontentloaded' })
       await app.waitForSelector('.home .home-bar', { timeout: 40000 })
@@ -469,11 +486,48 @@ run(
       await app.click(`${block} [data-testid=pod-update] button`)
       assert(await waitFor(() => (fs.existsSync(marker) ? true : null), 30000), 'charlie ran the installer with the request signed by the device key of the browser')
 
+      // 12b. Power. The menu of a pod asks for confirmation, then the browser signs the action
+      // with its device key: charlie (through the relay) lets its pod shut it down, bravo (over the
+      // LAN link of alpha) has no polkit rule, so it only restarts its pod.
+      page.on('dialog', (d) => d.accept())
+      const powerItem = async (name, label) => {
+        await app.click(`[data-testid=pod-block][data-name=${name}] [data-testid=pod-power]`)
+        return app.waitForSelector(`.ctx-menu .ctx-item:has-text("${label}")`)
+      }
+      // The list charlie published again says its rule is there: the item turns enabled.
+      let shutC = null
+      for (const end = Date.now() + 40000; !shutC && Date.now() < end; ) {
+        const it = await powerItem('charlie', 'Shut down')
+        if (!(await it.isDisabled())) shutC = it
+        else {
+          await app.keyboard.press('Escape')
+          await sleep(1000)
+        }
+      }
+      assert(shutC, 'Shut down is offered for charlie, whose machine allows it')
+      await shutC.click()
+      assert(await waitFor(() => (fs.existsSync(powerMark('charlie') + 'shutdown') ? true : null), 30000), 'charlie shut down on the request of the browser, carried by the relay')
+      const shutB = await powerItem('bravo', 'Shut down')
+      assert(await shutB.isDisabled(), 'Shut down is disabled for bravo: its machine has no rule')
+      assert(((await shutB.getAttribute('title')) || '').includes('allow-shutdown'), 'the tooltip gives the command: ' + (await shutB.getAttribute('title')))
+      await app.click('.ctx-menu .ctx-item:has-text("Restart the pod")')
+      assert(await waitFor(() => (fs.existsSync(powerMark('bravo') + 'restart') ? true : null), 30000), 'bravo restarted its pod on the request carried over the LAN link')
+      assert(!fs.existsSync(powerMark('bravo') + 'shutdown'), 'bravo never shut down')
+
       // 13. Failover. Bravo takes its own link to the relay, a project of bravo is opened on the
       // page, a terminal runs in it. Then alpha, the gateway this window entered through, is
       // killed: the page of bravo keeps working, and the home page of the window is the new
       // gateway's.
       await stop(bravo)
+      // Bravo sleeps: its row offers Wake, and alpha, on the network bravo published, sends the
+      // magic packet of its card.
+      await app.click('[data-testid=pod-block][data-name=bravo] [data-testid=pod-wake]', { timeout: 40000 })
+      const pkt = await waitFor(() => wakes.find((m) => m.length === 102) ?? null, 20000)
+      assert(pkt, 'the magic packet reached the network of bravo')
+      const macHex = WAKE_MAC.replace(/:/g, '')
+      assert(pkt.subarray(0, 6).toString('hex') === 'ffffffffffff' && pkt.subarray(6).toString('hex') === macHex.repeat(16), 'it is the packet of its card: ' + pkt.toString('hex'))
+      await app.waitForSelector('[data-testid=pod-block][data-name=bravo] [data-testid=pod-wake]:has-text("Waking")')
+      wakeSock.close()
       bravo = await startPod('bravo', dataB, portB, { lan: `127.0.0.1:${lanPeerPort}`, relay: true })
       assert(await waitOnline('pod-bravo'), 'bravo is registered with the relay')
       const bravoWs = path.join(TMP, 'mp-bravo', 'ws')

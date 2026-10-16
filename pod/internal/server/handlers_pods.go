@@ -30,6 +30,10 @@ type Pods interface {
 	// CanUpdate says whether this pod runs a release version: the only case where it may offer
 	// another pod to install it.
 	CanUpdate() bool
+	// Power carries a signed power request (wake, shutdown, reboot, restart) and answers what the
+	// pod that acted on it said; CanPower says whether this machine lets its pod power it off.
+	Power(ctx context.Context, req *identity.PowerRequest) (any, error)
+	CanPower() bool
 }
 
 func (s *Server) registerPods() {
@@ -65,12 +69,25 @@ func (s *Server) registerPods() {
 		req.V = 1
 		return s.Pods.Update(ctx, &req)
 	})
+	// Power: signed by the page like an update, checked and run by the pod it is for (or, for a wake,
+	// by an awake pod of the network of the machine).
+	s.handle("pods.power", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		if s.Pods == nil {
+			return nil, i18n.New("the pod is not paired")
+		}
+		var req identity.PowerRequest
+		if err := json.Unmarshal(p, &req); err != nil {
+			return nil, err
+		}
+		req.V = 1
+		return s.Pods.Power(ctx, &req)
+	})
 	s.handle("pods.self", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 		if s.Pods == nil {
 			return nil, i18n.New("the pod is not paired")
 		}
 		out := map[string]any{"site": s.Pods.Site(), "gateway": s.Pods.Gateway(), "preferred": s.Pods.Preferred(),
-			"canUpdate": s.Pods.CanUpdate()}
+			"canUpdate": s.Pods.CanUpdate(), "power": s.Pods.CanPower()}
 		if own := s.Pods.Own(); own != "" {
 			out["key"], out["fingerprint"] = own, identity.Fingerprint(own)
 		}

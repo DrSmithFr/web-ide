@@ -27,6 +27,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/pion/webrtc/v4"
 
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 	"github.com/DrSmithFr/web-ide/pod/internal/server"
 	"github.com/DrSmithFr/web-ide/pod/internal/settingsync"
@@ -75,10 +76,13 @@ type sigMsg struct {
 	Pods      []PodInfo `json:"pods,omitempty"`
 	// Update this pod (#60): the relay only carries a signed update request between two pods of the
 	// same account. req is the id of the hop the relay handed out, echoed on the answer.
-	Update  *identity.UpdateRequest `json:"update,omitempty"`
-	Req     string                  `json:"req,omitempty"`
-	Status  string                  `json:"status,omitempty"`
-	Command string                  `json:"command,omitempty"`
+	Update *identity.UpdateRequest `json:"update,omitempty"`
+	// Power (relay.md, *Power*): a signed power request carried the same way; a wake goes to every
+	// other online pod of the account, the relay passes back the first that sent the packet.
+	Power   *identity.PowerRequest `json:"power,omitempty"`
+	Req     string                 `json:"req,omitempty"`
+	Status  string                 `json:"status,omitempty"`
+	Command string                 `json:"command,omitempty"`
 	// Quota (milestone 5): the TURN month of the account, told on ready and on the ice messages
 	// (mirrors relay.QuotaState).
 	Quota *QuotaState `json:"quota,omitempty"`
@@ -181,6 +185,8 @@ type Config struct {
 	// OnUpdate runs an update request the relay carried to this pod: the pod checks the request
 	// itself, the relay is a plain carrier.
 	OnUpdate func(*identity.UpdateRequest) update.Answer
+	// OnPower runs a power request the relay carried to this pod, checked by the pod itself.
+	OnPower func(*identity.PowerRequest) update.Answer
 	// ForceTurn only advertises relay (TURN) candidates (e2e).
 	ForceTurn bool
 	// OnState is called with the state of the link to the relay (connecting, connected,
@@ -204,8 +210,8 @@ type Client struct {
 	link   *podLink
 	iceMu  sync.Mutex
 	iceFor map[string]webrtc.ICEServer
-	// updates holds the update requests this pod sent through the relay, by the id the relay gave
-	// the hop: the answer comes back on the same link.
+	// updates holds the update and power requests this pod sent through the relay, by the id the
+	// relay gave the hop: the answer comes back on the same link.
 	updates map[string]chan update.Answer
 	// quota is the TURN month the relay applies to this pod's account (nil: the relay says
 	// nothing, an old one or no quota at all).
@@ -397,7 +403,12 @@ func (c *Client) runOnce(ctx context.Context) error {
 				ans := c.cfg.OnUpdate(m.Update)
 				_ = link.send(sigMsg{Type: "update.done", Req: m.Req, Status: ans.Status, Message: ans.Message, Command: ans.Command})
 			}
-		case "update.done":
+		case "power":
+			if m.Power != nil && c.cfg.OnPower != nil {
+				ans := c.cfg.OnPower(m.Power)
+				_ = link.send(sigMsg{Type: "power.done", Req: m.Req, Status: ans.Status, Message: ans.Message, Command: ans.Command})
+			}
+		case "update.done", "power.done":
 			c.mu.Lock()
 			ch := c.updates[m.Req]
 			if ch != nil {
@@ -458,6 +469,25 @@ const UpdateWait = 10 * time.Second
 // its answer. The relay carries it to the online link of that device, for pods of the same account
 // only; the target checks the signature itself.
 func (c *Client) SendUpdate(ctx context.Context, device string, req *identity.UpdateRequest) (*update.Answer, error) {
+	return c.carry(ctx, sigMsg{Type: "update", Device: device, Update: req},
+		update.Answer{Status: update.StatusNotService, Command: update.Command(req.Version)})
+}
+
+// SendPower gives the relay a signed power request for another pod of the account. A wake is not
+// for an online link: the relay asks every other pod of the account, and the answer is the first
+// one that sent the packet.
+func (c *Client) SendPower(ctx context.Context, device string, req *identity.PowerRequest) (*update.Answer, error) {
+	silent := i18n.New("that pod does not answer: it may be older than this one")
+	if req.Action == identity.PowerWake {
+		silent = i18n.New("no awake pod is on the network of that machine")
+	}
+	return c.carry(ctx, sigMsg{Type: "power", Device: device, Power: req},
+		update.Answer{Status: update.StatusRefused, Message: i18n.Translate("en", silent)})
+}
+
+// carry sends a request on the link with an id of this pod and waits for its answer, or for silent
+// when no answer comes.
+func (c *Client) carry(ctx context.Context, m sigMsg, silent update.Answer) (*update.Answer, error) {
 	c.mu.Lock()
 	link := c.link
 	if link == nil {
@@ -473,14 +503,15 @@ func (c *Client) SendUpdate(ctx context.Context, device string, req *identity.Up
 		delete(c.updates, id)
 		c.mu.Unlock()
 	}()
-	if err := link.send(sigMsg{Type: "update", Device: device, Req: id, Update: req}); err != nil {
+	m.Req = id
+	if err := link.send(m); err != nil {
 		return nil, err
 	}
 	select {
 	case a := <-ch:
 		return &a, nil
 	case <-time.After(UpdateWait):
-		return &update.Answer{Status: update.StatusNotService, Command: update.Command(req.Version)}, nil
+		return &silent, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}

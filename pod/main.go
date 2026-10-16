@@ -30,6 +30,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 	"github.com/DrSmithFr/web-ide/pod/internal/multipod"
 	"github.com/DrSmithFr/web-ide/pod/internal/pair"
+	"github.com/DrSmithFr/web-ide/pod/internal/power"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 	"github.com/DrSmithFr/web-ide/pod/internal/push"
 	"github.com/DrSmithFr/web-ide/pod/internal/relay"
@@ -50,6 +51,10 @@ var version = "dev"
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "keeper" {
 		runKeeper(os.Args[2:])
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "allow-shutdown" {
+		runAllowShutdown(os.Args[2:])
 		return
 	}
 	home, _ := os.UserHomeDir()
@@ -229,6 +234,8 @@ func main() {
 			check(err)
 		}
 		src := multipod.NewProjectsSource(podID.ID(), hostname(), version, func() []multipod.Project { return projectList(st, reg) })
+		// The other pods read in the list what they can do to this machine: wake it, power it off.
+		src.Power = func() ([]power.Target, bool) { return power.Interfaces(), power.Allowed() }
 		if _, err := hub.AddSource(src); err != nil {
 			check(err)
 		}
@@ -271,6 +278,13 @@ func main() {
 	// What a pod does with an update request that reached it, over a LAN link or the relay: the
 	// checks are the same whatever carried it.
 	upd := update.New(podID)
+	// Power requests go the same way. A wake is for another pod: the cards it published in its list.
+	pwr := power.New(podID, func(key string) []power.Target {
+		if dir == nil {
+			return nil
+		}
+		return dir.Targets(key)
+	})
 	// What a change of the LAN links means: the page refreshes, the relay learns what this pod sees
 	// (the sites), and a pod with no link of its own publishes its key and its list through a peer.
 	onLANChange := func() {
@@ -299,7 +313,7 @@ func main() {
 		}
 	}
 	if cfg.LAN.Addr != "off" {
-		m := startLAN(ctx, st, cfg, srv, podID, *mdns, protocol, pushRevocations, forwardBlob, forwardSyncKey, pullLists, hub, &onLANChange, remoteGateway(&relayCli, &dir), upd.Run)
+		m := startLAN(ctx, st, cfg, srv, podID, *mdns, protocol, pushRevocations, forwardBlob, forwardSyncKey, pullLists, hub, &onLANChange, remoteGateway(&relayCli, &dir), upd.Run, pwr.Run)
 		if m != nil {
 			srv.LAN = m
 			lanMgr = m
@@ -326,7 +340,10 @@ func main() {
 	// under its own origin too (pod/internal/multipod.RemoteGateway).
 	dir.SetRemote(cfg.RelayURL != "")
 	dir.SetEmitter(srv.PodsChanged)
-	srv.Pods = &podsView{dir: dir, cfg: cfg, st: st, relayCli: &relayCli, id: podID}
+	srv.Pods = &podsView{dir: dir, cfg: cfg, st: st, relayCli: &relayCli, id: podID, power: pwr}
+	if pub != nil {
+		go watchAllowed(ctx, pub.Touch)
+	}
 	srv.Pods.(*podsView).lan = lanMgr
 	onLANChange()
 	// The link to the relay is a function of its URL: the Settings page turns remote access on or
@@ -364,6 +381,7 @@ func main() {
 			Preferred: cfg.Gateway.Preferred,
 			Route:     podRoute(lanMgr),
 			OnUpdate:  upd.Run,
+			OnPower:   pwr.Run,
 			ForceTurn: *forceTurn,
 			OnState: func(s string) {
 				state.Store(s)
@@ -536,7 +554,8 @@ func podRoute(m *lan.Manager) *multipod.Route {
 // port, mDNS, and the page of each pod found, served under /_lan/pod/<key>/.
 func startLAN(ctx context.Context, st *store.Store, cfg *config.Config, srv *server.Server, podID *identity.PodIdentity, mdns bool, protocol int,
 	onRevocations func(*identity.Revocations), onBlob func(*identity.BlobRecord), onSync func(*identity.SyncKeyRecord),
-	onKeyReady func(), hub *settingsync.Hub, onChange *func(), remote http.Handler, onUpdate func(*identity.UpdateRequest) update.Answer) *lan.Manager {
+	onKeyReady func(), hub *settingsync.Hub, onChange *func(), remote http.Handler, onUpdate func(*identity.UpdateRequest) update.Answer,
+	onPower func(*identity.PowerRequest) update.Answer) *lan.Manager {
 	m, err := lan.New(lan.Config{
 		Dir:         st.Dir(),
 		Addr:        cfg.LAN.Addr,
@@ -558,6 +577,8 @@ func startLAN(ctx context.Context, st *store.Store, cfg *config.Config, srv *ser
 		OnBlob:        onBlob,
 		OnSync:        onSync,
 		OnUpdate:      onUpdate,
+		OnPower:       onPower,
+		Power:         func() ([]power.Target, bool) { return power.Interfaces(), power.Allowed() },
 		OnWrap: func(w *identity.WrapRecord) {
 			// The wrap the relay pushed for this pod, carried back by a peer of its site: it is the
 			// only way a pod with no link of its own gets the key of the epoch.
@@ -794,6 +815,7 @@ type podsView struct {
 	lan      *lan.Manager
 	relayCli *atomic.Pointer[relayclient.Client]
 	id       *identity.PodIdentity
+	power    *power.Handler
 }
 
 func (v *podsView) List() any { return v.dir.List() }
@@ -839,6 +861,64 @@ func (v *podsView) Update(ctx context.Context, req *identity.UpdateRequest) (any
 		return c.SendUpdate(ctx, req.Pod, req)
 	}
 	return nil, i18n.New("this pod reaches no other pod")
+}
+
+// CanPower: the machine of this pod lets it shut down and reboot (the rule of allow-shutdown).
+func (v *podsView) CanPower() bool { return power.Allowed() }
+
+// Power carries a signed power request (relay.md, *Power*). A request for this pod runs here. A
+// wake runs here too when this pod shares a network with the machine that sleeps; otherwise the
+// relay asks the other pods of the account (a LAN peer is on this pod's network, it would not do
+// better). Any other action goes to the pod it names: over the LAN link, else through the relay.
+func (v *podsView) Power(ctx context.Context, req *identity.PowerRequest) (any, error) {
+	wake := req.Action == identity.PowerWake
+	if req.Pod == v.Own() || (wake && v.power.CanWake(req.Pod)) {
+		return v.power.Run(req), nil
+	}
+	if !wake && v.lan != nil {
+		if ans, err := v.lan.SendPower(ctx, req.Pod, req); err == nil {
+			return ans, nil
+		}
+	}
+	if c := v.relayCli.Load(); c != nil {
+		return c.SendPower(ctx, req.Pod, req)
+	}
+	if wake {
+		return nil, i18n.New("no awake pod is on the network of that machine")
+	}
+	return nil, i18n.New("this pod reaches no other pod")
+}
+
+// watchAllowed publishes the list again when the rule of allow-shutdown comes or goes, so the
+// other pods offer Shut down and Reboot without waiting for the next change of a project.
+func watchAllowed(ctx context.Context, touch func()) {
+	was := power.Allowed()
+	t := time.NewTicker(30 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if now := power.Allowed(); now != was {
+				was = now
+				touch()
+			}
+		}
+	}
+}
+
+// runAllowShutdown is `sudo web-ide-pod allow-shutdown [-remove] [-user U]`: the polkit rule that
+// lets the pod of a user power the machine off and reboot it.
+func runAllowShutdown(args []string) {
+	fs := flag.NewFlagSet("allow-shutdown", flag.ExitOnError)
+	user := fs.String("user", os.Getenv("SUDO_USER"), "the user the pod runs as (default: the one that ran sudo)")
+	remove := fs.Bool("remove", false, "remove the rule: the pod can no longer power the machine off")
+	_ = fs.Parse(args)
+	if err := power.AllowShutdown(*user, *remove, os.Stdout); err != nil {
+		fmt.Fprintln(os.Stderr, i18n.Translate("en", err))
+		os.Exit(1)
+	}
 }
 
 // runRelayCmd runs the relay server subcommand until interrupted.

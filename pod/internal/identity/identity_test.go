@@ -33,6 +33,8 @@ type vectors struct {
 	// Update this pod (#60): the request a browser signs for a pod of its account.
 	UpdateCanonical string `json:"updateCanonical"`
 	UpdateSig       string `json:"updateSig"`
+	PowerCanonical  string `json:"powerCanonical"`
+	PowerSig        string `json:"powerSig"`
 
 	EpochKey1        string `json:"epochKey1"`
 	SettingsKey      string `json:"settingsKey"`

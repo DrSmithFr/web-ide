@@ -43,6 +43,11 @@ export interface PodInfo {
   nokey?: boolean
   /** The pod reaches this pod on the LAN, but this pod cannot reach it back (a NAT, WSL2). */
   oneway?: boolean
+  /** It published a card a magic packet can wake: offline, the home page offers Wake. */
+  wake?: boolean
+  /** Its machine lets it shut down and reboot (sudo web-ide-pod allow-shutdown). Absent: a pod
+   *  older than the power requests, offered nothing. */
+  power?: boolean
 }
 
 /** The pods of the account, kept up to date while the calling component lives (null: not paired). */

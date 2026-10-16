@@ -7,7 +7,7 @@ import { createStore } from 'solid-js/store'
 import { on as onPod, request } from '../pod/rpc'
 import { traceBoot } from '../pod/transport'
 import { navigate } from '../app/router'
-import { Modal } from '../ui/overlay'
+import { contextMenu, Modal } from '../ui/overlay'
 import { errorToast, toast } from '../ui/toast'
 import { copyText } from '../ui/clipboard'
 import { Icon } from '../ui/icons'
@@ -20,6 +20,7 @@ import { OpenTunnels } from '../docker/OpenTunnels'
 import { useLan } from '../state/lan'
 import { podOpenable, podURL, usePods, type PodInfo, type PodProject } from '../state/pods'
 import { askUpdate, updateOffer, type UpdateAnswer } from '../pod/update'
+import { askPower, type PowerAction, type PowerAnswer } from '../pod/power'
 import { type Call, podCall } from '../pod/remote'
 
 interface Project {
@@ -328,11 +329,11 @@ function RemoteCard(props: {
 function Pods(props: { pods: PodInfo[]; name: string; version: string }) {
   const [lan] = useLan()
   const outdated = () => (lan()?.failed ?? []).filter((f) => f.error === 'version')
-  const [self] = createResource(() => request<{ key?: string; fingerprint?: string; gateway: string }>('pods.self').catch(() => null))
+  const [self] = createResource(() => request<{ key?: string; fingerprint?: string; gateway: string; power?: boolean }>('pods.self').catch(() => null))
   const own = (): PodInfo | null => {
     const s = self()
     if (!s?.key) return null
-    return { key: s.key, name: props.name, version: props.version, fingerprint: s.fingerprint ?? '', online: true, gateway: s.gateway === s.key }
+    return { key: s.key, name: props.name, version: props.version, fingerprint: s.fingerprint ?? '', online: true, gateway: s.gateway === s.key, power: s.power }
   }
   return (
     <section class="home-pods">
@@ -380,6 +381,55 @@ function PodRow(props: { pod: PodInfo; self?: boolean }) {
       setBusy(false)
     }
   }
+  // Power (relay.md, *Power*): Wake for a pod that sleeps and published a card, a menu for one that
+  // runs a version that knows the power requests. *Waking…* lasts until the pod is back, or 3 min.
+  const [waking, setWaking] = createSignal(false)
+  const [refusal, setRefusal] = createSignal<PowerAnswer | null>(null)
+  let wakeTimer: ReturnType<typeof setTimeout> | undefined
+  createEffect(() => p().online && setWaking(false))
+  onCleanup(() => clearTimeout(wakeTimer))
+  const runPower = async (action: PowerAction) => {
+    setBusy(true)
+    setRefusal(null)
+    try {
+      const ans = await askPower(p().key, action)
+      if (ans.status === 'sent') {
+        setWaking(true)
+        clearTimeout(wakeTimer)
+        wakeTimer = setTimeout(() => setWaking(false), 3 * 60_000)
+        toast(t('The magic packet left: {name} wakes up.', { name: p().name }), 'ok')
+      } else if (ans.status === 'running') {
+        const done: Record<string, string> = {
+          restart: t('{name} restarts: it comes back in a moment.', { name: p().name }),
+          reboot: t('{name} reboots.', { name: p().name }),
+          shutdown: t('{name} shuts down.', { name: p().name }),
+        }
+        toast(done[action], 'ok')
+      } else if (ans.status === 'not_service') {
+        errorToast(new Error(t('That pod does not run as the service: it cannot restart itself.')))
+      } else {
+        if (ans.command) setRefusal(ans)
+        errorToast(new Error(ans.message ? t(ans.message) : t('the pod refused the request')))
+      }
+    } catch (e) {
+      errorToast(e)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const powerMenu = (e: MouseEvent) => {
+    const name = p().name
+    const allowed = !!p().power
+    const why = allowed ? undefined : t('Run sudo web-ide-pod allow-shutdown on that machine to allow it.')
+    const ask = (action: PowerAction, question: string) => () => {
+      if (confirm(question)) void runPower(action)
+    }
+    contextMenu(e, [
+      { label: t('Restart the pod'), action: ask('restart', t('Restart the pod {name}?', { name })) },
+      { label: t('Reboot'), disabled: !allowed, title: why, action: ask('reboot', t('Reboot the machine of {name}?', { name })) },
+      { label: t('Shut down'), danger: true, disabled: !allowed, title: why, action: ask('shutdown', t('Shut down the machine of {name}? Waking it needs Wake-on-LAN and an awake pod on its network.', { name })) },
+    ])
+  }
   const oneway = () =>
     p().online
       ? t('This pod cannot reach {name} on the local network, only {name} reaches this pod: {name} is reached through the relay.', { name: p().name })
@@ -425,6 +475,16 @@ function PodRow(props: { pod: PodInfo; self?: boolean }) {
           <span class="muted small">{seen()}</span>
         </Show>
         <span class="muted small mono">{p().version}</span>
+        <Show when={!p().online && p().wake}>
+          <button class="btn small" disabled={busy() || waking()} onClick={() => void runPower('wake')} data-testid="pod-wake">
+            {waking() ? t('Waking…') : t('Wake')}
+          </button>
+        </Show>
+        <Show when={p().online && p().power !== undefined}>
+          <button class="icon-btn" title={t('Power')} disabled={busy()} onClick={powerMenu} data-testid="pod-power">
+            <Icon name="power" />
+          </button>
+        </Show>
         <Show when={outdated()}>
           <span data-testid="pod-update">
             <button class="btn small" disabled={busy()} onClick={runUpdate}>
@@ -436,6 +496,13 @@ function PodRow(props: { pod: PodInfo; self?: boolean }) {
       </div>
       <Show when={p().oneway && !p().online}>
         <p class="muted small">{oneway()}</p>
+      </Show>
+      <Show when={refusal()}>
+        <div data-testid="pod-power-cmd">
+          <p class="small">{t('That machine does not let its pod power it off: run this command on it:')}</p>
+          <pre class="mono small">{refusal()!.command}</pre>
+          <button class="btn small" onClick={() => void copyText(refusal()!.command ?? '')}>{t('Copy')}</button>
+        </div>
       </Show>
       <Show when={answer()?.status === 'not_service'}>
         <div data-testid="pod-update-cmd">

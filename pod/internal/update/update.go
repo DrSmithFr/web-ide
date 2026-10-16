@@ -127,12 +127,12 @@ func (h *Handler) command(version string) ([]string, error) {
 	if _, err := os.Stat(script); err != nil {
 		return nil, i18n.Errorf("the installer is not installed: %s", script)
 	}
-	return []string{"systemd-run", "--user", "--unit=web-ide-update-" + suffix(), script, version}, nil
+	return []string{"systemd-run", "--user", "--unit=web-ide-update-" + Suffix(), script, version}, nil
 }
 
-// suffix keeps each transient unit of an update under its own name: a unit that already ran is not
-// reused, and two updates do not fight for one unit.
-func suffix() string {
+// Suffix keeps each transient unit of an update (or of a restart) under its own name: a unit that
+// already ran is not reused, and two of them do not fight for one unit.
+func Suffix() string {
 	b := make([]byte, 4)
 	if _, err := rand.Read(b); err != nil {
 		return fmt.Sprintf("%d", time.Now().Unix())
@@ -154,11 +154,17 @@ func AsService() bool {
 // Detached runs a command outside this pod's process group (setsid), so the pod can stop while the
 // install still runs. The command is not waited for: the pod restarts, and the answer already went
 // out.
-func Detached(cmd []string) error {
+func Detached(cmd []string) error { return DetachedEnv(cmd, nil) }
+
+// DetachedEnv is Detached with variables added to the environment of the command.
+func DetachedEnv(cmd, env []string) error {
 	if len(cmd) == 0 {
 		return i18n.New("no command")
 	}
 	c := exec.Command(cmd[0], cmd[1:]...)
+	if len(env) > 0 {
+		c.Env = append(os.Environ(), env...)
+	}
 	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	c.Stdout, c.Stderr = os.Stdout, os.Stderr
 	return c.Start()

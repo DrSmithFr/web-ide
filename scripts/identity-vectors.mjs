@@ -98,6 +98,10 @@ async function main() {
   const upd = { v: 1, pod: v.deviceId, version: 'v1.11.0', created: Number(v.updateCanonical.match(/"created":(\d+)/)[1]) }
   check('updateCanonical', identity.canonicalUpdate(upd), v.updateCanonical)
   check('updateSig', await identity.sign(deviceKey, identity.canonicalUpdate(upd)), v.updateSig)
+  // Power (relay.md, *Power*): the same shape, with an action in place of the version.
+  const pow = { v: 1, pod: v.deviceId, action: 'shutdown', created: Number(v.powerCanonical.match(/"created":(\d+)/)[1]) }
+  check('powerCanonical', identity.canonicalPower(pow), v.powerCanonical)
+  check('powerSig', await identity.sign(deviceKey, identity.canonicalPower(pow)), v.powerSig)
 
   // A signature made by the browser must verify with the account id alone (the pod checks a
   // peer the same way).

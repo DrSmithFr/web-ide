@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
+	"github.com/DrSmithFr/web-ide/pod/internal/power"
 	"github.com/DrSmithFr/web-ide/pod/internal/settingsync"
 )
 
@@ -16,6 +17,8 @@ type ProjectsSource struct {
 	name    string
 	version string
 	read    func() []Project
+	// Power gives the cards of the machine and whether the pod may power it off (nil: neither).
+	Power func() ([]power.Target, bool)
 }
 
 // NewProjectsSource makes the source of the list of this pod. read gives its projects, with the
@@ -34,6 +37,10 @@ func (s *ProjectsSource) Enabled() bool       { return true }
 // unchanged list stays an unchanged list and nothing is written again.
 func (s *ProjectsSource) Read() json.RawMessage {
 	l := List{V: 1, Name: s.name, Version: s.version, Protocol: Protocol, Projects: s.read()}
+	if s.Power != nil {
+		wake, allowed := s.Power()
+		l.Wake, l.Power = wake, &allowed
+	}
 	b, err := json.Marshal(l)
 	if err != nil {
 		return json.RawMessage(`{}`)
