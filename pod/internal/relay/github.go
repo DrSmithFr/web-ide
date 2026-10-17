@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net/http"
@@ -58,6 +59,9 @@ type GitHub struct {
 
 	mu      sync.Mutex
 	pending map[string]*githubPending // state nonce → the link that asked for it
+	// changed is told the accounts whose supporter state may have moved (a read of the list):
+	// the relay tells their pods at once, else they show the old quota until they reconnect.
+	changed func(accounts []string)
 }
 
 // Sponsor is one person sponsoring the project, as the maintainer's token or
@@ -198,6 +202,30 @@ func (s *Store) GitHubLink(account string) (githubID, login string, err error) {
 		return "", "", nil
 	}
 	return githubID, login, err
+}
+
+// LinkedAccounts lists the accounts linked to a GitHub login, or to the given GitHub id only.
+func (s *Store) LinkedAccounts(githubID string) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	q, args := "SELECT account FROM github", []any{}
+	if githubID != "" {
+		q, args = q+" WHERE github_id=?", []any{githubID}
+	}
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var a string
+		if err := rows.Scan(&a); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
 }
 
 // UnlinkGitHub drops the link of an account: the account is no longer a supporter.
@@ -391,14 +419,43 @@ func (s *Server) serveGitHubCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "the link could not be stored", http.StatusInternalServerError)
 		return
 	}
+	s.tellQuota([]string{p.account})
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	// A small window that tells the panel and closes itself: the relay never sees a token again.
-	fmt.Fprintf(w, `<!doctype html><meta charset=utf-8><title>GitHub linked</title>
-<p>@%s</p><script>
-try { localStorage.setItem('webide.github.done', %q) } catch {}
-if (window.opener) window.opener.postMessage({type:'webide.github', login:%q}, location.origin)
-setTimeout(() => window.close(), 400)
-</script>`, login, id, login)
+	// A small window that thanks, tells the panel (github-done.js) and closes on its button: the
+	// relay never sees a token again.
+	words := githubDoneWords(r.Header.Get("Accept-Language"), g.isSupporter(p.account))
+	fmt.Fprintf(w, `<!doctype html><html lang="%s"><meta charset=utf-8>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>%s</title><link rel="stylesheet" href="/_relay/bootstrap.css">
+<main class="card" id="done" data-id="%s" data-login="%s">
+<div class="brand"><div class="name">%s</div></div>
+<p>%s</p><p class="muted">%s</p>
+<button class="btn primary" type="button" id="close">%s</button>
+</main><script type="module" src="/_relay/github/done.js"></script>`,
+		words.lang, html.EscapeString(words.title), html.EscapeString(id), html.EscapeString(login),
+		html.EscapeString(words.title), html.EscapeString(fmt.Sprintf(words.linked, "@"+login)),
+		html.EscapeString(words.thanks), html.EscapeString(words.close))
+}
+
+// githubDoneWords are the words of the window GitHub sends back to, in French when the browser
+// asks for it: the relay pages follow the browser language.
+type doneWords struct{ lang, title, linked, thanks, close string }
+
+func githubDoneWords(acceptLanguage string, supporter bool) doneWords {
+	fr := strings.HasPrefix(strings.ToLower(strings.TrimSpace(acceptLanguage)), "fr")
+	w := doneWords{"en", "GitHub linked", "This account is now linked to %s.",
+		"Thanks for linking it! Sponsoring Web IDE on GitHub lifts the monthly TURN quota of the relay.", "Close"}
+	if supporter {
+		w.thanks = "Thanks for supporting Web IDE, hugs ♥ The relay no longer counts your TURN traffic."
+	}
+	if fr {
+		w = doneWords{"fr", "GitHub lié", "Ce compte est maintenant lié à %s.",
+			"Merci de l’avoir lié ! Soutenir Web IDE sur GitHub lève le quota TURN mensuel du relay.", "Fermer"}
+		if supporter {
+			w.thanks = "Merci de soutenir Web IDE, des bisous ♥ Le relay ne compte plus votre trafic TURN."
+		}
+	}
+	return w
 }
 
 // exchange trades the code for a token. The token is used once, by user, and never stored.
@@ -570,7 +627,15 @@ func (g *GitHub) refreshSponsors(ctx context.Context) error {
 	for _, sp := range byID {
 		sponsors = append(sponsors, sp)
 	}
-	return g.store.SaveSponsors(sponsors)
+	if err := g.store.SaveSponsors(sponsors); err != nil {
+		return err
+	}
+	if g.changed != nil {
+		if accounts, err := g.store.LinkedAccounts(""); err == nil {
+			g.changed(accounts)
+		}
+	}
+	return nil
 }
 
 // refreshLoop reads the sponsor list again every hour.
@@ -652,7 +717,33 @@ func (s *Server) serveGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if accounts, err := g.store.LinkedAccounts(id); err == nil {
+		s.tellQuota(accounts)
+	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// tellQuota sends the TURN month to the pods of these accounts: a supporter state that moved (a
+// GitHub link, a sponsorship) shows in their Settings at once, not at their next connection.
+func (s *Server) tellQuota(accounts []string) {
+	if s.turn == nil || len(accounts) == 0 {
+		return
+	}
+	want := map[string]bool{}
+	for _, a := range accounts {
+		want[a] = true
+	}
+	s.mu.Lock()
+	var pods []*podConn
+	for _, pc := range s.pods {
+		if pc.account != "" && want[pc.account] {
+			pods = append(pods, pc)
+		}
+	}
+	s.mu.Unlock()
+	for _, pc := range pods {
+		_ = pc.send(sigMsg{Type: "quota", Quota: s.turn.QuotaState(pc.account)})
+	}
 }
 
 // validWebhookSignature checks the GitHub HMAC of a body.

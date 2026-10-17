@@ -25,6 +25,7 @@ var (
 	bootstrapCSS  []byte
 	routesJS      []byte
 	swJS          []byte
+	githubDoneJS  []byte
 )
 
 func init() {
@@ -33,6 +34,7 @@ func init() {
 	bootstrapCSS, _ = io.ReadAll(mustRead("bootstrap.css"))
 	routesJS, _ = io.ReadAll(mustRead("routes.js"))
 	swJS, _ = io.ReadAll(mustRead("sw.js"))
+	githubDoneJS, _ = io.ReadAll(mustRead("github-done.js"))
 }
 
 func mustRead(name string) io.Reader {
@@ -79,6 +81,7 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("/_relay/github/login", s.serveGitHubLogin)
 		mux.HandleFunc("/_relay/github/callback", s.serveGitHubCallback)
 		mux.HandleFunc("/_relay/github/webhook", s.serveGitHubWebhook)
+		mux.HandleFunc("/_relay/github/done.js", staticJS(githubDoneJS))
 	}
 	for p := range appFiles {
 		mux.HandleFunc(p, s.serveAppFile)

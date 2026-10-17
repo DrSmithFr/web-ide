@@ -118,10 +118,11 @@ start_relay() {
   # filters candidates it cannot reach; the suite asserts the pair is a relay one.
   # The push suite runs a fake push service: the relay lets its endpoints through.
   # The quota suite gives the relay a monthly TURN quota (E2E_RELAY_QUOTA).
-  # A fake OAuth App: the identity suite links GitHub up to the redirect to github.com.
+  # A fake OAuth App and webhook secret: the identity suite links GitHub up to the redirect to
+  # github.com, and makes the account a supporter with a signed sponsorship event.
   QUOTA=()
   [ -n "${E2E_RELAY_QUOTA:-}" ] && QUOTA=(-quota "$E2E_RELAY_QUOTA")
-  WEBIDE_GITHUB_CLIENT=e2e-client WEBIDE_GITHUB_SECRET=e2e-secret "$ROOT/bin/web-ide-pod" -data "$TMP/relaydata" -addr "127.0.0.1:$RELAY_PORT" -turn-ip 127.0.0.1 -turn-port "$TURN_PORT" \
+  WEBIDE_GITHUB_CLIENT=e2e-client WEBIDE_GITHUB_SECRET=e2e-secret WEBIDE_GITHUB_WEBHOOK=e2e-hook "$ROOT/bin/web-ide-pod" -data "$TMP/relaydata" -addr "127.0.0.1:$RELAY_PORT" -turn-ip 127.0.0.1 -turn-port "$TURN_PORT" \
     ${QUOTA[@]+"${QUOTA[@]}"} -push-test-endpoint "http://127.0.0.1:$PUSH_PORT/push/" relay >"$TMP/relay.log" 2>&1 </dev/null &
   RELAY_PID=$!
   export E2E_RELAY_PID=$RELAY_PID

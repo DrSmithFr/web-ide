@@ -212,6 +212,27 @@ run(
     assert(!(await app.locator('.toast:has-text("only a device")').count()), 'no "only a device of the account" error')
     for (const p of page.context().pages()) if (p.url().startsWith('https://github.com/')) await p.close()
 
+    // A sponsorship of the linked login moves the account to Supporter: the relay tells the pod
+    // at once (no reconnection), and Settings reads used / ∞ with a thank-you. The link itself
+    // is written in the base, GitHub being out of reach; the event is a real signed one.
+    execFileSync('python3', ['-I', '-c', `import sqlite3,sys,time
+db=sqlite3.connect(sys.argv[1]); db.execute("INSERT INTO github (account, github_id, login, created) VALUES (?,?,?,?)", (sys.argv[2], "4242", "e2e", int(time.time()))); db.commit()`,
+      path.join(process.env.E2E_RELAY_DATA, 'relay.db'), b1.account])
+    const event = JSON.stringify({ action: 'created', sponsorship: { created_at: new Date().toISOString(),
+      sponsor: { id: 4242, login: 'e2e' }, tier: { monthly_price_in_cents: 500, is_one_time: false } } })
+    const sig = 'sha256=' + require('crypto').createHmac('sha256', 'e2e-hook').update(event).digest('hex')
+    const hook = await fetch(process.env.E2E_RELAY_URL + '/_relay/github/webhook', { method: 'POST', body: event,
+      headers: { 'Content-Type': 'application/json', 'X-GitHub-Event': 'sponsorship', 'X-Hub-Signature-256': sig } })
+    assert(hook.status === 204, 'the relay takes the signed sponsorship event: ' + hook.status)
+    let unlimited = ''
+    for (let i = 0; i < 20 && !unlimited; i++) {
+      await app.click('.settings-nav button:has-text("Keyboard shortcuts")').catch(() => {})
+      await app.click('.settings-nav button:has-text("Remote access")')
+      await app.waitForTimeout(300)
+      if (await app.locator('[data-testid=turn-unlimited]').count()) unlimited = (await app.textContent('.settings-body .props')).replace(/\s+/g, ' ')
+    }
+    assert(unlimited.includes('/ ∞') && unlimited.includes('hugs'), 'Settings tells the new supporter at once: used / ∞ and a thank-you: ' + unlimited.slice(0, 300))
+
     // 4. An invite for a phone: the code, the QR, and the fingerprint the admin compares.
     await app.click('[data-testid=devices] button:has-text("Invite a device")')
     await app.waitForSelector('.qr svg', { timeout: 15000 })

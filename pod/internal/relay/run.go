@@ -130,6 +130,7 @@ func Run(ctx context.Context, cfg RelayConfig) error {
 	srv.Version = cfg.Version
 	srv.GitHub = gh
 	if gh != nil {
+		gh.changed = srv.tellQuota
 		go gh.refreshLoop(ctx)
 	}
 	// Web Push: the VAPID key of the relay, made once in its data folder.

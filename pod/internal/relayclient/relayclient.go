@@ -362,6 +362,14 @@ func (c *Client) runOnce(ctx context.Context) error {
 			if err := c.applyRevocations(m.List); err != nil {
 				return err
 			}
+		case "quota":
+			// The supporter state of the account moved (a GitHub link, a sponsorship): the relay
+			// tells it at once, the page reads it in Settings > Remote access.
+			if m.Quota != nil {
+				c.mu.Lock()
+				c.quota = m.Quota
+				c.mu.Unlock()
+			}
 		case "ice":
 			c.setICE(m.Session, m)
 			if m.Quota != nil {

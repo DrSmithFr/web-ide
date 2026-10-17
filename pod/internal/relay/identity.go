@@ -328,6 +328,7 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 				_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})
 				continue
 			}
+			s.tellQuota([]string{c.account})
 			_ = c.send(idMsg{Type: "github", Account: c.account})
 		case "pairApprove":
 			p, err := s.store.ApprovePairing(m.Code, c.account, m.Cert)

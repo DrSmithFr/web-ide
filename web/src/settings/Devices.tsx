@@ -138,6 +138,13 @@ export function Devices() {
       link?.send({ type: 'github' })
     }
     window.addEventListener('message', onMessage)
+    // On a pod origin the window (on the relay origin) cannot post to this page: the panel reads
+    // the link again when the window closes.
+    const watch = win && setInterval(() => {
+      if (!win.closed) return
+      clearInterval(watch!)
+      link?.send({ type: 'github' })
+    }, 500)
     if (!win) {
       window.removeEventListener('message', onMessage)
       errorToast(t('The browser blocked the GitHub window: allow popups for this site.'))

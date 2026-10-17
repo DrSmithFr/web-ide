@@ -678,7 +678,7 @@ function RemoteAccess() {
           </dd>
           <dt>{t('Open from another device')}</dt>
           <dd class="mono small">{info()?.link}</dd>
-          <Show when={info()!.turnLimit > 0 || info()!.turnUsed > 0}>
+          <Show when={info()!.turnLimit > 0 || info()!.turnUsed > 0 || info()!.turnSupporter}>
             <dt>{t('TURN traffic this month')}</dt>
             <dd>
               {bytes(info()!.turnUsed)}

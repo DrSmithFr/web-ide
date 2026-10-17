@@ -135,6 +135,13 @@ func TestGitHubOAuth(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "drsmith") {
 		t.Fatalf("the page tells the login: %s", rec.Body.String())
 	}
+	// It thanks, closes on a button, and runs no inline script (the policy of the relay
+	// refuses one): its script is a file.
+	page := rec.Body.String()
+	if !strings.Contains(page, "Thanks for linking it") || !strings.Contains(page, `id="close"`) ||
+		!strings.Contains(page, `src="/_relay/github/done.js"`) || strings.Contains(page, "<script>") || strings.Contains(page, "style=") {
+		t.Fatalf("the window GitHub sends back to: %s", page)
+	}
 	id, login, err := st.GitHubLink("acct-1")
 	if err != nil || id != "4242" || login != "drsmith" {
 		t.Fatalf("the account is linked to the id the token names: %q %q %v", id, login, err)
@@ -437,5 +444,44 @@ func TestGitHubNotice(t *testing.T) {
 	}
 	if msg := githubNotice(GitHubConfig{ClientID: "id", ClientSecret: "s", Token: "t", WebhookSecret: "w"}, nil, ""); msg != "relay: GitHub link on" {
 		t.Errorf("a full link: %q", msg)
+	}
+}
+
+// TestGitHubTellsPods: a sponsorship that moves the supporter state of an account reaches its
+// pods at once (a quota message), so Settings does not show the old limit until they reconnect.
+func TestGitHubTellsPods(t *testing.T) {
+	st, _ := OpenStore(filepath.Join(relayDir(t), "relay.db"))
+	t.Cleanup(func() { st.Close() })
+	g := NewGitHub(GitHubConfig{ClientID: "id", ClientSecret: "secret", WebhookSecret: "s3cret"}, st)
+	turn, _ := startTurn(t, st, TurnConfig{AdvertiseIP: "127.0.0.1", Quota: 1000, Supporter: g.isSupporter})
+	t.Cleanup(func() { turn.Close() })
+	srv := New(st, turn)
+	srv.GitHub = g
+	g.changed = srv.tellQuota
+	ts := httptest.NewServer(srv.Handler())
+	t.Cleanup(ts.Close)
+
+	a := testAccount(t)
+	pod := registerPod(t, ts, "A", "s1", a.ID, podDevice(t, a, "A").cert, true, podDevice(t, a, "A").key, false)
+	defer pod.close()
+	if m := ready(t, pod); m.Quota == nil || m.Quota.Supporter || m.Quota.Limit != 1000 {
+		t.Fatalf("the pod starts under the quota: %+v", m.Quota)
+	}
+	if err := st.LinkGitHub(a.ID, "4242", "drsmith"); err != nil {
+		t.Fatal(err)
+	}
+
+	body := sponsorshipEvent("created", 4242, 500, false, time.Now())
+	mac := hmac.New(sha256.New, []byte("s3cret"))
+	mac.Write(body)
+	req := httptest.NewRequest(http.MethodPost, "/_relay/github/webhook", strings.NewReader(string(body)))
+	req.Header.Set("X-Hub-Signature-256", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("the event: %d", rec.Code)
+	}
+	if m := nextUntil(t, pod, "quota"); m.Quota == nil || !m.Quota.Supporter {
+		t.Fatalf("the pod is told it is a supporter: %+v", m.Quota)
 	}
 }
