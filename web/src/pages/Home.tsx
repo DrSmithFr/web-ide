@@ -138,6 +138,12 @@ export function Home() {
         <h1>Web IDE</h1>
         <span class="muted small mono" data-testid="pod-version">{ws()?.version}</span>
         <span class="grow" />
+        {/* A plain link, not GitHub's iframe: nothing is loaded from GitHub until it is clicked. */}
+        <a class="sponsor-btn" href="https://github.com/sponsors/DrSmithFr" target="_blank" rel="noreferrer"
+          title={t('Sponsor Web IDE on GitHub')} data-testid="sponsor">
+          <Icon name="heart" size={14} />
+          {t('Sponsor')}
+        </a>
         <button class="icon-btn" title={t('Settings')} onClick={() => openSettings('workspace')}>
           <Icon name="gear" />
         </button>

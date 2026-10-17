@@ -14,6 +14,9 @@ run(async ({ page, ctx }) => {
   await page.waitForFunction(() => document.querySelector('[data-testid=pod-version]')?.textContent)
   const version = execSync(`${__dirname}/../../bin/web-ide-pod -version`, { encoding: 'utf8' }).trim()
   assert((await page.textContent('[data-testid=pod-version]')) === version, 'home page: version of the pod')
+  // The Sponsor button is a plain link: no frame, nothing loaded from GitHub.
+  assert((await page.getAttribute('[data-testid=sponsor]', 'href')) === 'https://github.com/sponsors/DrSmithFr', 'home page: the Sponsor button')
+  assert(!(await page.$('iframe[src*="github.com"]')), 'home page: no GitHub frame')
   // Installable app (PWA): Chromium sees no error but the incognito context of the tests.
   const cdp = await ctx.newCDPSession(page)
   const { installabilityErrors } = await cdp.send('Page.getInstallabilityErrors')
