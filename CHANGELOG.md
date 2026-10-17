@@ -4,11 +4,22 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+## [1.18.1] - 2026-10-17
+
+### Added
+
+- A **Sponsor** button in the header of the home page, a plain link to GitHub Sponsors (nothing is loaded from GitHub until it is clicked), and the Sponsor button of the repository (`.github/FUNDING.yml`).
+- The relay says at start whether its GitHub link is on (`relay: GitHub link on`, or what is missing), and names the keys of its env file it does not read: a file written with `GITHUB_CLIENT_ID`… instead of `WEBIDE_GITHUB_*` left the hosted relay without a link, its webhook answered by the page with a 200.
+
+### Fixed
+
+- The sponsor list reads people only: `Organization.databaseId` needs the `read:org` scope, which the `read:user` token of the maintainer does not have, so the whole read failed. An organization cannot link an account anyway (the OAuth link proves a person).
+
 ## [1.18.0] - 2026-10-17
 
 ### Changed
 
-- The hosted relay reads its sponsor list through the GraphQL API of GitHub (`viewer.sponsorshipsAsMaintainer`, 100 per page, past and private sponsorships included): Sponsors has no REST API, and the endpoint it called does not exist. The Supporter rule is spelled out — **$5 a month or more** on GitHub Sponsors, a higher tier giving the same perks, a one-time payment of $5 or more counting for 30 days, organizations counting like users — and `cancelled` arrives at the end of the paid period, so a sponsorship pending cancellation keeps access until it is actually cancelled.
+- The hosted relay reads its sponsor list through the GraphQL API of GitHub (`viewer.sponsorshipsAsMaintainer`, 100 per page, past and private sponsorships included): Sponsors has no REST API, and the endpoint it called does not exist. The Supporter rule is spelled out — **$5 a month or more** on GitHub Sponsors, a higher tier giving the same perks, a one-time payment of $5 or more counting for 30 days — and `cancelled` arrives at the end of the paid period, so a sponsorship pending cancellation keeps access until it is actually cancelled.
 - The keys of the GitHub setup are the ones the code reads: `WEBIDE_GITHUB_CLIENT` and `WEBIDE_GITHUB_SECRET` (the OAuth App), `WEBIDE_GITHUB_TOKEN` (a classic token with the `read:user` scope alone, which reads the sponsor list) and `WEBIDE_GITHUB_WEBHOOK` (the secret of the Sponsors webhook), in docs/self-hosting.md and in the env template of `scripts/deploy-relay.sh`. docs/relay.md gives the setup itself: an OAuth App whose callback is `https://<domain>/_relay/github/callback`, the token and its expiry, and the webhook of the Sponsors dashboard posted to `/_relay/github/webhook`.
 
 ### Fixed
