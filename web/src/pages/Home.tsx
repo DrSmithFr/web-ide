@@ -138,12 +138,6 @@ export function Home() {
         <h1>Web IDE</h1>
         <span class="muted small mono" data-testid="pod-version">{ws()?.version}</span>
         <span class="grow" />
-        {/* A plain link, not GitHub's iframe: nothing is loaded from GitHub until it is clicked. */}
-        <a class="sponsor-btn" href="https://github.com/sponsors/DrSmithFr" target="_blank" rel="noreferrer"
-          title={t('Sponsor Web IDE on GitHub')} data-testid="sponsor">
-          <Icon name="heart" size={14} />
-          {t('Sponsor')}
-        </a>
         <button class="icon-btn" title={t('Settings')} onClick={() => openSettings('workspace')}>
           <Icon name="gear" />
         </button>
@@ -214,6 +208,11 @@ export function Home() {
             </For>
           </div>
         </Show>
+        {/* A quiet line, not a button: a plain link, nothing is loaded from GitHub until it is clicked. */}
+        <p class="home-sponsor" data-testid="sponsor-line">
+          {t('Web IDE is free and open source. If it saves you time, you can')}{' '}
+          <a href="https://github.com/sponsors/DrSmithFr" target="_blank" rel="noreferrer" data-testid="sponsor">{t('support it on GitHub')}</a>.
+        </p>
       </main>
       <Show when={iconFor()}>
         {(f) => <IconEditor id={f().p.id} name={f().p.name} spec={f().spec} save={f().save} onClose={() => setIconFor(null)} />}
