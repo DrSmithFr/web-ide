@@ -682,11 +682,12 @@ function RemoteAccess() {
             <dt>{t('TURN traffic this month')}</dt>
             <dd>
               {bytes(info()!.turnUsed)}
-              <Show when={info()!.turnLimit > 0}>
-                {' / '}{bytes(info()!.turnLimit)}
-              </Show>
               <Show when={info()!.turnSupporter}>
-                {' · '}{t('Supporter: no quota')}
+                <span title={t('Supporter: no quota')} data-testid="turn-unlimited">{' / ∞'}</span>
+                <span class="muted">{' · '}{t('Thanks for supporting Web IDE, hugs ♥')}</span>
+              </Show>
+              <Show when={!info()!.turnSupporter && info()!.turnLimit > 0}>
+                {' / '}{bytes(info()!.turnLimit)}
               </Show>
             </dd>
           </Show>
