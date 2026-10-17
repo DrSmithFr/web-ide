@@ -28,12 +28,17 @@ import (
 //   - GitHub sends that browser back to /_relay/github/callback with a code the relay exchanges
 //     for a token it uses once, on GET /user, and forgets;
 //   - the relay stores account → github id;
-//   - the sponsor list is read with the maintainer token once an hour, and a sponsorship webhook
-//     (HMAC-checked) moves it between two reads.
+//   - the sponsor list is read with the maintainer token once an hour (GraphQL: Sponsors has no
+//     REST API), and the sponsorship webhook of the Sponsors dashboard (HMAC-checked) moves it
+//     between two reads.
+//
+// A supporter sponsors $5 a month or more (any higher tier gives the same), or paid $5 or more
+// once in the last 30 days.
 
 // GitHubConfig holds what the relay needs of the GitHub app. The client id and secret are the
 // OAuth app (no scope: the identity of the visitor is enough); the token is the maintainer's,
-// it only reads the sponsor list; the webhook secret signs the sponsorship events.
+// it only reads the sponsor list; the webhook secret signs the sponsorship events. They come from
+// WEBIDE_GITHUB_CLIENT, _SECRET, _TOKEN and _WEBHOOK (see githubConfig).
 type GitHubConfig struct {
 	ClientID      string
 	ClientSecret  string
@@ -51,15 +56,63 @@ type GitHub struct {
 	tokenURL string
 	apiBase  string
 
-	mu       sync.Mutex
-	pending  map[string]*githubPending // state nonce → the link that asked for it
-	sponsors map[string]Sponsor        // by GitHub user id
+	mu      sync.Mutex
+	pending map[string]*githubPending // state nonce → the link that asked for it
 }
 
-// Sponsor is one person sponsoring the project, as the maintainer's token lists them.
+// Sponsor is one person (or organization) sponsoring the project, as the maintainer's token or
+// the webhook tells it: the base keeps one row per sponsor, the sponsorship that counts most.
 type Sponsor struct {
-	ID    string `json:"id"`
-	Login string `json:"login"`
+	ID      string `json:"id"`
+	Login   string `json:"login"`
+	Cents   int64  `json:"cents"`   // the monthly price of the tier (the amount, for a one-time payment)
+	OneTime bool   `json:"oneTime"` // a one-time payment rather than a monthly sponsorship
+	Since   int64  `json:"since"`   // when the sponsorship started (unix seconds)
+}
+
+// The supporter rule: $5 a month or more, or $5 or more paid once, which counts for 30 days.
+const (
+	supporterCents = 500
+	oneTimeLasts   = 30 * 24 * time.Hour
+)
+
+// supporter applies the rule to one sponsorship.
+func (sp Sponsor) supporter(now time.Time) bool {
+	if sp.Cents < supporterCents {
+		return false
+	}
+	return !sp.OneTime || now.Sub(time.Unix(sp.Since, 0)) < oneTimeLasts
+}
+
+// rank orders the sponsorships of one sponsor: a qualifying monthly one, then a qualifying
+// one-time one, then the rest.
+func (sp Sponsor) rank(now time.Time) int {
+	switch {
+	case sp.supporter(now) && !sp.OneTime:
+		return 2
+	case sp.supporter(now):
+		return 1
+	}
+	return 0
+}
+
+// mergeSponsor picks the row a sponsor keeps when a second sponsorship of theirs shows up. A
+// monthly sponsorship replaces a monthly one (a tier change); otherwise the higher rank wins, then
+// the latest.
+func mergeSponsor(old *Sponsor, nw Sponsor, now time.Time) Sponsor {
+	if old == nil || (!old.OneTime && !nw.OneTime) {
+		return nw
+	}
+	if ro, rn := old.rank(now), nw.rank(now); ro != rn {
+		if ro > rn {
+			return *old
+		}
+		return nw
+	}
+	if old.Since > nw.Since {
+		return *old
+	}
+	return nw
 }
 
 // githubPending is one OAuth dance the relay started: the account it was started for, the
@@ -90,7 +143,6 @@ func NewGitHub(cfg GitHubConfig, st *Store) *GitHub {
 		tokenURL: "https://github.com/login/oauth/access_token",
 		apiBase:  "https://api.github.com",
 		pending:  map[string]*githubPending{},
-		sponsors: map[string]Sponsor{},
 	}
 }
 
@@ -107,7 +159,21 @@ func migrateGitHub(db *sql.DB) error {
 			github_id TEXT PRIMARY KEY,
 			login TEXT NOT NULL DEFAULT '',
 			updated INTEGER NOT NULL DEFAULT 0)`)
-	return err
+	if err != nil {
+		return err
+	}
+	// #85: the tier and the start, for the $5 rule (a row of #29 has neither, and no longer
+	// counts until the next read of the list).
+	for _, col := range [][2]string{
+		{"cents", "INTEGER NOT NULL DEFAULT 0"},
+		{"one_time", "INTEGER NOT NULL DEFAULT 0"},
+		{"since", "INTEGER NOT NULL DEFAULT 0"},
+	} {
+		if err := addColumn(db, "sponsors", col[0], col[1]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // LinkGitHub stores the GitHub id of an account (one login per account, replaced on a new link).
@@ -155,8 +221,7 @@ func (s *Store) SaveSponsors(list []Sponsor) error {
 		return err
 	}
 	for _, sp := range list {
-		if _, err := tx.Exec("INSERT INTO sponsors (github_id, login, updated) VALUES (?,?,?)",
-			sp.ID, sp.Login, time.Now().Unix()); err != nil {
+		if err := putSponsor(tx, sp); err != nil {
 			tx.Rollback()
 			return err
 		}
@@ -164,14 +229,69 @@ func (s *Store) SaveSponsors(list []Sponsor) error {
 	return tx.Commit()
 }
 
-// IsSponsor reports whether a GitHub id is on the cached sponsor list.
+func putSponsor(tx *sql.Tx, sp Sponsor) error {
+	_, err := tx.Exec(`INSERT INTO sponsors (github_id, login, cents, one_time, since, updated) VALUES (?,?,?,?,?,?)
+			ON CONFLICT (github_id) DO UPDATE SET login=excluded.login, cents=excluded.cents,
+			one_time=excluded.one_time, since=excluded.since, updated=excluded.updated`,
+		sp.ID, sp.Login, sp.Cents, sp.OneTime, sp.Since, time.Now().Unix())
+	return err
+}
+
+// Sponsor is the row of a GitHub id (nil when none).
+func (s *Store) Sponsor(githubID string) (*Sponsor, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return getSponsor(s.db.QueryRow, githubID)
+}
+
+func getSponsor(query func(string, ...any) *sql.Row, githubID string) (*Sponsor, error) {
+	sp := Sponsor{ID: githubID}
+	err := query("SELECT login, cents, one_time, since FROM sponsors WHERE github_id=?", githubID).
+		Scan(&sp.Login, &sp.Cents, &sp.OneTime, &sp.Since)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &sp, nil
+}
+
+// UpdateSponsor merges one sponsorship a webhook told into the row of its sponsor.
+func (s *Store) UpdateSponsor(sp Sponsor) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	old, err := getSponsor(tx.QueryRow, sp.ID)
+	if err == nil {
+		err = putSponsor(tx, mergeSponsor(old, sp, time.Now()))
+	}
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+// CancelSponsor drops the monthly sponsorship of a GitHub id; a one-time payment still counts
+// its 30 days.
+func (s *Store) CancelSponsor(githubID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec("DELETE FROM sponsors WHERE github_id=? AND one_time=0", githubID)
+	return err
+}
+
+// IsSponsor reports whether a GitHub id is a supporter: on the cached list, under the $5 rule.
 func (s *Store) IsSponsor(githubID string) bool {
 	if githubID == "" {
 		return false
 	}
-	var id string
-	err := s.db.QueryRow("SELECT github_id FROM sponsors WHERE github_id=?", githubID).Scan(&id)
-	return err == nil
+	sp, err := s.Sponsor(githubID)
+	return err == nil && sp != nil && sp.supporter(time.Now())
 }
 
 // isSupporter is the quota hook of the TURN server: an account is freed from its monthly quota
@@ -342,50 +462,114 @@ func (g *GitHub) user(ctx context.Context, token string) (id, login string, err 
 	return strconv64(out.ID), out.Login, nil
 }
 
-// refreshSponsors reads the sponsor list with the maintainer token.
+// sponsorsQuery lists every sponsorship the maintainer ever had, private ones too: the one-time
+// payments are not "active", and a past monthly sponsor is told apart by isActive.
+const sponsorsQuery = `query($after: String) {
+  viewer {
+    sponsorshipsAsMaintainer(first: 100, after: $after, activeOnly: false, includePrivate: true) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        isActive
+        isOneTimePayment
+        createdAt
+        tier { monthlyPriceInCents }
+        sponsorEntity {
+          ... on User { databaseId login }
+          ... on Organization { databaseId login }
+        }
+      }
+    }
+  }
+}`
+
+// refreshSponsors reads the sponsor list with the maintainer token, page by page, and replaces
+// the cached one: one row per sponsor, the sponsorship that counts most.
 func (g *GitHub) refreshSponsors(ctx context.Context) error {
 	if g.cfg.Token == "" {
 		return errors.New("github: no maintainer token, the sponsor list is not read")
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, g.apiBase+"/user/sponsorships_as_maintainer?per_page=100", nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+g.cfg.Token)
-	req.Header.Set("Accept", "application/json")
-	res, err := g.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("github: the sponsor list answered %d", res.StatusCode)
-	}
-	var raw []struct {
-		TwitterUsername *string `json:"twitter_username"`
-		Name            string  `json:"name"`
-		AccountUser     struct {
-			ID    int64  `json:"id"`
-			Login string `json:"login"`
-		} `json:"accountUser"`
-	}
-	if err := json.NewDecoder(res.Body).Decode(&raw); err != nil {
-		return err
-	}
-	list := make([]Sponsor, 0, len(raw))
-	for _, s := range raw {
-		if s.AccountUser.ID == 0 {
-			continue
+	now := time.Now()
+	byID := map[string]Sponsor{}
+	after := ""
+	for page := 0; page < 100; page++ {
+		vars := map[string]any{"after": nil}
+		if after != "" {
+			vars["after"] = after
 		}
-		list = append(list, Sponsor{ID: strconv64(s.AccountUser.ID), Login: s.AccountUser.Login})
+		body, _ := json.Marshal(map[string]any{"query": sponsorsQuery, "variables": vars})
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, g.apiBase+"/graphql", strings.NewReader(string(body)))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "Bearer "+g.cfg.Token)
+		req.Header.Set("Content-Type", "application/json")
+		res, err := g.client.Do(req)
+		if err != nil {
+			return err
+		}
+		var out struct {
+			Data struct {
+				Viewer struct {
+					Sponsorships struct {
+						PageInfo struct {
+							HasNextPage bool   `json:"hasNextPage"`
+							EndCursor   string `json:"endCursor"`
+						} `json:"pageInfo"`
+						Nodes []struct {
+							IsActive  bool      `json:"isActive"`
+							OneTime   bool      `json:"isOneTimePayment"`
+							CreatedAt time.Time `json:"createdAt"`
+							Tier      *struct {
+								Cents int64 `json:"monthlyPriceInCents"`
+							} `json:"tier"`
+							Entity struct {
+								ID    int64  `json:"databaseId"`
+								Login string `json:"login"`
+							} `json:"sponsorEntity"`
+						} `json:"nodes"`
+					} `json:"sponsorshipsAsMaintainer"`
+				} `json:"viewer"`
+			} `json:"data"`
+			Errors []struct {
+				Message string `json:"message"`
+			} `json:"errors"`
+		}
+		err = json.NewDecoder(res.Body).Decode(&out)
+		res.Body.Close()
+		if res.StatusCode != http.StatusOK {
+			return fmt.Errorf("github: the sponsor list answered %d", res.StatusCode)
+		}
+		if err != nil {
+			return err
+		}
+		if len(out.Errors) > 0 {
+			return fmt.Errorf("github: the sponsor list: %s", out.Errors[0].Message)
+		}
+		list := out.Data.Viewer.Sponsorships
+		for _, n := range list.Nodes {
+			// A past monthly sponsor no longer counts; a one-time payment counts by its date.
+			if n.Entity.ID == 0 || (!n.OneTime && !n.IsActive) {
+				continue
+			}
+			sp := Sponsor{ID: strconv64(n.Entity.ID), Login: n.Entity.Login, OneTime: n.OneTime, Since: n.CreatedAt.Unix()}
+			if n.Tier != nil {
+				sp.Cents = n.Tier.Cents
+			}
+			if old, ok := byID[sp.ID]; ok {
+				sp = mergeSponsor(&old, sp, now)
+			}
+			byID[sp.ID] = sp
+		}
+		if !list.PageInfo.HasNextPage || list.PageInfo.EndCursor == "" {
+			break
+		}
+		after = list.PageInfo.EndCursor
 	}
-	g.mu.Lock()
-	g.sponsors = map[string]Sponsor{}
-	for _, s := range list {
-		g.sponsors[s.ID] = s
+	sponsors := make([]Sponsor, 0, len(byID))
+	for _, sp := range byID {
+		sponsors = append(sponsors, sp)
 	}
-	g.mu.Unlock()
-	return g.store.SaveSponsors(list)
+	return g.store.SaveSponsors(sponsors)
 }
 
 // refreshLoop reads the sponsor list again every hour.
@@ -407,9 +591,10 @@ func (g *GitHub) refreshLoop(ctx context.Context) {
 	}
 }
 
-// serveGitHubWebhook takes the sponsorship events of the GitHub app: they move the sponsor list
-// between two reads. The body is checked against the webhook secret (HMAC SHA-256, the
-// X-Hub-Signature-256 header), so only GitHub can post one.
+// serveGitHubWebhook takes the sponsorship events of the Sponsors dashboard: they move the
+// sponsor list between two reads, one row at a time (the list itself is only replaced by a full
+// read). The body is checked against the webhook secret (HMAC SHA-256, the X-Hub-Signature-256
+// header), so only GitHub can post one.
 func (s *Server) serveGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 	g := s.GitHub
 	if g.cfg.WebhookSecret == "" {
@@ -425,41 +610,44 @@ func (s *Server) serveGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad signature", http.StatusUnauthorized)
 		return
 	}
+	if r.Header.Get("X-GitHub-Event") == "ping" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	var ev struct {
-		Action  string `json:"action"`
-		Sponsor struct {
-			ID    int64  `json:"id"`
-			Login string `json:"login"`
-		} `json:"sponsor"`
+		Action      string `json:"action"`
+		Sponsorship struct {
+			CreatedAt time.Time `json:"created_at"`
+			Sponsor   struct {
+				ID    int64  `json:"id"`
+				Login string `json:"login"`
+			} `json:"sponsor"`
+			Tier struct {
+				Cents   int64 `json:"monthly_price_in_cents"`
+				OneTime bool  `json:"is_one_time"`
+			} `json:"tier"`
+		} `json:"sponsorship"`
 	}
 	if err := json.Unmarshal(body, &ev); err != nil {
 		http.Error(w, "not a sponsorship event", http.StatusBadRequest)
 		return
 	}
-	if ev.Sponsor.ID == 0 {
+	sp := ev.Sponsorship
+	if sp.Sponsor.ID == 0 {
 		http.Error(w, "no sponsor in the event", http.StatusBadRequest)
 		return
 	}
-	id := strconv64(ev.Sponsor.ID)
-	g.mu.Lock()
+	id := strconv64(sp.Sponsor.ID)
 	switch ev.Action {
-	case "sponsorship_created":
-		g.sponsors[id] = Sponsor{ID: id, Login: ev.Sponsor.Login}
-	case "sponsorship_cancelled", "sponsorship_edited":
-		if ev.Action == "sponsorship_cancelled" {
-			delete(g.sponsors, id)
-		}
-	default:
-		g.mu.Unlock()
-		w.WriteHeader(http.StatusNoContent)
-		return
+	case "created", "tier_changed", "edited":
+		// tier_changed comes when the change takes effect (pending_tier_change before it).
+		err = g.store.UpdateSponsor(Sponsor{ID: id, Login: sp.Sponsor.Login, Cents: sp.Tier.Cents,
+			OneTime: sp.Tier.OneTime, Since: sp.CreatedAt.Unix()})
+	case "cancelled":
+		// Sent at the end of the paid period (pending_cancellation before it): access lasts until then.
+		err = g.store.CancelSponsor(id)
 	}
-	list := make([]Sponsor, 0, len(g.sponsors))
-	for _, sp := range g.sponsors {
-		list = append(list, sp)
-	}
-	g.mu.Unlock()
-	if err := g.store.SaveSponsors(list); err != nil {
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
