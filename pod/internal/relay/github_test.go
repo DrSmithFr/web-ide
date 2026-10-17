@@ -351,6 +351,11 @@ func TestGitHubSponsorsRefresh(t *testing.T) {
 			Variables map[string]any `json:"variables"`
 		}
 		json.NewDecoder(r.Body).Decode(&q)
+		// Organization.databaseId needs read:org, which the token of the maintainer does not have.
+		if strings.Contains(q.Query, "Organization") {
+			http.Error(w, "The 'databaseId' field requires one of the following scopes: ['read:org']", http.StatusBadRequest)
+			return
+		}
 		if !strings.Contains(q.Query, "activeOnly: false") || !strings.Contains(q.Query, "includePrivate: true") {
 			http.Error(w, "the query misses past and private sponsorships", http.StatusBadRequest)
 			return
@@ -365,6 +370,9 @@ func TestGitHubSponsorsRefresh(t *testing.T) {
 		}
 		json.NewEncoder(w).Encode(graphqlPage("",
 			sponsorshipNode(10, "recent-once", 1000, true, false, ago(10)),
+			// An organization: the User fragment does not match, GitHub answers an empty entity.
+			map[string]any{"isActive": true, "isOneTimePayment": false, "createdAt": ago(5).UTC().Format(time.RFC3339),
+				"tier": map[string]any{"monthlyPriceInCents": 10000}, "sponsorEntity": map[string]any{}},
 			sponsorshipNode(40, "old-once", 1000, true, false, ago(40)),
 			// A monthly sponsor who also paid once keeps the monthly row.
 			sponsorshipNode(4242, "drsmith", 2000, true, false, ago(50)),

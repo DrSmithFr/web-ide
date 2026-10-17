@@ -60,7 +60,7 @@ type GitHub struct {
 	pending map[string]*githubPending // state nonce → the link that asked for it
 }
 
-// Sponsor is one person (or organization) sponsoring the project, as the maintainer's token or
+// Sponsor is one person sponsoring the project, as the maintainer's token or
 // the webhook tells it: the base keeps one row per sponsor, the sponsorship that counts most.
 type Sponsor struct {
 	ID      string `json:"id"`
@@ -463,7 +463,9 @@ func (g *GitHub) user(ctx context.Context, token string) (id, login string, err 
 }
 
 // sponsorsQuery lists every sponsorship the maintainer ever had, private ones too: the one-time
-// payments are not "active", and a past monthly sponsor is told apart by isActive.
+// payments are not "active", and a past monthly sponsor is told apart by isActive. Only people:
+// an organization cannot link an account (the OAuth link proves a person), and its databaseId
+// would need the read:org scope on the token.
 const sponsorsQuery = `query($after: String) {
   viewer {
     sponsorshipsAsMaintainer(first: 100, after: $after, activeOnly: false, includePrivate: true) {
@@ -475,7 +477,6 @@ const sponsorsQuery = `query($after: String) {
         tier { monthlyPriceInCents }
         sponsorEntity {
           ... on User { databaseId login }
-          ... on Organization { databaseId login }
         }
       }
     }
