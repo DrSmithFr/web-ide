@@ -36,7 +36,7 @@ web-ide-pod relay -data /var/lib/antennae \
 | `-turn-ports` | the range the TURN relay sockets are bound in, e.g. `20000-20999` (any free port when unset). Keep it below the ephemeral range of the kernel (`32768-60999` on Linux), whose outgoing connections would take its ports. A relayed session costs four of them |
 | `-quota` | bytes one account may move through TURN per month (`10GB`); **unset: no limit** |
 | `-push-subject` | the contact of the Web Push claims (`mailto:` or `https:`) |
-| `-github-env` | a `KEY=VALUE` file (0600) with `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_TOKEN`, `GITHUB_WEBHOOK_SECRET`: without them the relay has no GitHub link and no supporters |
+| `-github-env` | a `KEY=VALUE` file (0640, `root:` the user of the service) with `WEBIDE_GITHUB_CLIENT`, `WEBIDE_GITHUB_SECRET` (the OAuth App), `WEBIDE_GITHUB_TOKEN` (reads the sponsor list) and `WEBIDE_GITHUB_WEBHOOK` (the secret of the Sponsors webhook): without them the relay has no GitHub link and no supporters, which a self-hosted relay does not need (setup: relay.md *Hosted service and pricing*) |
 
 Without `-domain` and without `-cert/-key`, the relay makes a **self-signed** certificate on first
 run: fine on a tailnet, a browser will complain.

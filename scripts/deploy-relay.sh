@@ -132,7 +132,7 @@ id -u $USER >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sb
 install -d -m750 -o $USER -g $USER $DATA
 if [ ! -f $ENV_FILE ]; then
   install -d -m755 /etc/antennae
-  printf '# GITHUB_CLIENT_ID=… GITHUB_CLIENT_SECRET=… GITHUB_TOKEN=… GITHUB_WEBHOOK_SECRET=…\n' > $ENV_FILE
+  printf '# WEBIDE_GITHUB_CLIENT=… WEBIDE_GITHUB_SECRET=… WEBIDE_GITHUB_TOKEN=… WEBIDE_GITHUB_WEBHOOK=…\n' > $ENV_FILE
   chmod 640 $ENV_FILE; chown root:$USER $ENV_FILE
 fi
 # The range the unit ran with until now: its firewall rule goes once the new one is written.

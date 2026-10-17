@@ -40,7 +40,7 @@ func TestGitHubLinkStore(t *testing.T) {
 	if id, login, err := st.GitHubLink("acct-1"); err != nil || id != "77" || login != "other" {
 		t.Fatalf("a new link replaces the old one: %q %q %v", id, login, err)
 	}
-	if err := st.SaveSponsors([]Sponsor{{ID: "77", Login: "other"}}); err != nil {
+	if err := st.SaveSponsors([]Sponsor{{ID: "77", Login: "other", Cents: 500}}); err != nil {
 		t.Fatal(err)
 	}
 	if !st.IsSponsor("77") || st.IsSponsor("42") || st.IsSponsor("") {
@@ -71,7 +71,7 @@ func TestGitHubSupporter(t *testing.T) {
 	if err := st.LinkGitHub("acct-plain", "12", "visitor"); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.SaveSponsors([]Sponsor{{ID: "77", Login: "drsmith"}}); err != nil {
+	if err := st.SaveSponsors([]Sponsor{{ID: "77", Login: "drsmith", Cents: 500}}); err != nil {
 		t.Fatal(err)
 	}
 	if !g.isSupporter("acct-sponsor") {
@@ -167,7 +167,7 @@ func TestGitHubQuotaLifted(t *testing.T) {
 	if err := st.LinkGitHub("acct-plain", "12", "visitor"); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.SaveSponsors([]Sponsor{{ID: "77", Login: "drsmith"}}); err != nil {
+	if err := st.SaveSponsors([]Sponsor{{ID: "77", Login: "drsmith", Cents: 500}}); err != nil {
 		t.Fatal(err)
 	}
 	month := usageMonth(time.Now())
@@ -195,8 +195,52 @@ func TestGitHubQuotaLifted(t *testing.T) {
 	}
 }
 
-// TestGitHubWebhook: a sponsorship event moves the sponsor list when its HMAC matches, and is
-// refused when it does not.
+// TestSponsorRule: $5 a month or more counts, any higher tier the same; a one-time payment of $5
+// or more counts for 30 days.
+func TestSponsorRule(t *testing.T) {
+	st := newGitHubStore(t)
+	now := time.Now()
+	days := func(n int) int64 { return now.Add(-time.Duration(n) * 24 * time.Hour).Unix() }
+	if err := st.SaveSponsors([]Sponsor{
+		{ID: "1", Cents: 500, Since: days(400)},
+		{ID: "2", Cents: 10000, Since: days(3)},
+		{ID: "3", Cents: 300, Since: days(3)},
+		{ID: "4", Cents: 2500, OneTime: true, Since: days(10)},
+		{ID: "5", Cents: 2500, OneTime: true, Since: days(40)},
+		{ID: "6", Cents: 200, OneTime: true, Since: days(1)},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for id, want := range map[string]bool{"1": true, "2": true, "3": false, "4": true, "5": false, "6": false, "9": false} {
+		if got := st.IsSponsor(id); got != want {
+			t.Errorf("sponsor %s: supporter %v, want %v", id, got, want)
+		}
+	}
+}
+
+// sponsorshipEvent is a webhook body in the shape GitHub sends (trimmed to what matters).
+func sponsorshipEvent(action string, id int64, cents int64, oneTime bool, created time.Time) []byte {
+	b, _ := json.Marshal(map[string]any{
+		"action": action,
+		"sponsorship": map[string]any{
+			"node_id":       "S_kwHOA",
+			"created_at":    created.UTC().Format(time.RFC3339),
+			"privacy_level": "public",
+			"sponsorable":   map[string]any{"login": "DrSmithFr", "id": 1, "type": "User"},
+			"sponsor":       map[string]any{"login": "sponsor" + strconv64(id), "id": id, "type": "User"},
+			"tier": map[string]any{
+				"node_id": "ST_kwHOA", "name": "$5 a month", "description": "Supporter",
+				"monthly_price_in_cents": cents, "monthly_price_in_dollars": cents / 100,
+				"is_one_time": oneTime, "is_custom_amount": false,
+			},
+		},
+		"sender": map[string]any{"login": "sponsor" + strconv64(id), "id": id},
+	})
+	return b
+}
+
+// TestGitHubWebhook: the real events move one row each when their HMAC matches, are refused when
+// it does not, and never wipe the other rows of the list.
 func TestGitHubWebhook(t *testing.T) {
 	st := newGitHubStore(t)
 	g := NewGitHub(GitHubConfig{ClientID: "id", ClientSecret: "secret", WebhookSecret: "s3cret"}, st)
@@ -205,51 +249,96 @@ func TestGitHubWebhook(t *testing.T) {
 	if err := st.LinkGitHub("acct-1", "4242", "drsmith"); err != nil {
 		t.Fatal(err)
 	}
-
-	body := []byte(`{"action":"sponsorship_created","sponsor":{"id":4242,"login":"drsmith"}}`)
+	if err := st.SaveSponsors([]Sponsor{{ID: "7", Login: "someone", Cents: 500}}); err != nil {
+		t.Fatal(err)
+	}
 	sign := func(b []byte) string {
 		mac := hmac.New(sha256.New, []byte("s3cret"))
 		mac.Write(b)
 		return "sha256=" + hex.EncodeToString(mac.Sum(nil))
 	}
-
-	req := httptest.NewRequest(http.MethodPost, "/_relay/github/webhook", strings.NewReader(string(body)))
-	req.Header.Set("X-Hub-Signature-256", sign(body))
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("a signed event: %d %s", rec.Code, rec.Body.String())
+	post := func(body []byte, sig string) int {
+		req := httptest.NewRequest(http.MethodPost, "/_relay/github/webhook", strings.NewReader(string(body)))
+		req.Header.Set("X-GitHub-Event", "sponsorship")
+		req.Header.Set("X-Hub-Signature-256", sig)
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		return rec.Code
 	}
+	send := func(action string, cents int64, oneTime bool) {
+		t.Helper()
+		body := sponsorshipEvent(action, 4242, cents, oneTime, time.Now())
+		if code := post(body, sign(body)); code != http.StatusNoContent {
+			t.Fatalf("%s: %d", action, code)
+		}
+	}
+
+	send("created", 500, false)
 	if !g.isSupporter("acct-1") {
-		t.Fatal("the event made the account a supporter")
+		t.Fatal("a $5 sponsorship makes the account a supporter")
 	}
-
-	req = httptest.NewRequest(http.MethodPost, "/_relay/github/webhook", strings.NewReader(string(body)))
-	req.Header.Set("X-Hub-Signature-256", "sha256=deadbeef")
-	rec = httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("a bad signature is refused: %d", rec.Code)
+	body := sponsorshipEvent("created", 4242, 500, false, time.Now())
+	if code := post(body, "sha256=deadbeef"); code != http.StatusUnauthorized {
+		t.Fatalf("a bad signature is refused: %d", code)
 	}
-
-	body = []byte(`{"action":"sponsorship_cancelled","sponsor":{"id":4242,"login":"drsmith"}}`)
-	req = httptest.NewRequest(http.MethodPost, "/_relay/github/webhook", strings.NewReader(string(body)))
-	req.Header.Set("X-Hub-Signature-256", sign(body))
-	rec = httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("a cancellation: %d", rec.Code)
+	send("pending_cancellation", 500, false)
+	if !g.isSupporter("acct-1") {
+		t.Fatal("a pending cancellation keeps the perks until the end of the paid period")
 	}
+	send("tier_changed", 300, false)
+	if g.isSupporter("acct-1") {
+		t.Fatal("a tier change down to $3 ends the perks")
+	}
+	send("tier_changed", 1500, false)
+	if !g.isSupporter("acct-1") {
+		t.Fatal("a tier change up to $15 gives them back")
+	}
+	send("cancelled", 1500, false)
 	if g.isSupporter("acct-1") {
 		t.Fatal("a cancelled sponsorship ends the tier")
 	}
+	send("created", 1000, true)
+	if !g.isSupporter("acct-1") {
+		t.Fatal("a one-time payment of $10 counts")
+	}
+	send("cancelled", 1000, true)
+	if !g.isSupporter("acct-1") {
+		t.Fatal("a cancel never drops a one-time payment")
+	}
+	if !st.IsSponsor("7") {
+		t.Fatal("the events never touch the other rows")
+	}
 }
 
-// TestGitHubSponsorsRefresh: the list is read with the maintainer token and cached.
+// graphqlPage is one page of viewer.sponsorshipsAsMaintainer in the shape GitHub answers.
+func graphqlPage(next string, nodes ...map[string]any) map[string]any {
+	return map[string]any{"data": map[string]any{"viewer": map[string]any{
+		"sponsorshipsAsMaintainer": map[string]any{
+			"pageInfo": map[string]any{"hasNextPage": next != "", "endCursor": next},
+			"nodes":    nodes,
+		}}}}
+}
+
+func sponsorshipNode(id int64, login string, cents int64, oneTime, active bool, created time.Time) map[string]any {
+	return map[string]any{
+		"isActive": active, "isOneTimePayment": oneTime,
+		"createdAt":     created.UTC().Format(time.RFC3339),
+		"tier":          map[string]any{"monthlyPriceInCents": cents},
+		"sponsorEntity": map[string]any{"databaseId": id, "login": login},
+	}
+}
+
+// TestGitHubSponsorsRefresh: the list is read through GraphQL with the maintainer token, page by
+// page, private sponsors and one-time payments included, and replaces the cached one.
 func TestGitHubSponsorsRefresh(t *testing.T) {
 	st := newGitHubStore(t)
+	now := time.Now()
+	ago := func(days int) time.Time { return now.Add(-time.Duration(days) * 24 * time.Hour) }
+	if err := st.SaveSponsors([]Sponsor{{ID: "999", Login: "gone", Cents: 500}}); err != nil {
+		t.Fatal(err)
+	}
 	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/user/sponsorships_as_maintainer" {
+		if r.URL.Path != "/graphql" || r.Method != http.MethodPost {
 			http.NotFound(w, r)
 			return
 		}
@@ -257,10 +346,29 @@ func TestGitHubSponsorsRefresh(t *testing.T) {
 			http.Error(w, "no token", http.StatusUnauthorized)
 			return
 		}
-		json.NewEncoder(w).Encode([]map[string]any{
-			{"accountUser": map[string]any{"id": 4242, "login": "drsmith"}},
-			{"accountUser": map[string]any{"id": 7, "login": "someone"}},
-		})
+		var q struct {
+			Query     string         `json:"query"`
+			Variables map[string]any `json:"variables"`
+		}
+		json.NewDecoder(r.Body).Decode(&q)
+		if !strings.Contains(q.Query, "activeOnly: false") || !strings.Contains(q.Query, "includePrivate: true") {
+			http.Error(w, "the query misses past and private sponsorships", http.StatusBadRequest)
+			return
+		}
+		if q.Variables["after"] == nil {
+			json.NewEncoder(w).Encode(graphqlPage("c1",
+				sponsorshipNode(4242, "drsmith", 500, false, true, ago(100)),
+				sponsorshipNode(3, "small", 300, false, true, ago(5)),
+				sponsorshipNode(8, "past", 2500, false, false, ago(300)),
+			))
+			return
+		}
+		json.NewEncoder(w).Encode(graphqlPage("",
+			sponsorshipNode(10, "recent-once", 1000, true, false, ago(10)),
+			sponsorshipNode(40, "old-once", 1000, true, false, ago(40)),
+			// A monthly sponsor who also paid once keeps the monthly row.
+			sponsorshipNode(4242, "drsmith", 2000, true, false, ago(50)),
+		))
 	}))
 	defer fake.Close()
 	g := NewGitHub(GitHubConfig{ClientID: "id", ClientSecret: "secret", Token: "maintainer"}, st)
@@ -268,7 +376,36 @@ func TestGitHubSponsorsRefresh(t *testing.T) {
 	if err := g.refreshSponsors(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if !st.IsSponsor("4242") || !st.IsSponsor("7") {
-		t.Fatal("the sponsor list is cached in the base")
+	for id, want := range map[string]bool{"4242": true, "3": false, "8": false, "10": true, "40": false, "999": false} {
+		if got := st.IsSponsor(id); got != want {
+			t.Errorf("sponsor %s: supporter %v, want %v", id, got, want)
+		}
+	}
+	if sp, _ := st.Sponsor("4242"); sp == nil || sp.OneTime || sp.Cents != 500 {
+		t.Errorf("the monthly row is kept: %+v", sp)
+	}
+	if sp, _ := st.Sponsor("8"); sp != nil {
+		t.Errorf("a past monthly sponsor is not kept: %+v", sp)
+	}
+}
+
+// TestGitHubSponsorsRefreshError: a GraphQL error (a missing scope, a field gone) is reported
+// and leaves the cached list as it was.
+func TestGitHubSponsorsRefreshError(t *testing.T) {
+	st := newGitHubStore(t)
+	if err := st.SaveSponsors([]Sponsor{{ID: "7", Login: "someone", Cents: 500}}); err != nil {
+		t.Fatal(err)
+	}
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"errors": []map[string]any{{"message": "Your token has not been granted the required scopes"}}})
+	}))
+	defer fake.Close()
+	g := NewGitHub(GitHubConfig{ClientID: "id", ClientSecret: "secret", Token: "maintainer"}, st)
+	g.apiBase = fake.URL
+	if err := g.refreshSponsors(context.Background()); err == nil || !strings.Contains(err.Error(), "scopes") {
+		t.Fatalf("the error of GitHub is told: %v", err)
+	}
+	if !st.IsSponsor("7") {
+		t.Fatal("a failed read keeps the cached list")
 	}
 }
