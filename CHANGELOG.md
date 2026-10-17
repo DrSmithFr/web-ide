@@ -4,6 +4,18 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-10-17
+
+### Changed
+
+- The hosted relay reads its sponsor list through the GraphQL API of GitHub (`viewer.sponsorshipsAsMaintainer`, 100 per page, past and private sponsorships included): Sponsors has no REST API, and the endpoint it called does not exist. The Supporter rule is spelled out — **$5 a month or more** on GitHub Sponsors, a higher tier giving the same perks, a one-time payment of $5 or more counting for 30 days, organizations counting like users — and `cancelled` arrives at the end of the paid period, so a sponsorship pending cancellation keeps access until it is actually cancelled.
+- The keys of the GitHub setup are the ones the code reads: `WEBIDE_GITHUB_CLIENT` and `WEBIDE_GITHUB_SECRET` (the OAuth App), `WEBIDE_GITHUB_TOKEN` (a classic token with the `read:user` scope alone, which reads the sponsor list) and `WEBIDE_GITHUB_WEBHOOK` (the secret of the Sponsors webhook), in docs/self-hosting.md and in the env template of `scripts/deploy-relay.sh`. docs/relay.md gives the setup itself: an OAuth App whose callback is `https://<domain>/_relay/github/callback`, the token and its expiry, and the webhook of the Sponsors dashboard posted to `/_relay/github/webhook`.
+
+### Fixed
+
+- The `sponsorship` webhook reads the real payload of GitHub (`sponsorship.sponsor`, `sponsorship.tier`; `created`, `tier_changed`, `edited`, `cancelled`, and the `pending_*` events, which change nothing) and moves one row of the cached list at a time: it no longer replaced the whole list with its in-memory copy, which a restart had emptied.
+- The cached sponsor list keeps the tier, the amount and the start of each sponsorship (three columns added on migration), which the $5 rule needs; a row written by the previous versions counts again once the list has been read.
+
 ## [1.17.0] - 2026-10-16
 
 ### Added
