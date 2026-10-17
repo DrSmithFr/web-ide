@@ -4,7 +4,19 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
-## [1.18.1] - 2026-10-17
+## [1.18.2] - 2026-10-17
+
+### Changed
+
+- The home page asks for support with a quiet line at the bottom right (“Web IDE is free and open source. If it saves you time, you can support it on GitHub.”) instead of a button in the header.
+- A Supporter's TURN month reads `used / ∞` in Settings > Remote access, with a thank-you.
+
+### Fixed
+
+- **Link a GitHub account** always answered “only a device of the account can link it”: the Devices panel now proves possession of its device key on its relay link, for the host the relay sees (the page's on the relay origin, the relay URL of the pod on a pod origin).
+- A supporter state that moves (a GitHub link made or dropped, a sponsorship event, a read of the sponsor list) reaches the pods of the account at once: Settings no longer shows the old quota until the pod reconnects.
+- The window GitHub sends back to after a link ran an inline script, which the policy of the relay refuses: it stayed open and almost empty, and never told the panel. It now thanks, closes on a button, and the panel reads the link again when the window closes.
+
 
 ### Added
 
