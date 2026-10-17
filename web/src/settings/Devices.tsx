@@ -31,7 +31,7 @@ interface Identity {
   openStore(): Promise<IDBDatabase>
   list(db: IDBDatabase): Promise<any[]>
   unlock(db: IDBDatabase): Promise<{ rec: any; key: CryptoKey; prf: Uint8Array; seed: Uint8Array } | null>
-  enroll(db: IDBDatabase, phrase: string, wordlist: string[], name: string, kind: string): Promise<{ rec: any; accountKey: CryptoKey }>
+  enroll(db: IDBDatabase, phrase: string, wordlist: string[], name: string, kind: string): Promise<{ rec: any; key: CryptoKey; accountKey: CryptoKey }>
   accountKey(rec: any, prf: Uint8Array): Promise<CryptoKey>
   syncSeed(rec: any, prf: Uint8Array): Promise<Uint8Array | null>
   x25519FromSeed(seed: Uint8Array): Promise<{ jwk: any; key: string }>
@@ -48,6 +48,7 @@ interface Identity {
   fingerprint(id: string, wordlist: string[]): Promise<string>
   support(): Promise<string[]>
   link(onPush: (m: any) => void): Promise<{ send: (m: any) => void; recv: (type?: string) => Promise<any>; close: () => void }>
+  prove(l: { send: (m: any) => void; recv: (type?: string) => Promise<any> }, key: CryptoKey, origin: string): Promise<any>
   wordlist(): Promise<string[]>
   lock(): Promise<void>
   KindBrowser: string
@@ -90,6 +91,10 @@ export function Devices() {
   let link: { send: (m: any) => void; recv: (type?: string) => Promise<any>; close: () => void } | null = null
   let accountKey: CryptoKey | null = null
   let own: any = null
+  // The signing key of this device, and the host the relay sees the link on: the link proves
+  // possession with them, which the relay asks before an account action (the GitHub link).
+  let deviceKey: CryptoKey | null = null
+  let relayHost = ''
   let wordlist: string[] = []
   // The seeds of this device, kept for the session: the X25519 key it signs its wraps with, and the
   // sync key of the epoch it derives. A device that does not hold the account key cannot wrap.
@@ -185,6 +190,7 @@ export function Devices() {
     syncSeed = await m.syncSeed(d.rec, d.prf)
     seed = d.seed
     own = d.rec
+    deviceKey = d.key
     setDevice(d.rec.key)
     setAccount(d.rec.account ?? '')
     void showFp(d.rec.key)
@@ -194,8 +200,12 @@ export function Devices() {
     try {
       const st = await request('relay.status')
       setPodId(st?.podId ?? '')
+      // On the relay origin the link goes straight to the relay; on a pod origin the pod
+      // carries it to its relay, which then sees its own host, not the page's.
+      relayHost = inTunnel() ? location.host : st?.url ? new URL(st.url).host : ''
     } catch {
       setPodId(new URL(location.href).hash.match(/[#&]pod=([^&]+)/)?.[1] ?? '')
+      if (inTunnel()) relayHost = location.host
     }
 
     if (!(await startLink())) return
@@ -231,7 +241,15 @@ export function Devices() {
       else if (msg.type === 'githubStart' && msg.loginUrl) openGitHubLink(msg.loginUrl)
       for (const key of [...devices().map((d) => d.key), ...pairings().map((p) => p.key)]) void showFp(key)
     })
-    link.send({ type: 'register', account: account(), name: deviceName(), cert: own?.cert ?? null, lang: lang() })
+    const prove = !!(deviceKey && own?.cert && relayHost)
+    link.send({ type: 'register', account: account(), name: deviceName(), cert: own?.cert ?? null, lang: lang(), prove })
+    if (prove) {
+      const err = await id()!.prove(link, deviceKey!, relayHost)
+      if (err) {
+        setError(t(err.message ?? err.type))
+        return false
+      }
+    }
     const ready = await link.recv()
     if (ready.type === 'error') {
       setError(t(ready.message))
@@ -246,6 +264,7 @@ export function Devices() {
     const d = await m.enroll(db, phrase(), wordlist, deviceName(), m.KindBrowser)
     accountKey = d.accountKey
     own = d.rec
+    deviceKey = d.key
     setDevice(d.rec.key)
     setAccount(d.rec.account)
     setPhrase('')

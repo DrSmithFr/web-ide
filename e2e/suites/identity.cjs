@@ -200,6 +200,18 @@ run(
     assert(devices.includes('pod') && devices.includes('browser'), 'the devices carry their kind')
     assert((await app.locator('[data-testid=device-list] tr').count()) === 3, 'two devices and the header row')
 
+    // The GitHub link: only a device that proved its key may start it, so the panel's link
+    // proves possession. The window goes on to GitHub with the OAuth App of the relay.
+    await page.context().route((u) => u.hostname === 'github.com', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<p>GitHub</p>' }))
+    const [authorize] = await Promise.all([
+      page.context().waitForEvent('request', { predicate: (r) => r.url().startsWith('https://github.com/login/oauth/authorize'), timeout: 15000 }),
+      app.click('[data-testid=devices] button:has-text("Link a GitHub account")'),
+    ])
+    const ghURL = new URL(authorize.url())
+    assert(ghURL.searchParams.get('client_id') === 'e2e-client' && ghURL.searchParams.get('state'), 'Link a GitHub account opens GitHub with the OAuth App and a state: ' + authorize.url())
+    assert(!(await app.locator('.toast:has-text("only a device")').count()), 'no "only a device of the account" error')
+    for (const p of page.context().pages()) if (p.url().startsWith('https://github.com/')) await p.close()
+
     // 4. An invite for a phone: the code, the QR, and the fingerprint the admin compares.
     await app.click('[data-testid=devices] button:has-text("Invite a device")')
     await app.waitForSelector('.qr svg', { timeout: 15000 })
