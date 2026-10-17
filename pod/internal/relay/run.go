@@ -112,7 +112,9 @@ func Run(ctx context.Context, cfg RelayConfig) error {
 
 	// The supporter tier: an account linked to a GitHub login that sponsors the project is freed
 	// from its TURN quota. Without a GitHub app the relay has no supporters (a self-hosted one).
-	gh := NewGitHub(githubConfig(cfg), st)
+	ghCfg := githubConfig(cfg)
+	gh := NewGitHub(ghCfg, st)
+	log.Print(githubNotice(ghCfg, readEnvFile(cfg.GitHubEnv), cfg.GitHubEnv))
 	if gh != nil {
 		turnCfg.Supporter = gh.isSupporter
 	}
@@ -217,23 +219,7 @@ func tlsListeners(cfg RelayConfig) ([]net.Listener, error) {
 // would read them).
 func githubConfig(cfg RelayConfig) GitHubConfig {
 	g := cfg.GitHub
-	file := map[string]string{}
-	if cfg.GitHubEnv != "" {
-		data, err := os.ReadFile(cfg.GitHubEnv)
-		if err != nil {
-			log.Printf("relay: %s: %v", cfg.GitHubEnv, err)
-		}
-		for _, line := range strings.Split(string(data), "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-			k, v, ok := strings.Cut(line, "=")
-			if ok {
-				file[strings.TrimSpace(k)] = strings.TrimSpace(v)
-			}
-		}
-	}
+	file := readEnvFile(cfg.GitHubEnv)
 	pick := func(flagVal, key string) string {
 		if flagVal != "" {
 			return flagVal
@@ -248,6 +234,57 @@ func githubConfig(cfg RelayConfig) GitHubConfig {
 	g.Token = pick(g.Token, "WEBIDE_GITHUB_TOKEN")
 	g.WebhookSecret = pick(g.WebhookSecret, "WEBIDE_GITHUB_WEBHOOK")
 	return g
+}
+
+// readEnvFile reads a file of KEY=VALUE lines (none when path is empty or unreadable).
+func readEnvFile(path string) map[string]string {
+	file := map[string]string{}
+	if path == "" {
+		return file
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		log.Printf("relay: %s: %v", path, err)
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if k, v, ok := strings.Cut(line, "="); ok {
+			file[strings.TrimSpace(k)] = strings.TrimSpace(v)
+		}
+	}
+	return file
+}
+
+// githubNotice is the line the relay logs at start about its GitHub link: whether it is on, what
+// is missing, and the keys of the env file it does not read (GITHUB_CLIENT_ID… instead of
+// WEBIDE_GITHUB_*, which left the hosted relay without a link and its webhook answered by the
+// page with a 200).
+func githubNotice(g GitHubConfig, file map[string]string, path string) string {
+	if g.ClientID == "" || g.ClientSecret == "" {
+		msg := "relay: no GitHub link, no supporters (WEBIDE_GITHUB_CLIENT and WEBIDE_GITHUB_SECRET are not set)"
+		var stray []string
+		for _, k := range []string{"GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET", "GITHUB_TOKEN", "GITHUB_WEBHOOK_SECRET"} {
+			if file[k] != "" {
+				stray = append(stray, k)
+			}
+		}
+		if len(stray) > 0 {
+			msg += fmt.Sprintf(": %s names %s, which the relay does not read — rename them WEBIDE_GITHUB_CLIENT, _SECRET, _TOKEN, _WEBHOOK",
+				path, strings.Join(stray, ", "))
+		}
+		return msg
+	}
+	msg := "relay: GitHub link on"
+	if g.Token == "" {
+		msg += "; no WEBIDE_GITHUB_TOKEN: the sponsor list is not read"
+	}
+	if g.WebhookSecret == "" {
+		msg += "; no WEBIDE_GITHUB_WEBHOOK: the sponsorship webhook is off"
+	}
+	return msg
 }
 
 // acmeEmail is the contact Let's Encrypt may write to: the mailto: of -push-subject, when that

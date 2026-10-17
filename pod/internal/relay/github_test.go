@@ -409,3 +409,25 @@ func TestGitHubSponsorsRefreshError(t *testing.T) {
 		t.Fatal("a failed read keeps the cached list")
 	}
 }
+
+// TestGitHubNotice: the start line says when the link is off, and names the env keys the relay
+// does not read (the hosted relay ran without a link from a file written with GITHUB_*).
+func TestGitHubNotice(t *testing.T) {
+	stray := map[string]string{"GITHUB_CLIENT_ID": "x", "GITHUB_CLIENT_SECRET": "y", "GITHUB_TOKEN": "z"}
+	msg := githubNotice(GitHubConfig{}, stray, "/etc/antennae/env")
+	for _, want := range []string{"no GitHub link", "/etc/antennae/env names GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_TOKEN", "rename them WEBIDE_GITHUB_CLIENT"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("stray keys: %q misses %q", msg, want)
+		}
+	}
+	if msg := githubNotice(GitHubConfig{}, map[string]string{}, ""); strings.Contains(msg, "rename") {
+		t.Errorf("a relay with no env file: %q", msg)
+	}
+	msg = githubNotice(GitHubConfig{ClientID: "id", ClientSecret: "s"}, nil, "")
+	if !strings.Contains(msg, "GitHub link on") || !strings.Contains(msg, "no WEBIDE_GITHUB_TOKEN") || !strings.Contains(msg, "no WEBIDE_GITHUB_WEBHOOK") {
+		t.Errorf("a link without token nor webhook: %q", msg)
+	}
+	if msg := githubNotice(GitHubConfig{ClientID: "id", ClientSecret: "s", Token: "t", WebhookSecret: "w"}, nil, ""); msg != "relay: GitHub link on" {
+		t.Errorf("a full link: %q", msg)
+	}
+}
