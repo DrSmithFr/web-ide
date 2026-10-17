@@ -4,6 +4,12 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+## [1.18.3] - 2026-10-17
+
+### Changed
+
+- The sponsor line of the home page sits in the bottom-right corner of the screen; on a phone, which has no free corner, it stays under the list.
+
 ## [1.18.2] - 2026-10-17
 
 ### Changed
