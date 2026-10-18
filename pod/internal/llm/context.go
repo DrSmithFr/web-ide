@@ -69,7 +69,9 @@ const (
 )
 
 var globalMemory = []string{".claude/CLAUDE.md", ".codex/AGENTS.md"}
-var projectMemory = []string{"CLAUDE.md", ".claude/CLAUDE.md", "CLAUDE.local.md", "AGENTS.md"}
+
+// AGENTS.md is the standard, read first: a CLAUDE.md that imports it (@AGENTS.md) adds nothing.
+var projectMemory = []string{"AGENTS.md", "CLAUDE.md", ".claude/CLAUDE.md", "CLAUDE.local.md"}
 var skillDirs = []string{".claude/skills", ".agents/skills"}
 
 // home is where the global instructions are read. WEBIDE_INSTRUCTIONS_HOME replaces the

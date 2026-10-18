@@ -92,6 +92,7 @@ interface Update {
   queue: Chat['queue']
   approval?: Chat['approval']
   resetAt?: number
+  nested?: Chat['nested']
   server: string
   model: string
   parent?: string
@@ -141,6 +142,7 @@ on('agent.update', (u: Update) => {
       c.ticket = u.ticket
       c.queue = u.queue ?? []
       c.resetAt = u.resetAt
+      c.nested = u.nested
       c.server = u.server
       c.model = u.model
       c.approval = u.approval

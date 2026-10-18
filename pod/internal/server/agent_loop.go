@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"path"
 	"regexp"
 	"strings"
 	"sync"
@@ -403,6 +404,16 @@ func (s *Server) complete(r *agentRun, req llm.ChatRequest, stream string, resum
 // instructions and skills of the project, the ticket linked to the conversation.
 func (s *Server) systemPrompt(r *agentRun, ref *runtimeRef, c *agent.Chat, tools bool) string {
 	ctx := s.LLM.LoadContext(llm.Project{Root: ref.rt.Root, FS: ref.rt.FS, IdeDir: ref.rt.IdeDir})
+	// A compaction dropped the tool results that carried the instructions of the subfolders:
+	// they come back with the others.
+	for _, n := range c.Nested {
+		if n.At <= c.ResetAt {
+			if f, ok := llm.ReadNested(ref.rt.FS, ref.rt.Root, n.Path); ok {
+				f.Path = path.Join(ref.rt.Root, n.Path)
+				ctx.Files = append(ctx.Files, f)
+			}
+		}
+	}
 	vars := agent.PromptVars{Root: ref.rt.Root, ActiveFile: opt(c).ActiveFile}
 	if ref.project != nil {
 		vars.Project = ref.project.Name()

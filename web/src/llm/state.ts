@@ -272,6 +272,8 @@ export interface Chat {
   messages: ChatMessage[]
   /** Index from which reported usages count again (after a compaction). */
   resetAt?: number
+  /** Instruction files of subfolders added to the context when the agent first touched them (relative paths). */
+  nested?: { path: string }[]
   /** Set while the agent runs, with the stream of the completion awaited: a reloaded page resumes it. */
   running?: { stream?: string }
   /** Messages written during an answer, sent at the next step. */

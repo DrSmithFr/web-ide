@@ -399,6 +399,12 @@ function ContextMenu() {
               <span>{compacted()}</span>
             </Show>
           </div>
+          <Show when={chat.nested?.length}>
+            <div class="ai-ctx-files small" data-testid="ai-nested">
+              <span>{t('Instructions of the folders read')}</span>
+              <For each={chat.nested}>{(n) => <code class="ellipsis" data-testid="ai-nested-file" title={n.path}>{n.path}</code>}</For>
+            </div>
+          </Show>
           <div class="ai-pop-sep" />
           <Switch label={t('Automatic compaction')} hint={t('Beyond {n} % of the context', { n: prefs.compactAt })} checked={prefs.autoCompact} onChange={(v) => (setPrefs('autoCompact', v), savePrefs())} />
           <label class="ai-ctx-range small">
