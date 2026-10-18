@@ -253,6 +253,7 @@ func (s *Server) agentTool(r *agentRun, ref *runtimeRef, call agent.ToolCall, mo
 	if err != nil {
 		return fail(r, err)
 	}
+	s.addNested(r, ref, name, a, &res)
 	return res
 }
 

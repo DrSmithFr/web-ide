@@ -180,6 +180,7 @@ type agentUpdate struct {
 	Queue     []agent.QueuedMessage `json:"queue"`
 	Approval  *agent.Approval       `json:"approval,omitempty"`
 	ResetAt   int                   `json:"resetAt,omitempty"`
+	Nested    []agent.NestedFile    `json:"nested,omitempty"`
 	Server    string                `json:"server"`
 	Model     string                `json:"model"`
 	Parent    string                `json:"parent,omitempty"`
@@ -193,7 +194,7 @@ type agentUpdate struct {
 
 func updateOf(c *agent.Chat, state string, ahead, from int) agentUpdate {
 	u := agentUpdate{ID: c.ID, State: state, Ahead: ahead, Title: c.Title, Mode: c.Mode, Ticket: c.Ticket, Queue: c.Queue, Approval: c.Approval,
-		ResetAt: c.ResetAt, Server: c.Server, Model: c.Model, Parent: c.Parent, Agent: c.Agent, Children: c.Children, Dismissed: c.Dismissed, From: from, Count: len(c.Messages)}
+		ResetAt: c.ResetAt, Nested: c.Nested, Server: c.Server, Model: c.Model, Parent: c.Parent, Agent: c.Agent, Children: c.Children, Dismissed: c.Dismissed, From: from, Count: len(c.Messages)}
 	if u.Queue == nil {
 		u.Queue = []agent.QueuedMessage{}
 	}

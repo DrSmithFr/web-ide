@@ -336,6 +336,8 @@
 .ai-ctx-bar i { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--fg-muted); border-radius: 1px; }
 .ai-ctx-rows { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; color: var(--fg-muted); }
 .ai-ctx-rows span:nth-child(even) { text-align: right; color: var(--fg); font-variant-numeric: tabular-nums; }
+.ai-ctx-files { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; color: var(--fg-muted); }
+.ai-ctx-files code { color: var(--fg); }
 .ai-ctx-range { display: flex; align-items: center; gap: 8px; padding: 0 8px; color: var(--fg-muted); }
 .ai-ctx-range input { flex: 1; }
 .ai-ctx-compact { justify-content: center; }

@@ -16,18 +16,20 @@ const (
 
 // Chat is a conversation as the page and the base store it (web/src/llm/state.ts).
 type Chat struct {
-	ID       string          `json:"id"`
-	Title    string          `json:"title"`
-	Created  int64           `json:"created"`
-	Updated  int64           `json:"updated"`
-	Server   string          `json:"server"`
-	Model    string          `json:"model"`
-	Messages []*Message      `json:"messages"`
-	ResetAt  int             `json:"resetAt,omitempty"`
-	Running  *Running        `json:"running,omitempty"`
-	Queue    []QueuedMessage `json:"queue,omitempty"`
-	Mode     string          `json:"mode,omitempty"`
-	Ticket   *TicketLink     `json:"ticket,omitempty"`
+	ID       string     `json:"id"`
+	Title    string     `json:"title"`
+	Created  int64      `json:"created"`
+	Updated  int64      `json:"updated"`
+	Server   string     `json:"server"`
+	Model    string     `json:"model"`
+	Messages []*Message `json:"messages"`
+	ResetAt  int        `json:"resetAt,omitempty"`
+	// Nested: the instruction files of subfolders added to the context (nested.go).
+	Nested  []NestedFile    `json:"nested,omitempty"`
+	Running *Running        `json:"running,omitempty"`
+	Queue   []QueuedMessage `json:"queue,omitempty"`
+	Mode    string          `json:"mode,omitempty"`
+	Ticket  *TicketLink     `json:"ticket,omitempty"`
 	// Options of the user for this conversation, sent with each message.
 	Options *Options `json:"options,omitempty"`
 	// Approval waiting for the user (a file change, a command).
@@ -43,6 +45,14 @@ type Chat struct {
 	// Dismissed: the user abandoned it after an error; it is no longer shown as failed (until
 	// it runs again).
 	Dismissed bool `json:"dismissed,omitempty"`
+}
+
+// NestedFile is the AGENTS.md (or CLAUDE.md) of a subfolder, read the first time the
+// conversation touched a file there: Path is relative to the root, At the number of messages
+// at that time (the system prompt carries it again once a compaction dropped that result).
+type NestedFile struct {
+	Path string `json:"path"`
+	At   int    `json:"at"`
 }
 
 // ActionCard is an action the page runs when the user clicks it; State and Result once done.

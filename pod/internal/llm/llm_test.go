@@ -428,7 +428,7 @@ func TestContext(t *testing.T) {
 	for _, f := range c.Files {
 		paths = append(paths, f.Scope+":"+filepath.Base(f.Path))
 	}
-	if strings.Join(paths, ",") != "global:CLAUDE.md,global:AGENTS.md,project:CLAUDE.md,project:style.md,project:AGENTS.md" {
+	if strings.Join(paths, ",") != "global:CLAUDE.md,global:AGENTS.md,project:AGENTS.md,project:CLAUDE.md,project:style.md" {
 		t.Fatalf("files: %v", paths)
 	}
 	if len(c.Skills) != 3 || c.Skills[0].Name != "deploy" || c.Skills[0].Description != "Deploy the project" || c.Skills[1].Name != "notes" || c.Skills[2].Scope != "project" || c.Skills[2].Description != "PDF du projet" {
@@ -608,5 +608,58 @@ func TestChatTimes(t *testing.T) {
 	}
 	if e, ok := times["e"]; !ok || e.Ms != 0 {
 		t.Fatalf("e: %+v %v", e, ok)
+	}
+}
+
+func TestNestedInstructions(t *testing.T) {
+	m, _ := newManager(t, "h:1", "llamacpp")
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("WEBIDE_INSTRUCTIONS_HOME", "")
+	root := t.TempDir()
+	write := func(p, s string) {
+		_ = os.MkdirAll(filepath.Dir(filepath.Join(root, p)), 0o755)
+		if err := os.WriteFile(filepath.Join(root, p), []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A CLAUDE.md importing the AGENTS.md next to it loads it once, and AGENTS.md comes first.
+	write("CLAUDE.md", "See @AGENTS.md")
+	write("AGENTS.md", "Root rule.")
+	write("a/AGENTS.md", "Rule of a.")
+	write("a/CLAUDE.md", "Not read: AGENTS.md wins.")
+	write("a/b/CLAUDE.md", "Rule of b.")
+	write("a/b/c/file.go", "package c")
+	c := m.LoadContext(Project{Root: root, FS: fsx.Local{}})
+	var got []string
+	for _, f := range c.Files {
+		got = append(got, filepath.Base(f.Path))
+	}
+	if strings.Join(got, ",") != "AGENTS.md,CLAUDE.md" {
+		t.Fatalf("root files: %v", got)
+	}
+
+	loaded := map[string]bool{}
+	read := func(dir string) []string {
+		var rels []string
+		for _, f := range NestedInstructions(fsx.Local{}, root, filepath.Join(root, dir), func(r string) bool { return loaded[r] }) {
+			loaded[f.Path] = true
+			rels = append(rels, f.Path+"="+f.Content)
+		}
+		return rels
+	}
+	if got := read(""); len(got) != 0 {
+		t.Fatalf("root: %v", got)
+	}
+	if got := strings.Join(read("a/b/c"), "|"); got != "a/AGENTS.md=Rule of a.|a/b/CLAUDE.md=Rule of b." {
+		t.Fatalf("nested: %v", got)
+	}
+	if got := read("a/b/c"); len(got) != 0 {
+		t.Fatalf("second read: %v", got)
+	}
+	if got := read("a"); len(got) != 0 {
+		t.Fatalf("parent already loaded: %v", got)
+	}
+	if got := NestedInstructions(fsx.Local{}, root, "/elsewhere", func(string) bool { return false }); len(got) != 0 {
+		t.Fatalf("outside of the root: %v", got)
 	}
 }

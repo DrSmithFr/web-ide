@@ -19,6 +19,11 @@ fs.writeFileSync(demo + '/docs/rules.md', 'Imported rule: indent with tabs.\n')
 fs.mkdirSync(demo + '/.claude/skills/deploy', { recursive: true })
 fs.writeFileSync(demo + '/.claude/skills/deploy/SKILL.md', '---\nname: deploy\ndescription: Deploy the project to production\n---\nRun make deploy.\n')
 
+// A folder with its own instructions: read when the assistant first enters it.
+fs.mkdirSync(demo + '/nest/deep', { recursive: true })
+fs.writeFileSync(demo + '/nest/AGENTS.md', 'Nested rule: name the tests after the file.\n')
+fs.writeFileSync(demo + '/nest/deep/a.go', 'package deep\n')
+
 const requests = []
 const summaries = []
 
@@ -107,6 +112,13 @@ const fake = http.createServer(async (req, res) => {
     if (done < 20) return sse(res, { reasoning_content: 'Step ' + done / 2 }), sse(res, { tool_calls: calls([['w' + done, 'list_dir', { path: '.' }]]) }), end(res, 'tool_calls')
     sse(res, { content: 'Steps walked.' })
     return end(res, 'stop', { prompt_tokens: 900, completion_tokens: 5 })
+  }
+  if (ask.includes('Read nested')) {
+    // Two reads in a folder with an AGENTS.md: its text comes with the first one only.
+    if (last.role === 'user') return sse(res, { tool_calls: calls([['n1', 'read_file', { path: 'nest/deep/a.go' }]]) }), end(res, 'tool_calls')
+    if (last.tool_call_id === 'n1') return sse(res, { tool_calls: calls([['n2', 'read_file', { path: 'nest/deep/a.go' }]]) }), end(res, 'tool_calls')
+    sse(res, { content: 'Nested read.' })
+    return end(res, 'stop', { prompt_tokens: 600, completion_tokens: 5 })
   }
   if (ask.includes('long')) {
     // Big usage: the next step must be preceded by an automatic compaction.
@@ -222,6 +234,18 @@ run(async ({ page }) => {
     const r4 = requests[requests.length - 1]
     assert(text(r4.messages[1]).includes('SUMMARY-2'), 'the task goes on after the automatic compaction')
     await page.screenshot({ path: OUT + '/agent-compaction.png' })
+
+    // The AGENTS.md of a folder comes with the first read there, once, and the popover lists it.
+    await ask(page, 'Read nested', 'Nested read.')
+    const nr = requests[requests.length - 1].messages.filter((m) => m.role === 'tool')
+    const nested = nr.find((m) => m.tool_call_id === 'n1')
+    assert(nested && text(nested).includes('<instructions path="nest/AGENTS.md">') && text(nested).includes('Nested rule: name the tests'), 'first read in a folder carries its AGENTS.md')
+    assert(!text(nr.find((m) => m.tool_call_id === 'n2')).includes('Nested rule'), 'second read adds nothing')
+    await page.click('[data-testid=ai-gauge]')
+    await page.waitForSelector('[data-testid=ai-nested-file]')
+    const listed = await page.$$eval('[data-testid=ai-nested-file]', (e) => e.map((x) => x.textContent))
+    assert(listed.length === 1 && listed[0] === 'nest/AGENTS.md', 'context popover lists the nested instructions: ' + JSON.stringify(listed))
+    await page.keyboard.press('Escape')
 
     // Commands: completion, /help, /model, a skill as a command, /compact with instructions.
     await page.click('.ai-composer .ed-content')
