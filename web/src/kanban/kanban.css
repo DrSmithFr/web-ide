@@ -218,8 +218,9 @@ input.tk-title { padding: 2px 6px; }
 .ms-card:hover, .ms-card:focus-visible { border-color: var(--accent); }
 .ms-card-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .ms-card-title { font-weight: 600; flex: 1; min-width: 0; }
-.ms-bar { height: 6px; border-radius: 3px; background: var(--bg-3, var(--line)); overflow: hidden; }
+.ms-bar { display: flex; height: 6px; border-radius: 3px; background: var(--bg-3, var(--line)); overflow: hidden; }
 .ms-bar > span { display: block; height: 100%; background: var(--ok); }
+.ms-bar > .ms-bar-totest { background: var(--st); }
 .ms-card-meta { display: flex; gap: 10px; flex-wrap: wrap; color: var(--fg-muted); }
 /* Objectives: a section per open objective in the Milestones view, and the objective page. */
 .ob-section { margin-bottom: 16px; }

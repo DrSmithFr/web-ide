@@ -36,6 +36,14 @@ run(async ({ page }) => {
   await page.waitForSelector('[data-testid=ticket-status]:has-text("To test")')
   await page.waitForSelector('[data-testid=ticket-milestone-reminder]:has-text("As a user, I export my orders as CSV")')
   assert((await page.textContent('[data-testid=ticket-milestone-reminder]')).includes('Exports'), 'How to test recalls the milestone and its user stories')
+  // The progress bar of the milestone counts its tickets To test, in their color, after the finished ones.
+  if (!(await page.isVisible('[data-testid=kanban-panel]'))) await page.click('.rail-left .rail-btn[title="Kanban"]')
+  await page.click('[data-testid=kanban-open-milestones]')
+  await page.waitForSelector('[data-testid=milestone-card-1] [data-testid=progress-bar] .ms-bar-totest')
+  const bar = await page.$eval('[data-testid=milestone-card-1] [data-testid=progress-bar]', (e) => ({ title: e.title, width: e.querySelector('.ms-bar-totest').style.width }))
+  assert(bar.width === '100%' && bar.title.includes('1 to test'), 'the bar of the milestone shows its ticket To test: ' + JSON.stringify(bar))
+  await page.click('[data-testid=kanban-view-board]')
+  await page.click('.pane .tab:has-text("#1")')
 
   // The milestone page: the ticket To test is validated there.
   await page.click('[data-testid=ticket-milestone-open]')

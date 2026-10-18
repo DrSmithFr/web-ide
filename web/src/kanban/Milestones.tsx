@@ -8,6 +8,7 @@ import { prompt } from '../ui/overlay'
 import { errorToast } from '../ui/toast'
 import { EmptyState } from '../ui/EmptyState'
 import { board, openMilestone, openObjective } from './state'
+import { ProgressBar } from './ProgressBar'
 import { createMilestone, milestoneStateNames, type MilestoneSummary } from './milestones'
 import { moveObjective, objectiveStateNames, type ObjectiveSummary } from './objectives'
 import { fmtDue, newObjective } from './ObjectiveView'
@@ -96,7 +97,6 @@ export function Milestones() {
 
 function ObjectiveHead(props: { o: ObjectiveSummary; first: boolean; last: boolean }) {
   const o = () => props.o
-  const pct = () => (o().tickets ? Math.round((o().ticketsDone / o().tickets) * 100) : 0)
   const move = (delta: number) => void moveObjective(o().id, delta).catch(errorToast)
   return (
     <div class="ob-head" data-testid={`objective-head-${o().id}`}>
@@ -112,9 +112,7 @@ function ObjectiveHead(props: { o: ObjectiveSummary; first: boolean; last: boole
           <Icon name="clock" size={10} /> {fmtDue(o().due!)}
         </span>
       </Show>
-      <div class="ms-bar ob-head-bar" title={t('Tickets finished {done}/{n}', { done: o().ticketsDone, n: o().tickets })}>
-        <span style={{ width: `${pct()}%` }} />
-      </div>
+      <ProgressBar class="ob-head-bar" done={o().ticketsDone} toTest={o().toTest} total={o().tickets} />
       <span class="muted small" data-testid="objective-head-progress">
         {t('Tickets finished {done}/{n}', { done: o().ticketsDone, n: o().tickets })}
       </span>
@@ -136,7 +134,6 @@ function ObjectiveHead(props: { o: ObjectiveSummary; first: boolean; last: boole
 
 function MilestoneCard(props: { m: MilestoneSummary }) {
   const m = () => props.m
-  const pct = () => (m().tickets ? Math.round((m().ticketsDone / m().tickets) * 100) : 0)
   return (
     <button class="ms-card" onClick={() => openMilestone(m().id)} data-testid={`milestone-card-${m().id}`}>
       <div class="ms-card-top">
@@ -144,9 +141,7 @@ function MilestoneCard(props: { m: MilestoneSummary }) {
         <span class="ms-card-title ellipsis">{m().title}</span>
         <span class={`kb-status ms-${m().state}`}>{t(milestoneStateNames[m().state])}</span>
       </div>
-      <div class="ms-bar" title={t('Tickets finished {done}/{n}', { done: m().ticketsDone, n: m().tickets })}>
-        <span style={{ width: `${pct()}%` }} />
-      </div>
+      <ProgressBar done={m().ticketsDone} toTest={m().toTest} total={m().tickets} />
       <div class="ms-card-meta small" data-testid="milestone-card-meta">
         <span>{t('Tickets finished {done}/{n}', { done: m().ticketsDone, n: m().tickets })}</span>
         <span>{t('User stories validated {done}/{n}', { done: m().storiesDone, n: m().stories })}</span>

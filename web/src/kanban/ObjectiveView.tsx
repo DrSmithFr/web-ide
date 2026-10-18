@@ -9,6 +9,7 @@ import { errorToast } from '../ui/toast'
 import { Markdown } from '../llm/parts'
 import { closeTab, leaves, type TabState } from '../state/project'
 import { board, ensureBoard, eventText, openMilestone, openObjective, openTicket, statusLabels, updateTicket, type Summary, type Ticket } from './state'
+import { ProgressBar } from './ProgressBar'
 import { updateMilestone, type Milestone } from './milestones'
 import {
   addObjectiveNote, createObjective, deleteObjective, deleteObjectiveNote, getObjective, objectiveStateNames, objectiveVersion, reachObjective, setObjectiveState, updateObjective, type Objective,
@@ -67,7 +68,6 @@ function ObjectiveBody(props: { o: Objective; apply: OApply; tabId: string }) {
   const o = () => props.o
   const events = () => o().notes.filter((n) => n.kind === 'event')
   const blocker = () => reachBlocker(o())
-  const pct = () => (o().tickets ? Math.round((o().ticketsDone / o().tickets) * 100) : 0)
   const remove = async () => {
     if (!confirm(t('Delete the objective “{title}”? Its tickets and milestones stay.', { title: o().title }))) return
     try {
@@ -130,9 +130,7 @@ function ObjectiveBody(props: { o: Objective; apply: OApply; tabId: string }) {
             <Icon name="menu" size={14} />
           </button>
         </div>
-        <div class="ms-bar ob-bar" title={t('Tickets finished {done}/{n}', { done: o().ticketsDone, n: o().tickets })}>
-          <span style={{ width: `${pct()}%` }} />
-        </div>
+        <ProgressBar class="ob-bar" done={o().ticketsDone} toTest={o().toTest} total={o().tickets} />
       </header>
 
       <div class="tk-body">
