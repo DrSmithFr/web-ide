@@ -1,12 +1,60 @@
 # Self-hosting the relay
 
+Run your own relay on a machine with a domain, so your pods and browsers reach each other from anywhere.
+
 One binary, one machine, one domain: `web-ide-pod relay` is the whole relay — signaling, STUN and
 TURN, the bootstrap page and its Service Worker, the identity tables, Web Push, and its SQLite
 base. A self-hosted relay has **every feature of the hosted one, without limits** (`-quota` unset),
 and your pods keep working whatever relay they were given: nothing about the machine is stored in a
 pod or in a passkey, only the URL of the relay.
 
-## Quick start on one machine
+## Prerequisites
+
+- A machine with a public address (IPv4, and IPv6 if you publish an AAAA), Linux with systemd, and root on it.
+- A domain or subdomain pointing at it: an `A` record, an `AAAA` one if you serve IPv6, and a `CAA` allowing `letsencrypt.org`.
+- Ports 80, 443 and 3478 open, and a range of UDP ports for the TURN sockets (see *Firewall*).
+- The `web-ide-pod` binary of the [release](https://github.com/DrSmithFr/web-ide/releases/latest) for the machine (`web-ide-pod-linux-amd64.tar.gz` or `-arm64`), or one built [from the sources](../install/from-sources.md).
+
+## Steps
+
+1. Point the domain at the machine and open the ports of *Firewall*.
+2. Install the binary in `/usr/local/bin/web-ide-pod`, and create a system user for it: `sudo useradd --system --no-create-home --shell /usr/sbin/nologin relay` (the unit's `StateDirectory=relay` creates `/var/lib/relay`, the data folder).
+3. Write the unit of *systemd* below with your domain and contact (`-domain`, `-push-subject`), then:
+
+   ```sh
+   sudo systemctl daemon-reload && sudo systemctl enable --now relay
+   ```
+
+   The certificate is issued by Let's Encrypt on the first start (no certbot, no renewal job).
+4. On each pod, Settings > Remote access: type `wss://relay.example.org` and connect, or start the pod with `-relay wss://relay.example.org` (saved in `config.json`). The pod prints its remote link:
+
+   ```
+   remote : https://relay.example.org/#pod=<id>&t=<token>
+   ```
+
+5. Open that link from another network, then [create the account](account-and-devices.md) to pair your other browsers, phones and pods.
+
+To try the relay on one machine first, see *Quick start on one machine*; `scripts/deploy-relay.sh --setup --host <user@host>` does steps 2 and 3 and more (below).
+
+## Check
+
+- `systemctl status relay` is active, and `https://relay.example.org` loads a page with a valid certificate.
+- A pod connected to it shows its remote link in Settings > Remote access, and the link opens the app from another network.
+- `journalctl -u relay` shows no certificate or bind error.
+
+## Troubleshooting
+
+| Symptom | Fix |
+| --- | --- |
+| The browser complains about the certificate | Without `-domain` or `-cert/-key` the relay makes a self-signed one. Give it the domain, with port 443 reachable (the ACME check is served on 443 itself; `-acme-staging` tests with the test CA). |
+| `-tls-port` cannot bind | A port below 1024 needs root or `CAP_NET_BIND_SERVICE` (the unit has it); TURN over TLS is simply off when it cannot be bound. |
+| A client behind a strict network does not connect | Check 443 and the UDP range of `-turn-ports`; keep that range below the ephemeral range of the kernel. |
+| `relayclient: sync: no wrap` in the log of a pod | After a move to another relay, an admin device wraps the sync keys again (Settings > Remote access > Sync). |
+| The pod cannot be woken or powered off | The relay is older than the pods: update it with them (see *Pointing your pods at it*). |
+
+## Reference
+
+### Quick start on one machine
 
 The relay is an optional piece: it only introduces the browser and the pod, the traffic between them is encrypted and the relay never sees your token. Run your own:
 
@@ -24,7 +72,7 @@ remote : http://127.0.0.1:4430/#pod=<id>&t=<token>
 
 Open that link from any browser on another network: a small bootstrap page and a Service Worker come from the relay, the app itself comes from your pod through the tunnel. The pod keeps one outbound WebSocket to its relay (no port to open on the machine) and reconnects by itself; the token is proved inside the DataChannel, bound to the fingerprints of both sides. If the relay is down, `127.0.0.1` keeps working as before. TURN credentials are short-lived and given only to a registered, online pod. See [relay.md](../design/relay.md).
 
-## What you need
+### What you need
 
 - A machine with a public address (IPv4, and IPv6 if you publish an AAAA), ports 80, 443, 3478
   open, and a range of UDP ports for the TURN relay sockets.
@@ -35,7 +83,7 @@ Open that link from any browser on another network: a small bootstrap page and a
   TLS-ALPN-01 check served on 443 itself, the cache under `<data>/acme`. No certbot, no separate
   web server, no renewal job.
 
-## Run it
+### Run it
 
 ```sh
 web-ide-pod relay -data /var/lib/antennae \
@@ -64,7 +112,7 @@ and `turns:relay.example.org:443?transport=tcp` — so a client behind a restric
 TURN on 443. Each TURN URL costs a relay port on each end of a tunnel (see [load.md](../design/load.md)):
 the addresses and TCP 3478 are only named when there is no domain.
 
-## systemd
+### systemd
 
 ```ini
 # /etc/systemd/system/relay.service
@@ -78,6 +126,8 @@ ExecStart=/usr/local/bin/web-ide-pod -data /var/lib/relay -addr 0.0.0.0:4430 -tl
   -domain relay.example.org -turn-ports 20000-20999 -push-subject mailto:you@example.org relay
 User=relay
 Group=relay
+StateDirectory=relay
+ReadWritePaths=/var/lib/relay
 Restart=always
 RestartSec=3
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
@@ -95,7 +145,7 @@ WantedBy=multi-user.target
 hosted relay), plus the firewall rules, unattended upgrades and the nightly backup timer, and
 running it again changes nothing.
 
-## Firewall
+### Firewall
 
 ```
 22, 80, 443 tcp          # ssh, the redirect, the page + TURN over TLS + ACME
@@ -103,14 +153,14 @@ running it again changes nothing.
 20000-20999 udp          # the TURN relay sockets (-turn-ports)
 ```
 
-## Backups
+### Backups
 
 The base holds the accounts, the devices, the pairings, the pods, the sync blobs, the TURN month
 and the GitHub links. `sqlite3 relay.db .backup` (or the timer of `--setup`) is enough; the ACME
 cache is worth keeping too, so a rebuilt machine does not spend the rate limits again.
 `scripts/relay-watch.sh --pull` copies them off the machine and keeps 30 days.
 
-## Pointing your pods at it
+### Pointing your pods at it
 
 Settings > Remote access of a pod shows the relay field, pre-filled with `wss://antennae.space`:
 type your relay there and connect, or start the pod with `-relay wss://relay.example.org` (it is
@@ -126,8 +176,12 @@ signed requests between the pods of an account, and asks every online pod of the
 wake. A relay older than milestone 7 drops these messages: the LAN path still works, the page says
 the pod does not answer otherwise. Update the relay with the pods.
 
-## What a self-hosted relay does not do
+### What a self-hosted relay does not do
 
 Nothing is missing: no quota, no GitHub link needed, no supporter tier. The relay never holds a
 private key, the phrase, the pod token, the code or the project names in clear — self-hosting
 changes who holds the base, not what the relay can see.
+
+## See also
+
+[Account and devices](account-and-devices.md) · [Pods on the local network](lan-pods.md) · [Notifications on the phone](notifications.md) · [Relay design](../design/relay.md) · [Load](../design/load.md)

@@ -44,7 +44,7 @@ curl -fsSL https://raw.githubusercontent.com/DrSmithFr/web-ide/main/scripts/inst
 curl -fsSL https://raw.githubusercontent.com/DrSmithFr/web-ide/main/scripts/install.sh | sh -s -- --tailscale
 ```
 
-It prints the address to open once, with the pairing token. On macOS, download the archive of the [latest release](https://github.com/DrSmithFr/web-ide/releases/latest) and run `./web-ide-pod`.
+It prints the address to open once, with the pairing token. On macOS, download the archive of the [latest release](https://github.com/DrSmithFr/web-ide/releases/latest) and run `./web-ide-pod` ([details](docs/install/macos.md)). On Windows, install it inside WSL 2 ([steps](docs/install/windows-wsl.md)).
 
 From the sources (Go 1.27+, Node.js 20.19+):
 
