@@ -4,6 +4,18 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+## [1.21.0] - 2026-10-18
+
+### Added
+
+- Relay teams: a monthly sponsorship of **$50 or more** is the **Team** tier, with one seat per $5 ($50 is 10 seats, $100 is 20). The sponsor is a VIP and takes no seat. The admin of the team adds its members by GitHub login or account id in Settings › Remote access › Members. The members within the seats are VIPs (`VIP · Team <name>`) for as long as the sponsorship stays at that tier. When the count falls, the members added last lose the level first.
+- Organizations can sponsor at the Team tier: their admin proves it once with *Manage the team of an organization*. That second GitHub window asks `read:org` for this alone, and the relay checks the admin role and forgets the token. When an organization refuses the app, the window says so, and `web-ide-pod relay team admin <org> <login>` names the admin by hand.
+- `web-ide-pod relay team list|add|remove|admin` and `make team ARGS=…`; `relay supporters` lists the members of the teams.
+
+### Changed
+
+- The relay base moves to version 9 (teams, team members, the kind of a sponsor).
+
 ## [1.20.0] - 2026-10-18
 
 ### Added
