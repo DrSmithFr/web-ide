@@ -152,10 +152,14 @@ run(
     }))
     await cdp.send('ServiceWorker.enable')
     const registrationId = await regs
-    await cdp.send('ServiceWorker.deliverPushMessage', { origin: ORIGIN, registrationId, data: JSON.stringify(done.payload) })
+    const deliver = () => cdp.send('ServiceWorker.deliverPushMessage', { origin: ORIGIN, registrationId, data: JSON.stringify(done.payload) })
+    await deliver()
     const sw = ctx.serviceWorkers().find((w) => w.url().startsWith(ORIGIN)) ?? (await ctx.waitForEvent('serviceworker'))
     let shown = null
     for (let i = 0; i < 50 && !shown; i++, await sleep(200)) {
+      // A push delivered before the worker runs is lost on a slow runner: delivered again (same
+      // tag, the notification replaces itself).
+      if (i && i % 10 === 0) await deliver().catch(() => {})
       shown = await sw.evaluate(async () => {
         const [n] = await self.registration.getNotifications()
         return n ? { title: n.title, body: n.body, url: n.data?.url } : null
