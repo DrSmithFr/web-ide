@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/acp"
-	"github.com/DrSmithFr/web-ide/pod/internal/agent"
+	"github.com/DrSmithFr/web-ide/pod/internal/assistant"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
@@ -104,7 +104,7 @@ func (s *Server) registerKanbanAgent() {
 		if name == "" {
 			return nil, i18n.New("the kanban develops with the assistant: no development agent is set")
 		}
-		if _, ok := agent.RoleInstructions[a.Role]; !ok {
+		if _, ok := assistant.RoleInstructions[a.Role]; !ok {
 			return nil, i18n.Errorf("unknown role: %s", a.Role)
 		}
 		t, err := s.Kanban.Get(k.loc, a.ID)
@@ -122,7 +122,7 @@ func (s *Server) registerKanbanAgent() {
 		if rt.Agents == nil {
 			return nil, i18n.New("agents run on local projects only")
 		}
-		prompt := agent.TicketPrompt(t.ID, a.Role, t.Branch, t.Parent, a.Feedback, kanban.Markdown(t))
+		prompt := assistant.TicketPrompt(t.ID, a.Role, t.Branch, t.Parent, a.Feedback, kanban.Markdown(t))
 		if a.Text != "" {
 			prompt += "\n\n---\n\n" + a.Text
 		}

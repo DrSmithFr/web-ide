@@ -47,7 +47,7 @@ const (
 	MaxNote        = 1000
 )
 
-// Actors of a change: the agents (the local model, Claude Code through the MCP endpoint)
+// Actors of a change: the AIs (the assistant, Claude Code through the MCP endpoint)
 // may only do some transitions.
 const (
 	ByUser   = "user"
@@ -64,8 +64,8 @@ func NormStatus(s string) string {
 	return s
 }
 
-// IsAgent tells whether a change comes from a model rather than from the user.
-func IsAgent(by string) bool { return by == ByModel || by == ByClaude }
+// IsAI tells whether a change comes from a model rather than from the user.
+func IsAI(by string) bool { return by == ByModel || by == ByClaude }
 
 // modelMoves are the transitions the model may do (docs/design/kanban.md). New → To do also
 // happens by itself when a plan is written.
@@ -86,7 +86,7 @@ func CanMove(from, to, by string) bool {
 	if to == Abandoned && by == ByUser {
 		return from != Done && from != Abandoned
 	}
-	if IsAgent(by) {
+	if IsAI(by) {
 		// Claude Code may also start the development of a ticket (kanban_start).
 		if by == ByClaude && from == Todo && to == InProgress {
 			return true

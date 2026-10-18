@@ -209,11 +209,11 @@ func (s *Server) projectName(id string) string {
 	return id
 }
 
-// notifyAgent: a turn of a root conversation ended (asks: it waits for the user).
-func (s *Server) notifyAgent(asks bool, root, chatID, title string) {
-	kind, head, urgency := push.Finished, "The agent finished", "normal"
+// notifyAssistant: a turn of a root conversation ended (asks: it waits for the user).
+func (s *Server) notifyAssistant(asks bool, root, chatID, title string) {
+	kind, head, urgency := push.Finished, "The assistant finished", "normal"
 	if asks {
-		kind, head, urgency = push.Asks, "The agent needs you", "high"
+		kind, head, urgency = push.Asks, "The assistant needs you", "high"
 	}
 	name := s.projectName(root)
 	go s.notify(pushNote{kind: kind, path: "/project/" + url.PathEscape(root) + "?chat=" + url.QueryEscape(chatID), tag: chatID, urgency: urgency,

@@ -1,6 +1,6 @@
 # Kanban
 
-Each project has a kanban, a tool of the IDE that is also where the user and the AI agents work together: tickets are written, specified, planned, developed and tested through linked conversations of the assistant.
+Each project has a kanban, a tool of the IDE that is also where the user and the AIs work together: tickets are written, specified, planned, developed and tested through linked conversations of the assistant.
 
 ## Storage
 
@@ -16,9 +16,9 @@ Number (#1, #2… per project), title, priority (low, normal, high, critical), l
 - **New**: description (Markdown, 1500 characters max: the model tends to be verbose), notes (1000 characters max each, with the conversation that wrote them), briefing conversations.
 - **To do**: implementation plan (Markdown), goals (a title and a description of how to check it, checkable), plan conversations, estimated size (S, M, L, XL: required when a model writes the plan, editable by the user).
 
-**Complexity** (low, medium, high: how hard the work is, apart from its size) routes the sessions: a model writing the plan estimates it (required with `kanban_set_plan`), as it does for each test feedback it adds (`kanban_feedback` action `add`); the user changes it on the ticket and on each feedback (a feedback without one takes the one of its ticket). Each level is an effort of the integrated assistant and a model of Claude Code:
+**Complexity** (low, medium, high: how hard the work is, apart from its size) routes the sessions: a model writing the plan estimates it (required with `kanban_set_plan`), as it does for each test feedback it adds (`kanban_feedback` action `add`); the user changes it on the ticket and on each feedback (a feedback without one takes the one of its ticket). Each level is an effort of the assistant and a model of Claude Code:
 
-| Complexity | Integrated assistant | Claude Code |
+| Complexity | Assistant | Claude Code |
 |---|---|---|
 | High | effort Max | Opus |
 | Medium, or not estimated | effort Dynamic | Sonnet |
@@ -69,7 +69,7 @@ Tickets move with buttons only (no drag and drop).
 | To test | Add feedback, Review, with open test feedback Fix feedbacks (assistant or Claude Code, all the open feedback), else Validate the step (a ticket with open children) or Validate the ticket (→ Done); Fix session (per open feedback), Create the pull request in their sections; *More actions*: Open the worktree, Back to In progress, Develop with Claude Code, Abandon | mark feedback handled |
 | Done / Abandoned | Reopen (Done → To test, Abandoned → New) | — |
 
-The header keeps the main actions; *Briefing*, *Generate the plan*, *Start development* and the *Fix session* of a feedback are split buttons: a click starts the integrated assistant, the arrow offers Claude Code instead (in a terminal). *Review* (In progress, To test) is a split button too, with Claude Code only for now: a review of the work whose findings become test feedback, plus a note with the verdict. The other actions are in the *More actions* menu.
+The header keeps the main actions; *Briefing*, *Generate the plan*, *Start development* and the *Fix session* of a feedback are split buttons: a click starts the assistant, the arrow offers Claude Code instead (in a terminal). *Review* (In progress, To test) is a split button too, with Claude Code only for now: a review of the work whose findings become test feedback, plus a note with the verdict. The other actions are in the *More actions* menu.
 
 A feedback leaves the ticket in *To test*; while one is open, the ticket and its step cannot be validated (the pod refuses too). Closing or abandoning removes the worktree; the branch is kept (abandoning offers to delete it). The change is frozen in the ticket when it is merged, or else when it is closed.
 
@@ -113,7 +113,7 @@ One call may hold a small graph of questions: a question with an `id` is asked o
 
 ## Development by a CLI agent (Agents tool)
 
-The kanban settings choose the **development agent**: the integrated assistant (default) or a CLI agent installed for the Agents tool (Claude Code, opencode, pi; `meta.devAgent`).
+The kanban settings choose the **development agent**: the assistant (default) or a CLI agent installed for the Agents tool (Claude Code, opencode, pi; `meta.devAgent`).
 
 - With an agent, *Start development* creates the branch and the worktree as usual, then gives the ticket to the agent (`kanban.agent`): **one session per ticket** in the Agents tool, in the worktree, named `#<n> <title>`, whose first prompt is the briefing of the role (the instructions of `agent/texts.go`, the ticket in Markdown) followed by the message of the button. *Fix session*, *Fix feedbacks*, *New dev session* and the resolution of a rebase in the worktree send their briefing to the same session (refused while it works).
 - Every session of the Agents tool gets the **MCP server of the IDE** in `session/new` / `session/load` (`http`, `http://127.0.0.1:<port>/mcp`, the token as a bearer, named `web-ide` like the one users add to Claude Code, so it replaces it): the agent reaches the kanban tools with its worktree as `cwd`, which selects its ticket. pi has no MCP over HTTP: its sessions say so in a notice.
@@ -122,7 +122,7 @@ The kanban settings choose the **development agent**: the integrated assistant (
 
 ## Claude Code
 
-The pod serves an MCP endpoint (`POST /mcp`, the token of the pod as a bearer) so that Claude Code can work on the kanban next to the local assistant: a planning or a debug that needs a stronger model, a task to go faster. Setup, once:
+The pod serves an MCP endpoint (`POST /mcp`, the token of the pod as a bearer) so that Claude Code can work on the kanban next to the assistant: a planning or a debug that needs a stronger model, a task to go faster. Setup, once:
 
 ```
 claude mcp add --transport http --scope user web-ide http://127.0.0.1:4433/mcp --header "Authorization: Bearer $(cat ~/.web-ide/token)"
@@ -140,7 +140,7 @@ claude mcp add --transport http --scope user web-ide http://127.0.0.1:4433/mcp -
 - The Claude Code mod `claude-mod/` (`claude --plugin-dir claude-mod`, or copied into a plugin folder): above the prompt, links to the project Claude works in and to the ticket of its worktree, and the files it changed, each a button opening the file in the IDE (the mobile app draws no band above the prompt: it gets the same links in a pane, opened when it joins the session and by `/webide`); `/webide <file[:line]>` opens any file. It reads the token in `~/.web-ide/token` (`WEBIDE_DATA`, `WEBIDE_URL` to change). Tests: `claude plugin test claude-mod`.
 - A session started at the root of the project moves into the worktree of a ticket with `EnterWorktree` (the worktrees of the IDE are git worktrees): `kanban_start` and the `dev` / `fix` prompts ask for it.
 - `kanban_conversation` takes `last` (the last messages only) and `tools` (the tool calls, their errors, the failed answers and the notes): what a review of a development needs. In this repository, the Claude Code skill `/review-dev` (`.claude/skills/review-dev`) reviews the tickets in progress (conversation, worktree, goals), reports, and comments with `kanban_reply` without asking, keeping for the user what is theirs to decide (`--dry`: propose only).
-- Prompts, commands of Claude Code: `/mcp__web-ide__brief <n>` (take over a briefing of the local assistant: check the need, complete the ticket), `plan`, `dev`, `fix` (`/mcp__web-ide__fix <n> [feedback]`: one feedback, else all the open ones), `review` (read only: findings as test feedback, the verdict as a note; Opus).
+- Prompts, commands of Claude Code: `/mcp__web-ide__brief <n>` (take over a briefing of the assistant: check the need, complete the ticket), `plan`, `dev`, `fix` (`/mcp__web-ide__fix <n> [feedback]`: one feedback, else all the open ones), `review` (read only: findings as test feedback, the verdict as a note; Opus).
 
 ## Git
 

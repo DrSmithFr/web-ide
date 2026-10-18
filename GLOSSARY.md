@@ -243,6 +243,3 @@ Naming problems found while writing this glossary, each to become a ticket.
 - **Device / member**: the code and the UI call a pod a device too (`device.key`, *Devices* panel, `identity.json`, the revocation list); a pod is a member, not a device. The *Devices* panel becomes *Members*.
 - **Session**: the state of a desk is stored as a session (`sessions/<project>.json`, package `sessions`); call it *desk state*, and keep *session* for agents.
 - **Projects folder**: the flag `-workspace`, `config.json` and the docs say *workspace*; rename to *projects folder* (`-projects`, the old flag kept as an alias).
-- **Tool call**: the code and the docs say *tool* for what a model calls; write *tool call* or *agent tool*.
-- **Agent**: the package `agent` and the docs (“the agent of the assistant”, “the agent of the project”) use *agent* for the assistant; rename the package `assistant` and keep *agent* for Claude Code, opencode and pi.
-- **Assistant**: the menu says *AI assistant*, the docs also *integrated assistant*; say *Assistant*.

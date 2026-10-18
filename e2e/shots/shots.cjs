@@ -216,7 +216,7 @@ async function say(page, text) {
         await page.waitForSelector('[data-testid=ticket-status]:has-text("To do")')
       }
     }
-    await page.click('.rail-right .rail-btn[title="AI assistant"]')
+    await page.click('.rail-right .rail-btn[title="Assistant"]')
     await widenRight(page)
     await page.waitForSelector(`[data-testid=model-pill]:has-text("${llm.rec.model}")`)
 
@@ -303,7 +303,7 @@ async function say(page, text) {
 
     // 5. The editor: completion by the language server, a terminal below; explorer instead of
     // the kanban, no assistant.
-    await page.click('.rail-right .rail-btn[title="AI assistant"]')
+    await page.click('.rail-right .rail-btn[title="Assistant"]')
     await page.click('.rail-left .rail-btn[title="Explorer"]')
     await openAt(page, 'pod/main.go', 'flag.Parse()')
     await page.keyboard.press('Control+Shift+Backquote')

@@ -1,6 +1,6 @@
 // ask_user, page side: the answer of a question as the card keeps it, and as a string (the
 // English words the pod gives back to the model, which validates the questions and writes
-// the text of the answers: pod/internal/agent/ask.go).
+// the text of the answers: pod/internal/assistant/ask.go).
 import { t } from '../i18n'
 import type { Question } from './state'
 
@@ -64,7 +64,7 @@ export const upToYouLabel = () => t('Up to you')
 // ---------- graphs of questions ----------
 // An option (for an idea: nextYes / nextNo) names the id of the question asked when it is
 // chosen; the questions nothing leads to are asked in order. Same rules as the pod
-// (pod/internal/agent/graph.go), which checks the graph and writes the path to the model.
+// (pod/internal/assistant/graph.go), which checks the graph and writes the path to the model.
 
 /** The ids a question leads to, with the answer leading there. */
 function nexts(q: Question): [string, string][] {

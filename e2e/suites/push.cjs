@@ -1,5 +1,5 @@
 // Push notifications (relay milestone 6): a paired browser enables them in Settings >
-// Notifications, the pod notifies it when an agent turn ends while it shows no window, and the
+// Notifications, the pod notifies it when an assistant turn ends while it shows no window, and the
 // relay forwards ciphertext only. run.sh starts the relay with -push-test-endpoint and the pod
 // with -relay; the pod joins the account with the phrase.
 //
@@ -110,8 +110,8 @@ run(
     assert(test?.payload?.title === 'Notifications work', 'the test notification decrypts with the keys of the browser: ' + JSON.stringify(test?.payload))
     await app.click('.modal-settings .modal-head button')
 
-    // An agent turn while the window is shown: no notification.
-    await app.click('.rail-right .rail-btn[title="AI assistant"]')
+    // An assistant turn while the window is shown: no notification.
+    await app.click('.rail-right .rail-btn[title="Assistant"]')
     await app.waitForSelector('.ai-empty')
     await app.click('.ai-empty button:has-text("Add a model server")')
     await app.fill('.ai-servers input[name=url]', `127.0.0.1:${llm.address().port}`)
@@ -133,8 +133,8 @@ run(
     await sleep(300)
     await app.fill('.ai-composer .ed-content', 'Hidden window')
     await app.click('[data-testid=send]')
-    const done = await waitFor(() => received.find((r) => r.payload?.title === 'The agent finished'), 20000)
-    assert(done, 'a hidden device is notified when the agent turn ends')
+    const done = await waitFor(() => received.find((r) => r.payload?.title === 'The assistant finished'), 20000)
+    assert(done, 'a hidden device is notified when the assistant turn ends')
     const url = done?.payload?.url ?? ''
     const open = decodeURIComponent(new URLSearchParams(url.split('#')[1] ?? '').get('open') ?? '')
     assert(url.startsWith(`/#pod=${POD_ID}&open=`) && /^\/project\/[^?]+\?chat=\w+/.test(open), 'the notification opens the conversation: ' + url)
@@ -161,7 +161,7 @@ run(
         return n ? { title: n.title, body: n.body, url: n.data?.url } : null
       })
     }
-    assert(shown?.title === 'The agent finished' && shown.url === url, 'the Service Worker shows the notification: ' + JSON.stringify(shown))
+    assert(shown?.title === 'The assistant finished' && shown.url === url, 'the Service Worker shows the notification: ' + JSON.stringify(shown))
 
     // The app leaves the conversation (home page), then the click brings it back.
     await page.evaluate(() => (document.getElementById('frame').src = '/app'))
@@ -178,7 +178,7 @@ run(
     // The relay base and its log hold no title nor project name.
     const relayFiles = fs.readdirSync(process.env.E2E_RELAY_DATA).filter((f) => f.startsWith('relay.db'))
     const dump = Buffer.concat([...relayFiles.map((f) => fs.readFileSync(`${process.env.E2E_RELAY_DATA}/${f}`)), fs.readFileSync(process.env.E2E_RELAY_LOG)])
-    const leaks = ['The agent finished', 'Notifications work', 'Hidden window', 'demo', chatId].filter((w) => dump.includes(w))
+    const leaks = ['The assistant finished', 'Notifications work', 'Hidden window', 'demo', chatId].filter((w) => dump.includes(w))
     assert(leaks.length === 0 && received.every((r) => !r.raw.includes('demo')), 'the relay base and log hold no payload in clear: ' + leaks.join(', '))
 
     llm.closeAllConnections()

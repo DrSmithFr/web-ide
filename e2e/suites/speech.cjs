@@ -18,7 +18,7 @@ run(
       else if (r.method() !== 'GET') uploads.push(`${r.method()} ${u}`)
     })
     await openProject(page)
-    await page.click('.rail-right .rail-btn[title="AI assistant"]')
+    await page.click('.rail-right .rail-btn[title="Assistant"]')
     await page.waitForSelector('.ai-panel')
 
     // Settings: smallest model, English.

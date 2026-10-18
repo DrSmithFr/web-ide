@@ -9,8 +9,8 @@ import (
 
 // The kinds of notifications, each one a switch per device.
 const (
-	Finished = "finished" // a turn of the agent ended
-	Asks     = "asks"     // the agent waits for the user (a change, a command, a question)
+	Finished = "finished" // a turn of the assistant ended
+	Asks     = "asks"     // the assistant waits for the user (a change, a command, a question)
 	Tests    = "tests"    // a saved command flagged test failed
 	Feedback = "feedback" // the assistant or Claude Code added feedback to a ticket
 )

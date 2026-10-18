@@ -455,7 +455,7 @@ run(
       // 11. An agent turn on charlie, on a window that shows no pod: the browser is notified by
       // charlie, which got the subscription from the fan-out of section 5, not from a panel it
       // ever opened on that pod.
-      await app.click('.rail-right .rail-btn[title="AI assistant"]')
+      await app.click('.rail-right .rail-btn[title="Assistant"]')
       await app.waitForSelector('.ai-empty')
       await app.click('.ai-empty button:has-text("Add a model server")')
       await app.fill('.ai-servers input[name=url]', `127.0.0.1:${llmPort}`)
@@ -470,7 +470,7 @@ run(
       await app.fill('.ai-composer .ed-content', 'turn on charlie')
       await app.click('[data-testid=send]')
       await app.waitForSelector('.ai-msg.assistant .md:has-text("Turn done.")', { timeout: 30000 })
-      const note = await waitFor(() => push.received.find((r) => r.payload?.title === 'The agent finished'))
+      const note = await waitFor(() => push.received.find((r) => r.payload?.title === 'The assistant finished'))
       assert(note, 'a browser that enabled notifications on alpha is notified by an agent turn of charlie')
       assert(note.payload.body.includes('charlie-app'), 'the notification names the project of the pod that sent it: ' + JSON.stringify(note.payload))
       assert(note.payload.url.startsWith('/#pod=pod-charlie&open=%2Fproject%2F'), 'it opens the conversation on charlie: ' + note.payload.url)

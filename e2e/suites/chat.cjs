@@ -1,4 +1,4 @@
-// AI assistant, conversation features: side bar order, Ctrl+click on @file, queue of
+// Assistant, conversation features: side bar order, Ctrl+click on @file, queue of
 // messages (after an answer and between tool steps), message edited in place (attachments
 // kept), scroll at the end after a reload, reload during an answer (the page attaches to
 // the completion still running in the pod) and during a tool (the pod runs the agent: the
@@ -98,7 +98,7 @@ run(async ({ page, ctx }) => {
   page.on('dialog', (d) => d.accept())
   try {
     await openProject(page)
-    await page.click('.rail-right .rail-btn[title="AI assistant"]')
+    await page.click('.rail-right .rail-btn[title="Assistant"]')
     await page.click('.ai-empty button:has-text("Add a model server")')
     await page.fill('.ai-servers input[name=url]', `127.0.0.1:${fake.address().port}`)
     await page.click('.ai-servers button:has-text("Add")')

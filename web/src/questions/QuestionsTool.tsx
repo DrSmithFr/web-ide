@@ -42,7 +42,7 @@ export function QuestionsTool() {
       <div class="panel-body q-list" data-testid="questions-tool">
         <Toggle
           label={t('Open questions automatically')}
-          hint={t('A new question of an agent opens in front of everything.')}
+          hint={t('A new question of an AI opens in front of everything.')}
           checked={settings.questions.autoOpen}
           onChange={(v) => updateSettings((s) => (s.questions.autoOpen = v), 'Open questions automatically')}
           testid="questions-auto"

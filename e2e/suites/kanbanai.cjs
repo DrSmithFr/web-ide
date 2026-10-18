@@ -235,7 +235,7 @@ run(async ({ page }) => {
   page.on('dialog', (d) => d.accept())
   try {
     await openProject(page)
-    await page.click('.rail-right .rail-btn[title="AI assistant"]')
+    await page.click('.rail-right .rail-btn[title="Assistant"]')
     await page.click('.ai-empty button:has-text("Add a model server")')
     await page.fill('.ai-servers input[name=url]', `127.0.0.1:${fake.address().port}`)
     await page.click('.ai-servers button:has-text("Add")')

@@ -1,4 +1,4 @@
-// Sub-agents in the thread (pod/internal/agent/subagents.go): the card of each child in its
+// Sub-agents in the thread (pod/internal/assistant/subagents.go): the card of each child in its
 // parent, the events of a child (note, question, report) or of the parent (message), the
 // task and the header of a child conversation.
 import { For, Show } from 'solid-js'
@@ -6,7 +6,7 @@ import { Icon } from '../ui/icons'
 import { errorToast } from '../ui/toast'
 import { request } from '../pod/rpc'
 import { t } from '../i18n'
-import { openChat, runStates } from './agent'
+import { openChat, runStates } from './assistant'
 import { formatTokens, Markdown } from './parts'
 import { chat, chatList, config, type AgentEvent, type ChatInfo, type ChatMessage } from './state'
 
@@ -56,7 +56,7 @@ export function ChildCard(props: { id: string }) {
         </span>
         <span class="grow" />
         <Show when={runStates()[props.id]}>
-          <button class="btn small" onClick={() => request('agent.stop', { id: props.id }).catch(errorToast)} data-testid="ai-child-stop">
+          <button class="btn small" onClick={() => request('assistant.stop', { id: props.id }).catch(errorToast)} data-testid="ai-child-stop">
             <Icon name="stop" size={12} /> {t('Stop')}
           </button>
         </Show>

@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/pod/internal/agent"
+	"github.com/DrSmithFr/web-ide/pod/internal/assistant"
 	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
@@ -55,7 +55,7 @@ var ticketID = map[string]any{"type": "integer", "description": "Ticket number (
 var (
 	parentProp     = map[string]any{"type": "integer", "description": "Root ticket: this one becomes a step of its lineage, developed in the root's worktree after the previous steps (0 takes it out). Only before its development starts"}
 	complexityProp = enum("How hard the work is, which picks the model and the effort of its sessions: low (a small obvious change: a color, a label, a one-line fix), medium (usual work), high (a delicate design, concurrency, security, a bug hard to find)", kanban.Complexities...)
-	sizeProp       = enum("Estimated effort of the whole ticket: s (a few files, an hour of agent work), m, l, xl (many files across the pod and the page, several days)", kanban.Sizes...)
+	sizeProp       = enum("Estimated effort of the whole ticket: s (a few files, an hour of AI work), m, l, xl (many files across the pod and the page, several days)", kanban.Sizes...)
 	dependsOnProp  = map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "Tickets of other lineages this one waits for: it starts once they are merged or done (replaces the list)"}
 )
 
@@ -243,7 +243,7 @@ var mcpTools = []mcpTool{
 	},
 	{
 		name:        "kanban_conversation",
-		description: "Reads a conversation of the local assistant linked to the ticket (see Linked conversations in kanban_get), or the session of the agent developing it (Agent session in kanban_get): the messages of the user and of the assistant, with the questions asked and their answers. Use it to take over a briefing; with last and tools, to review a development (its commands, errors and notes).",
+		description: "Reads a conversation of the assistant linked to the ticket (see Linked conversations in kanban_get), or the session of the agent developing it (Agent session in kanban_get): the messages of the user and of the assistant, with the questions asked and their answers. Use it to take over a briefing; with last and tools, to review a development (its commands, errors and notes).",
 		props: map[string]any{"id": ticketID, "chat": str("Conversation id (chat … in kanban_get)"),
 			"last":  map[string]any{"type": "integer", "description": "Only the last messages, this many (default: all)"},
 			"tools": map[string]any{"type": "boolean", "description": "Also the tool calls (name and arguments, cut), their errors, the answers that failed and the notes and reports of sub-agents"}},
@@ -275,14 +275,14 @@ var mcpTools = []mcpTool{
 			if s.run(a.Chat) != nil {
 				return text + "\n\n(The assistant is answering now: read the conversation again later.)", nil
 			}
-			var chat agent.Chat
+			var chat assistant.Chat
 			_ = json.Unmarshal(raw, &chat)
 			return text + pendingQuestions(&chat), nil
 		}),
 	},
 	{
 		name:        "kanban_reply",
-		description: "Writes a message in a conversation of the local assistant linked to the ticket, as Claude Code: the assistant reads it and answers (its questions still waiting are left aside; use kanban_answer to answer them). Queued if the conversation is running. Use it to answer a question the assistant asked in its text, or to guide it.",
+		description: "Writes a message in a conversation of the assistant linked to the ticket, as Claude Code: the assistant reads it and answers (its questions still waiting are left aside; use kanban_answer to answer them). Queued if the conversation is running. Use it to answer a question the assistant asked in its text, or to guide it.",
 		props:       map[string]any{"id": ticketID, "chat": str("Conversation id (chat … in kanban_get)"), "message": str("Your message, in Markdown")},
 		required:    []string{"chat", "message"},
 		run: ticketTool(func(ctx context.Context, s *Server, sc mcpScope, id int64, a struct{ Chat, Message string }) (string, error) {
@@ -295,7 +295,7 @@ var mcpTools = []mcpTool{
 	},
 	{
 		name:        "kanban_answer",
-		description: "Answers the questions of ask_user waiting in a conversation of the local assistant linked to the ticket, for the user (kanban_conversation lists them with their options); the assistant then goes on. Answer only what the plan, the ticket or the user already decided; otherwise leave the questions to the user.",
+		description: "Answers the questions of ask_user waiting in a conversation of the assistant linked to the ticket, for the user (kanban_conversation lists them with their options); the assistant then goes on. Answer only what the plan, the ticket or the user already decided; otherwise leave the questions to the user.",
 		props: map[string]any{
 			"id":   ticketID,
 			"chat": str("Conversation id (chat … in kanban_get)"),

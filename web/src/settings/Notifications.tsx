@@ -9,8 +9,8 @@ import { t } from '../i18n'
 type Status = { available: boolean; subscribed?: boolean; kinds: string[]; choices?: Record<string, boolean>; sub?: string }
 
 const kindLabels: Record<string, string> = {
-  finished: 'The agent finished a turn',
-  asks: 'The agent asks for an approval or an answer',
+  finished: 'The assistant finished a turn',
+  asks: 'The assistant asks for an approval or an answer',
   tests: 'Tests failed (a saved command flagged test)',
   feedback: 'Feedback on a ticket from the assistant or Claude Code',
 }

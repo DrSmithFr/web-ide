@@ -1,12 +1,12 @@
 # Web IDE
 
-A self-hosted IDE in your browser, with an AI assistant that runs on **your** models (llama.cpp, Ollama) and a kanban that takes each change from an idea to a merged branch.
+A self-hosted IDE in your browser, with an assistant that runs on **your** models (llama.cpp, Ollama) and a kanban that takes each change from an idea to a merged branch.
 
 ![The model develops a ticket in its own git worktree: it reads the code, edits, runs the tests and commits](docs/images/develop.gif)
 
 - **One binary, local first.** A small Go program, the *pod*, serves the interface and does the work on your machine: files, git, terminals, language servers, databases, model calls. No Electron, no cloud, no account.
 - **The same session everywhere.** Open it from another browser or device (over Tailscale) and find your tabs, splits and terminals as you left them.
-- **A development cycle with the agent.** Briefing → plan → development in a worktree → test → merge, each step with its conversation, each decision yours.
+- **A development cycle with the assistant.** Briefing → plan → development in a worktree → test → merge, each step with its conversation, each decision yours.
 
 ## From an idea to a merged branch
 
@@ -57,7 +57,7 @@ Optional: `git`, language servers in the `PATH`, a [llama.cpp](https://github.co
 
 ## Security
 
-The pod has the rights of your user: it reads and writes files and runs commands for the page. It only answers the local machine, every request needs the pairing token, and the agent should only be connected to model servers you trust. See [SECURITY.md](SECURITY.md).
+The pod has the rights of your user: it reads and writes files and runs commands for the page. It only answers the local machine, every request needs the pairing token, and the assistant should only be connected to model servers you trust. See [SECURITY.md](SECURITY.md).
 
 ## Contributing
 

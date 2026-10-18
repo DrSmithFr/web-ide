@@ -57,7 +57,7 @@ func TestMCPIDETools(t *testing.T) {
 	if out := m.ok("share_preview", with("title", "Home page")); !strings.Contains(out, `"Home page"`) || !strings.Contains(out, "Do not run the command yourself") {
 		t.Fatalf("share_preview: %s", out)
 	}
-	ev := a.waitEvent("agent.ui", func(d map[string]any) bool { return d["tool"] == "share_preview" })
+	ev := a.waitEvent("assistant.ui", func(d map[string]any) bool { return d["tool"] == "share_preview" })
 	spec := ev["args"].(map[string]any)["spec"].(map[string]any)
 	if spec["title"] != "Home page" || spec["command"] != "sleep 30" || int(spec["port"].(float64)) != port || spec["project"] != id || ev["chat"] != "" {
 		t.Fatalf("share_preview event: %+v", ev)
@@ -66,10 +66,10 @@ func TestMCPIDETools(t *testing.T) {
 		t.Fatalf("list_previews: %s", out)
 	}
 
-	// A tool run by the window: the page answers with agent.ui.result.
+	// A tool run by the window: the page answers with assistant.ui.result.
 	answer := func(tool string, res map[string]any) map[string]any {
-		ev := a.waitEvent("agent.ui", func(d map[string]any) bool { return d["tool"] == tool })
-		a.call("agent.ui.result", map[string]any{"id": ev["id"], "content": res["content"], "status": res["status"], "image": res["image"]})
+		ev := a.waitEvent("assistant.ui", func(d map[string]any) bool { return d["tool"] == tool })
+		a.call("assistant.ui.result", map[string]any{"id": ev["id"], "content": res["content"], "status": res["status"], "image": res["image"]})
 		return ev
 	}
 	done := make(chan string, 1)

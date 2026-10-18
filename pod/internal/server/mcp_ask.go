@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/pod/internal/agent"
+	"github.com/DrSmithFr/web-ide/pod/internal/assistant"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
 
@@ -38,9 +38,9 @@ type mcpAsk struct {
 
 var mcpAskTool = mcpTool{
 	name:        "ask_user",
-	description: fmt.Sprintf("Asks the user one or more questions (1 to %d) in the IDE, where they answer in its Questions tool, when information is missing or a choice is theirs. Each question has a type that picks its look: choice (the default), idea, compare, rank or scenario. The user can also answer freely, say \"I don't know\" or \"Up to you\", and add a note. The call returns the answers; when the user takes long, it returns that the questions are still open with their id: call again with wait set to that id (and no questions) to go on waiting. Write the questions in the user's language.", agent.MaxQuestions),
+	description: fmt.Sprintf("Asks the user one or more questions (1 to %d) in the IDE, where they answer in its Questions tool, when information is missing or a choice is theirs. Each question has a type that picks its look: choice (the default), idea, compare, rank or scenario. The user can also answer freely, say \"I don't know\" or \"Up to you\", and add a note. The call returns the answers; when the user takes long, it returns that the questions are still open with their id: call again with wait set to that id (and no questions) to go on waiting. Write the questions in the user's language.", assistant.MaxQuestions),
 	props: map[string]any{
-		"questions": agent.AskUserQuestions(),
+		"questions": assistant.AskUserQuestions(),
 		"context":   str("What the user should know before answering (your finding, what you are about to do), shown above the questions"),
 		"wait":      str("Id of questions asked before and still open: wait for their answers instead of asking"),
 	},
@@ -67,7 +67,7 @@ var mcpAskTool = mcpTool{
 				return "", fmt.Errorf("no open questions %q: they were answered or the IDE restarted; ask again", a.Wait)
 			}
 		} else {
-			qs, err := agent.NormalizeQuestions(a.Questions)
+			qs, err := assistant.NormalizeQuestions(a.Questions)
 			if err != nil {
 				return "", err
 			}
@@ -81,7 +81,7 @@ var mcpAskTool = mcpTool{
 			if ans.skip {
 				return "The user did not answer these questions: go on with your best judgment, or ask in another way.", nil
 			}
-			return agent.AnswersText(ask.q.Questions, ans.answers, ans.notes, ans.path, ans.offPath), nil
+			return assistant.AnswersText(ask.q.Questions, ans.answers, ans.notes, ans.path, ans.offPath), nil
 		case <-time.After(mcpAskWait):
 			return fmt.Sprintf("The user has not answered yet; the questions stay open in the IDE. Call ask_user again with wait %q to go on waiting.", ask.q.ID), nil
 		case <-ctx.Done():
@@ -93,7 +93,7 @@ var mcpAskTool = mcpTool{
 func init() { mcpTools = append(mcpTools, mcpAskTool) }
 
 // newMCPAsk puts questions of an MCP client in the Questions tool of its project.
-func (s *Server) newMCPAsk(sc mcpScope, qs []agent.Question, context string) *mcpAsk {
+func (s *Server) newMCPAsk(sc mcpScope, qs []assistant.Question, context string) *mcpAsk {
 	s.asks.mu.Lock()
 	s.asks.next++
 	id := "mcp:" + strconv.Itoa(s.asks.next)

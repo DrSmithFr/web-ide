@@ -133,7 +133,7 @@ export const answerForm = (q: Question, action: 'accept' | 'decline' | 'cancel',
 
 /** The answers of an ask_user card: to its conversation for the assistant, else to the MCP call. */
 export function answerAsk(q: Question, answers: (AnswerEntry | null)[][], notes: string[], path?: number[], offPath?: number) {
-  if (q.source === 'assistant') return request('agent.answer', { id: q.session, index: q.index, answers: answerStrings(answers), notes, path, offPath })
+  if (q.source === 'assistant') return request('assistant.answer', { id: q.session, index: q.index, answers: answerStrings(answers), notes, path, offPath })
   return request('questions.answer', { id: q.id, answers: answerStrings(answers), notes, path, offPath })
 }
 

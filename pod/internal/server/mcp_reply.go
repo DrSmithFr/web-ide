@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/pod/internal/agent"
+	"github.com/DrSmithFr/web-ide/pod/internal/assistant"
 	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
 )
 
-// Claude Code takes part in a conversation of the local assistant linked to a ticket: it
+// Claude Code takes part in a conversation of the assistant linked to a ticket: it
 // writes a message (kanban_reply) or answers the questions waiting for the user
 // (kanban_answer). Its messages carry the author "claude" and the conversation goes on as
 // if the user had sent them.
@@ -87,7 +87,7 @@ func (s *Server) mcpReply(lc linkedChat, id, text string) (string, error) {
 	if r := s.run(id); r != nil {
 		r.mu.Lock()
 		if !r.done {
-			r.chat.Queue = append(r.chat.Queue, agent.QueuedMessage{ID: newID(), Text: text, Author: AuthorClaude})
+			r.chat.Queue = append(r.chat.Queue, assistant.QueuedMessage{ID: newID(), Text: text, Author: AuthorClaude})
 			s.publish(r, -1)
 			r.mu.Unlock()
 			return "The conversation is running: your message is queued and sent at its next step.", nil
@@ -102,7 +102,7 @@ func (s *Server) mcpReply(lc linkedChat, id, text string) (string, error) {
 		return "", fmt.Errorf("this conversation has no model yet: the user must send its first message")
 	}
 	from := minFrom(len(chat.Messages), skipQuestions(chat))
-	chat.Messages = append(chat.Messages, &agent.Message{Role: "user", Content: agent.String(text), Display: text, Author: AuthorClaude})
+	chat.Messages = append(chat.Messages, &assistant.Message{Role: "user", Content: assistant.String(text), Display: text, Author: AuthorClaude})
 	if !s.startRun(lc.cc.loc, lc.cc.root, lc.project, s.uiLanguage(), chat, from) {
 		return "", fmt.Errorf("the conversation started meanwhile: send your message again")
 	}
@@ -141,15 +141,15 @@ func (s *Server) mcpAnswer(lc linkedChat, id string, answers [][]string, notes [
 		}
 	}
 	m.Answers, m.Notes, m.Path, m.OffPath, m.AskState, m.Author = answers, notes, path, nil, "answered", AuthorClaude
-	m.Content = agent.String("Claude Code answered for the user.\n" + agent.AnswersText(m.Questions, answers, notes, path, nil))
-	m.Summary = agent.T("answers received", nil).Raw()
+	m.Content = assistant.String("Claude Code answered for the user.\n" + assistant.AnswersText(m.Questions, answers, notes, path, nil))
+	m.Summary = assistant.T("answers received", nil).Raw()
 	if !s.startRun(lc.cc.loc, lc.cc.root, lc.project, s.uiLanguage(), chat, index) {
 		return "", fmt.Errorf("the conversation started meanwhile: read it again")
 	}
 	return "Answers sent: the assistant goes on.", nil
 }
 
-func hasGraph(qs []agent.Question) bool {
+func hasGraph(qs []assistant.Question) bool {
 	for _, q := range qs {
 		if q.ID != "" {
 			return true
@@ -159,7 +159,7 @@ func hasGraph(qs []agent.Question) bool {
 }
 
 // pendingQuestions lists the questions waiting in a conversation, for kanban_conversation.
-func pendingQuestions(c *agent.Chat) string {
+func pendingQuestions(c *assistant.Chat) string {
 	for i := len(c.Messages) - 1; i >= 0; i-- {
 		m := c.Messages[i]
 		if m.AskState != "pending" {

@@ -1,5 +1,5 @@
-// Tools of the agent that act on the interface, run by this window when the pod asks it
-// (agent.ui): show a file, bring a panel, a console or the problems to the front, draw a page
+// Tools of the assistant that act on the interface, run by this window when the pod asks it
+// (assistant.ui): show a file, bring a panel, a console or the problems to the front, draw a page
 // of the board (it needs the doodle code of the page: text measures, description, PNG).
 import { attached, basename, loadDoc, mutate, openFile, openTab, relPath, root } from '../state/project'
 import { errorToast, toast } from '../ui/toast'

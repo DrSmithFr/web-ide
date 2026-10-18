@@ -41,7 +41,7 @@ import { docsIndex, openDoc } from '../state/docs'
 import { openSettings } from '../settings/SettingsModal'
 import { actions, registerAction, runAction, shortcutOf } from '../keys/bindings'
 import { onMouseNav } from '../keys/mouse'
-import { navigateChats, openChat } from '../llm/agent'
+import { navigateChats, openChat } from '../llm/assistant'
 import { contextMenu, focusBeforeMenus, prompt, type MenuItem } from '../ui/overlay'
 import { Icon } from '../ui/icons'
 import { refreshConnections } from '../db/api'
@@ -65,7 +65,7 @@ export const toolPanels: Record<string, { label: string; icon: string; component
   problems: { label: 'Problems', icon: 'problems', component: ProblemsTool, badge: problemCount },
   docker: { label: 'Docker', icon: 'docker', component: DockerTool },
   database: { label: 'Database explorer', icon: 'database', component: DatabaseTool },
-  assistant: { label: 'AI assistant', icon: 'sparkle', component: AssistantTool },
+  assistant: { label: 'Assistant', icon: 'sparkle', component: AssistantTool },
   agents: { label: 'Agents', icon: 'comment', component: AgentsTool },
   questions: { label: 'Questions', icon: 'question', component: QuestionsTool, badge: () => questions().length },
   structure: { label: 'Structure', icon: 'outline', component: StructureTool },

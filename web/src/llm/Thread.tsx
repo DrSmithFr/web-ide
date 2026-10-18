@@ -5,7 +5,7 @@ import { Icon } from '../ui/icons'
 import { errorToast, toast } from '../ui/toast'
 import { activeTab, openFile, project, relPath } from '../state/project'
 import { approval, chat, config, live, liveSpeed, savePrefs, setPrefs, type Attachment, type ChatMessage, type Effort, type Part, type ToolCall } from './state'
-import { answerApproval, currentMode, dismiss, otherModel, resume, retry, stepsSinceUser } from './agent'
+import { answerApproval, currentMode, dismiss, otherModel, resume, retry, stepsSinceUser } from './assistant'
 import { AttachmentChip, callLabel, DiffBlock, formatDuration, formatTokens, Markdown, safeArgs, summaryText, toolIcons, toolVerbs } from './parts'
 import { absPath } from './uiTools'
 import { focusComposer, reuseDoodle, runCommand } from './Composer'
@@ -16,7 +16,7 @@ import { pages, showPage } from './board/pages'
 import { captureScreen, canCapture, type Picture } from './doodle/background'
 import { drawPage } from './uiTools'
 import { request } from '../pod/rpc'
-import { answerQuestions, dismissPlan, executePlan, send } from './agent'
+import { answerQuestions, dismissPlan, executePlan, send } from './assistant'
 import { AskCard } from './AskCard'
 import { PreviewCard } from './PreviewCard'
 import { ChildCard, ChildHeader, EventCard, TaskCard } from './SubAgents'
@@ -192,11 +192,11 @@ function EditBox(props: { index: number; text: string }) {
 
 /**
  * board_draw on a capture of the screen: the browser needs a click of the user to capture it.
- * Share draws the page here on the capture and gives it to the agent; Refuse tells it.
+ * Share draws the page here on the capture and gives it to the assistant; Refuse tells it.
  */
 function CaptureCard(props: { msg: ChatMessage; call?: ToolCall }) {
   const [busy, setBusy] = createSignal(false)
-  const send = (body: Record<string, unknown>) => request('agent.capture', { id: chat.id, index: chat.messages.indexOf(props.msg), ...body })
+  const send = (body: Record<string, unknown>) => request('assistant.capture', { id: chat.id, index: chat.messages.indexOf(props.msg), ...body })
   const share = async () => {
     let pic: Picture
     try {

@@ -328,7 +328,7 @@ func TestMCPReplyAndAnswer(t *testing.T) {
 		}
 		return text("OK: " + last["content"].(string))
 	}
-	a.call("agent.send", map[string]any{"id": "c1", "text": "Export", "server": "s1", "model": "m", "ticket": map[string]any{"id": 1, "role": "briefing"}})
+	a.call("assistant.send", map[string]any{"id": "c1", "text": "Export", "server": "s1", "model": "m", "ticket": map[string]any{"id": 1, "role": "briefing"}})
 	a.waitUpdate("c1", idle)
 
 	m := &mcpClient{t: t, url: ts.URL, token: "secret-token-0123456789abcdef0123"}
@@ -353,7 +353,7 @@ func TestMCPReplyAndAnswer(t *testing.T) {
 	m.ok("kanban_reply", args(map[string]any{"message": "Keep the dates in ISO 8601."}))
 	a.waitUpdate("c1", idle)
 
-	chat := a.call("agent.open", map[string]any{"id": "c1"})["result"].(map[string]any)["chat"].(map[string]any)
+	chat := a.call("assistant.open", map[string]any{"id": "c1"})["result"].(map[string]any)["chat"].(map[string]any)
 	var ask, reply map[string]any
 	for _, x := range chat["messages"].([]any) {
 		msg := x.(map[string]any)

@@ -1,4 +1,4 @@
-// State of the AI assistant: model servers, models, and the current conversation. Kept at
+// State of the Assistant: model servers, models, and the current conversation. Kept at
 // module level so that switching panels does not lose a running answer.
 import { createSignal } from 'solid-js'
 import { createStore, reconcile } from 'solid-js/store'
@@ -178,7 +178,7 @@ export interface ActionCard {
   result?: string
 }
 
-/** Status of a sub-agent (pod/internal/agent/subagents.go). */
+/** Status of a sub-agent (pod/internal/assistant/subagents.go). */
 export type AgentStatus = 'running' | 'waiting_parent' | 'done' | 'blocked' | 'stopped' | 'error'
 
 export interface SubAgent {
@@ -272,9 +272,9 @@ export interface Chat {
   messages: ChatMessage[]
   /** Index from which reported usages count again (after a compaction). */
   resetAt?: number
-  /** Instruction files of subfolders added to the context when the agent first touched them (relative paths). */
+  /** Instruction files of subfolders added to the context when the assistant first touched them (relative paths). */
   nested?: { path: string }[]
-  /** Set while the agent runs, with the stream of the completion awaited: a reloaded page resumes it. */
+  /** Set while the assistant runs, with the stream of the completion awaited: a reloaded page resumes it. */
   running?: { stream?: string }
   /** Messages written during an answer, sent at the next step. */
   queue?: QueuedMessage[]
@@ -388,7 +388,7 @@ export const [approval, setApproval] = createSignal<Approval | null>(null)
 export const [prefs, setPrefs] = createStore({
   autoApply: false,
   think: true,
-  /** Reasoning effort: auto lets the agent choose at each step; effortTool lets the model change it. */
+  /** Reasoning effort: auto lets the assistant choose at each step; effortTool lets the model change it. */
   effort: 'auto' as 'auto' | Effort,
   effortTool: false,
   tools: true,
@@ -569,7 +569,7 @@ export function resetChat() {
   leaveChat()
   setChat(reconcile(emptyChat()))
   setApproval(null)
-  request('agent.watch', { id: chat.id }).catch(() => {})
+  request('assistant.watch', { id: chat.id }).catch(() => {})
 }
 
 export async function renameChat(id: string, title: string) {

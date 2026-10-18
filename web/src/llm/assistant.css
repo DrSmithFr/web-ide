@@ -1,4 +1,4 @@
-/* AI assistant: chat layout in the style of current chat apps, on the theme variables. */
+/* Assistant: chat layout in the style of current chat apps, on the theme variables. */
 
 .ai-panel { --ai-col: 780px; --ai-r: 14px; --ai-soft: color-mix(in srgb, var(--fg) 5%, var(--bg)); --ai-softer: color-mix(in srgb, var(--fg) 3%, var(--bg)); position: relative; background: var(--bg); }
 .ai-head { gap: 4px; }

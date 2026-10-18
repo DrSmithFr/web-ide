@@ -151,7 +151,7 @@ run(
     assert(saved.startsWith('saved ') && saved.length === big.length + 6, '1.5 MB file saved through the tunnel')
 
     // Assistant: an attachment and an answer, over the tunnel.
-    await app.click('.rail-right .rail-btn[title="AI assistant"]')
+    await app.click('.rail-right .rail-btn[title="Assistant"]')
     await app.waitForSelector('.ai-empty')
     await app.click('.ai-empty button:has-text("Add a model server")')
     await app.fill('.ai-servers input[name=url]', `127.0.0.1:${fake.address().port}`)

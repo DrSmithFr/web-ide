@@ -1,0 +1,157 @@
+package assistant
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestRunsFreely(t *testing.T) {
+	const root = "/p"
+	for _, c := range []struct {
+		cmd  string
+		cwd  string
+		free bool
+	}{
+		{"ls -la", "", true},
+		{"cat a.go | grep x | wc -l", "", true},
+		{"git log --oneline -5 && git diff HEAD~1", "", true},
+		{"git -C /elsewhere status", "", true},
+		{"git push", "", false},
+		{"git commit -m 'x'", "", false},
+		{"go test ./...", "", true},
+		{"go test ./...", "/tmp", false},
+		{"cd /tmp && go test ./...", "", false},
+		{"cd sub && make", "", true},
+		{"make install", "", false},
+		{"npm run check", "", true},
+		{"npm install", "", false},
+		{"npx tsc --noEmit", "", true},
+		{"npx prettier --write .", "", false},
+		{"rm -rf build", "", false},
+		{"echo x > file.txt", "", false},
+		{"go vet ./... 2>&1 > /dev/null", "", true},
+		{"go test ./... > /tmp/out.log 2>&1", "", true},
+		{"sed -i s/a/b/ f", "", false},
+		{"sed -n 1,5p f", "", true},
+		{"find . -name '*.go' -delete", "", false},
+		{"find . -name '*.go'", "", true},
+		{"echo $(git rev-parse HEAD)", "", true},
+		{"echo $(rm -rf x)", "", false},
+		{"grep 'a|b;c' file", "", true},
+		{"LANG=C timeout 60 grep -r x .", "", true},
+		{"node scripts/check.mjs", "", true},
+		{"node -e 'require(\"fs\").rmSync(\"x\")'", "", false},
+		{"./run.sh", "", true},
+		{"/usr/bin/evil", "", false},
+		{"curl http://x", "", false},
+		{"docker compose ps", "", true},
+		{"docker compose up -d", "", false},
+		{"awk '{ system(\"rm x\") }' f", "", false},
+		{"cd /tmp && echo x > f", "", true},
+		{"echo x > /tmp/../etc/passwd", "", false},
+		{"echo x &> /tmp/log", "", true},
+		{"echo x > $HOME/f", "", false},
+	} {
+		if got := RunsFreely(c.cmd, root, c.cwd); got != c.free {
+			t.Errorf("RunsFreely(%q, cwd %q) = %v, want %v", c.cmd, c.cwd, got, c.free)
+		}
+	}
+}
+
+func TestStaysIn(t *testing.T) {
+	for _, c := range []struct {
+		cmd  string
+		cwd  string
+		stay bool
+	}{
+		{"rm -rf build && go build -o bin/x ./cmd", "/p", true},
+		{"npm install", "/p", true},
+		{"cat /etc/hosts | grep x", "/p", true},
+		{"git -C /elsewhere log", "/p", true},
+		{"rm -rf /home/u/x", "/p", false},
+		{"rm -rf ../other", "/p", false},
+		{"rm -rf ~/x", "/p", false},
+		{"rm -rf $HOME", "/p", false},
+		{"cp a.go /tmp/a.go && cd /tmp && gcc -o a a.c", "/p", true},
+		{"cd .. && rm x", "/p", false},
+		{"cd && make", "/p", false},
+		{"make", "/elsewhere", false},
+		{"go test ./... > /tmp/out.log 2>&1", "/p", true},
+		{"echo x > /etc/f", "/p", false},
+		{"echo x >> ../f", "/p", false},
+		{"go build --output=/usr/local/bin/x", "/p", false},
+		{"sudo make", "/p", false},
+		{"ssh host make", "/p", false},
+		{"echo $(rm -rf /x)", "/p", false},
+		{"/usr/bin/env make", "/p", true},
+		{"/usr/bin/sudo make", "/p", false},
+		{"~/sdk/go/bin/go test ./...", "/p", true},
+		{"cd pod && timeout 120 /home/u/sdk/go/bin/go vet ./internal/x/", "/p", true},
+		{"$GO test ./...", "/p", false},
+		{"~/scripts/deploy.sh", "/p", false},
+		{"/opt/tools/bin/unknown-tool x", "/p", false},
+		{"./run.sh", "/p", true},
+		// Here-documents are input, not commands; the command and its redirection are checked.
+		{"cat > /tmp/v.mjs <<'EOF'\n// a comment\nconst t = `${x}/../../etc`\nEOF\nnode /tmp/v.mjs", "/p", true},
+		{"python3 - <<EOF\np = 'go.mod' // indirect\nEOF", "/p", true},
+		{"cat <<-EOF > x.txt\n\t/etc/passwd\n\tEOF\ncat x.txt", "/p", true},
+		{"cat > /etc/f <<'EOF'\nx\nEOF", "/p", false},
+		{"cat > f <<EOF\n$(rm -rf /x)\nEOF", "/p", false},
+		{"cat > f <<'EOF'\n$(not run)\nEOF\nrm -rf /x", "/p", false},
+		// A quoted argument is one word.
+		{`git commit -q -m "Step 2: proofs / fingerprints\n\nkeys ~ certs"`, "/p", true},
+		{`rm "/etc/passwd"`, "/p", false},
+		{"go test ./... -coverprofile /dev/null", "/p", true},
+		// A shell given a command: that command is checked.
+		{`bash -c "rm -rf /x"`, "/p", false},
+		{`sh -ec 'make && rm -rf build'`, "/p", true},
+		{`eval "rm -rf ~"`, "/p", false},
+		// Loops and conditions: the commands inside are checked.
+		{`for f in src/*.go; do echo "== $f"; cat $f; done`, "/p", true},
+		{`for k in "Code" "Name"; do grep -n "\"$k\":" src/fr.json | head -2; done`, "/p", true},
+		{`for d in a b .; do [ -f "$d/package.json" ] && echo "$d"; done`, "/p", true},
+		{`if [ -f x ]; then make; else echo no; fi`, "/p", true},
+		{"for f in /etc/*; do rm $f; done", "/p", false},
+		{"if true; then rm -rf ~/x; fi", "/p", false},
+		{"while true; do rm /x; done", "/p", false},
+		// A variable assigned a literal is that literal; arithmetic is a number.
+		{"PORT=4611 && nohup ./bin/pod -addr 127.0.0.1:$PORT > /tmp/p.log 2>&1 &", "/p", true},
+		{"PORT=$((4500 + RANDOM % 300)) && ./bin/pod -addr 127.0.0.1:${PORT}", "/p", true},
+		{"P=/etc; rm -rf $P/x", "/p", false},
+		{"D=src; cd /; rm -rf $D", "/p", false},
+		{"GO=$(command -v go); $GO test ./...", "/p", false},
+		{"N=$((1 + $(rm -rf /x))); echo $N", "/p", false},
+		{"nohup rm -rf ~/y &", "/p", false},
+		{"kill 4242", "/p", false},
+	} {
+		if got := StaysIn(c.cmd, c.cwd, "/p", Scratch); got != c.stay {
+			t.Errorf("StaysIn(%q, cwd %q) = %v, want %v", c.cmd, c.cwd, got, c.stay)
+		}
+	}
+	if !StaysIn("cd /tmp && rm -rf x && python3 /tmp/s.py", "/p", Scratch) || StaysIn("rm x", "/p", Scratch) {
+		t.Error("the scratch folder alone: the project stays out")
+	}
+}
+
+// TestStaysInSymlink: a project opened through a symlink is the same folder under its real path.
+func TestStaysInSymlink(t *testing.T) {
+	real := t.TempDir()
+	link := t.TempDir() + "/link"
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		cmd, root string
+		stay      bool
+	}{
+		{"cd " + real + " && gofmt -w pod/*.go && go test ./...", link, true},
+		{"cd " + link + " && go test ./...", real, true},
+		{"touch " + real + "/new/file.go", link, true},
+		{"rm -rf " + filepath.Dir(real), link, false},
+	} {
+		if got := StaysIn(c.cmd, c.root, c.root); got != c.stay {
+			t.Errorf("StaysIn(%q) in %s = %v, want %v", c.cmd, c.root, got, c.stay)
+		}
+	}
+}
