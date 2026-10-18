@@ -2173,5 +2173,9 @@
   "Manage the team of an organization": "Gestionar el equipo de una organización",
   "Team {name}": "Equipo {name}",
   "The sponsorship gives fewer seats than members: the members added last are not VIPs until some are removed.": "El patrocinio da menos plazas que miembros: los últimos añadidos no son VIP hasta que se quiten otros.",
-  "{used}/{seats} seats": "{used}/{seats} plazas"
+  "{used}/{seats} seats": "{used}/{seats} plazas",
+  "Change the status…": "Cambiar el estado…",
+  "For work done outside the flow: no branch, worktree nor session is made": "Para un trabajo hecho fuera del flujo: no se crea rama, worktree ni sesión",
+  "New status of ticket #{id}": "Nuevo estado del ticket #{id}",
+  "Ticket #{id} → {status}": "Ticket #{id} → {status}"
 }

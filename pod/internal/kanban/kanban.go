@@ -73,27 +73,19 @@ var modelMoves = map[[2]string]bool{
 	{New, Todo}: true, {InProgress, ToTest}: true,
 }
 
-// userMoves are the transitions of the buttons. Done and Abandoned are reached through
-// Close and Abandon.
-var userMoves = map[[2]string]bool{
-	{New, Todo}: true, {Todo, New}: true, {Todo, InProgress}: true, {InProgress, ToTest}: true,
-	{ToTest, InProgress}: true, {ToTest, Done}: true, {Done, ToTest}: true, {Abandoned, New}: true,
-}
-
-// CanMove tells whether an actor may move a ticket from one status to another.
+// CanMove tells whether an actor may move a ticket from one status to another. The user
+// may set any status (*Change the status…*, for work done outside the flow); the order of a
+// lineage and the open test feedback are checked by Move.
 func CanMove(from, to, by string) bool {
 	from, to = NormStatus(from), NormStatus(to)
-	if to == Abandoned && by == ByUser {
-		return from != Done && from != Abandoned
+	if !IsAI(by) {
+		return from != to && contains(Statuses, to)
 	}
-	if IsAI(by) {
-		// Claude Code may also start the development of a ticket (kanban_start).
-		if by == ByClaude && from == Todo && to == InProgress {
-			return true
-		}
-		return modelMoves[[2]string{from, to}]
+	// Claude Code may also start the development of a ticket (kanban_start).
+	if by == ByClaude && from == Todo && to == InProgress {
+		return true
 	}
-	return userMoves[[2]string{from, to}]
+	return modelMoves[[2]string{from, to}]
 }
 
 func contains(list []string, v string) bool {

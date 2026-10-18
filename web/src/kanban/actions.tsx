@@ -2,13 +2,13 @@
 // state (branch, worktree, changes against the base).
 import { createResource, createSignal, For, Show } from 'solid-js'
 import { Icon } from '../ui/icons'
-import { prompt } from '../ui/overlay'
+import { pick, prompt } from '../ui/overlay'
 import { errorToast } from '../ui/toast'
 import { request } from '../pod/rpc'
 import { openFile, project, root, showWorktree } from '../state/project'
 import {
-  abortGit, continueGit, filePatch, finishTicket, gitInfo, inWorktreeOf, mergeTicket, openPR, rebaseTicket, roleLabels, ticketDiff, ticketVersion, unlinkChat, updateTicket,
-  validateStep, workTime, worktreeProject, type ChatRole, type Complexity, type Diff, type GitInfo, type GitOpState, type Status, type Ticket,
+  abortGit, continueGit, filePatch, finishTicket, gitInfo, inWorktreeOf, mergeTicket, moveTicket, openPR, rebaseTicket, roleLabels, ticketDiff, ticketVersion, unlinkChat, updateTicket,
+  statusLabels, statusOrder, validateStep, workTime, worktreeProject, type ChatRole, type Complexity, type Diff, type GitInfo, type GitOpState, type Status, type Ticket,
 } from './state'
 import { openTicketChat, openWorktree, startDevelopment, startTicketChat, startWorkSession } from './sessions'
 import { devAgent, openAgentSession } from './agentSession'
@@ -213,6 +213,25 @@ export async function abandonTicket(tk: Ticket, apply: Apply) {
   // The branch of a lineage belongs to its root.
   const deleteBranch = !tk.parent && !!tk.branch && confirm(t('Also delete the branch {branch}?', { branch: tk.branch }))
   await apply(finishTicket(tk.id, 'abandoned', why, deleteBranch, open.length > 0))
+}
+
+/** Sets any status, for work done outside the flow: no branch, worktree nor session is made;
+ * Done and Abandoned still remove the worktree. */
+export async function changeStatus(tk: Ticket, apply: Apply) {
+  const to = await pick<Status>({
+    placeholder: t('New status of ticket #{id}', { id: tk.id }),
+    items: statusOrder.filter((s) => s !== tk.status).map((s) => ({ label: statusLabels[s], value: s })),
+  })
+  if (!to) return
+  if (to === 'abandoned') return abandonTicket(tk, apply)
+  const why = await prompt({ title: t('Ticket #{id} → {status}', { id: tk.id, status: statusLabels[to] }), label: t('Reason (optional)') })
+  if (why === null) return
+  if (to !== 'done') return apply(moveTicket(tk.id, to, 'user', why))
+  if (tk.worktree) {
+    const d = await ticketDiff(tk.id).catch(() => null)
+    if (d?.dirty && !confirm(t('The worktree has uncommitted changes: they will be lost with it. Close anyway?'))) return
+  }
+  await apply(finishTicket(tk.id, 'done', why))
 }
 
 /** Opens a conversation of a ticket: development ones with the worktree of the ticket shown. */

@@ -14,7 +14,7 @@ import {
   moveTicket, priorityLabels, sizeNames, statusLabels, ticketVersion, updateTicket,
   complexityLabels, complexityNames, MAX_DESCRIPTION, MAX_NOTE, type Complexity, type FeedbackKind, type Goal, type Priority, type Size, type Status, type Ticket,
 } from './state'
-import { abandonTicket, ChatLink, PullRequest, recommended, routed, ticketActions, TicketChats, TicketGit, type ActionButton } from './actions'
+import { abandonTicket, changeStatus, ChatLink, PullRequest, recommended, routed, ticketActions, TicketChats, TicketGit, type ActionButton } from './actions'
 import { aiLabel, aiSuffix, claudeLabel, claudeSuffix, tiers, type Tier } from './route'
 import { runClaude } from './claude'
 import { startWorkSession } from './sessions'
@@ -209,6 +209,7 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
                   .map((b) => ({ label: b.label, action: b.run, disabled: b.disabled })),
                 ...(buttons().some((b) => b.more) ? [{ label: '', separator: true }] : []),
                 ...(!closed() ? [{ label: t('Abandon the ticket'), action: () => void abandonTicket(tk(), props.apply) }] : []),
+                { label: t('Change the status…'), title: t('For work done outside the flow: no branch, worktree nor session is made'), action: () => void changeStatus(tk(), props.apply) },
                 { label: t('Delete the ticket'), action: () => void remove() },
               ])
             }

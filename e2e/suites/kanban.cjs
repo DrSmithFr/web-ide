@@ -303,6 +303,21 @@ run(async ({ page, ctx }) => {
   await page.click('[data-testid=kanban-view-board]')
   await page.waitForSelector('.kb-col')
 
+  // Work done outside the flow: the user sets any status, New → Done, with a reason.
+  await page.goto(page.url().replace(/[?#].*$/, '') + '?ticket=8')
+  await page.waitForSelector('[data-testid=ticket-view] [data-testid=ticket-title]:has-text("Lone two")')
+  await page.click('[data-testid=ticket-more]')
+  await page.click('.ctx-menu button:has-text("Change the status…")')
+  await page.waitForSelector('.pick-input')
+  await page.keyboard.type('Done')
+  await page.waitForFunction(() => document.querySelector('.pick-item.selected')?.textContent.includes('Done'))
+  await page.keyboard.press('Enter')
+  await page.fill('.modal-small input', 'done on main')
+  await page.keyboard.press('Enter')
+  await page.waitForSelector('[data-testid=ticket-status]:has-text("Done")')
+  await page.click('.tk-section-toggle:has-text("History")')
+  assert((await page.textContent('.tk-events')).includes('done on main'), 'a New ticket set to Done from More actions, the reason in the history')
+
   // A ticket link of Claude Code: /project/<id>?ticket=<n> opens its tab.
   await page.goto(page.url().replace(/[?#].*$/, '') + '?ticket=1')
   await page.waitForSelector('[data-testid=ticket-view] [data-testid=ticket-title]:has-text("CSV export")')

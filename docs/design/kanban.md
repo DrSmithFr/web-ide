@@ -83,6 +83,8 @@ Tickets move with buttons only (no drag and drop).
 | To test | Add feedback, Review, with open test feedback Fix feedbacks (assistant or Claude Code, all the open feedback), else Validate the step (a ticket with open children) or Validate the ticket (→ Done); Fix session (per open feedback), Create the pull request in their sections; *More actions*: Open the worktree, Back to In progress, Develop with Claude Code, Abandon | mark feedback handled |
 | Done / Abandoned | Reopen (Done → To test, Abandoned → New) | — |
 
+Every status also has *Change the status…* in *More actions*: the user sets any status, with an optional reason kept in the history, for work done outside the flow (committed on main, covered by another ticket). It makes no branch, worktree nor session; Done and Abandoned go through Close and Abandon (the worktree is removed). The pod still refuses what breaks a lineage (a root closed before its steps) and Done with open test feedback; the model keeps its own transitions only.
+
 A change of status never starts a conversation: the user starts each session (*Start development* makes the branch and the worktree, then *Dev session* starts the development); only the `start_dev` card of the Orchestrator does both, as its click asks to develop and the Orchestrator follows that session.
 
 The header keeps the main actions; *Briefing*, *Generate the plan*, *Dev session* and the *Fix session* of a feedback are split buttons: a click starts the assistant, the arrow offers Claude Code instead (in a terminal). *Review* (In progress, To test) is a split button too, with Claude Code only for now: a review of the work whose findings become test feedback, plus a note with the verdict. The other actions are in the *More actions* menu.

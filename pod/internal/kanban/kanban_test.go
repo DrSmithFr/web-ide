@@ -136,11 +136,21 @@ func TestTicketLifecycle(t *testing.T) {
 	if events < 6 {
 		t.Fatalf("events: %d %+v", events, tk.Notes)
 	}
-	if err := m.Move(loc, id, Abandoned, ByUser, ""); err == nil {
-		t.Fatal("abandoned a closed ticket")
-	}
 	if err := m.Move(loc, id, ToTest, ByUser, ""); err != nil {
 		t.Fatal("reopen to To test: ", err)
+	}
+	// The user sets any status, for work done outside the flow; the model does not.
+	other, _ := m.Create(loc, Patch{Title: ptr("Done on main")}, ByUser)
+	if err := m.Move(loc, other, Done, ByModel, ""); err == nil {
+		t.Fatal("model closed a New ticket")
+	}
+	for _, s := range []string{Done, Abandoned, InProgress, New} {
+		if err := m.Move(loc, other, s, ByUser, "outside the flow"); err != nil {
+			t.Fatalf("New ticket to %s: %v", s, err)
+		}
+	}
+	if CanMove(New, New, ByUser) || CanMove(New, "ready", ByUser) {
+		t.Fatal("CanMove: same or unknown status")
 	}
 }
 
