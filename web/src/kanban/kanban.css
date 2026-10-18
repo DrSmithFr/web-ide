@@ -211,3 +211,15 @@ input.tk-title { padding: 2px 6px; }
 .ms-stories { list-style: none; margin: 4px 0 0; padding: 0; font-size: 13px; }
 .ms-stories li { display: flex; align-items: baseline; gap: 6px; padding: 1px 0; }
 .ms-stories li.done { color: var(--fg-muted); }
+.ms-list { padding: 12px 16px; overflow: auto; flex: 1; }
+.ms-list-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.ms-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.ms-card { display: flex; flex-direction: column; gap: 8px; text-align: left; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-2); color: inherit; cursor: pointer; min-width: 0; }
+.ms-card:hover, .ms-card:focus-visible { border-color: var(--accent); }
+.ms-card-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ms-card-title { font-weight: 600; flex: 1; min-width: 0; }
+.ms-bar { height: 6px; border-radius: 3px; background: var(--bg-3, var(--line)); overflow: hidden; }
+.ms-bar > span { display: block; height: 100%; background: var(--ok); }
+.ms-card-meta { display: flex; gap: 10px; flex-wrap: wrap; color: var(--fg-muted); }
+.ms-totest-count { color: var(--st); }
+.rm-band { position: absolute; left: 2px; font-size: 12px; font-weight: 600; color: var(--accent); display: flex; align-items: center; gap: 4px; white-space: nowrap; }

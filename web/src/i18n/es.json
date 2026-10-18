@@ -2153,5 +2153,11 @@
   "Validate the milestone": "Validar el hito",
   "What did you notice while testing the feature?": "¿Qué notaste al probar la funcionalidad?",
   "A step has the milestone of its root: choose it on #{id}": "Un paso tiene el hito de su raíz: elígelo en #{id}",
-  "No milestone (#{id})": "Ningún hito (#{id})"
+  "No milestone (#{id})": "Ningún hito (#{id})",
+  "Milestones": "Hitos",
+  "All milestones": "Todos los hitos",
+  "A milestone gathers the tickets of one feature, with its spec and its user stories; you validate it.": "Un hito reúne los tickets de una funcionalidad, con su especificación y sus historias de usuario; tú lo validas.",
+  "Validated and abandoned ({n})": "Validados y abandonados ({n})",
+  "No milestone yet.": "Aún no hay hitos.",
+  "{n} to test": "{n} por probar"
 }

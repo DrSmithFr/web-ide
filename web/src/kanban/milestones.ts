@@ -43,6 +43,10 @@ export interface Milestone extends MilestoneSummary {
 }
 
 export const milestoneStateNames: Record<MilestoneState, string> = { open: 'Ongoing', validated: 'Validated', abandoned: 'Abandoned' }
+/** The milestone filter of Board and Roadmap: all tickets, those without milestone, or one. */
+export type MilestoneFilter = 'all' | 'none' | number
+export const milestoneMatch = (f: MilestoneFilter, milestone?: number) => f === 'all' || (f === 'none' ? !milestone : milestone === f)
+
 /** Longest user story, in characters (checked by the pod too). */
 export const MAX_STORY = 500
 

@@ -16,27 +16,33 @@ import {
 } from './state'
 import { blockerText } from './Lineage'
 import { Roadmap } from './Roadmap'
+import { Milestones } from './Milestones'
+import { milestoneMatch, type MilestoneFilter } from './milestones'
 import { t } from '../i18n'
 import './kanban.css'
 
 const active: Status[] = ['new', 'todo', 'in_progress', 'to_test']
 
 const VIEW_KEY = 'webide.kanban.view'
-function savedView(): 'board' | 'roadmap' {
+type View = 'board' | 'roadmap' | 'milestones'
+function savedView(): View {
   try {
-    return localStorage.getItem(VIEW_KEY) === 'roadmap' ? 'roadmap' : 'board'
+    const v = localStorage.getItem(VIEW_KEY)
+    return v === 'roadmap' || v === 'milestones' ? v : 'board'
   } catch {
     return 'board'
   }
 }
+
 
 export function Board() {
   onMount(ensureBoard)
   const [query, setQuery] = createSignal('')
   const [showClosed, setShowClosed] = createSignal(false)
   const [settingsOpen, setSettingsOpen] = createSignal(false)
-  const [view, setView] = createSignal<'board' | 'roadmap'>(savedView())
-  const choose = (v: 'board' | 'roadmap') => {
+  const [view, setView] = createSignal<View>(savedView())
+  const [ms, setMs] = createSignal<MilestoneFilter>('all')
+  const choose = (v: View) => {
     setView(v)
     try {
       localStorage.setItem(VIEW_KEY, v)
@@ -47,7 +53,7 @@ export function Board() {
   const filtered = createMemo(() => {
     const q = query().trim().toLowerCase()
     return board.tickets.filter(
-      (tk) => !q || tk.title.toLowerCase().includes(q) || `#${tk.id}` === q || String(tk.id) === q,
+      (tk) => (!q || tk.title.toLowerCase().includes(q) || `#${tk.id}` === q || String(tk.id) === q) && milestoneMatch(ms(), tk.milestone),
     )
   })
   const column = (s: Status) => filtered().filter((tk) => tk.status === s)
@@ -66,7 +72,35 @@ export function Board() {
           <button class="btn small" classList={{ on: view() === 'roadmap' }} aria-pressed={view() === 'roadmap'} onClick={() => choose('roadmap')} data-testid="kanban-view-roadmap">
             <Icon name="history" size={13} /> {t('Roadmap')}
           </button>
+          <button class="btn small" classList={{ on: view() === 'milestones' }} aria-pressed={view() === 'milestones'} onClick={() => choose('milestones')} data-testid="kanban-view-milestones">
+            <Icon name="flag" size={13} /> {t('Milestones')}
+          </button>
         </div>
+        <Show when={view() !== 'milestones' && board.milestones.length}>
+          <select
+            class="small"
+            title={t('Milestone')}
+            onChange={(e) => {
+              const v = e.currentTarget.value
+              setMs(v === 'all' || v === 'none' ? v : Number(v))
+            }}
+            data-testid="kanban-milestone-filter"
+          >
+            <option value="all" selected={ms() === 'all'}>
+              {t('All milestones')}
+            </option>
+            <option value="none" selected={ms() === 'none'}>
+              {t('No milestone')}
+            </option>
+            <For each={board.milestones.filter((m) => m.state === 'open' || m.id === ms())}>
+              {(m) => (
+                <option value={m.id} selected={ms() === m.id}>
+                  {m.title}
+                </option>
+              )}
+            </For>
+          </select>
+        </Show>
         <span class="grow" />
         <button class="btn small" onClick={() => setSettingsOpen(true)} data-testid="kanban-settings">
           <Icon name="gear" size={13} /> {t('Settings')}
@@ -85,7 +119,10 @@ export function Board() {
         <KanbanSettings onClose={() => setSettingsOpen(false)} />
       </Show>
       <Show when={view() === 'roadmap'}>
-        <Roadmap tickets={board.tickets} query={query()} />
+        <Roadmap tickets={board.tickets} query={query()} milestone={ms()} />
+      </Show>
+      <Show when={view() === 'milestones'}>
+        <Milestones />
       </Show>
       <div class="kb-columns" hidden={view() !== 'board'}>
         <For each={active}>

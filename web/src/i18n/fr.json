@@ -2153,5 +2153,11 @@
   "Validate the milestone": "Valider le jalon",
   "What did you notice while testing the feature?": "Qu'avez-vous remarqué en testant la fonctionnalité ?",
   "A step has the milestone of its root: choose it on #{id}": "Une étape a le jalon de sa racine : choisissez-le sur #{id}",
-  "No milestone (#{id})": "Aucun jalon (#{id})"
+  "No milestone (#{id})": "Aucun jalon (#{id})",
+  "Milestones": "Jalons",
+  "All milestones": "Tous les jalons",
+  "A milestone gathers the tickets of one feature, with its spec and its user stories; you validate it.": "Un jalon rassemble les tickets d'une fonctionnalité, avec sa spec et ses user stories ; c'est vous qui le validez.",
+  "Validated and abandoned ({n})": "Validés et abandonnés ({n})",
+  "No milestone yet.": "Aucun jalon pour l'instant.",
+  "{n} to test": "{n} à tester"
 }
