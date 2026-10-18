@@ -71,6 +71,8 @@ type Server struct {
 	Previews  *preview.Manager
 	PreviewTS preview.Tailscale
 	Static    fs.FS
+	// Docs is the documentation embedded in the binary (pod/docsdist), served by docs.read.
+	Docs fs.FS
 	// AllowRemote accepts connections from other machines (the token is then the only protection).
 	AllowRemote bool
 	// Version of the pod, shown by the page.
@@ -172,6 +174,7 @@ func (s *Server) Init() {
 	s.registerKanbanGit()
 	s.registerRelay()
 	s.registerLAN()
+	s.registerDocs()
 	s.registerSync()
 	s.registerPods()
 	s.registerPush()

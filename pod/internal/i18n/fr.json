@@ -216,6 +216,8 @@
   "the command “%s” has no port": "la commande « %s » n’a pas de port",
   "not an image": "ce n'est pas une image",
   "image too large": "image trop grande",
+  "no such documentation page": "cette page de documentation n'existe pas",
+  "not a documentation page": "ce n'est pas une page de documentation",
   "this pod has no relay": "ce pod n'a pas de relay",
   "the relay must be a ws:// or wss:// URL": "le relay doit être une URL ws:// ou wss://",
   "this pod cannot change its relay": "ce pod ne peut pas changer de relay",

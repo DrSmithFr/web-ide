@@ -1,5 +1,6 @@
 // Checks the relative links of the Markdown files tracked by git: the target exists and its
-// #anchor is a heading of it (GitHub slugs). Run by `make test`; prints the broken links.
+// #anchor is a heading of it (GitHub slugs), and the same for the targets of the "?" links of the
+// interface (web/src/help/topics.json). Run by `make test`; prints the broken links.
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
@@ -48,8 +49,17 @@ for (const f of files) {
     }
   }
 }
+// The places of the interface that have a page: topic → "path#heading", paths from the repo root.
+const topicsFile = 'web/src/help/topics.json'
+const topics = JSON.parse(readFileSync(path.join(root, topicsFile), 'utf8'))
+for (const [topic, target] of Object.entries(topics)) {
+  const [file, anchor] = target.split('#')
+  const dest = path.join(root, file)
+  if (!file.endsWith('.md') || !existsSync(dest)) broken.push(`${topicsFile}: ${topic} → ${target} (no such page)`)
+  else if (anchor && !slugs(dest).has(anchor)) broken.push(`${topicsFile}: ${topic} → ${target} (no such heading)`)
+}
 if (broken.length) {
   console.error(`broken links:\n  ${broken.join('\n  ')}`)
   process.exit(1)
 }
-console.log(`links: ${files.length} Markdown files checked`)
+console.log(`links: ${files.length} Markdown files and ${Object.keys(topics).length} help topics checked`)

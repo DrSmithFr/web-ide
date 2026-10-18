@@ -15,7 +15,7 @@ import { deviceId, layoutFor } from './device'
 import { settings } from './settings'
 import { closeDesks, desk, loadDesks, showDesk, touchRecent, type DeskList } from './desks'
 
-export type TabKind = 'file' | 'sql' | 'table' | 'text' | 'diff' | 'kanban' | 'ticket' | 'tool' | 'console'
+export type TabKind = 'file' | 'sql' | 'table' | 'text' | 'diff' | 'kanban' | 'ticket' | 'tool' | 'console' | 'doc'
 
 export interface TabState {
   id: string
@@ -37,6 +37,9 @@ export interface TabState {
   /** A tool shown as a tab or a tile (kind tool: id of the tool) or a console (kind console: its id). */
   tool?: string
   console?: string
+  /** Doc tabs: the page of the embedded documentation (path of the repo) and the heading shown. */
+  doc?: string
+  anchor?: string
 }
 
 /** width: a column of the Scroll mode, its width as a fraction of the view (unset: one column in sight). */
@@ -313,6 +316,7 @@ export function openTab(tab: Omit<TabState, 'id'>, paneId = session.activePane):
     if (tab.kind === 'ticket') return t.ticket === tab.ticket
     if (tab.kind === 'tool') return t.tool === tab.tool
     if (tab.kind === 'console') return t.console === tab.console
+    if (tab.kind === 'doc') return true
     return false
   })
   if (same) {

@@ -37,6 +37,7 @@ import { QuestionModal, QuestionsTool } from '../questions/QuestionsTool'
 import { questions, refreshQuestions, resetQuestions, showQuestion } from '../questions/state'
 import { refreshAgents } from '../agents/state'
 import { openConflict } from '../conflict/ConflictDialog'
+import { docsIndex, openDoc } from '../state/docs'
 import { openSettings } from '../settings/SettingsModal'
 import { actions, registerAction, runAction, shortcutOf } from '../keys/bindings'
 import { onMouseNav } from '../keys/mouse'
@@ -138,6 +139,10 @@ export function useProjectActions() {
     }),
     registerAction('settings.open', () => openSettings()),
     registerAction('kanban.open', () => openBoard()),
+    registerAction('help.docs', () => openDoc(docsIndex)),
+    registerAction('help.guide', () => openDoc('docs/guide.md')),
+    registerAction('help.glossary', () => openDoc('GLOSSARY.md')),
+    registerAction('help.shortcuts', () => openSettings('keys')),
     registerAction('search.everywhere', () => searchEverywhere('all')),
     registerAction('palette.open', () => searchEverywhere('actions')),
     registerAction('nav.gotoFile', () => searchEverywhere('files')),
@@ -233,6 +238,7 @@ const menus: [string, string[]][] = [
   ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover', '-', 'lsp.rename', 'lsp.format', '-', 'edit.fold', 'edit.unfold', 'edit.foldAll', 'edit.unfoldAll']],
   ['menu|View', ['view.splitRight', 'view.splitDown', '-', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', '-', 'view.visualFocus', 'view.focusOutline', 'view.focusDim', '-', 'view.whitespace', 'view.wordWrap', 'view.markdown', '-', 'console.new', 'palette.open']],
   ['menu|Tools', ['tool.explorer', 'tool.search', 'tool.git', 'tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.questions', 'tool.database', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.console', 'tool.problems', 'tool.docker']],
+  ['menu|Help', ['help.docs', 'help.guide', 'help.glossary', '-', 'help.shortcuts']],
 ]
 
 // Menu entries switching a setting, shown with a check box.

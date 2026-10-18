@@ -1,6 +1,7 @@
 # Build output
 /bin/
 /pod/webdist/dist/
+/pod/docsdist/content/
 
 # Dependencies
 /web/node_modules/

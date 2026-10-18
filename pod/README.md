@@ -12,6 +12,7 @@ flowchart LR
   kg["Kanban and git"]
   net["Network and identity"]
   webdist["webdist<br/>embedded front end"]
+  docsdist["docsdist<br/>embedded docs"]
   ai --> files
   ai --> server
   files --> server
@@ -28,6 +29,7 @@ flowchart LR
   server --> kg
   server --> net
   main --> webdist
+  main --> docsdist
   cmds --> net
   cmds --> files
   click server "internal/README.md#server-and-protocol"
@@ -44,6 +46,7 @@ Arrows between blocks are imports of their packages, checked with `go list`; eve
 - `main.go`: flags, wiring and the subcommands: no argument runs the pod; `keeper` (the keeper, with `-upgrade`), `relay`, `pair create / restore / join / status`, `allow-shutdown`.
 - `internal/`: the packages, in five blocks: [Server and protocol](internal/README.md#server-and-protocol), [Files and processes](internal/README.md#files-and-processes), [AI](internal/README.md#ai), [Kanban and git](internal/README.md#kanban-and-git), [Network and identity](internal/README.md#network-and-identity).
 - `webdist/`: `embed.go` and the built `dist/` (git-ignored; `make build` fills it, and `make test` builds it first).
+- `docsdist/`: `embed.go` and `content/`, a copy of the docs (`docs/`, `GLOSSARY.md`, the READMEs of the code, at their repo paths) made by `scripts/embed-docs.sh` (git-ignored; every `make` build and `make test` run it). `server/handlers_docs.go` serves it read only (`docs.read`, `docs.image`) to the Help of the window.
 - `cmd/relayload`: the load tool of a relay; `cmd/genvec`: writes the identity test vectors shared with the JS module; `internal/sshtest/sshtestd`: the SSH server of the browser tests.
 
 ## Invariants and pitfalls

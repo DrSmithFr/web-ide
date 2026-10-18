@@ -21,6 +21,8 @@ import { Devices } from './Devices'
 import { SyncPanel } from './Sync'
 import { LanSection } from './Lan'
 import { PodsSection } from './Pods'
+import { HelpLink } from '../help/HelpLink'
+import type { HelpTopic } from '../state/docs'
 import { Notifications } from './Notifications'
 import { relayDevice } from '../pod/push'
 import { browserLang, fmtDate, languages, t, tn, type LangSetting } from '../i18n'
@@ -39,6 +41,19 @@ const sections = [
 ] as const
 
 const [open, setOpen] = createSignal<string | null>(null)
+
+// The page of the documentation of the sections that have one.
+const sectionHelp: Record<string, HelpTopic> = {
+  language: 'settings.language',
+  workspace: 'settings.workspace',
+  remote: 'settings.remote',
+  notifications: 'settings.notifications',
+}
+
+/** A "?" in a settings section: the window closes, the page opens in the project's window. */
+function Help(props: { topic: HelpTopic }) {
+  return <HelpLink topic={props.topic} onBefore={() => setOpen(null)} />
+}
 export function openSettings(section = 'themes') {
   setOpen(section)
 }
@@ -58,6 +73,7 @@ export function SettingsHost() {
             </For>
           </nav>
           <div class="settings-body">
+            <Show when={sectionHelp[open()!]}>{(topic) => <div class="settings-help"><Help topic={topic()} /></div>}</Show>
             <Show when={open() === 'language'}>
               <LanguageSettings />
             </Show>
@@ -655,7 +671,7 @@ function RemoteAccess() {
       <Show when={info()}>
         <div class="field-row">
           <label class="field grow">
-            <span>{t('Relay')}</span>
+            <span>{t('Relay')}<Help topic="settings.remote.relay" /></span>
             <input class="mono" value={url()} onInput={(e) => setUrl(e.currentTarget.value)}
               placeholder="wss://antennae.space" data-testid="relay-url" />
           </label>
@@ -708,7 +724,7 @@ function RemoteAccess() {
       </Show>
       <h3>{t('Pods of the account')}</h3>
       <PodsSection />
-      <h3>{t('Local network')}</h3>
+      <h3>{t('Local network')}<Help topic="settings.remote.lan" /></h3>
       <LanSection />
     </section>
   )

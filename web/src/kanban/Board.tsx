@@ -1,5 +1,6 @@
 // Board of the kanban (tab of the editor): one column per status, Done and Abandoned
 // folded. Tickets move with the buttons of their view, never by drag and drop.
+import { HelpLink } from '../help/HelpLink'
 import { createMemo, createResource, createSignal, For, onMount, Show } from 'solid-js'
 import { Icon } from '../ui/icons'
 import { Modal } from '../ui/overlay'
@@ -70,6 +71,7 @@ export function Board() {
         <button class="btn small" onClick={() => setSettingsOpen(true)} data-testid="kanban-settings">
           <Icon name="gear" size={13} /> {t('Settings')}
         </button>
+        <HelpLink topic="kanban" />
         <Show when={view() === 'board'}>
           <button class="btn small" classList={{ on: showClosed() }} onClick={() => setShowClosed(!showClosed())}>
             {t('Done and abandoned ({n})', { n: board.tickets.filter((tk) => tk.status === 'done' || tk.status === 'abandoned').length })}
