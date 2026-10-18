@@ -198,7 +198,7 @@ flowchart LR
 
 ## Kanban and git
 
-Tickets and the Git tool. `kanban` keeps the tickets and the milestones (SQLite) and the git operations of a ticket (worktree, diff, merge, rebase); it runs `git` itself through `execx`, it does not import `git`. The development of a ticket by an agent is in `server/handlers_kanban_agent.go`; the workflow is in [kanban.md](../../docs/design/kanban.md).
+Tickets and the Git tool. `kanban` keeps the tickets, the milestones and the objectives (SQLite) and the git operations of a ticket (worktree, diff, merge, rebase); it runs `git` itself through `execx`, it does not import `git`. The development of a ticket by an agent is in `server/handlers_kanban_agent.go`; the workflow is in [kanban.md](../../docs/design/kanban.md).
 
 ```mermaid
 flowchart LR
@@ -223,7 +223,7 @@ flowchart LR
 
 **Packages**
 
-- `kanban`: Tickets and milestones (SQLite), workflow rules, ticket git operations (worktrees, diff, merge, rebase); the development by an ACP agent is in `server/handlers_kanban_agent.go` (a session of the worktree's `acp.Manager` per ticket, `Info.Ticket`)
+- `kanban`: Tickets, milestones and objectives (SQLite), workflow rules, ticket git operations (worktrees, diff, merge, rebase); the development by an ACP agent is in `server/handlers_kanban_agent.go` (a session of the worktree's `acp.Manager` per ticket, `Info.Ticket`)
 - `git`: Git panel operations
 
 **Invariants and pitfalls**

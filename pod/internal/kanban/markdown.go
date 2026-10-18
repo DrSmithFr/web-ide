@@ -44,6 +44,9 @@ func Markdown(t *Ticket) string {
 	if t.Milestone != 0 {
 		fmt.Fprintf(&b, "\n\n## Milestone\nMilestone %d · %s (kanban_milestone action get: its spec and user stories).", t.Milestone, t.MilestoneTitle)
 	}
+	if t.Objective != 0 {
+		fmt.Fprintf(&b, "\n\n## Objective\nObjective %d · %s (kanban_objective action get: its deadline and its other tickets).", t.Objective, t.ObjectiveTitle)
+	}
 	desc := strings.TrimSpace(t.Description)
 	if desc == "" {
 		desc = "(empty)"
@@ -236,6 +239,59 @@ func MilestoneMarkdown(ms *Milestone) string {
 			}
 			fmt.Fprintf(&b, "- %s: %s (chat %s)\n", RoleNames[c.Role], title, c.ChatID)
 		}
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// ObjectiveMarkdown is an objective as a model reads it.
+func ObjectiveMarkdown(o *Objective) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# Objective %d · %s\n", o.ID, o.Title)
+	fmt.Fprintf(&b, "State: %s · tickets finished %d/%d", ObjectiveStateNames[o.State], o.TicketsDone, o.Tickets)
+	if o.ToTest > 0 {
+		fmt.Fprintf(&b, " · to test %d", o.ToTest)
+	}
+	if o.Due != "" {
+		fmt.Fprintf(&b, "\nDue: %s", o.Due)
+	}
+	desc := strings.TrimSpace(o.Description)
+	if desc == "" {
+		desc = "(empty)"
+	}
+	fmt.Fprintf(&b, "\n\n## Description\n%s\n", desc)
+	if len(o.MilestoneList) > 0 {
+		b.WriteString("\n## Milestones\n")
+		for _, m := range o.MilestoneList {
+			line := fmt.Sprintf("- Milestone %d [%s] %s", m.ID, MilestoneStateNames[m.State], m.Title)
+			if m.Objective == o.ID {
+				line += " (its default objective)"
+			}
+			b.WriteString(line + "\n")
+		}
+	}
+	if len(o.TicketList) > 0 {
+		b.WriteString("\n## Tickets\n")
+		for _, t := range o.TicketList {
+			line := fmt.Sprintf("- #%d [%s] %s", t.ID, StatusNames[t.Status], t.Title)
+			if t.Milestone != 0 {
+				line += fmt.Sprintf(" (milestone %d)", t.Milestone)
+			}
+			if t.Parent != 0 {
+				line += fmt.Sprintf(" (step of #%d)", t.Parent)
+			}
+			b.WriteString(line + "\n")
+		}
+	}
+	notes := false
+	for _, n := range o.Notes {
+		if n.Kind == "event" {
+			continue
+		}
+		if !notes {
+			b.WriteString("\n## Notes\n")
+			notes = true
+		}
+		fmt.Fprintf(&b, "- (%s, %s) %s\n", authorNames[n.Author], isoDate(n.Created), strings.TrimSpace(n.Text))
 	}
 	return strings.TrimRight(b.String(), "\n")
 }

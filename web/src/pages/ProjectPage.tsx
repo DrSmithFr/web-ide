@@ -25,7 +25,7 @@ import { GitPanel } from '../panels/git/GitPanel'
 import { KanbanPanel } from '../kanban/Panel'
 import { NewTicketHost } from '../kanban/Board'
 import { CommandsHost } from '../console/CommandsModal'
-import { openBoard, openMilestone, openTicket } from '../kanban/state'
+import { openBoard, openMilestone, openObjective, openTicket } from '../kanban/state'
 import { refreshGit } from '../state/git'
 import { DatabaseTool } from '../db/DatabaseTool'
 import { AssistantTool } from '../llm/AssistantTool'
@@ -609,6 +609,11 @@ export function ProjectPage(props: { id: string }) {
       if (milestone > 0) {
         history.replaceState(null, '', location.pathname)
         openMilestone(milestone)
+      }
+      const objective = Number(new URLSearchParams(location.search).get('objective'))
+      if (objective > 0) {
+        history.replaceState(null, '', location.pathname)
+        openObjective(objective)
       }
       // A push notification of a conversation: /project/<id>?chat=<id> shows it in the assistant.
       const chatId = new URLSearchParams(location.search).get('chat')

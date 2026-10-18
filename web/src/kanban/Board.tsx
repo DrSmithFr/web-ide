@@ -18,6 +18,7 @@ import { blockerText } from './Lineage'
 import { Roadmap } from './Roadmap'
 import { Milestones } from './Milestones'
 import { milestoneMatch, type MilestoneFilter } from './milestones'
+import { objectiveMatch, type ObjectiveFilter } from './objectives'
 import { t } from '../i18n'
 import './kanban.css'
 
@@ -31,10 +32,12 @@ export function Board() {
   const view = boardView
   const choose = setBoardView
   const [ms, setMs] = createSignal<MilestoneFilter>('all')
+  const [ob, setOb] = createSignal<ObjectiveFilter>('all')
   const filtered = createMemo(() => {
     const q = query().trim().toLowerCase()
     return board.tickets.filter(
-      (tk) => (!q || tk.title.toLowerCase().includes(q) || `#${tk.id}` === q || String(tk.id) === q) && milestoneMatch(ms(), tk.milestone),
+      (tk) =>
+        (!q || tk.title.toLowerCase().includes(q) || `#${tk.id}` === q || String(tk.id) === q) && milestoneMatch(ms(), tk.milestone) && objectiveMatch(ob(), tk.objective),
     )
   })
   const column = (s: Status) => filtered().filter((tk) => tk.status === s)
@@ -82,6 +85,31 @@ export function Board() {
             </For>
           </select>
         </Show>
+        <Show when={view() !== 'milestones' && board.objectives.length}>
+          <select
+            class="small"
+            title={t('Objective')}
+            onChange={(e) => {
+              const v = e.currentTarget.value
+              setOb(v === 'all' || v === 'none' ? v : Number(v))
+            }}
+            data-testid="kanban-objective-filter"
+          >
+            <option value="all" selected={ob() === 'all'}>
+              {t('All objectives')}
+            </option>
+            <option value="none" selected={ob() === 'none'}>
+              {t('No objective')}
+            </option>
+            <For each={board.objectives.filter((o) => o.state === 'open' || o.id === ob())}>
+              {(o) => (
+                <option value={o.id} selected={ob() === o.id}>
+                  {o.title}
+                </option>
+              )}
+            </For>
+          </select>
+        </Show>
         <span class="grow" />
         <button class="btn small" onClick={() => setSettingsOpen(true)} data-testid="kanban-settings">
           <Icon name="gear" size={13} /> {t('Settings')}
@@ -100,7 +128,7 @@ export function Board() {
         <KanbanSettings onClose={() => setSettingsOpen(false)} />
       </Show>
       <Show when={view() === 'roadmap'}>
-        <Roadmap tickets={board.tickets} query={query()} milestone={ms()} />
+        <Roadmap tickets={board.tickets} query={query()} milestone={ms()} objective={ob()} />
       </Show>
       <Show when={view() === 'milestones'}>
         <Milestones />
@@ -163,6 +191,13 @@ export function Card(props: { tk: Summary; compact?: boolean; closed?: boolean }
           {(m) => (
             <span class="kb-badge kb-milestone ellipsis" title={t('Milestone: {title}', { title: m().title })} data-testid="card-milestone">
               <Icon name="flag" size={10} /> {m().title}
+            </span>
+          )}
+        </Show>
+        <Show when={board.objectives.find((o) => o.id === tk().objective)}>
+          {(o) => (
+            <span class="kb-badge kb-objective ellipsis" title={t('Objective: {title}', { title: o().title })} data-testid="card-objective">
+              <Icon name="target" size={10} /> {o().title}
             </span>
           )}
         </Show>

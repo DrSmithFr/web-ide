@@ -352,5 +352,17 @@
   "this account does not manage that team": "esta cuenta no gestiona ese equipo",
   "not a member of this team": "no es miembro de este equipo",
   "the owner of a team takes no seat": "el propietario de un equipo no ocupa plaza",
-  "the team has no seat left (%d of %d)": "el equipo no tiene plazas libres (%d de %d)"
+  "the team has no seat left (%d of %d)": "el equipo no tiene plazas libres (%d de %d)",
+  "objective not found": "objetivo no encontrado",
+  "invalid date %q: use YYYY-MM-DD": "fecha %q no válida: use AAAA-MM-DD",
+  "only the user reaches an objective": "solo el usuario alcanza un objetivo",
+  "the objective is closed": "el objetivo está cerrado",
+  "%d ticket(s) of this objective are not finished": "%d ticket(s) de este objetivo no están terminados",
+  "only the user closes or reopens an objective": "solo el usuario cierra o reabre un objetivo",
+  "an objective is reached once its tickets are finished": "un objetivo se alcanza una vez terminados sus tickets",
+  "unknown objective state: %s": "estado de objetivo desconocido: %s",
+  "only an open objective can be abandoned": "solo se puede abandonar un objetivo abierto",
+  "objective %d not found": "objetivo %d no encontrado",
+  "objective %d is closed": "el objetivo %d está cerrado",
+  "a step takes the objective of its root (#%d)": "un paso toma el objetivo de su raíz (#%d)"
 }

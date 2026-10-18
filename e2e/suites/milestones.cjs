@@ -1,6 +1,7 @@
 // Milestones: one created from a ticket, its user stories written by Claude (MCP), the
 // reminder in How to test, the milestone page validating its ticket To test, a feedback made
-// into a ticket, then the milestone validated by the user once everything is done.
+// into a ticket, then the milestone validated by the user once everything is done. Then the
+// objectives: one given to a milestone, ordered, filtered, its page, reached by the user.
 const { run, openProject, assert, mcp, OUT } = require('../common.cjs')
 
 run(async ({ page }) => {
@@ -109,4 +110,62 @@ run(async ({ page }) => {
   await page.click('[data-testid=milestone-card-2]')
   await page.waitForSelector('[data-testid=milestone-view] [data-testid=milestone-title]:has-text("Imports")')
   assert(true, 'a card opens its milestone')
+
+  // Objectives: a new one as the default objective of a milestone, whose tickets follow.
+  await page.selectOption('select[data-testid=milestone-objective]', '-1')
+  await page.waitForSelector('.modal input')
+  await page.fill('.modal input', 'MVP')
+  await page.keyboard.press('Enter')
+  await page.waitForFunction(() => document.querySelector('select[data-testid=milestone-objective]')?.value === '1')
+  const step = await mcp('kanban_get', { id: 4 })
+  assert(step.result?.content?.[0]?.text.includes('Objective 1 · MVP'), 'the default objective of a milestone reaches its tickets, a step with its root')
+  await mcp('kanban_objective', { action: 'create', title: 'Launch', due: '2026-12-01' })
+  await mcp('kanban_create', { title: 'Lone', objective: 2 })
+
+  // The Milestones view: a section per objective, in their order, moved by the user.
+  await page.click('.pane .tab:has-text("Kanban")')
+  await page.click('[data-testid=kanban-view-milestones]')
+  await page.waitForSelector('[data-testid=objective-section-2]')
+  const order = () => page.$$eval('.ob-section[data-testid^=objective-section-]', (l) => l.map((e) => e.dataset.testid.replace('objective-section-', '')).join())
+  assert((await order()) === '1,2', `objectives in their order: ${await order()}`)
+  assert(await page.isVisible('[data-testid=objective-section-1] [data-testid=milestone-card-2]'), 'a milestone shows under its default objective')
+  await page.click('[data-testid=objective-section-2] [data-testid=objective-up]')
+  await page.waitForFunction(() => document.querySelector('.ob-section')?.dataset.testid === 'objective-section-2')
+  assert(true, 'an objective moved up')
+  await page.screenshot({ path: OUT + '/objectives-view.png' })
+
+  // The board: the objective filter and the badge of a card.
+  await page.click('[data-testid=kanban-view-board]')
+  await page.selectOption('[data-testid=kanban-objective-filter]', '2')
+  await page.waitForSelector('[data-testid=kanban-board] [data-testid=ticket-card-5]', { state: 'detached' })
+  assert((await page.textContent('[data-testid=ticket-card-6] [data-testid=card-objective]')).includes('Launch'), 'the filter keeps the tickets of the objective, the card shows it')
+  await page.selectOption('[data-testid=kanban-objective-filter]', 'all')
+
+  // A lone ticket put in an objective; the objective page groups its tickets by milestone.
+  await page.click('[data-testid=ticket-card-5]')
+  await page.waitForSelector('[data-testid=ticket-view] [data-testid=ticket-title]:has-text("Other work")')
+  await page.selectOption('select[data-testid=ticket-objective]', '1')
+  await page.waitForSelector('[data-testid=ticket-objective-open]')
+  await page.click('[data-testid=ticket-objective-open]')
+  await page.waitForSelector('[data-testid=objective-view] [data-testid=objective-title]:has-text("MVP")')
+  await page.waitForSelector('[data-testid=objective-progress]:has-text("0/3")')
+  assert((await page.$$eval('[data-testid=objective-group] .kb-panel-group', (l) => l.map((e) => e.textContent.trim()))).join('|') === 'Imports0/2|No milestone0/1', 'the tickets of the objective, by milestone then lone')
+  assert(await page.isDisabled('[data-testid=objective-reach]'), 'an objective waits for its tickets')
+
+  // Reached by the user once its tickets are finished.
+  await page.goto(page.url().replace(/[?#].*$/, '') + '?ticket=6')
+  await page.waitForSelector('[data-testid=ticket-view] [data-testid=ticket-title]:has-text("Lone")')
+  await page.click('[data-testid=ticket-more]')
+  await page.click('.ctx-menu button:has-text("Change the status…")')
+  await page.waitForSelector('.pick-input')
+  await page.keyboard.type('Done')
+  await page.keyboard.press('Enter')
+  await page.fill('.modal-small input', '')
+  await page.keyboard.press('Enter')
+  await page.waitForSelector('[data-testid=ticket-status]:has-text("Done")')
+  await page.goto(page.url().replace(/[?#].*$/, '') + '?objective=2')
+  await page.waitForSelector('[data-testid=objective-view] [data-testid=objective-due]:has-text("2026")')
+  await page.click('[data-testid=objective-reach]')
+  await page.waitForSelector('[data-testid=objective-state]:has-text("Reached")')
+  assert(await page.isVisible('[data-testid=objective-reopen]'), 'the objective reached by the user, then reopenable')
 })

@@ -108,7 +108,7 @@ func (s *Server) registerMilestones() {
 		if err != nil {
 			return 0, err
 		}
-		return 0, s.Kanban.UpdateMilestone(loc, a.ID, b.Patch)
+		return 0, s.Kanban.UpdateMilestone(loc, a.ID, b.Patch, a.By)
 	}))
 	s.handle("kanban.milestone.delete", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 		root, err := s.kanbanProject(c.project)

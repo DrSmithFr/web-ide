@@ -77,9 +77,23 @@ var (
 	sizeRank     = map[string]int{"s": 0, "m": 1, "l": 2, "xl": 3, "": 4}
 )
 
-// Next orders the tickets that can start now (To do, no blocker; Blockers filled): the next
-// step of a lineage in progress first, then by priority, smaller size, age.
-func Next(list []Summary) []Summary {
+// Next orders the tickets that can start now (To do, no blocker; Blockers filled): those of
+// the first open objective first (objectives in their order, as Objectives lists them), then
+// the next step of a lineage in progress, then by priority, smaller size, age.
+func Next(list []Summary, objectives []ObjectiveSummary) []Summary {
+	rank := map[int64]int{}
+	for i, o := range objectives {
+		if o.State == ObjectiveOpen {
+			rank[o.ID] = i + 1
+		}
+	}
+	// The tickets without an open objective come last.
+	objective := func(t Summary) int {
+		if r := rank[t.Objective]; r > 0 {
+			return r
+		}
+		return len(objectives) + 1
+	}
 	status := map[int64]string{}
 	for _, t := range list {
 		status[t.ID] = t.Status
@@ -93,6 +107,9 @@ func Next(list []Summary) []Summary {
 	step := func(t Summary) bool { return t.Parent != 0 && status[t.Parent] != Todo && status[t.Parent] != New }
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
+		if oa, ob := objective(a), objective(b); oa != ob {
+			return oa < ob
+		}
 		if sa, sb := step(a), step(b); sa != sb {
 			return sa
 		}

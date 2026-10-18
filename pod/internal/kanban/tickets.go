@@ -109,7 +109,10 @@ type Summary struct {
 	Parent     int64  `json:"parent,omitempty"`
 	Pos        int    `json:"pos,omitempty"`
 	// Milestone: the one of the ticket (0: none); a step has the one of its root.
-	Milestone int64   `json:"milestone,omitempty"`
+	Milestone int64 `json:"milestone,omitempty"`
+	// Objective: the one of the ticket (0: none), apart from its milestone; a step has the
+	// one of its root.
+	Objective int64   `json:"objective,omitempty"`
 	StepDone  bool    `json:"stepDone,omitempty"`
 	DependsOn []int64 `json:"dependsOn"`
 	// Blockers keep a ticket from starting (filled by the server for the tickets that may
@@ -143,6 +146,7 @@ type Ticket struct {
 	// MilestoneTitle and MilestoneStories: the title and the user stories of its milestone.
 	MilestoneTitle   string  `json:"milestoneTitle,omitempty"`
 	MilestoneStories []Story `json:"milestoneStories,omitempty"`
+	ObjectiveTitle   string  `json:"objectiveTitle,omitempty"`
 }
 
 var ErrNotFound = i18n.New("ticket not found")
@@ -152,12 +156,12 @@ const summaryCols = `t.id, t.title, t.priority, t.status, t.branch, t.worktree, 
   (SELECT COUNT(*) FROM goals g WHERE g.ticket_id = t.id),
   (SELECT COUNT(*) FROM chats c WHERE c.ticket_id = t.id),
   (SELECT COUNT(*) FROM feedback f WHERE f.ticket_id = t.id AND f.done = 0),
-  t.parent_id, t.pos, t.step_done, t.size, t.complexity, t.milestone_id`
+  t.parent_id, t.pos, t.step_done, t.size, t.complexity, t.milestone_id, t.objective_id`
 
 func scanSummary(row interface{ Scan(...any) error }, s *Summary) error {
 	s.DependsOn = []int64{}
 	return row.Scan(&s.ID, &s.Title, &s.Priority, &s.Status, &s.Branch, &s.Worktree, &s.Created, &s.Updated, &s.Closed, &s.GoalsDone, &s.Goals, &s.Chats, &s.FeedbackOpen,
-		&s.Parent, &s.Pos, &s.StepDone, &s.Size, &s.Complexity, &s.Milestone)
+		&s.Parent, &s.Pos, &s.StepDone, &s.Size, &s.Complexity, &s.Milestone, &s.Objective)
 }
 
 // summaries reads tickets with their dependencies (where: an SQL condition on t).
@@ -243,8 +247,10 @@ func (m *Manager) List(loc Location) ([]Summary, error) {
 }
 
 // eachRow runs f on each row of a query.
-func eachRow(db *sql.DB, query string, f func(*sql.Rows) error) error {
-	rows, err := db.Query(query)
+func eachRow(q interface {
+	Query(string, ...any) (*sql.Rows, error)
+}, query string, f func(*sql.Rows) error, args ...any) error {
+	rows, err := q.Query(query, args...)
 	if err != nil {
 		return err
 	}
@@ -270,7 +276,7 @@ func get(db *sql.DB, id int64) (*Ticket, error) {
 	var snap string
 	row := db.QueryRow(`SELECT `+summaryCols+`, t.description, t.plan, t.test_summary, t.pr, t.base, t.setup, t.setup_log, t.snapshot FROM tickets t WHERE t.id = ?`, id)
 	err := row.Scan(&t.ID, &t.Title, &t.Priority, &t.Status, &t.Branch, &t.Worktree, &t.Created, &t.Updated, &t.Closed, &t.GoalsDone, &t.Goals, &t.Chats, &t.FeedbackOpen,
-		&t.Parent, &t.Pos, &t.StepDone, &t.Size, &t.Complexity, &t.Milestone,
+		&t.Parent, &t.Pos, &t.StepDone, &t.Size, &t.Complexity, &t.Milestone, &t.Objective,
 		&t.Description, &t.Plan, &t.TestSummary, &t.PR, &t.Base, &t.Setup, &t.SetupLog, &snap)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -289,6 +295,9 @@ func get(db *sql.DB, id int64) (*Ticket, error) {
 			t.MilestoneStories = append(t.MilestoneStories, s)
 			return err
 		})
+	}
+	if t.Objective != 0 {
+		_ = db.QueryRow(`SELECT title FROM objectives WHERE id = ?`, t.Objective).Scan(&t.ObjectiveTitle)
 	}
 	t.DependsOn = []int64{}
 	if deps, err := db.Query(`SELECT dep_id FROM deps WHERE ticket_id = ? ORDER BY dep_id`, id); err == nil {
@@ -386,6 +395,8 @@ type Patch struct {
 	DependsOn *[]int64 `json:"dependsOn"`
 	// Milestone: 0 takes the ticket (and its steps) out of its milestone.
 	Milestone *int64 `json:"milestone"`
+	// Objective: 0 takes the ticket (and its steps) out of its objective.
+	Objective *int64 `json:"objective"`
 	// PlanSize: the size and the complexity come with a plan, kept as they are once the estimate is fixed.
 	PlanSize bool `json:"-"`
 }
@@ -495,7 +506,10 @@ func createTicket(tx *sql.Tx, p Patch, by string, now int64) (int64, error) {
 	if err := setLinks(tx, id, p, by, now); err != nil {
 		return 0, err
 	}
-	return id, setMilestone(tx, id, p.Milestone, by, now)
+	if err := setMilestone(tx, id, p.Milestone, by, now); err != nil {
+		return 0, err
+	}
+	return id, setObjective(tx, id, p.Objective, by, now)
 }
 
 func setFiles(tx *sql.Tx, id int64, p Patch) error {
@@ -572,6 +586,9 @@ func (m *Manager) Update(loc Location, id int64, p Patch, by string) error {
 			return err
 		}
 		if err := setMilestone(tx, id, p.Milestone, by, now); err != nil {
+			return err
+		}
+		if err := setObjective(tx, id, p.Objective, by, now); err != nil {
 			return err
 		}
 		if p.Plan != nil {

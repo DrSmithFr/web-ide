@@ -130,7 +130,7 @@ run(async ({ page, ctx }) => {
   await page.click('[data-testid=ticket-start]')
   await page.waitForSelector('[data-testid=ticket-status]:has-text("In progress")')
   assert(
-    (await page.isVisible('.tk-meta-row span.badge:has-text("priority")')) && (await page.isVisible('span[data-testid=ticket-size]')) && !(await page.$('.tk-meta-row select:not([data-testid=ticket-complexity]):not([data-testid=ticket-milestone])')),
+    (await page.isVisible('.tk-meta-row span.badge:has-text("priority")')) && (await page.isVisible('span[data-testid=ticket-size]')) && !(await page.$('.tk-meta-row select:not([data-testid=ticket-complexity]):not([data-testid=ticket-milestone]):not([data-testid=ticket-objective])')),
     'In progress: priority and size fixed, shown as badges',
   )
   assert((await page.textContent('span[data-testid=ticket-complexity]')) === 'Medium complexity', 'In progress: complexity fixed, shown as a badge')

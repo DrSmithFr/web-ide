@@ -14,6 +14,7 @@ import {
 } from './milestones'
 import { routed, ticketActions } from './actions'
 import { runClaudeMilestone } from './claude'
+import { MilestoneObjectiveSelect } from './ObjectiveView'
 import { openTicketChat, startMilestoneBriefing } from './sessions'
 import { ActionBtn, ComplexitySelect, Count, EditableMarkdown, EditableText, Section, tooLong } from './TicketView'
 import { MAX_DESCRIPTION, MAX_NOTE } from './state'
@@ -87,6 +88,7 @@ function MilestoneBody(props: { ms: Milestone; apply: MApply; tabId: string }) {
           <span class="muted small" data-testid="milestone-progress">
             {t('Tickets finished {done}/{n}', { done: ms().ticketsDone, n: ms().tickets })} · {t('User stories validated {done}/{n}', { done: ms().storiesDone, n: ms().stories })}
           </span>
+          <MilestoneObjectiveSelect ms={ms()} apply={props.apply} />
           <span class="grow" />
           <button class="btn small" title={t('Conversation (Briefing mode) to clarify the milestone and write its stories and tickets')} onClick={() => void startMilestoneBriefing(ms())} data-testid="milestone-briefing">
             <Icon name="sparkle" size={12} /> {t('Briefing')}

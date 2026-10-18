@@ -13,6 +13,8 @@ export interface MilestoneSummary {
   created: number
   updated: number
   closed?: number
+  /** The default objective of its tickets. */
+  objective?: number
   /** Tickets: all of them, finished (Done or Abandoned), To test. */
   tickets: number
   ticketsDone: number
@@ -59,6 +61,8 @@ export interface MilestonePatch {
   title?: string
   description?: string
   spec?: string
+  /** The default objective (0: none): its open tickets go into it. */
+  objective?: number
 }
 
 export const listMilestones = () => request<MilestoneSummary[]>('kanban.milestone.list')

@@ -58,6 +58,7 @@ var (
 	sizeProp       = enum("Estimated effort of the whole ticket: s (a few files, an hour of AI work), m, l, xl (many files across the pod and the page, several days)", kanban.Sizes...)
 	dependsOnProp  = map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "Tickets of other lineages this one waits for: it starts once they are merged or done (replaces the list)"}
 	milestoneProp  = map[string]any{"type": "integer", "description": "Milestone of the ticket and of its steps (0 takes it out; a step has the one of its root); see kanban_milestone"}
+	objectiveProp  = map[string]any{"type": "integer", "description": "Objective of the ticket and of its steps, apart from its milestone (0 takes it out; a step has the one of its root); see kanban_objective"}
 )
 
 // mcpScope is the kanban a call works on, found from the working directory of the client.
@@ -328,13 +329,14 @@ var mcpTools = []mcpTool{
 			"parent":      parentProp,
 			"depends_on":  dependsOnProp,
 			"milestone":   milestoneProp,
+			"objective":   objectiveProp,
 		},
 		required: []string{"title"},
 		run: func(ctx context.Context, s *Server, raw json.RawMessage) (string, error) {
 			a, err := bind[struct {
 				Cwd, Title, Description, Priority string
 				Files                             []string
-				Parent, Milestone                 *int64
+				Parent, Milestone, Objective      *int64
 				DependsOn                         *[]int64 `json:"depends_on"`
 			}](raw)
 			if err != nil {
@@ -347,7 +349,7 @@ var mcpTools = []mcpTool{
 			if err != nil {
 				return "", err
 			}
-			id, err := s.Kanban.Create(sc.loc, kanban.Patch{Title: &a.Title, Description: nonEmpty(a.Description), Priority: nonEmpty(a.Priority), AddFiles: a.Files, Parent: a.Parent, DependsOn: a.DependsOn, Milestone: a.Milestone}, kanban.ByClaude)
+			id, err := s.Kanban.Create(sc.loc, kanban.Patch{Title: &a.Title, Description: nonEmpty(a.Description), Priority: nonEmpty(a.Priority), AddFiles: a.Files, Parent: a.Parent, DependsOn: a.DependsOn, Milestone: a.Milestone, Objective: a.Objective}, kanban.ByClaude)
 			if err != nil {
 				return "", err
 			}
@@ -371,20 +373,21 @@ var mcpTools = []mcpTool{
 			"parent":       parentProp,
 			"depends_on":   dependsOnProp,
 			"milestone":    milestoneProp,
+			"objective":    objectiveProp,
 		},
 		run: ticketTool(func(ctx context.Context, s *Server, sc mcpScope, id int64, a struct {
 			Title, Description, Priority string
 			TestSummary                  string   `json:"test_summary"`
 			AddFiles                     []string `json:"add_files"`
 			RemoveFiles                  []string `json:"remove_files"`
-			Parent, Milestone            *int64
+			Parent, Milestone, Objective *int64
 			DependsOn                    *[]int64 `json:"depends_on"`
 			Size, Complexity             string
 		}) (string, error) {
 			if err := tooLong(a.Description, kanban.MaxDescription, descriptionAdvice); err != nil {
 				return "", err
 			}
-			p := kanban.Patch{Title: nonEmpty(a.Title), Description: nonEmpty(a.Description), Priority: nonEmpty(a.Priority), TestSummary: nonEmpty(a.TestSummary), AddFiles: a.AddFiles, RemoveFiles: a.RemoveFiles, Parent: a.Parent, DependsOn: a.DependsOn, Size: nonEmpty(a.Size), Complexity: nonEmpty(a.Complexity), Milestone: a.Milestone}
+			p := kanban.Patch{Title: nonEmpty(a.Title), Description: nonEmpty(a.Description), Priority: nonEmpty(a.Priority), TestSummary: nonEmpty(a.TestSummary), AddFiles: a.AddFiles, RemoveFiles: a.RemoveFiles, Parent: a.Parent, DependsOn: a.DependsOn, Size: nonEmpty(a.Size), Complexity: nonEmpty(a.Complexity), Milestone: a.Milestone, Objective: a.Objective}
 			if err := s.Kanban.Update(sc.loc, id, p, kanban.ByClaude); err != nil {
 				return "", err
 			}
@@ -410,6 +413,26 @@ var mcpTools = []mcpTool{
 			}
 			out, _, err := s.milestoneTool(sc.root.ID, sc.loc, a.milestoneArgs, kanban.ByClaude, "")
 			return out, err
+		},
+	},
+	{
+		name:        "kanban_objective",
+		description: assistant.ObjectiveDescription,
+		props:       assistant.ObjectiveProps,
+		required:    []string{"action"},
+		run: func(ctx context.Context, s *Server, raw json.RawMessage) (string, error) {
+			a, err := bind[struct {
+				Cwd string
+				objectiveArgs
+			}](raw)
+			if err != nil {
+				return "", err
+			}
+			sc, err := s.mcpScope(a.Cwd)
+			if err != nil {
+				return "", err
+			}
+			return s.objectiveTool(sc.root.ID, sc.loc, a.objectiveArgs, kanban.ByClaude, "")
 		},
 	},
 	{

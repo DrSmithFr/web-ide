@@ -46,11 +46,21 @@ func TestNext(t *testing.T) {
 		{ID: 10, Status: InProgress, FeedbackOpen: 2},
 	}
 	var ids []int64
-	for _, t := range Next(list) {
+	for _, t := range Next(list, nil) {
 		ids = append(ids, t.ID)
 	}
 	if want := []int64{6, 2, 3, 1, 7}; len(ids) != len(want) || ids[0] != 6 || ids[1] != 2 || ids[2] != 3 || ids[3] != 1 || ids[4] != 7 {
 		t.Fatalf("next: %v, want %v", ids, want)
+	}
+	// The tickets of the first open objective come first, then those of the next one.
+	list[6].Objective, list[2].Objective = 20, 21
+	objectives := []ObjectiveSummary{{ID: 22, State: ObjectiveReached}, {ID: 20, State: ObjectiveOpen}, {ID: 21, State: ObjectiveOpen}}
+	ids = nil
+	for _, t := range Next(list, objectives) {
+		ids = append(ids, t.ID)
+	}
+	if len(ids) != 5 || ids[0] != 7 || ids[1] != 3 || ids[2] != 6 {
+		t.Fatalf("next by objective: %v", ids)
 	}
 	if w := Waiting(list); len(w) != 2 || w[0].ID != 8 || w[1].ID != 10 {
 		t.Fatalf("waiting: %+v", w)

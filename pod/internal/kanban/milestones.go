@@ -49,6 +49,8 @@ type MilestoneSummary struct {
 	Created int64  `json:"created"`
 	Updated int64  `json:"updated"`
 	Closed  int64  `json:"closed,omitempty"`
+	// Objective: the default objective of its tickets (0: none).
+	Objective int64 `json:"objective,omitempty"`
 	// Tickets: all of them, finished (Done or Abandoned), and To test.
 	Tickets     int `json:"tickets"`
 	TicketsDone int `json:"ticketsDone"`
@@ -76,6 +78,8 @@ type MilestonePatch struct {
 	Title       *string `json:"title"`
 	Description *string `json:"description"`
 	Spec        *string `json:"spec"`
+	// Objective: the default objective (0: none); its open tickets go into it.
+	Objective *int64 `json:"objective"`
 }
 
 func (p *MilestonePatch) validate() error {
@@ -90,7 +94,7 @@ func (p *MilestonePatch) validate() error {
 	return nil
 }
 
-const milestoneCols = `m.id, m.title, m.state, m.created, m.updated, m.closed,
+const milestoneCols = `m.id, m.title, m.state, m.created, m.updated, m.closed, m.objective_id,
   (SELECT COUNT(*) FROM tickets t WHERE t.milestone_id = m.id),
   (SELECT COUNT(*) FROM tickets t WHERE t.milestone_id = m.id AND t.status IN ('done', 'abandoned')),
   (SELECT COUNT(*) FROM tickets t WHERE t.milestone_id = m.id AND t.status = 'to_test'),
@@ -99,7 +103,7 @@ const milestoneCols = `m.id, m.title, m.state, m.created, m.updated, m.closed,
   (SELECT COUNT(*) FROM milestone_feedback f WHERE f.milestone_id = m.id AND f.done = 0)`
 
 func scanMilestone(row interface{ Scan(...any) error }, s *MilestoneSummary, more ...any) error {
-	return row.Scan(append([]any{&s.ID, &s.Title, &s.State, &s.Created, &s.Updated, &s.Closed, &s.Tickets, &s.TicketsDone, &s.ToTest, &s.Stories, &s.StoriesDone, &s.FeedbackOpen}, more...)...)
+	return row.Scan(append([]any{&s.ID, &s.Title, &s.State, &s.Created, &s.Updated, &s.Closed, &s.Objective, &s.Tickets, &s.TicketsDone, &s.ToTest, &s.Stories, &s.StoriesDone, &s.FeedbackOpen}, more...)...)
 }
 
 // Milestones lists the milestones, the open ones first.
@@ -242,11 +246,14 @@ func trimmed(s *string) string {
 	return strings.TrimSpace(*s)
 }
 
-func (m *Manager) UpdateMilestone(loc Location, id int64, p MilestonePatch) error {
+func (m *Manager) UpdateMilestone(loc Location, id int64, p MilestonePatch, by string) error {
 	if err := p.validate(); err != nil {
 		return err
 	}
 	return m.mtx(loc, id, func(tx *sql.Tx, now int64) error {
+		if err := setMilestoneObjective(tx, id, p.Objective, by, now); err != nil {
+			return err
+		}
 		for col, v := range map[string]*string{"title": p.Title, "description": p.Description, "spec": p.Spec} {
 			if v != nil {
 				if _, err := tx.Exec(`UPDATE milestones SET `+col+` = ? WHERE id = ?`, strings.TrimSpace(*v), id); err != nil {
@@ -621,7 +628,18 @@ func setMilestone(tx *sql.Tx, id int64, ms *int64, by string, now int64) error {
 	if *ms == 0 {
 		return event(tx, id, by, "Removed from the milestone “{milestone}”", Params{"milestone": title}, now)
 	}
-	return event(tx, id, by, "Milestone: “{milestone}”", Params{"milestone": title}, now)
+	if err := event(tx, id, by, "Milestone: “{milestone}”", Params{"milestone": title}, now); err != nil {
+		return err
+	}
+	// A ticket without objective takes the default objective of its milestone.
+	var own, def int64
+	if err := tx.QueryRow(`SELECT t.objective_id, m.objective_id FROM tickets t, milestones m WHERE t.id = ? AND m.id = ?`, id, *ms).Scan(&own, &def); err != nil {
+		return err
+	}
+	if own != 0 || def == 0 {
+		return nil
+	}
+	return setObjective(tx, id, &def, by, now)
 }
 
 func milestoneTitle(tx *sql.Tx, id int64) (string, error) {

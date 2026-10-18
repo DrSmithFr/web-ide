@@ -21,6 +21,7 @@ import { startWorkSession } from './sessions'
 import { TicketAgentSession } from './agentSession'
 import { LineageSection } from './Lineage'
 import { MilestoneReminder, MilestoneSelect } from './MilestoneView'
+import { ObjectiveSelect } from './ObjectiveView'
 import { TicketAgentStats } from '../agents/stats'
 import { fmtDate, fmtSize, t } from '../i18n'
 import './kanban.css'
@@ -195,6 +196,7 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
             <ComplexitySelect value={tk().complexity} onChange={(c) => props.apply(updateTicket(tk().id, { complexity: c }))} testid="ticket-complexity" />
           </Show>
           <MilestoneSelect tk={tk()} apply={props.apply} />
+          <ObjectiveSelect tk={tk()} apply={props.apply} />
           <span class="muted small">{t('created on {date}', { date: fmtDate(tk().created) })}</span>
           <TicketAgentStats ticket={tk().id} />
           <span class="grow" />

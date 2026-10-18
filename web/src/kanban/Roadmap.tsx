@@ -7,6 +7,7 @@ import { EmptyState } from '../ui/EmptyState'
 import { layoutRoadmap, type Block, type BlockState } from './roadmap'
 import { board, openTicket, sizeNames, statusLabels, type Summary } from './state'
 import { milestoneMatch, type MilestoneFilter } from './milestones'
+import { objectiveMatch, type ObjectiveFilter } from './objectives'
 import { blockerText } from './Lineage'
 import { t } from '../i18n'
 
@@ -32,7 +33,7 @@ function tooltip(b: Block) {
   return lines.join('\n')
 }
 
-export function Roadmap(props: { tickets: Summary[]; query: string; milestone?: MilestoneFilter }) {
+export function Roadmap(props: { tickets: Summary[]; query: string; milestone?: MilestoneFilter; objective?: ObjectiveFilter }) {
   const layout = createMemo(() => layoutRoadmap(props.tickets))
   const match = (s: Summary) => {
     const q = props.query.trim().toLowerCase()
@@ -45,7 +46,7 @@ export function Roadmap(props: { tickets: Summary[]; query: string; milestone?: 
   const shown = createMemo(() =>
     layout()
       .rows.map((r, i) => ({ r, i }))
-      .filter(({ r }) => r.blocks.some((b) => match(b.ticket)) && milestoneMatch(props.milestone ?? 'all', band(r)))
+      .filter(({ r }) => r.blocks.some((b) => match(b.ticket)) && milestoneMatch(props.milestone ?? 'all', band(r)) && objectiveMatch(props.objective ?? 'all', r.root.objective))
       .sort((a, b) => bandRank(band(a.r)) - bandRank(band(b.r)) || a.i - b.i),
   )
   const banded = () => (props.milestone ?? 'all') === 'all' && shown().some(({ r }) => band(r))

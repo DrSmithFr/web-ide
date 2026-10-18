@@ -76,6 +76,7 @@ const paths: Record<string, string> = {
   code: 'M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16',
   eye: 'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12zM12 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6z',
   power: 'M12 3v9M7.1 6.3a7 7 0 1 0 9.8 0',
+  target: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM12 7.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zM12 11.5v1',
 }
 
 export function Icon(props: { name: keyof typeof paths | string; size?: number; title?: string } & JSX.SvgSVGAttributes<SVGSVGElement>) {

@@ -46,7 +46,11 @@ func (s *Server) kanbanNext(r *assistantRun) (toolResult, error) {
 		return toolResult{}, err
 	}
 	s.fillBlockers(r.ctx, s.kanbanGit(r), list)
-	next := kanban.Next(list)
+	objectives, err := s.Kanban.Objectives(kanbanLocOf(r.loc))
+	if err != nil {
+		return toolResult{}, err
+	}
+	next := kanban.Next(list, objectives)
 	var b strings.Builder
 	b.WriteString("Can start now, in order:\n")
 	if len(next) == 0 {
