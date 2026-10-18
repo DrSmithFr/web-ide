@@ -24,8 +24,10 @@ import (
 // count) with the TURN bytes aggregated per key and month (turn_usage, see turn.go);
 // dbVersion 6 adds the GitHub link of an account and the cached sponsor list (github.go);
 // dbVersion 7 adds the anonymous counter of the accounts seen (status.go): an account id and
-// the time it was last seen, nothing else; dbVersion 8 adds the VIP list (vips.go).
-const dbVersion = 8
+// the time it was last seen, nothing else; dbVersion 8 adds the VIP list (vips.go); dbVersion 9
+// adds the teams and their members (teams.go) and the kind of a sponsor (a person or an
+// organization).
+const dbVersion = 9
 
 type Pod struct {
 	ID       string
@@ -123,6 +125,9 @@ func migrate(db *sql.DB) error {
 		return err
 	}
 	if err := migrateVIPs(db); err != nil {
+		return err
+	}
+	if err := migrateTeams(db); err != nil {
 		return err
 	}
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS accounts_seen (

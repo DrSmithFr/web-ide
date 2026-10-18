@@ -626,6 +626,7 @@ interface RelayInfo {
   turnUntil?: number
   turnSponsor?: string
   turnVip?: boolean
+  turnTeam?: string
 }
 
 /** A byte count as the relay reports it, read the way a person reads a size. */
@@ -670,7 +671,7 @@ function RemoteAccess() {
   const on = () => (info()?.url ?? '') !== ''
   const turnBadge = () => {
     const i = info()
-    return levelBadge(i && { level: i.turnLevel, until: i.turnUntil, sponsor: i.turnSponsor, vip: i.turnVip })
+    return levelBadge(i && { level: i.turnLevel, until: i.turnUntil, sponsor: i.turnSponsor, vip: i.turnVip, team: i.turnTeam })
   }
   return (
     <section class="form">

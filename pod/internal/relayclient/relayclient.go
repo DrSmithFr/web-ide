@@ -100,6 +100,7 @@ type QuotaState struct {
 	Until     int64  `json:"until,omitempty"`
 	Sponsor   string `json:"sponsor,omitempty"`
 	VIP       bool   `json:"vip,omitempty"`
+	Team      string `json:"team,omitempty"` // the team that makes the account a VIP (#88)
 	Over      bool   `json:"over,omitempty"`
 }
 

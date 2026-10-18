@@ -16,6 +16,7 @@ import { podPath } from '../app/base'
 import { inTunnel } from '../pod/transport'
 import { createSignal, For, Show, onCleanup, onMount } from 'solid-js'
 import { levelBadge, type AccountLevel } from './level'
+import { TeamSection, type TeamInfo } from './Team'
 import { request } from '../pod/rpc'
 import { errorToast, toast } from '../ui/toast'
 import { copyText } from '../ui/clipboard'
@@ -90,6 +91,8 @@ export function Members() {
   // The GitHub link of the account (milestone 5): the login it is linked to, and the level of the
   // account (#87: its sponsorship and the VIP list of the relay), which sets the TURN quota.
   const [gh, setGh] = createSignal<({ login: string } & AccountLevel) | null>(null)
+  // The teams the account is the admin of (#88), and whether an organization's team may be its.
+  const [teams, setTeams] = createSignal<{ teams: TeamInfo[]; mayOwn: boolean }>({ teams: [], mayOwn: false })
   let link: { send: (m: any) => void; recv: (type?: string) => Promise<any>; close: () => void } | null = null
   let accountKey: CryptoKey | null = null
   let own: any = null
@@ -131,6 +134,11 @@ export function Members() {
   // stores the id of that person, and the window closes itself. The relay never sees a token.
   function linkGitHub() {
     link?.send({ type: 'githubStart' })
+  }
+  // The team of an organization: GitHub again, asking read:org this time (the window says what
+  // the relay proved, the panel reads the teams when it closes).
+  function manageTeam() {
+    link?.send({ type: 'githubStart', purpose: 'team' })
   }
   function openGitHubLink(url: string) {
     const win = window.open(url, 'webide-github', 'width=520,height=620')
@@ -246,7 +254,11 @@ export function Members() {
       } else if (msg.type === 'wraps') setWraps(msg.wraps ?? [])
       else if (msg.type === 'wrap' && msg.wrap) setWraps((w) => [...w.filter((x) => x.device !== msg.wrap.device), msg.wrap])
       else if (msg.type === 'pair' && msg.pairing) setPairings((p) => [...p.filter((x) => x.code !== msg.pairing.code), msg.pairing])
-      else if (msg.type === 'github') setGh({ login: msg.login ?? '', level: msg.level, until: msg.until, sponsor: msg.sponsor, vip: msg.vip })
+      else if (msg.type === 'github') {
+        setGh({ login: msg.login ?? '', level: msg.level, until: msg.until, sponsor: msg.sponsor, vip: msg.vip, team: msg.team })
+        if (msg.login) link?.send({ type: 'team' })
+        else setTeams({ teams: [], mayOwn: false })
+      } else if (msg.type === 'team') setTeams({ teams: msg.teams ?? [], mayOwn: !!msg.mayOwn })
       else if (msg.type === 'githubStart' && msg.loginUrl) openGitHubLink(msg.loginUrl)
       for (const key of [...members().map((d) => d.key), ...pairings().map((p) => p.key)]) void showFp(key)
     })
@@ -485,6 +497,9 @@ export function Members() {
             <button class="btn small" onClick={() => unlinkGitHub()}>{t('Unlink GitHub')}</button>
           </Show>
         </div>
+        <Show when={gh()?.login}>
+          <TeamSection teams={teams().teams} mayOwn={teams().mayOwn} send={(m) => link?.send(m)} manage={manageTeam} />
+        </Show>
         <p class="muted small">
           {t('Sponsoring the project on GitHub sets the monthly TURN quota of the hosted relay: a Backer ($2 a month) has it raised, a Supporter ($5) and a VIP ($10) have none. The relay keeps the GitHub id it was shown, never a token, and no e-mail is asked.')}
         </p>

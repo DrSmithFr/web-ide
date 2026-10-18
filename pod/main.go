@@ -369,7 +369,7 @@ func main() {
 			if c := relayCli.Load(); c != nil {
 				if q := c.Quota(); q != nil {
 					info.TurnUsed, info.TurnLimit, info.TurnOver, info.TurnSupporter = q.Used, q.Limit, q.Over, q.Supporter
-					info.TurnLevel, info.TurnUntil, info.TurnSponsor, info.TurnVIP = q.Level, q.Until, q.Sponsor, q.VIP
+					info.TurnLevel, info.TurnUntil, info.TurnSponsor, info.TurnVIP, info.TurnTeam = q.Level, q.Until, q.Sponsor, q.VIP, q.Team
 				}
 			}
 			return info

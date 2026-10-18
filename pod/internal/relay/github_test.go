@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -408,7 +409,14 @@ func TestGitHubSponsorsRefresh(t *testing.T) {
 	if err := st.SaveSponsors([]Sponsor{{ID: "999", Login: "gone", Cents: 500}}); err != nil {
 		t.Fatal(err)
 	}
+	orgCalls := 0
 	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The id of an organization comes from its public profile, read with the token.
+		if r.URL.Path == "/orgs/acme" && r.Header.Get("Authorization") == "Bearer maintainer" {
+			orgCalls++
+			json.NewEncoder(w).Encode(map[string]any{"id": 7000, "login": "acme"})
+			return
+		}
 		if r.URL.Path != "/graphql" || r.Method != http.MethodPost {
 			http.NotFound(w, r)
 			return
@@ -423,7 +431,7 @@ func TestGitHubSponsorsRefresh(t *testing.T) {
 		}
 		json.NewDecoder(r.Body).Decode(&q)
 		// Organization.databaseId needs read:org, which the token of the maintainer does not have.
-		if strings.Contains(q.Query, "Organization") {
+		if regexp.MustCompile(`Organization\s*\{[^}]*databaseId`).MatchString(q.Query) {
 			http.Error(w, "The 'databaseId' field requires one of the following scopes: ['read:org']", http.StatusBadRequest)
 			return
 		}
@@ -441,9 +449,9 @@ func TestGitHubSponsorsRefresh(t *testing.T) {
 		}
 		json.NewEncoder(w).Encode(graphqlPage("",
 			sponsorshipNode(10, "recent-once", 1000, true, false, ago(10)),
-			// An organization: the User fragment does not match, GitHub answers an empty entity.
+			// An organization: its login only (#88), its id from /orgs/<login>.
 			map[string]any{"isActive": true, "isOneTimePayment": false, "createdAt": ago(5).UTC().Format(time.RFC3339),
-				"tier": map[string]any{"monthlyPriceInCents": 10000}, "sponsorEntity": map[string]any{}},
+				"tier": map[string]any{"monthlyPriceInCents": 10000}, "sponsorEntity": map[string]any{"__typename": "Organization", "login": "acme"}},
 			// $10 once is a VIP for 90 days: this one ended.
 			sponsorshipNode(40, "old-once", 1000, true, false, ago(95)),
 			// A monthly sponsor whose one-time payment ended keeps the monthly row.
@@ -466,6 +474,13 @@ func TestGitHubSponsorsRefresh(t *testing.T) {
 	}
 	if sp, _ := st.Sponsor("8"); sp != nil {
 		t.Errorf("a past monthly sponsor is not kept: %+v", sp)
+	}
+	if sp, _ := st.Sponsor("7000"); sp == nil || !sp.Org || sp.Login != "acme" || seats(*sp) != 20 {
+		t.Errorf("an organization is kept with its id and its seats: %+v", sp)
+	}
+	// A second read knows the organization: no new call to /orgs.
+	if err := g.refreshSponsors(context.Background()); err != nil || orgCalls != 1 {
+		t.Errorf("the id of an organization is read once: %d calls, %v", orgCalls, err)
 	}
 }
 

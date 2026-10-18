@@ -59,6 +59,7 @@ type QuotaState struct {
 	Until     int64  `json:"until,omitempty"`
 	Sponsor   string `json:"sponsor,omitempty"`
 	VIP       bool   `json:"vip,omitempty"`
+	Team      string `json:"team,omitempty"` // the team that makes the account a VIP (#88)
 	Over      bool   `json:"over,omitempty"`
 }
 
@@ -103,7 +104,7 @@ func (t *Turn) used(key string) int64 {
 func (t *Turn) QuotaState(key string) *QuotaState {
 	al := t.levelOf(key)
 	st := &QuotaState{Limit: t.limit(al.Level), Supporter: al.Level >= LevelSupporter,
-		Level: al.Level.wire(), Until: al.Until, Sponsor: al.Sponsor.wire(), VIP: al.VIP}
+		Level: al.Level.wire(), Until: al.Until, Sponsor: al.Sponsor.wire(), VIP: al.VIP, Team: al.Team}
 	st.Used = t.used(key)
 	st.Over = st.Limit > 0 && st.Used >= st.Limit
 	return st

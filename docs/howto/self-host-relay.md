@@ -198,7 +198,23 @@ counts and stays in `vip list` until removed. `relay supporters` lists everyone 
 above — level, source (`monthly $5`, `one-time $10`, `vip`), end, linked accounts, note. The levels
 themselves are in relay.md *Hosted service and pricing*.
 
-On the hosted relay: `make vip ARGS="add bob -days 90"`, `make supporters` (over SSH, `RELAY_HOST`).
+**Teams**: a monthly sponsorship of $50 or more gives one seat per $5, and the admin of the team
+adds its members in Settings › Remote access › Members. The same by hand, where `<owner>` is the
+GitHub login of the sponsor (a person, or an organization) and a member is a login or an account id:
+
+```
+web-ide-pod -data /var/lib/relay relay team list
+web-ide-pod -data /var/lib/relay relay team add <owner> <member>
+web-ide-pod -data /var/lib/relay relay team remove <owner> <member>
+web-ide-pod -data /var/lib/relay relay team admin <org> <github-login>
+```
+
+`team admin` names the admin of an organization's team when the organization refuses the OAuth app
+the relay proves its admins with (the panel says so). Teams need the GitHub link: they come from
+the sponsor list.
+
+On the hosted relay: `make vip ARGS="add bob -days 90"`, `make team ARGS="add acme bob"`,
+`make supporters` (over SSH, `RELAY_HOST`).
 
 ### What a self-hosted relay does not do
 

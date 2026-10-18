@@ -272,6 +272,41 @@ db=sqlite3.connect(sys.argv[1]); db.execute("INSERT INTO github (account, github
     lv = await waitLevel((v) => v.turn === 'Supporter · VIP · 12 d')
     assert(lv.turn === 'Supporter · VIP · 12 d' && lv.members === 'Supporter · VIP · 12 d', 'a sponsor who is a VIP too: ' + JSON.stringify(lv))
 
+    // The Team tier (#88): $50 a month gives 10 seats; the sponsor is the admin of its team and
+    // takes no seat. Members are added by account id (here made up: a member needs no pod).
+    const tier = JSON.stringify({ action: 'tier_changed', sponsorship: { created_at: new Date().toISOString(),
+      sponsor: { id: 4242, login: 'e2e' }, tier: { monthly_price_in_cents: 5000, is_one_time: false } } })
+    const tierSig = 'sha256=' + require('crypto').createHmac('sha256', 'e2e-hook').update(tier).digest('hex')
+    const tierHook = await fetch(process.env.E2E_RELAY_URL + '/_relay/github/webhook', { method: 'POST', body: tier,
+      headers: { 'Content-Type': 'application/json', 'X-GitHub-Event': 'sponsorship', 'X-Hub-Signature-256': tierSig } })
+    assert(tierHook.status === 204, 'the relay takes the $50 tier: ' + tierHook.status)
+    const seatsText = async () => {
+      await levelView()
+      await app.waitForSelector('[data-testid=team-seats]', { timeout: 10000 }).catch(() => {})
+      return (await app.locator('[data-testid=team-seats]').count()) ? (await app.textContent('[data-testid=team-seats]')).trim() : ''
+    }
+    let seatsNow = await seatsText()
+    assert(seatsNow === '0/10 seats' && (await app.textContent('[data-testid=team] h4')).includes('Team e2e'), 'a $50 sponsor manages its team: ' + seatsNow)
+    const newAccount = () => require('crypto').randomBytes(32).toString('base64url')
+    const first = newAccount()
+    await app.fill('[data-testid=team-add]', first)
+    await app.press('[data-testid=team-add]', 'Enter')
+    await app.waitForFunction(() => document.querySelector('[data-testid=team-seats]')?.textContent?.trim() === '1/10 seats', null, { timeout: 10000 })
+    assert((await app.locator('[data-testid=team-member]').count()) === 1, 'the member is listed')
+    assert(relayCLI('supporters').includes('team e2e'), 'relay supporters lists the member of the team')
+    for (let i = 0; i < 9; i++) relayCLI('team', 'add', 'e2e', newAccount())
+    seatsNow = await seatsText()
+    assert(seatsNow === '10/10 seats', 'nine more by the CLI: ' + seatsNow)
+    await app.fill('[data-testid=team-add]', newAccount())
+    await app.press('[data-testid=team-add]', 'Enter')
+    await app.waitForSelector('.toast:has-text("no seat left")', { timeout: 10000 })
+    assert((await app.locator('[data-testid=team-member]').count()) === 10, 'an eleventh member is refused')
+    await app.click('[data-testid=team-member]:first-child button:has-text("Remove")')
+    await app.waitForFunction(() => document.querySelector('[data-testid=team-seats]')?.textContent?.trim() === '9/10 seats', null, { timeout: 10000 })
+    assert(!relayCLI('team', 'list').includes(first), 'the member removed from the panel is off the team')
+    lv = await levelView()
+    assert(lv.turn === 'VIP' && lv.members === 'VIP', 'the $50 sponsor is a VIP itself, with no end: ' + JSON.stringify(lv))
+
     // 4. An invite for a phone: the code, the QR, and the fingerprint the admin compares.
     await app.click('[data-testid=members] button:has-text("Invite a device")')
     await app.waitForSelector('.qr svg', { timeout: 15000 })

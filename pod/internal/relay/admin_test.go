@@ -145,3 +145,56 @@ func TestAdminSupporters(t *testing.T) {
 		t.Errorf("the days left of a one-time payment: %q", lines[2])
 	}
 }
+
+// TestAdminTeam: `relay team add/remove/list/admin`, and the members within the seats in
+// `relay supporters`.
+func TestAdminTeam(t *testing.T) {
+	dir := t.TempDir()
+	st, err := OpenStore(filepath.Join(dir, "relay.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SaveSponsors([]Sponsor{{ID: "100", Login: "boss", Cents: 5000}, {ID: "9", Login: "acme", Cents: 7500, Org: true}, {ID: "5", Login: "small", Cents: 1000}}); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/users/drsmith" {
+			json.NewEncoder(w).Encode(map[string]any{"id": 4242, "login": "DrSmith"})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer fake.Close()
+	run := func(args ...string) (string, error) {
+		var out bytes.Buffer
+		err := runAdmin(dir, append([]string{"team"}, args...), &out, fake.URL)
+		return out.String(), err
+	}
+	member := testAccount(t).ID
+	if out, err := run("add", "boss", member); err != nil || !strings.Contains(out, "member of the team boss") {
+		t.Fatalf("add to the team of a person: %q %v", out, err)
+	}
+	if _, err := run("add", "small", member); err == nil || !strings.Contains(err.Error(), "Team tier") {
+		t.Fatalf("a sponsor below $50 has no team: %v", err)
+	}
+	if _, err := run("add", "acme", member); err == nil || !strings.Contains(err.Error(), "no admin yet") {
+		t.Fatalf("an organization needs its admin first: %v", err)
+	}
+	if out, err := run("admin", "acme", "drsmith"); err != nil || !strings.Contains(out, "@DrSmith manages the team acme (15 seats now)") {
+		t.Fatalf("admin: %q %v", out, err)
+	}
+	if out, err := run("add", "acme", "drsmith"); err != nil || !strings.Contains(out, "@DrSmith is a member of the team acme") {
+		t.Fatalf("add by login: %q %v", out, err)
+	}
+	if out, err := run("list"); err != nil || !strings.Contains(out, "boss  1/10") || !strings.Contains(out, "acme  1/15") || !strings.Contains(out, member) {
+		t.Fatalf("list: %q %v", out, err)
+	}
+	var out bytes.Buffer
+	if err := runAdmin(dir, []string{"supporters"}, &out, ""); err != nil || !strings.Contains(out.String(), "team boss") || !strings.Contains(out.String(), "team acme") {
+		t.Fatalf("supporters lists the members: %q %v", out.String(), err)
+	}
+	if out, err := run("remove", "acme", "drsmith"); err != nil || !strings.Contains(out, "no longer a member") {
+		t.Fatalf("remove by login: %q %v", out, err)
+	}
+}

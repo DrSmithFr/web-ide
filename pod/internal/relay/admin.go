@@ -3,13 +3,11 @@ package relay
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -25,11 +23,14 @@ import (
 //	web-ide-pod relay vip add <login|account> [-note …] [-days N | -until YYYY-MM-DD]
 //	web-ide-pod relay vip remove <login|account>
 //	web-ide-pod relay vip list
+//	web-ide-pod relay team list
+//	web-ide-pod relay team add|remove <owner> <login|account>
+//	web-ide-pod relay team admin <org> <login>
 //	web-ide-pod relay supporters
 
 // IsAdminCommand reports whether the words after "relay" are an admin command, not the server.
 func IsAdminCommand(args []string) bool {
-	return len(args) > 0 && (args[0] == "vip" || args[0] == "supporters")
+	return len(args) > 0 && (args[0] == "vip" || args[0] == "team" || args[0] == "supporters")
 }
 
 // admin is one run of a command: the base, where it writes, and the GitHub API a login is
@@ -70,6 +71,12 @@ func runAdmin(dataDir string, args []string, out io.Writer, apiBase string) erro
 		return a.vipRemove(args[2:])
 	case len(args) >= 2 && args[0] == "vip" && args[1] == "list":
 		return a.vipList()
+	case len(args) == 2 && args[0] == "team" && args[1] == "list":
+		return a.teamList()
+	case len(args) == 4 && args[0] == "team" && (args[1] == "add" || args[1] == "remove"):
+		return a.teamChange(args[1], args[2], args[3])
+	case len(args) == 4 && args[0] == "team" && args[1] == "admin":
+		return a.teamAdmin(args[2], args[3])
 	case len(args) == 1 && args[0] == "supporters":
 		return a.supporters()
 	}
@@ -80,6 +87,9 @@ const adminUsage = `usage:
   web-ide-pod [-data DIR] relay vip add <login|account> [-note TEXT] [-days N | -until YYYY-MM-DD]
   web-ide-pod [-data DIR] relay vip remove <login|account>
   web-ide-pod [-data DIR] relay vip list
+  web-ide-pod [-data DIR] relay team list
+  web-ide-pod [-data DIR] relay team add|remove <owner> <login|account>
+  web-ide-pod [-data DIR] relay team admin <org> <login>
   web-ide-pod [-data DIR] relay supporters`
 
 // isAccountID tells an account id from a GitHub login: an account id is the base64url of an
@@ -267,6 +277,33 @@ func (a *admin) supporters() error {
 		r.sources = append(r.sources, "vip")
 		r.note = v.Note
 	}
+	// The members of a team within its seats (#88).
+	teams, err := a.st.Teams("")
+	if err != nil {
+		return err
+	}
+	for _, t := range teams {
+		n := a.st.TeamSeats(t.OwnerID)
+		members, _ := a.st.TeamMembers(t.OwnerID)
+		for i, m := range members {
+			if i >= n {
+				break
+			}
+			var r *supporterRow
+			if m.Kind == vipGitHub {
+				r = row("github:"+m.ID, "@"+m.Login)
+			} else {
+				who := m.ID
+				if _, login, _ := a.st.GitHubLink(m.ID); login != "" {
+					who = m.ID + " (@" + login + ")"
+				}
+				r = row("account:"+m.ID, who)
+				r.accounts = []string{m.ID}
+			}
+			lift(r, LevelVIP, 0)
+			r.sources = append(r.sources, "team "+t.Name)
+		}
+	}
 	list := make([]*supporterRow, 0, len(rows))
 	for key, r := range rows {
 		if id, ok := strings.CutPrefix(key, "github:"); ok {
@@ -296,6 +333,142 @@ func (a *admin) supporters() error {
 	return w.Flush()
 }
 
+// ownerTeam finds the team of an owner by its login: a team already made, or the sponsor row of a
+// person at the Team tier, whose team is made with them as its admin.
+func (a *admin) ownerTeam(owner string) (*Team, error) {
+	owner = strings.TrimPrefix(owner, "@")
+	teams, err := a.st.Teams("")
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range teams {
+		if strings.EqualFold(t.Name, owner) {
+			return &t, nil
+		}
+	}
+	sp := a.sponsorByLogin(owner)
+	switch {
+	case sp == nil:
+		return nil, fmt.Errorf("%s is not a sponsor", owner)
+	case seats(*sp) == 0:
+		return nil, fmt.Errorf("%s does not sponsor at the Team tier ($50 a month or more)", owner)
+	case sp.Org:
+		return nil, fmt.Errorf("%s has no admin yet: relay team admin %s <login>", owner, sp.Login)
+	}
+	t := Team{OwnerID: sp.ID, Name: sp.Login, AdminID: sp.ID}
+	return &t, a.st.PutTeam(t)
+}
+
+func (a *admin) sponsorByLogin(login string) *Sponsor {
+	list, _ := a.st.sponsors()
+	for _, sp := range list {
+		if strings.EqualFold(sp.Login, login) {
+			return &sp
+		}
+	}
+	return nil
+}
+
+func (a *admin) teamList() error {
+	teams, err := a.st.Teams("")
+	if err != nil {
+		return err
+	}
+	w := tabwriter.NewWriter(a.out, 0, 2, 2, ' ', 0)
+	fmt.Fprintln(w, "TEAM\tSEATS\tADMIN\tMEMBER")
+	for _, t := range teams {
+		members, _ := a.st.TeamMembers(t.OwnerID)
+		n := a.st.TeamSeats(t.OwnerID)
+		admin := t.AdminID
+		if t.AdminID == t.OwnerID {
+			admin = "@" + t.Name
+		} else if accounts, _ := a.st.LinkedAccounts(t.AdminID); len(accounts) > 0 {
+			if _, login, _ := a.st.GitHubLink(accounts[0]); login != "" {
+				admin = "@" + login
+			}
+		}
+		fmt.Fprintf(w, "%s\t%d/%d\t%s\t\n", t.Name, len(members), n, admin)
+		for i, m := range members {
+			name := m.ID
+			if m.Login != "" {
+				name = "@" + m.Login
+			}
+			if i >= n {
+				name += " (beyond the seats)"
+			}
+			fmt.Fprintf(w, "\t\t\t%s\n", name)
+		}
+	}
+	return w.Flush()
+}
+
+func (a *admin) teamChange(op, owner, who string) error {
+	t, err := a.ownerTeam(owner)
+	if err != nil {
+		return err
+	}
+	var m TeamMember
+	if isAccountID(who) {
+		m = TeamMember{Kind: vipAccount, ID: who}
+	} else if op == "remove" && a.memberByLogin(t.OwnerID, who) != nil {
+		m = *a.memberByLogin(t.OwnerID, who)
+	} else {
+		id, login, err := a.githubUser(who)
+		if err != nil {
+			return err
+		}
+		m = TeamMember{Kind: vipGitHub, ID: id, Login: login}
+	}
+	name := m.ID
+	if m.Login != "" {
+		name = "@" + m.Login
+	}
+	if op == "add" {
+		if err := a.st.AddTeamMember(t.OwnerID, m); err != nil {
+			return err
+		}
+		fmt.Fprintf(a.out, "%s is a member of the team %s\n", name, t.Name)
+		return nil
+	}
+	ok, err := a.st.RemoveTeamMember(t.OwnerID, m.Kind, m.ID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("%s is not a member of the team %s", name, t.Name)
+	}
+	fmt.Fprintf(a.out, "%s is no longer a member of the team %s\n", name, t.Name)
+	return nil
+}
+
+func (a *admin) memberByLogin(ownerID, login string) *TeamMember {
+	members, _ := a.st.TeamMembers(ownerID)
+	for _, m := range members {
+		if m.Kind == vipGitHub && strings.EqualFold(m.Login, strings.TrimPrefix(login, "@")) {
+			return &m
+		}
+	}
+	return nil
+}
+
+// teamAdmin names the admin of an organization's team by hand, when the organization refuses the
+// OAuth app the relay proves its admins with.
+func (a *admin) teamAdmin(org, login string) error {
+	sp := a.sponsorByLogin(strings.TrimPrefix(org, "@"))
+	if sp == nil || !sp.Org {
+		return fmt.Errorf("%s is not an organization sponsoring the project", org)
+	}
+	id, exact, err := a.githubUser(login)
+	if err != nil {
+		return err
+	}
+	if err := a.st.PutTeam(Team{OwnerID: sp.ID, Org: true, Name: sp.Login, AdminID: id}); err != nil {
+		return err
+	}
+	fmt.Fprintf(a.out, "@%s manages the team %s (%d seats now)\n", exact, sp.Login, seats(*sp))
+	return nil
+}
+
 // endText is an end the way the admin reads it: the day, and the days left (or ended).
 func (a *admin) endText(until int64) string {
 	t := time.Unix(until, 0)
@@ -322,35 +495,11 @@ func dollars(cents int64) string {
 
 // githubUser resolves a login to its GitHub id and exact login (no token: /users is public).
 func (a *admin) githubUser(login string) (id, exact string, err error) {
-	login = strings.TrimPrefix(login, "@")
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.apiBase+"/users/"+url.PathEscape(login), nil)
-	if err != nil {
-		return "", "", err
+	id, exact, err = githubAccount(ctx, a.client, a.apiBase, "users", login, "")
+	if err != nil && strings.Contains(err.Error(), "no GitHub account") {
+		return "", "", fmt.Errorf("no GitHub user %q (an account id is 43 characters)", strings.TrimPrefix(login, "@"))
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "web-ide-relay")
-	res, err := a.client.Do(req)
-	if err != nil {
-		return "", "", fmt.Errorf("github: %v", err)
-	}
-	defer res.Body.Close()
-	if res.StatusCode == http.StatusNotFound {
-		return "", "", fmt.Errorf("no GitHub user %q (an account id is 43 characters)", login)
-	}
-	if res.StatusCode != http.StatusOK {
-		return "", "", fmt.Errorf("github: /users/%s answered %d", login, res.StatusCode)
-	}
-	var out struct {
-		ID    int64  `json:"id"`
-		Login string `json:"login"`
-	}
-	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
-		return "", "", err
-	}
-	if out.ID == 0 {
-		return "", "", fmt.Errorf("github: /users/%s gave no id", login)
-	}
-	return strconv64(out.ID), out.Login, nil
+	return id, exact, err
 }
