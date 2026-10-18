@@ -19,8 +19,11 @@ const DefaultAddr = "127.0.0.1:4433"
 const DefaultRelay = "wss://antennae.space"
 
 type Config struct {
-	Addr      string `json:"addr"`
-	Workspace string `json:"workspace"`
+	Addr string `json:"addr"`
+	// Projects is the projects folder: where new projects are made (default ~/Apps).
+	Projects string `json:"projects"`
+	// Workspace is the former key of Projects, still read (and no longer written).
+	Workspace string `json:"workspace,omitempty"`
 	// PublicURL is the address the user opens the IDE at from anywhere, for the links given to
 	// Claude Code; empty: the page of the pod on its relay (paired), else http://<addr>.
 	PublicURL string `json:"publicUrl,omitempty"`
@@ -55,9 +58,13 @@ func Load(st *store.Store) (*Config, error) {
 	if cfg.Addr == "" {
 		cfg.Addr = DefaultAddr
 	}
-	if cfg.Workspace == "" {
+	if cfg.Projects == "" {
+		cfg.Projects = cfg.Workspace
+	}
+	cfg.Workspace = ""
+	if cfg.Projects == "" {
 		home, _ := os.UserHomeDir()
-		cfg.Workspace = filepath.Join(home, "Apps")
+		cfg.Projects = filepath.Join(home, "Apps")
 	}
 	return cfg, nil
 }

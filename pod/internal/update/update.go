@@ -20,7 +20,8 @@ import (
 )
 
 // What the pod answers to the one that carried the request. The page shows the command for
-// not_service: a pod that does not run as the service cannot restart itself.
+// not_service (the name of the wire, from before the units): a pod that does not run as its
+// systemd unit cannot restart itself.
 const (
 	StatusRunning    = "running"
 	StatusNotService = "not_service"
@@ -28,7 +29,7 @@ const (
 )
 
 // UpdateCmdEnv replaces the install command: the hook of the browser tests, which has to restart a
-// pod that does not run as a service.
+// pod that does not run as a unit.
 const UpdateCmdEnv = "WEBIDE_UPDATE_CMD"
 
 // InstalledScript is the copy of scripts/install.sh the installer leaves next to the binary it
@@ -51,11 +52,11 @@ type Handler struct {
 	Identity *identity.PodIdentity
 	Own      string // the device key of this pod: a request must name this pod
 
-	// Service reports whether this pod runs as the systemd user service, the only case where it can
+	// Unit reports whether this pod runs as its systemd user unit, the only case where it can
 	// restart itself. Start runs the command detached. Both are fields so the tests do not need
 	// systemd, and a pod that cannot run the command says so instead of failing quietly.
-	Service func() bool
-	Start   func(cmd []string) error
+	Unit  func() bool
+	Start func(cmd []string) error
 	// Script is the installer this pod may run (InstalledScript by default).
 	Script string
 
@@ -65,7 +66,7 @@ type Handler struct {
 
 // New makes the handler of a pod.
 func New(id *identity.PodIdentity) *Handler {
-	return &Handler{Identity: id, Own: id.ID(), Service: AsService, Start: Detached, Script: InstalledScript(), seen: map[string]bool{}}
+	return &Handler{Identity: id, Own: id.ID(), Unit: AsUnit, Start: Detached, Script: InstalledScript(), seen: map[string]bool{}}
 }
 
 // Run checks a request and, when the pod can trust it, starts the install. The answer goes out
@@ -110,15 +111,15 @@ func Command(version string) string {
 	return "scripts/install.sh " + version
 }
 
-// command builds the command that installs the tag. As the service it goes through systemd-run, in
+// command builds the command that installs the tag. As the unit it goes through systemd-run, in
 // a unit of its own: the installer restarts web-ide-pod, and a child of the pod would be killed by
 // that restart before it finished.
 func (h *Handler) command(version string) ([]string, error) {
 	if hook := os.Getenv(UpdateCmdEnv); hook != "" {
 		return []string{"/bin/sh", "-c", hook}, nil
 	}
-	if !h.Service() {
-		return nil, i18n.New("this pod does not run as the service")
+	if !h.Unit() {
+		return nil, i18n.New("this pod does not run as its systemd unit")
 	}
 	script := h.Script
 	if script == "" {
@@ -140,10 +141,10 @@ func Suffix() string {
 	return hex.EncodeToString(b)
 }
 
-// AsService reports whether this process is the web-ide-pod systemd user service: systemd sets
+// AsUnit reports whether this process is the web-ide-pod systemd user unit: systemd sets
 // INVOCATION_ID for every unit, and the cgroup names the unit. A pod started by hand, in a terminal
 // or by the browser tests, is not.
-func AsService() bool {
+func AsUnit() bool {
 	if os.Getenv("INVOCATION_ID") == "" {
 		return false
 	}

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Browser tests: builds nothing, uses ../bin/web-ide-pod and the front in ../pod/webdist/dist.
-# Each suite gets a fresh pod (temporary data and workspace); suites ending with "+" reuse
+# Each suite gets a fresh pod (temporary data and projects folder); suites ending with "+" reuse
 # the pod of the previous one (session restore tests). Usage: ./run.sh [-j N] [suite...]
 # -j N (or E2E_JOBS): N workers run the suites in parallel, each one with its own temporary
 # folder and block of ports (default: a quarter of the CPUs, 8 at most; -j 1: one by one).
@@ -162,11 +162,11 @@ PY
     KEEPER_PID=$!
     for _ in $(seq 50); do [ -S "$TMP/data/keeper.sock" ] && break; sleep 0.1; done
   fi
-  # A git identity for the commits of the tests: CI runners have none. The workspace is in
+  # A git identity for the commits of the tests: CI runners have none. The projects folder is in
   # /tmp: another scratch folder keeps the approvals of the changes out of the projects.
   cat >"$TMP/launch-pod.sh" <<EOF
 GIT_AUTHOR_NAME=e2e GIT_AUTHOR_EMAIL=e2e@x GIT_COMMITTER_NAME=e2e GIT_COMMITTER_EMAIL=e2e@x \\
-WEBIDE_INSTRUCTIONS_HOME="$TMP/home" WEBIDE_SCRATCH="$TMP/scratch" WEBIDE_CLAUDE="$ROOT/e2e/bin/claude" PATH="$ROOT/e2e/bin:$HOME/go/bin:$HOME/sdk/go/bin:$PATH" "$ROOT/bin/web-ide-pod" -addr "127.0.0.1:$PORT" -data "$TMP/data" -workspace "$TMP/ws" \\
+WEBIDE_INSTRUCTIONS_HOME="$TMP/home" WEBIDE_SCRATCH="$TMP/scratch" WEBIDE_CLAUDE="$ROOT/e2e/bin/claude" PATH="$ROOT/e2e/bin:$HOME/go/bin:$HOME/sdk/go/bin:$PATH" "$ROOT/bin/web-ide-pod" -addr "127.0.0.1:$PORT" -data "$TMP/data" -projects "$TMP/ws" \\
   -static "$ROOT/pod/webdist/dist" ${EXTRA[@]+"${EXTRA[@]}"} >>"$TMP/pod.log" 2>&1 </dev/null &
 echo \$! >"$TMP/pod.pid"
 for _ in \$(seq 50); do [ -s "$TMP/data/token" ] && curl -s -o /dev/null "http://127.0.0.1:$PORT/" && break; sleep 0.1; done

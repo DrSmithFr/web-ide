@@ -57,8 +57,8 @@ run(async ({ page }) => {
   // The "?" of a settings section: the window closes, the page opens at its heading.
   await page.keyboard.press('Control+Alt+s')
   await page.waitForSelector('.settings')
-  await page.click('.settings-nav button:has-text("Workspace and pod")')
-  await page.click('[data-testid=help-settings\\.workspace]')
+  await page.click('.settings-nav button:has-text("Projects folder and pod")')
+  await page.click('[data-testid=help-settings\\.projects]')
   await page.waitForFunction(() => !document.querySelector('.settings'))
   await shown('docs/guide.md#projects')
   const t = await top('projects')

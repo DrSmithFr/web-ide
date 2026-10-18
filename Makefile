@@ -62,7 +62,7 @@ shots: build
 install: build
 	install -Dm755 $(BIN) $(HOME)/.local/bin/web-ide-pod
 
-# Runs this build as a systemd user service started at boot (scripts/install.sh; releases are
+# Runs this build as a systemd user unit started at boot (scripts/install.sh; releases are
 # installed the same way: scripts/install.sh v1.0.0). The URL with the token is in
 # `journalctl --user -u web-ide-pod`, or in ~/.web-ide/token.
 service: build
@@ -96,7 +96,7 @@ deploy-relay:
 relay-build: web pod/webdist/dist docs-content
 	cd pod && GOOS=linux GOARCH=amd64 $(GO) build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o ../bin/web-ide-pod-relay .
 
-# The load test of the relay (#72): a second relay on the same host, with its own service, data
+# The load test of the relay (#72): a second relay on the same host, with its own unit, data
 # folder and a narrow TURN port range (500 relay ports), driven by pod/internal/relayload over the
 # network. LOAD_TIER is static, signal or turn; LOAD_PODS, LOAD_SESSIONS, LOAD_MB, LOAD_RAMP and
 # LOAD_HOLD size the run. `make load-relay-down` takes the test relay back off.

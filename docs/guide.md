@@ -30,7 +30,7 @@ Then, as you need them: [account and devices](howto/account-and-devices.md), [po
 
 ![The home page with the project and its icon](images/home.png)
 
-The home page lists your projects and the folders of the workspace not added yet: click one to open it. A project is a local folder or a folder on an SSH host (same features, through your local SSH keys). Each project gets an icon, generated from its name and editable.
+The home page lists your projects and the folders of the projects folder not added yet: click one to open it. A project is a local folder or a folder on an SSH host (same features, through your local SSH keys). Each project gets an icon, generated from its name and editable.
 
 A project opens in its own window, and comes back as you left it, in any browser connected to the same pod: tabs, splits, carets, terminals.
 
@@ -134,7 +134,7 @@ This documentation is inside the IDE, read only, and always the one of the versi
 
 ## Where the data lives
 
-- `~/.web-ide/`: settings (with their history), projects, sessions, model servers, secrets (mode 0600), the access token.
+- `~/.web-ide/`: settings (with their history), projects, the state of the desks, model servers, secrets (mode 0600), the access token.
 - `<project>/.ide/`: conversations (`chats.db`), kanban (`kanban.db`), worktrees of the tickets, database connections, folder marks, icon. The whole folder is ignored by git (its `.gitignore` is `*`); the worktrees use the `.ide` of the main project.
 - Audio and private keys never leave your machine.
 

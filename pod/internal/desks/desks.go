@@ -1,13 +1,13 @@
-package sessions
+package desks
 
 import (
 	"encoding/json"
 	"strconv"
 )
 
-// A desk is a session of its own on a project (its layout, tabs and tools), as the virtual
+// A desk has a state of its own on a project (its layout, tabs and tools), as the virtual
 // desktops of a desktop environment. The list of the desks of a project, and what they
-// share (the Recent Files), is in sessions/<project>.desks.json.
+// share (the Recent Files), is in desks/<project>.desks.json.
 type Desk struct {
 	N    int    `json:"n"`
 	Name string `json:"name,omitempty"`
@@ -20,7 +20,7 @@ type DeskList struct {
 	Recent []string `json:"recent"`
 }
 
-// Key is the session key of a desk: the project id for desk 1 (the session it had before
+// Key is the state key of a desk: the project id for desk 1 (the state it had before
 // desks), id@N for the others.
 func Key(id string, desk int) string {
 	if desk <= 1 {
@@ -29,17 +29,18 @@ func Key(id string, desk int) string {
 	return id + "@" + strconv.Itoa(desk)
 }
 
-func desksName(id string) string { return "sessions/" + id + ".desks.json" }
+func desksName(id string) string { return "desks/" + id + ".desks.json" }
 
 // Desks is the desk list of a project. Without a file it is desk 1 alone, with the Recent
-// Files taken from its session (where they were before desks).
-func (s *Sessions) Desks(id string) DeskList {
+// Files taken from the state of desk 1 (where they were before desks).
+func (s *Store) List(id string) DeskList {
 	s.mu.Lock()
 	if d, ok := s.desks[id]; ok {
 		defer s.mu.Unlock()
 		return clone(d)
 	}
 	s.mu.Unlock()
+	s.migrate(id + ".desks.json")
 	var d DeskList
 	if err := s.st.ReadJSON(desksName(id), &d); err != nil {
 		var old struct{ Recent []string }
@@ -57,8 +58,8 @@ func (s *Sessions) Desks(id string) DeskList {
 }
 
 // HasDesk tells whether desk n exists on the project.
-func (s *Sessions) HasDesk(id string, n int) bool {
-	for _, d := range s.Desks(id).Desks {
+func (s *Store) HasDesk(id string, n int) bool {
+	for _, d := range s.List(id).Desks {
 		if d.N == n {
 			return true
 		}
@@ -66,10 +67,10 @@ func (s *Sessions) HasDesk(id string, n int) bool {
 	return false
 }
 
-// PutDesks replaces the desk list (desk 1 is always kept) and removes the sessions of the
+// PutList replaces the desk list (desk 1 is always kept) and removes the state of the
 // desks no longer listed.
-func (s *Sessions) PutDesks(id string, d DeskList) DeskList {
-	prev := s.Desks(id)
+func (s *Store) PutList(id string, d DeskList) DeskList {
+	prev := s.List(id)
 	d = normalize(d)
 	s.mu.Lock()
 	s.desks[id] = &d

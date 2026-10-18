@@ -1,5 +1,5 @@
 #!/bin/sh
-# Installs the pod as a systemd user service that starts at boot (Linux).
+# Installs the pod as a systemd user unit that starts at boot (Linux).
 #
 #   install.sh                     latest release from GitHub
 #   install.sh v1.0.0              a given release
@@ -8,7 +8,7 @@
 #
 # The binary goes to ~/.local/bin/web-ide-pod, the unit to ~/.config/systemd/user/web-ide-pod.service.
 # Running it again upgrades the pod; data in ~/.web-ide is kept.
-# A second service, web-ide-keeper (a copy of the binary in ~/.local/lib/web-ide), runs the
+# A second unit, web-ide-keeper (a copy of the binary in ~/.local/lib/web-ide), runs the
 # terminals: they survive the updates of the pod. It is replaced only when its protocol changes,
 # and then updates itself in place (re-exec, same process): its terminals stay.
 set -eu
@@ -29,8 +29,8 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-[ "$(uname -s)" = Linux ] || { echo "The service needs Linux and systemd. On macOS, run the binary directly." >&2; exit 1; }
-command -v systemctl >/dev/null || { echo "systemctl not found: the service needs systemd." >&2; exit 1; }
+[ "$(uname -s)" = Linux ] || { echo "The unit needs Linux and systemd. On macOS, run the binary directly." >&2; exit 1; }
+command -v systemctl >/dev/null || { echo "systemctl not found: the unit needs systemd." >&2; exit 1; }
 
 BIN_DIR=$HOME/.local/bin
 UNIT_DIR=$HOME/.config/systemd/user
@@ -114,7 +114,7 @@ RestartSec=2
 WantedBy=default.target
 EOF
 
-# Lingering starts the user services at boot, without an open session.
+# Lingering starts the user units at boot, without an open session.
 if [ "$(loginctl show-user "$(id -un)" -p Linger --value 2>/dev/null)" != yes ]; then
   loginctl enable-linger "$(id -un)" || echo "warning: loginctl enable-linger failed; the pod will start with your session only" >&2
 fi

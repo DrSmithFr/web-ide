@@ -46,7 +46,7 @@ exports.start = async (opts = {}) => {
 exports.openProject = async (page) => {
   await page.waitForSelector('.home .home-bar')
   await page.waitForFunction(() => document.querySelector('.project-list .project-card, .ws-dir'))
-  // Fresh data: the project is added from the workspace folders.
+  // Fresh data: the project is added from the folders of the projects folder.
   if (await page.$('.project-open:has-text("demo")')) await page.click('.project-open:has-text("demo")')
   else await page.click('.ws-dir:has-text("demo")')
   await page.waitForSelector('.menubar')

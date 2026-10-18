@@ -5,7 +5,7 @@ A self-hosted IDE in your browser, with an AI assistant that runs on **your** mo
 ![The model develops a ticket in its own git worktree: it reads the code, edits, runs the tests and commits](docs/images/develop.gif)
 
 - **One binary, local first.** A small Go program, the *pod*, serves the interface and does the work on your machine: files, git, terminals, language servers, databases, model calls. No Electron, no cloud, no account.
-- **The same session everywhere.** Open it from another browser or device (over Tailscale) and find your tabs, splits and terminals as you left them.
+- **The same desk everywhere.** Open it from another browser or device (over Tailscale) and find your tabs, splits and terminals as you left them.
 - **A development cycle with the agent.** Briefing → plan → development in a worktree → test → merge, each step with its conversation, each decision yours.
 
 ## From an idea to a merged branch
@@ -36,7 +36,7 @@ The full walk-through is in the **[user guide](docs/guide.md)**; every page of t
 
 ## Install
 
-Linux, as a service started at boot ([details](docs/install/linux.md)):
+Linux, as a systemd unit started at boot ([details](docs/install/linux.md)):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/DrSmithFr/web-ide/main/scripts/install.sh | sh

@@ -31,9 +31,9 @@ func pod(t *testing.T) (*Handler, *identity.Account, ed25519.PrivateKey) {
 	}
 	browser := identity.KeyFromSeed(identity.Derive(a.Seed, "the browser"))
 	h := New(p)
-	// Not the service, no systemd: the tests watch the command that would run, with an installer of
+	// Not a unit, no systemd: the tests watch the command that would run, with an installer of
 	// their own in a folder of the test.
-	h.Service = func() bool { return true }
+	h.Unit = func() bool { return true }
 	h.Start = func(cmd []string) error { return nil }
 	h.Script = filepath.Join(t.TempDir(), "install.sh")
 	os.WriteFile(h.Script, []byte("#!/bin/sh\n"), 0o755)
@@ -147,24 +147,24 @@ func TestRunRefused(t *testing.T) {
 	}
 }
 
-// TestRunNotService: a pod that does not run as the service answers the command the user runs by
-// hand, and a service whose installer is missing does the same.
+// TestRunNotService: a pod that does not run as its unit answers the command the user runs by
+// hand, and a unit whose installer is missing does the same.
 func TestRunNotService(t *testing.T) {
 	h, a, browser := pod(t)
 	ran := false
 	h.Start = func(cmd []string) error { ran = true; return nil }
 
-	h.Service = func() bool { return false }
+	h.Unit = func() bool { return false }
 	ans := h.Run(request(t, h, browser, a, "v1.11.0", time.Now()))
 	if ans.Status != StatusNotService || ans.Command != "scripts/install.sh v1.11.0" {
-		t.Fatalf("a pod that is not the service gives the command: %+v", ans)
+		t.Fatalf("a pod that is not a unit gives the command: %+v", ans)
 	}
 
-	h.Service = func() bool { return true }
+	h.Unit = func() bool { return true }
 	h.Script = filepath.Join(t.TempDir(), "no-such-install.sh")
 	if ans := h.Run(request(t, h, browser, a, "v1.12.0", time.Now())); ans.Status != StatusNotService ||
 		!strings.Contains(ans.Message, "installer") || ans.Command != "scripts/install.sh v1.12.0" {
-		t.Fatalf("a service with no installed script gives the command too: %+v", ans)
+		t.Fatalf("a unit with no installed script gives the command too: %+v", ans)
 	}
 	if ran {
 		t.Fatal("nothing ran")
@@ -172,13 +172,13 @@ func TestRunNotService(t *testing.T) {
 }
 
 // TestRunHook: WEBIDE_UPDATE_CMD replaces the install command — the hook of the browser tests,
-// which restarts a pod that is not a service.
+// which restarts a pod that is not a unit.
 func TestRunHook(t *testing.T) {
 	dir := t.TempDir()
 	marker := filepath.Join(dir, "updated")
 	t.Setenv(UpdateCmdEnv, "touch "+marker)
 	h, a, browser := pod(t)
-	h.Service = func() bool { return false } // the hook answers for the service, wherever the pod runs
+	h.Unit = func() bool { return false } // the hook answers for the unit, wherever the pod runs
 	h.Start = Detached
 	ans := h.Run(request(t, h, browser, a, "v1.11.0", time.Now()))
 	if ans.Status != StatusRunning {
@@ -197,14 +197,14 @@ func fileExists(p string) bool {
 	return err == nil
 }
 
-// TestAsService: only the systemd user service of the pod can restart itself.
-func TestAsService(t *testing.T) {
+// TestAsUnit: only the systemd user unit of the pod can restart itself.
+func TestAsUnit(t *testing.T) {
 	t.Setenv("INVOCATION_ID", "")
-	if AsService() {
-		t.Fatal("without INVOCATION_ID, this is not a service")
+	if AsUnit() {
+		t.Fatal("without INVOCATION_ID, this is not a unit")
 	}
 	t.Setenv("INVOCATION_ID", "1234567890abcdef")
-	if AsService() {
-		t.Fatal("a process of another unit is not the pod service")
+	if AsUnit() {
+		t.Fatal("a process of another unit is not the pod unit")
 	}
 }

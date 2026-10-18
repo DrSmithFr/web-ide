@@ -224,7 +224,7 @@ func (s *Server) registerWorktrees() {
 			s.mu.Unlock()
 			s.closeRuntime(child)
 			_ = s.Projects.Delete(child)
-			s.Sessions.Delete(child)
+			s.Desks.Delete(child)
 		}
 		if err := rt.Git.RemoveWorktree(ctx, a.Path); err != nil {
 			return nil, err

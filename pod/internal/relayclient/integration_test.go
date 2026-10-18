@@ -30,13 +30,13 @@ import (
 	"github.com/pion/webrtc/v4"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/config"
+	"github.com/DrSmithFr/web-ide/pod/internal/desks"
 	"github.com/DrSmithFr/web-ide/pod/internal/hfcache"
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 	"github.com/DrSmithFr/web-ide/pod/internal/relay"
 	"github.com/DrSmithFr/web-ide/pod/internal/server"
-	"github.com/DrSmithFr/web-ide/pod/internal/sessions"
 	"github.com/DrSmithFr/web-ide/pod/internal/settings"
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
 	"github.com/DrSmithFr/web-ide/pod/internal/store"
@@ -161,7 +161,7 @@ func buildPod(t *testing.T) (*server.Server, *tunnel.RateLimiter) {
 	sets, _ := settings.Load(st)
 	s := &server.Server{
 		Cfg: cfg, Store: st, Token: podToken, Projects: reg, Settings: sets,
-		Sessions: sessions.New(st), LLM: llm.New(st), Models: hfcache.New(st.Path("models", "hf")),
+		Desks: desks.New(st), LLM: llm.New(st), Models: hfcache.New(st.Path("models", "hf")),
 		Pool:    sshx.NewPool(sshx.NewHostKeys(st.Path("known_hosts"))),
 		Static:  fstest.MapFS{"index.html": {Data: []byte(`<html><script src="./assets/app.js"></script>app</html>`)}},
 		Version: "1",

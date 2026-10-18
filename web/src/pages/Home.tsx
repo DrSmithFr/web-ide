@@ -1,5 +1,5 @@
 // Home page: one list of the projects of every pod of the account, the state of those pods,
-// creation of local or SSH projects, workspace folders not yet added.
+// creation of local or SSH projects, folders of the projects folder not yet added.
 import { base, podPath } from '../app/base'
 import { homeBase } from '../app/home'
 import { createEffect, createResource, createSignal, For, onCleanup, onMount, Show } from 'solid-js'
@@ -37,6 +37,7 @@ interface Project {
 
 export function Home() {
   const [projects, { refetch }] = createResource(() => request<Project[]>('projects.list'))
+  // workspace.get/dirs: the projects folder, under its old name on the wire (pods of other releases).
   const [ws, { refetch: refetchWs }] = createResource(() => request('workspace.get'))
   const [dirs, { refetch: refetchDirs }] = createResource(() => request('workspace.dirs', {}).catch(() => null))
   // The project form: a project of this pod (pod null) or of another one, which saves it itself.
@@ -138,7 +139,7 @@ export function Home() {
         <h1>Web IDE</h1>
         <span class="muted small mono" data-testid="pod-version">{ws()?.version}</span>
         <span class="grow" />
-        <button class="icon-btn" title={t('Settings')} onClick={() => openSettings('workspace')}>
+        <button class="icon-btn" title={t('Settings')} onClick={() => openSettings('projects')}>
           <Icon name="gear" />
         </button>
         <PodStatus />
@@ -147,7 +148,7 @@ export function Home() {
         <div class="home-bar">
           <h2>{t('Projects')}</h2>
           <span class="muted small">
-            {t('Workspace:')} <span class="mono">{ws()?.workspace}</span>
+            {t('Projects folder:')} <span class="mono">{ws()?.workspace}</span>
           </span>
           <span class="grow" />
           <button class="btn primary" onClick={() => setEditing({ p: { type: 'local' }, pod: null })}>
@@ -155,7 +156,7 @@ export function Home() {
           </button>
         </div>
         <div class="project-list">
-          <For each={entries()} fallback={<p class="muted">{projects.loading ? t('Loading…') : t('No project. Create one, or add a folder of the workspace below.')}</p>}>
+          <For each={entries()} fallback={<p class="muted">{projects.loading ? t('Loading…') : t('No project. Create one, or add one of the folders below.')}</p>}>
             {(e) =>
               e.pod ? (
                 <RemoteCard pod={e.pod} p={e.p as PodProject} onEdit={remoteEdit} onIcon={remoteIcon} onRemove={remoteRemove} />
@@ -196,7 +197,7 @@ export function Home() {
         </Show>
         <OpenTunnels />
         <Show when={available().length}>
-          <h3 class="home-sub">{t('In the workspace')}</h3>
+          <h3 class="home-sub">{t('In the projects folder')}</h3>
           <div class="ws-dirs">
             <For each={available()}>
               {(d: any) => (
@@ -412,7 +413,7 @@ function PodRow(props: { pod: PodInfo; self?: boolean }) {
         }
         toast(done[action], 'ok')
       } else if (ans.status === 'not_service') {
-        errorToast(new Error(t('That pod does not run as the service: it cannot restart itself.')))
+        errorToast(new Error(t('That pod does not run as its systemd unit: it cannot restart itself.')))
       } else {
         if (ans.command) setRefusal(ans)
         errorToast(new Error(ans.message ? t(ans.message) : t('the pod refused the request')))
@@ -512,7 +513,7 @@ function PodRow(props: { pod: PodInfo; self?: boolean }) {
       </Show>
       <Show when={answer()?.status === 'not_service'}>
         <div data-testid="pod-update-cmd">
-          <p class="small">{t('That pod does not run as the service: run this command there, then restart it:')}</p>
+          <p class="small">{t('That pod does not run as its systemd unit: run this command there, then restart it:')}</p>
           <pre class="mono small">{answer()!.command}</pre>
           <button class="btn small" onClick={() => void copyText(answer()!.command ?? '')}>{t('Copy')}</button>
         </div>
@@ -522,7 +523,7 @@ function PodRow(props: { pod: PodInfo; self?: boolean }) {
 }
 
 /** The form of a project: saved by the pod that holds it. A new project picks its pod among this
- * one and the pods it can ask (pods); the folder, the workspace and the SSH hosts are that pod's. */
+ * one and the pods it can ask (pods); the folder, the projects folder and the SSH hosts are that pod's. */
 function ProjectForm(props: {
   initial: Partial<Project>
   pod: PodInfo | null
@@ -550,13 +551,13 @@ function ProjectForm(props: {
           </select>
         </label>
       </Show>
-      {/* Everything below is the chosen pod's: a new form once its workspace is known. */}
+      {/* Everything below is the chosen pod's: a new form once its projects folder is known. */}
       <Show when={!ws.loading && ws()} keyed>
         {(w) => (
           <ProjectFields
             initial={isNew ? { ...props.initial, path: w.workspace ? w.workspace + '/' : '' } : props.initial}
             isNew={isNew}
-            workspace={w.workspace}
+            projectsFolder={w.workspace}
             call={call()}
             onClose={props.onClose}
             onSaved={(p) => props.onSaved(p, isNew, target())}
@@ -567,7 +568,7 @@ function ProjectForm(props: {
   )
 }
 
-function ProjectFields(props: { initial: Partial<Project>; isNew: boolean; workspace: string; call: Call; onClose: () => void; onSaved: (p: Project) => void }) {
+function ProjectFields(props: { initial: Partial<Project>; isNew: boolean; projectsFolder: string; call: Call; onClose: () => void; onSaved: (p: Project) => void }) {
   const [p, setP] = createStore<Project>({
     id: '',
     name: '',
@@ -612,14 +613,14 @@ function ProjectFields(props: { initial: Partial<Project>; isNew: boolean; works
         <label class="field">
           <span>{t('Folder')}</span>
           <div class="field-row">
-            <input class="grow mono" value={p.path} placeholder={props.workspace + '/my-project'} onInput={(e) => setP('path', e.currentTarget.value)} required />
+            <input class="grow mono" value={p.path} placeholder={props.projectsFolder + '/my-project'} onInput={(e) => setP('path', e.currentTarget.value)} required />
             <button type="button" class="btn" onClick={() => setBrowse(!browse())}>
               {t('Browse')}
             </button>
           </div>
         </label>
         <Show when={browse()}>
-          <FolderBrowser start={p.path.replace(/\/$/, '') || props.workspace} call={props.call} onPick={(d) => setP('path', d)} />
+          <FolderBrowser start={p.path.replace(/\/$/, '') || props.projectsFolder} call={props.call} onPick={(d) => setP('path', d)} />
         </Show>
       </Show>
       <Show when={p.type === 'ssh'}>

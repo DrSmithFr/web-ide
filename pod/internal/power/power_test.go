@@ -156,7 +156,7 @@ func handler(t *testing.T) (*Handler, *identity.Account, ed25519.PrivateKey, *re
 		return nil
 	})
 	h.Delay = 0
-	h.Service = func() bool { return true }
+	h.Unit = func() bool { return true }
 	h.Allowed = func() bool { return true }
 	h.Start = func(cmd, env []string) error {
 		rec.mu.Lock()
@@ -214,7 +214,7 @@ func TestRunActions(t *testing.T) {
 }
 
 // TestRunRefused: no rule, another pod, a replay, a bad action, a stale request, a pod that is not
-// the service.
+// the unit.
 func TestRunRefused(t *testing.T) {
 	h, a, browser, rec := handler(t)
 	h.Allowed = func() bool { return false }
@@ -241,9 +241,9 @@ func TestRunRefused(t *testing.T) {
 	if ans := h.Run(r); ans.Status != StatusRefused {
 		t.Fatalf("a replay: %+v", ans)
 	}
-	h.Service = func() bool { return false }
+	h.Unit = func() bool { return false }
 	if ans := h.Run(signed(a, browser, h.Own, identity.PowerRestart, time.Now().Add(2*time.Millisecond))); ans.Status != StatusNotService {
-		t.Fatalf("not the service: %+v", ans)
+		t.Fatalf("not a unit: %+v", ans)
 	}
 	if n := len(rec.wait(t, 2)); n != 2 {
 		t.Fatalf("only the two good restarts ran: %d", n)

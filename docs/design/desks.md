@@ -4,10 +4,10 @@ Status: **under discussion**. User desks and the layout modes are planned in tic
 
 ## Why
 
-- **Several screens.** Every window of a project shows the same session (`sessions/<project>.json`): two windows show the same layout. The detached views (`/project/:id/editor`, `/project/:id/tool/:toolId`) only half answer it.
+- **Several screens.** Every window of a project shows the same desk state (`desks/<project>.json`): two windows show the same layout. The detached views (`/project/:id/editor`, `/project/:id/tool/:toolId`) only half answer it.
 - **Agents working in the background.** The follow mode of the Agents tool opens the files of the agent in the window of the user and takes the focus. Consoles, commands, previews and agent processes run behind the windows with no single place to see or end them.
 
-The name: a **desk** (*bureau* in French), as the virtual desktops of GNOME and KDE. *Workspace* is taken by the folder of the pod.
+The name: a **desk** (*bureau* in French), as the virtual desktops of GNOME and KDE. *Workspace* is avoided: the folder of the pod is the *projects folder*, and a *session* is a run of an agent.
 
 ## Model
 
@@ -26,7 +26,7 @@ Project (or worktree)
 
 ## Layout modes
 
-Full and Grid are done in #82, Scroll in #83 (see [spec.md](spec.md#9-session-and-persistence)). Each desk picks its mode. The Full mode keeps the rails and tool zones; the two others need **tiles**: a file, a console, a tool (Git, kanban…), a conversation, a preview, each shown outside a zone. The detached routes prove a tool renders alone; it is the *Tab view / Tool* contribution point of the plugins.
+Full and Grid are done in #82, Scroll in #83 (see [spec.md](spec.md#9-desk-state-and-persistence)). Each desk picks its mode. The Full mode keeps the rails and tool zones; the two others need **tiles**: a file, a console, a tool (Git, kanban…), a conversation, a preview, each shown outside a zone. The detached routes prove a tool renders alone; it is the *Tab view / Tool* contribution point of the plugins.
 
 | Mode | Unit | Rails | Like |
 |---|---|---|---|
@@ -40,7 +40,7 @@ Full and Grid are done in #82, Scroll in #83 (see [spec.md](spec.md#9-session-an
 
 ## User desks
 
-Done in #81 (see [spec.md](spec.md#9-session-and-persistence)):
+Done in #81 (see [spec.md](spec.md#9-desk-state-and-persistence)):
 
 - Numbered `1 2 3 +` in the project bar; a desk may get a name.
 - The URL carries the desk: `/project/:id/desk/2`, `/project/:id` being desk 1. A click switches the window; a middle click opens it in a new tab (a plain `<a href>`). Two windows on the same desk mirror each other, as today. The home page opens the last desk of the device.
@@ -105,7 +105,7 @@ The binding of an agent to its desk holds for the tools of the IDE only: Claude 
 ## Order (if decided)
 
 1. **Ownership**: `owner` on the processes of the keeper, a cgroup per owner, the Activity list with its kills. Useful at once, without desks.
-2. **User desks** in Full mode: a session per desk, URL, switcher, migration of `sessions/<project>.json` (the current session becomes desk 1).
+2. **User desks** in Full mode: a state per desk, URL, switcher, migration of `sessions/<project>.json` to `desks/` (the current state becomes desk 1).
 3. **Agent desks**: one per development session, MCP scoped by desk, follow mode in its desk, conversation as a view, confinement and reserved ports.
 4. **Tiles** (tools outside zones), then the **Grid** mode.
 5. **Scroll** mode, then the phone on top of it.

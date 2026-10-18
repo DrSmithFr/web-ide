@@ -40,6 +40,7 @@ async function startPod(name, n, mode, { lanHost = '127.0.0.1', peers } = {}) {
   if (peers) fs.writeFileSync(path.join(data, 'config.json'), JSON.stringify({ lan: { peers } }))
   const port = LAN_PORT + 10 + 2 * n
   const log = fs.openSync(path.join(dir, 'pod.log'), 'a')
+  // -workspace is the former name of -projects: this suite keeps it, so the alias stays tested.
   const proc = spawn(BIN, ['-addr', `127.0.0.1:${port}`, '-data', data, '-workspace', ws, '-static', STATIC, '-lan', `${lanHost}:${port + 1}`, '-mdns=false', '-name', name, '-keeper', 'off'], {
     stdio: ['ignore', log, log],
   })
