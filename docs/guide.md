@@ -109,6 +109,8 @@ In **To test**, the ticket shows how to test, the goals, and the change against 
 
 A big change can be split into a **lineage**: a first ticket, the **root**, and its **steps** (the briefing proposes it, or *Make it a step of…* in the *Lineage* section of a ticket). Each step is developed in the root's worktree once the previous one is validated (*Validate the step* on the root, *Close* on a step), and the root is merged once all its steps are finished. A ticket can also wait for another lineage to be merged; a blocked ticket shows what it waits for, and *Start anyway…* goes past it. The *Roadmap* view of the board shows the lineages as rows of blocks as wide as their size, so you see what can start and how big the work ahead is.
 
+A whole feature can be a **milestone**: choose it in the header of a ticket (*New milestone…* creates one), or let a *Briefing* on the milestone write its user stories and its tickets. Each ticket recalls the milestone and its user stories in *How to test*. The milestone page gathers its spec, its stories, its tickets (validate those to test right there) and its own feedback (*Make a ticket* turns one into a ticket of the milestone). Once its tickets are finished, its stories checked and its feedback handled, you validate the milestone: only you can.
+
 ![The kanban after the merge](images/kanban.png)
 
 ![The Git panel: the ticket branch merged into main](images/git.png)

@@ -124,7 +124,7 @@ run(async ({ page, ctx }) => {
   await page.click('[data-testid=ticket-start]')
   await page.waitForSelector('[data-testid=ticket-status]:has-text("In progress")')
   assert(
-    (await page.isVisible('.tk-meta-row span.badge:has-text("priority")')) && (await page.isVisible('span[data-testid=ticket-size]')) && !(await page.$('.tk-meta-row select:not([data-testid=ticket-complexity])')),
+    (await page.isVisible('.tk-meta-row span.badge:has-text("priority")')) && (await page.isVisible('span[data-testid=ticket-size]')) && !(await page.$('.tk-meta-row select:not([data-testid=ticket-complexity]):not([data-testid=ticket-milestone])')),
     'In progress: priority and size fixed, shown as badges',
   )
   assert((await header()).join() === 'Review · Sonnet,Send to testing', 'In progress: Review (Sonnet for a medium ticket) and Send to testing in the header: ' + (await header()).join())

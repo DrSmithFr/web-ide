@@ -97,6 +97,12 @@ func Markdown(t *Ticket) string {
 	if s := strings.TrimSpace(t.TestSummary); s != "" {
 		fmt.Fprintf(&b, "\n## How to test\n%s\n", s)
 	}
+	if len(t.MilestoneStories) > 0 {
+		b.WriteString("\n## User stories of the milestone (the user checks them on the milestone)\n")
+		for _, s := range t.MilestoneStories {
+			fmt.Fprintf(&b, "- %s\n", indent(s.Text))
+		}
+	}
 	if len(t.FeedbackList) > 0 {
 		b.WriteString("\n## Test feedback\n")
 		for _, f := range t.FeedbackList {

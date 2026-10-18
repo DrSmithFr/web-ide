@@ -124,6 +124,7 @@ export interface Ticket extends Summary {
   /** Children of the lineage, in order. */
   children: Summary[]
   milestoneTitle?: string
+  milestoneStories?: { id: number; text: string; done: boolean }[]
 }
 
 export const statusOrder: Status[] = ['new', 'todo', 'in_progress', 'to_test', 'done', 'abandoned']
@@ -388,6 +389,10 @@ export function openBoard() {
 
 export function openTicket(id: number) {
   openTab({ kind: 'ticket', ticket: id, title: `#${id}` })
+}
+
+export function openMilestone(id: number) {
+  openTab({ kind: 'milestone', milestone: id, title: t('Milestone') })
 }
 
 export const [newTicketOpen, setNewTicketOpen] = createSignal(false)

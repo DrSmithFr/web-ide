@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"unicode/utf8"
 
@@ -139,8 +140,9 @@ type Ticket struct {
 	Attachments  []Attachment `json:"attachments"`
 	// Children of the lineage, in order.
 	Children []Summary `json:"children"`
-	// MilestoneTitle: the title of its milestone.
-	MilestoneTitle string `json:"milestoneTitle,omitempty"`
+	// MilestoneTitle and MilestoneStories: the title and the user stories of its milestone.
+	MilestoneTitle   string  `json:"milestoneTitle,omitempty"`
+	MilestoneStories []Story `json:"milestoneStories,omitempty"`
 }
 
 var ErrNotFound = i18n.New("ticket not found")
@@ -281,6 +283,12 @@ func get(db *sql.DB, id int64) (*Ticket, error) {
 	}
 	if t.Milestone != 0 {
 		_ = db.QueryRow(`SELECT title FROM milestones WHERE id = ?`, t.Milestone).Scan(&t.MilestoneTitle)
+		_ = eachRow(db, fmt.Sprintf(`SELECT id, text, done FROM stories WHERE milestone_id = %d ORDER BY pos, id`, t.Milestone), func(r *sql.Rows) error {
+			var s Story
+			err := r.Scan(&s.ID, &s.Text, &s.Done)
+			t.MilestoneStories = append(t.MilestoneStories, s)
+			return err
+		})
 	}
 	t.DependsOn = []int64{}
 	if deps, err := db.Query(`SELECT dep_id FROM deps WHERE ticket_id = ? ORDER BY dep_id`, id); err == nil {

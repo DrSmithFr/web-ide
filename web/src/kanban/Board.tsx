@@ -141,6 +141,13 @@ export function Card(props: { tk: Summary; compact?: boolean; closed?: boolean }
             ↳ #{tk().parent}
           </span>
         </Show>
+        <Show when={board.milestones.find((m) => m.id === tk().milestone)}>
+          {(m) => (
+            <span class="kb-badge kb-milestone ellipsis" title={t('Milestone: {title}', { title: m().title })} data-testid="card-milestone">
+              <Icon name="flag" size={10} /> {m().title}
+            </span>
+          )}
+        </Show>
         <Show when={tk().blockers?.length}>
           <span class="kb-badge blocked" title={t('Cannot start yet: {blockers}', { blockers: tk().blockers!.map(blockerText).join(', ') })} data-testid="card-blocked">
             <Icon name="lock" size={10} /> {tk().blockers!.map((b) => `#${b.id}`).join(' ')}

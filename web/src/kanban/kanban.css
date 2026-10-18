@@ -151,6 +151,7 @@ input.tk-title { padding: 2px 6px; }
 /* Lineage: badges of the cards, section of the ticket. */
 .kb-badge { display: inline-flex; align-items: center; gap: 3px; font-family: var(--font-code); font-size: 12px; color: var(--fg-muted); white-space: nowrap; }
 .kb-badge.blocked { color: var(--warn); }
+.kb-badge.kb-milestone { color: var(--accent); font-family: inherit; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
 .tk-lineage { display: flex; flex-direction: column; gap: 6px; }
 .tk-lineage .link { padding: 0; text-align: left; }
 .tk-blockers { display: flex; align-items: flex-start; gap: 6px; padding: 4px 8px; border-radius: 6px; background: color-mix(in srgb, var(--warn) 12%, transparent); }
@@ -200,3 +201,13 @@ input.tk-title { padding: 2px 6px; }
 .rm-swatch.blocked { border-style: dashed; opacity: 0.6; }
 .rm-swatch.new { background: repeating-linear-gradient(135deg, var(--bg-2) 0 3px, var(--bg-3) 3px 6px); }
 .rm-swatch.done { background: color-mix(in srgb, var(--ok) 30%, var(--bg-2)); opacity: 0.5; }
+
+/* Milestones: page, tickets To test validated there, reminder in a ticket. */
+.ms-open { --st: var(--accent); }
+.ms-validated { --st: var(--ok); }
+.ms-abandoned { --st: var(--fg-muted); }
+.ms-totest { border: 1px solid var(--line); border-left: 3px solid var(--st, #b48ef0); border-radius: var(--radius); padding: 6px 10px; margin: 4px 0; background: var(--bg-2); }
+.ms-reminder { border: 1px dashed var(--line); border-radius: var(--radius); padding: 6px 10px; margin-bottom: 8px; }
+.ms-stories { list-style: none; margin: 4px 0 0; padding: 0; font-size: 13px; }
+.ms-stories li { display: flex; align-items: baseline; gap: 6px; padding: 1px 0; }
+.ms-stories li.done { color: var(--fg-muted); }

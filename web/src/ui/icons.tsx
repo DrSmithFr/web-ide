@@ -9,6 +9,7 @@ const paths: Record<string, string> = {
   conflict: 'M12 3 2 20h20zM12 10v4M12 17v.5',
   outline: 'M4 6h3M10 6h10M6 12h3M12 12h8M6 18h3M12 18h8',
   puzzle: 'M10 4a2 2 0 1 1 4 0v2h4v4h-2a2 2 0 1 0 0 4h2v4h-4v-2a2 2 0 1 0-4 0v2H6v-4h2a2 2 0 1 0 0-4H6V6h4z',
+  flag: 'M5 21V4M5 4h12l-2.5 4 2.5 4H5',
   info: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM12 11v6M12 7.5v.5',
   question: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17v.5',
   terminal: 'M3 5h18v14H3zM7 9l3 3-3 3M12 15h5',

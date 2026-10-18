@@ -42,7 +42,7 @@ export interface Milestone extends MilestoneSummary {
   ticketList: Summary[]
 }
 
-export const milestoneStateNames: Record<MilestoneState, string> = { open: 'Open', validated: 'Validated', abandoned: 'Abandoned' }
+export const milestoneStateNames: Record<MilestoneState, string> = { open: 'Ongoing', validated: 'Validated', abandoned: 'Abandoned' }
 /** Longest user story, in characters (checked by the pod too). */
 export const MAX_STORY = 500
 
