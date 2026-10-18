@@ -10,7 +10,7 @@ import {
   abortGit, continueGit, filePatch, finishTicket, gitInfo, inWorktreeOf, mergeTicket, openPR, rebaseTicket, roleLabels, ticketDiff, ticketVersion, unlinkChat, updateTicket,
   validateStep, workTime, worktreeProject, type ChatRole, type Complexity, type Diff, type GitInfo, type GitOpState, type Status, type Ticket,
 } from './state'
-import { openTicketChat, openWorktree, startTicketChat, startWorkSession } from './sessions'
+import { openTicketChat, openWorktree, startDevelopment, startTicketChat, startWorkSession } from './sessions'
 import { devAgent, openAgentSession } from './agentSession'
 import { blockerText } from './Lineage'
 import { runClaude } from './claude'
@@ -110,20 +110,18 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
       ]
     case 'todo':
       return [
-        routed(
-          {
-            label: t('Start development'),
-            primary: true,
-            disabled: !!blocked,
-            title: blocked
-              ? t('Cannot start yet: {blockers}', { blockers: blocked })
-              : tk.parent
-                ? t('Starts this step in the worktree of #{id}, then a development conversation in its window', { id: tk.parent })
-                : t('Creates the branch and the worktree of the ticket, then starts a development conversation in its window'),
-            testid: 'ticket-start',
-          },
-          dev,
-        ),
+        {
+          label: t('Start development'),
+          primary: true,
+          disabled: !!blocked,
+          title: blocked
+            ? t('Cannot start yet: {blockers}', { blockers: blocked })
+            : tk.parent
+              ? t('Starts this step in the worktree of #{id}; the development session is started from the ticket', { id: tk.parent })
+              : t('Creates the branch and the worktree of the ticket; the development session is started from the ticket'),
+          run: () => void startDevelopment(tk),
+          testid: 'ticket-start',
+        },
         { label: t('Back to “New”'), run: () => void ctx.move('new'), more: true },
         { label: t('Redo the plan'), run: () => void startTicketChat(tk, 'plan'), more: true },
         { label: t('Redo the plan with Claude Code (Opus)'), run: () => runClaude(tk, 'plan'), more: true },
@@ -133,20 +131,26 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
                 label: t('Start anyway…'),
                 more: true,
                 run: () => {
-                  if (confirm(t('Ticket #{id} waits for {blockers}. Start it anyway?', { id: tk.id, blockers: blocked }))) void startWorkSession(tk, 'dev', undefined, true, undefined, recommended(dev).effort)
+                  if (confirm(t('Ticket #{id} waits for {blockers}. Start it anyway?', { id: tk.id, blockers: blocked }))) void startDevelopment(tk, true)
                 },
               },
             ]
           : []),
       ]
-    case 'in_progress':
+    case 'in_progress': {
+      // Starting the development opens no conversation: the first session is the main action.
+      const developing = tk.chatList.some((c) => c.role === 'dev')
       return [
         review,
-        { label: t('Send to testing'), primary: true, run: () => void ctx.move('to_test'), testid: 'ticket-to-test' },
+        ...(developing
+          ? []
+          : [routed({ label: t('Dev session'), primary: true, title: t('A development session in the worktree, following the plan'), testid: 'ticket-dev-session' }, dev)]),
+        { label: t('Send to testing'), primary: developing, run: () => void ctx.move('to_test'), testid: 'ticket-to-test' },
         ...worktree,
-        { label: t('New dev session'), run: () => dev.ai!(recommended(dev)), more: true },
+        ...(developing ? [{ label: t('New dev session'), run: () => dev.ai!(recommended(dev)), more: true }] : []),
         { label: t('Develop with Claude Code'), run: () => dev.claude(recommended(dev)), more: true },
       ]
+    }
     case 'to_test':
       return [
         { label: t('Add feedback'), run: ctx.focusFeedback, testid: 'ticket-feedback' },

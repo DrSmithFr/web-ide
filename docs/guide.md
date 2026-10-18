@@ -46,7 +46,7 @@ The pictures of this guide are made with Qwen3.8 27B on llama.cpp.
 
 The *Agents* tool (right bar) runs the coding agents installed on your machine in the IDE, through the Agent Client Protocol: Claude Code (with your subscription or API key, as in the terminal), opencode and pi. Open it, pick an agent: *Install* fetches a missing adapter (`npm`, into the data folder of the pod), opencode is installed by hand. Each session is a tab working in the project: type a prompt in the same box as the assistant (`@` for a file, `/` for the commands of the agent, files, images and doodles from the paperclip; Ctrl+Enter sends, a prompt sent during a turn waits for its end), follow its messages, tool calls and diffs, answer its permission cards and its questions, change its mode (the colored button, or Shift+Tab) or its model (at the right) under the box, as in the assistant. The options button holds its other settings (effort…); the ring shows the context used, and a click the work time and cost of the session and *Compact now*. The eye turns on the follow mode: each file the agent edits opens in the editor. A session keeps running when you close the window or update the pod; closing its tab ends it. The tooltip of a tab, the header of a ticket and the Infos tool show the work time and the cost of the agents (an *API equivalent* under a subscription).
 
-To develop the tickets with one of them instead of the assistant, choose it as the *Development agent* in the kanban settings: *Start development* then opens its session in the worktree of the ticket, briefed with the ticket and its plan, with the kanban tools of the IDE at hand (goals, notes, *To test*). The ticket's *Open the session* brings it back.
+To develop the tickets with one of them instead of the assistant, choose it as the *Development agent* in the kanban settings: *Dev session* then opens its session in the worktree of the ticket, briefed with the ticket and its plan, with the kanban tools of the IDE at hand (goals, notes, *To test*). The ticket's *Open the session* brings it back.
 
 When an agent needs you — a permission, a question of Claude, an `ask_user` — and its session is not on screen, the question opens in front of everything with what the agent said just before; *Later* leaves it in the *Questions* tool (right bar), which lists all of them. Turn *Open questions automatically* off at the top of that tool, or for one session from the menu of its tab.
 
@@ -58,7 +58,7 @@ Each project has a kanban. A ticket goes through four stages, each one with its 
 |---|---|---|
 | **New** | The need is clarified and written down | A *Briefing* conversation questions you and writes the ticket |
 | **To do** | The implementation plan and its goals | *Generate the plan*: the model reads the code and writes them |
-| **In progress** | The code, on its own branch and worktree | *Start development*: the model codes, tests and commits |
+| **In progress** | The code, on its own branch and worktree | *Start development*, then *Dev session*: the model codes, tests and commits |
 | **To test** | You check; feedback goes back to the model | You, then *Fix sessions*; finally merge and close |
 
 You decide every move between stages; the model works inside one.
@@ -85,7 +85,7 @@ On the ticket, *Generate the plan* starts a conversation in Plan mode: the model
 
 ![The model develops the ticket in its worktree](images/develop.gif)
 
-*Start development* creates the branch `ticket/<n>-<slug>` and a git worktree for it in `.ide/worktrees/`, runs the setup commands of the project in it (the Console commands flagged `setup`: `npm install`, copy a `.env`…), and shows it in the same window, where the model starts working:
+*Start development* creates the branch `ticket/<n>-<slug>` and a git worktree for it in `.ide/worktrees/`, runs the setup commands of the project in it (the Console commands flagged `setup`: `npm install`, copy a `.env`…), and shows it in the same window. No conversation starts by itself: *Dev session* (the main button of the ticket while none exists) starts the model there:
 
 - it follows the plan and the project instructions (`CLAUDE.md`, `AGENTS.md`, skills);
 - it reads, searches, edits files, uses the language servers and runs commands (build, tests);

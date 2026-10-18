@@ -11,7 +11,7 @@ import { catalog } from '../agents/state'
 import { openCommands } from '../console/CommandsModal'
 import { commands, loadCommands } from '../console/commands'
 import {
-  board, createTicket, ensureBoard, setMeta, newTicketOpen, openTicket, priorityLabels, setNewTicketOpen, statusLabels, workTime,
+  board, boardView, createTicket, setBoardView, ensureBoard, setMeta, newTicketOpen, openTicket, priorityLabels, setNewTicketOpen, statusLabels, workTime,
   MAX_DESCRIPTION, type Priority, type Status, type Summary,
 } from './state'
 import { blockerText } from './Lineage'
@@ -21,29 +21,13 @@ import './kanban.css'
 
 const active: Status[] = ['new', 'todo', 'in_progress', 'to_test']
 
-const VIEW_KEY = 'webide.kanban.view'
-function savedView(): 'board' | 'roadmap' {
-  try {
-    return localStorage.getItem(VIEW_KEY) === 'roadmap' ? 'roadmap' : 'board'
-  } catch {
-    return 'board'
-  }
-}
-
 export function Board() {
   onMount(ensureBoard)
   const [query, setQuery] = createSignal('')
   const [showClosed, setShowClosed] = createSignal(false)
   const [settingsOpen, setSettingsOpen] = createSignal(false)
-  const [view, setView] = createSignal<'board' | 'roadmap'>(savedView())
-  const choose = (v: 'board' | 'roadmap') => {
-    setView(v)
-    try {
-      localStorage.setItem(VIEW_KEY, v)
-    } catch {
-      /* private mode: the choice lasts for this window */
-    }
-  }
+  const view = boardView
+  const choose = setBoardView
   const filtered = createMemo(() => {
     const q = query().trim().toLowerCase()
     return board.tickets.filter(

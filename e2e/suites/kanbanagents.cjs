@@ -34,9 +34,11 @@ run(async ({ page }) => {
   await mcp('kanban_set_plan', { id: 1, plan: 'Write export.txt', goals: [{ title: 'export.txt exists' }], size: 's', complexity: 'medium' })
   await page.waitForSelector('[data-testid=ticket-status]:has-text("To do")')
 
-  // Start: the worktree, then the session of the ticket in the Agents tool.
+  // Start: the worktree; Dev session then opens the session of the ticket in the Agents tool.
   await page.click('[data-testid=ticket-start]')
   await page.waitForSelector('[data-testid=worktree-banner]:has-text("Ticket #1")', { timeout: 15000 })
+  await page.click('.pane .tab:has-text("#1")')
+  await page.click('[data-testid=ticket-dev-session]')
   await page.waitForSelector(`${tab} .tab-title:has-text("#1 Data export")`, { timeout: 15000 })
   await page.waitForSelector(`${tab}[data-state=ready] >> nth=0`, { timeout: 15000 })
   const answer = await page.waitForSelector('[data-testid=agent-message]:has-text("Briefing received")', { timeout: 15000 })

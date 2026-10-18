@@ -369,12 +369,12 @@ type Patch struct {
 	// Parent: 0 takes the ticket out of its lineage. DependsOn replaces the dependencies.
 	Parent    *int64   `json:"parent"`
 	DependsOn *[]int64 `json:"dependsOn"`
-	// PlanSize: the size comes with a plan, kept as is once the estimate is fixed.
+	// PlanSize: the size and the complexity come with a plan, kept as they are once the estimate is fixed.
 	PlanSize bool `json:"-"`
 }
 
-// Estimated tells whether the priority and the size of a ticket in this status may still
-// change: they are fixed once its development started.
+// Estimated tells whether the priority, the size and the complexity of a ticket in this
+// status may still change: they are fixed once its development started.
 func Estimated(status string) bool { return status == "new" || status == "todo" }
 
 func (p *Patch) validate() error {
@@ -504,16 +504,21 @@ func (m *Manager) Update(loc Location, id int64, p Patch, by string) error {
 		return err
 	}
 	return m.tx(loc, id, func(tx *sql.Tx, now int64) error {
-		var status, priority, size string
-		if err := tx.QueryRow(`SELECT status, priority, size FROM tickets WHERE id = ?`, id).Scan(&status, &priority, &size); err != nil {
+		var status, priority, size, complexity string
+		if err := tx.QueryRow(`SELECT status, priority, size, complexity FROM tickets WHERE id = ?`, id).Scan(&status, &priority, &size, &complexity); err != nil {
 			return err
 		}
 		if !Estimated(status) {
-			if p.Size != nil && *p.Size != size && p.PlanSize {
-				p.Size = nil
+			if p.PlanSize {
+				if p.Size != nil && *p.Size != size {
+					p.Size = nil
+				}
+				if p.Complexity != nil && *p.Complexity != complexity {
+					p.Complexity = nil
+				}
 			}
-			if (p.Priority != nil && *p.Priority != priority) || (p.Size != nil && *p.Size != size) {
-				return i18n.New("the priority and the size are fixed once the development started")
+			if (p.Priority != nil && *p.Priority != priority) || (p.Size != nil && *p.Size != size) || (p.Complexity != nil && *p.Complexity != complexity) {
+				return i18n.New("the priority, the size and the complexity are fixed once the development started")
 			}
 		}
 		set := func(col string, v *string) error {
