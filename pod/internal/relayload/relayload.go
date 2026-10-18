@@ -44,6 +44,8 @@ type Config struct {
 	// Insecure accepts the self-signed certificate a relay makes for itself (a test instance
 	// has no domain): the pages, the links and the TLS side of TURN are still measured.
 	Insecure bool
+
+	hc *http.Client // the HTTP client of the run, made once (client)
 }
 
 // transport is the HTTP transport of the run, with the certificate check off when Insecure is.
@@ -56,9 +58,16 @@ func (c *Config) transport() *http.Transport {
 	return tr
 }
 
-// client is the HTTP client of the run.
+// client is the HTTP client of the run: one for the whole run, so its connections are reused
+// (a client per request would open a socket per request and run a machine out of ports, and
+// leave its idle connections open after the run).
 func (c *Config) client() *http.Client {
-	return &http.Client{Timeout: 20 * time.Second, Transport: c.transport()}
+	if c.hc == nil {
+		tr := c.transport()
+		tr.MaxIdleConnsPerHost = max(c.Workers, 8)
+		c.hc = &http.Client{Timeout: 20 * time.Second, Transport: tr}
+	}
+	return c.hc
 }
 
 // dialOpts is the WebSocket option set of the run: the same client as the HTTP one, so an
@@ -168,12 +177,15 @@ func pct(sorted []time.Duration, p int) time.Duration {
 // Run drives one tier and reports what it took.
 func Run(ctx context.Context, c Config) (*Report, error) {
 	c.fill()
+	c.client() // made here, before the goroutines of the run share it
 	rep := &Report{Tier: c.Tier, Pods: c.Pods, Sessions: c.Sessions}
 	var mu sync.Mutex
 	stop := context.CancelFunc(func() {})
 	runCtx, cancel := context.WithCancel(ctx)
 	stop = cancel
 	defer stop()
+	// The connections of the run are closed with it, whatever ends it.
+	defer c.client().CloseIdleConnections()
 
 	// The relay is read while it is pushed on: the samples are what a ramp is compared with.
 	var samples []Status

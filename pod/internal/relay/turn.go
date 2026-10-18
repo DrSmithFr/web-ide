@@ -532,11 +532,16 @@ func (t *Turn) onAllocation(src, dst net.Addr, protocol, userID, realm string, r
 }
 
 func (t *Turn) onDeallocate(src, dst net.Addr, protocol, userID, realm string) {
+	// The allocation counts as open until its bytes are written: Close waits for that.
+	defer func() {
+		t.mu.Lock()
+		if t.allocs > 0 {
+			t.allocs--
+		}
+		t.mu.Unlock()
+	}()
 	t.mu.Lock()
 	delete(t.active, userID)
-	if t.allocs > 0 {
-		t.allocs--
-	}
 	t.mu.Unlock()
 	// The allocation is over: its bytes go to the base now, so the quota a key is held to is
 	// what it moved, not what it moved a minute ago.
@@ -591,6 +596,23 @@ func (t *Turn) Creds(podID, key string, ttl time.Duration) (user, pass string, e
 	return user, pass, nil
 }
 
+// closeWait bounds how long Close waits for the allocations to report their end.
+const closeWait = 5 * time.Second
+
+// waitAllocations waits until no allocation is open, or the delay is over.
+func (t *Turn) waitAllocations(d time.Duration) {
+	deadline := time.Now().Add(d)
+	for time.Now().Before(deadline) {
+		t.mu.Lock()
+		n := t.allocs
+		t.mu.Unlock()
+		if n == 0 {
+			return
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+}
+
 // Close stops the TURN server, its listeners, and the flush of the byte counters (what was
 // relayed is written before the relay stops).
 func (t *Turn) Close() error {
@@ -603,6 +625,11 @@ func (t *Turn) Close() error {
 	}
 	if t.srv != nil {
 		_ = t.srv.Close()
+		// Closing the sockets ends the allocations on goroutines of Pion's: each one reports
+		// OnAllocationDeleted, which writes its bytes to the base. Wait for them, so nothing
+		// writes once Close has returned (the base may be closed, or its folder removed, right
+		// after).
+		t.waitAllocations(closeWait)
 	}
 	for _, udp := range t.udp {
 		_ = udp.Close()

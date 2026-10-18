@@ -33,8 +33,10 @@ func runStatic(ctx context.Context, c *Config, rep *Report) error {
 					return
 				default:
 				}
+				mu.Lock()
 				path := staticFiles[n%len(staticFiles)]
 				n++
+				mu.Unlock()
 				at := time.Now()
 				size, err := fetch(ctx, client, c.RelayURL+path)
 				if err != nil {

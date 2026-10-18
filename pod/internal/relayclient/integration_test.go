@@ -105,13 +105,9 @@ func startEnv(t *testing.T, ident *identity.PodIdentity, route PeerRoute) *testE
 	httpSrv := httptest.NewServer(rsrv.Handler())
 	runCtx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(func() {
-		cancel() // the pod link drops; the relay's servePod handler marks the pod offline
-		// (a SQLite commit on its own goroutine, not waited by httpSrv.Close).
-		deadline := time.Now().Add(5 * time.Second)
-		for time.Now().Before(deadline) && st.OnlinePod("test-pod") {
-			time.Sleep(20 * time.Millisecond)
-		}
-		httpSrv.Close() // after the offline commit, so no journal file races the RemoveAll
+		cancel() // the pod link drops
+		httpSrv.Close()
+		rsrv.Close() // waits for the handlers of the links: the offline commit lands before the base closes
 		turn.Close()
 		st.Close()
 	})

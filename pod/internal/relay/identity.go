@@ -138,10 +138,11 @@ func mustJSON(v any) []byte {
 // The relay cannot approve a pairing by itself: the certificate it is shown must verify
 // against the account id, which only a device holding the account key can sign.
 func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
-	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+	ws, done, err := s.accept(w, r)
 	if err != nil {
 		return
 	}
+	defer done()
 	ws.SetReadLimit(wsReadLimit)
 	c := &identityConn{ws: ws, sessions: map[string]*browserConn{}}
 	defer func() {

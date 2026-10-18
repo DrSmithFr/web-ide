@@ -167,3 +167,29 @@ func relayDir(t *testing.T) string {
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	return dir
 }
+
+// TestCloseEndsLinks (#102): a pod link still open when the relay closes is ended, and its
+// handler has committed the pod offline by the time Close returns: nothing writes to the base
+// afterwards (a test removing the folder of the base right after used to fail at random).
+func TestCloseEndsLinks(t *testing.T) {
+	st, err := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	srv := New(st, nil)
+	ts := httptest.NewServer(srv.Handler())
+	pod := connectPod(t, ts, "pod-c", "secret-c", "laptop")
+	defer pod.close()
+	if !st.OnlinePod("pod-c") {
+		t.Fatal("the pod is not online")
+	}
+	ts.Close()
+	srv.Close()
+	if st.OnlinePod("pod-c") {
+		t.Fatal("Close returned before the handler of the link marked the pod offline")
+	}
+	if _, _, err := pod.c.Read(context.Background()); err == nil {
+		t.Fatal("the link is still open after Close")
+	}
+}

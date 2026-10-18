@@ -112,6 +112,12 @@ type Server struct {
 	Version string
 	// startedAt is when this relay came up (status.go).
 	startedAt time.Time
+
+	// The WebSocket links in flight (shutdown.go): the HTTP server forgets a hijacked connection,
+	// so Close finds them here.
+	sockMu sync.Mutex
+	socks  map[*websocket.Conn]bool
+	live   sync.WaitGroup
 }
 
 // podConn is the pod's persistent link: register (pod id + secret), then carry the
@@ -313,10 +319,11 @@ const wsReadLimit = 1 << 20
 // servePod is the pod's persistent link: register (pod id + secret), then carry its
 // WebRTC signaling, routed by session id.
 func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
-	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+	ws, done, err := s.accept(w, r)
 	if err != nil {
 		return
 	}
+	defer done()
 	ws.SetReadLimit(wsReadLimit)
 	pc := &podConn{ws: ws}
 	defer func() {
@@ -512,10 +519,11 @@ func (s *Server) serveSignal(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"error":"no such session"}`))
 		return
 	}
-	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+	ws, done, err := s.accept(w, r)
 	if err != nil {
 		return
 	}
+	defer done()
 	ws.SetReadLimit(wsReadLimit)
 	bc := &browserConn{podID: podID, session: session,
 		write: func(b []byte) error { return ws.Write(context.Background(), websocket.MessageText, b) },
