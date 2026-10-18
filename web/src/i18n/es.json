@@ -2159,5 +2159,7 @@
   "A milestone gathers the tickets of one feature, with its spec and its user stories; you validate it.": "Un hito reúne los tickets de una funcionalidad, con su especificación y sus historias de usuario; tú lo validas.",
   "Validated and abandoned ({n})": "Validados y abandonados ({n})",
   "No milestone yet.": "Aún no hay hitos.",
-  "{n} to test": "{n} por probar"
+  "{n} to test": "{n} por probar",
+  "Review coverage": "Revisión de cobertura",
+  "Claude Code checks that the e2e tests cover each user story: the gaps become feedback of the milestone": "Claude Code comprueba que los tests e2e cubren cada historia de usuario: lo que falta se convierte en comentarios del hito"
 }

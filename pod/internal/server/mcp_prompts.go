@@ -7,7 +7,7 @@ import (
 )
 
 // Prompts of the MCP endpoint: Claude Code shows them as commands
-// (/mcp__web-ide__plan 12). Each one hands a ticket to Claude for one role, like the
+// (/mcp__web-ide__plan 12). Each one hands a ticket (a milestone for coverage) to Claude for one role, like the
 // roles of the conversations of the assistant (ROLE_INSTRUCTIONS in web/src/llm/prompt.ts).
 
 type mcpRole struct {
@@ -48,12 +48,31 @@ var mcpRoles = []mcpRole{
 - Each finding the developer must act on becomes a test feedback with kanban_feedback (action add): kind bug (wrong behavior), feature (missing from the plan or the goals) or info (worth knowing), and the complexity of the fix (low, medium, high); one concrete finding each, with the file and line, under 1000 characters. Skip what an open feedback already says; no feedback for style nits.
 - Then one note with kanban_add_note: the verdict in a few lines (ready to test, or what blocks).
 - Sum up for the user: the feedback added, the verdict.`},
+	{"coverage", "Review the e2e coverage of the user stories of a milestone: gaps become milestone feedback", `**Review the e2e coverage** of milestone {{id}}: its user stories are the minimal coverage the browser tests must give.
+- Read the milestone (kanban_milestone action get): its spec (read the file or the address), its user stories, its tickets (kanban_get for their how to test).
+- Read how the project tests in the browser (e2e/README.md, the e2e suites, or whatever the project uses) and find, for each user story, the assertions that check it end to end.
+- Report per story: covered (suite and assertion), partly (what is missing), not covered.
+- Each story partly or not covered becomes a feedback of the milestone with kanban_milestone (action feedback_add): kind feature, the complexity of the missing tests (low, medium, high), the story and what is missing, under 1000 characters. Skip what an open feedback of the milestone already says.
+- Then one note with kanban_milestone (action note): the verdict, n covered, partly, not covered.
+- Do not change any file, do not commit, do not check the stories nor validate the milestone: the user does.
+- Sum up for the user: the table of the stories, the feedback added.`},
+}
+
+// promptArg is the argument naming what a prompt works on: a milestone for coverage, else a ticket.
+func promptArg(role string) string {
+	if role == "coverage" {
+		return "milestone"
+	}
+	return "ticket"
 }
 
 func mcpPromptList() []map[string]any {
 	out := make([]map[string]any, 0, len(mcpRoles))
 	for _, r := range mcpRoles {
 		args := []map[string]any{{"name": "ticket", "description": "Ticket number", "required": true}}
+		if promptArg(r.name) == "milestone" {
+			args = []map[string]any{{"name": "milestone", "description": "Milestone number", "required": true}}
+		}
 		if r.name == "fix" {
 			args = append(args, feedbackArg)
 		}
@@ -71,9 +90,10 @@ func mcpPrompt(name string, args map[string]string) (map[string]any, error) {
 		if r.name != name {
 			continue
 		}
-		id, err := strconv.ParseInt(strings.TrimPrefix(strings.TrimSpace(args["ticket"]), "#"), 10, 64)
+		arg := promptArg(name)
+		id, err := strconv.ParseInt(strings.TrimPrefix(strings.TrimSpace(args[arg]), "#"), 10, 64)
 		if err != nil || id <= 0 {
-			return nil, fmt.Errorf("ticket must be a ticket number, got %q", args["ticket"])
+			return nil, fmt.Errorf("%s must be a %s number, got %q", arg, arg, args[arg])
 		}
 		feedback := "the open **test feedback**"
 		if f := strings.TrimSpace(args["feedback"]); f != "" {

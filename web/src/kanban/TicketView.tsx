@@ -569,7 +569,7 @@ function RoutedBtn(props: { b: ActionButton; icon?: string }) {
   )
 }
 
-function ActionBtn(props: { b: ActionButton; icon?: string }) {
+export function ActionBtn(props: { b: ActionButton; icon?: string }) {
   const b = props.b
   const main = (
     <button class={`btn small ${b.primary ? 'primary' : ''} ${b.danger ? 'danger' : ''}`} disabled={b.disabled} title={b.title} onClick={b.run} data-testid={b.testid}>

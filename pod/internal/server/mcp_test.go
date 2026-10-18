@@ -228,6 +228,9 @@ func TestMCPKanban(t *testing.T) {
 	if msg := promptText(m.rpc("prompts/get", map[string]any{"name": "fix", "arguments": map[string]string{"ticket": "1", "feedback": "3"}})); !strings.Contains(msg, "feedback** with id 3 (only this one) of ticket #1") {
 		t.Fatalf("fix prompt of one feedback: %s", msg)
 	}
+	if msg := promptText(m.rpc("prompts/get", map[string]any{"name": "coverage", "arguments": map[string]string{"milestone": "1"}})); !strings.Contains(msg, "**Review the e2e coverage** of milestone 1") || !strings.Contains(msg, "feedback_add") {
+		t.Fatalf("coverage prompt: %s", msg)
+	}
 }
 
 func TestMCPConversation(t *testing.T) {

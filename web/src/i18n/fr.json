@@ -2159,5 +2159,7 @@
   "A milestone gathers the tickets of one feature, with its spec and its user stories; you validate it.": "Un jalon rassemble les tickets d'une fonctionnalité, avec sa spec et ses user stories ; c'est vous qui le validez.",
   "Validated and abandoned ({n})": "Validés et abandonnés ({n})",
   "No milestone yet.": "Aucun jalon pour l'instant.",
-  "{n} to test": "{n} à tester"
+  "{n} to test": "{n} à tester",
+  "Review coverage": "Revue de couverture",
+  "Claude Code checks that the e2e tests cover each user story: the gaps become feedback of the milestone": "Claude Code vérifie que les tests e2e couvrent chaque user story : les manques deviennent des feedbacks du jalon"
 }

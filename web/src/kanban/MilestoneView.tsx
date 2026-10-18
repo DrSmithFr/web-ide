@@ -12,9 +12,10 @@ import {
   addMilestoneNote, createMilestone, deleteMilestone, deleteMilestoneNote, feedbackTicket, getMilestone, milestoneFeedbackOp, milestoneStateNames, milestoneVersion, setMilestoneState, storyOp, updateMilestone, validateMilestone,
   MAX_STORY, type Milestone,
 } from './milestones'
-import { ticketActions } from './actions'
+import { routed, ticketActions } from './actions'
+import { runClaudeMilestone } from './claude'
 import { openTicketChat, startMilestoneBriefing } from './sessions'
-import { ComplexitySelect, Count, EditableMarkdown, EditableText, Section, tooLong } from './TicketView'
+import { ActionBtn, ComplexitySelect, Count, EditableMarkdown, EditableText, Section, tooLong } from './TicketView'
 import { MAX_DESCRIPTION, MAX_NOTE } from './state'
 import { fmtDate, t } from '../i18n'
 import './kanban.css'
@@ -90,6 +91,14 @@ function MilestoneBody(props: { ms: Milestone; apply: MApply; tabId: string }) {
           <button class="btn small" title={t('Conversation (Briefing mode) to clarify the milestone and write its stories and tickets')} onClick={() => void startMilestoneBriefing(ms())} data-testid="milestone-briefing">
             <Icon name="sparkle" size={12} /> {t('Briefing')}
           </button>
+          <Show when={ms().state === 'open' && ms().stories}>
+            <ActionBtn
+              b={routed(
+                { label: t('Review coverage'), title: t('Claude Code checks that the e2e tests cover each user story: the gaps become feedback of the milestone'), testid: 'milestone-coverage' },
+                { complexity: 'high', claude: (x) => runClaudeMilestone(ms().id, x.claude), levels: ['high', 'medium'] },
+              )}
+            />
+          </Show>
           <Show when={ms().state === 'open'}>
             <button
               class="btn small primary"
