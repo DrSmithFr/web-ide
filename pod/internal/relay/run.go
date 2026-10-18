@@ -29,7 +29,11 @@ type RelayConfig struct {
 	Domain        string // serve this domain: the certificate comes from Let's Encrypt (autocert)
 	ACMEStaging   bool   // ask the Let's Encrypt test CA instead (bring a domain up without spending the production limits)
 	Quota         int64  // bytes one account may move through TURN in a month (0 → no limit)
-	// GitHub: the OAuth app and the maintainer token behind the supporter tier (github.go).
+	QuotaBacker   int64  // the quota of a Backer (0 → twice Quota)
+	// LevelPoll: how often the relay looks for a level that moved without it, a VIP the CLI
+	// added or an end that passed (0 → 30 s; the e2e shortens it).
+	LevelPoll time.Duration
+	// GitHub: the OAuth app and the maintainer token behind the sponsor levels (github.go).
 	// GitHubEnv is a file of KEY=VALUE lines (0600) they can come from instead of the process
 	// environment: /etc/antennae/env on the hosted relay.
 	GitHub    GitHubConfig
@@ -79,6 +83,10 @@ func Run(ctx context.Context, cfg RelayConfig) error {
 		MinPort:       cfg.TurnMinPort,
 		MaxPort:       cfg.TurnMaxPort,
 		Quota:         cfg.Quota,
+		QuotaBacker:   cfg.QuotaBacker,
+		// The level of an account sets its quota (level.go): its GitHub sponsorship and the VIP
+		// list. It needs no GitHub app: a self-hosted relay has VIPs by account id.
+		Level: func(key string) AccountLevel { return st.Level(key, time.Now()) },
 	}
 	var demux *Demux
 	tcfg, acme, err := TLSConfig(dataDir, TLSOptions{
@@ -110,14 +118,11 @@ func Run(ctx context.Context, cfg RelayConfig) error {
 		}
 	}
 
-	// The supporter tier: an account linked to a GitHub login that sponsors the project is freed
-	// from its TURN quota. Without a GitHub app the relay has no supporters (a self-hosted one).
+	// The GitHub link: an account linked to a GitHub login that sponsors the project gets the
+	// level of its tier. Without a GitHub app the relay has no sponsors (a self-hosted one).
 	ghCfg := githubConfig(cfg)
 	gh := NewGitHub(ghCfg, st)
 	log.Print(githubNotice(ghCfg, readEnvFile(cfg.GitHubEnv), cfg.GitHubEnv))
-	if gh != nil {
-		turnCfg.Supporter = gh.isSupporter
-	}
 
 	turn, err := NewTurn(st, turnCfg)
 	if err != nil {
@@ -133,6 +138,7 @@ func Run(ctx context.Context, cfg RelayConfig) error {
 		gh.changed = srv.tellQuota
 		go gh.refreshLoop(ctx)
 	}
+	go srv.watchLevels(ctx, cfg.LevelPoll)
 	// Web Push: the VAPID key of the relay, made once in its data folder.
 	if push, err := LoadPush(dataDir, cfg.PushSubject); err != nil {
 		log.Printf("relay: push notifications are off: %v", err)

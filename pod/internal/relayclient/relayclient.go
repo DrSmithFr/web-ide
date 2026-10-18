@@ -89,13 +89,18 @@ type sigMsg struct {
 }
 
 // QuotaState is the monthly TURN quota the relay applies to this pod's account (mirrors
-// relay.QuotaState): the bytes moved this month, the limit (0: none) and whether the account is
-// freed from it.
+// relay.QuotaState): the bytes moved this month, the limit (0: none), whether the account is
+// freed from it, and its level (#87: "", backer, supporter, vip; its end, the level of the
+// sponsorship alone and the VIP list), which an older relay does not send.
 type QuotaState struct {
-	Used      int64 `json:"used"`
-	Limit     int64 `json:"limit"`
-	Supporter bool  `json:"supporter,omitempty"`
-	Over      bool  `json:"over,omitempty"`
+	Used      int64  `json:"used"`
+	Limit     int64  `json:"limit"`
+	Supporter bool   `json:"supporter,omitempty"`
+	Level     string `json:"level,omitempty"`
+	Until     int64  `json:"until,omitempty"`
+	Sponsor   string `json:"sponsor,omitempty"`
+	VIP       bool   `json:"vip,omitempty"`
+	Over      bool   `json:"over,omitempty"`
 }
 
 // PodInfo is one pod of the account as the relay sees it (mirrors relay.PodInfo).
@@ -363,7 +368,7 @@ func (c *Client) runOnce(ctx context.Context) error {
 				return err
 			}
 		case "quota":
-			// The supporter state of the account moved (a GitHub link, a sponsorship): the relay
+			// The level of the account moved (a GitHub link, a sponsorship, the VIP list): the relay
 			// tells it at once, the page reads it in Settings > Remote access.
 			if m.Quota != nil {
 				c.mu.Lock()

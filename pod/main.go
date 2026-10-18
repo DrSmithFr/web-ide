@@ -86,6 +86,7 @@ func main() {
 	domain := flag.String("domain", "", "relay: serve this domain: the certificate is issued and renewed by Let's Encrypt (TLS-ALPN-01), the ICE URLs name the domain")
 	acmeStaging := flag.Bool("acme-staging", false, "relay: ask the Let's Encrypt test CA instead of the production one")
 	quota := flag.String("quota", "", "relay: monthly TURN quota per account, 10GB (default: no limit, what a self-hosted relay wants)")
+	quotaBacker := flag.String("quota-backer", "", "relay: monthly TURN quota of a Backer ($2 a month), 20GB (default: twice -quota)")
 	githubEnv := flag.String("github-env", "", "relay: file of KEY=VALUE secrets for the GitHub link (/etc/antennae.env): WEBIDE_GITHUB_CLIENT, _SECRET, _TOKEN (sponsor list), _WEBHOOK")
 	pushSubject := flag.String("push-subject", "", "relay: the contact of the Web Push (VAPID) claims, mailto: or https:")
 	pushTest := flag.String("push-test-endpoint", "", "relay: also allow the push endpoints under this prefix (tests only)")
@@ -104,6 +105,9 @@ func main() {
 	// The multi-pod protocol this pod speaks (multipod.Protocol, unless a test asked for another
 	// one): what the other pods compare to decide it can be routed to.
 	protocol := *multipodProtocol
+	if flag.Arg(0) == "relay" && runRelayAdmin(flagValue(flag.CommandLine, "data", ""), flag.Args()[1:]) {
+		return
+	}
 	if len(flag.Args()) > 0 && flag.Arg(0) == "relay" {
 		// The relay has its own data folder (~/.web-ide-relay): pass "" when -data was not
 		// set explicitly, else the pod's default would hold relay.db.
@@ -113,7 +117,7 @@ func main() {
 		if *static != "" {
 			app = os.DirFS(*static)
 		}
-		runRelayCmd(flagValue(flag.CommandLine, "data", ""), *addr, *turnPort, *turnIP, *turnIP6, *turnPorts, *tlsPort, *certFile, *keyFile, *domain, *acmeStaging, *quota, *githubEnv, app, *pushSubject, *pushTest)
+		runRelayCmd(flagValue(flag.CommandLine, "data", ""), *addr, *turnPort, *turnIP, *turnIP6, *turnPorts, *tlsPort, *certFile, *keyFile, *domain, *acmeStaging, *quota, *quotaBacker, *githubEnv, app, *pushSubject, *pushTest)
 		return
 	}
 	if len(flag.Args()) > 0 && flag.Arg(0) == "pair" {
@@ -365,6 +369,7 @@ func main() {
 			if c := relayCli.Load(); c != nil {
 				if q := c.Quota(); q != nil {
 					info.TurnUsed, info.TurnLimit, info.TurnOver, info.TurnSupporter = q.Used, q.Limit, q.Over, q.Supporter
+					info.TurnLevel, info.TurnUntil, info.TurnSponsor, info.TurnVIP = q.Level, q.Until, q.Sponsor, q.VIP
 				}
 			}
 			return info
@@ -945,7 +950,7 @@ func runAllowShutdown(args []string) {
 }
 
 // runRelayCmd runs the relay server subcommand until interrupted.
-func runRelayCmd(dataDir string, addr string, turnPort int, turnIP, turnIP6, turnPorts string, tlsPort int, certFile, keyFile, domain string, acmeStaging bool, quota, githubEnv string, app fs.FS, pushSubject, pushTest string) {
+func runRelayCmd(dataDir string, addr string, turnPort int, turnIP, turnIP6, turnPorts string, tlsPort int, certFile, keyFile, domain string, acmeStaging bool, quota, quotaBacker, githubEnv string, app fs.FS, pushSubject, pushTest string) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	minPort, maxPort := turnPortRange(turnPorts)
@@ -953,13 +958,32 @@ func runRelayCmd(dataDir string, addr string, turnPort int, turnIP, turnIP6, tur
 	if err != nil {
 		log.Printf("relay: -quota %q: %v (no limit)", quota, err)
 	}
+	backer, err := parseSize(quotaBacker)
+	if err != nil {
+		log.Printf("relay: -quota-backer %q: %v (twice -quota)", quotaBacker, err)
+	}
+	// WEBIDE_LEVEL_POLL shortens the look for a level the CLI changed (the e2e: 1s).
+	poll, _ := time.ParseDuration(os.Getenv("WEBIDE_LEVEL_POLL"))
 	check(relay.Run(ctx, relay.RelayConfig{
 		DataDir: dataDir, Addr: addr, TurnPort: turnPort, AdvertiseIP: turnIP, AdvertiseIPv6: turnIP6,
 		TurnMinPort: minPort, TurnMaxPort: maxPort, TLSPort: tlsPort,
-		CertFile: certFile, KeyFile: keyFile, Domain: domain, ACMEStaging: acmeStaging, Quota: bytes,
+		CertFile: certFile, KeyFile: keyFile, Domain: domain, ACMEStaging: acmeStaging, Quota: bytes, QuotaBacker: backer, LevelPoll: poll,
 		GitHubEnv: githubEnv,
 		App:       app, Version: version, PushSubject: pushSubject, PushTestEndpoint: pushTest,
 	}))
+}
+
+// runRelayAdmin runs an admin command of the relay (the VIP list, the supporters) when the words
+// after "relay" name one: relay.db only, next to the live relay, with its default data folder.
+func runRelayAdmin(dataDir string, args []string) bool {
+	if !relay.IsAdminCommand(args) {
+		return false
+	}
+	if err := relay.RunAdmin(dataDir, args, os.Stdout); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	return true
 }
 
 // parseSize reads a byte count with a unit suffix ("10GB", "1MB", "500k"); empty is no limit.

@@ -139,7 +139,12 @@ func TestTurnQuota(t *testing.T) {
 
 	turn, _ := startTurn(t, st, TurnConfig{
 		AdvertiseIP: "127.0.0.1", Quota: 1000,
-		Supporter: func(key string) bool { return key == "acct-supporter" },
+		Level: func(key string) AccountLevel {
+			if key == "acct-supporter" {
+				return AccountLevel{Level: LevelSupporter, Sponsor: LevelSupporter}
+			}
+			return AccountLevel{}
+		},
 	})
 	defer turn.Close()
 	for _, id := range []string{"acct-over", "acct-under", "acct-supporter"} {

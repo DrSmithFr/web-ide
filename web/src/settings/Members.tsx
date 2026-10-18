@@ -15,6 +15,7 @@
 import { podPath } from '../app/base'
 import { inTunnel } from '../pod/transport'
 import { createSignal, For, Show, onCleanup, onMount } from 'solid-js'
+import { levelBadge, type AccountLevel } from './level'
 import { request } from '../pod/rpc'
 import { errorToast, toast } from '../ui/toast'
 import { copyText } from '../ui/clipboard'
@@ -86,9 +87,9 @@ export function Members() {
   const [podId, setPodId] = createSignal('')
   const [keys, setKeys] = createSignal<SyncKey[]>([])
   const [wraps, setWraps] = createSignal<Wrap[]>([])
-  // The GitHub link of the account (milestone 5): the login it is linked to, and whether that
-  // login sponsors the project, which lifts the TURN quota.
-  const [gh, setGh] = createSignal<{ login: string; supporter: boolean } | null>(null)
+  // The GitHub link of the account (milestone 5): the login it is linked to, and the level of the
+  // account (#87: its sponsorship and the VIP list of the relay), which sets the TURN quota.
+  const [gh, setGh] = createSignal<({ login: string } & AccountLevel) | null>(null)
   let link: { send: (m: any) => void; recv: (type?: string) => Promise<any>; close: () => void } | null = null
   let accountKey: CryptoKey | null = null
   let own: any = null
@@ -153,7 +154,7 @@ export function Members() {
   }
   function unlinkGitHub() {
     link?.send({ type: 'githubUnlink' })
-    setGh({ login: '', supporter: false })
+    setGh(null)
   }
 
   // The wrap of the key of the epoch for a device: the only way a pod paired without the phrase gets
@@ -245,7 +246,7 @@ export function Members() {
       } else if (msg.type === 'wraps') setWraps(msg.wraps ?? [])
       else if (msg.type === 'wrap' && msg.wrap) setWraps((w) => [...w.filter((x) => x.device !== msg.wrap.device), msg.wrap])
       else if (msg.type === 'pair' && msg.pairing) setPairings((p) => [...p.filter((x) => x.code !== msg.pairing.code), msg.pairing])
-      else if (msg.type === 'github') setGh({ login: msg.login ?? '', supporter: !!msg.supporter })
+      else if (msg.type === 'github') setGh({ login: msg.login ?? '', level: msg.level, until: msg.until, sponsor: msg.sponsor, vip: msg.vip })
       else if (msg.type === 'githubStart' && msg.loginUrl) openGitHubLink(msg.loginUrl)
       for (const key of [...members().map((d) => d.key), ...pairings().map((p) => p.key)]) void showFp(key)
     })
@@ -471,8 +472,8 @@ export function Members() {
           <dd>
             <Show when={gh()?.login}>{'@' + gh()!.login}</Show>
             <Show when={!gh()?.login}>{t('not linked')}</Show>
-            <Show when={gh()?.supporter}>
-              {' · '}{t('Supporter: no TURN quota')}
+            <Show when={levelBadge(gh())}>
+              {' '}<span class="badge" data-testid="level-badge">{levelBadge(gh())}</span>
             </Show>
           </dd>
         </dl>
@@ -485,7 +486,7 @@ export function Members() {
           </Show>
         </div>
         <p class="muted small">
-          {t('A Supporter of the project on GitHub is freed from the monthly TURN quota of the hosted relay. The relay keeps the GitHub id it was shown, never a token, and no e-mail is asked.')}
+          {t('Sponsoring the project on GitHub sets the monthly TURN quota of the hosted relay: a Backer ($2 a month) has it raised, a Supporter ($5) and a VIP ($10) have none. The relay keeps the GitHub id it was shown, never a token, and no e-mail is asked.')}
         </p>
 
         <div class="field-row">

@@ -24,11 +24,17 @@ type RelayInfo struct {
 	State string `json:"state"`
 	// The monthly TURN quota the relay applies to this account (milestone 5): what it moved this
 	// month, the limit (0: none, a self-hosted relay), whether the account is freed from it, and
-	// whether the relayed path is closed. 0/0/false when the relay says nothing.
-	TurnUsed      int64 `json:"turnUsed"`
-	TurnLimit     int64 `json:"turnLimit"`
-	TurnSupporter bool  `json:"turnSupporter,omitempty"`
-	TurnOver      bool  `json:"turnOver,omitempty"`
+	// whether the relayed path is closed. 0/0/false when the relay says nothing. The level of the
+	// account (#87) is the badge of the page: its name, its end, the level of the sponsorship
+	// alone and the VIP list.
+	TurnUsed      int64  `json:"turnUsed"`
+	TurnLimit     int64  `json:"turnLimit"`
+	TurnSupporter bool   `json:"turnSupporter,omitempty"`
+	TurnOver      bool   `json:"turnOver,omitempty"`
+	TurnLevel     string `json:"turnLevel,omitempty"`
+	TurnUntil     int64  `json:"turnUntil,omitempty"`
+	TurnSponsor   string `json:"turnSponsor,omitempty"`
+	TurnVIP       bool   `json:"turnVip,omitempty"`
 }
 
 func (s *Server) registerRelay() {

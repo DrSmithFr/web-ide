@@ -212,6 +212,39 @@ run(
     assert(!(await app.locator('.toast:has-text("only a device")').count()), 'no "only a device of the account" error')
     for (const p of page.context().pages()) if (p.url().startsWith('https://github.com/')) await p.close()
 
+    // The level of the account (#87), as Settings > Remote access shows it: the badge next to the
+    // TURN quota and next to the GitHub login, read again from a fresh view of the page.
+    const levelView = async () => {
+      await app.click('.settings-nav button:has-text("Keyboard shortcuts")').catch(() => {})
+      await app.click('.settings-nav button:has-text("Remote access")')
+      await app.waitForSelector('[data-testid=members] [data-testid=github-link]', { timeout: 20000 })
+      await app.waitForTimeout(300)
+      const text = async (sel) => (await app.locator(sel).count()) ? (await app.textContent(sel)).trim() : ''
+      return { turn: await text('[data-testid=turn-level]'), members: await text('[data-testid=github-link] [data-testid=level-badge]'),
+        unlimited: (await app.locator('[data-testid=turn-unlimited]').count()) > 0 }
+    }
+    const waitLevel = async (ok) => {
+      let v
+      for (let i = 0; i < 30; i++) {
+        v = await levelView()
+        if (ok(v)) return v
+      }
+      return v
+    }
+    const relayCLI = (...args) => execFileSync(BIN, ['-data', process.env.E2E_RELAY_DATA, 'relay', ...args], { encoding: 'utf8' })
+
+    // The VIP list by account id, written by the CLI next to the live relay: no GitHub link is
+    // needed, and the pod is told without reconnecting (run.sh: WEBIDE_LEVEL_POLL=1s).
+    assert(/is a VIP, until/.test(relayCLI('vip', 'add', b1.account, '-days', '12', '-note', 'e2e friend')), 'relay vip add takes an account id')
+    let lv = await waitLevel((v) => v.turn === 'VIP · 12 d' && v.members === 'VIP · 12 d')
+    assert(lv.turn === 'VIP · 12 d' && lv.unlimited, 'a VIP added with the CLI shows VIP · 12 d and ∞ next to the TURN quota: ' + JSON.stringify(lv))
+    assert(lv.members === 'VIP · 12 d', 'and next to the GitHub login: ' + JSON.stringify(lv))
+    const listed = relayCLI('supporters')
+    assert(listed.includes(b1.account) && listed.includes('VIP') && listed.includes('e2e friend'), 'relay supporters lists the VIP: ' + listed)
+    relayCLI('vip', 'remove', b1.account)
+    lv = await waitLevel((v) => !v.turn && !v.members && !v.unlimited)
+    assert(!lv.turn && !lv.members && !lv.unlimited, 'removed, the account is back to free: ' + JSON.stringify(lv))
+
     // A sponsorship of the linked login moves the account to Supporter: the relay tells the pod
     // at once (no reconnection), and Settings reads used / ∞ with a thank-you. The link itself
     // is written in the base, GitHub being out of reach; the event is a real signed one.
@@ -232,6 +265,12 @@ db=sqlite3.connect(sys.argv[1]); db.execute("INSERT INTO github (account, github
       if (await app.locator('[data-testid=turn-unlimited]').count()) unlimited = (await app.textContent('.settings-body .props')).replace(/\s+/g, ' ')
     }
     assert(unlimited.includes('/ ∞') && unlimited.includes('hugs'), 'Settings tells the new supporter at once: used / ∞ and a thank-you: ' + unlimited.slice(0, 300))
+    lv = await levelView()
+    assert(lv.turn === 'Supporter' && lv.members === 'Supporter', 'the badge of a $5 sponsor: ' + JSON.stringify(lv))
+    // A sponsor on the VIP list too has both words, and the end of the VIP level.
+    relayCLI('vip', 'add', b1.account, '-days', '12')
+    lv = await waitLevel((v) => v.turn === 'Supporter · VIP · 12 d')
+    assert(lv.turn === 'Supporter · VIP · 12 d' && lv.members === 'Supporter · VIP · 12 d', 'a sponsor who is a VIP too: ' + JSON.stringify(lv))
 
     // 4. An invite for a phone: the code, the QR, and the fingerprint the admin compares.
     await app.click('[data-testid=members] button:has-text("Invite a device")')

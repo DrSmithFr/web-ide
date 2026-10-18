@@ -11,6 +11,7 @@ import {
 import { builtinGrammar, grammarDefs } from '../editor/languages'
 import { Grammar, type GrammarDef, type RuleDef } from '../editor/tokenizer'
 import { on as onPod, request } from '../pod/rpc'
+import { levelBadge } from './level'
 import { bootJournal, inTunnel } from '../pod/transport'
 import { errorToast, toast } from '../ui/toast'
 import { copyText } from '../ui/clipboard'
@@ -621,6 +622,10 @@ interface RelayInfo {
   turnLimit: number
   turnSupporter?: boolean
   turnOver?: boolean
+  turnLevel?: string
+  turnUntil?: number
+  turnSponsor?: string
+  turnVip?: boolean
 }
 
 /** A byte count as the relay reports it, read the way a person reads a size. */
@@ -663,6 +668,10 @@ function RemoteAccess() {
     }
   }
   const on = () => (info()?.url ?? '') !== ''
+  const turnBadge = () => {
+    const i = info()
+    return levelBadge(i && { level: i.turnLevel, until: i.turnUntil, sponsor: i.turnSponsor, vip: i.turnVip })
+  }
   return (
     <section class="form">
       <Show when={error()}>
@@ -694,7 +703,7 @@ function RemoteAccess() {
           </dd>
           <dt>{t('Open from another device')}</dt>
           <dd class="mono small">{info()?.link}</dd>
-          <Show when={info()!.turnLimit > 0 || info()!.turnUsed > 0 || info()!.turnSupporter}>
+          <Show when={info()!.turnLimit > 0 || info()!.turnUsed > 0 || info()!.turnSupporter || !!turnBadge()}>
             <dt>{t('TURN traffic this month')}</dt>
             <dd>
               {bytes(info()!.turnUsed)}
@@ -705,12 +714,15 @@ function RemoteAccess() {
               <Show when={!info()!.turnSupporter && info()!.turnLimit > 0}>
                 {' / '}{bytes(info()!.turnLimit)}
               </Show>
+              <Show when={turnBadge()}>
+                {' '}<span class="badge" data-testid="turn-level">{turnBadge()}</span>
+              </Show>
             </dd>
           </Show>
         </dl>
         <Show when={info()!.turnOver}>
           <p class="muted small">
-            {t('The monthly TURN quota is reached on this account: the direct paths still work, a tunnel relayed through the relay does not. A Supporter lifts it.')}{' '}
+            {t('The monthly TURN quota is reached on this account: the direct paths still work, a tunnel relayed through the relay does not. Sponsoring the project raises it (Backer) or lifts it (Supporter, VIP).')}{' '}
             <a href="https://github.com/sponsors/DrSmithFr" target="_blank" rel="noreferrer">github.com/sponsors/DrSmithFr</a>
           </p>
         </Show>

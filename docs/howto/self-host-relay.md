@@ -101,8 +101,9 @@ web-ide-pod relay -data /var/lib/antennae \
 | `-turn-ip`, `-turn-ip6` | the addresses named in the ICE URLs (auto-detected when unset) |
 | `-turn-ports` | the range the TURN relay sockets are bound in, e.g. `20000-20999` (any free port when unset). Keep it below the ephemeral range of the kernel (`32768-60999` on Linux), whose outgoing connections would take its ports. A relayed session costs four of them |
 | `-quota` | bytes one account may move through TURN per month (`10GB`); **unset: no limit** |
+| `-quota-backer` | the quota of a Backer, a $2 monthly sponsor (`20GB`); unset: twice `-quota`, and no limit without `-quota` |
 | `-push-subject` | the contact of the Web Push claims (`mailto:` or `https:`) |
-| `-github-env` | a `KEY=VALUE` file (0640, `root:` the user of the service) with `WEBIDE_GITHUB_CLIENT`, `WEBIDE_GITHUB_SECRET` (the OAuth App), `WEBIDE_GITHUB_TOKEN` (reads the sponsor list) and `WEBIDE_GITHUB_WEBHOOK` (the secret of the Sponsors webhook): without them the relay has no GitHub link and no supporters, which a self-hosted relay does not need (setup: relay.md *Hosted service and pricing*) |
+| `-github-env` | a `KEY=VALUE` file (0640, `root:` the user of the service) with `WEBIDE_GITHUB_CLIENT`, `WEBIDE_GITHUB_SECRET` (the OAuth App), `WEBIDE_GITHUB_TOKEN` (reads the sponsor list) and `WEBIDE_GITHUB_WEBHOOK` (the secret of the Sponsors webhook): without them the relay has no GitHub link and no sponsors, which a self-hosted relay does not need (setup: relay.md *Hosted service and pricing*) |
 
 Without `-domain` and without `-cert/-key`, the relay makes a **self-signed** certificate on first
 run: fine on a tailnet, a browser will complain.
@@ -176,9 +177,32 @@ signed requests between the pods of an account, and asks every online pod of the
 wake. A relay older than milestone 7 drops these messages: the LAN path still works, the page says
 the pod does not answer otherwise. Update the relay with the pods.
 
+### VIPs and supporters
+
+The relay keeps a **VIP list**: people you give the VIP level by hand (no TURN quota, the `VIP`
+badge in Settings > Remote access). It needs no GitHub app — an account id is enough — and the
+commands write `relay.db` directly, next to the running relay, which feels the change within 30 s:
+
+```
+web-ide-pod -data /var/lib/relay relay vip add <github-login|account-id> [-note TEXT] [-days N | -until YYYY-MM-DD]
+web-ide-pod -data /var/lib/relay relay vip remove <github-login|account-id>
+web-ide-pod -data /var/lib/relay relay vip list
+web-ide-pod -data /var/lib/relay relay supporters
+```
+
+Run them as the user of the service (`sudo -u relay …`), with the `-data` of the service. An account
+id is the 43 characters Settings > Remote access > Members shows for the account; anything else is
+a GitHub login, resolved once to its id through the GitHub API (the machine needs the network). A
+row added again replaces its note and end; `-until` counts the whole day; an ended row no longer
+counts and stays in `vip list` until removed. `relay supporters` lists everyone at Backer level or
+above — level, source (`monthly $5`, `one-time $10`, `vip`), end, linked accounts, note. The levels
+themselves are in relay.md *Hosted service and pricing*.
+
+On the hosted relay: `make vip ARGS="add bob -days 90"`, `make supporters` (over SSH, `RELAY_HOST`).
+
 ### What a self-hosted relay does not do
 
-Nothing is missing: no quota, no GitHub link needed, no supporter tier. The relay never holds a
+Nothing is missing: no quota, no GitHub link needed, no sponsor level to buy. The relay never holds a
 private key, the phrase, the pod token, the code or the project names in clear — self-hosting
 changes who holds the base, not what the relay can see.
 
