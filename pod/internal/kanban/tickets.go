@@ -608,7 +608,7 @@ func (m *Manager) Move(loc Location, id int64, to, by, comment string) error {
 			return nil
 		}
 		if !CanMove(from, to, by) {
-			if IsAgent(by) {
+			if IsAI(by) {
 				return i18n.Errorf("the model cannot move the ticket from “%s” to “%s”", i18n.Text(StatusNames[from]), i18n.Text(StatusNames[to]))
 			}
 			return i18n.Errorf("a ticket cannot go from “%s” to “%s”", i18n.Text(StatusNames[from]), i18n.Text(StatusNames[to]))

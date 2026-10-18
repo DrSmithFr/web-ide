@@ -96,7 +96,7 @@ input.tk-title { padding: 2px 6px; }
 .tk-count.over { color: var(--danger); font-weight: 600; }
 .tk-chat-time { display: inline-flex; align-items: center; gap: 3px; color: var(--fg-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tk-chat-link { display: inline-flex; align-items: center; gap: 3px; padding: 0; max-width: 260px; }
-/* Split button: the action with the integrated assistant, the arrow offers Claude Code. */
+/* Split button: the action with the assistant, the arrow offers Claude Code. */
 .tk-split { display: inline-flex; }
 .tk-tier { opacity: 0.8; font-weight: 400; }
 .tk-split > .btn:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }

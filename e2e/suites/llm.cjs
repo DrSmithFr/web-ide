@@ -1,4 +1,4 @@
-// AI assistant: server setup, model list, streamed answer with tool calls (read, language
+// Assistant: server setup, model list, streamed answer with tool calls (read, language
 // server, confirmed edit), Markdown + Mermaid rendering, saved conversations, image
 // attachment, stop, and resume after a crash (with the same or another model). The model is a scripted fake OpenAI server.
 const fs = require('fs')
@@ -166,7 +166,7 @@ run(async ({ page, ctx }) => {
   try {
     await openProject(page)
     await open(page, 'main.go')
-    await page.click('.rail-right .rail-btn[title="AI assistant"]')
+    await page.click('.rail-right .rail-btn[title="Assistant"]')
     await page.waitForSelector('.ai-panel .ai-empty')
 
     // Server setup.

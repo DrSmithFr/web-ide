@@ -29,7 +29,7 @@ export interface ActionButton {
   /** In the "More actions" menu rather than in the header. */
   more?: boolean
   /** The same action with Claude Code in a terminal: a split button offers both (only:
-   * no integrated assistant yet, the button runs Claude Code). */
+   * no assistant yet, the button runs Claude Code). */
   claude?: { run: () => void; opus?: boolean; only?: boolean }
   /** A session routed by the complexity: the arrow offers each level (route.ts). */
   route?: Route
@@ -37,7 +37,7 @@ export interface ActionButton {
 
 export interface Route {
   complexity?: Complexity
-  /** The session with the integrated assistant (none: Claude Code only) or Claude Code. */
+  /** The session with the assistant (none: Claude Code only) or Claude Code. */
   ai?: (x: Tier) => void
   claude: (x: Tier) => void
   /** The levels offered (default: all). */

@@ -134,10 +134,10 @@ export function QuestionForm(props: {
         <button type="submit" class="btn primary" disabled={props.busy || missing()} data-testid="question-submit">
           {t('Send')}
         </button>
-        <button type="button" class="btn" disabled={props.busy} onClick={() => props.onAnswer('decline')} data-testid="question-decline" title={t('The agent goes on without an answer')}>
+        <button type="button" class="btn" disabled={props.busy} onClick={() => props.onAnswer('decline')} data-testid="question-decline" title={t('The AI goes on without an answer')}>
           {t('Skip')}
         </button>
-        <button type="button" class="btn danger" disabled={props.busy} onClick={() => props.onAnswer('cancel')} data-testid="question-cancel" title={t('The agent stops what it was doing')}>
+        <button type="button" class="btn danger" disabled={props.busy} onClick={() => props.onAnswer('cancel')} data-testid="question-cancel" title={t('The AI stops what it was doing')}>
           {t('Cancel')}
         </button>
       </div>

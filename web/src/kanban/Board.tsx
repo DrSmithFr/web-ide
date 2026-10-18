@@ -236,7 +236,7 @@ function KanbanSettings(props: { onClose: () => void }) {
         <label class="field">
           <span>{t('Development agent')}</span>
           <select value={agent()} onChange={(e) => setAgent(e.currentTarget.value)} data-testid="kanban-dev-agent">
-            <option value="assistant">{t('AI assistant')}</option>
+            <option value="assistant">{t('Assistant')}</option>
             <For each={agents() ?? []}>{(a) => <option value={a.id}>{a.name}</option>}</For>
           </select>
           <span class="muted small">{t('Start development, corrections and conflicts of a worktree go to a session of this agent in the Agents tool, with the kanban tools of the IDE.')}</span>

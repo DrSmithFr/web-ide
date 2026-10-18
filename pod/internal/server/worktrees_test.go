@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/pod/internal/agent"
+	"github.com/DrSmithFr/web-ide/pod/internal/assistant"
 )
 
 func TestWorktrees(t *testing.T) {
@@ -79,10 +79,10 @@ func TestWorktrees(t *testing.T) {
 	}
 
 	// A ticket conversation works in its worktree whatever the window shows.
-	if got := srv.runProject(&agent.Chat{Ticket: &agent.TicketLink{ID: 1, Project: created}}, id, id); got != created {
+	if got := srv.runProject(&assistant.Chat{Ticket: &assistant.TicketLink{ID: 1, Project: created}}, id, id); got != created {
 		t.Fatalf("run project = %s", got)
 	}
-	if got := srv.runProject(&agent.Chat{Ticket: &agent.TicketLink{ID: 1, Project: other}}, id, child); got != child {
+	if got := srv.runProject(&assistant.Chat{Ticket: &assistant.TicketLink{ID: 1, Project: other}}, id, child); got != child {
 		t.Fatalf("run project of another repository = %s", got)
 	}
 

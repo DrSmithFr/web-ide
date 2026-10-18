@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/pod/internal/agent"
+	"github.com/DrSmithFr/web-ide/pod/internal/assistant"
 	"github.com/DrSmithFr/web-ide/pod/internal/commands"
 	"github.com/DrSmithFr/web-ide/pod/internal/console"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
@@ -109,7 +109,7 @@ func (s *Server) openPreview(ctx context.Context, sp preview.Spec) (preview.Stat
 	for !listens(ctx, dial, sp.AppPort) {
 		if !consoleRuns(rt, info.ID) {
 			text, _, _ := consoleText(rt, info.ID)
-			return preview.State{}, i18n.Errorf("the command ended before listening on port %d: %s", sp.AppPort, agent.Tail(text, 5, 400))
+			return preview.State{}, i18n.Errorf("the command ended before listening on port %d: %s", sp.AppPort, assistant.Tail(text, 5, 400))
 		}
 		if time.Now().After(until) || ctx.Err() != nil {
 			return preview.State{}, i18n.Errorf("nothing listens on port %d after %d s (see the console)", sp.AppPort, int(PreviewWait/time.Second))
@@ -174,13 +174,13 @@ func (s *Server) registerPreviews() {
 // sharePreview is the tool share_preview: a card in the conversation, nothing runs yet.
 // The app is a saved serve command when there is one: command_id, else the only one with a
 // port when no command is given, else the one whose text is the command.
-func (s *Server) sharePreview(r *agentRun, rt *runtime.Runtime, a toolArgs) (toolResult, error) {
+func (s *Server) sharePreview(r *assistantRun, rt *runtime.Runtime, a toolArgs) (toolResult, error) {
 	return s.sharePreviewIn(r.project, rt, a)
 }
 
 // sharePreviewIn resolves the app of share_preview in project (the assistant and the MCP).
 func (s *Server) sharePreviewIn(project string, rt *runtime.Runtime, a toolArgs) (toolResult, error) {
-	pv := &agent.Preview{Project: project, Title: strings.TrimSpace(a.str("title")), Command: strings.TrimSpace(a.str("command")),
+	pv := &assistant.Preview{Project: project, Title: strings.TrimSpace(a.str("title")), Command: strings.TrimSpace(a.str("command")),
 		Cwd: a.str("cwd"), Port: a.num("port"), CommandID: strings.TrimSpace(a.str("command_id"))}
 	list, err := s.projectCommands(rt)
 	if err != nil && (pv.CommandID != "" || pv.Command == "") {
@@ -247,7 +247,7 @@ func (s *Server) sharePreviewIn(project string, rt *runtime.Runtime, a toolArgs)
 		sum = saved.Name
 	}
 	res := ok(fmt.Sprintf("A card is shown to the user: %s starts when they click it (port %d), and the app opens on a temporary URL. Do not run the command yourself.", what, pv.Port),
-		agent.T("{command} → port {port}", map[string]any{"command": sum, "port": pv.Port}))
+		assistant.T("{command} → port {port}", map[string]any{"command": sum, "port": pv.Port}))
 	res.Preview = pv
 	return res, nil
 }

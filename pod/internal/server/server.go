@@ -116,8 +116,8 @@ type Server struct {
 	runtimes map[string]*runtime.Runtime
 	opening  map[string]*sync.Mutex
 	handlers map[string]handler
-	// agents are the conversations of the assistant running in the pod.
-	agents agents
+	// assistants are the conversations of the assistant running in the pod.
+	assistants assistants
 	// asks: the questions of the MCP tool ask_user, and the conversations asking (Questions tool).
 	asks askRegistry
 	// previewMu serializes preview.open (one command per app).
@@ -139,7 +139,7 @@ func (s *Server) Init() {
 	s.runtimes = map[string]*runtime.Runtime{}
 	s.opening = map[string]*sync.Mutex{}
 	s.handlers = map[string]handler{}
-	s.agents = agents{runs: map[string]*agentRun{}, slots: map[string]chan struct{}{}, waiting: map[string]int{}, ui: map[string]chan uiResult{}}
+	s.assistants = assistants{runs: map[string]*assistantRun{}, slots: map[string]chan struct{}{}, waiting: map[string]int{}, ui: map[string]chan uiResult{}}
 	if s.Kanban == nil {
 		s.Kanban = kanban.NewManager(s.Store)
 	}
@@ -158,7 +158,7 @@ func (s *Server) Init() {
 	s.registerIcons()
 	s.registerWorktrees()
 	s.registerLLM()
-	s.registerAgent()
+	s.registerAssistant()
 	s.registerExec()
 	s.registerDocker()
 	s.registerDockerLogs()

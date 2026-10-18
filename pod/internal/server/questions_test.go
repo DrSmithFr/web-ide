@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/pod/internal/agent"
+	"github.com/DrSmithFr/web-ide/pod/internal/assistant"
 )
 
 // The Questions tool lists what waits for the user — a form of an ACP session, ask_user of a
@@ -108,10 +108,10 @@ func TestQuestions(t *testing.T) {
 
 	// A conversation of the assistant asking.
 	loc, root, _ := s.chatLoc(id)
-	chat := &agent.Chat{ID: "c1", Title: "Plan the cache", Messages: []*agent.Message{
-		{Role: "user", Content: agent.String("Plan it")},
-		{Role: "assistant", Content: agent.String("Two ways to do it.")},
-		{Role: "tool", ToolCallID: "x", Name: "ask_user", AskState: "pending", At: 5, Questions: []agent.Question{{Question: "Which one?", Options: []agent.Option{{Label: "A"}, {Label: "B"}}}}},
+	chat := &assistant.Chat{ID: "c1", Title: "Plan the cache", Messages: []*assistant.Message{
+		{Role: "user", Content: assistant.String("Plan it")},
+		{Role: "assistant", Content: assistant.String("Two ways to do it.")},
+		{Role: "tool", ToolCallID: "x", Name: "ask_user", AskState: "pending", At: 5, Questions: []assistant.Question{{Question: "Which one?", Options: []assistant.Option{{Label: "A"}, {Label: "B"}}}}},
 	}}
 	if err := s.publishIdle(loc, root, chat, 0); err != nil {
 		t.Fatal(err)

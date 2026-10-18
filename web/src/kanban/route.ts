@@ -1,5 +1,5 @@
 // Routing of the sessions of a ticket by its complexity (docs/design/kanban.md): each level has an
-// effort of the integrated assistant and a model of Claude Code. The click of a session
+// effort of the assistant and a model of Claude Code. The click of a session
 // button runs the level recommended by the complexity; its arrow offers all of them.
 import type { Effort } from '../llm/state'
 import type { Complexity } from './state'
@@ -9,7 +9,7 @@ export type ClaudeModel = 'opus' | 'sonnet' | 'haiku'
 
 export interface Tier {
   complexity: Complexity
-  /** Effort of the integrated assistant: auto is the dynamic one. */
+  /** Effort of the assistant: auto is the dynamic one. */
   effort: 'auto' | Effort
   claude: ClaudeModel
 }

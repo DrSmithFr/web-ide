@@ -8,7 +8,7 @@ import { t } from '../i18n'
 import { getTicket, openTicket } from '../kanban/state'
 import { blockerText } from '../kanban/Lineage'
 import { startTicketChat, startWorkSession } from '../kanban/sessions'
-import { openChat } from './agent'
+import { openChat } from './assistant'
 import { chat, chatList, type ActionCard as Card, type ChatMessage } from './state'
 
 const kindIcons: Record<Card['kind'], string> = { start_dev: 'play', generate_plan: 'outline', open_ticket: 'kanban', open_conversation: 'comment' }
@@ -16,7 +16,7 @@ const kindIcons: Record<Card['kind'], string> = { start_dev: 'play', generate_pl
 export function ActionCard(props: { msg: ChatMessage; index: number }) {
   const card = () => props.msg.card!
   const [busy, setBusy] = createSignal(false)
-  const record = (state: 'done' | 'failed', result: string) => request('agent.card', { id: chat.id, index: props.index, state, result })
+  const record = (state: 'done' | 'failed', result: string) => request('assistant.card', { id: chat.id, index: props.index, state, result })
   const run = async () => {
     setBusy(true)
     try {

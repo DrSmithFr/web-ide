@@ -1,4 +1,4 @@
-// AI assistant, Plan / Build modes: Shift+Tab, Plan prompt and tools (scratch files only,
+// Assistant, Plan / Build modes: Shift+Tab, Plan prompt and tools (scratch files only,
 // exit_plan_mode), dedicated Plan model, bash guess (reading and project builds run, a change asks),
 // plan card and its execution in Build (changes in the project without asking), compaction
 // asked by the model.
@@ -74,7 +74,7 @@ run(async ({ page }) => {
   page.on('dialog', (d) => d.accept())
   try {
     await openProject(page)
-    await page.click('.rail-right .rail-btn[title="AI assistant"]')
+    await page.click('.rail-right .rail-btn[title="Assistant"]')
     await page.click('.ai-empty button:has-text("Add a model server")')
     await page.fill('.ai-servers input[name=url]', `127.0.0.1:${fake.address().port}`)
     await page.click('.ai-servers button:has-text("Add")')

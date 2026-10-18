@@ -18,7 +18,7 @@ type mcpRole struct {
 var feedbackArg = map[string]any{"name": "feedback", "description": "Id of one test feedback to handle (optional: all the open ones)"}
 
 var mcpRoles = []mcpRole{
-	{"brief", "Take over the briefing of a ticket qualified by the local assistant", `Take over the **briefing** of ticket #{{id}}: the local assistant has qualified the need with the user; check it before planning.
+	{"brief", "Take over the briefing of a ticket qualified by the assistant", `Take over the **briefing** of ticket #{{id}}: the assistant has qualified the need with the user; check it before planning.
 - Read the ticket (kanban_get) and its briefing conversations (kanban_conversation), then the code concerned.
 - Look for what is missing or fragile: unclear need, unstated acceptance criteria, edge cases, risks, conflicts with the existing code, a ticket that should be split.
 - Ask the user about what only they can decide; record the answers.

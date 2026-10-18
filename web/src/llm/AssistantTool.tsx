@@ -8,7 +8,7 @@ import { errorToast } from '../ui/toast'
 import { route } from '../app/router'
 import { approval, chat, live, loadConfig, modelsError, prefs, resetChat, savePrefs, setPrefs } from './state'
 import { SettingsModal } from './AssistantSettings'
-import { restoreActive } from './agent'
+import { restoreActive } from './assistant'
 import { Thread } from './Thread'
 import { addFiles, Composer, focusComposer, fullComposer, suggest } from './Composer'
 import { Sidebar } from './Sidebar'
@@ -40,7 +40,7 @@ function TicketBar() {
     if (!s) return
     const ticket = { id: s.id, role: roleFor(s.status) }
     setChat('ticket', ticket)
-    await request('agent.set', { id: chat.id, ticket }).catch(errorToast)
+    await request('assistant.set', { id: chat.id, ticket }).catch(errorToast)
   }
   return (
     <Show

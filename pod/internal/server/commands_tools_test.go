@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/pod/internal/agent"
+	"github.com/DrSmithFr/web-ide/pod/internal/assistant"
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
 )
 
@@ -52,7 +52,7 @@ func TestSavedCommandsForModels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := &agentRun{id: "c", ctx: context.Background(), chat: &agent.Chat{}, project: id, root: id}
+	r := &assistantRun{id: "c", ctx: context.Background(), chat: &assistant.Chat{}, project: id, root: id}
 	args := func(js string) toolArgs {
 		var a toolArgs
 		if err := json.Unmarshal([]byte(js), &a); err != nil {

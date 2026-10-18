@@ -6,28 +6,28 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/pod/internal/agent"
+	"github.com/DrSmithFr/web-ide/pod/internal/assistant"
 )
 
-func answer(at int64, effort string, usage string, thinkMs, elapsedMs int64, reasoning string, calls ...[2]string) *agent.Message {
-	m := &agent.Message{Role: "assistant", At: at, Effort: effort, Model: "m", Usage: json.RawMessage(usage), ThinkMs: thinkMs, ElapsedMs: elapsedMs, Reasoning: reasoning}
+func answer(at int64, effort string, usage string, thinkMs, elapsedMs int64, reasoning string, calls ...[2]string) *assistant.Message {
+	m := &assistant.Message{Role: "assistant", At: at, Effort: effort, Model: "m", Usage: json.RawMessage(usage), ThinkMs: thinkMs, ElapsedMs: elapsedMs, Reasoning: reasoning}
 	for _, c := range calls {
-		var tc agent.ToolCall
+		var tc assistant.ToolCall
 		tc.Function.Name, tc.Function.Arguments = c[0], c[1]
 		m.ToolCalls = append(m.ToolCalls, tc)
 	}
 	return m
 }
 
-func result(name, status, failure string, elapsed, wait int64, content string) *agent.Message {
-	return &agent.Message{Role: "tool", Name: name, Status: status, Failure: failure, ElapsedMs: elapsed, WaitMs: wait, Content: agent.String(content)}
+func result(name, status, failure string, elapsed, wait int64, content string) *assistant.Message {
+	return &assistant.Message{Role: "tool", Name: name, Status: status, Failure: failure, ElapsedMs: elapsed, WaitMs: wait, Content: assistant.String(content)}
 }
 
 // A conversation: a message, an answer reading two files at once (one read twice), an edit
 // approved after a wait, a command that fails, a compaction, a forgotten parameter, the end.
-func fixture() *agent.Chat {
-	return &agent.Chat{ID: "c", Messages: []*agent.Message{
-		{Role: "user", At: 1000, Content: agent.String(strings.Repeat("u", 70))},
+func fixture() *assistant.Chat {
+	return &assistant.Chat{ID: "c", Messages: []*assistant.Message{
+		{Role: "user", At: 1000, Content: assistant.String(strings.Repeat("u", 70))},
 		answer(2000, "xhigh", `{"prompt":1000,"completion":100,"cached":0,"perSecond":50,"promptPerSecond":500}`, 800, 1200, strings.Repeat("r", 30),
 			[2]string{"read_file", `{"path":"a"}`}, [2]string{"read_file", `{"path":"b"}`}),
 		result("read_file", "ok", "", 10, 0, strings.Repeat("x", 350)),
@@ -39,7 +39,7 @@ func fixture() *agent.Chat {
 			[2]string{"read_file", `{"path":"a"}`}, [2]string{"bash", `{"command":"make test"}`}),
 		result("read_file", "ok", "", 10, 0, ""),
 		result("bash", "error", "exit", 3000, 0, "FAIL"),
-		{Role: "user", At: 7000, Kind: "summary", Content: agent.String(strings.Repeat("s", 35))},
+		{Role: "user", At: 7000, Kind: "summary", Content: assistant.String(strings.Repeat("s", 35))},
 		answer(9000, "xhigh", `{"prompt":500,"completion":60,"cached":0,"perSecond":60,"promptPerSecond":1000}`, 600, 1000, "",
 			[2]string{"write_file", `{}`}),
 		result("write_file", "error", "usage", 1, 0, "Error: path is missing"),

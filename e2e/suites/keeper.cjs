@@ -117,7 +117,7 @@ run(async ({ page }) => {
   // The assistant: the pod restarts while the answer is written, then while its command runs.
   await new Promise((r) => fake.listen(0, '127.0.0.1', r))
   try {
-    await page.click('.rail-right .rail-btn[title="AI assistant"]')
+    await page.click('.rail-right .rail-btn[title="Assistant"]')
     await page.waitForSelector('.ai-panel .ai-empty')
     await page.click('.ai-empty button:has-text("Add a model server")')
     await page.fill('.ai-servers input[name=url]', `127.0.0.1:${fake.address().port}`)

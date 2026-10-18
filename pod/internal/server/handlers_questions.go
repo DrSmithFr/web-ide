@@ -10,7 +10,7 @@ import (
 	"sync"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/acp"
-	"github.com/DrSmithFr/web-ide/pod/internal/agent"
+	"github.com/DrSmithFr/web-ide/pod/internal/assistant"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/push"
 )
@@ -34,11 +34,11 @@ type Question struct {
 	Name  string `json:"name"`
 	Title string `json:"title"`
 	// Kind: permission (Options), form (Text and Schema), ask (Questions of ask_user).
-	Kind      string           `json:"kind"`
-	Text      string           `json:"text,omitempty"`
-	Options   []acp.Option     `json:"options,omitempty"`
-	Schema    json.RawMessage  `json:"schema,omitempty"`
-	Questions []agent.Question `json:"questions,omitempty"`
+	Kind      string               `json:"kind"`
+	Text      string               `json:"text,omitempty"`
+	Options   []acp.Option         `json:"options,omitempty"`
+	Schema    json.RawMessage      `json:"schema,omitempty"`
+	Questions []assistant.Question `json:"questions,omitempty"`
 	// Last is what the asker said before the question (its context).
 	Last string `json:"last,omitempty"`
 	Time int64  `json:"time"`
@@ -121,7 +121,7 @@ func (s *Server) assistantQuestions(root string) []Question {
 			}
 			if m.AskState == "pending" {
 				out = append(out, Question{ID: "chat:" + c.ID + ":" + strconv.Itoa(i), Source: "assistant", Project: root, Session: c.ID, Index: i,
-					Name: "AI assistant", Title: c.Title, Kind: "ask", Questions: m.Questions, Last: last, Time: m.At})
+					Name: "Assistant", Title: c.Title, Kind: "ask", Questions: m.Questions, Last: last, Time: m.At})
 			}
 		}
 	}
@@ -139,7 +139,7 @@ func textOf(raw json.RawMessage) string {
 // asked names who just asked one (a push notification).
 func (s *Server) questionsChanged(projectID, asked string) {
 	root := s.questionRoot(projectID)
-	s.emitAgent(root, "questions.changed", map[string]string{"project": root})
+	s.emitAssistant(root, "questions.changed", map[string]string{"project": root})
 	if asked != "" {
 		s.notifyQuestion(root, asked)
 	}
@@ -154,7 +154,7 @@ func (s *Server) notifyQuestion(root, who string) {
 
 // noteAsks: a conversation of the assistant was saved; its questions changed when it asks
 // or stops asking, or when a message with questions is among those published.
-func (s *Server) noteAsks(root string, c *agent.Chat, from int) {
+func (s *Server) noteAsks(root string, c *assistant.Chat, from int) {
 	pending, touched := false, false
 	for i, m := range c.Messages {
 		if m.AskState == "pending" {
@@ -173,7 +173,7 @@ func (s *Server) noteAsks(root string, c *agent.Chat, from int) {
 	}
 	s.asks.mu.Unlock()
 	if prev != pending || touched {
-		s.emitAgent(root, "questions.changed", map[string]string{"project": root})
+		s.emitAssistant(root, "questions.changed", map[string]string{"project": root})
 	}
 }
 
@@ -212,7 +212,7 @@ func (s *Server) registerQuestions() {
 	})
 	// questions.answer answers a question of an ACP session or of the MCP tool from any window
 	// of its root (the session may run in a worktree the window did not attach). The questions
-	// of the assistant go through agent.answer.
+	// of the assistant go through assistant.answer.
 	s.handle("questions.answer", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 		a, err := bind[struct {
 			ID string `json:"id"`
@@ -221,7 +221,7 @@ func (s *Server) registerQuestions() {
 			// A form: accept (with Content), decline or cancel.
 			Action  string          `json:"action"`
 			Content json.RawMessage `json:"content"`
-			// ask_user of MCP: as agent.answer; Skip: the user does not answer.
+			// ask_user of MCP: as assistant.answer; Skip: the user does not answer.
 			Answers [][]string `json:"answers"`
 			Notes   []string   `json:"notes"`
 			Path    []int      `json:"path"`

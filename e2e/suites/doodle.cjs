@@ -1,4 +1,4 @@
-// AI assistant, doodles: paperclip menu, modal with the conversation, pen, marker under the
+// Assistant, doodles: paperclip menu, modal with the conversation, pen, marker under the
 // pen, pixel and object eraser (and the eraser end of a stylus), stylus pressure, undo / redo,
 // frame presets, attach (chip opened again), PNG and description sent to the model,
 // Ctrl+Shift+D and sending from the composer of the modal.
@@ -129,7 +129,7 @@ run(async ({ page }) => {
   await new Promise((r) => fake.listen(0, '127.0.0.1', r))
   try {
     await openProject(page)
-    await page.click('.rail-right .rail-btn[title="AI assistant"]')
+    await page.click('.rail-right .rail-btn[title="Assistant"]')
     await page.click('.ai-empty button:has-text("Add a model server")')
     await page.fill('.ai-servers input[name=url]', `127.0.0.1:${fake.address().port}`)
     await page.click('.ai-servers button:has-text("Add")')

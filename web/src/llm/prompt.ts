@@ -1,4 +1,4 @@
-// System prompt of the assistant, as the settings show it. The pod builds it (the agent runs
+// System prompt of the assistant, as the settings show it. The pod builds it (the assistant runs
 // there): an editable template (global, or per project in .ide/system-prompt.md), then the
 // memory files (CLAUDE.md, AGENTS.md…) and the list of skills, loaded the same way as Claude
 // Code does.
@@ -78,5 +78,5 @@ export function templateOf(c: PromptContext | null, mode: Mode = 'build'): { tex
 /** The final system prompt of a mode, as the pod would send it now. */
 export function systemPrompt(mode: Mode): Promise<string> {
   const tab = activeTab()
-  return request<string>('agent.prompt', { mode, activeFile: tab?.kind === 'file' && tab.path ? relPath(tab.path) : '' })
+  return request<string>('assistant.prompt', { mode, activeFile: tab?.kind === 'file' && tab.path ? relPath(tab.path) : '' })
 }

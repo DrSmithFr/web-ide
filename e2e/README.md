@@ -24,13 +24,13 @@ flowchart LR
 - `shots/`: `make shots`, the pictures of the documentation, replayed from `recording.json.gz` (`shots.cjs`, `screencast.cjs`, `llm-proxy.cjs`).
 - `suites/`: one script per area, alphabetical (`run.sh` has its own order, longest first):
 
-- `agent`: AI assistant, agent features: system prompt built from the editable template
+- `agent`: Assistant, features of the assistant: system prompt built from the editable template
 - `agents`: Agents tool: ACP sessions with the fake agent of e2e/bin (claude-agent-acp): opened from the launcher, a prompt streams thought
-- `chat`: AI assistant, conversation features: side bar order, Ctrl+click on @file
+- `chat`: Assistant, conversation features: side bar order, Ctrl+click on @file
 - `commands`: Saved commands of the project: quick access of the empty Console, modal list + detail (bash editor), ▶ menu
 - `desks`: Desks (docs/design/desks.md): each desk of a project has its own layout; the URL names the desk; two windows on two desks do not t
 - `docker`: Docker tool against the local Docker: Compose stack of the project
-- `doodle`: AI assistant, doodles: paperclip menu, modal with the conversation, pen, marker under the pen
+- `doodle`: Assistant, doodles: paperclip menu, modal with the conversation, pen, marker under the pen
 - `editing`: Editing: typing, undo, auto-indent, save, remote changes (merge, conflict), find bar, sub-words
 - `editor`: Editor: text against the gutter, indentation guides, whitespace, multiple carets, folding, soft wrap
 - `explorer`: File explorer: file type icons, click to select and double click to open, git colors (untracked, added, ignored), folder marks
@@ -46,7 +46,7 @@ flowchart LR
 - `keeper`: Keeper: a terminal survives a restart of the pod (run.sh starts a keeper for this suite and gives the command restarting the pod)
 - `keyboard`: Keyboard navigation: one shortcut per tool, Escape back to the editor, arrows inside toolbars and tab bars (one Tab stop per bar)
 - `lan`: LAN (#50): the pods of one account reach each other on the local network with no relay
-- `llm`: AI assistant: server setup, model list, streamed answer with tool calls (read, language server, confirmed edit)
+- `llm`: Assistant: server setup, model list, streamed answer with tool calls (read, language server, confirmed edit)
 - `lsp`: Code navigation with gopls (skipped when gopls is not installed)
 - `mcptools`: Tools of the IDE in its MCP (#68), called as a CLI agent does: a file and a diff opened in the window, a message
 - `mobile`: Phone layout (375×812, touch): one bar of three rows (project and status, the menus, the icons of the views)
@@ -54,7 +54,7 @@ flowchart LR
 - `multipod`: Multi-pod (milestone 3): three pods of one account, alpha and bravo on one cluster (they are linked by the LAN)
 - `orchestrator`: Orchestrator mode, the default of a new conversation
 - `perf`: Performance on a 100 000-line file: each keystroke and each scroll must fit in a few frames
-- `plan`: AI assistant, Plan / Build modes: Shift+Tab, Plan prompt and tools (scratch files only, exit_plan_mode), dedicated Plan model
+- `plan`: Assistant, Plan / Build modes: Shift+Tab, Plan prompt and tools (scratch files only, exit_plan_mode), dedicated Plan model
 - `popups`: Popups: Search Everywhere (tabs over files, symbols, actions and text), Recent Files and the switcher, the clipboard history
 - `preview`: App previews (share_preview): the model offers the app, nothing runs before the click; the click starts the command in a console
 - `projects`: Projects: installable app, generated icon (home page, favicon), icon editor; menu bar with the selector of the worktrees

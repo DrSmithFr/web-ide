@@ -62,7 +62,7 @@ run(async ({ page, ctx }) => {
     for (let i = 0; i < 20 && git('ls-files .ide'); i++) await page.waitForTimeout(200)
     assert(git('ls-files .ide') === '' && fs.existsSync(repo + '/.ide/folders.json'), '.ide files untracked, kept on disk')
     git('commit -q -m "untrack .ide"')
-    await page.click('.rail-right .rail-btn[title="AI assistant"]')
+    await page.click('.rail-right .rail-btn[title="Assistant"]')
     await page.click('.ai-empty button:has-text("Add a model server")')
     await page.fill('.ai-servers input[name=url]', `127.0.0.1:${fake.address().port}`)
     await page.click('.ai-servers button:has-text("Add")')

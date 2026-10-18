@@ -1,6 +1,6 @@
 // Statistics of the conversation (with its sub-agents) or of the project: speeds, time spent
 // generating, thinking and in the tools, failures of the tools, the context and its
-// compactions. Computed by the pod (agent.stats); followed live during an answer.
+// compactions. Computed by the pod (assistant.stats); followed live during an answer.
 import { createEffect, createResource, createSignal, For, on, onCleanup, Show } from 'solid-js'
 import { request } from '../pod/rpc'
 import { t } from '../i18n'
@@ -130,7 +130,7 @@ export function Stats() {
           effort: effort(),
           from: periods.find((p) => p.id === period())!.ms ? Date.now() - periods.find((p) => p.id === period())!.ms : 0,
         }
-  const [data, { refetch }] = createResource(params, (p) => request<ChatResult & ProjectResult>('agent.stats', p))
+  const [data, { refetch }] = createResource(params, (p) => request<ChatResult & ProjectResult>('assistant.stats', p))
 
   // Live: the conversation shown is followed at most every 1.5 s while it changes.
   let timer: ReturnType<typeof setTimeout> | undefined

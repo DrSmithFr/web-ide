@@ -29,7 +29,7 @@ import {
   type Effort,
   type Model,
 } from './state'
-import { compactNow, currentMode, nextMode, send, setMode, stop, unqueue } from './agent'
+import { compactNow, currentMode, nextMode, send, setMode, stop, unqueue } from './assistant'
 import { prepare, type Prepared } from './attachments'
 import { prepareDoodle } from './doodle/export'
 import { cloneDoc, newDoc, type DoodleDoc } from './doodle/model'

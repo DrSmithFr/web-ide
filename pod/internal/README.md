@@ -6,7 +6,7 @@ The packages of the pod, in five blocks. Each section has the map of its package
 |---|---|
 | [Server and protocol](#server-and-protocol) | `server`, `runtime`, `store`, `settings`, `projects`, `sessions`, `idedir`, `config`, `stats`, `update`, `i18n` |
 | [Files and processes](#files-and-processes) | `fsx`, `execx`, `sshx`, `sshtest`, `console`, `keeper`, `search`, `lsp`, `db`, `docker`, `tunnels`, `preview`, `clipboard`, `commands` |
-| [AI](#ai) | `llm`, `agent`, `acp`, `hfcache` |
+| [AI](#ai) | `llm`, `assistant`, `acp`, `hfcache` |
 | [Kanban and git](#kanban-and-git) | `kanban`, `git` |
 | [Network and identity](#network-and-identity) | `relay`, `relayclient`, `relayload`, `tunnel`, `multipod`, `lan`, `identity`, `pair`, `settingsync`, `push`, `power` |
 
@@ -22,7 +22,7 @@ flowchart LR
     fsx["fsx"]
     identity["identity"]
     llm["llm"]
-    agent["agent"]
+    assistant["assistant"]
   end
   server["server<br/>HTTP, pairing, WebSocket RPC, MCP"]
   runtime["runtime<br/>one per open project"]
@@ -34,7 +34,7 @@ flowchart LR
   idedir["idedir<br/>.ide out of git"]
   stats["stats<br/>assistant measures"]
   update["update<br/>signed update request"]
-  server --> agent
+  server --> assistant
   server --> config
   server --> fsx
   server --> idedir
@@ -55,13 +55,13 @@ flowchart LR
   settings --> store
   config --> store
   idedir --> fsx
-  stats --> agent
+  stats --> assistant
   stats --> llm
   update --> identity
   llm --> idedir
   llm --> store
   classDef other stroke-dasharray: 4 3
-  class fsx,identity,llm,agent other
+  class fsx,identity,llm,assistant other
 ```
 
 **Packages**
@@ -150,7 +150,7 @@ flowchart LR
 
 ## AI
 
-The assistant and the agents. `llm` talks to the model servers and keeps the conversations; `agent` is what the assistant's turn loop needs apart from the server (the loop itself is `server/agent*.go`); `acp` is the client of the CLI agents (Claude Code, opencode, pi), which run in the keeper. The way they interact is told in [architecture.md](../../docs/design/architecture.md#ai-assistant) and [kanban.md](../../docs/design/kanban.md#claude-code).
+The assistant and the agents. `llm` talks to the model servers and keeps the conversations; `assistant` is what the assistant's turn loop needs apart from the server (the loop itself is `server/assistant*.go`); `acp` is the client of the CLI agents (Claude Code, opencode, pi), which run in the keeper. The way they interact is told in [architecture.md](../../docs/design/architecture.md#assistant) and [kanban.md](../../docs/design/kanban.md#claude-code).
 
 ```mermaid
 flowchart LR
@@ -165,21 +165,21 @@ flowchart LR
     store["store"]
   end
   llm["llm<br/>model servers, conversations"]
-  agent["agent<br/>turn tools, modes, sub-agents"]
+  assistant["assistant<br/>turn tools, modes, sub-agents"]
   acp["acp<br/>ACP client of CLI agents"]
   hfcache["hfcache<br/>offline model files"]
   llm --> fsx
   llm --> idedir
   llm -->|"completions relayed"| keeper
   llm --> store
-  agent -->|"chat jobs"| llm
+  assistant -->|"chat jobs"| llm
   acp -->|"agent processes"| keeper
   server --> acp
-  server --> agent
+  server --> assistant
   server --> hfcache
   server --> llm
   runtime --> acp
-  stats --> agent
+  stats --> assistant
   stats --> llm
   settingsync --> llm
   classDef other stroke-dasharray: 4 3
@@ -189,11 +189,11 @@ flowchart LR
 **Packages**
 
 - `llm`: Model servers, chat completions as jobs that survive the page, conversations (SQLite), instructions and skills
-- `agent`: What the agent of the assistant needs apart from the server: the stored conversation, the prompts and tool definitions, the Plan mode command rules, the line diff of a change, the questions of `ask_user`, the sub-agents (`subagents.go`); the loop itself is in `server/agent*.go`
+- `assistant`: What the assistant needs apart from the server: the stored conversation, the prompts and tool definitions, the Plan mode command rules, the line diff of a change, the questions of `ask_user`, the sub-agents (`subagents.go`); the loop itself is in `server/assistant*.go`
 - `acp`: Agents tool: ACP client of the CLI agents (Claude Code, opencode, pi), one process per session in the keeper (piped, `sh -c 'exec "$@" 2>>log'` so that stderr stays apart) or in the pod without keeper; the JSON-RPC lines go through a queue per session (the reader of the keeper never waits); the thread built from `session/update` (`transcript.go`, the relative paths of tool calls made absolute from the cwd), saved with the output offset and the awaited prompt id so that the next pod follows the process again; a process that ends is restarted and `session/load`ed (3 ends in a minute stop it); the catalog finds the adapters in the `PATH` or `<data>/acp` and installs them with npm; each turn is timed (the open permissions apart) and recorded with its tokens per model in `turns.jsonl` (`stats.go`: Claude's `_meta.quota.model_usage`, opencode's `usage` and running cost, pi's session file through `~/.pi/pi-acp/session-map.json`), priced by `prices.go` (embedded table + `<data>/prices.json`) when summed; the context ring takes `usage_update`, and during a turn of pi or opencode (which tell it only at its end) `live.go` reads the tokens of the last step (pi's session file, opencode's `opencode.db` read only); `Agent.Hidden` adds the commands an agent runs without listing them (opencode's `/compact`); `Deps.MCP` is the MCP server of the IDE given to the agents that speak MCP over HTTP (`Server.agentsMCP`: the listen address, or `MCPBase` in tests); `prompt.go`: the content blocks of a prompt (text, `resource_link` per existing `@path`, images when `promptCapabilities.image`, texts), its images kept as files next to the session (`<id>/img-N`, served by `agents.image`) so the session file stays small, and the queue of the prompts sent during a turn (saved, sent by `endTurn` and after a start); the questions of the agent (`ask.go`): permissions and the forms of `elicitation/create` (declared in `clientCapabilities`: Claude's AskUserQuestion) are entries open until answered, withdrawn by `$/cancel_request`, cancelled by Stop, listed by `Manager.Questions` with the last agent message
 - `hfcache`: Hugging Face files downloaded once and served offline (speech models)
 
-**Tests**: `cd pod && go test ./internal/{llm,agent,acp,hfcache}` and `./internal/server` (the loop, the MCP endpoint); e2e: `llm`, `agent`, `chat`, `plan`, `orchestrator`, `subagents`, `agents`, `questions`, `speech`, `doodle`.
+**Tests**: `cd pod && go test ./internal/{llm,assistant,acp,hfcache}` and `./internal/server` (the loop, the MCP endpoint); e2e: `llm`, `agent`, `chat`, `plan`, `orchestrator`, `subagents`, `agents`, `questions`, `speech`, `doodle`.
 
 
 ## Kanban and git
