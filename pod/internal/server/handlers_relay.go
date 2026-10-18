@@ -35,6 +35,7 @@ type RelayInfo struct {
 	TurnUntil     int64  `json:"turnUntil,omitempty"`
 	TurnSponsor   string `json:"turnSponsor,omitempty"`
 	TurnVIP       bool   `json:"turnVip,omitempty"`
+	TurnTeam      string `json:"turnTeam,omitempty"`
 }
 
 func (s *Server) registerRelay() {

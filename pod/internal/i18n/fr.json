@@ -345,5 +345,12 @@
   "only the user validates a user story": "seul l'utilisateur valide une user story",
   "the milestone is closed": "le jalon est fermé",
   "user story %d not found": "user story %d introuvable",
-  "user story too long (%d characters, %d max)": "user story trop longue (%d caractères, %d max)"
+  "user story too long (%d characters, %d max)": "user story trop longue (%d caractères, %d max)",
+  "no GitHub account %q": "aucun compte GitHub %q",
+  "a GitHub login or an account id is needed": "il faut un login GitHub ou un id de compte",
+  "only a device of the account can manage its team": "seul un appareil du compte peut gérer son équipe",
+  "this account does not manage that team": "ce compte ne gère pas cette équipe",
+  "not a member of this team": "pas membre de cette équipe",
+  "the owner of a team takes no seat": "le propriétaire d’une équipe ne prend pas de siège",
+  "the team has no seat left (%d of %d)": "l’équipe n’a plus de siège libre (%d sur %d)"
 }

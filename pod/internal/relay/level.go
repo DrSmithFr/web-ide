@@ -105,6 +105,7 @@ type AccountLevel struct {
 	SponsorUntil int64
 	VIP          bool // on the VIP list, live
 	VIPUntil     int64
+	Team         string // the name of the team that makes it a VIP (#88), "" when none
 }
 
 // Level reads the level of an account (or of a TURN key that is a pod id: free). It needs no
@@ -126,6 +127,10 @@ func (s *Store) Level(account string, now time.Time) AccountLevel {
 	al.Level, al.Until = al.Sponsor, al.SponsorUntil
 	if al.VIP && better(LevelVIP, al.VIPUntil, al.Level, al.Until) {
 		al.Level, al.Until = LevelVIP, al.VIPUntil
+	}
+	// A seat of a team lasts as long as the monthly sponsorship of its owner: no end.
+	if al.Team = s.teamFor(account, githubID); al.Team != "" && better(LevelVIP, 0, al.Level, al.Until) {
+		al.Level, al.Until = LevelVIP, 0
 	}
 	return al
 }
@@ -200,9 +205,13 @@ func (s *Store) levels(now time.Time) (map[string]AccountLevel, int64) {
 			accounts = append(accounts, v.ID)
 		}
 	}
+	accounts = append(accounts, s.teamAccounts()...)
 	out := map[string]AccountLevel{}
 	var next int64
 	for _, a := range accounts {
+		if _, seen := out[a]; seen {
+			continue
+		}
 		al := s.Level(a, now)
 		if al.Level == LevelFree && !al.VIP {
 			continue

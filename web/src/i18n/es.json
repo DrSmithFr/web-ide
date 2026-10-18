@@ -2165,5 +2165,13 @@
   "{n} to test": "{n} por probar",
   "Review coverage": "Revisión de cobertura",
   "Claude Code checks that the e2e tests cover each user story: the gaps become feedback of the milestone": "Claude Code comprueba que los tests e2e cubren cada historia de usuario: lo que falta se convierte en comentarios del hito",
-  "Open the milestones": "Abrir los hitos"
+  "Open the milestones": "Abrir los hitos",
+  "Add a member": "Añadir un miembro",
+  "beyond the seats": "más allá de las plazas",
+  "GitHub asks to read your organizations (read:org): the relay checks once that you are an admin of the organization that sponsors the project, then forgets the token.": "GitHub pide leer tus organizaciones (read:org): el relay comprueba una vez que eres admin de la organización que patrocina el proyecto y luego olvida el token.",
+  "GitHub login or account id": "Login de GitHub o id de cuenta",
+  "Manage the team of an organization": "Gestionar el equipo de una organización",
+  "Team {name}": "Equipo {name}",
+  "The sponsorship gives fewer seats than members: the members added last are not VIPs until some are removed.": "El patrocinio da menos plazas que miembros: los últimos añadidos no son VIP hasta que se quiten otros.",
+  "{used}/{seats} seats": "{used}/{seats} plazas"
 }

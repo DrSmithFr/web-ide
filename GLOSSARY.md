@@ -32,7 +32,14 @@ The level of a $5 monthly sponsor, or of $5 paid once (for 30 days): no TURN quo
 _Avoid_: sponsor (for the level: a sponsor is the person on GitHub, at any level)
 
 **VIP**
-The level of a $10 monthly sponsor and above, of $10 or $50 paid once (90 or 360 days), or of a person on the VIP list: no TURN quota, and the VIP badge.
+The level of a $10 monthly sponsor and above, of $10 or $50 paid once (90 or 360 days), of a person on the VIP list, or of a member of a team within its seats: no TURN quota, and the VIP badge.
+
+**Team**
+The tier of a monthly sponsorship of $50 or more, by a person or an organization: the sponsor's team, whose admin adds members who become VIPs. The owner takes no seat.
+_Avoid_: company, organization (an organization is one kind of owner)
+
+**Seat**
+A place in a team: one per $5 of the monthly sponsorship ($50 is 10 seats).
 
 **VIP list**
 The people the admin of a relay makes VIPs by hand (`web-ide-pod relay vip`), by GitHub login or by account id, with an optional end and a note only the admin sees.

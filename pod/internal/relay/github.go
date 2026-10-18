@@ -14,6 +14,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -73,6 +74,7 @@ type Sponsor struct {
 	Cents   int64  `json:"cents"`   // the monthly price of the tier (the amount, for a one-time payment)
 	OneTime bool   `json:"oneTime"` // a one-time payment rather than a monthly sponsorship
 	Since   int64  `json:"since"`   // when the sponsorship started (unix seconds)
+	Org     bool   `json:"org"`     // an organization (#88): it links no account, its seats make a team
 }
 
 // mergeSponsor picks the row a sponsor keeps when a second sponsorship of theirs shows up. A
@@ -102,6 +104,7 @@ type githubPending struct {
 	account string
 	device  string
 	at      time.Time
+	purpose string // "" links the account; "team" proves the admin of an organization (#88)
 }
 
 const githubPendingTTL = 10 * time.Minute
@@ -149,6 +152,7 @@ func migrateGitHub(db *sql.DB) error {
 		{"cents", "INTEGER NOT NULL DEFAULT 0"},
 		{"one_time", "INTEGER NOT NULL DEFAULT 0"},
 		{"since", "INTEGER NOT NULL DEFAULT 0"},
+		{"org", "INTEGER NOT NULL DEFAULT 0"}, // #88
 	} {
 		if err := addColumn(db, "sponsors", col[0], col[1]); err != nil {
 			return err
@@ -235,10 +239,10 @@ func (s *Store) SaveSponsors(list []Sponsor) error {
 }
 
 func putSponsor(tx *sql.Tx, sp Sponsor) error {
-	_, err := tx.Exec(`INSERT INTO sponsors (github_id, login, cents, one_time, since, updated) VALUES (?,?,?,?,?,?)
+	_, err := tx.Exec(`INSERT INTO sponsors (github_id, login, cents, one_time, since, org, updated) VALUES (?,?,?,?,?,?,?)
 			ON CONFLICT (github_id) DO UPDATE SET login=excluded.login, cents=excluded.cents,
-			one_time=excluded.one_time, since=excluded.since, updated=excluded.updated`,
-		sp.ID, sp.Login, sp.Cents, sp.OneTime, sp.Since, time.Now().Unix())
+			one_time=excluded.one_time, since=excluded.since, org=excluded.org, updated=excluded.updated`,
+		sp.ID, sp.Login, sp.Cents, sp.OneTime, sp.Since, sp.Org, time.Now().Unix())
 	return err
 }
 
@@ -253,7 +257,7 @@ func (s *Store) Sponsor(githubID string) (*Sponsor, error) {
 func (s *Store) sponsors() ([]Sponsor, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rows, err := s.db.Query("SELECT github_id, login, cents, one_time, since FROM sponsors")
+	rows, err := s.db.Query("SELECT github_id, login, cents, one_time, since, org FROM sponsors")
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +265,7 @@ func (s *Store) sponsors() ([]Sponsor, error) {
 	var out []Sponsor
 	for rows.Next() {
 		var sp Sponsor
-		if err := rows.Scan(&sp.ID, &sp.Login, &sp.Cents, &sp.OneTime, &sp.Since); err != nil {
+		if err := rows.Scan(&sp.ID, &sp.Login, &sp.Cents, &sp.OneTime, &sp.Since, &sp.Org); err != nil {
 			return nil, err
 		}
 		out = append(out, sp)
@@ -271,8 +275,8 @@ func (s *Store) sponsors() ([]Sponsor, error) {
 
 func getSponsor(query func(string, ...any) *sql.Row, githubID string) (*Sponsor, error) {
 	sp := Sponsor{ID: githubID}
-	err := query("SELECT login, cents, one_time, since FROM sponsors WHERE github_id=?", githubID).
-		Scan(&sp.Login, &sp.Cents, &sp.OneTime, &sp.Since)
+	err := query("SELECT login, cents, one_time, since, org FROM sponsors WHERE github_id=?", githubID).
+		Scan(&sp.Login, &sp.Cents, &sp.OneTime, &sp.Since, &sp.Org)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -312,7 +316,7 @@ func (s *Store) CancelSponsor(githubID string) error {
 
 // startLink is the admin panel asking for the link: the relay hands out a URL the browser opens,
 // under a state it remembers for a few minutes, tied to the account of the link that asked.
-func (s *Server) githubStart(c *identityConn) (string, error) {
+func (s *Server) githubStart(c *identityConn, purpose string) (string, error) {
 	if c.account == "" {
 		return "", errors.New("relay: the link is not registered with an account")
 	}
@@ -329,7 +333,10 @@ func (s *Server) githubStart(c *identityConn) (string, error) {
 			delete(g.pending, id)
 		}
 	}
-	g.pending[nonce] = &githubPending{account: c.account, device: c.key, at: time.Now()}
+	if purpose != purposeTeam {
+		purpose = ""
+	}
+	g.pending[nonce] = &githubPending{account: c.account, device: c.key, at: time.Now(), purpose: purpose}
 	g.mu.Unlock()
 	q := url.Values{"state": {nonce}, "account": {c.account}}
 	return "/_relay/github/login?" + q.Encode(), nil
@@ -351,7 +358,11 @@ func (s *Server) serveGitHubLogin(w http.ResponseWriter, r *http.Request) {
 		q.Set("client_id", g.cfg.ClientID)
 	}
 	q.Set("state", state)
-	// No scope: the relay only asks who the visitor is.
+	// No scope: the relay only asks who the visitor is — but for the team of an organization,
+	// whose admin it must check (read:org, asked for this alone).
+	if p.purpose == purposeTeam {
+		q.Set("scope", "read:org")
+	}
 	http.Redirect(w, r, g.authURL+"?"+q.Encode(), http.StatusFound)
 }
 
@@ -389,16 +400,26 @@ func (s *Server) serveGitHubCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "GitHub did not answer", http.StatusBadGateway)
 		return
 	}
+	if p.purpose == purposeTeam {
+		s.serveTeamDone(ctx, w, r, p, token, id, login)
+		return
+	}
 	if err := g.store.LinkGitHub(p.account, id, login); err != nil {
 		log.Printf("relay: github: %v", err)
 		http.Error(w, "the link could not be stored", http.StatusInternalServerError)
 		return
 	}
 	s.tellQuota([]string{p.account})
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// A small window that thanks, tells the panel (github-done.js) and closes on its button: the
 	// relay never sees a token again.
 	words := githubDoneWords(r.Header.Get("Accept-Language"), s.store.Level(p.account, time.Now()).Level)
+	writeDonePage(w, words.lang, words.title, id, login, fmt.Sprintf(words.linked, "@"+login), words.thanks, words.close)
+}
+
+// writeDonePage writes the window GitHub sends back to: a title, two lines, and a button that
+// closes it (github-done.js tells the panel that opened it).
+func writeDonePage(w http.ResponseWriter, lang, title, id, login, line, muted, close string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprintf(w, `<!doctype html><html lang="%s"><meta charset=utf-8>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>%s</title><link rel="stylesheet" href="/_relay/bootstrap.css">
@@ -407,9 +428,8 @@ func (s *Server) serveGitHubCallback(w http.ResponseWriter, r *http.Request) {
 <p>%s</p><p class="muted">%s</p>
 <button class="btn primary" type="button" id="close">%s</button>
 </main><script type="module" src="/_relay/github/done.js"></script>`,
-		words.lang, html.EscapeString(words.title), html.EscapeString(id), html.EscapeString(login),
-		html.EscapeString(words.title), html.EscapeString(fmt.Sprintf(words.linked, "@"+login)),
-		html.EscapeString(words.thanks), html.EscapeString(words.close))
+		lang, html.EscapeString(title), html.EscapeString(id), html.EscapeString(login),
+		html.EscapeString(title), html.EscapeString(line), html.EscapeString(muted), html.EscapeString(close))
 }
 
 // githubDoneWords are the words of the window GitHub sends back to, in the language of the
@@ -511,9 +531,9 @@ func (g *GitHub) user(ctx context.Context, token string) (id, login string, err 
 }
 
 // sponsorsQuery lists every sponsorship the maintainer ever had, private ones too: the one-time
-// payments are not "active", and a past monthly sponsor is told apart by isActive. Only people:
-// an organization cannot link an account (the OAuth link proves a person), and its databaseId
-// would need the read:org scope on the token.
+// payments are not "active", and a past monthly sponsor is told apart by isActive. An
+// organization (#88: its seats make a team) is read by its login only: its databaseId would need
+// the read:org scope on the token, so its id comes from the public /orgs/<login> (orgID).
 const sponsorsQuery = `query($after: String) {
   viewer {
     sponsorshipsAsMaintainer(first: 100, after: $after, activeOnly: false, includePrivate: true) {
@@ -524,7 +544,9 @@ const sponsorsQuery = `query($after: String) {
         createdAt
         tier { monthlyPriceInCents }
         sponsorEntity {
+          __typename
           ... on User { databaseId login }
+          ... on Organization { login }
         }
       }
     }
@@ -539,6 +561,15 @@ func (g *GitHub) refreshSponsors(ctx context.Context) error {
 	}
 	now := time.Now()
 	byID := map[string]Sponsor{}
+	// The ids of the organizations already known: one call to /orgs per new one only.
+	orgIDs := map[string]string{}
+	if known, err := g.store.sponsors(); err == nil {
+		for _, sp := range known {
+			if sp.Org {
+				orgIDs[strings.ToLower(sp.Login)] = sp.ID
+			}
+		}
+	}
 	after := ""
 	for page := 0; page < 100; page++ {
 		vars := map[string]any{"after": nil}
@@ -572,6 +603,7 @@ func (g *GitHub) refreshSponsors(ctx context.Context) error {
 								Cents int64 `json:"monthlyPriceInCents"`
 							} `json:"tier"`
 							Entity struct {
+								Type  string `json:"__typename"`
 								ID    int64  `json:"databaseId"`
 								Login string `json:"login"`
 							} `json:"sponsorEntity"`
@@ -597,10 +629,26 @@ func (g *GitHub) refreshSponsors(ctx context.Context) error {
 		list := out.Data.Viewer.Sponsorships
 		for _, n := range list.Nodes {
 			// A past monthly sponsor no longer counts; a one-time payment counts by its date.
-			if n.Entity.ID == 0 || (!n.OneTime && !n.IsActive) {
+			if !n.OneTime && !n.IsActive {
 				continue
 			}
-			sp := Sponsor{ID: strconv64(n.Entity.ID), Login: n.Entity.Login, OneTime: n.OneTime, Since: n.CreatedAt.Unix()}
+			org := n.Entity.Type == "Organization" && n.Entity.Login != ""
+			if org && n.Entity.ID == 0 {
+				id, ok := orgIDs[strings.ToLower(n.Entity.Login)]
+				if !ok {
+					var err error
+					if id, err = g.orgID(ctx, n.Entity.Login); err != nil {
+						log.Printf("relay: github sponsors: %v", err)
+						continue
+					}
+					orgIDs[strings.ToLower(n.Entity.Login)] = id
+				}
+				n.Entity.ID, _ = strconv.ParseInt(id, 10, 64)
+			}
+			if n.Entity.ID == 0 {
+				continue
+			}
+			sp := Sponsor{ID: strconv64(n.Entity.ID), Login: n.Entity.Login, OneTime: n.OneTime, Since: n.CreatedAt.Unix(), Org: org}
 			if n.Tier != nil {
 				sp.Cents = n.Tier.Cents
 			}
@@ -627,6 +675,50 @@ func (g *GitHub) refreshSponsors(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// orgID reads the id of an organization from its public profile, with the maintainer token (its
+// rate is 5000 calls an hour, 60 without).
+func (g *GitHub) orgID(ctx context.Context, login string) (string, error) {
+	id, _, err := githubAccount(ctx, g.client, g.apiBase, "orgs", login, g.cfg.Token)
+	return id, err
+}
+
+// githubAccount reads the id and the exact login of a public GitHub user or organization
+// (kind "users" or "orgs"), with a token when one is given.
+func githubAccount(ctx context.Context, client *http.Client, apiBase, kind, login, token string) (id, exact string, err error) {
+	login = strings.TrimPrefix(login, "@")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiBase+"/"+kind+"/"+url.PathEscape(login), nil)
+	if err != nil {
+		return "", "", err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "web-ide-relay")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	res, err := client.Do(req)
+	if err != nil {
+		return "", "", fmt.Errorf("github: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode == http.StatusNotFound {
+		return "", "", i18n.Errorf("no GitHub account %q", login)
+	}
+	if res.StatusCode != http.StatusOK {
+		return "", "", fmt.Errorf("github: /%s/%s answered %d", kind, login, res.StatusCode)
+	}
+	var out struct {
+		ID    int64  `json:"id"`
+		Login string `json:"login"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+		return "", "", err
+	}
+	if out.ID == 0 {
+		return "", "", fmt.Errorf("github: /%s/%s gave no id", kind, login)
+	}
+	return strconv64(out.ID), out.Login, nil
 }
 
 // refreshLoop reads the sponsor list again every hour.
@@ -678,6 +770,7 @@ func (s *Server) serveGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 			Sponsor   struct {
 				ID    int64  `json:"id"`
 				Login string `json:"login"`
+				Type  string `json:"type"` // "User" or "Organization"
 			} `json:"sponsor"`
 			Tier struct {
 				Cents   int64 `json:"monthly_price_in_cents"`
@@ -699,7 +792,7 @@ func (s *Server) serveGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 	case "created", "tier_changed", "edited":
 		// tier_changed comes when the change takes effect (pending_tier_change before it).
 		err = g.store.UpdateSponsor(Sponsor{ID: id, Login: sp.Sponsor.Login, Cents: sp.Tier.Cents,
-			OneTime: sp.Tier.OneTime, Since: sp.CreatedAt.Unix()})
+			OneTime: sp.Tier.OneTime, Since: sp.CreatedAt.Unix(), Org: sp.Sponsor.Type == "Organization"})
 	case "cancelled":
 		// Sent at the end of the paid period (pending_cancellation before it): access lasts until then.
 		err = g.store.CancelSponsor(id)

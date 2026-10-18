@@ -9,16 +9,19 @@ export interface AccountLevel {
   until?: number
   sponsor?: string
   vip?: boolean
+  team?: string
 }
 
 const words: Record<string, string> = { backer: 'Backer', supporter: 'Supporter', vip: 'VIP' }
 
-/** The badge: `Backer`, `Supporter`, `VIP`, `Supporter · VIP` for a sponsor on the VIP list too,
- * with `· 12 d` when the level ends. Empty for a free account. */
+/** The badge: `Backer`, `Supporter`, `VIP`, `Supporter · VIP` for a sponsor on the VIP list or in
+ * a team too, `· Team acme` for a member of a team (#88), with `· 12 d` when the level ends. Empty
+ * for a free account. */
 export function levelBadge(l: AccountLevel | null | undefined, now = Date.now()): string {
   if (!l?.level || !words[l.level]) return ''
   let badge = words[l.level]
-  if (l.vip && l.sponsor && l.sponsor !== 'vip' && words[l.sponsor]) badge = `${words[l.sponsor]} · VIP`
+  if ((l.vip || l.team) && l.sponsor && l.sponsor !== 'vip' && words[l.sponsor]) badge = `${words[l.sponsor]} · VIP`
+  if (l.team) badge += ` · Team ${l.team}`
   if (l.until) {
     const days = Math.max(1, Math.ceil((l.until * 1000 - now) / 86400000))
     badge += ' · ' + t('{n} d', { n: days })

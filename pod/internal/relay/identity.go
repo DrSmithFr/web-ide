@@ -59,11 +59,21 @@ type idMsg struct {
 	Until     int64  `json:"until,omitempty"`
 	Sponsor   string `json:"sponsor,omitempty"`
 	VIP       bool   `json:"vip,omitempty"`
+	Team      string `json:"team,omitempty"` // the team that makes the account a VIP (#88)
+	// Teams (#88): `githubStart` with the purpose team proves the admin of an organization;
+	// `team`, `teamAdd` and `teamRemove` (owner, member, and kind for a removal) manage the teams
+	// the account is the admin of.
+	Purpose string     `json:"purpose,omitempty"`
+	Owner   string     `json:"owner,omitempty"`
+	Member  string     `json:"member,omitempty"`
+	Teams   []TeamInfo `json:"teams,omitempty"`
+	MayOwn  bool       `json:"mayOwn,omitempty"`
 }
 
 // withLevel adds the level of the account to a github answer.
 func (m idMsg) withLevel(al AccountLevel) idMsg {
 	m.Supporter, m.Level, m.Until, m.Sponsor, m.VIP = al.Level >= LevelSupporter, al.Level.wire(), al.Until, al.Sponsor.wire(), al.VIP
+	m.Team = al.Team
 	return m
 }
 
@@ -323,12 +333,14 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 				_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, errors.New("this relay has no GitHub link"))})
 				continue
 			}
-			target, err := s.githubStart(c)
+			target, err := s.githubStart(c, m.Purpose)
 			if err != nil {
 				_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})
 				continue
 			}
 			_ = c.send(idMsg{Type: "githubStart", Account: c.account, LoginURL: target})
+		case "team", "teamAdd", "teamRemove":
+			_ = c.send(s.teamMessage(c, m))
 		case "githubUnlink":
 			if s.GitHub == nil {
 				continue
