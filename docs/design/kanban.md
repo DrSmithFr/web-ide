@@ -63,9 +63,10 @@ A **milestone** groups the tickets of one feature: a functional grouping above l
 
 - Title, description, spec (a path of the repo or a URL), linked briefing conversations, user stories (checkable, validated by the user).
 - A ticket belongs to 0 or 1 milestone; a step takes the milestone of its root.
-- Complete once every ticket is *Done* or *Abandoned* and every story validated; *Close* by hand.
-- The milestone page validates both its stories and its tickets *To test* (their *How to test* shown there); each ticket recalls its milestone and stories in its *How to test* section.
-- User stories are not linked to tickets: they are the base of a review of the e2e coverage (#107).
+- Its tickets may be chained without the user (agent loop), but the milestone is always validated by the user: *Validate the milestone* is refused to models, and waits until every ticket is *Done* or *Abandoned*, every story checked and no feedback open.
+- **Milestone feedback**, like the feedback of a ticket (info, bug, feature; complexity), added by the user or a model; handled by hand, or turned into a ticket of the milestone and handled when that ticket is *Done*.
+- The milestone page validates its stories, its tickets *To test* (their *How to test* shown there) and the milestone; each ticket recalls its milestone and stories in its *How to test* section.
+- User stories are not linked to tickets: they are the base of a review of the e2e coverage (#107), whose gaps become milestone feedback.
 - The Board gets a third view, *Milestones*, and a milestone filter on Board and Roadmap (#106).
 
 ## Statuses and transitions

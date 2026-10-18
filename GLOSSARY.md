@@ -232,7 +232,7 @@ _Avoid_: planner, supervisor
 The step of a lineage whose development currently uses the lineage's worktree.
 
 **Milestone** (#104)
-The tickets of one feature, across lineages, with its spec and its user stories; validated as a whole.
+The tickets of one feature, across lineages, with its spec, its user stories and its feedback; always validated by the user.
 _Avoid_: epic, release, sprint
 
 **User story** (#104)
