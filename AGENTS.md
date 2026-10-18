@@ -6,6 +6,7 @@ Web IDE: a Go program, the pod (`pod/`), serving a SolidJS front end (`web/`) ov
 - [docs/README.md](docs/README.md): every page of the documentation (install, how-to, guide, design).
 - [docs/design/spec.md](docs/design/spec.md): what the IDE does and why.
 - [docs/design/architecture.md](docs/design/architecture.md): the system map, code layout, protocol, build and test commands, pitfalls.
+- The code: [pod/README.md](pod/README.md), [pod/internal/README.md](pod/internal/README.md), [web/src/README.md](web/src/README.md), [e2e/README.md](e2e/README.md): a Mermaid map, the components, the pitfalls and the tests of each area.
 - [docs/design/kanban.md](docs/design/kanban.md): the kanban and its git workflow.
 - [docs/design/relay.md](docs/design/relay.md): remote access through a relay, and the hosted one at `antennae.space`.
 - [docs/howto/self-host-relay.md](docs/howto/self-host-relay.md): running your own relay (domain, flags, firewall, backups).
