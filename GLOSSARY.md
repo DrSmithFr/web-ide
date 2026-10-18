@@ -231,6 +231,13 @@ _Avoid_: planner, supervisor
 **Worktree holder** (#46)
 The step of a lineage whose development currently uses the lineage's worktree.
 
+**Milestone** (#104)
+The tickets of one feature, across lineages, with its spec and its user stories; validated as a whole.
+_Avoid_: epic, release, sprint
+
+**User story** (#104)
+What a user can do once a milestone is done; checked by the user, and the base of its e2e coverage review.
+
 **Agent desk** ([desks](docs/design/desks.md))
 A desk bound to an agent's session or a development conversation and its worktree; the AI acts there only.
 

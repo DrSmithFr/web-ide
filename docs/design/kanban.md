@@ -57,6 +57,17 @@ Work too big for one ticket is split into a **lineage**: a ticket (the root) and
 - In the worktree of a lineage, the default ticket of Claude Code is the current step: the step in progress, else the last one to test, else the root.
 - Cards show `↳ #n` (step of) and a lock with the blocking tickets; the ticket view has a *Lineage* section (root, steps with their order, dependencies with their state, blockers).
 
+## Milestones (planned, #104-#107)
+
+A **milestone** groups the tickets of one feature: a functional grouping above lineages, spanning several lineages and lone tickets. It is the scope the agent loop will chain later.
+
+- Title, description, spec (a path of the repo or a URL), linked briefing conversations, user stories (checkable, validated by the user).
+- A ticket belongs to 0 or 1 milestone; a step takes the milestone of its root.
+- Complete once every ticket is *Done* or *Abandoned* and every story validated; *Close* by hand.
+- The milestone page validates both its stories and its tickets *To test* (their *How to test* shown there); each ticket recalls its milestone and stories in its *How to test* section.
+- User stories are not linked to tickets: they are the base of a review of the e2e coverage (#107).
+- The Board gets a third view, *Milestones*, and a milestone filter on Board and Roadmap (#106).
+
 ## Statuses and transitions
 
 Tickets move with buttons only (no drag and drop).
