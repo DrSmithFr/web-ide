@@ -964,10 +964,12 @@ func runRelayCmd(dataDir string, addr string, turnPort int, turnIP, turnIP6, tur
 	}
 	// WEBIDE_LEVEL_POLL shortens the look for a level the CLI changed (the e2e: 1s).
 	poll, _ := time.ParseDuration(os.Getenv("WEBIDE_LEVEL_POLL"))
+	// WEBIDE_TURN_TTL shortens the TURN credentials (the e2e: a tunnel renews them, #86).
+	turnTTL, _ := time.ParseDuration(os.Getenv("WEBIDE_TURN_TTL"))
 	check(relay.Run(ctx, relay.RelayConfig{
 		DataDir: dataDir, Addr: addr, TurnPort: turnPort, AdvertiseIP: turnIP, AdvertiseIPv6: turnIP6,
 		TurnMinPort: minPort, TurnMaxPort: maxPort, TLSPort: tlsPort,
-		CertFile: certFile, KeyFile: keyFile, Domain: domain, ACMEStaging: acmeStaging, Quota: bytes, QuotaBacker: backer, LevelPoll: poll,
+		CertFile: certFile, KeyFile: keyFile, Domain: domain, ACMEStaging: acmeStaging, Quota: bytes, QuotaBacker: backer, LevelPoll: poll, TurnTTL: turnTTL,
 		GitHubEnv: githubEnv,
 		App:       app, Version: version, PushSubject: pushSubject, PushTestEndpoint: pushTest,
 	}))

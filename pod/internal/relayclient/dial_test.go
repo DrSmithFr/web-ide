@@ -357,3 +357,53 @@ func swapSignal(t *testing.T, relayURL string) string {
 	t.Cleanup(ts.Close)
 	return strings.Replace(ts.URL, "http", "ws", 1)
 }
+
+// TestDialRenewsTurnCredentials (#86): a pod-to-pod tunnel forced through TURN outlives its
+// credentials. Before they end the dialler asks fresh ones and restarts ICE: the tunnel and its rpc
+// channel stay, and the relay never sees an expired credential (the old allocations are released
+// with credentials still valid).
+func TestDialRenewsTurnCredentials(t *testing.T) {
+	a, err := identity.FromPhrase(vectorsPhrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	podA := pairAccount(t, a, "alpha")
+	podB := pairAccount(t, a, "bravo")
+	const ttl = 6 * time.Second
+	env := startEnvTTL(t, podA, nil, ttl)
+	startSecond(t, env, podB, "bravo-pod")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+	defer cancel()
+	peer, err := dialTry(ctx, env.cli, "bravo-pod", podB.ID())
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer peer.Close()
+	if hello := readMsg(t, peer.RPC(), 10*time.Second); hello.Event != "hello" {
+		t.Fatalf("expected the end pod hello, got %q", hello.Event)
+	}
+	first := iceUfrag(peer.pc.LocalDescription().SDP)
+
+	// Three lifetimes of a credential: the same rpc channel answers after each one.
+	for i := int64(1); i <= 3; i++ {
+		time.Sleep(ttl)
+		rpcCallMsg(t, peer.RPC(), i, "workspace.get", map[string]any{})
+	}
+	if now := iceUfrag(peer.pc.LocalDescription().SDP); now == first {
+		t.Fatalf("ICE never restarted (ufrag %q): the credentials were not renewed", now)
+	}
+	if n := env.turn.Expired(); n != 0 {
+		t.Fatalf("the relay saw %d requests with an expired credential", n)
+	}
+}
+
+// iceUfrag is the ICE username fragment of an SDP: a restart changes it.
+func iceUfrag(sdp string) string {
+	for _, l := range strings.Split(sdp, "\n") {
+		if v, ok := strings.CutPrefix(strings.TrimSpace(l), "a=ice-ufrag:"); ok {
+			return v
+		}
+	}
+	return ""
+}

@@ -97,6 +97,7 @@ const words = {
   oops: L('Cannot connect', 'Connexion impossible', 'No se puede conectar'),
   quota: L('Monthly TURN quota reached: no relayed tunnel, the direct paths stay open.', 'Quota TURN mensuel atteint : plus de tunnel relayé, les chemins directs restent ouverts.', 'Cuota mensual de TURN alcanzada: no hay túnel retransmitido, los caminos directos siguen abiertos.'),
   sponsor: L('raise it (Backer) or lift it (Supporter)', 'l’augmenter (Backer) ou le lever (Supporter)', 'aumentarla (Backer) o eliminarla (Supporter)'),
+  dismiss: L('Dismiss', 'Fermer', 'Cerrar'),
   updated: L('A new version of this page is ready.', 'Une nouvelle version de cette page est prête.', 'Hay una nueva versión de esta página.'),
   reload: L('Reload', 'Recharger', 'Recargar'),
   install: L('Install the app', 'Installer l’app', 'Instalar la app'),
@@ -115,6 +116,7 @@ const words = {
   tEarlyDropped: L('The pod asked early is not the entry: a new tunnel', 'Le pod demandé d’avance n’est pas l’entrée : nouveau tunnel', 'El pod pedido de antemano no es el de entrada: nuevo túnel'),
   tIce: L('TURN credentials received ({n} servers)', 'Identifiants TURN reçus ({n} serveurs)', 'Credenciales TURN recibidas ({n} servidores)'),
   tIceQuota: L('No TURN credential (quota reached): direct paths only', 'Aucun identifiant TURN (quota atteint) : chemins directs seulement', 'Sin credencial TURN (cuota alcanzada): solo caminos directos'),
+  tRenew: L('TURN credentials renewed: ICE restarts on the same tunnel', 'Identifiants TURN renouvelés : ICE redémarre sur le même tunnel', 'Credenciales TURN renovadas: ICE se reinicia en el mismo túnel'),
   tOffer: L('Offer sent, waiting for the pod to answer…', 'Offre envoyée, en attente de la réponse du pod…', 'Oferta enviada, esperando la respuesta del pod…'),
   tAnswer: L('Answer of the pod received', 'Réponse du pod reçue', 'Respuesta del pod recibida'),
   tPath: L('Looking for a network path (ICE)…', 'Recherche d’un chemin réseau (ICE)…', 'Buscando un camino de red (ICE)…'),
@@ -396,15 +398,29 @@ function quotaNote(q) {
   q = quotaSeen
   const el = document.getElementById('msg')
   if (!el || el.querySelector('.quota')) return
+  el.append(h('p', { class: 'quota muted' }, ...quotaLine(q)))
+}
+
+// What the quota note says: the month used and what lifts it.
+function quotaLine(q) {
   const size = (n) => {
     const u = L(['B', 'kB', 'MB', 'GB'], ['o', 'Ko', 'Mo', 'Go'], ['B', 'kB', 'MB', 'GB'])
     let v = n, i = 0
     while (v >= 1024 && i < u.length - 1) { v /= 1024; i++ }
     return (i ? v.toFixed(1) : String(v)) + ' ' + (i ? u[i] : u[0])
   }
-  el.append(h('p', { class: 'quota muted' },
-    words.quota, ' ', size(q.used), ' / ', size(q.limit), ' ',
-    h('a', { href: 'https://github.com/sponsors/DrSmithFr', target: '_blank', rel: 'noreferrer' }, words.sponsor)))
+  return [words.quota, ' ', size(q.used), ' / ', size(q.limit), ' ',
+    h('a', { href: 'https://github.com/sponsors/DrSmithFr', target: '_blank', rel: 'noreferrer' }, words.sponsor)]
+}
+
+// A renewal refused with the app open (#86): the card is under the frame, so the note goes in a
+// bar over the app, which the user can dismiss.
+function quotaBar(q) {
+  if (document.getElementById('frame')?.style.display !== 'block' || document.getElementById('quota-bar')) return
+  const bar = h('div', { id: 'quota-bar', class: 'quota', role: 'status' },
+    h('span', {}, ...quotaLine(q)),
+    h('button', { class: 'btn', type: 'button', onclick: () => bar.remove() }, words.dismiss))
+  document.body.append(bar)
 }
 
 let failed = false
@@ -1007,7 +1023,9 @@ function connect(key, podId, mode, want) {
   // The sub-steps of the tunnel the page waits for are shown; the others go to the journal only.
   const watch = (name, line) => (t.key === entryKey && !t.done ? phaseOf(name, line) : trace(line))
   const onSignal = (m) => {
-    if (m.type === 'ice') {
+    if (m.type === 'ice' && t.pc) {
+      renew(t, m).catch((err) => trace(words.tError + err.message))
+    } else if (m.type === 'ice') {
       mark('ice')
       trace(m.quota?.over ? words.tIceQuota : fmt(words.tIce, { n: (m.urls ?? []).length }))
       if (m.quota?.over) quotaNote(m.quota)
@@ -1015,7 +1033,7 @@ function connect(key, podId, mode, want) {
     } else if (m.type === 'answer') {
       mark('answer')
       trace(words.tAnswer)
-      watch('ice', words.tPath)
+      if (!t.done) watch('ice', words.tPath)
       t.pc?.setRemoteDescription({ type: 'answer', sdp: m.sdp }).catch(() => {})
     } else if (m.type === 'candidate') {
       if (t.key === entryKey) cands.remote++
@@ -1115,9 +1133,9 @@ async function ensure(key, podId) {
 async function start(t, ice, watch) {
   // Over the monthly quota the relay sent no credential: keep the STUN servers and drop the TURN
   // ones, which a client cannot use without one (relay.md, Hosted service).
-  const urls = ice.quota?.over ? (ice.urls ?? []).filter((u) => u.startsWith('stun:')) : ice.urls
-  const pc = new RTCPeerConnection({ iceServers: [{ urls, username: ice.username, credential: ice.credential }] })
+  const pc = new RTCPeerConnection({ iceServers: iceServers(ice) })
   t.pc = pc
+  renewLater(t, ice.ttl)
   window.tunnels = tunnels
   window.tunnel = { pc, session: t.session, pod: t.podId } // read by the e2e suite (getStats)
   const rpc = pc.createDataChannel('rpc', { ordered: true })
@@ -1166,6 +1184,43 @@ async function start(t, ice, watch) {
     return next.then(t.resolve, t.reject)
   }
   drop(t, r.error)
+}
+
+// The ICE servers of an ice message of the relay. Over the monthly quota the relay sent no
+// credential: keep the STUN servers and drop the TURN ones, which a client cannot use without one
+// (relay.md, Hosted service).
+function iceServers(ice) {
+  const urls = ice.quota?.over ? (ice.urls ?? []).filter((u) => u.startsWith('stun:')) : ice.urls
+  return [{ urls, username: ice.username, credential: ice.credential }]
+}
+
+// TURN checks the expiry of a credential on every refresh of an allocation, so a tunnel asks
+// fresh ones at three quarters of their life (#86). The ttl is relative: the clock of the page
+// does not have to agree with the relay's.
+function renewLater(t, ttl) {
+  clearTimeout(t.renewal)
+  if (!ttl) return
+  t.renewal = setTimeout(() => {
+    if (!t.dropped && t.sig?.open()) t.sig.send({ type: 'ice' })
+  }, Math.max(ttl * 750, 1000))
+}
+
+// The fresh credentials came: the ICE servers take them and ICE restarts on the same
+// PeerConnection, so the tunnel and its channels stay. The offer brings the pod fresh ones too.
+// Over the quota there are none: the restart keeps the direct paths only, as a new tunnel would.
+async function renew(t, ice) {
+  const pc = t.pc
+  if (ice.quota?.over) {
+    quotaNote(ice.quota)
+    quotaBar(ice.quota)
+  }
+  trace(ice.quota?.over ? words.tIceQuota : words.tRenew)
+  pc.setConfiguration({ ...pc.getConfiguration(), iceServers: iceServers(ice) })
+  const offer = await pc.createOffer({ iceRestart: true })
+  await pc.setLocalDescription(offer)
+  t.sig?.send({ type: 'offer', sdp: offer.sdp })
+  t.renewed = (t.renewed ?? 0) + 1
+  renewLater(t, ice.ttl)
 }
 
 // The handshake of one rpc channel. want is the device key of the pod expected at the other end:
@@ -1238,6 +1293,7 @@ function sendCandidate(t, c) {
 }
 
 function close(t) {
+  clearTimeout(t.renewal)
   try { t.pc?.close() } catch {}
   try { t.sig?.close() } catch {}
   t.pc = null

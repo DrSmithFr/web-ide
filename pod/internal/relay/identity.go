@@ -110,7 +110,7 @@ func (c *identityConn) send(m idMsg) error {
 
 // identitySignal carries the signaling of a tunnel of the page on its identity link (#75): one
 // WebSocket instead of two, and the offer can leave while the link proves itself. "signal" opens a
-// session to a pod (the ICE servers come back), then offer, candidate and bye go as on
+// session to a pod (the ICE servers come back), then ice (fresh credentials), offer, candidate and bye go as on
 // /_relay/signal, and every answer of the pod carries the session. It needs no proof, as
 // /_relay/signal does not. Reports whether the message was one.
 func (s *Server) identitySignal(c *identityConn, b []byte) bool {
@@ -130,7 +130,7 @@ func (s *Server) identitySignal(c *identityConn, b []byte) bool {
 		}
 		c.sessions[m.Session] = bc
 		s.openBrowser(bc)
-	case "offer", "candidate", "bye":
+	case "ice", "offer", "candidate", "bye":
 		bc := c.sessions[m.Session]
 		if bc == nil {
 			return true

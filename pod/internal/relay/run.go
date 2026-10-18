@@ -33,6 +33,9 @@ type RelayConfig struct {
 	// LevelPoll: how often the relay looks for a level that moved without it, a VIP the CLI
 	// added or an end that passed (0 → 30 s; the e2e shortens it).
 	LevelPoll time.Duration
+	// TurnTTL: the validity of the TURN credentials (0 → 1 h; the e2e shortens it to see a tunnel
+	// renew them).
+	TurnTTL time.Duration
 	// GitHub: the OAuth app and the maintainer token behind the sponsor levels (github.go).
 	// GitHubEnv is a file of KEY=VALUE lines (0600) they can come from instead of the process
 	// environment: /etc/antennae/env on the hosted relay.
@@ -84,6 +87,7 @@ func Run(ctx context.Context, cfg RelayConfig) error {
 		MaxPort:       cfg.TurnMaxPort,
 		Quota:         cfg.Quota,
 		QuotaBacker:   cfg.QuotaBacker,
+		TTL:           cfg.TurnTTL,
 		// The level of an account sets its quota (level.go): its GitHub sponsorship and the VIP
 		// list. It needs no GitHub app: a self-hosted relay has VIPs by account id.
 		Level: func(key string) AccountLevel { return st.Level(key, time.Now()) },

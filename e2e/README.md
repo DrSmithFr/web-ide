@@ -62,6 +62,7 @@ flowchart LR
 - `questions`: Questions tool: a form of an ACP session (the fake agent's elicitation/create) opens by itself in a modal with the last message of
 - `quota`: Quota (milestone 5): run.sh starts the relay with -quota 1MB and the pod with -force-turn, so every byte of the app crosses TURN
 - `relay`: Relay (milestone 1): a browser on another network opens a project of a pod through the relay, and installs as an app (PWA)
+- `renew`: TURN renewal (#86): run.sh starts the relay with credentials valid 10 s and the pod with -force-turn; the page renews them and restarts ICE on the same tunnel
 - `restore`: Session restored after a reload (runs after features, same pod), detached windows
 - `speech`: Local speech recognition: Whisper (tiny) in the browser, fed by a fake microphone playing e2e/audio/jfk.wav
 - `subagents`: Sub-agents: the parent delegates with spawn_agent (a card in its thread); the child notes and asks; the parent
@@ -75,7 +76,7 @@ flowchart LR
 - The suites run without keeper, except `keeper` (`run.sh` starts one and gives it the script restarting the pod, `E2E_RESTART_POD`). Every pod but the ones of the `lan` suite runs with `-lan off`.
 - Needs: `lsp` needs `gopls`; `docker` needs Docker with Compose and `postgres:17-alpine` (skipped otherwise); `speech` downloads `whisper-tiny` once; `forwards` builds `sshtestd`.
 - **E2E tests** must wait actively (`waitForFunction`): language servers start cold. `<option>` elements are never "visible" for Playwright (`state: 'attached'`).
-- **E2E suites that need the relay** (`relay`, `identity`, `sync`, `push`, `multipod`): `run.sh` starts the relay **before** the pod, else the pod fails its first dial and sits in exponential backoff; the suite waits until the pod is registered (the signaling path answers 404 before that).
+- **E2E suites that need the relay** (`relay`, `identity`, `sync`, `push`, `multipod`, `quota`, `renew`): `run.sh` starts the relay **before** the pod, else the pod fails its first dial and sits in exponential backoff; the suite waits until the pod is registered (the signaling path answers 404 before that).
 
 ## Tests
 

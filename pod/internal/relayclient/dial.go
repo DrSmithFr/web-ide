@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/url"
 	"strings"
 	"sync"
@@ -91,7 +92,7 @@ func (c *Client) Dial(ctx context.Context, podID, key string, via *identity.Cert
 		policy = webrtc.ICETransportPolicyRelay
 	}
 	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{
-		ICEServers:         []webrtc.ICEServer{{URLs: ice.URLs, Username: ice.Username, Credential: ice.Credential}},
+		ICEServers:         []webrtc.ICEServer{iceServer(ice)},
 		ICETransportPolicy: policy,
 	})
 	if err != nil {
@@ -157,20 +158,7 @@ func (c *Client) Dial(ctx context.Context, podID, key string, via *identity.Cert
 			return nil, errors.New("the pod refused the tunnel: " + m.Message)
 		}
 	}
-	go func() {
-		for {
-			m, err := readSignal(context.Background(), sig)
-			if err != nil {
-				return
-			}
-			if m.Type != "candidate" {
-				continue
-			}
-			if init, ok := candidateInit(m.Candidate); ok {
-				_ = pc.AddICECandidate(init)
-			}
-		}
-	}()
+	go p.follow(ice.TTL)
 
 	select {
 	case <-opened:
@@ -206,6 +194,90 @@ func (c *Client) Dial(ctx context.Context, podID, key string, via *identity.Cert
 	}
 	_ = account
 	return p, nil
+}
+
+// follow reads the signaling of the tunnel once the pod answered: its late candidates, and the
+// answer to a renewal. Before the TURN credentials end, it asks fresh ones and restarts ICE with
+// them (#86): the tunnel and its channels stay.
+func (p *Peer) follow(ttl int64) {
+	msgs := make(chan sigMsg)
+	go func() {
+		defer close(msgs)
+		for {
+			m, err := readSignal(context.Background(), p.sig)
+			if err != nil {
+				return
+			}
+			select {
+			case msgs <- m:
+			case <-p.done:
+				return
+			}
+		}
+	}()
+	var renew <-chan time.Time
+	schedule := func(ttl int64) {
+		if d, ok := renewAfter(ttl); ok {
+			renew = time.After(d)
+		}
+	}
+	schedule(ttl)
+	for {
+		select {
+		case <-p.done:
+			return
+		case <-renew:
+			renew = nil
+			_ = p.sig.Write(context.Background(), websocket.MessageText, []byte(mustSignal(sigMsg{Type: "ice", Session: p.session})))
+		case m, ok := <-msgs:
+			if !ok {
+				return
+			}
+			switch m.Type {
+			case "candidate":
+				if init, ok := candidateInit(m.Candidate); ok {
+					_ = p.pc.AddICECandidate(init)
+				}
+			case "ice":
+				if err := p.restart(m); err != nil {
+					log.Printf("relayclient: tunnel %s: ICE restart: %v", p.session[:6], err)
+				}
+				schedule(m.TTL)
+			case "answer":
+				_ = p.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: m.SDP})
+			case "bye":
+				go p.Close()
+				return
+			}
+		}
+	}
+}
+
+// restart offers again with the fresh credentials of an "ice" message, restarting ICE. The trickle
+// starts before the offer: the restart gathers at once.
+func (p *Peer) restart(ice sigMsg) error {
+	cfg := p.pc.GetConfiguration()
+	cfg.ICEServers = []webrtc.ICEServer{iceServer(ice)}
+	if err := p.pc.SetConfiguration(cfg); err != nil {
+		return err
+	}
+	tr := trickle(p.pc, func(c json.RawMessage) {
+		_ = p.sig.Write(context.Background(), websocket.MessageText, []byte(mustSignal(sigMsg{Type: "candidate", Session: p.session, Candidate: c})))
+	})
+	offer, err := p.pc.CreateOffer(&webrtc.OfferOptions{ICERestart: true})
+	if err != nil {
+		return err
+	}
+	gather := webrtc.GatheringCompletePromise(p.pc)
+	if err := p.pc.SetLocalDescription(offer); err != nil {
+		return err
+	}
+	desc, _ := tr.describe(p.pc, gather)
+	if err := p.sig.Write(context.Background(), websocket.MessageText, []byte(mustSignal(sigMsg{Type: "offer", Session: p.session, SDP: desc.SDP}))); err != nil {
+		return err
+	}
+	tr.sent()
+	return nil
 }
 
 // Open adds one channel of this window and waits for it.

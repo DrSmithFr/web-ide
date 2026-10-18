@@ -17,7 +17,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 # The longest first: the workers end together.
-[ ${#SUITES[@]} -eq 0 ] && SUITES=(kanban milestones chat agents kanbanagents questions features restore+ docker lan identity multipod sync push keeper doodle speech relay quota preview git editor agent llm subagents orchestrator kanbanai editing lsp mousenav kanbangit commands mcptools projects popups desks keyboard mobile forwards explorer plan i18n help perf)
+[ ${#SUITES[@]} -eq 0 ] && SUITES=(kanban milestones chat agents kanbanagents questions features restore+ docker lan identity multipod sync push keeper doodle speech relay quota renew preview git editor agent llm subagents orchestrator kanbanai editing lsp mousenav kanbangit commands mcptools projects popups desks keyboard mobile forwards explorer plan i18n help perf)
 [ -d node_modules/playwright-core ] || npm install --no-audit --no-fund >/dev/null
 if [ -z "$JOBS" ]; then JOBS=$(($(nproc) / 4)); [ "$JOBS" -gt 8 ] && JOBS=8; [ "$JOBS" -lt 1 ] && JOBS=1; fi
 # wait -n -p needs bash 5.1.
@@ -117,13 +117,14 @@ start_relay() {
   # TURN on loopback: without -turn-ip the relay advertises the machine IP, and Chromium
   # filters candidates it cannot reach; the suite asserts the pair is a relay one.
   # The push suite runs a fake push service: the relay lets its endpoints through.
-  # The quota suite gives the relay a monthly TURN quota (E2E_RELAY_QUOTA).
+  # The quota suite gives the relay a monthly TURN quota (E2E_RELAY_QUOTA), and E2E_TURN_TTL
+  # shortens its credentials.
   # A fake OAuth App and webhook secret: the identity suite links GitHub up to the redirect to
   # github.com, and makes the account a supporter with a signed sponsorship event. The relay
   # looks for the VIPs its CLI writes every second (WEBIDE_LEVEL_POLL), not every 30 s.
   QUOTA=()
   [ -n "${E2E_RELAY_QUOTA:-}" ] && QUOTA=(-quota "$E2E_RELAY_QUOTA")
-  WEBIDE_LEVEL_POLL=1s WEBIDE_GITHUB_CLIENT=e2e-client WEBIDE_GITHUB_SECRET=e2e-secret WEBIDE_GITHUB_WEBHOOK=e2e-hook "$ROOT/bin/web-ide-pod" -data "$TMP/relaydata" -addr "127.0.0.1:$RELAY_PORT" -turn-ip 127.0.0.1 -turn-port "$TURN_PORT" \
+  WEBIDE_TURN_TTL=${E2E_TURN_TTL:-} WEBIDE_LEVEL_POLL=1s WEBIDE_GITHUB_CLIENT=e2e-client WEBIDE_GITHUB_SECRET=e2e-secret WEBIDE_GITHUB_WEBHOOK=e2e-hook "$ROOT/bin/web-ide-pod" -data "$TMP/relaydata" -addr "127.0.0.1:$RELAY_PORT" -turn-ip 127.0.0.1 -turn-port "$TURN_PORT" \
     ${QUOTA[@]+"${QUOTA[@]}"} -push-test-endpoint "http://127.0.0.1:$PUSH_PORT/push/" relay >"$TMP/relay.log" 2>&1 </dev/null &
   RELAY_PID=$!
   export E2E_RELAY_PID=$RELAY_PID
@@ -134,7 +135,7 @@ start_pod() {
   rm -rf "$TMP/data" "$TMP/ws"
   EXTRA=()
   # The identity, sync and push suites pair the pod with the CLI, so its pod must reach the relay too.
-  if [ "${1:-}" = relay ] || [ "${1:-}" = identity ] || [ "${1:-}" = sync ] || [ "${1:-}" = push ] || [ "${1:-}" = multipod ] || [ "${1:-}" = quota ]; then EXTRA=(-relay "http://127.0.0.1:$RELAY_PORT" -force-turn); fi
+  if [ "${1:-}" = relay ] || [ "${1:-}" = identity ] || [ "${1:-}" = sync ] || [ "${1:-}" = push ] || [ "${1:-}" = multipod ] || [ "${1:-}" = quota ] || [ "${1:-}" = renew ]; then EXTRA=(-relay "http://127.0.0.1:$RELAY_PORT" -force-turn); fi
   # The LAN link only in its suite, on loopback and with the addresses typed (no mDNS): a
   # paired pod of another suite must not take the port of the IDE's own pod.
   if [ "${1:-}" = lan ]; then EXTRA+=(-lan "127.0.0.1:$LAN_PORT" -mdns=false -name alpha)
@@ -191,9 +192,11 @@ for s in "${SUITES[@]}"; do
     stop_relay
     # The relay comes up first for the suites that need it: a pod started before the relay
     # fails its first dial and sits in exponential backoff.
-    if [ "$s" = relay ] || [ "$s" = identity ] || [ "$s" = sync ] || [ "$s" = push ] || [ "$s" = multipod ] || [ "$s" = quota ]; then
+    if [ "$s" = relay ] || [ "$s" = identity ] || [ "$s" = sync ] || [ "$s" = push ] || [ "$s" = multipod ] || [ "$s" = quota ] || [ "$s" = renew ]; then
       # The quota suite runs the relay with a monthly TURN quota (milestone 5).
       if [ "$s" = quota ]; then export E2E_RELAY_QUOTA=1MB; else unset E2E_RELAY_QUOTA; fi
+      # The renew and quota suites shorten the TURN credentials: a tunnel renews them (#86).
+      if [ "$s" = renew ] || [ "$s" = quota ]; then export E2E_TURN_TTL=10s; else unset E2E_TURN_TTL; fi
       start_relay
     fi
     stop_pod; start_pod "$s"

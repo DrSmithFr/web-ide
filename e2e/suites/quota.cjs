@@ -1,6 +1,7 @@
 // Quota (milestone 5): run.sh starts the relay with -quota 1MB and the pod with -force-turn, so
-// every byte of the app crosses TURN. The first load passes the quota; the next tunnel gets no
-// TURN credential, and the page says why, with what lifts it. Settings > Remote access of the pod
+// every byte of the app crosses TURN. The first load passes the quota; the renewal of its
+// credentials (#86) and the next tunnel get no TURN credential, and the page says why, with what
+// lifts it. Settings > Remote access of the pod
 // tells the same month.
 const { run, assert, OUT } = require('../common.cjs')
 
@@ -25,6 +26,18 @@ run(
     let bytes = await received()
     for (let end = Date.now() + 30000; bytes <= 1024 * 1024 && Date.now() < end; bytes = await received()) await page.waitForTimeout(500)
     assert(bytes > 1024 * 1024, 'the first load carried over the quota through TURN: ' + bytes)
+
+    // The credentials live 10 s here (#86): the renewal of this tunnel comes over the quota, the
+    // relay gives none, and the page says why over the app, without a reload — the restart keeps
+    // the direct paths only, and this pod has none.
+    await page.waitForFunction(() => window.bootJournal.includes('No TURN credential (quota reached)'), null, { timeout: 30000 })
+    await page.waitForSelector('#quota-bar', { timeout: 10000 })
+    const bar = (await page.textContent('#quota-bar')).trim()
+    assert(/quota/i.test(bar) && /\d+(\.\d)? (MB|Mo)/.test(bar), 'the bar over the app tells the quota: ' + bar)
+    assert(await page.isVisible('#quota-bar a[href="https://github.com/sponsors/DrSmithFr"]'), 'the bar points at what lifts it')
+    await page.screenshot({ path: OUT + '/quota-renewal.png' })
+    await page.click('#quota-bar button')
+    assert(!(await page.isVisible('#quota-bar')), 'the bar is dismissed')
 
     // The month is spent: the relay issues no TURN credential, and this pod has no direct path.
     await page.reload({ waitUntil: 'domcontentloaded' })
