@@ -439,11 +439,15 @@ export function MilestoneSelect(props: { tk: Ticket; apply: (p: Promise<Ticket>)
     <Show
       when={!props.tk.parent}
       fallback={
-        <Show when={props.tk.milestone}>
-          <button class="badge link" title={t('A step has the milestone of its root')} onClick={() => openMilestone(props.tk.milestone!)} data-testid="ticket-milestone">
-            <Icon name="flag" size={10} /> {props.tk.milestoneTitle}
-          </button>
-        </Show>
+        // A step: the milestone of its root, chosen there.
+        <button
+          class="badge link"
+          title={t('A step has the milestone of its root: choose it on #{id}', { id: props.tk.parent! })}
+          onClick={() => (props.tk.milestone ? openMilestone(props.tk.milestone) : openTicket(props.tk.parent!))}
+          data-testid="ticket-milestone"
+        >
+          <Icon name="flag" size={10} /> {props.tk.milestone ? props.tk.milestoneTitle : t('No milestone (#{id})', { id: props.tk.parent! })}
+        </button>
       }
     >
       <select

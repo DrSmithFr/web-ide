@@ -2119,7 +2119,6 @@
   "Abandon the milestone": "Abandonner le jalon",
   "A path of the repository or an address": "Un chemin du dépôt ou une adresse",
   "As a user, I can…": "En tant qu'utilisateur, je peux…",
-  "A step has the milestone of its root": "Une étape a le jalon de sa racine",
   "A ticket of the milestone handles it: the feedback is handled once the ticket is Done": "Un ticket du jalon le traite : le feedback est traité quand le ticket est terminé",
   "Change the spec": "Changer la spec",
   "Closes the milestone: its feature is done": "Ferme le jalon : sa fonctionnalité est terminée",
@@ -2152,5 +2151,7 @@
   "User stories": "User stories",
   "User stories validated {done}/{n}": "User stories validées {done}/{n}",
   "Validate the milestone": "Valider le jalon",
-  "What did you notice while testing the feature?": "Qu'avez-vous remarqué en testant la fonctionnalité ?"
+  "What did you notice while testing the feature?": "Qu'avez-vous remarqué en testant la fonctionnalité ?",
+  "A step has the milestone of its root: choose it on #{id}": "Une étape a le jalon de sa racine : choisissez-le sur #{id}",
+  "No milestone (#{id})": "Aucun jalon (#{id})"
 }

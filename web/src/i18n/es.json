@@ -2119,7 +2119,6 @@
   "Abandon the milestone": "Abandonar el hito",
   "A path of the repository or an address": "Una ruta del repositorio o una dirección",
   "As a user, I can…": "Como usuario, puedo…",
-  "A step has the milestone of its root": "Un paso tiene el hito de su raíz",
   "A ticket of the milestone handles it: the feedback is handled once the ticket is Done": "Un ticket del hito lo trata: el comentario queda tratado cuando el ticket está terminado",
   "Change the spec": "Cambiar la especificación",
   "Closes the milestone: its feature is done": "Cierra el hito: su funcionalidad está terminada",
@@ -2152,5 +2151,7 @@
   "User stories": "Historias de usuario",
   "User stories validated {done}/{n}": "Historias de usuario validadas {done}/{n}",
   "Validate the milestone": "Validar el hito",
-  "What did you notice while testing the feature?": "¿Qué notaste al probar la funcionalidad?"
+  "What did you notice while testing the feature?": "¿Qué notaste al probar la funcionalidad?",
+  "A step has the milestone of its root: choose it on #{id}": "Un paso tiene el hito de su raíz: elígelo en #{id}",
+  "No milestone (#{id})": "Ningún hito (#{id})"
 }

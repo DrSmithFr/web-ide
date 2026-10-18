@@ -70,4 +70,14 @@ run(async ({ page }) => {
   assert(await page.isVisible('[data-testid=milestone-reopen]'), 'the milestone validated by the user, then reopenable')
   const refused = await mcp('kanban_milestone', { action: 'validate', id: 1 })
   assert(refused.result?.isError, 'a model cannot validate a milestone')
+
+  // A step shows the milestone of its root, chosen on the root.
+  await mcp('kanban_create', { title: 'Root' })
+  await mcp('kanban_create', { title: 'Its step', parent: 3 })
+  await page.click('.pane .tab:has-text("Kanban")')
+  await page.click('[data-testid=ticket-card-4]')
+  await page.waitForSelector('[data-testid=ticket-view] button[data-testid=ticket-milestone]:has-text("#3")')
+  await page.click('[data-testid=ticket-view] button[data-testid=ticket-milestone]')
+  await page.waitForSelector('[data-testid=ticket-view] .tk-num:has-text("#3")')
+  assert(await page.isVisible('select[data-testid=ticket-milestone]'), 'a step points to its root, where the milestone is chosen')
 })
