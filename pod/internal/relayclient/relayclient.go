@@ -42,6 +42,7 @@ type sigMsg struct {
 	URLs       []string              `json:"urls,omitempty"`
 	Username   string                `json:"username,omitempty"`
 	Credential string                `json:"credential,omitempty"`
+	TTL        int64                 `json:"ttl,omitempty"` // seconds the TURN credential is valid from now
 	SDP        string                `json:"sdp,omitempty"`
 	Candidate  json.RawMessage       `json:"candidate,omitempty"`
 	ID         string                `json:"id,omitempty"`
@@ -70,6 +71,7 @@ type sigMsg struct {
 	Build     string    `json:"build,omitempty"` // the fingerprint of the front end (server.Build)
 	Protocol  int       `json:"protocol,omitempty"`
 	Preferred bool      `json:"preferred,omitempty"`
+	Renew     bool      `json:"renew,omitempty"` // register: this pod answers an offer on a live session (#86)
 	Peers     []string  `json:"peers,omitempty"`
 	Cluster   string    `json:"site,omitempty"` // "site" on the wire: the cluster (GLOSSARY.md)
 	Gateway   string    `json:"gateway,omitempty"`
@@ -282,9 +284,9 @@ func (c *Client) runOnce(ctx context.Context) error {
 	if c.cfg.Identity != nil && c.cfg.Identity.Paired() {
 		account, cert, _ := c.cfg.Identity.State()
 		reg = sigMsg{Type: "register", ID: c.cfg.PodID, Secret: c.cfg.Secret, Name: c.cfg.Name,
-			Account: account, Cert: cert, Prove: true, Version: c.cfg.Version, Build: c.build(), Protocol: c.cfg.Protocol, Preferred: c.cfg.Preferred}
+			Account: account, Cert: cert, Prove: true, Version: c.cfg.Version, Build: c.build(), Protocol: c.cfg.Protocol, Preferred: c.cfg.Preferred, Renew: true}
 	} else {
-		reg = sigMsg{Type: "register", ID: c.cfg.PodID, Secret: c.cfg.Secret, Name: c.cfg.Name, Version: c.cfg.Version, Build: c.build(), Protocol: c.cfg.Protocol}
+		reg = sigMsg{Type: "register", ID: c.cfg.PodID, Secret: c.cfg.Secret, Name: c.cfg.Name, Version: c.cfg.Version, Build: c.build(), Protocol: c.cfg.Protocol, Renew: true}
 	}
 	if err := link.send(reg); err != nil {
 		return err
@@ -386,6 +388,10 @@ func (c *Client) runOnce(ctx context.Context) error {
 				c.mu.Unlock()
 			}
 		case "offer":
+			if s := c.session(m.Session); s != nil && s.renegotiating() {
+				go s.renegotiate(m)
+				continue
+			}
 			go c.handleOffer(c.newSession(m.Session, link), m, link)
 		case "candidate":
 			c.route(m.Session, func(s *session) { s.addBrowserCandidate(m.Candidate) })
@@ -617,6 +623,14 @@ func (c *Client) route(id string, fn func(*session)) {
 }
 
 func (c *Client) setICE(sessionID string, m sigMsg) {
+	srv := iceServer(m)
+	c.iceMu.Lock()
+	c.iceFor[sessionID] = srv
+	c.iceMu.Unlock()
+}
+
+// iceServer is the ICE server of an "ice" message of the relay.
+func iceServer(m sigMsg) webrtc.ICEServer {
 	urls := m.URLs
 	if m.Quota != nil && m.Quota.Over {
 		// The month is over: no credential came, so the TURN servers are dropped rather than
@@ -629,10 +643,17 @@ func (c *Client) setICE(sessionID string, m sigMsg) {
 			}
 		}
 	}
-	srv := webrtc.ICEServer{URLs: urls, Username: m.Username, Credential: m.Credential}
-	c.iceMu.Lock()
-	c.iceFor[sessionID] = srv
-	c.iceMu.Unlock()
+	return webrtc.ICEServer{URLs: urls, Username: m.Username, Credential: m.Credential}
+}
+
+// renewAfter is when to ask fresh TURN credentials for a tunnel whose credentials are valid ttl
+// seconds (0: the relay said nothing, no renewal): at three quarters of it, so the ICE restart is
+// done well before the relay refuses the old ones (#86).
+func renewAfter(ttl int64) (time.Duration, bool) {
+	if ttl <= 0 {
+		return 0, false
+	}
+	return max(time.Duration(ttl)*time.Second*3/4, time.Second), true
 }
 
 // Quota is the TURN month the relay applies to this pod's account (nil: the relay said nothing).
@@ -811,7 +832,17 @@ func (s *session) setupOffer(m sigMsg) error {
 			s.close()
 		}
 	})
-	if err := pc.SetRemoteDescription(s.offer); err != nil {
+	return s.answerOffer(pc, s.offer)
+}
+
+// answerOffer sets an offer of the browser on pc and sends the answer. The trickle starts before
+// the offer is set: an offer that restarts ICE starts the gathering at once (#86).
+func (s *session) answerOffer(pc *webrtc.PeerConnection, offer webrtc.SessionDescription) error {
+	// The answer leaves with the candidates gathered within earlyWait (host and reflexive ones,
+	// a TURN allocation when it is quick); the later ones are trickled after it (#75). It used to
+	// wait for the whole gathering, up to 8 s.
+	tr := trickle(pc, func(c json.RawMessage) { _ = s.link.send(sigMsg{Type: "candidate", Session: s.id, Candidate: c}) })
+	if err := pc.SetRemoteDescription(offer); err != nil {
 		return err
 	}
 	s.mu.Lock()
@@ -826,10 +857,6 @@ func (s *session) setupOffer(m sigMsg) error {
 	if err != nil {
 		return err
 	}
-	// The answer leaves with the candidates gathered within earlyWait (host and reflexive ones,
-	// a TURN allocation when it is quick); the later ones are trickled after it (#75). It used to
-	// wait for the whole gathering, up to 8 s.
-	tr := trickle(pc, func(c json.RawMessage) { _ = s.link.send(sigMsg{Type: "candidate", Session: s.id, Candidate: c}) })
 	gather := webrtc.GatheringCompletePromise(pc)
 	if err := pc.SetLocalDescription(answer); err != nil {
 		return err
@@ -846,6 +873,38 @@ func (s *session) setupOffer(m sigMsg) error {
 	}
 	tr.sent()
 	return nil
+}
+
+// renegotiating reports whether an offer for this session is a new one on its live
+// PeerConnection: the browser restarts ICE with fresh TURN credentials (#86). Its candidates wait
+// for that offer, as the first ones did.
+func (s *session) renegotiating() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.pc == nil || s.closed {
+		return false
+	}
+	s.remote = false
+	return true
+}
+
+// renegotiate answers a new offer of the browser on the same PeerConnection: the ICE servers
+// take the credentials the relay sent with it, and the offer restarts ICE. The DataChannels and
+// the tunnel stay. A failure leaves the current path, which lives until its credentials end.
+func (s *session) renegotiate(m sigMsg) {
+	log.Printf("relayclient: tunnel %s: new offer (ICE restart with fresh TURN credentials)", s.short())
+	s.mu.Lock()
+	pc := s.pc
+	s.mu.Unlock()
+	cfg := pc.GetConfiguration()
+	cfg.ICEServers = []webrtc.ICEServer{s.client.ICE(s.id)}
+	err := pc.SetConfiguration(cfg)
+	if err == nil {
+		err = s.answerOffer(pc, webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: m.SDP})
+	}
+	if err != nil {
+		log.Printf("relayclient: tunnel %s: new offer: %v", s.short(), err)
+	}
 }
 
 // short is the session id cut for the log: enough to follow one tunnel, nothing to reuse.

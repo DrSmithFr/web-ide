@@ -157,6 +157,13 @@ code, .code {
 @keyframes spin { to { transform: rotate(1turn); } }
 @media (prefers-reduced-motion: reduce) { .spin, .steps li.now .dot { animation-duration: 3s; } }
 
+#quota-bar {
+  position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 2;
+  width: max-content; max-width: calc(100% - 32px);
+  display: flex; align-items: center; gap: 12px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+  padding: 10px 12px 10px 16px; font-size: 14px;
+}
 .err { background: var(--err-soft); color: var(--err); border-radius: 10px; padding: 12px 14px; font-weight: 550; }
 .notice { display: flex; gap: 10px; align-items: flex-start; }
 

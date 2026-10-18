@@ -193,3 +193,68 @@ func TestCloseEndsLinks(t *testing.T) {
 		t.Fatal("the link is still open after Close")
 	}
 }
+
+// TestSignalingRenewal (#86): a browser asks fresh TURN credentials on its session and gets them
+// with their ttl, under the quota as the first ones; a pod that does not answer an offer on a live
+// session gets its browsers no ttl (they never renew); and a session the pod closes is told to its
+// browser.
+func TestSignalingRenewal(t *testing.T) {
+	st, _ := OpenStore(filepath.Join(relayDir(t), "relay.db"))
+	t.Cleanup(func() { st.Close() })
+	turn, _ := startTurn(t, st, TurnConfig{AdvertiseIP: "127.0.0.1", Quota: 1000, TTL: time.Minute})
+	t.Cleanup(func() { turn.Close() })
+	ts := httptest.NewServer(New(st, turn).Handler())
+	t.Cleanup(ts.Close)
+
+	c, _, err := websocket.Dial(context.Background(), wsURL(ts, "/_relay/pod"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pod := &wsClient{c}
+	defer pod.close()
+	pod.send(t, sigMsg{Type: "register", ID: "pod-r", Secret: "secret-r", Renew: true})
+	if m := pod.next(t); m.Type != "ready" {
+		t.Fatalf("expected ready, got %q", m.Type)
+	}
+	old := connectPod(t, ts, "pod-old", "secret-o", "old")
+	defer old.close()
+
+	// The first credentials and the renewed ones carry their ttl.
+	c, _, err = websocket.Dial(context.Background(), wsURL(ts, "/_relay/signal?pod=pod-r&session=sR"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := &wsClient{c}
+	defer b.close()
+	first := b.next(t)
+	if first.Type != "ice" || first.Username == "" || first.TTL < 55 || first.TTL > 60 {
+		t.Fatalf("first ice = %+v", first)
+	}
+	b.send(t, sigMsg{Type: "ice", Session: "sR"})
+	if m := b.next(t); m.Type != "ice" || m.Username == "" || m.TTL < 55 || m.Quota != nil {
+		t.Fatalf("renewed ice = %+v", m)
+	}
+
+	// Over the quota the renewal gives none, and says why.
+	if err := st.AddUsage("pod-r", usageMonth(time.Now()), 2000, 0); err != nil {
+		t.Fatal(err)
+	}
+	b.send(t, sigMsg{Type: "ice", Session: "sR"})
+	if m := b.next(t); m.Type != "ice" || m.Username != "" || m.Credential != "" || m.Quota == nil || !m.Quota.Over || m.TTL != 0 {
+		t.Fatalf("ice over the quota = %+v", m)
+	}
+
+	// The pod closes the session: its browser is told.
+	pod.send(t, sigMsg{Type: "bye", Session: "sR"})
+	if m := b.next(t); m.Type != "bye" || m.Session != "sR" {
+		t.Fatalf("expected the bye of the pod, got %+v", m)
+	}
+
+	// An older pod: credentials, no ttl.
+	ob := connectBrowser(t, ts, "pod-old", "sO")
+	defer ob.close()
+	ob.send(t, sigMsg{Type: "ice", Session: "sO"})
+	if m := ob.next(t); m.Type != "ice" || m.Username == "" || m.TTL != 0 {
+		t.Fatalf("ice of a pod that does not renew = %+v", m)
+	}
+}

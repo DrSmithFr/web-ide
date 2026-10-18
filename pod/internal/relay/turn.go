@@ -41,6 +41,10 @@ type Turn struct {
 	backer int64 // the quota of a Backer (#87)
 	level  func(key string) AccountLevel
 	stop   chan struct{}
+	ttl    time.Duration
+	// expired counts the requests refused for an expired credential (#86): a client that keeps
+	// refreshing its allocation with one past its TTL.
+	expired atomic.Int64
 }
 
 // errQuota: the key reached its monthly TURN quota and is not freed from it. Only the relayed
@@ -222,6 +226,8 @@ type TurnConfig struct {
 	QuotaBacker int64
 	// Level reads the level of a key (level.go), which sets its quota. nil: everyone is free.
 	Level func(key string) AccountLevel
+	// TTL: the validity of the credentials (0 = turnTTL; the tests shorten it).
+	TTL time.Duration
 }
 
 // NewTurn starts the embedded TURN/STUN server. It binds the control listeners on every
@@ -267,6 +273,10 @@ func NewTurn(st *Store, cfg TurnConfig) (*Turn, error) {
 		backer: cfg.QuotaBacker,
 		level:  cfg.Level,
 		stop:   make(chan struct{}),
+		ttl:    cfg.TTL,
+	}
+	if t.ttl <= 0 {
+		t.ttl = turnTTL
 	}
 	t.ice = iceURLs(cfg, addrs)
 
@@ -319,7 +329,7 @@ func NewTurn(st *Store, cfg TurnConfig) (*Turn, error) {
 		LoggerFactory:     t.logger,
 		PacketConnConfigs: conns,
 		ListenerConfigs:   listeners,
-		AuthHandler:       turnserver.LongTermTURNRESTAuthHandler(string(secret), nil),
+		AuthHandler:       t.auth(turnserver.LongTermTURNRESTAuthHandler(string(secret), nil)),
 		EventHandler: turnserver.EventHandler{
 			OnAllocationCreated: t.onAllocation,
 			OnAllocationDeleted: t.onDeallocate,
@@ -590,6 +600,29 @@ func usageKeyOf(userID string) string {
 	}
 	return userID
 }
+
+// auth counts the requests that come with an expired credential, then lets Pion check them.
+func (t *Turn) auth(next turnserver.AuthHandler) turnserver.AuthHandler {
+	return func(ra *turnserver.RequestAttributes) (string, []byte, bool) {
+		if exp, ok := credExpiry(ra.Username); ok && exp < time.Now().Unix() {
+			t.expired.Add(1)
+		}
+		return next(ra)
+	}
+}
+
+// credExpiry reads the expiry (unix seconds) a credential username starts with (<expiry>:<key>).
+func credExpiry(user string) (int64, bool) {
+	ts, _, _ := strings.Cut(user, ":")
+	exp, err := strconv.ParseInt(ts, 10, 64)
+	return exp, err == nil
+}
+
+// Expired is how many requests came with an expired credential since the relay started.
+func (t *Turn) Expired() int64 { return t.expired.Load() }
+
+// TTL is the validity of the credentials Creds issues for a session.
+func (t *Turn) TTL() time.Duration { return t.ttl }
 
 // ICE returns the STUN and TURN URLs the clients are told to reach (no credentials).
 func (t *Turn) ICE() []string { return t.ice }

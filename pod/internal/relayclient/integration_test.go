@@ -60,6 +60,7 @@ type testEnv struct {
 	secret  string
 	token   string
 	pod     *server.Server
+	turn    *relay.Turn
 }
 
 // freeTurnPort picks a port free for UDP and TCP both: the control port of the embedded TURN is
@@ -89,6 +90,12 @@ func freeTurnPort(t *testing.T) int {
 // identity is the pod's own: nil keeps the pod unpaired (token mode).
 func startEnv(t *testing.T, ident *identity.PodIdentity, route PeerRoute) *testEnv {
 	t.Helper()
+	return startEnvTTL(t, ident, route, 0)
+}
+
+// startEnvTTL is startEnv with TURN credentials valid ttl (0: the relay's own).
+func startEnvTTL(t *testing.T, ident *identity.PodIdentity, route PeerRoute, ttl time.Duration) *testEnv {
+	t.Helper()
 	// A port free for UDP and TCP both: the control port of the embedded TURN is served on each,
 	// and a test binary of another package running in parallel takes ephemeral ports too.
 	turnPort := freeTurnPort(t)
@@ -97,7 +104,7 @@ func startEnv(t *testing.T, ident *identity.PodIdentity, route PeerRoute) *testE
 	if err != nil {
 		t.Fatal("relay store:", err)
 	}
-	turn, err := relay.NewTurn(st, relay.TurnConfig{AdvertiseIP: "127.0.0.1", Port: turnPort})
+	turn, err := relay.NewTurn(st, relay.TurnConfig{AdvertiseIP: "127.0.0.1", Port: turnPort, TTL: ttl})
 	if err != nil {
 		t.Fatal("turn:", err)
 	}
@@ -141,7 +148,7 @@ func startEnv(t *testing.T, ident *identity.PodIdentity, route PeerRoute) *testE
 	if !st.OnlinePod(podID) {
 		t.Fatal("the pod did not register with the relay")
 	}
-	return &testEnv{httpSrv: httpSrv, st: st, cli: cli, podID: podID, token: podToken, pod: s}
+	return &testEnv{httpSrv: httpSrv, st: st, cli: cli, podID: podID, token: podToken, pod: s, turn: turn}
 }
 
 // buildPod builds a real server.Server in a temp dir, the way main.go does.

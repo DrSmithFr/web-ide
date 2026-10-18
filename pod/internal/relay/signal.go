@@ -13,10 +13,10 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 )
 
-// turnTTL is the validity of a short-lived TURN credential: long enough for a whole
-// session (Pion re-checks the expiry on every Refresh, a short one would kill a
-// relayed tunnel mid-way), short enough that a leaked one dies soon and the monthly
-// quota is re-checked often.
+// turnTTL is the validity of a short-lived TURN credential: short enough that a leaked one
+// dies soon and the monthly quota is re-checked often. TURN re-checks the expiry on every
+// Refresh and CreatePermission, so a longer session asks fresh ones before it ends (an "ice"
+// message of the browser) and restarts ICE with them (#86).
 const turnTTL = time.Hour
 
 // sigMsg is one signaling message between the relay and a client (pod or browser).
@@ -28,6 +28,7 @@ type sigMsg struct {
 	URLs       []string        `json:"urls,omitempty"`
 	Username   string          `json:"username,omitempty"`
 	Credential string          `json:"credential,omitempty"`
+	TTL        int64           `json:"ttl,omitempty"` // seconds the credential is valid from now (#86): no clock to agree on
 	SDP        string          `json:"sdp,omitempty"`
 	Candidate  json.RawMessage `json:"candidate,omitempty"`
 	// Pod is the pod a session of the identity link signals to (#75): its "signal" message opens
@@ -59,6 +60,7 @@ type sigMsg struct {
 	Build     string    `json:"build,omitempty"` // the fingerprint of the pod's front end (#73)
 	Protocol  int       `json:"protocol,omitempty"`
 	Preferred bool      `json:"preferred,omitempty"`
+	Renew     bool      `json:"renew,omitempty"` // register: the pod answers an offer on a live session (#86)
 	Peers     []string  `json:"peers,omitempty"`
 	Cluster   string    `json:"site,omitempty"` // "site" on the wire: the cluster (GLOSSARY.md)
 	Gateway   string    `json:"gateway,omitempty"`
@@ -137,6 +139,7 @@ type podConn struct {
 	build     string // the fingerprint of its front end (#73)
 	protocol  int    // the multi-pod protocol the pod told (0: one older than #60, or none told)
 	preferred bool
+	renew     bool // it answers an offer on a live session: its tunnels may renew their credentials (#86)
 	peers     []string
 	clean     bool
 	ws        *websocket.Conn
@@ -232,6 +235,11 @@ func (s *Server) dropBrowser(bc *browserConn) {
 func (s *Server) browserSignal(bc *browserConn, m sigMsg) {
 	podID, session := bc.podID, bc.session
 	switch m.Type {
+	case "ice":
+		// The credentials of a long session are about to end (#86): fresh ones, under the quota
+		// as the first ones were. The browser restarts ICE with them; its offer brings the pod
+		// fresh ones too.
+		bc.send(s.iceMessage(podID, session))
 	case "offer":
 		// A pod the store still lists but whose link is gone (it re-dials) cannot answer:
 		// the browser is told, rather than left waiting for an offer that was dropped.
@@ -302,13 +310,26 @@ func (s *Server) iceMessage(podID, session string) sigMsg {
 	if s.turn == nil {
 		return sigMsg{Type: "ice", Session: session}
 	}
-	user, pass, err := s.turn.Creds(podID, key, turnTTL)
+	user, pass, err := s.turn.Creds(podID, key, s.turn.TTL())
 	m := sigMsg{Type: "ice", Session: session, URLs: s.turn.ICE(), Username: user, Credential: pass}
+	// The ttl tells the tunnel to renew them: only with a pod that answers the new offer on its
+	// live session (an older one would take it for a new tunnel and break the one in use).
+	if exp, ok := credExpiry(user); ok && s.podRenews(podID) {
+		m.TTL = exp - time.Now().Unix()
+	}
 	if err == errQuota {
 		m.Quota = s.turn.QuotaState(key)
 		m.Message = "quota"
 	}
 	return m
+}
+
+// podRenews reports whether the link of a pod said it answers an offer on a live session.
+func (s *Server) podRenews(podID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	pc := s.pods[podID]
+	return pc != nil && pc.renew
 }
 
 // wsReadLimit is the largest frame a link may send (#72). Signaling frames are a few hundred
@@ -361,7 +382,7 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			pc.id, pc.name, pc.account = m.ID, m.Name, m.Account
-			pc.version, pc.build, pc.preferred, pc.protocol = m.Version, m.Build, m.Preferred, m.Protocol
+			pc.version, pc.build, pc.preferred, pc.protocol, pc.renew = m.Version, m.Build, m.Preferred, m.Protocol, m.Renew
 			// A paired pod sends its certificate: it must verify against the account it
 			// claims, which only a device holding the account key can sign.
 			if m.Cert != nil {
@@ -431,6 +452,16 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 				pc.clean = true
 				pc.mu.Unlock()
 				return
+			}
+			// The pod closed one tunnel (its ICE failed, a refused handshake): the browser is
+			// told, else a page whose path died without a word waits on it (#86, a renewal over
+			// the quota leaves a TURN-only tunnel no path).
+			s.mu.Lock()
+			bc := s.browsers[m.Session]
+			s.mu.Unlock()
+			if bc != nil && bc.podID == pc.id {
+				bc.send(sigMsg{Type: "bye", Session: m.Session})
+				s.dropBrowser(bc)
 			}
 		case "revocations":
 			// A pod holds a newer list than the relay (made offline by the pair command, or
