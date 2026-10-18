@@ -216,6 +216,13 @@ _Avoid_: difficulty
 How much work a ticket holds, S to XL.
 _Avoid_: estimate
 
+**Milestone**
+The tickets of one feature, across lineages, with its spec, its user stories and its feedback; always validated by the user.
+_Avoid_: epic, release, sprint
+
+**User story**
+What a user can do once a milestone is done; checked by the user, and the base of its e2e coverage review.
+
 **Review**
 A reading of a ticket's change by a model, before its merge.
 _Avoid_: test, To test
@@ -230,13 +237,6 @@ _Avoid_: planner, supervisor
 
 **Worktree holder** (#46)
 The step of a lineage whose development currently uses the lineage's worktree.
-
-**Milestone** (#104)
-The tickets of one feature, across lineages, with its spec, its user stories and its feedback; always validated by the user.
-_Avoid_: epic, release, sprint
-
-**User story** (#104)
-What a user can do once a milestone is done; checked by the user, and the base of its e2e coverage review.
 
 **Agent desk** ([desks](docs/design/desks.md))
 A desk bound to an agent's session or a development conversation and its worktree; the AI acts there only.
