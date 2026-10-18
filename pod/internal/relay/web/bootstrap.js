@@ -503,6 +503,7 @@ const fingerprint = (desc) => {
 // channels labelled @<key>/<label> (relay.md, *Multi-pod*).
 const tunnels = new Map()
 let entry = null // the tunnel of the gateway this window entered through
+let opening = false // openApp ran: a drop of the entry tunnel is a failover from then on
 let entryKey = '' // its device key, and the pod id the relay knows it by
 let entryPod = ''
 let entryCluster = ''
@@ -845,6 +846,7 @@ async function enter(mode) {
     l.adopt?.(earlySession.session, () => {}).close()
     earlySession = null
   }
+  let first
   if (early && !early.dropped && early.podId === pod) {
     // The early tunnel is the one: it takes its key, and its handshake checks it.
     if (tunnels.get('') === early) tunnels.delete('')
@@ -852,12 +854,15 @@ async function enter(mode) {
     early.early = false
     tunnels.set(entryKey, early)
     early.settle(entryKey)
-    entry = await early.ready
+    first = early.ready
   } else {
     if (early) trace(words.tEarlyDropped)
     giveUp()
-    entry = await connect(entryKey, pod, mode)
+    first = connect(entryKey, pod, mode)
   }
+  // The tunnel can drop before the app opens (a slow path through TURN): one more try, before
+  // the page says it cannot connect.
+  entry = await first.catch(() => connect(entryKey, pod, mode))
   openApp()
   return ''
 }
@@ -1280,10 +1285,12 @@ function drop(t, msg) {
   close(t)
   if (tunnels.get(t.key) === t) tunnels.delete(t.key)
   t.reject?.(new Error(msg))
-  // An early tunnel that failed before the pods list came is left to enter, which asks again.
+  // An early tunnel that failed before the pods list came is left to enter, which asks again;
+  // so is the entry tunnel before the app opens.
   if (t.early) return
-  if (t.key === entryKey) void failover()
-  else if (shownKey === t.key) notice(msg)
+  if (t.key === entryKey) {
+    if (opening) void failover()
+  } else if (shownKey === t.key) notice(msg)
 }
 
 // The gateway left: ask the relay who carries the cluster now and reconnect through it, with a
@@ -1360,6 +1367,7 @@ async function refreshPods() {
 // and its rpc channel is a DataChannel of the tunnel of its pod. One origin for every pod: the
 // installed app never leaves it.
 async function openApp() {
+  opening = true
   busy(words.loading)
   // The fetches of the app go through the Service Worker: opening the frame before it is active
   // would answer them from the relay, which does not know them.
