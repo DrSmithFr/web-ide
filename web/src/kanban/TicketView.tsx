@@ -1,7 +1,7 @@
 // Detail of a ticket (tab of the editor): the sections of its status, those of the earlier
 // statuses folded (description, briefing and notes; plan and goals; development and git;
 // how to test, feedback and pull request); lineage, linked files, attachments and history
-// aside, and the buttons that move it on (docs/kanban.md).
+// aside, and the buttons that move it on (docs/design/kanban.md).
 import { createEffect, createMemo, createResource, createSignal, For, type JSX, on, Show } from 'solid-js'
 import { Icon } from '../ui/icons'
 import { contextMenu, fuzzy, pick, type MenuItem } from '../ui/overlay'

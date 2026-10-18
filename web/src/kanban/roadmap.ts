@@ -1,4 +1,4 @@
-// Layout of the roadmap (docs/kanban.md): one row per lineage not merged yet, its blocks in
+// Layout of the roadmap (docs/design/kanban.md): one row per lineage not merged yet, its blocks in
 // order along a sequence axis (no dates), each block as wide as the estimated size of its
 // ticket. Pure: the view only draws it.
 import type { Priority, Size, Summary } from './state'

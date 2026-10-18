@@ -11,7 +11,7 @@ import (
 )
 
 // Pull request of a ticket: its branch is pushed to origin, then gh opens the pull request
-// (docs/kanban.md). Only when the user asks for it: the model never pushes.
+// (docs/design/kanban.md). Only when the user asks for it: the model never pushes.
 
 // CanPR tells whether a pull request can be opened: a remote origin and the gh command.
 func (g Git) CanPR(ctx context.Context) bool {

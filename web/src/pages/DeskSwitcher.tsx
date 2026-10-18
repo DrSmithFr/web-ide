@@ -1,4 +1,4 @@
-// Desks of the project in the menu bar (docs/desks.md): 1 2 3 +. A desk is a link: a click
+// Desks of the project in the menu bar (docs/design/desks.md): 1 2 3 +. A desk is a link: a click
 // switches the window, a middle click opens it in a new tab. A tab dropped on a desk moves there.
 import { createSignal, For, Show } from 'solid-js'
 import { podPath } from '../app/base'

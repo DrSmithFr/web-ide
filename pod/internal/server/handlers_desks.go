@@ -8,7 +8,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/sessions"
 )
 
-// Desks of a project (docs/desks.md): each desk is a session of its own; a window shows one
+// Desks of a project (docs/design/desks.md): each desk is a session of its own; a window shows one
 // (window.desk) and its session changes reach the windows of the same desk only.
 func (s *Server) registerDesks() {
 	// desk.switch shows another desk in the window without reopening the project.

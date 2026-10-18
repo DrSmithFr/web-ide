@@ -1,4 +1,4 @@
-// The agent runs in the pod (docs/architecture.md): this module shows the conversation it
+// The agent runs in the pod (docs/design/architecture.md): this module shows the conversation it
 // runs and sends what the user does. The pod announces every change of a conversation
 // (agent.update) and streams the answer being written (llm.delta, followed with llm.attach);
 // a conversation goes on when the window closes, and any window can follow or stop it.

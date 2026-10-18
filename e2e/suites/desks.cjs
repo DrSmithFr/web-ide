@@ -1,4 +1,4 @@
-// Desks (docs/desks.md): each desk of a project has its own layout; the URL names the desk; two
+// Desks (docs/design/desks.md): each desk of a project has its own layout; the URL names the desk; two
 // windows on two desks do not touch each other, two on the same desk mirror; a tab moves to
 // another desk; desks are renamed and removed; the home page opens the last desk of the device.
 // A desk in Grid mode is a tree of tiles (files, tools, consoles) driven by the keyboard; in

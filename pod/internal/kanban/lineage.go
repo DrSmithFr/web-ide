@@ -7,7 +7,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
 
-// Lineages and dependencies (docs/kanban.md). The children of a ticket form its lineage:
+// Lineages and dependencies (docs/design/kanban.md). The children of a ticket form its lineage:
 // they are developed one after the other in the worktree and on the branch of their parent,
 // which is merged once they are all finished. A ticket may also depend on tickets of other
 // lineages: it cannot start before they are merged or done.

@@ -11,7 +11,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 )
 
-// Kanban tools of the assistant (docs/kanban.md): every conversation reads the tickets and
+// Kanban tools of the assistant (docs/design/kanban.md): every conversation reads the tickets and
 // creates some (in Briefing mode the conversation is linked to the first one); a conversation
 // linked to a ticket changes that ticket only.
 

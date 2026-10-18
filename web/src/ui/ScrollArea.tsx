@@ -1,4 +1,4 @@
-// Scroll mode of a desk (docs/desks.md), like niri or PaperWM: the columns of the tile tree
+// Scroll mode of a desk (docs/design/desks.md), like niri or PaperWM: the columns of the tile tree
 // side by side in a strip wider than the window, each column a stack of tiles. A column is
 // as wide as one column in sight (1, 2 or 3 by window width) or wider; the focused column
 // scrolls into view. A strip of marks under it shows the columns and the part in sight.

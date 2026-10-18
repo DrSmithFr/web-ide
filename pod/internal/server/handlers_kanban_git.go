@@ -19,7 +19,7 @@ import (
 )
 
 // Git side of the tickets: worktree and branch of a ticket, its changes, and the end of
-// its worktree when it is closed or abandoned (docs/kanban.md).
+// its worktree when it is closed or abandoned (docs/design/kanban.md).
 // gctx is what the git side of a ticket works on: the kanban, the main project, its
 // runtime and git.
 type gctx struct {

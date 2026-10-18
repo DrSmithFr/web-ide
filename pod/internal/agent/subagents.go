@@ -8,7 +8,7 @@ import (
 
 // Sub-agents: a conversation delegates a task to a child conversation, with a fresh context
 // and the same rights, that runs in the background. They talk only through tools; every
-// exchange is a message of one of the two conversations (docs/spec.md, assistant).
+// exchange is a message of one of the two conversations (docs/design/spec.md, assistant).
 
 const (
 	// MaxDepth: a child cannot start children of its own.

@@ -31,7 +31,7 @@ DOMAIN=${RELAY_DOMAIN:-antennae.space}
 DATA=${RELAY_DATA:-/var/lib/antennae}
 USER=${RELAY_USER:-antennae}
 QUOTA=${RELAY_QUOTA:-10GB}
-# One relayed session costs four TURN allocations (see docs/load.md): the range is the capacity
+# One relayed session costs four TURN allocations (see docs/design/load.md): the range is the capacity
 # of the relay, 2840 ports carry about 710 simultaneous tunnels. It stays below the ephemeral
 # range of the kernel (32768-60999), whose outgoing connections would take its ports.
 TURN_PORTS=${RELAY_TURN_PORTS:-20000-22839}

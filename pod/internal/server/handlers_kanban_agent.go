@@ -15,7 +15,7 @@ import (
 )
 
 // The development of a ticket by an ACP agent (kanban setting devAgent): one session of the
-// Agents tool per ticket, in its worktree, with the MCP server of the IDE (docs/kanban.md).
+// Agents tool per ticket, in its worktree, with the MCP server of the IDE (docs/design/kanban.md).
 
 // agentsMCP is the MCP server of the IDE as the sessions of the Agents tool reach it: the
 // listen address of the pod, the token as a bearer. Named like the server users add to Claude

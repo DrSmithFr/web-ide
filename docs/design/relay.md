@@ -221,7 +221,7 @@ Code and review together:
 
 ## Hosted service and pricing
 
-The hosted relay runs on one EU VPS (`antennae.space`, OVH VPS-1): `web-ide-pod relay` with its own systemd service, its own user and its own data folder (`/var/lib/antennae`: the base, the VAPID key, the ACME cache). The domain is served by the binary itself — Let's Encrypt through `autocert` (TLS-ALPN-01 on 443, the cache in `<data>/acme`), `:80` redirecting to https — and everything listens on both stacks (IPv4 and IPv6). See [self-hosting](self-hosting.md) for running your own.
+The hosted relay runs on one EU VPS (`antennae.space`, OVH VPS-1): `web-ide-pod relay` with its own systemd service, its own user and its own data folder (`/var/lib/antennae`: the base, the VAPID key, the ACME cache). The domain is served by the binary itself — Let's Encrypt through `autocert` (TLS-ALPN-01 on 443, the cache in `<data>/acme`), `:80` redirecting to https — and everything listens on both stacks (IPv4 and IPv6). See [self-hosting](../howto/self-host-relay.md) for running your own.
 
 - **Free**: relay, pairing, multi-pod, settings sync, push, TURN within a monthly quota (**10 GB per account**).
 - **Supporter** (**$5 a month** or more on GitHub Sponsors; a higher tier gives the same perks, a one-time payment of $5 or more counts for 30 days): TURN without quota (fair use), share links, vault sync. Later **Team**: shared sessions and voice.
@@ -240,7 +240,7 @@ The hosted relay runs on one EU VPS (`antennae.space`, OVH VPS-1): `web-ide-pod 
 2. **Done** (`web-ide-pod pair`, `pod/internal/identity`, Settings > Remote access > Devices): phrase, device certificates, pairing, QR, passkeys, revocation. See *Milestone 2* below.
 3. Multi-pod: **done** (#58: proof of possession, sites, gateway election, encrypted project lists, unified home page, entry through a gateway; #59: one origin, one tunnel per pod, routing through the gateway, pod-to-pod WebRTC, failover — see *Routing (one origin)*; #60: protocol versions and *Update this pod* — see *Versions and updates*).
 4. **Done** (`pod/internal/settingsync`, Settings > Remote access > Sync): encrypted blobs, field-by-field merge, per-device layout, vault. See *Settings sync* above.
-5. Hosted relay at `antennae.space`, GitHub Sponsors, quotas, counters: **done** (#29 — see *Hosted service and pricing* above and [self-hosting](self-hosting.md)): the domain served by the binary (autocert, both stacks), TURN counted per key and capped per month, the GitHub link that lifts the cap, `/_relay/status`, the deploy and backup scripts.
+5. Hosted relay at `antennae.space`, GitHub Sponsors, quotas, counters: **done** (#29 — see *Hosted service and pricing* above and [self-hosting](../howto/self-host-relay.md)): the domain served by the binary (autocert, both stacks), TURN counted per key and capped per month, the GitHub link that lifts the cap, `/_relay/status`, the deploy and backup scripts.
 6. **Done**: push notifications. See *Push notifications* above.
 7. **Done**: Wake-on-LAN, shutdown, reboot and restart of a pod. See *Power* above.
 8. Share links.

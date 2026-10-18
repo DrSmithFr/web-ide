@@ -1,5 +1,5 @@
 // Claude Code on a ticket: a terminal of the IDE runs `claude` with one of the prompts of
-// the MCP endpoint of the pod (docs/kanban.md, Claude Code). Briefing, planning and review ask
+// the MCP endpoint of the pod (docs/design/kanban.md, Claude Code). Briefing, planning and review ask
 // for Opus; development and fixes keep the default model of Claude Code.
 import { request } from '../pod/rpc'
 import { root } from '../state/project'

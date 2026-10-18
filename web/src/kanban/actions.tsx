@@ -450,7 +450,7 @@ export function PatchView(props: { text: string }) {
   )
 }
 
-/** Merge into the base, rebase on it, and the conflicts they leave (docs/kanban.md). */
+/** Merge into the base, rebase on it, and the conflicts they leave (docs/design/kanban.md). */
 function GitOps(props: { tk: Ticket; tick: number; behind: number; onDone: () => void }) {
   const tk = () => props.tk
   const [squash, setSquash] = createSignal(false)
@@ -528,7 +528,7 @@ function GitOps(props: { tk: Ticket; tick: number; behind: number; onDone: () =>
   )
 }
 
-/** Pull request of the ticket: its branch pushed to origin, opened with gh (docs/kanban.md). */
+/** Pull request of the ticket: its branch pushed to origin, opened with gh (docs/design/kanban.md). */
 export function PullRequest(props: { tk: Ticket; apply: Apply; folded?: boolean }) {
   const tk = () => props.tk
   const [busy, setBusy] = createSignal(false)
