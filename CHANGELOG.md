@@ -4,6 +4,19 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+## [1.20.0] - 2026-10-18
+
+### Added
+
+- Milestones on the kanban: a milestone holds a description, a spec, user stories, its tickets, feedback made into tickets, briefing conversations, notes and history. Each milestone has a page with *Validate the milestone*, which only the user can do. A ticket chooses its milestone (the steps of a lineage take the one of their root) and recalls the stories in *How to test*. The board has a third view, *Milestones*, a milestone filter, and roadmap bands per milestone. *Review coverage* asks Claude Code to check the e2e coverage of each story (the `coverage` prompt of the MCP endpoint). The kanban base moves to version 8.
+- Relay levels: an account is free, **Backer** ($2 a month: 20 GB of TURN a month on the hosted relay instead of 10), **Supporter** ($5: no TURN quota) or **VIP** ($10 and more, or the VIP list: no quota and the badge). A one-time payment of $5 makes a Supporter for 30 days, $10 a VIP for 90 days, $50 a VIP for 360 days. Settings › Remote access shows the badge next to the GitHub login and the TURN quota (`Supporter · VIP`, `· 12 d` when it ends). The vault and everything else stay free at every level.
+- The VIP list of a relay: `web-ide-pod relay vip add|remove|list <github-login|account-id>` (with `-note`, `-days`, `-until`) and `web-ide-pod relay supporters`. They work next to the running relay, which notices the change within 30 s, and they need no GitHub app, since an account id is enough. A new relay flag, `-quota-backer`, sets the quota of a Backer (twice `-quota` when unset).
+
+### Changed
+
+- Kanban: the side panel opens the board in either view; *Start development* creates the branch and the worktree only, and *Dev session* starts the development; the complexity is fixed once the development started.
+- The relay base moves to version 8 (the `vips` table). Pods and relays of 1.19 keep working with 1.20: the quota messages keep their `supporter` field.
+
 ## [1.19.0] - 2026-10-18
 
 ### Added
