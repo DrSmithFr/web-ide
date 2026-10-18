@@ -12,11 +12,11 @@ import (
 
 	"github.com/DrSmithFr/web-ide/pod/internal/assistant"
 	"github.com/DrSmithFr/web-ide/pod/internal/config"
+	"github.com/DrSmithFr/web-ide/pod/internal/desks"
 	"github.com/DrSmithFr/web-ide/pod/internal/hfcache"
 	"github.com/DrSmithFr/web-ide/pod/internal/keeper"
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
-	"github.com/DrSmithFr/web-ide/pod/internal/sessions"
 	"github.com/DrSmithFr/web-ide/pod/internal/settings"
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
 	"github.com/DrSmithFr/web-ide/pod/internal/store"
@@ -31,7 +31,7 @@ func podAt(t *testing.T, dir, sock string) (*Server, *httptest.Server) {
 	reg, _ := projects.Load(st)
 	sets, _ := settings.Load(st)
 	s := &Server{Cfg: cfg, Store: st, Token: "secret-token-0123456789abcdef0123", Projects: reg, Settings: sets,
-		Sessions: sessions.New(st), LLM: llm.New(st), Models: hfcache.New(st.Path("models", "hf")), Pool: sshx.NewPool(sshx.NewHostKeys(st.Path("known_hosts"))),
+		Desks: desks.New(st), LLM: llm.New(st), Models: hfcache.New(st.Path("models", "hf")), Pool: sshx.NewPool(sshx.NewHostKeys(st.Path("known_hosts"))),
 		Static: fstest.MapFS{"index.html": {Data: []byte("<html>app</html>")}}}
 	c, _, err := keeper.Dial(sock)
 	if err != nil {

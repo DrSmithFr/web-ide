@@ -1,6 +1,6 @@
 {
   "settings.language": "docs/howto/add-translation.md",
-  "settings.workspace": "docs/guide.md#projects",
+  "settings.projects": "docs/guide.md#projects",
   "settings.remote": "docs/howto/account-and-devices.md",
   "settings.remote.relay": "docs/design/relay.md",
   "settings.remote.lan": "docs/howto/lan-pods.md",

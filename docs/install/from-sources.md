@@ -37,7 +37,7 @@ Build the pod yourself, to run it, to install it as a unit, or to change it.
 
 ## Options of the pod
 
-`-addr` (listen address, default `127.0.0.1:4433`), `-workspace` (default folder of new projects, `~/Apps`), `-data` (`~/.web-ide`), `-allow-remote` (plain HTTP to other machines, protected by the token only: prefer Tailscale), `-relay`, `-lan`, `-name`, `-version`. `web-ide-pod -h` lists them all.
+`-addr` (listen address, default `127.0.0.1:4433`), `-projects` (the projects folder, where new projects are made, `~/Apps`; `-workspace` still works), `-data` (`~/.web-ide`), `-allow-remote` (plain HTTP to other machines, protected by the token only: prefer Tailscale), `-relay`, `-lan`, `-name`, `-version`. `web-ide-pod -h` lists them all.
 
 ## Check
 

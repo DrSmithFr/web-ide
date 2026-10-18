@@ -14,6 +14,7 @@ run(async ({ page, ctx }) => {
   await page.waitForFunction(() => document.querySelector('[data-testid=pod-version]')?.textContent)
   const version = execSync(`${__dirname}/../../bin/web-ide-pod -version`, { encoding: 'utf8' }).trim()
   assert((await page.textContent('[data-testid=pod-version]')) === version, 'home page: version of the pod')
+  assert((await page.textContent('.home')).includes('Projects folder:'), 'home page: the projects folder is named')
   // The sponsor line is a quiet plain link at the bottom: no button, no frame, nothing loaded from GitHub.
   assert((await page.getAttribute('[data-testid=sponsor]', 'href')) === 'https://github.com/sponsors/DrSmithFr', 'home page: the sponsor line links GitHub Sponsors')
   assert(!(await page.$('.home-head [data-testid=sponsor]')), 'home page: no sponsor button in the header')

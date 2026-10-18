@@ -4,6 +4,10 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+### Changed
+
+- Naming (#100): the systemd units of the pod and the keeper are called units, not services; the state of the desks of a project is in `desks/` (the files of `sessions/` are read and moved there), and the projects folder is `-projects` / `projects` in `config.json` (*Projects folder* in Settings and on the home page); `-workspace` and the `workspace` key still work.
+
 ### Added
 
 - Help: the documentation is embedded in the pod and opens read only in a tab from *Help › Documentation* or the command palette, with working links and headings. A **?** next to the settings sections, the kanban and the Agents tool opens the page that explains it.

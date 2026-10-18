@@ -11,13 +11,13 @@ import (
 	"sync"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/config"
+	"github.com/DrSmithFr/web-ide/pod/internal/desks"
 	"github.com/DrSmithFr/web-ide/pod/internal/fsx"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/lsp"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
 	"github.com/DrSmithFr/web-ide/pod/internal/search"
-	"github.com/DrSmithFr/web-ide/pod/internal/sessions"
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
 )
 
@@ -40,7 +40,7 @@ func (c *Client) runtime() (*runtime.Runtime, error) {
 	return rt, nil
 }
 
-// ---------- global: workspace, projects, settings ----------
+// ---------- global: projects folder, projects, settings ----------
 
 func (s *Server) registerGlobal() {
 	// The window tells its language: the messages sent to it are translated.
@@ -54,9 +54,11 @@ func (s *Server) registerGlobal() {
 		}
 		return nil, nil
 	})
+	// workspace.get, .set and .dirs are the projects folder (the answer field is still
+	// "workspace"): the other pods of an account, of another release, and their pages call them.
 	s.handle("workspace.get", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 		home, _ := os.UserHomeDir()
-		return map[string]string{"workspace": s.Cfg.Workspace, "home": home, "dataDir": s.Store.Dir(), "version": s.Version, "name": s.Name}, nil
+		return map[string]string{"workspace": s.Cfg.Projects, "home": home, "dataDir": s.Store.Dir(), "version": s.Version, "name": s.Name}, nil
 	})
 	s.handle("workspace.set", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 		a, err := bind[struct{ Path string }](p)
@@ -67,7 +69,7 @@ func (s *Server) registerGlobal() {
 		if st, err := os.Stat(dir); err != nil || !st.IsDir() {
 			return nil, i18n.Errorf("folder not found: %s", dir)
 		}
-		s.Cfg.Workspace = dir
+		s.Cfg.Projects = dir
 		return nil, s.Cfg.Save(s.Store)
 	})
 	// Local folders, for the project creation form.
@@ -78,7 +80,7 @@ func (s *Server) registerGlobal() {
 		}
 		dir := config.ExpandHome(a.Path)
 		if dir == "" {
-			dir = s.Cfg.Workspace
+			dir = s.Cfg.Projects
 		}
 		dir, _ = filepath.Abs(dir)
 		es, err := fsx.Local{}.List(dir)
@@ -157,13 +159,13 @@ func (s *Server) registerGlobal() {
 			return nil, err
 		}
 		s.closeRuntime(a.ID)
-		s.Sessions.Delete(a.ID)
+		s.Desks.Delete(a.ID)
 		_ = s.Store.Remove(iconCache(a.ID))
 		// The worktrees of its tickets stay on disk, their projects go.
 		for _, id := range children {
 			_ = s.Projects.Delete(id)
 			s.closeRuntime(id)
-			s.Sessions.Delete(id)
+			s.Desks.Delete(id)
 		}
 		s.broadcast("projects.changed", nil, nil)
 		return nil, nil
@@ -352,7 +354,7 @@ func (s *Server) registerProject() {
 		c.project = a.ID
 		// A desk removed meanwhile (an old link): the window opens desk 1.
 		desk := a.Desk
-		if !s.Sessions.HasDesk(a.ID, desk) {
+		if !s.Desks.HasDesk(a.ID, desk) {
 			desk = 1
 		}
 		c.desk = desk
@@ -375,14 +377,17 @@ func (s *Server) registerProject() {
 			"project":  projects.View{Project: v, DisplayName: v.Name()},
 			"root":     rt.Root,
 			"local":    rt.Local,
-			"session":  s.Sessions.Get(sessions.Key(a.ID, desk)),
+			"session":  s.Desks.Get(desks.Key(a.ID, desk)),
 			"desk":     desk,
-			"desks":    s.Sessions.Desks(a.ID),
+			"desks":    s.Desks.List(a.ID),
 			"consoles": rt.Consoles.List(),
 			// Files of .ide still tracked by git: the page offers to untrack them once.
 			"ideTracked": s.ideTracked(ctx, v, rt),
 		}, nil
 	})
+	// session.update, session.get, session.put and the session.changed event carry the state of
+	// a desk (the field "session" too): the old name stays on the wire, a browser can be served
+	// the page of a pod of another release.
 	s.handle("session.update", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 		a, err := bind[struct{ Session json.RawMessage }](p)
 		if err != nil {
@@ -395,10 +400,10 @@ func (s *Server) registerProject() {
 		desk := c.desk
 		s.mu.Unlock()
 		// A desk removed by another window is not written back.
-		if !s.Sessions.HasDesk(c.project, desk) {
+		if !s.Desks.HasDesk(c.project, desk) {
 			return nil, nil
 		}
-		s.Sessions.Put(sessions.Key(c.project, desk), a.Session)
+		s.Desks.Put(desks.Key(c.project, desk), a.Session)
 		s.emitDesk(c.project, desk, "session.changed", map[string]any{"session": a.Session, "desk": desk}, c.id)
 		return nil, nil
 	})

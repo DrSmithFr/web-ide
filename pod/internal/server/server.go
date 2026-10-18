@@ -26,6 +26,7 @@ import (
 
 	"github.com/DrSmithFr/web-ide/pod/internal/config"
 	"github.com/DrSmithFr/web-ide/pod/internal/db"
+	"github.com/DrSmithFr/web-ide/pod/internal/desks"
 	"github.com/DrSmithFr/web-ide/pod/internal/forwards"
 	"github.com/DrSmithFr/web-ide/pod/internal/hfcache"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
@@ -36,7 +37,6 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 	"github.com/DrSmithFr/web-ide/pod/internal/push"
 	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
-	"github.com/DrSmithFr/web-ide/pod/internal/sessions"
 	"github.com/DrSmithFr/web-ide/pod/internal/settings"
 	"github.com/DrSmithFr/web-ide/pod/internal/settingsync"
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
@@ -52,7 +52,7 @@ type Server struct {
 	Token    string
 	Projects *projects.Registry
 	Settings *settings.Settings
-	Sessions *sessions.Sessions
+	Desks    *desks.Store
 	// Clipboard is the history of the texts copied in the IDE, shared by every window.
 	Clipboard *clipboard.History
 	Pool      *sshx.Pool
@@ -1108,7 +1108,7 @@ func (s *Server) Shutdown() {
 	for _, rt := range rts {
 		rt.Release()
 	}
-	s.Sessions.FlushAll()
+	s.Desks.FlushAll()
 	s.Pool.CloseAll()
 	s.LLM.Close()
 	s.Kanban.Close()

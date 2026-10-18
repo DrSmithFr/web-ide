@@ -9,7 +9,7 @@ import (
 )
 
 // The actions a power request may ask for (relay.md, *Power*): wake a machine that sleeps, shut it
-// down, reboot it, or restart the pod service only.
+// down, reboot it, or restart the pod unit only.
 const (
 	PowerWake     = "wake"
 	PowerShutdown = "shutdown"

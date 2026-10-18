@@ -87,6 +87,7 @@ _Avoid_: repo, workspace
 **Projects folder**
 The folder where a pod makes new projects (`~/Apps` by default).
 _Avoid_: workspace
+The flag `-workspace` and the `workspace` key of `config.json` are still read, and so are the RPCs `workspace.get`, `workspace.set` and `workspace.dirs` (with the `workspace` field of the answer) that pods and pages of different releases call.
 
 **Worktree**
 A git worktree of a project, made for a ticket in development; it shares the kanban and the conversations of its project.
@@ -95,6 +96,7 @@ _Avoid_: branch, clone
 **Desk**
 One arrangement of a project's window: its layout mode, tabs, consoles and previews. A project has one or more.
 _Avoid_: workspace, session
+The pod stores the state of a desk in `desks/` (it was `sessions/`, read and moved on first use); on the wire it is still called `session` (`session.update`, `session.changed`), so that a page and a pod of different releases keep talking.
 
 **Tool**
 A part of the window shown from a rail icon: Explorer, Git, Kanban, Console…
@@ -237,8 +239,5 @@ The list of the desks of every project with what runs in them, and the way to en
 
 ## Conflicts
 
-Naming problems found while writing this glossary, each to become a ticket.
+None open: every conflict found while writing this glossary was fixed (#96-#100). A naming problem found later goes here, then to a ticket.
 
-- **Service**: the docs call the systemd units of the pod and the keeper *services* (`install.sh`, guide); call them *units*.
-- **Session**: the state of a desk is stored as a session (`sessions/<project>.json`, package `sessions`); call it *desk state*, and keep *session* for agents.
-- **Projects folder**: the flag `-workspace`, `config.json` and the docs say *workspace*; rename to *projects folder* (`-projects`, the old flag kept as an alias).

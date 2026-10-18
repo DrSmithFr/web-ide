@@ -311,7 +311,7 @@
   "the request is not for this pod": "la demande ne concerne pas ce pod",
   "%s is not a release tag": "%s n'est pas une version publiée",
   "this request was already run": "cette demande a déjà été exécutée",
-  "this pod does not run as the service": "ce pod ne tourne pas comme service",
+  "this pod does not run as its systemd unit": "ce pod ne tourne pas comme son unité systemd",
   "the installer is not installed: %s": "l'installateur n'est pas installé : %s",
   "the update could not start: %w": "la mise à jour n'a pas pu démarrer : %w",
   "this pod reaches no other pod": "ce pod ne joint aucun autre pod",

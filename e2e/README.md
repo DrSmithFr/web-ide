@@ -19,7 +19,7 @@ flowchart LR
 
 - `run.sh`: runs suites one by one or in parallel (`-j N` / `E2E_JOBS`, longest first, `perf` alone at the end). Each chain (a suite and the `+` ones after it) has its own temporary folder and block of 100 ports from `E2E_PORT_BASE` (21000: pod, +1 relay, +2 TURN, +3 push service, +20 LAN). The output of a failed suite is printed at the end, its pod log is in `/tmp/web-ide-e2e-<suite>.pod.log`. It does not build: run `make build` first.
 - `common.cjs`: `start` (browser and page, English unless `E2E_LOCALE`), `openProject` and the helpers the suites share.
-- `fixtures/`: `demo` is the workspace copied for each suite, `other` a second one; `audio/` the speech sample; `home/` the home folder of the pod under test.
+- `fixtures/`: `demo` is the projects folder copied for each suite, `other` a second one; `audio/` the speech sample; `home/` the home folder of the pod under test.
 - `bin/`: fake `claude`, `claude-agent-acp`, `gh` and `tailscale` put first in the `PATH` of the pod.
 - `shots/`: `make shots`, the pictures of the documentation, replayed from `recording.json.gz` (`shots.cjs`, `screencast.cjs`, `llm-proxy.cjs`).
 - `suites/`: one script per area, alphabetical (`run.sh` has its own order, longest first):

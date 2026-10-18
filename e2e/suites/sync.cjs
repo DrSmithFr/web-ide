@@ -106,7 +106,7 @@ async function waitOnline(podId) {
 
 let bProc = null
 function startPodB() {
-  bProc = spawn(BIN, ['-addr', `127.0.0.1:${PORT_B}`, '-data', DATA_B, '-workspace', WS,
+  bProc = spawn(BIN, ['-addr', `127.0.0.1:${PORT_B}`, '-data', DATA_B, '-projects', WS,
     '-static', path.join(ROOT, 'pod', 'webdist', 'dist'), '-relay', `http://127.0.0.1:${RELAY_PORT}`, '-force-turn', '-lan', 'off'],
     { stdio: ['ignore', 'pipe', 'pipe'] })
   bProc.stdout.on('data', (d) => process.stdout.write('  B| ' + d))

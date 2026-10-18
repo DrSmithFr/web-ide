@@ -59,9 +59,9 @@ type Handler struct {
 	Own      string
 
 	// The machine, as fields so the tests need neither systemd nor a network card: whether the pod
-	// runs as the service, whether the rule is installed, how a command starts detached, the cards
+	// runs as its unit, whether the rule is installed, how a command starts detached, the cards
 	// of another pod, and how a packet leaves.
-	Service func() bool
+	Unit    func() bool
 	Allowed func() bool
 	Start   func(cmd, env []string) error
 	Targets func(pod string) []Target
@@ -75,7 +75,7 @@ type Handler struct {
 
 // New makes the handler of a pod; targets gives the cards another pod of the account published.
 func New(id *identity.PodIdentity, targets func(pod string) []Target) *Handler {
-	return &Handler{Identity: id, Own: id.ID(), Service: update.AsService, Allowed: Allowed, Start: detached,
+	return &Handler{Identity: id, Own: id.ID(), Unit: update.AsUnit, Allowed: Allowed, Start: detached,
 		Targets: targets, Send: Send, Delay: time.Second, seen: map[string]bool{}}
 }
 
@@ -117,7 +117,7 @@ func (h *Handler) Run(req *identity.PowerRequest) Answer {
 	}
 	cmd := h.command(req.Action)
 	if cmd == nil {
-		return Answer{Status: StatusNotService, Message: i18n.Translate("en", i18n.New("this pod does not run as the service"))}
+		return Answer{Status: StatusNotService, Message: i18n.Translate("en", i18n.New("this pod does not run as its systemd unit"))}
 	}
 	env := []string{ActionEnv + "=" + req.Action}
 	time.AfterFunc(h.Delay, func() {
@@ -142,7 +142,7 @@ func (h *Handler) wake(pod string) Answer {
 	return Answer{Status: StatusSent}
 }
 
-// command is what runs an action: nil for a restart of a pod that is not the service. The restart
+// command is what runs an action: nil for a restart of a pod that is not a unit. The restart
 // goes through systemd-run, in a unit of its own, so the restart of the pod does not kill the
 // command that asked for it.
 func (h *Handler) command(action string) []string {
@@ -155,7 +155,7 @@ func (h *Handler) command(action string) []string {
 	case identity.PowerReboot:
 		return []string{"systemctl", "reboot", "-i"}
 	}
-	if !h.Service() {
+	if !h.Unit() {
 		return nil
 	}
 	return []string{"systemd-run", "--user", "--unit=web-ide-restart-" + update.Suffix(), "systemctl", "--user", "restart", "web-ide-pod.service"}

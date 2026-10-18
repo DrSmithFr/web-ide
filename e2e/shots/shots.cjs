@@ -34,8 +34,8 @@ function chrome() {
 
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
 
-/** Workspace with a copy of the repository at `commit`, without remote (the base is main). */
-function workspace(tmp, commit) {
+/** Projects folder with a copy of the repository at `commit`, without remote (the base is main). */
+function projectsFolder(tmp, commit) {
   const ws = path.join(tmp, 'ws')
   const repo = path.join(ws, 'web-ide')
   fs.mkdirSync(ws, { recursive: true })
@@ -80,7 +80,7 @@ async function startPod(tmp, ws, dataDir) {
   fs.mkdirSync(home, { recursive: true })
   // git and the other tools speak English, so the model does too.
   const env = { ...process.env, LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', LANGUAGE: 'en', WEBIDE_INSTRUCTIONS_HOME: home, PATH: `${os.homedir()}/go/bin:${os.homedir()}/sdk/go/bin:${process.env.PATH}` }
-  const args = ['-addr', `127.0.0.1:${PORT}`, '-data', dataDir, '-workspace', ws, '-static', path.join(ROOT, 'pod/webdist/dist')]
+  const args = ['-addr', `127.0.0.1:${PORT}`, '-data', dataDir, '-projects', ws, '-static', path.join(ROOT, 'pod/webdist/dist')]
   const pod = spawn(path.join(ROOT, 'bin/web-ide-pod'), args, { env, stdio: ['ignore', fs.openSync(path.join(tmp, 'pod.log'), 'w'), 'inherit'] })
   for (let i = 0; i < 100 && !fs.existsSync(path.join(dataDir, 'token')); i++) await new Promise((ok) => setTimeout(ok, 100))
   await new Promise((ok) => setTimeout(ok, 300))
@@ -167,7 +167,7 @@ async function say(page, text) {
     llm.rec.model = process.env.LLM_MODEL ?? (await (await fetch(upstream + '/v1/models')).json()).data[0].id
     llm.save()
   }
-  const { ws, repo } = workspace(tmp, llm.rec.commit)
+  const { ws, repo } = projectsFolder(tmp, llm.rec.commit)
   const dataDir = data(tmp, llm.port, llm.rec.model)
   const { pod, token } = await startPod(tmp, ws, dataDir)
   const browser = await chromium.launch({ executablePath: chrome(), headless: true })

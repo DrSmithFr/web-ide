@@ -34,7 +34,7 @@ const sections = [
   ['editor', 'Editor'],
   ['keys', 'Keyboard shortcuts'],
   ['syntax', 'Syntax highlighting'],
-  ['workspace', 'Workspace and pod'],
+  ['projects', 'Projects folder and pod'],
   ['remote', 'Remote access'],
   ['notifications', 'Notifications'],
   ['history', 'Settings history'],
@@ -45,7 +45,7 @@ const [open, setOpen] = createSignal<string | null>(null)
 // The page of the documentation of the sections that have one.
 const sectionHelp: Record<string, HelpTopic> = {
   language: 'settings.language',
-  workspace: 'settings.workspace',
+  projects: 'settings.projects',
   remote: 'settings.remote',
   notifications: 'settings.notifications',
 }
@@ -92,8 +92,8 @@ export function SettingsHost() {
             <Show when={open() === 'syntax'}>
               <Syntax />
             </Show>
-            <Show when={open() === 'workspace'}>
-              <Workspace />
+            <Show when={open() === 'projects'}>
+              <ProjectsFolder />
             </Show>
             <Show when={open() === 'remote'}>
               <RemoteAccess />
@@ -574,13 +574,13 @@ function LanguageSettings() {
   )
 }
 
-function Workspace() {
+function ProjectsFolder() {
   const [info, { refetch }] = createResource(() => request('workspace.get'))
   const [value, setValue] = createSignal('')
   return (
     <section class="form">
       <label class="field">
-        <span>{t('Workspace (folder suggested for new local projects)')}</span>
+        <span>{t('Projects folder (suggested for new local projects)')}</span>
         <div class="field-row">
           <input class="grow" value={value() || info()?.workspace || ''} onInput={(e) => setValue(e.currentTarget.value)} />
           <button
@@ -589,7 +589,7 @@ function Workspace() {
               try {
                 await request('workspace.set', { path: value() || info()?.workspace })
                 refetch()
-                toast(t('Workspace saved'), 'ok')
+                toast(t('Projects folder saved'), 'ok')
               } catch (e) {
                 errorToast(e)
               }

@@ -438,7 +438,7 @@ func (s *Server) removeWorktree(ctx context.Context, loc kanban.Location, root *
 	if _, ok := s.Projects.Get(child); ok {
 		s.closeRuntime(child)
 		_ = s.Projects.Delete(child)
-		s.Sessions.Delete(child)
+		s.Desks.Delete(child)
 	}
 	// Its agent sessions end with it, even when no window had it open.
 	acp.Purge(s.Keeper, child, s.Store.Path("agents", child))

@@ -23,6 +23,7 @@ import (
 
 	"github.com/DrSmithFr/web-ide/pod/docsdist"
 	"github.com/DrSmithFr/web-ide/pod/internal/config"
+	"github.com/DrSmithFr/web-ide/pod/internal/desks"
 	"github.com/DrSmithFr/web-ide/pod/internal/hfcache"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
@@ -37,7 +38,6 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/relay"
 	"github.com/DrSmithFr/web-ide/pod/internal/relayclient"
 	"github.com/DrSmithFr/web-ide/pod/internal/server"
-	"github.com/DrSmithFr/web-ide/pod/internal/sessions"
 	"github.com/DrSmithFr/web-ide/pod/internal/settings"
 	"github.com/DrSmithFr/web-ide/pod/internal/settingsync"
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
@@ -60,9 +60,10 @@ func main() {
 	}
 	home, _ := os.UserHomeDir()
 	defaultData := filepath.Join(home, ".web-ide")
-	dataDir := flag.String("data", defaultData, "folder of the settings, projects and sessions")
+	dataDir := flag.String("data", defaultData, "folder of the settings, projects and desks")
 	addr := flag.String("addr", "", "listen address (default: config.json, else "+config.DefaultAddr+")")
-	workspace := flag.String("workspace", "", "default workspace (default: ~/Apps)")
+	projectsDir := flag.String("projects", "", "projects folder, where new projects are made (default: config.json, else ~/Apps)")
+	workspace := flag.String("workspace", "", "former name of -projects")
 	allowRemote := flag.Bool("allow-remote", false, "accept connections from other machines (protected by the token only)")
 	publicURL := flag.String("public-url", "", "address the IDE is opened at, for the links given to Claude Code (default: config.json, else its page on the relay, else http://<addr>)")
 	static := flag.String("static", "", "serve the front end from this folder instead of the embedded one")
@@ -149,8 +150,8 @@ func main() {
 	if *addr != "" {
 		cfg.Addr = *addr
 	}
-	if *workspace != "" {
-		cfg.Workspace = config.ExpandHome(*workspace)
+	if dir := projectsFolder(*projectsDir, *workspace); dir != "" {
+		cfg.Projects = config.ExpandHome(dir)
 	}
 	if *publicURL != "" {
 		cfg.PublicURL = strings.TrimSuffix(*publicURL, "/")
@@ -172,7 +173,7 @@ func main() {
 		Token:       token,
 		Projects:    reg,
 		Settings:    sets,
-		Sessions:    sessions.New(st),
+		Desks:       desks.New(st),
 		LLM:         llm.New(st),
 		Models:      hfcache.New(st.Path("models", "hf")),
 		Pool:        sshx.NewPool(sshx.NewHostKeys(st.Path("known_hosts"))),
@@ -500,7 +501,7 @@ func main() {
 		_ = httpSrv.Shutdown(cctx)
 	}()
 
-	fmt.Printf("Web IDE pod %s\n  data      : %s\n  workspace : %s\n  open      : http://%s/?token=%s\n", version, st.Dir(), cfg.Workspace, cfg.Addr, token)
+	fmt.Printf("Web IDE pod %s\n  data      : %s\n  projects  : %s\n  open      : http://%s/?token=%s\n", version, st.Dir(), cfg.Projects, cfg.Addr, token)
 	if remote != "" {
 		fmt.Printf("  remote    : %s\n", remote)
 	}
@@ -660,7 +661,7 @@ func dialKeeper(path, def string) *keeper.Client {
 	return c
 }
 
-// runKeeper is the keeper service: web-ide-pod keeper [-data DIR] [-protocol].
+// runKeeper is the keeper unit: web-ide-pod keeper [-data DIR] [-protocol].
 func runKeeper(args []string) {
 	home, _ := os.UserHomeDir()
 	fs := flag.NewFlagSet("keeper", flag.ExitOnError)
@@ -747,6 +748,14 @@ func upgradeKeeper(path string, u keeper.Upgrade) {
 	}
 	fmt.Fprintln(os.Stderr, "the keeper does not answer after its update")
 	os.Exit(1)
+}
+
+// projectsFolder is the folder given on the command line: -projects, else its former name -workspace.
+func projectsFolder(projects, workspace string) string {
+	if projects != "" {
+		return projects
+	}
+	return workspace
 }
 
 func check(err error) {

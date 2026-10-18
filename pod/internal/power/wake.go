@@ -1,6 +1,6 @@
 // Package power is what a pod does with its machine for a device of its account (relay.md,
 // *Power*): it lists the network cards a magic packet can wake, sends that packet for a machine
-// that sleeps on its network, and shuts down, reboots or restarts its own service once a signed
+// that sleeps on its network, and shuts down, reboots or restarts its own unit once a signed
 // request asks it to.
 package power
 

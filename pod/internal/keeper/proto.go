@@ -1,4 +1,4 @@
-// Package keeper runs processes for the pod in a second, stable service (web-ide-keeper), so
+// Package keeper runs processes for the pod in a second, stable unit (web-ide-keeper), so
 // that they survive the updates of the pod: it spawns them, holds their PTY and their output
 // (numbered by offset), and lets the pod attach again from where it was. It knows processes
 // and bytes only: what the pod needs to rebuild its state travels as opaque metadata.

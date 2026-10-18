@@ -33,7 +33,7 @@ var powershell = func(script string) ([]byte, error) {
 }
 
 // powershellPath finds powershell.exe: in the PATH of a login shell, else at its place on the C:
-// drive (a systemd service does not get the Windows PATH).
+// drive (a systemd unit does not get the Windows PATH).
 func powershellPath() (string, error) {
 	if p, err := exec.LookPath("powershell.exe"); err == nil {
 		return p, nil

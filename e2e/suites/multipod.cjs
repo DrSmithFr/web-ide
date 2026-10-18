@@ -83,7 +83,7 @@ async function stop(proc) {
   if (proc.exitCode === null) proc.kill('SIGKILL')
 }
 
-/** A pod of its own: its data folder, its workspace with one project <name>-app, paired with the
+/** A pod of its own: its data folder, its projects folder with one project <name>-app, paired with the
  * phrase. relay: it registers with the relay; lan: the address of its LAN port (off: none). */
 async function startPod(name, data, port, { lan = null, relay = false, protocol = 1, podVersion = '', updateCmd = '', powerCmd = '', powerAllowed = false, wake = '' } = {}) {
   const dir = path.dirname(data)
@@ -97,7 +97,7 @@ async function startPod(name, data, port, { lan = null, relay = false, protocol 
   if (!fs.existsSync(path.join(data, 'device.key'))) pair(data, ['join', '--phrase'], PHRASE + '\n')
   // A pod id of its own: the default is the host name, and the three pods of the suite share it.
   fs.writeFileSync(path.join(data, 'relay.json'), JSON.stringify({ podId: 'pod-' + name, secret: 'sec' + name + '-0000000000000000000000' }))
-  const args = ['-addr', `127.0.0.1:${port}`, '-data', data, '-workspace', ws, '-static', STATIC, '-name', name, '-keeper', 'off']
+  const args = ['-addr', `127.0.0.1:${port}`, '-data', data, '-projects', ws, '-static', STATIC, '-name', name, '-keeper', 'off']
   args.push(lan ? ['-lan', lan, '-mdns=false'] : ['-lan', 'off'])
   if (relay) args.push('-relay', `http://127.0.0.1:${RELAY_PORT}`)
   // A pod started with another multi-pod protocol, and with an install command of its own standing

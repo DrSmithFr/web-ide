@@ -74,7 +74,7 @@ systemctl --user daemon-reload
 
 | Symptom | Fix |
 | --- | --- |
-| `systemctl not found: the service needs systemd` | The script needs systemd; run `web-ide-pod` by hand from the [release archive](macos.md) or the [sources](from-sources.md). |
+| `systemctl not found: the unit needs systemd` | The script needs systemd; run `web-ide-pod` by hand from the [release archive](macos.md) or the [sources](from-sources.md). |
 | `no release build for <arch>` | Releases exist for x86_64 and arm64 only: [build from the sources](from-sources.md). |
 | `warning: loginctl enable-linger failed` | The pod then starts with your session only. Ask root to run `loginctl enable-linger $USER`. |
 | `warning: tailscale serve failed` | Allow your user once: `sudo tailscale set --operator=$USER`, then run the script with `--tailscale` again. |

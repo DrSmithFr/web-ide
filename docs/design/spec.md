@@ -9,7 +9,7 @@ An IDE that runs in the browser, usable without installing anything on the front
 - A browser alone cannot open a TCP socket or an SSH connection.
 - The pod is a single binary (Go, no runtime dependency) running on the user's machine.
 - The pod gives access to the local disk, to SSH (with the local key set), to databases, terminals and language servers.
-- Updating or restarting the pod keeps the local terminals running (they run in the keeper service): the page reconnects and shows their output without gap. A conversation of the assistant goes on too: the answer being written ends whole, a command running ends and its result reaches the model, an approval waiting is asked again. The terminals of SSH projects survive too (the keeper has its own connection), and so does an update of the keeper itself (it re-executes in place; only the SSH terminals are closed).
+- Updating or restarting the pod keeps the local terminals running (they run in the keeper unit): the page reconnects and shows their output without gap. A conversation of the assistant goes on too: the answer being written ends whole, a command running ends and its result reaches the model, an approval waiting is asked again. The terminals of SSH projects survive too (the keeper has its own connection), and so does an update of the keeper itself (it re-executes in place; only the SSH terminals are closed).
 - Private keys never leave the machine and are never sent to a remote backend.
 
 ## 2. Stack
@@ -17,7 +17,7 @@ An IDE that runs in the browser, usable without installing anything on the front
 - TypeScript across the whole front end.
 - **SolidJS** for the IDE chrome (menus, tabs, panels, settings, status, pop-ups): fine-grained reactivity with signals, no virtual DOM.
 - **Editor core** (buffer, cursor, selection, highlighting): plain TypeScript without a framework, manipulating the DOM directly to avoid diffing on every keystroke.
-- All persistent state lives on the pod side in `~/.web-ide`: settings (with snapshot history), project registry, per-project sessions. The browser keeps nothing essential.
+- All persistent state lives on the pod side in `~/.web-ide`: settings (with snapshot history), project registry, per-project desk state. The browser keeps nothing essential.
 - No WebAssembly to start with: plain JS first, profile later. Candidates if a bottleneck appears: the three-way merge and multi-file search.
 
 ## 3. Pod (local agent)
@@ -25,7 +25,7 @@ An IDE that runs in the browser, usable without installing anything on the front
 - WebSocket connection on a fixed, documented port (`127.0.0.1:4433` by default).
 - Access to local and remote (SSH/SFTP) files: read, write, watch.
 - Streams files to the front end and pushes new versions when a file changes on disk (for example when an AI agent edits it).
-- Holds the session of each project (section 9).
+- Holds the desk state of each project (section 9).
 - Hosts database connections (section 11) and language servers (section 12).
 - Generic file reading by absolute path, not limited to the project root (needed for dependency sources and stubs, section 12).
 
@@ -33,7 +33,7 @@ Technical points:
 
 - **Mixed content**: the front end is embedded in the pod binary and served from the same origin, so there is no HTTPS page talking to `ws://localhost`.
 - **Pairing**: without a check, any website open in the browser could talk to the pod. The pod prints a token once; opening the URL with `?token=…` stores it in an HTTP-only cookie.
-- **Persistence**: a systemd user service (`make service`) or a one-off run (`make run`). No tray icon.
+- **Persistence**: a systemd user unit (`make service`) or a one-off run (`make run`). No tray icon.
 - **Installable app** (PWA): a manifest and its icons (`web/public`) let Chromium browsers install the IDE in its own window (*Install* in the address bar), where shortcuts such as `Ctrl+Tab`, `Ctrl+W` or `Ctrl+N` reach the IDE. The browser fetches the manifest without cookies: it and its icons are served before the pairing check. Installing needs a secure context: `localhost`, or HTTPS (relay, Tailscale); not plain HTTP with `-allow-remote`.
 
 ## 4. Browser file access (fallback notes)
@@ -181,11 +181,11 @@ On a screen 720 px wide or less (phones; tablets keep the layout above):
 - **Conflict**: the file enters a conflict state; the local buffer is not overwritten until the user decides.
 - Conflict UI: warning banner on the tab, a **Conflicts** tool listing conflicted files, and a three-pane resolution dialog (local changes, editable result, new version) with per-block accept buttons.
 
-## 9. Session and persistence
+## 9. Desk state and persistence
 
-**Pod side, per project**: open files, per file the cursor position, folded ranges and chosen indentation, explorer options, consoles, split layout (tree, sizes, active file per pane). Pushed over the WebSocket on every change (debounced for the cursor), restored on load or reconnection, so the session is the same from another browser or machine.
+**Pod side, per project**: open files, per file the cursor position, folded ranges and chosen indentation, explorer options, consoles, split layout (tree, sizes, active file per pane). Pushed over the WebSocket on every change (debounced for the cursor), restored on load or reconnection, so the desk is the same from another browser or machine.
 
-**Desks** ([desks.md](desks.md)): a project has numbered desks, as the virtual desktops of GNOME or KDE, each a session of its own (layout, tabs, tool zones, panel sizes). The documents and their unsaved changes stay shared: a file open on two desks is one buffer. The Recent Files are shared by the desks of the project.
+**Desks** ([desks.md](desks.md)): a project has numbered desks, as the virtual desktops of GNOME or KDE, each with a state of its own (layout, tabs, tool zones, panel sizes). The documents and their unsaved changes stay shared: a file open on two desks is one buffer. The Recent Files are shared by the desks of the project.
 
 - `1 2 3 +` in the menu bar, after the worktree selector. A desk is a link: a click switches the window without reloading it, a middle click opens the desk in a new tab; its menu opens it in a new tab, renames it or removes it (not desk 1: its tabs close, the files stay open elsewhere). A window on a removed desk goes back to desk 1.
 - The URL names the desk: `/project/:id` is desk 1, `/project/:id/desk/N` the others; the history goes back to the previous desk. The home page opens the desk last shown on the device.
@@ -212,14 +212,14 @@ Large modal with navigation on the left: themes (with the accent color and the v
 
 The docs are embedded in the pod (`docs/`, the glossary and the READMEs of the code), so they match the running version and work offline. The *Help* menu (and the palette) has *Documentation* (the index), *User guide*, *Glossary* and *Keyboard shortcuts* (the settings). A page opens read only in a *doc* tab, the same tab for every page: its title is the first heading of the page, relative links to other pages open in it (*Back* returns, *Documentation* goes to the index), a `#heading` link scrolls, pictures show, Mermaid diagrams are drawn, links to `https:` open in the browser and a link to something that is not a page of the docs says so. The tab is restored with the desk.
 
-A **?** next to a place of the interface opens the page that explains it, at its heading: the settings sections (Language, Workspace and pod, Remote access, with the relay and the local network, Notifications), the kanban toolbar and the Agents tool. The map from place to `path#heading` is `web/src/help/topics.json`; `make test` checks that each page and heading exists. The **?** shows in the window of a project only (the page opens there).
+A **?** next to a place of the interface opens the page that explains it, at its heading: the settings sections (Language, Projects folder and pod, Remote access, with the relay and the local network, Notifications), the kanban toolbar and the Agents tool. The map from place to `path#heading` is `web/src/help/topics.json`; `make test` checks that each page and heading exists. The **?** shows in the window of a project only (the page opens there).
 
 ### Home page and projects
 
 - **One home page for the account**: one flat list of the projects of every pod — this pod's and those the other pods publish — the last opened first, each with the badge of its pod (when the account has several) and its icon. A project of another pod opens in the same window, with the front end of that pod; it is greyed and not openable when its pod is offline or speaks another multi-pod protocol (the reason in its tooltip). Its icon, its form (*Edit*) and *Remove from the list* work as for a project of this pod: the request goes to the pod that holds it, which checks and saves it. *New project* picks the pod (this one by default): the folder, the folder browser, the workspace and the SSH hosts are those of that pod, and the new project opens with its front end. Below the list, one line per other pod: online or not, gateway, version (*Update this pod*), *waiting for the sync key*, *LAN one-way*. A pod that sleeps offers **Wake** (Wake-on-LAN, sent by an awake pod of its network); one that runs, this one included, a power menu: *Restart the pod*, *Reboot*, *Shut down*, the last two only once `sudo web-ide-pod allow-shutdown` ran on its machine (relay.md, *Power*).
 - The home page is always the one of the pod the window entered through (`127.0.0.1` or the LAN port: that pod; the relay origin: the entry pod of the bootstrap page, moved by a failover): the home button of a project of another pod goes back there, and the home page of a pod served under a prefix (`/_lan/pod/<key>/`, `/pod/<key>/`) redirects to it.
 - A project is **local** or **SSH**, with an optional title and description (name derived from the path or the host otherwise).
-- The project registry lives in the pod. Each project has its own URL, `/project/:id`, with its own pod session (one per desk, `/project/:id/desk/N`).
+- The project registry lives in the pod. Each project has its own URL, `/project/:id`, with its own desk state on the pod (one per desk, `/project/:id/desk/N`).
 - Every project is a git repository: creating a project runs `git init` (first branch `main`, an empty first commit when the folder is empty) unless the folder is already in a repository, and adds the optional remote as `origin`. An SSH host not reachable at creation (password) gets it at the first opening (`gitSetup` pending in the registry).
 - **Project icon**: a glyph (a subset of Lucide) or 1 to 3 characters on a shape (circle, rounded square, square, hexagon, diamond) filled with a colour or a two-colour gradient in one of 8 directions. Shown on the home page, and as the favicon of every window of the project so that browser tabs tell the projects apart; the worktree of a ticket shows the icon of its project with a dot. The page draws the SVG and saves it in `.ide/icon.svg` with its description in `.ide/icon.json`; a project without one gets one generated (initials, colour and shape from its id).
 - Each project has a `.ide` folder: project settings, folder marks, database connections (without secrets), prompts, icon, conversations of the assistant and the kanban. The whole folder is ignored by git (`.ide/.gitignore` is `*`): the IDE never adds files to the repository. The worktrees of the project (tickets, branches) have no `.ide` of their own: they read and write the settings of the main project. When files of `.ide` were committed before, the IDE offers once, at the opening of the project, to take them out of git (`git rm --cached`, the files stay on disk, the user commits); it never does it on its own.
@@ -380,5 +380,5 @@ The assistant reads, without confirmation: the state of the services of the proj
 - **Q2**: "accept both" concatenates local then remote.
 - **Q3**: credentials are never written in `.ide`. Remembered passwords go to `~/.web-ide/secrets.json` (mode 0600, same model as `~/.pgpass`, not encrypted); otherwise they stay in the pod's memory for the session.
 - **Q4**: Redis keys get a dedicated node (type and TTL) under each `dbN`.
-- **Q5**: systemd user service (`make service`) or one-off run (`make run`). No tray icon.
+- **Q5**: systemd user unit (`make service`) or one-off run (`make run`). No tray icon.
 - **Q6**: the pod listens on `127.0.0.1` and refuses other machines. `-allow-remote` allows remote access, protected by the token only.

@@ -30,3 +30,14 @@ func TestRelayLink(t *testing.T) {
 		t.Fatalf("ws relay: got %q, want %q", got, want)
 	}
 }
+
+// -workspace, the former name of -projects, is still accepted; -projects wins.
+func TestProjectsFolder(t *testing.T) {
+	for _, tc := range []struct{ projects, workspace, want string }{
+		{"", "", ""}, {"/p", "", "/p"}, {"", "/w", "/w"}, {"/p", "/w", "/p"},
+	} {
+		if got := projectsFolder(tc.projects, tc.workspace); got != tc.want {
+			t.Fatalf("-projects %q -workspace %q: got %q, want %q", tc.projects, tc.workspace, got, tc.want)
+		}
+	}
+}

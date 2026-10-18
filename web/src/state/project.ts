@@ -57,6 +57,11 @@ export interface Cursor {
   indent?: Indent
 }
 
+/**
+ * The state of a desk (layout, tabs, consoles). Called session on the wire (session.update,
+ * session.changed, the `session` field): a session is now a run of an agent, but the name stays
+ * so that a page and a pod of two releases still understand each other.
+ */
 export interface SessionData {
   layout: LayoutNode
   tabs: Record<string, TabState>
