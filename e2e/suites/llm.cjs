@@ -156,6 +156,14 @@ const fake = http.createServer(async (req, res) => {
     chunk(res, { content: part })
     await sleep(60)
   }
+  // The answer watched in a wide window runs until the test stops it: a slow runner takes
+  // longer than the answer to draw the page.
+  if (userText(lastUser).includes('greeter')) {
+    for (let i = 0; i < 300 && !res.destroyed; i++) {
+      await sleep(100)
+      chunk(res, { content: '.' })
+    }
+  }
   finish(res, 'stop', { prompt_tokens: 300, completion_tokens: 40, prompt_tokens_details: { cached_tokens: 100 } })
 })
 

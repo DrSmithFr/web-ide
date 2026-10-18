@@ -13,12 +13,17 @@ run(
   async ({ page, ctx, errors }) => {
     // Under the quota: the app comes through the relay as usual.
     await page.waitForSelector('#frame', { timeout: 30000 })
-    const bytes = await page.evaluate(async () => {
-      const r = await window.tunnel.pc.getStats()
-      let n = 0
-      r.forEach((c) => { if (c.type === 'candidate-pair' && c.state === 'succeeded') n += c.bytesReceived ?? 0 })
-      return n
-    })
+    // The frame shows before the app is loaded: on a slow runner the rest of its files are
+    // still crossing TURN.
+    const received = () =>
+      page.evaluate(async () => {
+        const r = await window.tunnel.pc.getStats()
+        let n = 0
+        r.forEach((c) => { if (c.type === 'candidate-pair' && c.state === 'succeeded') n += c.bytesReceived ?? 0 })
+        return n
+      })
+    let bytes = await received()
+    for (let end = Date.now() + 30000; bytes <= 1024 * 1024 && Date.now() < end; bytes = await received()) await page.waitForTimeout(500)
     assert(bytes > 1024 * 1024, 'the first load carried over the quota through TURN: ' + bytes)
 
     // The month is spent: the relay issues no TURN credential, and this pod has no direct path.
