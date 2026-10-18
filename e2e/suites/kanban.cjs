@@ -137,7 +137,7 @@ run(async ({ page, ctx }) => {
   await page.click('.pane .tab:has-text("#1")')
   await page2.waitForSelector('[data-testid=ticket-status]:has-text("In progress")', { timeout: 5000 })
   assert(true, 'the other window follows the status change')
-  await page.click('[data-testid=ticket-to-review]')
+  await page.click('[data-testid=ticket-to-test]')
   await page.waitForSelector('[data-testid=ticket-status]:has-text("To test")')
   assert(
     (await sections()).join() === 'How to test,Feedback,Git and changes,|,-Description,-Briefing conversations,-Notes,-Plan conversations,-Implementation plan,-Goals · 1/2,-Development conversations',
@@ -229,7 +229,7 @@ run(async ({ page, ctx }) => {
   assert(await page.isVisible('[data-testid=ticket-card-5] [data-testid=card-blocked]'), 'card of a dependent ticket: blocker badge')
   await page.click('[data-testid=ticket-card-4]')
   await page.waitForSelector('[data-testid=ticket-view] [data-testid=ticket-parent]:has-text("#3")')
-  assert((await page.textContent('[data-testid=ticket-blockers]')).includes('#3: parent not started'), 'the blockers of a step are shown')
+  assert((await page.textContent('[data-testid=ticket-blockers]')).includes('#3: root not started'), 'the blockers of a step are shown')
   assert(await page.isDisabled('[data-testid=ticket-start]'), 'a blocked ticket cannot start')
   await page.click('[data-testid=ticket-more]')
   assert(await page.isVisible('.ctx-menu button:has-text("Start anyway…")'), 'the user can start it anyway, from More actions')
@@ -239,7 +239,7 @@ run(async ({ page, ctx }) => {
   assert(true, 'the parent lists its steps')
   await page.click('[data-testid=ticket-start]')
   await page.waitForSelector('[data-testid=ticket-status]:has-text("In progress")')
-  await page.click('[data-testid=ticket-to-review]')
+  await page.click('[data-testid=ticket-to-test]')
   await page.waitForSelector('[data-testid=ticket-step]')
   assert(!(await page.isVisible('[data-testid=ticket-close]')), 'a parent is validated after its steps: only Validate the step shown')
   await page.screenshot({ path: OUT + '/kanban-lineage.png' })

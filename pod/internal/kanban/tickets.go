@@ -590,11 +590,12 @@ func setComplexity(tx *sql.Tx, id int64, c *string, by string, now int64) error 
 
 // StatusNames are the English names of the statuses (translated in messages).
 var StatusNames = map[string]string{
-	New: "New", Todo: "To do", InProgress: "In progress", Review: "To test", Done: "Done", Abandoned: "Abandoned",
+	New: "New", Todo: "To do", InProgress: "In progress", ToTest: "To test", Done: "Done", Abandoned: "Abandoned",
 }
 
 // Move changes the status of a ticket if the actor may do this transition.
 func (m *Manager) Move(loc Location, id int64, to, by, comment string) error {
+	to = NormStatus(to)
 	if !contains(Statuses, to) {
 		return i18n.Errorf("unknown status: %s", to)
 	}
@@ -632,11 +633,11 @@ func lineageMove(tx *sql.Tx, id int64, from, to string) error {
 		return err
 	}
 	if to == Done && open > 0 {
-		return i18n.Errorf("%d child ticket(s) of this lineage are not finished", open)
+		return i18n.Errorf("%d step(s) of this lineage are not finished", open)
 	}
-	if from == Review && to == InProgress {
+	if from == ToTest && to == InProgress {
 		if started > 0 {
-			return i18n.New("its children have started: the lineage goes on in them")
+			return i18n.New("its steps have started: the lineage goes on in them")
 		}
 		_, err := tx.Exec(`UPDATE tickets SET step_done = 0 WHERE id = ?`, id)
 		return err
@@ -692,7 +693,7 @@ func (m *Manager) Delete(loc Location, id int64) error {
 		return err
 	}
 	if children > 0 {
-		return i18n.New("this ticket has children: take them out of its lineage first")
+		return i18n.New("this ticket has steps: take them out of its lineage first")
 	}
 	res, err := db.Exec(`DELETE FROM tickets WHERE id = ?`, id)
 	if err != nil {

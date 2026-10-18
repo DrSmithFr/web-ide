@@ -39,7 +39,7 @@ const closed = (s: Summary) => s.status === 'done' || s.status === 'abandoned'
 
 export function blockState(s: Summary): BlockState {
   if (closed(s)) return 'done'
-  if (s.status === 'in_progress' || s.status === 'review') return 'active'
+  if (s.status === 'in_progress' || s.status === 'to_test') return 'active'
   if (s.blockers?.length) return 'blocked'
   return s.status === 'new' ? 'new' : 'ready'
 }

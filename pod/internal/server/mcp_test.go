@@ -142,8 +142,14 @@ func TestMCPKanban(t *testing.T) {
 	m.ok("kanban_goal", map[string]any{"cwd": wt, "action": "check", "goal": 1})
 	m.ok("kanban_move", map[string]any{"cwd": wt, "status": "review", "test_summary": "open the export"})
 	tk = a.call("kanban.get", map[string]any{"id": 1})["result"].(map[string]any)
-	if tk["status"] != "review" || tk["goalsDone"] != float64(1) {
+	if tk["status"] != "to_test" || tk["goalsDone"] != float64(1) {
 		t.Fatalf("after dev: %v %v", tk["status"], tk["goalsDone"])
+	}
+	// `review` is the old name of to_test: still accepted by the filter, answered as To test.
+	for _, st := range []string{"review", "to_test"} {
+		if text := m.ok("kanban_list", map[string]any{"cwd": cwd, "status": st}); !strings.Contains(text, "#1 [To test]") {
+			t.Fatalf("list %s: %s", st, text)
+		}
 	}
 	// Claude edits and deletes goals, adds test feedback and marks it handled.
 	m.ok("kanban_goal", map[string]any{"cwd": wt, "action": "add", "title": "extra"})
@@ -168,7 +174,7 @@ func TestMCPKanban(t *testing.T) {
 	// it becomes the default ticket.
 	text = m.ok("kanban_create", map[string]any{"cwd": cwd, "title": "Export step 2", "parent": 1})
 	m.ok("kanban_set_plan", map[string]any{"cwd": cwd, "id": 2, "plan": "p", "goals": []any{"g"}, "size": "s", "complexity": "low"})
-	if text := m.ok("kanban_list", map[string]any{"cwd": cwd}); !strings.Contains(text, "#2 [To do] (Normal) Export step 2 · size S · complexity Low · goals 0/1 · child of #1 · blocked by #1 (previous step not validated)") {
+	if text := m.ok("kanban_list", map[string]any{"cwd": cwd}); !strings.Contains(text, "#2 [To do] (Normal) Export step 2 · size S · complexity Low · goals 0/1 · step of #1 · blocked by #1 (previous step not validated)") {
 		t.Fatalf("list with a lineage: %s", text)
 	}
 	if text, failed := m.tool("kanban_start", map[string]any{"cwd": cwd, "id": 2}); !failed || !strings.Contains(text, "#1 (previous step not validated)") || !strings.Contains(text, "Only the user") {
@@ -178,7 +184,7 @@ func TestMCPKanban(t *testing.T) {
 	if text := m.ok("kanban_start", map[string]any{"cwd": cwd, "id": 2}); !strings.Contains(text, "Worktree: "+wt) || !strings.Contains(text, "step of the lineage of #1") {
 		t.Fatalf("start of the child: %s", text)
 	}
-	if md := m.ok("kanban_get", map[string]any{"cwd": wt}); !strings.HasPrefix(md, "# Ticket #2") || !strings.Contains(md, "## Lineage\n- Child of #1") {
+	if md := m.ok("kanban_get", map[string]any{"cwd": wt}); !strings.HasPrefix(md, "# Ticket #2") || !strings.Contains(md, "## Lineage\n- Step of #1") {
 		t.Fatalf("default ticket of the lineage: %s", md)
 	}
 

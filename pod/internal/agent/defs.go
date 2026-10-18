@@ -212,13 +212,13 @@ var sharePreviewDef = fn("share_preview",
 	}, "title")
 
 var (
-	statuses       = []string{"new", "todo", "in_progress", "review", "done", "abandoned"}
+	statuses       = []string{"new", "todo", "in_progress", "to_test", "review", "done", "abandoned"}
 	priorities     = []string{"low", "normal", "high", "critical"}
 	sizes          = []string{"s", "m", "l", "xl"}
 	complexities   = []string{"low", "medium", "high"}
 	complexityProp = enum("How hard the work is, which picks the model and the effort of its sessions: low (a small obvious change: a color, a label, a one-line fix), medium (usual work), high (a delicate design, concurrency, security, a bug hard to find)", complexities...)
 	sizeProp       = enum("Estimated effort of the whole ticket: s (a few files, an hour of agent work), m, l, xl (many files across the pod and the page, several days)", sizes...)
-	lineageParent  = integer("Parent ticket: this one becomes the next step of its lineage, developed in the parent's worktree after it (0 takes it out). Only before its development starts")
+	lineageParent  = integer("Root ticket: this one becomes a step of its lineage, developed in the root's worktree after the previous steps (0 takes it out). Only before its development starts")
 	lineageDeps    = obj{"type": "array", "items": obj{"type": "integer"}, "description": "Tickets of other lineages this one waits for: it starts once they are merged or done (replaces the list)"}
 )
 
@@ -278,10 +278,10 @@ var kanbanWriteDefs = []Def{
 			"complexity": enum("How hard the fix is (add): low, medium or high; it picks the model of the fix session", complexities...),
 			"text":       str(fmt.Sprintf("What was noticed (add, %d characters max)", MaxNote)),
 		}, "action"),
-	fn("kanban_move", "Moves the linked ticket from In progress to To test (status review), with test_summary: how to test it. Other changes belong to the user.",
+	fn("kanban_move", "Moves the linked ticket from In progress to To test (status to_test), with test_summary: how to test it. Other changes belong to the user.",
 		obj{
-			"status":       enum("", "review"),
-			"test_summary": str("For review: what to test and how (steps, commands, expected results), in Markdown"),
+			"status":       enum("review is the old name of to_test", "to_test", "review"),
+			"test_summary": str("For to_test: what to test and how (steps, commands, expected results), in Markdown"),
 			"comment":      str("Comment for the history (optional)"),
 		}, "status"),
 }

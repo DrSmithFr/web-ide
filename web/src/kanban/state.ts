@@ -8,7 +8,7 @@ import { on, request } from '../pod/rpc'
 import { openTab, project } from '../state/project'
 import { t } from '../i18n'
 
-export type Status = 'new' | 'todo' | 'in_progress' | 'review' | 'done' | 'abandoned'
+export type Status = 'new' | 'todo' | 'in_progress' | 'to_test' | 'done' | 'abandoned'
 export type Priority = 'low' | 'normal' | 'high' | 'critical'
 /** Estimated effort of a whole ticket, written with its plan. */
 export type Size = 's' | 'm' | 'l' | 'xl'
@@ -55,7 +55,7 @@ export interface Blocker {
 }
 /** English texts of the blockers (also what the model reads). */
 export const blockerNames: Record<BlockerKind, string> = {
-  parent: 'parent not started',
+  parent: 'root not started',
   previous: 'previous step not validated',
   depends: 'dependency not merged',
   abandoned: 'dependency abandoned',
@@ -122,18 +122,18 @@ export interface Ticket extends Summary {
   children: Summary[]
 }
 
-export const statusOrder: Status[] = ['new', 'todo', 'in_progress', 'review', 'done', 'abandoned']
+export const statusOrder: Status[] = ['new', 'todo', 'in_progress', 'to_test', 'done', 'abandoned']
 /** English names (also what the model reads); the *Labels below are translated. */
 export const statusNames: Record<Status, string> = {
   new: 'New',
   todo: 'To do',
   in_progress: 'In progress',
-  review: 'To test',
+  to_test: 'To test',
   done: 'Done',
   abandoned: 'Abandoned',
 }
 /** Statuses of older bases, still named in the history. */
-const legacyNames: Record<string, string> = { ready: 'Ready', fix: 'Fix' }
+const legacyNames: Record<string, string> = { ready: 'Ready', fix: 'Fix', review: 'To test' }
 export const feedbackNames: Record<FeedbackKind, string> = { info: 'Info', bug: 'Bug', feature: 'New feature' }
 export const priorityNames: Record<Priority, string> = { low: 'Low', normal: 'Normal', high: 'High', critical: 'Critical' }
 export const sizeNames: Record<Size, string> = { s: 'S', m: 'M', l: 'L', xl: 'XL' }
@@ -163,12 +163,19 @@ const [versions, setVersions] = createStore<Record<number, number>>({})
 export const ticketVersion = (id: number) => versions[id] ?? 0
 
 let loading: Promise<void> | null = null
+/** A pod older than the page still says `review` for To test (update window). */
+const fixStatus = <T extends { status: string; children?: { status: string }[] }>(x: T): T => {
+  if (x.status === 'review') x.status = 'to_test'
+  x.children?.forEach(fixStatus)
+  return x
+}
+
 export function refreshBoard(): Promise<void> {
   if (loading) return loading
   loading = (async () => {
     try {
       const r = await request<{ project: string; tickets: Summary[]; meta: Record<string, string> }>('kanban.list')
-      setBoard('tickets', reconcile(r.tickets, { key: 'id' }))
+      setBoard('tickets', reconcile(r.tickets.map(fixStatus), { key: 'id' }))
       setBoard({ project: r.project, meta: r.meta ?? {}, loaded: true, error: '' })
     } catch (e) {
       setBoard({ error: (e as Error).message, loaded: true })
@@ -229,7 +236,7 @@ export function summary(id: number): Summary | undefined {
 }
 
 export async function getTicket(id: number): Promise<Ticket> {
-  return request<Ticket>('kanban.get', { id })
+  return fixStatus(await request<Ticket>('kanban.get', { id }))
 }
 
 // ---------- changes (by the user; the assistant passes by: 'model') ----------

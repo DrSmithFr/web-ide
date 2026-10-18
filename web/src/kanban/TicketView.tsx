@@ -83,7 +83,7 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
   // The sections of the status: a closed ticket keeps those of "To test" that have content.
   const parts = () => {
     if (!closed()) return layouts[tk().status as Stage].parts
-    const list = layouts.review.parts.filter((p) => filled[p](tk()))
+    const list = layouts.to_test.parts.filter((p) => filled[p](tk()))
     // No rule at either end.
     return list.filter((p, i) => p !== 'sep' || (i > 0 && i < list.length - 1))
   }
@@ -288,7 +288,7 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
 
 /** Sections of the main column of a ticket. */
 type Part = 'sep' | 'description' | 'briefing' | 'notes' | 'planChats' | 'plan' | 'goals' | 'devChats' | 'test' | 'git' | 'feedback' | 'pr'
-type Stage = 'new' | 'todo' | 'in_progress' | 'review'
+type Stage = 'new' | 'todo' | 'in_progress' | 'to_test'
 
 // The sections each status shows, in order, and those open (the others folded).
 // The sections each status shows, in order, and those open (the others folded). Its own
@@ -300,7 +300,7 @@ const layouts: Record<Stage, { parts: Part[]; open: Part[] }> = {
     parts: ['devChats', 'goals', 'git', 'sep', 'description', 'briefing', 'notes', 'planChats', 'plan'],
     open: ['devChats', 'goals', 'git'],
   },
-  review: {
+  to_test: {
     parts: ['test', 'feedback', 'git', 'pr', 'sep', 'description', 'briefing', 'notes', 'planChats', 'plan', 'goals', 'devChats'],
     open: ['test', 'feedback', 'git', 'pr'],
   },
@@ -411,7 +411,7 @@ function FeedbackList(props: { tk: Ticket; apply: Apply; areaRef: (el: HTMLTextA
                   <ChatLink tk={props.tk} chatId={f.chatId!} />
                 </Show>
                 <span class="grow" />
-                <Show when={!f.done && props.tk.status === 'review'}>
+                <Show when={!f.done && props.tk.status === 'to_test'}>
                   <ActionBtn
                     icon="sparkle"
                     b={routed(
@@ -432,7 +432,7 @@ function FeedbackList(props: { tk: Ticket; apply: Apply; areaRef: (el: HTMLTextA
             </div>
           )}
         </For>
-        <Show when={props.tk.status === 'review'}>
+        <Show when={props.tk.status === 'to_test'}>
           <div class="tk-feedback-add">
             <select class="small" value={kind()} onChange={(e) => setKind(e.currentTarget.value as FeedbackKind)} data-testid="ticket-feedback-kind">
               <For each={Object.entries(feedbackLabels)}>{([v, l]) => <option value={v}>{l}</option>}</For>

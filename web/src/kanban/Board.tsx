@@ -18,7 +18,7 @@ import { Roadmap } from './Roadmap'
 import { t } from '../i18n'
 import './kanban.css'
 
-const active: Status[] = ['new', 'todo', 'in_progress', 'review']
+const active: Status[] = ['new', 'todo', 'in_progress', 'to_test']
 
 const VIEW_KEY = 'webide.kanban.view'
 function savedView(): 'board' | 'roadmap' {

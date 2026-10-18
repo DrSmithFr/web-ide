@@ -71,7 +71,7 @@ func TestTicketLifecycle(t *testing.T) {
 	if err := m.Update(loc, id, Patch{TestSummary: ptr("tester l'export"), RemoveFiles: []string{"a.go"}}, ByModel); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.Move(loc, id, Review, ByModel, "ready"); err != nil {
+	if err := m.Move(loc, id, ToTest, ByModel, "ready"); err != nil {
 		t.Fatal(err)
 	}
 	// Feedback stays in To test, the model marks it done.
@@ -86,7 +86,7 @@ func TestTicketLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	tk, _ = m.Get(loc, id)
-	if tk.Status != Review || tk.FeedbackOpen != 1 || tk.FeedbackList[0].Kind != "bug" || tk.FeedbackList[0].ChatID != "c9" || len(tk.Files) != 1 {
+	if tk.Status != ToTest || tk.FeedbackOpen != 1 || tk.FeedbackList[0].Kind != "bug" || tk.FeedbackList[0].ChatID != "c9" || len(tk.Files) != 1 {
 		t.Fatalf("after feedback: %+v", tk)
 	}
 	if _, err := m.Feedback(loc, id, FeedbackOp{Op: "check", ID: fid, Done: true}, ByModel); err != nil {
@@ -100,7 +100,7 @@ func TestTicketLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	tk, _ = m.Get(loc, id)
-	if tk.Goals != 2 || tk.FeedbackOpen != 0 || tk.Status != Review {
+	if tk.Goals != 2 || tk.FeedbackOpen != 0 || tk.Status != ToTest {
 		t.Fatalf("after replan: %+v", tk.Summary)
 	}
 	if err := m.Move(loc, id, Done, ByModel, ""); err == nil {
@@ -136,7 +136,7 @@ func TestTicketLifecycle(t *testing.T) {
 	if err := m.Move(loc, id, Abandoned, ByUser, ""); err == nil {
 		t.Fatal("abandoned a closed ticket")
 	}
-	if err := m.Move(loc, id, Review, ByUser, ""); err != nil {
+	if err := m.Move(loc, id, ToTest, ByUser, ""); err != nil {
 		t.Fatal("reopen to To test: ", err)
 	}
 }
@@ -185,7 +185,7 @@ INSERT INTO notes (ticket_id, kind, text) VALUES (2, 'feedback', 'empty file'), 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a.Status != Todo || b.Status != Review || len(b.GoalList) != 1 || len(b.Notes) != 1 || len(b.FeedbackList) != 2 {
+	if a.Status != Todo || b.Status != ToTest || len(b.GoalList) != 1 || len(b.Notes) != 1 || len(b.FeedbackList) != 2 {
 		t.Fatalf("migrated: %+v %+v", a.Summary, b)
 	}
 	if f := b.FeedbackList; f[0].Kind != "bug" || !f[0].Done || f[1].Kind != "info" || f[1].Text != "nice" || b.FeedbackOpen != 1 {

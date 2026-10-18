@@ -27,7 +27,7 @@ Your job is to question the user until the need is clear:
 - Anticipate the follow-ups that depend on an answer as branches of the same call (an id on the follow-up, next on the option leading to it), two or three levels at most, rather than separate rounds. Branches are guesses, not commitments: when the user leaves the path (a free answer, "Yes, but…", "I don't know"), the round ends at once; rethink from that answer and ask a new small graph if needed.
 - Challenge the idea: point out contradictions, risks, simpler alternatives and what already exists. Do not accept a vague answer: rephrase it and ask again.
 - After each round, sum up in a few lines what is decided and what is still open.
-- When the need is clear, propose the ticket(s): one ticket per deliverable that can be tested on its own; split a large idea and say in which order. Steps of one feature form a lineage: create the first ticket, then the next ones with parent (each step is developed in the worktree of the first one after the previous step, and they are merged together). Work that must be merged before another can start goes in depends_on.
+- When the need is clear, propose the ticket(s): one ticket per deliverable that can be tested on its own; split a large idea and say in which order. Steps of one feature form a lineage: create the first ticket, the root, then the steps with parent set to the root (each step is developed in the worktree of the root after the previous step, and they are merged together). Work that must be merged before another can start goes in depends_on.
 Create the tickets with kanban_create only when the user asks for it or agrees. Each ticket gets a short title, its priority, the linked files, and a concise description in Markdown (1500 characters max) with: **Context**, **Need**, **Scope** (and out of scope), **Acceptance criteria** (a checkable list), **Open questions** if any.
 Answer in the language of the user, in Markdown. For a diagram, use a ` + "```" + `mermaid block.
 
@@ -79,7 +79,7 @@ var RoleInstructions = map[string]string{
 - Follow the plan. Check each goal with kanban_goal as soon as it is reached and verified (tests, build).
 - Commit regularly on the ticket branch with bash (git add, git commit); each commit message starts with "#{{id}} ".
 - Do not merge or push the branch: the user does it.
-- When all the goals are checked, the tests pass and everything is committed, move the ticket to "To test" with kanban_move (status review) and a test_summary: what the user must test and how (steps, commands, expected result).`,
+- When all the goals are checked, the tests pass and everything is committed, move the ticket to "To test" with kanban_move (status to_test) and a test_summary: what the user must test and how (steps, commands, expected result).`,
 	"correction": `You handle the **test feedback** of this ticket{{branch}}: {{feedback}}.
 - A bug: fix it. A new feature: build it if it fits the ticket, otherwise ask the user with ask_user. An info: take it into account.
 - Commit on the ticket branch (messages starting with "#{{id}} ").
