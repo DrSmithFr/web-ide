@@ -143,6 +143,22 @@ func TestMCPKanban(t *testing.T) {
 	if md := m.ok("kanban_get", map[string]any{"cwd": cwd, "id": 1}); !strings.Contains(md, "Milestone 1 · Exports") {
 		t.Fatalf("ticket of a milestone: %s", md)
 	}
+	// Objectives: Claude writes one and gives it to a milestone, whose tickets follow; reaching
+	// it is the user's.
+	if text := m.ok("kanban_objective", map[string]any{"cwd": cwd, "action": "create", "title": "MVP", "due": "2026-11-01"}); !strings.Contains(text, "Objective 1 created") {
+		t.Fatalf("objective: %s", text)
+	}
+	a.waitEvent("kanban.changed", func(d map[string]any) bool { return d["objective"] == float64(1) })
+	m.ok("kanban_milestone", map[string]any{"cwd": cwd, "action": "update", "id": 1, "objective": 1})
+	if text, failed := m.tool("kanban_objective", map[string]any{"cwd": cwd, "action": "reach", "id": 1}); !failed || !strings.Contains(text, "action") {
+		t.Fatalf("a model reached an objective: %s", text)
+	}
+	if md := m.ok("kanban_objective", map[string]any{"cwd": cwd, "action": "get", "id": 1}); !strings.Contains(md, "Due: 2026-11-01") || !strings.Contains(md, "- #1 [To do] Export (milestone 1)") {
+		t.Fatalf("objective get: %s", md)
+	}
+	if md := m.ok("kanban_get", map[string]any{"cwd": cwd, "id": 1}); !strings.Contains(md, "Objective 1 · MVP") {
+		t.Fatalf("ticket of an objective: %s", md)
+	}
 	tk := a.call("kanban.get", map[string]any{"id": 1})["result"].(map[string]any)
 	notes := tk["notes"].([]any)
 	if n := notes[len(notes)-1].(map[string]any); n["author"] != "claude" {
