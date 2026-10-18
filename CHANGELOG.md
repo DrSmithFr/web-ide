@@ -4,6 +4,13 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+## [1.22.0] - 2026-10-18
+
+### Added
+
+- Kanban objectives: an objective is a named deadline (*MVP*, a launch…) in an ordered list, with a description and an optional date. A milestone says what, an objective says when: a ticket has at most one objective apart from its milestone (the steps of a lineage take the one of their root), and a milestone may give its default objective to its open tickets and to those added later. Each objective has a page (date, progress, its tickets grouped by milestone, *Reach the objective*, which only the user can do once its tickets are finished). The *Milestones* view shows a section per objective in its order (↑ ↓), Board and Roadmap get an objective filter, and cards a badge. The models use the `kanban_objective` tool and the `objective` field of `kanban_create`, `kanban_update` and `kanban_milestone`; *what do we work on?* proposes the tickets of the first objective first. The kanban base moves to version 9.
+- Kanban: *More actions › Change the status…* sets any status of a ticket, with a reason kept in its history, for work done outside the flow (committed on main, covered by another ticket). It makes no branch, worktree nor session; the order of a lineage and the open test feedback are still checked.
+
 ## [1.21.0] - 2026-10-18
 
 ### Added
