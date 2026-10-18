@@ -4,15 +4,40 @@ How Web IDE is built, where things live, and the traps already met. Read [spec.m
 
 ## Overview
 
-```
-browser (SolidJS app)  ──WebSocket JSON-RPC──▶  pod (Go binary)
-                                                 ├─ local disk, or SSH/SFTP host
-                                                 ├─ terminals (PTY), in the keeper ─unix socket─▶ web-ide-keeper
-                                                 ├─ commands
-                                                 ├─ language servers (LSP)
-                                                 ├─ databases (SQLite, PostgreSQL, Redis)
-                                                 ├─ git, docker
-                                                 └─ model servers (llama.cpp, Ollama)
+The system map, in the words of the [glossary](../GLOSSARY.md):
+
+```mermaid
+flowchart LR
+  browser["Browser<br/>(a device: SolidJS app)"]
+  relay["Relay<br/>signaling · TURN · encrypted blobs · push"]
+
+  subgraph machine["One machine"]
+    pod["Pod<br/>(Go binary, serves the app)"]
+    keeper["Keeper<br/>terminals · tasks · agent processes · answers being written"]
+    projects[("Projects<br/>local or over SSH: files, git, kanban, conversations")]
+    lsp["Language servers"]
+    dbs["Databases · Docker"]
+    assistant["Assistant<br/>(runs in the pod)"]
+    agents["Agents<br/>Claude Code · opencode · pi"]
+  end
+
+  models["Model servers<br/>llama.cpp · Ollama · cloud"]
+  peers["Other pods of the cluster"]
+
+  browser -- "WebSocket JSON-RPC (same machine, Tailscale)" --> pod
+  browser == "tunnel (WebRTC, end to end)" ==> pod
+  browser -. "bootstrap page, signaling" .-> relay
+  pod -- "outbound WebSocket" --> relay
+  pod <-- "LAN port, mDNS" --> peers
+  pod -- "unix socket" --> keeper
+  pod --> projects
+  pod --> lsp
+  pod --> dbs
+  pod --- assistant
+  keeper -- "completions relayed" --> models
+  assistant -. "through the keeper" .-> models
+  keeper -- "runs, ACP over stdio" --> agents
+  agents -- "MCP (/mcp): kanban, consoles, window" --> pod
 ```
 
 The front end is built by Vite and embedded in the pod binary (`pod/webdist`), so the page and the WebSocket share one origin: no mixed content, and pairing is a cookie.

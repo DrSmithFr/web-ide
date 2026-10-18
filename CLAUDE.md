@@ -1,7 +1,8 @@
 # Notes for AI agents
 
-Web IDE: a Go agent (`pod/`) serving a SolidJS front end (`web/`) over a WebSocket. Read these first:
+Web IDE: a Go program, the pod (`pod/`), serving a SolidJS front end (`web/`) over a WebSocket. Read these first:
 
+- [GLOSSARY.md](GLOSSARY.md): the words of the project, one meaning each. Use them in code, docs and UI texts; its *Conflicts* list the names still to fix.
 - [docs/spec.md](docs/spec.md): what the IDE does and why.
 - [docs/architecture.md](docs/architecture.md): code layout, protocol, build and test commands, pitfalls.
 - [docs/kanban.md](docs/kanban.md): the kanban and its git workflow.
