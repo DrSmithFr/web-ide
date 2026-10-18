@@ -30,6 +30,9 @@ func testRelay(t *testing.T) *httptest.Server {
 	srv := relay.New(st, turn)
 	srv.Version = "load-test"
 	ts := httptest.NewServer(srv.Handler())
+	// LIFO: stop accepting, end the links and wait for their handlers, then TURN, then the base,
+	// then the removal of the folder: nothing may write once the test has returned.
+	t.Cleanup(srv.Close)
 	t.Cleanup(ts.Close)
 	return ts
 }

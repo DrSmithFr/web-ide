@@ -246,7 +246,9 @@ func TestJoin(t *testing.T) {
 		t.Fatal("starting the embedded TURN:", err)
 	}
 	defer turn.Close()
-	ts := httptest.NewServer(relay.New(st, turn).Handler())
+	rsrv := relay.New(st, turn)
+	ts := httptest.NewServer(rsrv.Handler())
+	defer rsrv.Close() // after ts.Close: the handlers of the links finish before the base closes
 	defer ts.Close()
 
 	a, err := identity.FromPhrase(phrase)
