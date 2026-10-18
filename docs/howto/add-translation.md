@@ -2,7 +2,7 @@
 
 Translate the interface and the pod's messages into a new language.
 
-English is the key and the default: a text with no translation shows in English. Today the catalogs are `fr` (French) and English (no catalog). The code lists the languages in a few places, which this page walks through; `fr` is the model to copy (replace `de` below with your code).
+English is the key and the default: a text with no translation shows in English. The catalogs today are French (`fr`) and Spanish (`es`). Each side keeps one list of languages that every place reads; replace `de` below with your code.
 
 ## Prerequisites
 
@@ -11,32 +11,33 @@ English is the key and the default: a text with no translation shows in English.
 
 ## Steps
 
-1. **Interface catalog.** Copy `web/src/i18n/fr.json` to `web/src/i18n/de.json` and translate the values; the keys are the English texts and stay as they are. Parameters are written `{name}` and must be kept. A key may carry a context before a bar (`menu|Edit`) that is not shown in English.
-2. **Register it** in `web/src/i18n/index.ts`: import the file, extend the `Lang` type, add `{ id: 'de', name: 'Deutsch' }` to `languages` and the file to `catalogs`. `locale()` and the plural rule of `tn()` have a branch for French: add yours there.
-3. **The setting.** `web/src/state/settings.ts` accepts `'en'` and `'fr'` for the language setting (`raw.language === 'en' || raw.language === 'fr'`): add yours.
-4. **The checker.** `web/scripts/i18n-check.mjs` lists the catalogs it checks (`const catalogs = { fr: … }`): add yours, so a missing key fails `npm run check`.
-5. **Pod messages.** Copy `pod/internal/i18n/fr.json` the same way, embed it and add it to `catalogs` in `pod/internal/i18n/i18n.go` (what `Supported` reads). `TestCatalogComplete` in `i18n_test.go` checks the French catalog only: extend it to yours. A few pages written by the pod pick `fr` from the `Accept-Language` header or the language setting (`pod/internal/server/open.go`, `pod/internal/lan/update.go`, `pod/internal/preview/preview.go`, `pod/internal/server/mcp_reply.go`): add yours where the page should follow it.
-6. **Dictation.** The language list of the speech model is in `web/src/llm/transcribe.ts`; add the language there if the model supports it.
+1. **Add the code to the lists.**
+   - Page: an entry in `web/src/i18n/languages.json` (`id`, native `name`, `locale` for dates and numbers, `singularBelow2` for a language that uses the singular for 0 and 1, as French).
+   - Pod: the code in `Languages` of `pod/internal/i18n/i18n.go`.
+2. **Add the catalogs.** Copy `web/src/i18n/fr.json` to `web/src/i18n/de.json` and `pod/internal/i18n/fr.json` to `pod/internal/i18n/de.json`, then translate the values. The keys are the English texts and stay as they are; `{name}` and `%s` parameters are kept; a key may carry a context before a bar (`menu|Edit`) that is not shown in English.
+3. **Relay page.** The page of the relay (`pod/internal/relay/web/bootstrap.js`) and the window after a GitHub link (`doneCatalog` in `pod/internal/relay/github.go`) have their own few words: add the code to `langs` and a third text to each `L(…)`, and a row to `doneCatalog`.
+
+The speech list of the dictation (`web/src/llm/transcribe.ts`) is the list of the models, not ours: add the language there only if the model supports it and it is missing.
 
 ## Check
 
 ```sh
-cd web && npm run check      # tsc and the catalog: no "missing de" line
-make test                    # includes the pod catalog test
+cd web && npm run check      # tsc and the catalogs: no "missing de" line
+make test                    # includes the pod catalog tests
 make dev                     # then Settings > Language > pick yours
 ```
 
-In the interface, the texts show in your language, a pod error (a refused git command, for example) as well, and the language survives a reload.
+The checks loop over the lists: every text of the sources is in every catalog, the catalogs have the same keys (none missing, none extra) and a translation keeps the parameters of its key. In the interface, the texts show in your language, a pod error (a refused git command, for example) as well, and the language survives a reload.
 
 ## Troubleshooting
 
 | Symptom | Fix |
 | --- | --- |
 | `npm run check` prints `missing de: "…"` | A text used in the sources has no key in `de.json`: copy the English text exactly. |
+| `parameters differ in de` | A `{name}` was renamed or dropped in the translation: keep it as in the key. |
 | Some texts stay in English | They are missing from the catalog (silent fallback), or built from a variable that the checker cannot see: search the key in the sources. |
-| A `{name}` shows literally | The parameter was renamed in the translation: keep it as in the key. |
-| The language is not in the menu | It is missing from `languages` in `index.ts`. |
-| Pod messages stay in English | The pod catalog is not registered, or the page has not told the pod its language (the pod follows each window). |
+| The language is not in the menu | It is missing from `languages.json`. |
+| Pod messages stay in English | It is missing from `Languages`, or the page has not told the pod its language (the pod follows each window). |
 
 ## See also
 

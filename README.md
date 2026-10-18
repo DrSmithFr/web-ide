@@ -28,7 +28,7 @@ The full walk-through is in the **[user guide](docs/guide.md)**; every page of t
 - **Local and SSH projects**, with your local keys.
 - **Safe with other tools**: changes made to open files by another program are merged into your buffer.
 - **Assistant**: Build, Plan and Briefing modes, `CLAUDE.md` / `AGENTS.md` and skills, Mermaid diagrams, image / PDF / audio attachments, local dictation (Whisper in the browser), doodles.
-- Interface in **English and French**.
+- Interface in **English, French and Spanish**.
 
 | | |
 |---|---|

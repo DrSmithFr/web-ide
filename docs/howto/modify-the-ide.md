@@ -44,7 +44,7 @@ Your terminals and the conversations (the assistant's and the agents') go on whi
 | --- | --- |
 | `make dev` cannot bind a port | Another dev pod runs: it uses 4434 and 5173. Stop it, or set `DEV_ADDR`. |
 | `make service` fails | `make build` first, to see the error; the unit needs systemd ([Linux](../install/linux.md), *Troubleshooting*). |
-| A text is missing in French | `npm run check` in `web/` names it; add it to `web/src/i18n/fr.json`. |
+| A text is missing in a language | `npm run check` in `web/` names it; add it to each `web/src/i18n/<id>.json`. |
 | The new pod is broken | Install the release again with the script of [Linux](../install/linux.md): data in `~/.web-ide` is kept. |
 
 ## See also

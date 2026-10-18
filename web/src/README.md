@@ -112,7 +112,7 @@ Diagram edges are imports of the folders, checked with a script over the `import
 - [`questions/`](questions/): Questions tool: the list (`state.ts`, asked again on `questions.changed`), the modal one question at a time and its auto-open (not for a question whose thread is on screen: `showsQuestions`), the forms of `elicitation/create` (`Form.tsx`, also in the Agents thread)
 - [`kanban/`](kanban/): Board, ticket view, workflow actions, linked conversations
 - [`docker/`](docker/): Docker tool: lists and polling (`state.ts`), detail pane, logs with ANSI colors (`ansi.ts`), disk usage, port forwards (and their list on the home page), app previews
-- [`i18n/`](i18n/): `t()` and the catalogs (English source strings, French translation)
+- [`i18n/`](i18n/): `t()` and the catalogs (English source strings, `languages.json`, one catalog per other language)
 
 ## Invariants and pitfalls
 
@@ -131,4 +131,4 @@ Diagram edges are imports of the folders, checked with a script over the `import
 
 ## Tests
 
-`cd web && npm run check` (tsc and the French catalog); browser suites ([../../e2e/README.md](../../e2e/README.md)): `editing`, `editor`, `features`, `explorer`, `popups`, `keyboard`, `mousenav`, `mobile`, `desks`, `llm`, `kanban`, `perf` and the others by tool.
+`cd web && npm run check` (tsc and the catalogs); browser suites ([../../e2e/README.md](../../e2e/README.md)): `editing`, `editor`, `features`, `explorer`, `popups`, `keyboard`, `mousenav`, `mobile`, `desks`, `llm`, `kanban`, `perf` and the others by tool.

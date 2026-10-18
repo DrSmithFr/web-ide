@@ -7,14 +7,14 @@ The front end: SolidJS and TypeScript, built by Vite into `pod/webdist/dist`, wh
 - `src/`: the application, one folder per concern: [src/README.md](src/README.md).
 - `index.html`, `vite.config.ts`: entry and build. `base: './'` keeps the paths relative, because the page also runs under `/_lan/pod/<key>/` of a gateway; in development Vite proxies `/ws`, `/auth` and the model files to the pod (`POD=http://127.0.0.1:4433`).
 - `public/`: the icons and the manifest of the installable app.
-- `scripts/i18n-check.mjs`: fails when a text passed to `t()` has no French translation in `src/i18n/fr.json`.
+- `scripts/i18n-check.mjs`: fails when a text passed to `t()` is missing from a catalog (`src/i18n/<id>.json`, one per language of `src/i18n/languages.json`), or the catalogs differ.
 
 ## Commands
 
 ```
 npm run dev     # Vite on :5173 with hot reload (make dev also starts a dev pod)
 npm run build   # tsc --noEmit, then vite build into ../pod/webdist/dist
-npm run check   # tsc --noEmit and the French catalog check (part of make test)
+npm run check   # tsc --noEmit and the catalog check (part of make test)
 ```
 
 ## Invariants and pitfalls

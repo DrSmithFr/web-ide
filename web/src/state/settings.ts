@@ -6,7 +6,7 @@ import { on as onPod, request } from '../pod/rpc'
 import { accentOf, monoOf, themeById, tokenTypes, toneVars, unfocusedParts } from '../settings/themes'
 import { setGrammarOverrides } from '../editor/languages'
 import type { GrammarDef } from '../editor/tokenizer'
-import { setLang, type LangSetting } from '../i18n'
+import { languages, setLang, type LangSetting } from '../i18n'
 import { deviceId, FALLBACK, layoutFor, type DeviceLayout } from './device'
 
 export interface Settings {
@@ -72,7 +72,7 @@ function merge(raw: any): Settings {
     editor: { ...d.editor, ...(raw.editor ?? {}) },
     keyboard: { ...d.keyboard, ...(raw.keyboard ?? {}), overrides: raw.keyboard?.overrides ?? {} },
     syntax: raw.syntax ?? {},
-    language: raw.language === 'en' || raw.language === 'fr' ? raw.language : 'auto',
+    language: languages.some((l) => l.id === raw.language) ? raw.language : 'auto',
     devices: raw.devices ?? {},
     sync: { settings: raw.sync?.settings !== false, vault: raw.sync?.vault === true },
     questions: { autoOpen: raw.questions?.autoOpen !== false },

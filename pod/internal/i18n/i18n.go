@@ -4,30 +4,58 @@
 package i18n
 
 import (
-	_ "embed"
+	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 )
 
-//go:embed fr.json
-var frJSON []byte
+// Languages is the one list of the languages of the pod, English (the source text, no
+// catalog) first. Each other one has a catalog `<code>.json` in this folder; the page keeps
+// its own list in web/src/i18n/languages.json.
+var Languages = []string{"en", "fr", "es"}
 
-var catalogs = map[string]map[string]string{"fr": {}}
+//go:embed *.json
+var files embed.FS
+
+var catalogs = map[string]map[string]string{}
 
 func init() {
-	if err := json.Unmarshal(frJSON, ptr(catalogs["fr"])); err != nil {
-		panic("i18n: fr.json: " + err.Error())
+	for _, lang := range Languages[1:] {
+		data, err := files.ReadFile(lang + ".json")
+		if err != nil {
+			panic("i18n: " + err.Error())
+		}
+		c := map[string]string{}
+		if err := json.Unmarshal(data, &c); err != nil {
+			panic("i18n: " + lang + ".json: " + err.Error())
+		}
+		catalogs[lang] = c
 	}
 }
 
-func ptr[T any](v T) *T { return &v }
+// Detect gives the language of an Accept-Language header: the first language of the header
+// that is in the list, else English.
+func Detect(acceptLanguage string) string {
+	for _, part := range strings.Split(acceptLanguage, ",") {
+		tag, _, _ := strings.Cut(part, ";")
+		code, _, _ := strings.Cut(strings.ToLower(strings.TrimSpace(tag)), "-")
+		if Supported(code) {
+			return code
+		}
+	}
+	return "en"
+}
 
 // Supported tells whether a language has a catalog (English needs none).
 func Supported(lang string) bool {
-	_, ok := catalogs[lang]
-	return ok || lang == "en"
+	for _, l := range Languages {
+		if l == lang {
+			return true
+		}
+	}
+	return false
 }
 
 // T formats a message in a language.

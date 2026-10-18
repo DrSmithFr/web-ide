@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/assistant"
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
 )
 
@@ -72,8 +73,8 @@ func (s *Server) ticketChatProject(sc mcpScope, t *kanban.Ticket, chatID string)
 func (s *Server) uiLanguage() string {
 	var set struct{ Language string }
 	_ = json.Unmarshal(s.Settings.Current().Settings, &set)
-	if set.Language == "fr" {
-		return "fr"
+	if i18n.Supported(set.Language) {
+		return set.Language
 	}
 	return "en"
 }

@@ -37,7 +37,7 @@ flowchart LR
 - `features`: Navigation, splits, global search, terminal, palette, settings, SQLite explorer and console
 - `git`: Git tool: Commit tab (tree of changes with check boxes, diff, commit, commit and push), History tab
 - `help`: Help: the docs embedded in the pod open read only from the Help menu and the palette; relative links, Back, anchors and pictures; the "?" of the settings, the Agents tool and the kanban at their headings; the tab after a reload
-- `i18n`: Languages: a French browser gets the French interface; the language setting switches it at once
+- `i18n`: Languages: a French browser gets the French interface; the language setting switches it at once (English, Spanish)
 - `identity`: Identity (milestone 2): the pod makes an account from a 24-word phrase, browsers pair with the phrase or by an invite
 - `kanban`: Kanban: board, new ticket, ticket view by status
 - `kanbanagents`: Kanban and the Agents tool: with Claude Code as the development agent (kanban settings)

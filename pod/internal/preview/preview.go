@@ -436,10 +436,7 @@ func stripCookies(r *http.Request, preview string) {
 
 // page answers a short message in the language of the browser.
 func page(w http.ResponseWriter, r *http.Request, code int, text string, vars map[string]any) {
-	lang := "en"
-	if strings.HasPrefix(strings.ToLower(r.Header.Get("Accept-Language")), "fr") {
-		lang = "fr"
-	}
+	lang := i18n.Detect(r.Header.Get("Accept-Language"))
 	msg := i18n.T(lang, text)
 	for k, v := range vars {
 		msg = strings.ReplaceAll(msg, "{"+k+"}", fmt.Sprint(v))

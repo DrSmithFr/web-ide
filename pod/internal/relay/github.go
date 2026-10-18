@@ -17,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
 
 // The GitHub link of milestone 5: an account links a GitHub login, and the relay checks that
@@ -437,23 +439,29 @@ func (s *Server) serveGitHubCallback(w http.ResponseWriter, r *http.Request) {
 		html.EscapeString(words.thanks), html.EscapeString(words.close))
 }
 
-// githubDoneWords are the words of the window GitHub sends back to, in French when the browser
-// asks for it: the relay pages follow the browser language.
-type doneWords struct{ lang, title, linked, thanks, close string }
+// githubDoneWords are the words of the window GitHub sends back to, in the language of the
+// browser: the relay pages follow it.
+type doneWords struct{ lang, title, linked, thanks, thanksSupporter, close string }
+
+var doneCatalog = map[string]doneWords{
+	"en": {"en", "GitHub linked", "This account is now linked to %s.",
+		"Thanks for linking it! Sponsoring Web IDE on GitHub lifts the monthly TURN quota of the relay.",
+		"Thanks for supporting Web IDE, hugs ♥ The relay no longer counts your TURN traffic.", "Close"},
+	"fr": {"fr", "GitHub lié", "Ce compte est maintenant lié à %s.",
+		"Merci de l’avoir lié ! Soutenir Web IDE sur GitHub lève le quota TURN mensuel du relay.",
+		"Merci de soutenir Web IDE, des bisous ♥ Le relay ne compte plus votre trafic TURN.", "Fermer"},
+	"es": {"es", "GitHub vinculado", "Esta cuenta ya está vinculada a %s.",
+		"¡Gracias por vincularla! Patrocinar Web IDE en GitHub elimina la cuota mensual de TURN del relay.",
+		"Gracias por apoyar Web IDE, un abrazo ♥ El relay ya no cuenta tu tráfico TURN.", "Cerrar"},
+}
 
 func githubDoneWords(acceptLanguage string, supporter bool) doneWords {
-	fr := strings.HasPrefix(strings.ToLower(strings.TrimSpace(acceptLanguage)), "fr")
-	w := doneWords{"en", "GitHub linked", "This account is now linked to %s.",
-		"Thanks for linking it! Sponsoring Web IDE on GitHub lifts the monthly TURN quota of the relay.", "Close"}
-	if supporter {
-		w.thanks = "Thanks for supporting Web IDE, hugs ♥ The relay no longer counts your TURN traffic."
+	w, ok := doneCatalog[i18n.Detect(acceptLanguage)]
+	if !ok {
+		w = doneCatalog["en"]
 	}
-	if fr {
-		w = doneWords{"fr", "GitHub lié", "Ce compte est maintenant lié à %s.",
-			"Merci de l’avoir lié ! Soutenir Web IDE sur GitHub lève le quota TURN mensuel du relay.", "Fermer"}
-		if supporter {
-			w.thanks = "Merci de soutenir Web IDE, des bisous ♥ Le relay ne compte plus votre trafic TURN."
-		}
+	if supporter {
+		w.thanks = w.thanksSupporter
 	}
 	return w
 }

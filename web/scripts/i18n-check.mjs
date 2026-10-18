@@ -1,11 +1,14 @@
-// Checks the translation catalogs: every literal passed to t() / tn() in the sources must
-// have an entry in each catalog. Keys used through variables (labels of data tables) cannot
-// be checked here; catalog entries never seen as literals are listed with --unused.
+// Checks the translation catalogs of every language of src/i18n/languages.json (English
+// has none): every literal passed to t() / tn() in the sources must have an entry in each
+// catalog, the catalogs have the same keys, and a translation keeps the {parameters} of its
+// key. Keys used through variables (labels of data tables) cannot be checked against the
+// sources; catalog entries never seen as literals are listed with --unused.
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 const src = new URL('../src/', import.meta.url).pathname
-const catalogs = { fr: JSON.parse(readFileSync(join(src, 'i18n/fr.json'), 'utf8')) }
+const read = (f) => JSON.parse(readFileSync(join(src, 'i18n', f), 'utf8'))
+const catalogs = Object.fromEntries(read('languages.json').filter((l) => l.id !== 'en').map((l) => [l.id, read(`${l.id}.json`)]))
 
 const files = []
 const walk = (d) => {
@@ -39,6 +42,19 @@ for (const [lang, cat] of Object.entries(catalogs)) {
     if (!(key in cat)) {
       console.log(`missing ${lang}: ${JSON.stringify(key)} (${where})`)
       missing++
+    }
+  }
+  const params = (s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join()
+  for (const [key, text] of Object.entries(cat)) {
+    if (params(key) !== params(text)) {
+      console.log(`parameters differ in ${lang}: ${JSON.stringify(key)}`)
+      missing++
+    }
+    for (const [other, o] of Object.entries(catalogs)) {
+      if (other !== lang && !(key in o)) {
+        console.log(`missing ${other}: ${JSON.stringify(key)} (present in ${lang})`)
+        missing++
+      }
     }
   }
   if (process.argv.includes('--unused')) for (const key of Object.keys(cat)) if (!used.has(key)) console.log(`not used as a literal (${lang}): ${JSON.stringify(key)}`)
