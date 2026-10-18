@@ -4,18 +4,30 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
-### Changed
-
-- Naming (#100): the systemd units of the pod and the keeper are called units, not services; the state of the desks of a project is in `desks/` (the files of `sessions/` are read and moved there), and the projects folder is `-projects` / `projects` in `config.json` (*Projects folder* in Settings and on the home page); `-workspace` and the `workspace` key still work.
+## [1.19.0] - 2026-10-18
 
 ### Added
 
+- Help: the documentation is embedded in the pod and opens read only in a tab from *Help › Documentation* or the command palette, with working links, headings, pictures and Mermaid diagrams. A **?** next to the settings sections, the kanban and the Agents tool opens the page that explains it.
 - Spanish (`es`) as a third language of the interface, the pod messages and the relay pages; the languages are listed once on each side (`web/src/i18n/languages.json`, `i18n.Languages`), so adding one is a list entry plus its catalogs.
-- Help: the documentation is embedded in the pod and opens read only in a tab from *Help › Documentation* or the command palette, with working links and headings. A **?** next to the settings sections, the kanban and the Agents tool opens the page that explains it.
+- The assistant follows the `AGENTS.md` of a project first, and the `AGENTS.md` (else `CLAUDE.md`) of a folder the first time it reads or edits a file there, once per conversation; the context popover lists them.
+- Documentation for humans and AIs: a glossary (`GLOSSARY.md`), install pages (Linux, macOS, Windows with WSL, from the sources), how-to pages (account and devices, pods on the local network, self-hosting a relay, adding a language, modifying the IDE), and a README with a Mermaid map in each area of the code. The repository is English only; `AGENTS.md` holds the instructions, `make test` checks the links of the docs.
 
 ### Changed
 
-- Naming (glossary): the SSH *tunnels* are *port forwards* (Docker tool tab, home page, `.ide/forwards.json`: a project with `.ide/tunnels.json` is read and moved), the first link carries the *access token* (no longer *pairing token*), and the *Devices* panel of Settings > Remote access is *Members* (browsers and pods). Keys and wire formats (`device.key`, `identity.json`, RPC names) are unchanged.
+- One word per thing, as in the glossary:
+  - the SSH *tunnels* are *port forwards* (Docker tool tab, home page, `.ide/forwards.json`: a project with `.ide/tunnels.json` is read and moved);
+  - the first link carries the *access token* (no longer *pairing token*), and the *Devices* panel of Settings › Remote access is *Members* (browsers and pods);
+  - the pods of an account on one network form a *cluster* (no longer a *site*);
+  - the built-in AI is the *Assistant* (no longer *AI assistant*), *agent* means Claude Code, opencode or pi;
+  - the kanban status *To test* is `to_test` in the base and the APIs (the base migrates; `review` is still accepted), and a lineage has a *root* and *steps*;
+  - the systemd units of the pod and the keeper are *units*; the state of the desks is in `desks/` (the files of `sessions/` are read and moved there); the projects folder is `-projects` / `projects` in `config.json` (*Projects folder* in Settings and on the home page), `-workspace` and the `workspace` key still work.
+
+  Wire formats and keys (`device.key`, `identity.json`, the relay protocol, RPC names) are unchanged, so pods and relays of 1.18 keep working with 1.19. Going back to 1.18 after this update loses the layout of the desks (it reads `sessions/`).
+
+### Fixed
+
+- The relay writes nothing to its base once it is closed: its WebSocket links and TURN allocations are ended and waited for, which also fixes tests failing at random when several ran at once.
 
 ## [1.18.3] - 2026-10-17
 
