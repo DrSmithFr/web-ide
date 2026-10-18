@@ -8,6 +8,7 @@ import { on, request } from '../pod/rpc'
 import { openTab, project } from '../state/project'
 import { t } from '../i18n'
 import { bumpMilestone, type MilestoneSummary } from './milestones'
+import { bumpObjective, type ObjectiveSummary } from './objectives'
 
 export type Status = 'new' | 'todo' | 'in_progress' | 'to_test' | 'done' | 'abandoned'
 export type Priority = 'low' | 'normal' | 'high' | 'critical'
@@ -42,6 +43,8 @@ export interface Summary {
   stepDone?: boolean
   /** Its milestone (a step has the one of its root). */
   milestone?: number
+  /** Its objective, apart from its milestone (a step has the one of its root). */
+  objective?: number
   /** Tickets of other lineages this one waits for. */
   dependsOn: number[]
   /** What keeps a ticket from starting (New or To do only). */
@@ -125,6 +128,7 @@ export interface Ticket extends Summary {
   children: Summary[]
   milestoneTitle?: string
   milestoneStories?: { id: number; text: string; done: boolean }[]
+  objectiveTitle?: string
 }
 
 export const statusOrder: Status[] = ['new', 'todo', 'in_progress', 'to_test', 'done', 'abandoned']
@@ -155,10 +159,19 @@ export const priorityLabels = translated(priorityNames)
 export const roleLabels = translated(roleNames)
 export const complexityLabels = translated(complexityNames)
 
-export const [board, setBoard] = createStore<{ project: string; tickets: Summary[]; milestones: MilestoneSummary[]; meta: Record<string, string>; loaded: boolean; error: string }>({
+export const [board, setBoard] = createStore<{
+  project: string
+  tickets: Summary[]
+  milestones: MilestoneSummary[]
+  objectives: ObjectiveSummary[]
+  meta: Record<string, string>
+  loaded: boolean
+  error: string
+}>({
   project: '',
   tickets: [],
   milestones: [],
+  objectives: [],
   meta: {},
   loaded: false,
   error: '',
@@ -180,9 +193,10 @@ export function refreshBoard(): Promise<void> {
   if (loading) return loading
   loading = (async () => {
     try {
-      const r = await request<{ project: string; tickets: Summary[]; milestones?: MilestoneSummary[]; meta: Record<string, string> }>('kanban.list')
+      const r = await request<{ project: string; tickets: Summary[]; milestones?: MilestoneSummary[]; objectives?: ObjectiveSummary[]; meta: Record<string, string> }>('kanban.list')
       setBoard('tickets', reconcile(r.tickets.map(fixStatus), { key: 'id' }))
       setBoard('milestones', reconcile(r.milestones ?? [], { key: 'id' }))
+      setBoard('objectives', reconcile(r.objectives ?? [], { key: 'id' }))
       setBoard({ project: r.project, meta: r.meta ?? {}, loaded: true, error: '' })
     } catch (e) {
       setBoard({ error: (e as Error).message, loaded: true })
@@ -200,15 +214,16 @@ export function ensureBoard() {
   const pid = project()?.parent || project()?.id || ''
   if (pid && pid !== loadedFor) {
     loadedFor = pid
-    setBoard({ tickets: [], milestones: [], loaded: false })
+    setBoard({ tickets: [], milestones: [], objectives: [], loaded: false })
     refreshBoard()
   }
 }
 
 let refreshTimer: number | undefined
-on('kanban.changed', (e: { project: string; id: number; milestone?: number }) => {
+on('kanban.changed', (e: { project: string; id: number; milestone?: number; objective?: number }) => {
   if (e.id) setVersions(e.id, (v) => (v ?? 0) + 1)
   if (e.milestone) bumpMilestone(e.milestone)
+  if (e.objective) bumpObjective(e.objective)
   clearTimeout(refreshTimer)
   refreshTimer = window.setTimeout(() => refreshBoard(), 60)
 })
@@ -268,6 +283,8 @@ export interface TicketPatch {
   dependsOn?: number[]
   /** 0 takes the ticket (and its steps) out of its milestone. */
   milestone?: number
+  /** 0 takes the ticket (and its steps) out of its objective. */
+  objective?: number
 }
 
 export const createTicket = (p: TicketPatch & { title: string }, by: By = 'user') => request<Ticket>('kanban.create', { ...p, by })
@@ -417,6 +434,10 @@ export function openTicket(id: number) {
 
 export function openMilestone(id: number) {
   openTab({ kind: 'milestone', milestone: id, title: t('Milestone') })
+}
+
+export function openObjective(id: number) {
+  openTab({ kind: 'objective', objective: id, title: t('Objective') })
 }
 
 export const [newTicketOpen, setNewTicketOpen] = createSignal(false)

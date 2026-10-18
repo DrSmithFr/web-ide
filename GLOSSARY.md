@@ -247,6 +247,10 @@ _Avoid_: epic, release, sprint
 **User story**
 What a user can do once a milestone is done; checked by the user, and the base of its e2e coverage review.
 
+**Objective**
+A named deadline (MVP, a launch…) in an ordered list: the tickets of several milestones and lone ones due together; reached by the user once they are finished. A milestone says what, an objective says when.
+_Avoid_: release, target, goal, version
+
 **Review**
 A reading of a ticket's change by a model, before its merge.
 _Avoid_: test, To test

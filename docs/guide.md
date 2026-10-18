@@ -113,6 +113,8 @@ A big change can be split into a **lineage**: a first ticket, the **root**, and 
 
 A whole feature can be a **milestone**: create one in the *Milestones* view of the board (each card shows its progress), or choose it in the header of a ticket (*New milestone…* creates one), or let a *Briefing* on the milestone write its user stories and its tickets. Each ticket recalls the milestone and its user stories in *How to test*. The milestone page gathers its spec, its stories, its tickets (validate those to test right there) and its own feedback (*Make a ticket* turns one into a ticket of the milestone). *Review coverage* asks Claude Code whether the browser tests cover each user story: what is missing comes back as feedback of the milestone. Once its tickets are finished, its stories checked and its feedback handled, you validate the milestone: only you can. The milestone filter of the board narrows the columns and the roadmap, which groups the lineages of each milestone in a band.
 
+A deadline that takes part of several milestones (an *MVP* before a launch) is an **objective**: *New objective* in the *Milestones* view, which lists the objectives in their order (move them with ↑ ↓), each with the milestones that give it their tickets. Choose the objective of a ticket in its header, or the *default objective* of a milestone on its page: its open tickets go into it. The objective page shows its date, its progress and its tickets grouped by milestone; you reach it once they are finished. The Orchestrator proposes the tickets of the first objective first.
+
 ![The kanban after the merge](images/kanban.png)
 
 ![The Git panel: the ticket branch merged into main](images/git.png)

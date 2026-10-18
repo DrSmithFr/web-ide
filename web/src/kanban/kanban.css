@@ -151,7 +151,7 @@ input.tk-title { padding: 2px 6px; }
 /* Lineage: badges of the cards, section of the ticket. */
 .kb-badge { display: inline-flex; align-items: center; gap: 3px; font-family: var(--font-code); font-size: 12px; color: var(--fg-muted); white-space: nowrap; }
 .kb-badge.blocked { color: var(--warn); }
-.kb-badge.kb-milestone { color: var(--accent); font-family: inherit; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
+.kb-badge.kb-milestone, .kb-badge.kb-objective { color: var(--accent); font-family: inherit; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
 .tk-lineage { display: flex; flex-direction: column; gap: 6px; }
 .tk-lineage .link { padding: 0; text-align: left; }
 .tk-blockers { display: flex; align-items: flex-start; gap: 6px; padding: 4px 8px; border-radius: 6px; background: color-mix(in srgb, var(--warn) 12%, transparent); }
@@ -221,6 +221,12 @@ input.tk-title { padding: 2px 6px; }
 .ms-bar { height: 6px; border-radius: 3px; background: var(--bg-3, var(--line)); overflow: hidden; }
 .ms-bar > span { display: block; height: 100%; background: var(--ok); }
 .ms-card-meta { display: flex; gap: 10px; flex-wrap: wrap; color: var(--fg-muted); }
+/* Objectives: a section per open objective in the Milestones view, and the objective page. */
+.ob-section { margin-bottom: 16px; }
+.ob-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; min-width: 0; }
+.ob-title { font-weight: 600; max-width: 40%; }
+.ob-head-bar { width: 120px; flex: none; }
+.ob .ob-bar { margin-top: 8px; }
 .ms-totest-count { color: var(--st); }
 .rm-band { position: absolute; left: 2px; font-size: 12px; font-weight: 600; color: var(--accent); display: flex; align-items: center; gap: 4px; white-space: nowrap; }
 .kb-panel-views { display: flex; gap: 4px; padding: 4px 8px 6px; border-bottom: 1px solid var(--line); }

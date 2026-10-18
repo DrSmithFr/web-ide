@@ -15,7 +15,7 @@ import { deviceId, layoutFor } from './device'
 import { settings } from './settings'
 import { closeDesks, desk, loadDesks, showDesk, touchRecent, type DeskList } from './desks'
 
-export type TabKind = 'file' | 'sql' | 'table' | 'text' | 'diff' | 'kanban' | 'ticket' | 'milestone' | 'tool' | 'console' | 'doc'
+export type TabKind = 'file' | 'sql' | 'table' | 'text' | 'diff' | 'kanban' | 'ticket' | 'milestone' | 'objective' | 'tool' | 'console' | 'doc'
 
 export interface TabState {
   id: string
@@ -32,9 +32,10 @@ export interface TabState {
   head?: boolean
   rev?: string
   from?: string
-  /** Number of the kanban ticket shown (kind ticket), or of the milestone (kind milestone). */
+  /** Number of the kanban ticket shown (kind ticket), of the milestone (kind milestone), or of the objective (kind objective). */
   ticket?: number
   milestone?: number
+  objective?: number
   /** A tool shown as a tab or a tile (kind tool: id of the tool) or a console (kind console: its id). */
   tool?: string
   console?: string
@@ -321,6 +322,7 @@ export function openTab(tab: Omit<TabState, 'id'>, paneId = session.activePane):
     if (tab.kind === 'kanban') return true
     if (tab.kind === 'ticket') return t.ticket === tab.ticket
     if (tab.kind === 'milestone') return t.milestone === tab.milestone
+    if (tab.kind === 'objective') return t.objective === tab.objective
     if (tab.kind === 'tool') return t.tool === tab.tool
     if (tab.kind === 'console') return t.console === tab.console
     if (tab.kind === 'doc') return true
