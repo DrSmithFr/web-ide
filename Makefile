@@ -3,7 +3,7 @@ GO ?= $(shell command -v go || echo $(HOME)/sdk/go/bin/go)
 BIN := bin/web-ide-pod
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: docs-content build web pod run dev test e2e shots check clean install service deploy-relay relay-build relayload load-relay load-relay-down
+.PHONY: docs-content build web pod run dev test e2e shots check clean install service deploy-relay relay-build vip supporters relayload load-relay load-relay-down
 
 build: web pod
 
@@ -92,6 +92,18 @@ deploy-relay:
 		$(MAKE) -s relay-build && \
 		./scripts/deploy-relay.sh --binary bin/web-ide-pod-relay --host $(RELAY_HOST) --unit $(RELAY_UNIT) --url $(RELAY_URL); \
 	fi
+
+# The VIP list and the supporters of the hosted relay (#87), over SSH against its live relay.db:
+# `make vip ARGS="add bob -days 90 -note 'early tester'"` (the remote shell reads ARGS: quote a
+# note), `make vip ARGS="remove bob"`, `make vip ARGS=list`, `make supporters`. The live relay
+# feels a change within 30 s.
+RELAY_USER ?= antennae
+RELAY_DATA ?= /var/lib/antennae
+vip:
+	@ssh $(RELAY_HOST) "sudo -u $(RELAY_USER) /usr/local/bin/web-ide-pod -data $(RELAY_DATA) relay vip $(ARGS)"
+
+supporters:
+	@ssh $(RELAY_HOST) sudo -u $(RELAY_USER) /usr/local/bin/web-ide-pod -data $(RELAY_DATA) relay supporters
 
 relay-build: web pod/webdist/dist docs-content
 	cd pod && GOOS=linux GOARCH=amd64 $(GO) build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o ../bin/web-ide-pod-relay .

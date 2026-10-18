@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/coder/websocket"
 
@@ -47,12 +48,23 @@ type idMsg struct {
 	Cluster string    `json:"site,omitempty"` // "site" on the wire: the cluster (GLOSSARY.md)
 	Gateway string    `json:"gateway,omitempty"`
 	Pods    []PodInfo `json:"pods,omitempty"`
-	// GitHub (milestone 5): the login an account is linked to, whether it sponsors the project,
-	// and the URL the panel opens to link it. The relay never holds a user token.
+	// GitHub (milestone 5): the login an account is linked to, its level (#87, the fields of
+	// QuotaState: Supporter for the older panels) and the URL the panel opens to link it. The
+	// relay never holds a user token.
 	GitHubID  string `json:"githubId,omitempty"`
 	Login     string `json:"login,omitempty"`
 	LoginURL  string `json:"loginUrl,omitempty"`
 	Supporter bool   `json:"supporter,omitempty"`
+	Level     string `json:"level,omitempty"`
+	Until     int64  `json:"until,omitempty"`
+	Sponsor   string `json:"sponsor,omitempty"`
+	VIP       bool   `json:"vip,omitempty"`
+}
+
+// withLevel adds the level of the account to a github answer.
+func (m idMsg) withLevel(al AccountLevel) idMsg {
+	m.Supporter, m.Level, m.Until, m.Sponsor, m.VIP = al.Level >= LevelSupporter, al.Level.wire(), al.Until, al.Sponsor.wire(), al.VIP
+	return m
 }
 
 // identityConn is one live pairing/admin link: a browser (or the pod CLI) that pairs a
@@ -293,10 +305,11 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 		case "syncKey", "syncKeys", "wrap", "wraps", "wrapGet", "blobGet", "blobPut":
 			s.handleSync(c, m)
 		case "github":
-			// The panel asking what the account is linked to, and whether that login sponsors
-			// the project (which lifts the TURN quota).
+			// The panel asking what the account is linked to, and its level (which sets the TURN
+			// quota). A relay with no GitHub app still has VIPs by account.
+			al := s.store.Level(c.account, time.Now())
 			if s.GitHub == nil {
-				_ = c.send(idMsg{Type: "github", Account: c.account})
+				_ = c.send(idMsg{Type: "github", Account: c.account}.withLevel(al))
 				continue
 			}
 			id, login, err := s.store.GitHubLink(c.account)
@@ -304,8 +317,7 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 				_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, err)})
 				continue
 			}
-			_ = c.send(idMsg{Type: "github", Account: c.account, GitHubID: id, Login: login,
-				Supporter: s.GitHub.isSupporter(c.account)})
+			_ = c.send(idMsg{Type: "github", Account: c.account, GitHubID: id, Login: login}.withLevel(al))
 		case "githubStart":
 			if s.GitHub == nil {
 				_ = c.send(idMsg{Type: "error", Message: i18n.Translate(c.lang, errors.New("this relay has no GitHub link"))})
@@ -330,7 +342,7 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			s.tellQuota([]string{c.account})
-			_ = c.send(idMsg{Type: "github", Account: c.account})
+			_ = c.send(idMsg{Type: "github", Account: c.account}.withLevel(s.store.Level(c.account, time.Now())))
 		case "pairApprove":
 			p, err := s.store.ApprovePairing(m.Code, c.account, m.Cert)
 			if err != nil {

@@ -31,6 +31,7 @@ DOMAIN=${RELAY_DOMAIN:-antennae.space}
 DATA=${RELAY_DATA:-/var/lib/antennae}
 USER=${RELAY_USER:-antennae}
 QUOTA=${RELAY_QUOTA:-10GB}
+QUOTA_BACKER=${RELAY_QUOTA_BACKER:-20GB}
 # One relayed session costs four TURN allocations (see docs/design/load.md): the range is the capacity
 # of the relay, 2840 ports carry about 710 simultaneous tunnels. It stays below the ephemeral
 # range of the kernel (32768-60999), whose outgoing connections would take its ports.
@@ -145,7 +146,7 @@ Wants=network-online.target
 
 [Service]
 ExecStart=$BIN -data $DATA -addr 0.0.0.0:4430 -tls-port 443 -domain $DOMAIN \\
-  -turn-ports $TURN_PORTS -quota $QUOTA -push-subject $PUSH_SUBJECT -github-env $ENV_FILE relay
+  -turn-ports $TURN_PORTS -quota $QUOTA -quota-backer $QUOTA_BACKER -push-subject $PUSH_SUBJECT -github-env $ENV_FILE relay
 EnvironmentFile=$ENV_FILE
 User=$USER
 Group=$USER

@@ -96,7 +96,7 @@ const words = {
   podsOffHow: L('Start a pod of this account, or check that it is linked to this relay.', 'Démarrez un pod de ce compte, ou vérifiez qu’il est relié à ce relay.', 'Inicia un pod de esta cuenta o comprueba que está vinculado a este relay.'),
   oops: L('Cannot connect', 'Connexion impossible', 'No se puede conectar'),
   quota: L('Monthly TURN quota reached: no relayed tunnel, the direct paths stay open.', 'Quota TURN mensuel atteint : plus de tunnel relayé, les chemins directs restent ouverts.', 'Cuota mensual de TURN alcanzada: no hay túnel retransmitido, los caminos directos siguen abiertos.'),
-  sponsor: L('lift it (Supporter)', 'le lever (Supporter)', 'eliminarla (Supporter)'),
+  sponsor: L('raise it (Backer) or lift it (Supporter)', 'l’augmenter (Backer) ou le lever (Supporter)', 'aumentarla (Backer) o eliminarla (Supporter)'),
   updated: L('A new version of this page is ready.', 'Une nouvelle version de cette page est prête.', 'Hay una nueva versión de esta página.'),
   reload: L('Reload', 'Recharger', 'Recargar'),
   install: L('Install the app', 'Installer l’app', 'Instalar la app'),

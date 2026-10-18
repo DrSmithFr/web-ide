@@ -20,6 +20,23 @@ _Avoid_: service
 An optional server that introduces browsers and pods across networks; it carries only signaling, TURN and encrypted data. Hosted at antennae.space, or self-hosted.
 _Avoid_: proxy, server
 
+**Level**
+What an account gives the project, which sets its TURN quota on the relay: free, Backer, Supporter or VIP, from its GitHub sponsorship and the VIP list. The best live one counts; they do not add up.
+_Avoid_: tier (a tier is the price on GitHub Sponsors, a level is what the relay grants), plan, supporter (for the level itself)
+
+**Backer**
+The level of a $2 monthly sponsor: the TURN quota is raised (20 GB on the hosted relay).
+
+**Supporter**
+The level of a $5 monthly sponsor, or of $5 paid once (for 30 days): no TURN quota (fair use).
+_Avoid_: sponsor (for the level: a sponsor is the person on GitHub, at any level)
+
+**VIP**
+The level of a $10 monthly sponsor and above, of $10 or $50 paid once (90 or 360 days), or of a person on the VIP list: no TURN quota, and the VIP badge.
+
+**VIP list**
+The people the admin of a relay makes VIPs by hand (`web-ide-pod relay vip`), by GitHub login or by account id, with an optional end and a note only the admin sees.
+
 **Tunnel**
 The encrypted WebRTC connection between a browser and a pod, or between two pods, set up through the relay.
 _Avoid_: relay link, channel

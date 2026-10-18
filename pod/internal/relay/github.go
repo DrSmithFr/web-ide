@@ -35,8 +35,7 @@ import (
 //     REST API), and the sponsorship webhook of the Sponsors dashboard (HMAC-checked) moves it
 //     between two reads.
 //
-// A supporter sponsors $5 a month or more (any higher tier gives the same), or paid $5 or more
-// once in the last 30 days.
+// What a sponsorship gives is a level (level.go): Backer, Supporter or VIP, by the tier grid.
 
 // GitHubConfig holds what the relay needs of the GitHub app. The client id and secret are the
 // OAuth app (no scope: the identity of the visitor is enough); the token is the maintainer's,
@@ -61,7 +60,7 @@ type GitHub struct {
 
 	mu      sync.Mutex
 	pending map[string]*githubPending // state nonce → the link that asked for it
-	// changed is told the accounts whose supporter state may have moved (a read of the list):
+	// changed is told the accounts whose level may have moved (a read of the list):
 	// the relay tells their pods at once, else they show the old quota until they reconnect.
 	changed func(accounts []string)
 }
@@ -76,41 +75,17 @@ type Sponsor struct {
 	Since   int64  `json:"since"`   // when the sponsorship started (unix seconds)
 }
 
-// The supporter rule: $5 a month or more, or $5 or more paid once, which counts for 30 days.
-const (
-	supporterCents = 500
-	oneTimeLasts   = 30 * 24 * time.Hour
-)
-
-// supporter applies the rule to one sponsorship.
-func (sp Sponsor) supporter(now time.Time) bool {
-	if sp.Cents < supporterCents {
-		return false
-	}
-	return !sp.OneTime || now.Sub(time.Unix(sp.Since, 0)) < oneTimeLasts
-}
-
-// rank orders the sponsorships of one sponsor: a qualifying monthly one, then a qualifying
-// one-time one, then the rest.
-func (sp Sponsor) rank(now time.Time) int {
-	switch {
-	case sp.supporter(now) && !sp.OneTime:
-		return 2
-	case sp.supporter(now):
-		return 1
-	}
-	return 0
-}
-
 // mergeSponsor picks the row a sponsor keeps when a second sponsorship of theirs shows up. A
-// monthly sponsorship replaces a monthly one (a tier change); otherwise the higher rank wins, then
-// the latest.
+// monthly sponsorship replaces a monthly one (a tier change); otherwise the best live level wins
+// (then the one that lasts longer), then the latest.
 func mergeSponsor(old *Sponsor, nw Sponsor, now time.Time) Sponsor {
 	if old == nil || (!old.OneTime && !nw.OneTime) {
 		return nw
 	}
-	if ro, rn := old.rank(now), nw.rank(now); ro != rn {
-		if ro > rn {
+	lo, uo := levelOf(*old, now)
+	ln, un := levelOf(nw, now)
+	if lo != ln || uo != un {
+		if better(lo, uo, ln, un) {
 			return *old
 		}
 		return nw
@@ -230,7 +205,7 @@ func (s *Store) LinkedAccounts(githubID string) ([]string, error) {
 	return out, rows.Err()
 }
 
-// UnlinkGitHub drops the link of an account: the account is no longer a supporter.
+// UnlinkGitHub drops the link of an account: its sponsorship no longer counts.
 func (s *Store) UnlinkGitHub(account string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -274,6 +249,26 @@ func (s *Store) Sponsor(githubID string) (*Sponsor, error) {
 	return getSponsor(s.db.QueryRow, githubID)
 }
 
+// sponsors is the whole cached list.
+func (s *Store) sponsors() ([]Sponsor, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rows, err := s.db.Query("SELECT github_id, login, cents, one_time, since FROM sponsors")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Sponsor
+	for rows.Next() {
+		var sp Sponsor
+		if err := rows.Scan(&sp.ID, &sp.Login, &sp.Cents, &sp.OneTime, &sp.Since); err != nil {
+			return nil, err
+		}
+		out = append(out, sp)
+	}
+	return out, rows.Err()
+}
+
 func getSponsor(query func(string, ...any) *sql.Row, githubID string) (*Sponsor, error) {
 	sp := Sponsor{ID: githubID}
 	err := query("SELECT login, cents, one_time, since FROM sponsors WHERE github_id=?", githubID).
@@ -307,34 +302,12 @@ func (s *Store) UpdateSponsor(sp Sponsor) error {
 }
 
 // CancelSponsor drops the monthly sponsorship of a GitHub id; a one-time payment still counts
-// its 30 days.
+// its days.
 func (s *Store) CancelSponsor(githubID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_, err := s.db.Exec("DELETE FROM sponsors WHERE github_id=? AND one_time=0", githubID)
 	return err
-}
-
-// IsSponsor reports whether a GitHub id is a supporter: on the cached list, under the $5 rule.
-func (s *Store) IsSponsor(githubID string) bool {
-	if githubID == "" {
-		return false
-	}
-	sp, err := s.Sponsor(githubID)
-	return err == nil && sp != nil && sp.supporter(time.Now())
-}
-
-// isSupporter is the quota hook of the TURN server: an account is freed from its monthly quota
-// when the GitHub login it linked is a sponsor.
-func (g *GitHub) isSupporter(account string) bool {
-	if g == nil || account == "" {
-		return false
-	}
-	id, _, err := g.store.GitHubLink(account)
-	if err != nil || id == "" {
-		return false
-	}
-	return g.store.IsSponsor(id)
 }
 
 // startLink is the admin panel asking for the link: the relay hands out a URL the browser opens,
@@ -425,7 +398,7 @@ func (s *Server) serveGitHubCallback(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// A small window that thanks, tells the panel (github-done.js) and closes on its button: the
 	// relay never sees a token again.
-	words := githubDoneWords(r.Header.Get("Accept-Language"), g.isSupporter(p.account))
+	words := githubDoneWords(r.Header.Get("Accept-Language"), s.store.Level(p.account, time.Now()).Level)
 	fmt.Fprintf(w, `<!doctype html><html lang="%s"><meta charset=utf-8>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>%s</title><link rel="stylesheet" href="/_relay/bootstrap.css">
@@ -441,30 +414,40 @@ func (s *Server) serveGitHubCallback(w http.ResponseWriter, r *http.Request) {
 
 // githubDoneWords are the words of the window GitHub sends back to, in the language of the
 // browser: the relay pages follow it.
-type doneWords struct{ lang, title, linked, thanks, thanksSupporter, close string }
+type doneWords struct{ lang, title, linked, thanks, thanksBacker, thanksSupporter, close string }
 
+// thanksSupporter names the level (Supporter or VIP, the words of the badge, never translated).
 var doneCatalog = map[string]doneWords{
 	"en": {"en", "GitHub linked", "This account is now linked to %s.",
-		"Thanks for linking it! Sponsoring Web IDE on GitHub lifts the monthly TURN quota of the relay.",
-		"Thanks for supporting Web IDE, hugs ♥ The relay no longer counts your TURN traffic.", "Close"},
+		"Thanks for linking it! Sponsoring Web IDE on GitHub raises or lifts the monthly TURN quota of the relay.",
+		"Thanks for backing Web IDE ♥ As a Backer, your monthly TURN quota on the relay is raised.",
+		"Thanks for supporting Web IDE, hugs ♥ As a %s, the relay no longer counts your TURN traffic.", "Close"},
 	"fr": {"fr", "GitHub lié", "Ce compte est maintenant lié à %s.",
-		"Merci de l’avoir lié ! Soutenir Web IDE sur GitHub lève le quota TURN mensuel du relay.",
-		"Merci de soutenir Web IDE, des bisous ♥ Le relay ne compte plus votre trafic TURN.", "Fermer"},
+		"Merci de l’avoir lié ! Soutenir Web IDE sur GitHub augmente ou lève le quota TURN mensuel du relay.",
+		"Merci de soutenir Web IDE ♥ En Backer, votre quota TURN mensuel sur le relay est augmenté.",
+		"Merci de soutenir Web IDE, des bisous ♥ En %s, le relay ne compte plus votre trafic TURN.", "Fermer"},
 	"es": {"es", "GitHub vinculado", "Esta cuenta ya está vinculada a %s.",
-		"¡Gracias por vincularla! Patrocinar Web IDE en GitHub elimina la cuota mensual de TURN del relay.",
-		"Gracias por apoyar Web IDE, un abrazo ♥ El relay ya no cuenta tu tráfico TURN.", "Cerrar"},
+		"¡Gracias por vincularla! Patrocinar Web IDE en GitHub aumenta o elimina la cuota mensual de TURN del relay.",
+		"Gracias por respaldar Web IDE ♥ Como Backer, tu cuota mensual de TURN en el relay aumenta.",
+		"Gracias por apoyar Web IDE, un abrazo ♥ Como %s, el relay ya no cuenta tu tráfico TURN.", "Cerrar"},
 }
 
-func githubDoneWords(acceptLanguage string, supporter bool) doneWords {
+func githubDoneWords(acceptLanguage string, lv Level) doneWords {
 	w, ok := doneCatalog[i18n.Detect(acceptLanguage)]
 	if !ok {
 		w = doneCatalog["en"]
 	}
-	if supporter {
-		w.thanks = w.thanksSupporter
+	switch {
+	case lv == LevelBacker:
+		w.thanks = w.thanksBacker
+	case lv >= LevelSupporter:
+		w.thanks = fmt.Sprintf(w.thanksSupporter, levelBadgeWords[lv])
 	}
 	return w
 }
+
+// levelBadgeWords are the words of the badges, the same in every language.
+var levelBadgeWords = map[Level]string{LevelBacker: "Backer", LevelSupporter: "Supporter", LevelVIP: "VIP"}
 
 // exchange trades the code for a token. The token is used once, by user, and never stored.
 func (g *GitHub) exchange(ctx context.Context, code string) (string, error) {
@@ -731,8 +714,9 @@ func (s *Server) serveGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// tellQuota sends the TURN month to the pods of these accounts: a supporter state that moved (a
-// GitHub link, a sponsorship) shows in their Settings at once, not at their next connection.
+// tellQuota sends the TURN month to the pods of these accounts: a level that moved (a
+// GitHub link, a sponsorship, the VIP list) shows in their Settings at once, not at their next
+// connection.
 func (s *Server) tellQuota(accounts []string) {
 	if s.turn == nil || len(accounts) == 0 {
 		return

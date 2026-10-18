@@ -14,6 +14,25 @@ import (
 	"time"
 )
 
+// isSponsor: the row of a GitHub id lifts the quota (Supporter or above).
+func isSponsor(st *Store, githubID string) bool {
+	sp, err := st.Sponsor(githubID)
+	if err != nil || sp == nil {
+		return false
+	}
+	lv, _ := levelOf(*sp, time.Now())
+	return lv >= LevelSupporter
+}
+
+// isSupporter: the level of an account lifts the quota.
+func isSupporter(st *Store, account string) bool {
+	return st.Level(account, time.Now()).Level >= LevelSupporter
+}
+
+func levelHook(st *Store) func(string) AccountLevel {
+	return func(key string) AccountLevel { return st.Level(key, time.Now()) }
+}
+
 func newGitHubStore(t *testing.T) *Store {
 	t.Helper()
 	st, err := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
@@ -43,7 +62,7 @@ func TestGitHubLinkStore(t *testing.T) {
 	if err := st.SaveSponsors([]Sponsor{{ID: "77", Login: "other", Cents: 500}}); err != nil {
 		t.Fatal(err)
 	}
-	if !st.IsSponsor("77") || st.IsSponsor("42") || st.IsSponsor("") {
+	if !isSponsor(st, "77") || isSponsor(st, "42") || isSponsor(st, "") {
 		t.Fatal("the sponsor list is what counts")
 	}
 	if err := st.UnlinkGitHub("acct-1"); err != nil {
@@ -74,13 +93,13 @@ func TestGitHubSupporter(t *testing.T) {
 	if err := st.SaveSponsors([]Sponsor{{ID: "77", Login: "drsmith", Cents: 500}}); err != nil {
 		t.Fatal(err)
 	}
-	if !g.isSupporter("acct-sponsor") {
+	if !isSupporter(st, "acct-sponsor") {
 		t.Fatal("a linked sponsor is a supporter")
 	}
-	if g.isSupporter("acct-plain") {
+	if isSupporter(st, "acct-plain") {
 		t.Fatal("a linked login that does not sponsor is not")
 	}
-	if g.isSupporter("acct-none") || g.isSupporter("") {
+	if isSupporter(st, "acct-none") || isSupporter(st, "") {
 		t.Fatal("an account with no link is not")
 	}
 }
@@ -167,7 +186,6 @@ func TestGitHubOAuth(t *testing.T) {
 // linked but does not sponsor stays under the quota.
 func TestGitHubQuotaLifted(t *testing.T) {
 	st := newGitHubStore(t)
-	g := NewGitHub(GitHubConfig{ClientID: "id", ClientSecret: "secret"}, st)
 	if err := st.LinkGitHub("acct-sponsor", "77", "drsmith"); err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +204,7 @@ func TestGitHubQuotaLifted(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	turn, _ := startTurn(t, st, TurnConfig{AdvertiseIP: "127.0.0.1", Quota: 1000, Supporter: g.isSupporter})
+	turn, _ := startTurn(t, st, TurnConfig{AdvertiseIP: "127.0.0.1", Quota: 1000, Level: levelHook(st)})
 	defer turn.Close()
 	if _, _, err := turn.Creds("acct-sponsor", "acct-sponsor", time.Hour); err != nil {
 		t.Fatalf("a sponsor over the quota: %v", err)
@@ -202,26 +220,72 @@ func TestGitHubQuotaLifted(t *testing.T) {
 	}
 }
 
-// TestSponsorRule: $5 a month or more counts, any higher tier the same; a one-time payment of $5
-// or more counts for 30 days.
+// TestSponsorRule: the tier grid of #87, monthly and one-time, at every threshold and on both
+// sides of the end of a one-time payment.
 func TestSponsorRule(t *testing.T) {
-	st := newGitHubStore(t)
 	now := time.Now()
-	days := func(n int) int64 { return now.Add(-time.Duration(n) * 24 * time.Hour).Unix() }
-	if err := st.SaveSponsors([]Sponsor{
-		{ID: "1", Cents: 500, Since: days(400)},
-		{ID: "2", Cents: 10000, Since: days(3)},
-		{ID: "3", Cents: 300, Since: days(3)},
-		{ID: "4", Cents: 2500, OneTime: true, Since: days(10)},
-		{ID: "5", Cents: 2500, OneTime: true, Since: days(40)},
-		{ID: "6", Cents: 200, OneTime: true, Since: days(1)},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	for id, want := range map[string]bool{"1": true, "2": true, "3": false, "4": true, "5": false, "6": false, "9": false} {
-		if got := st.IsSponsor(id); got != want {
-			t.Errorf("sponsor %s: supporter %v, want %v", id, got, want)
+	days := func(n int) int64 { return now.Add(-time.Duration(n) * day).Unix() }
+	for _, c := range []struct {
+		name  string
+		sp    Sponsor
+		want  Level
+		lasts int // days left, 0: no end
+	}{
+		{"monthly $1", Sponsor{Cents: 100}, LevelFree, 0},
+		{"monthly $1.99", Sponsor{Cents: 199}, LevelFree, 0},
+		{"monthly $2", Sponsor{Cents: 200, Since: days(400)}, LevelBacker, 0},
+		{"monthly $4.99", Sponsor{Cents: 499}, LevelBacker, 0},
+		{"monthly $5", Sponsor{Cents: 500}, LevelSupporter, 0},
+		{"monthly $7", Sponsor{Cents: 700}, LevelSupporter, 0},
+		{"monthly $10", Sponsor{Cents: 1000}, LevelVIP, 0},
+		{"monthly $49", Sponsor{Cents: 4900}, LevelVIP, 0},
+		{"monthly $50 (Team)", Sponsor{Cents: 5000}, LevelVIP, 0},
+		{"one-time $2", Sponsor{Cents: 200, OneTime: true, Since: days(1)}, LevelFree, 0},
+		{"one-time $4.99", Sponsor{Cents: 499, OneTime: true, Since: days(1)}, LevelFree, 0},
+		{"one-time $5 day 29", Sponsor{Cents: 500, OneTime: true, Since: days(29)}, LevelSupporter, 1},
+		{"one-time $5 day 31", Sponsor{Cents: 500, OneTime: true, Since: days(31)}, LevelFree, 0},
+		{"one-time $7", Sponsor{Cents: 700, OneTime: true, Since: days(0)}, LevelSupporter, 30},
+		{"one-time $10 day 89", Sponsor{Cents: 1000, OneTime: true, Since: days(89)}, LevelVIP, 1},
+		{"one-time $10 day 91", Sponsor{Cents: 1000, OneTime: true, Since: days(91)}, LevelFree, 0},
+		{"one-time $49", Sponsor{Cents: 4900, OneTime: true, Since: days(0)}, LevelVIP, 90},
+		{"one-time $50", Sponsor{Cents: 5000, OneTime: true, Since: days(200)}, LevelVIP, 160},
+		{"one-time $50 day 361", Sponsor{Cents: 5000, OneTime: true, Since: days(361)}, LevelFree, 0},
+	} {
+		lv, until := levelOf(c.sp, now)
+		left := 0
+		if until > 0 {
+			left = int((time.Unix(until, 0).Sub(now) + day/2) / day)
 		}
+		if lv != c.want || left != c.lasts {
+			t.Errorf("%s: %v with %d days left, want %v with %d", c.name, lv, left, c.want, c.lasts)
+		}
+	}
+}
+
+// TestSponsorMerge: two sponsorships of one sponsor do not add up, the best live one counts; a
+// monthly one replaces a monthly one (a tier change, down too).
+func TestSponsorMerge(t *testing.T) {
+	now := time.Now()
+	days := func(n int) int64 { return now.Add(-time.Duration(n) * day).Unix() }
+	backer := Sponsor{Cents: 200, Since: days(300)}
+	vipOnce := Sponsor{Cents: 1000, OneTime: true, Since: days(10)}
+	if got := mergeSponsor(&backer, vipOnce, now); got != vipOnce {
+		t.Errorf("a live VIP payment wins over a Backer: %+v", got)
+	}
+	if got := mergeSponsor(&vipOnce, backer, now); got != vipOnce {
+		t.Errorf("in either order: %+v", got)
+	}
+	ended := Sponsor{Cents: 5000, OneTime: true, Since: days(400)}
+	if got := mergeSponsor(&backer, ended, now); got != backer {
+		t.Errorf("an ended payment never wins: %+v", got)
+	}
+	supporter := Sponsor{Cents: 500, Since: days(300)}
+	supOnce := Sponsor{Cents: 500, OneTime: true, Since: days(2)}
+	if got := mergeSponsor(&supOnce, supporter, now); got != supporter {
+		t.Errorf("at one level, the one with no end wins: %+v", got)
+	}
+	if got := mergeSponsor(&supporter, backer, now); got != backer {
+		t.Errorf("a monthly one replaces a monthly one: %+v", got)
 	}
 }
 
@@ -281,7 +345,7 @@ func TestGitHubWebhook(t *testing.T) {
 	}
 
 	send("created", 500, false)
-	if !g.isSupporter("acct-1") {
+	if !isSupporter(st, "acct-1") {
 		t.Fatal("a $5 sponsorship makes the account a supporter")
 	}
 	body := sponsorshipEvent("created", 4242, 500, false, time.Now())
@@ -289,30 +353,30 @@ func TestGitHubWebhook(t *testing.T) {
 		t.Fatalf("a bad signature is refused: %d", code)
 	}
 	send("pending_cancellation", 500, false)
-	if !g.isSupporter("acct-1") {
+	if !isSupporter(st, "acct-1") {
 		t.Fatal("a pending cancellation keeps the perks until the end of the paid period")
 	}
 	send("tier_changed", 300, false)
-	if g.isSupporter("acct-1") {
-		t.Fatal("a tier change down to $3 ends the perks")
+	if lv := st.Level("acct-1", time.Now()).Level; lv != LevelBacker {
+		t.Fatalf("a tier change down to $3 makes a Backer: %v", lv)
 	}
 	send("tier_changed", 1500, false)
-	if !g.isSupporter("acct-1") {
+	if !isSupporter(st, "acct-1") {
 		t.Fatal("a tier change up to $15 gives them back")
 	}
 	send("cancelled", 1500, false)
-	if g.isSupporter("acct-1") {
+	if isSupporter(st, "acct-1") {
 		t.Fatal("a cancelled sponsorship ends the tier")
 	}
 	send("created", 1000, true)
-	if !g.isSupporter("acct-1") {
+	if !isSupporter(st, "acct-1") {
 		t.Fatal("a one-time payment of $10 counts")
 	}
 	send("cancelled", 1000, true)
-	if !g.isSupporter("acct-1") {
+	if !isSupporter(st, "acct-1") {
 		t.Fatal("a cancel never drops a one-time payment")
 	}
-	if !st.IsSponsor("7") {
+	if !isSponsor(st, "7") {
 		t.Fatal("the events never touch the other rows")
 	}
 }
@@ -380,9 +444,10 @@ func TestGitHubSponsorsRefresh(t *testing.T) {
 			// An organization: the User fragment does not match, GitHub answers an empty entity.
 			map[string]any{"isActive": true, "isOneTimePayment": false, "createdAt": ago(5).UTC().Format(time.RFC3339),
 				"tier": map[string]any{"monthlyPriceInCents": 10000}, "sponsorEntity": map[string]any{}},
-			sponsorshipNode(40, "old-once", 1000, true, false, ago(40)),
-			// A monthly sponsor who also paid once keeps the monthly row.
-			sponsorshipNode(4242, "drsmith", 2000, true, false, ago(50)),
+			// $10 once is a VIP for 90 days: this one ended.
+			sponsorshipNode(40, "old-once", 1000, true, false, ago(95)),
+			// A monthly sponsor whose one-time payment ended keeps the monthly row.
+			sponsorshipNode(4242, "drsmith", 2000, true, false, ago(100)),
 		))
 	}))
 	defer fake.Close()
@@ -392,7 +457,7 @@ func TestGitHubSponsorsRefresh(t *testing.T) {
 		t.Fatal(err)
 	}
 	for id, want := range map[string]bool{"4242": true, "3": false, "8": false, "10": true, "40": false, "999": false} {
-		if got := st.IsSponsor(id); got != want {
+		if got := isSponsor(st, id); got != want {
 			t.Errorf("sponsor %s: supporter %v, want %v", id, got, want)
 		}
 	}
@@ -420,7 +485,7 @@ func TestGitHubSponsorsRefreshError(t *testing.T) {
 	if err := g.refreshSponsors(context.Background()); err == nil || !strings.Contains(err.Error(), "scopes") {
 		t.Fatalf("the error of GitHub is told: %v", err)
 	}
-	if !st.IsSponsor("7") {
+	if !isSponsor(st, "7") {
 		t.Fatal("a failed read keeps the cached list")
 	}
 }
@@ -453,7 +518,7 @@ func TestGitHubTellsPods(t *testing.T) {
 	st, _ := OpenStore(filepath.Join(relayDir(t), "relay.db"))
 	t.Cleanup(func() { st.Close() })
 	g := NewGitHub(GitHubConfig{ClientID: "id", ClientSecret: "secret", WebhookSecret: "s3cret"}, st)
-	turn, _ := startTurn(t, st, TurnConfig{AdvertiseIP: "127.0.0.1", Quota: 1000, Supporter: g.isSupporter})
+	turn, _ := startTurn(t, st, TurnConfig{AdvertiseIP: "127.0.0.1", Quota: 1000, Level: levelHook(st)})
 	t.Cleanup(func() { turn.Close() })
 	srv := New(st, turn)
 	srv.GitHub = g

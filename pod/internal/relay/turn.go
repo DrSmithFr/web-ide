@@ -38,7 +38,8 @@ type Turn struct {
 	allocs int             // allocations open right now (#72: one of them takes one relay port)
 	usage  *usageRegistry
 	quota  int64 // bytes per month per key (0: no limit)
-	supp   func(key string) bool
+	backer int64 // the quota of a Backer (#87)
+	level  func(key string) AccountLevel
 	stop   chan struct{}
 }
 
@@ -47,18 +48,40 @@ type Turn struct {
 var errQuota = errors.New("quota")
 
 // QuotaState is what the relay knows of the TURN month of a key: the bytes it moved, the
-// monthly limit (0: none) and whether the account is freed from it. It travels to the pod
-// (Settings > Remote access) and to the bootstrap page.
+// monthly limit (0: none), the level of the account (#87) and whether it is over. It travels to
+// the pod (Settings > Remote access) and to the bootstrap page. Supporter (no quota) stays for
+// the pods that read only it; Sponsor and VIP are the sources of the level, for the badge.
 type QuotaState struct {
-	Used      int64 `json:"used"`
-	Limit     int64 `json:"limit"`
-	Supporter bool  `json:"supporter,omitempty"`
-	Over      bool  `json:"over,omitempty"`
+	Used      int64  `json:"used"`
+	Limit     int64  `json:"limit"`
+	Supporter bool   `json:"supporter,omitempty"`
+	Level     string `json:"level,omitempty"`
+	Until     int64  `json:"until,omitempty"`
+	Sponsor   string `json:"sponsor,omitempty"`
+	VIP       bool   `json:"vip,omitempty"`
+	Over      bool   `json:"over,omitempty"`
 }
 
-// isSupporter reports whether this key is freed from the quota.
-func (t *Turn) isSupporter(key string) bool {
-	return t.supp != nil && t.supp(key)
+// levelOf reads the level of a key (free without a hook: a relay with no levels).
+func (t *Turn) levelOf(key string) AccountLevel {
+	if t.level == nil || key == "" {
+		return AccountLevel{}
+	}
+	return t.level(key)
+}
+
+// limit is the monthly quota of a level: -quota for free, -quota-backer (twice -quota unset) for a
+// Backer, none above. A relay with no -quota has no limit at any level.
+func (t *Turn) limit(lv Level) int64 {
+	switch {
+	case t.quota <= 0 || lv >= LevelSupporter:
+		return 0
+	case lv == LevelBacker && t.backer > 0:
+		return t.backer
+	case lv == LevelBacker:
+		return 2 * t.quota
+	}
+	return t.quota
 }
 
 // used is what a key moved this month: what the base already holds, plus what its live
@@ -78,9 +101,11 @@ func (t *Turn) used(key string) int64 {
 // QuotaState reads the month of a key. An account over its quota is told so before it dials,
 // not after a failed tunnel.
 func (t *Turn) QuotaState(key string) *QuotaState {
-	st := &QuotaState{Limit: t.quota, Supporter: t.isSupporter(key)}
+	al := t.levelOf(key)
+	st := &QuotaState{Limit: t.limit(al.Level), Supporter: al.Level >= LevelSupporter,
+		Level: al.Level.wire(), Until: al.Until, Sponsor: al.Sponsor.wire(), VIP: al.VIP}
 	st.Used = t.used(key)
-	st.Over = st.Limit > 0 && !st.Supporter && st.Used >= st.Limit
+	st.Over = st.Limit > 0 && st.Used >= st.Limit
 	return st
 }
 
@@ -192,9 +217,10 @@ type TurnConfig struct {
 	// Quota: the bytes one key (an account, or a pod while it is unpaired) may move through
 	// TURN in a month. 0: no limit, which is what a self-hosted relay wants.
 	Quota int64
-	// Supporter reports whether a key is freed from the quota (a GitHub Sponsors link, see
-	// github.go). nil: nobody is, which is what a self-hosted relay wants too.
-	Supporter func(key string) bool
+	// QuotaBacker: the quota of a Backer (0: twice Quota).
+	QuotaBacker int64
+	// Level reads the level of a key (level.go), which sets its quota. nil: everyone is free.
+	Level func(key string) AccountLevel
 }
 
 // NewTurn starts the embedded TURN/STUN server. It binds the control listeners on every
@@ -237,7 +263,8 @@ func NewTurn(st *Store, cfg TurnConfig) (*Turn, error) {
 		active: map[string]bool{},
 		usage:  usage,
 		quota:  cfg.Quota,
-		supp:   cfg.Supporter,
+		backer: cfg.QuotaBacker,
+		level:  cfg.Level,
 		stop:   make(chan struct{}),
 	}
 	t.ice = iceURLs(cfg, addrs)
@@ -578,13 +605,11 @@ func (t *Turn) Creds(podID, key string, ttl time.Duration) (user, pass string, e
 	if key == "" {
 		key = podID
 	}
-	// The monthly quota of the hosted relay (-quota): a supporter is freed from it, and a
-	// self-hosted relay has none (Quota 0). Refusing here only closes the relayed path — the
-	// browser and the pod still try their direct and STUN candidates.
-	if t.quota > 0 && !t.isSupporter(key) {
-		if t.used(key) >= t.quota {
-			return "", "", errQuota
-		}
+	// The monthly quota of the hosted relay (-quota), by level: a Backer has more, a Supporter
+	// none, and a self-hosted relay has none at all (Quota 0). Refusing here only closes the
+	// relayed path — the browser and the pod still try their direct and STUN candidates.
+	if limit := t.limit(t.levelOf(key).Level); limit > 0 && t.used(key) >= limit {
+		return "", "", errQuota
 	}
 	user, pass, err = turnserver.GenerateLongTermTURNRESTCredentials(string(t.secret), key, ttl)
 	if err != nil {
