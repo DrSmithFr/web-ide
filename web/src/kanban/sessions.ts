@@ -58,13 +58,11 @@ export async function openTicketChat(chatId: string) {
 }
 
 /**
- * Development, correction or conflict resolution: the conversation works in the worktree
- * of the ticket (created on the way), which the window shows. With a development agent
- * (kanban settings), it is the session of the ticket in the Agents tool.
+ * Starts the development of a ticket: its branch and worktree (setup commands included),
+ * In progress, the worktree shown in the window. No conversation: the user starts the
+ * session (docs/design/kanban.md). Answers whether the work may go on.
  */
-export async function startWorkSession(tk: Ticket, role: ChatRole, feedback?: Feedback, force = false, adoptedBy?: string, effort?: 'auto' | Effort) {
-  const work = () => (devAgent() ? startAgentSession(tk, role, firstMessage[role](tk, feedback), feedback?.id) : startTicketChat(tk, role, undefined, feedback, adoptedBy, effort))
-  if (project()?.ticket === tk.id) return work()
+export async function startDevelopment(tk: Ticket, force = false): Promise<boolean> {
   let target: string
   try {
     target = (await startWork(tk.id, '', force)).project
@@ -72,18 +70,28 @@ export async function startWorkSession(tk: Ticket, role: ChatRole, feedback?: Fe
     const msg = (e as Error).message
     if (e instanceof RpcError && e.code === 'not_git' && confirm(t('{error}.\n\nDevelop in the project folder, without branch or worktree?', { error: msg }))) {
       if (tk.status === 'todo') await moveTicket(tk.id, 'in_progress', 'user', '', force).catch(() => {})
-      return startTicketChat(tk, role, undefined, feedback, adoptedBy, effort)
+      return true
     }
     errorToast(e)
-    return
+    return false
   }
   try {
     await showWorktree(target)
   } catch (e) {
     errorToast(e)
-    return
+    return false
   }
-  return work()
+  return true
+}
+
+/**
+ * Development, correction or conflict resolution: the conversation works in the worktree
+ * of the ticket (created on the way), which the window shows. With a development agent
+ * (kanban settings), it is the session of the ticket in the Agents tool.
+ */
+export async function startWorkSession(tk: Ticket, role: ChatRole, feedback?: Feedback, force = false, adoptedBy?: string, effort?: 'auto' | Effort) {
+  if (project()?.ticket !== tk.id && !(await startDevelopment(tk, force))) return
+  return devAgent() ? startAgentSession(tk, role, firstMessage[role](tk, feedback), feedback?.id) : startTicketChat(tk, role, undefined, feedback, adoptedBy, effort)
 }
 
 /** Shows the worktree of a ticket in the window. */

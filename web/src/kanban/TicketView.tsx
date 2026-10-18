@@ -182,7 +182,16 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
               <For each={Object.entries(sizeNames)}>{([v, l]) => <option value={v}>{t('Size {size}', { size: l })}</option>}</For>
             </select>
           </Show>
-          <ComplexitySelect value={tk().complexity} onChange={(c) => props.apply(updateTicket(tk().id, { complexity: c }))} testid="ticket-complexity" />
+          <Show
+            when={tk().status === 'new' || tk().status === 'todo'}
+            fallback={
+              <span class="badge" title={t('Fixed once the development started')} data-testid="ticket-complexity">
+                {tk().complexity ? complexityLabels[tk().complexity!] : t('Complexity not estimated')}
+              </span>
+            }
+          >
+            <ComplexitySelect value={tk().complexity} onChange={(c) => props.apply(updateTicket(tk().id, { complexity: c }))} testid="ticket-complexity" />
+          </Show>
           <span class="muted small">{t('created on {date}', { date: fmtDate(tk().created) })}</span>
           <TicketAgentStats ticket={tk().id} />
           <span class="grow" />

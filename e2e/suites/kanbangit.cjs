@@ -98,7 +98,7 @@ run(async ({ page, ctx }) => {
     await page.waitForSelector('[data-testid=ticket-status]:has-text("To do")')
     await page.waitForSelector('[data-testid=ticket-goal]')
 
-    // Start: branch + worktree, shown in the same window, which runs the conversation.
+    // Start: branch + worktree, shown in the same window; Dev session runs the conversation there.
     const pages = ctx.pages().length
     await page.click('[data-testid=ticket-start]')
     const wt = repo + '/.ide/worktrees/1-data-export'
@@ -113,6 +113,9 @@ run(async ({ page, ctx }) => {
     assert(!fs.existsSync(wt + '/.ide'), 'no .ide in the worktree')
     await page.click('.rail-left .rail-btn[title="Explorer"]')
     await page.waitForSelector(`.explorer .tree-row[data-path="${wt}/src"] .file-icon.mark-source`, { timeout: 5000 })
+    assert(requests.length === 0, 'Start development starts no conversation')
+    await page.click('.pane .tab:has-text("#1")')
+    await page.click('[data-testid=ticket-dev-session]')
     await page.waitForSelector('.ai-msg.assistant:not(.live) .md:has-text("Fait.")', { timeout: 20000 })
     const r0 = requests[0]
     const bashOut = (requests[1].messages.find((m) => m.tool_call_id === 'b1') ?? {}).content ?? ''

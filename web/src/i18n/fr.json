@@ -239,7 +239,6 @@
   "Create and open": "Créer et ouvrir",
   "Created from {branch}": "Créée depuis {branch}",
   "created on {date}": "créé le {date}",
-  "Creates the branch and the worktree of the ticket, then starts a development conversation in its window": "Crée la branche et le worktree du ticket, puis lance une conversation de développement dans sa fenêtre",
   "Creates the ticket": "Crée le ticket",
   "Critical": "Critique",
   "Ctrl+click: open in the editor": "Ctrl+clic : ouvrir dans l’éditeur",
@@ -1571,7 +1570,6 @@
   "Abandoned: it never resolves": "Abandonné : ne sera jamais résolu",
   "Not merged yet": "Pas encore fusionné",
   "Wait for another ticket": "Attendre un autre ticket",
-  "Starts this step in the worktree of #{id}, then a development conversation in its window": "Démarre cette étape dans le worktree de #{id}, puis une conversation de développement dans sa fenêtre",
   "Start anyway…": "Démarrer quand même…",
   "Ticket #{id} waits for {blockers}. Start it anyway?": "Le ticket #{id} attend {blockers}. Le démarrer quand même ?",
   "Validate the step": "Valider l'étape",
@@ -2108,5 +2106,10 @@
   "Back": "Retour",
   "Help": "Aide",
   "Help: open the documentation page": "Aide : ouvrir la page de documentation",
-  "Not in the embedded documentation: {path}": "Ne fait pas partie de la documentation embarquée : {path}"
+  "Not in the embedded documentation: {path}": "Ne fait pas partie de la documentation embarquée : {path}",
+  "Open the roadmap": "Ouvrir la feuille de route",
+  "Starts this step in the worktree of #{id}; the development session is started from the ticket": "Démarre cette étape dans le worktree de #{id} ; la session de développement se lance depuis le ticket",
+  "Creates the branch and the worktree of the ticket; the development session is started from the ticket": "Crée la branche et le worktree du ticket ; la session de développement se lance depuis le ticket",
+  "Dev session": "Session de dev",
+  "A development session in the worktree, following the plan": "Une session de développement dans le worktree, qui suit le plan"
 }

@@ -172,7 +172,7 @@
   "unknown size: %s (%s)": "taille inconnue : %s (%s)",
   "unknown complexity: %s (%s)": "complexité inconnue : %s (%s)",
   "%d test feedback(s) not handled yet": "%d retour(s) de test pas encore traité(s)",
-  "the priority and the size are fixed once the development started": "la priorité et la taille sont figées une fois le développement commencé",
+  "the priority, the size and the complexity are fixed once the development started": "la priorité, la taille et la complexité sont figées une fois le développement commencé",
   "Nothing to compact": "Rien à compacter",
   "No model for the compaction": "Aucun modèle pour la compaction",
   "the model returned an empty summary": "le modèle a renvoyé un résumé vide",

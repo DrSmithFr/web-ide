@@ -12,6 +12,12 @@ run(async ({ page, ctx }) => {
   await page.click('[data-testid=kanban-open-board]')
   await page.waitForSelector('[data-testid=kanban-board]')
   assert((await page.$$('.kb-col')).length === 4, 'four active columns: New, To do, In progress, To test')
+  await page.click('[data-testid=kanban-open-roadmap]')
+  await page.waitForSelector('[data-testid=kanban-view-roadmap][aria-pressed=true]')
+  assert(true, 'the side panel opens the open board on the Roadmap')
+  await page.click('[data-testid=kanban-open-board]')
+  await page.waitForSelector('[data-testid=kanban-view-board][aria-pressed=true]')
+  assert(true, 'and back on the Board')
 
   // New ticket.
   await page.click('[data-testid=kanban-new]')
@@ -127,7 +133,10 @@ run(async ({ page, ctx }) => {
     (await page.isVisible('.tk-meta-row span.badge:has-text("priority")')) && (await page.isVisible('span[data-testid=ticket-size]')) && !(await page.$('.tk-meta-row select:not([data-testid=ticket-complexity])')),
     'In progress: priority and size fixed, shown as badges',
   )
-  assert((await header()).join() === 'Review · Sonnet,Send to testing', 'In progress: Review (Sonnet for a medium ticket) and Send to testing in the header: ' + (await header()).join())
+  assert((await page.textContent('span[data-testid=ticket-complexity]')) === 'Medium complexity', 'In progress: complexity fixed, shown as a badge')
+  assert(!(await page.$('[data-testid=ai-ticket-bar]')), 'Start development starts no conversation')
+  assert((await header()).join() === 'Review · Sonnet,Dev session,Send to testing', 'In progress: Review (Sonnet for a medium ticket), Dev session (no session yet) and Send to testing in the header: ' + (await header()).join())
+  assert(await page.isVisible('.tk-meta-row .btn.primary[data-testid=ticket-dev-session]'), 'Dev session is the main action while no development session exists')
   await page.click('[data-testid=ticket-review-with]')
   assert((await page.$$eval('.ctx-menu button', (l) => l.map((e) => e.textContent.trim()))).join() === 'With Claude Opus,With Claude Sonnet★', 'Review: Claude Opus or Sonnet, Sonnet recommended for a medium ticket')
   await page.keyboard.press('Escape')
@@ -154,7 +163,7 @@ run(async ({ page, ctx }) => {
   assert((await header()).join() === 'Add feedback,Review · Sonnet,Fix feedbacks', 'an open feedback: Fix feedbacks instead of Validate: ' + (await header()).join())
   assert(await page.isVisible('[data-testid=ticket-feedback-item] [data-testid=ticket-feedback-session]'), 'fix session offered for an open feedback')
   // Routing by complexity: a hard feedback is fixed with the most effort, or Claude Opus.
-  assert((await page.$eval('[data-testid=ticket-complexity]', (e) => e.value)) === 'medium', 'complexity of the ticket, written with the plan')
+  assert((await page.textContent('[data-testid=ticket-complexity]')) === 'Medium complexity', 'complexity of the ticket, written with the plan')
   await page.selectOption('[data-testid=ticket-feedback-item] [data-testid=ticket-feedback-complexity]', 'high')
   await page.waitForSelector('[data-testid=ticket-feedback-item] [data-testid=ticket-feedback-session]:has-text("Max")')
   await page.click('[data-testid=ticket-feedback-item] [data-testid=ticket-feedback-session-with]')

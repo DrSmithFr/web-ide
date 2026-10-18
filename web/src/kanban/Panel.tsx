@@ -23,8 +23,11 @@ export function KanbanPanel() {
         <button class="icon-btn" title={t('Refresh')} onClick={() => refreshBoard()}>
           <Icon name="refresh" size={14} />
         </button>
-        <button class="icon-btn" title={t('Open the board')} onClick={openBoard} data-testid="kanban-open-board">
-          <Icon name="kanban" size={14} />
+        <button class="btn small" title={t('Open the board')} onClick={() => openBoard('board')} data-testid="kanban-open-board">
+          <Icon name="kanban" size={13} /> {t('Board')}
+        </button>
+        <button class="btn small" title={t('Open the roadmap')} onClick={() => openBoard('roadmap')} data-testid="kanban-open-roadmap">
+          <Icon name="history" size={13} /> {t('Roadmap')}
         </button>
       </div>
       <div class="panel-body kb-panel">

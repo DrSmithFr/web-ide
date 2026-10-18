@@ -311,6 +311,9 @@ run(async ({ page }) => {
     // Not a git repository: after confirmation, development in the project folder itself.
     const before2 = requests.length
     await page.click('[data-testid=ticket-start]')
+    await page.waitForSelector('[data-testid=ticket-status]:has-text("In progress")', { timeout: 15000 })
+    assert(requests.length === before2, 'Start development starts no conversation')
+    await page.click('[data-testid=ticket-dev-session]')
     await page.waitForSelector('[data-testid=ticket-status]:has-text("To test")', { timeout: 15000 })
     const rd = requests[before2]
     assert(rd.messages[0].content.includes('You **develop** this ticket') && toolNames(rd).includes('edit_file'), 'dev role in Build mode')

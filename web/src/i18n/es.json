@@ -239,7 +239,6 @@
   "Create and open": "Crear y abrir",
   "Created from {branch}": "Creado a partir de {branch}",
   "created on {date}": "creado el {date}",
-  "Creates the branch and the worktree of the ticket, then starts a development conversation in its window": "Crea la rama y el worktree del ticket y luego inicia una conversación de desarrollo en su ventana",
   "Creates the ticket": "Crea el ticket",
   "Critical": "Crítica",
   "Ctrl+click: open in the editor": "Ctrl+clic: abrir en el editor",
@@ -1571,7 +1570,6 @@
   "Abandoned: it never resolves": "Abandonado: nunca se resuelve",
   "Not merged yet": "Aún sin fusionar",
   "Wait for another ticket": "Esperar a otro ticket",
-  "Starts this step in the worktree of #{id}, then a development conversation in its window": "Inicia este paso en el worktree de #{id} y luego una conversación de desarrollo en su ventana",
   "Start anyway…": "Iniciar de todos modos…",
   "Ticket #{id} waits for {blockers}. Start it anyway?": "El ticket #{id} espera a {blockers}. ¿Iniciarlo de todos modos?",
   "Validate the step": "Validar el paso",
@@ -2108,5 +2106,10 @@
   "Back": "Atrás",
   "Help": "Ayuda",
   "Help: open the documentation page": "Ayuda: abrir la página de documentación",
-  "Not in the embedded documentation: {path}": "No está en la documentación integrada: {path}"
+  "Not in the embedded documentation: {path}": "No está en la documentación integrada: {path}",
+  "Open the roadmap": "Abrir la hoja de ruta",
+  "Starts this step in the worktree of #{id}; the development session is started from the ticket": "Inicia este paso en el worktree de #{id}; la sesión de desarrollo se inicia desde el ticket",
+  "Creates the branch and the worktree of the ticket; the development session is started from the ticket": "Crea la rama y el worktree del ticket; la sesión de desarrollo se inicia desde el ticket",
+  "Dev session": "Sesión de desarrollo",
+  "A development session in the worktree, following the plan": "Una sesión de desarrollo en el worktree, siguiendo el plan"
 }

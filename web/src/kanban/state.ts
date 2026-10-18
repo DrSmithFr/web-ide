@@ -373,7 +373,30 @@ export function openWorktreeWindow(projectId: string, assistant = false) {
 
 // ---------- tabs ----------
 
-export function openBoard() {
+export type BoardView = 'board' | 'roadmap'
+const VIEW_KEY = 'webide.kanban.view'
+function savedView(): BoardView {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'roadmap' ? 'roadmap' : 'board'
+  } catch {
+    return 'board'
+  }
+}
+
+/** The view of the board, shared by its tabs and remembered by the browser. */
+export const [boardView, setBoardViewSignal] = createSignal<BoardView>(savedView())
+export function setBoardView(v: BoardView) {
+  setBoardViewSignal(v)
+  try {
+    localStorage.setItem(VIEW_KEY, v)
+  } catch {
+    /* private mode: the choice lasts for this window */
+  }
+}
+
+/** Opens the board, on a view when given. */
+export function openBoard(view?: BoardView) {
+  if (view) setBoardView(view)
   openTab({ kind: 'kanban', title: 'Kanban' })
 }
 
