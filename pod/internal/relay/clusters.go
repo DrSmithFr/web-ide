@@ -15,18 +15,18 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 )
 
-// Sites and gateways (milestone 3). Each pod reports the pods it sees on its LAN (the `site`
+// Clusters and gateways (milestone 3). Each pod reports the pods it sees on its LAN (the `site`
 // message); the connected components of those edges, among the pods of an account that proved
-// possession of the device key their certificate names, are the sites. The relay elects one
-// gateway per site: the pod the user marked preferred, else the one online the longest. A
+// possession of the device key their certificate names, are the clusters. The relay elects one
+// gateway per cluster: the pod the user marked preferred, else the one online the longest. A
 // gateway whose link drops without saying bye keeps the role for a moment, so a flaky link does
-// not move the entry point of the site.
+// not move the entry point of the cluster.
 //
 // The relay is not trusted for identity here either: it only says who is online and where.
 
-// siteGrace is how long a gateway that dropped without saying bye keeps the role. A var so the
+// clusterGrace is how long a gateway that dropped without saying bye keeps the role. A var so the
 // tests do not wait ten seconds for a failover.
-var siteGrace = 10 * time.Second
+var clusterGrace = 10 * time.Second
 
 // proofTimeout is how long a link that announced a proof of possession has to answer the nonce.
 const proofTimeout = 10 * time.Second
@@ -38,7 +38,7 @@ var (
 )
 
 // PodInfo is one pod of an account as the relay sees it: the device key that proved possession,
-// the pod id its link registered with, and its place in its site.
+// the pod id its link registered with, and its place in its cluster.
 type PodInfo struct {
 	Key     string `json:"key"`
 	PodID   string `json:"podId"`
@@ -49,12 +49,12 @@ type PodInfo struct {
 	Build string `json:"build,omitempty"`
 	// Protocol is the multi-pod protocol the pod told at register (0: a pod older than #60).
 	Protocol int    `json:"protocol"`
-	Site     string `json:"site"`
+	Cluster  string `json:"site"` // "site" on the wire: the cluster (GLOSSARY.md)
 	Gateway  bool   `json:"gateway"`
-	// Mismatch: this pod does not speak the protocol of its site ("outdated" or "newer"). The
+	// Mismatch: this pod does not speak the protocol of its cluster ("outdated" or "newer"). The
 	// relay never elects one as gateway, and a pod that routes says so (relay.md, *Multi-pod*).
 	Mismatch string `json:"mismatch,omitempty"`
-	// Preferred: the pod was marked as the entry point of its site by its user.
+	// Preferred: the pod was marked as the entry point of its cluster by its user.
 	Preferred bool  `json:"preferred,omitempty"`
 	Since     int64 `json:"since"` // when its link came up (kept across a link that dropped uncleanly)
 }
@@ -125,29 +125,29 @@ func (s *Server) podArrives(pc *podConn) {
 }
 
 // podLeaves forgets a pod link. A link that ended without saying bye keeps its place: the gateway
-// role stays its for siteGrace, and its "since" is not reset, so a flaky link does not make it
-// the newest of its site. It runs with s.mu held.
+// role stays its for clusterGrace, and its "since" is not reset, so a flaky link does not make it
+// the newest of its cluster. It runs with s.mu held.
 func (s *Server) podLeaves(pc *podConn) {
 	if pc.key == "" {
 		return
 	}
 	if pc.clean {
 		delete(s.since, pc.key)
-		delete(s.siteOf, pc.key)
+		delete(s.clusterOf, pc.key)
 		return
 	}
-	if s.gateways[s.siteOf[pc.key]] == pc.key {
+	if s.gateways[s.clusterOf[pc.key]] == pc.key {
 		key, account := pc.key, pc.account
 		if g := s.grace[key]; g != nil && g.timer != nil {
 			g.timer.Stop()
 		}
-		s.grace[key] = &graceEntry{account: account, until: time.Now().Add(siteGrace), timer: time.AfterFunc(siteGrace, func() { s.recomputeSites(account) })}
+		s.grace[key] = &graceEntry{account: account, until: time.Now().Add(clusterGrace), timer: time.AfterFunc(clusterGrace, func() { s.recomputeClusters(account) })}
 	}
 }
 
-// setSite records what a pod reports about the pods it sees on its LAN. Only a pod that proved
-// possession can shape a site: an unproven link says nothing about the network.
-func (s *Server) setSite(pc *podConn, peers []string) {
+// setCluster records what a pod reports about the pods it sees on its LAN. Only a pod that proved
+// possession can shape a cluster: an unproven link says nothing about the network.
+func (s *Server) setCluster(pc *podConn, peers []string) {
 	if pc.key == "" {
 		return
 	}
@@ -161,11 +161,11 @@ func (s *Server) setSite(pc *podConn, peers []string) {
 	pc.peers = clean
 }
 
-// recomputeSites rebuilds the sites of an account from what its pods reported, elects one gateway
-// per site and pushes the result to its links. It runs on each event that can move a site: a pod
+// recomputeClusters rebuilds the clusters of an account from what its pods reported, elects one gateway
+// per cluster and pushes the result to its links. It runs on each event that can move a cluster: a pod
 // registering, leaving, or reporting its LAN peers, and when the grace of a gateway ends. It
-// reports whether the sites moved, and so was pushed.
-func (s *Server) recomputeSites(account string) bool {
+// reports whether the clusters moved, and so was pushed.
+func (s *Server) recomputeClusters(account string) bool {
 	if account == "" {
 		return false
 	}
@@ -217,14 +217,14 @@ func (s *Server) recomputeSites(account string) bool {
 			}
 		}
 	}
-	// A gateway in grace stays in the site it left: it is tied to the members it was with, so a
-	// pod leaving does not rename the site nor move the role before the grace ends.
+	// A gateway in grace stays in the cluster it left: it is tied to the members it was with, so a
+	// pod leaving does not rename the cluster nor move the role before the grace ends.
 	for k, g := range s.grace {
-		if g.account != account || s.siteOf[k] == "" {
+		if g.account != account || s.clusterOf[k] == "" {
 			continue
 		}
 		for m := range parent {
-			if m != k && s.siteOf[m] == s.siteOf[k] {
+			if m != k && s.clusterOf[m] == s.clusterOf[k] {
 				union(k, m)
 			}
 		}
@@ -235,20 +235,20 @@ func (s *Server) recomputeSites(account string) bool {
 		comps[r] = append(comps[r], k)
 	}
 	gateways := map[string]string{}
-	siteOf := map[string]string{}
+	clusterOf := map[string]string{}
 	infos := []PodInfo{}
 	for _, keys := range comps {
 		sort.Strings(keys)
-		site := keys[0] // the site id is the smallest device key of the component
+		cluster := keys[0] // the cluster id is the smallest device key of the component
 		for _, k := range keys {
-			siteOf[k] = site
+			clusterOf[k] = cluster
 		}
 		gateway := ""
-		// A gateway must speak the protocol of its site: a browser entering through it routes every
-		// pod of the site through it, and a pod of another protocol cannot carry those channels.
-		proto := siteProtocol(keys, online)
+		// A gateway must speak the protocol of its cluster: a browser entering through it routes every
+		// pod of the cluster through it, and a pod of another protocol cannot carry those channels.
+		proto := clusterProtocol(keys, online)
 		// A gateway in grace keeps the role even though its link is down.
-		if prev := s.gateways[site]; prev != "" && s.grace[prev] != nil {
+		if prev := s.gateways[cluster]; prev != "" && s.grace[prev] != nil {
 			for _, k := range keys {
 				if k == prev {
 					gateway = prev
@@ -271,7 +271,7 @@ func (s *Server) recomputeSites(account string) bool {
 			}
 		}
 		if gateway != "" {
-			gateways[site] = gateway
+			gateways[cluster] = gateway
 		}
 		for _, k := range keys {
 			pc := online[k]
@@ -280,40 +280,40 @@ func (s *Server) recomputeSites(account string) bool {
 			}
 			infos = append(infos, PodInfo{Key: k, PodID: pc.id, Name: pc.name, Version: pc.version, Build: pc.build,
 				Protocol: pc.protocol, Mismatch: protocolMismatch(pc.protocol, proto),
-				Site: site, Gateway: gateways[site] == k, Preferred: pc.preferred, Since: s.since[k].Unix()})
+				Cluster: cluster, Gateway: gateways[cluster] == k, Preferred: pc.preferred, Since: s.since[k].Unix()})
 		}
 	}
-	// Forget the sites of this account that no longer exist.
-	for id := range s.siteAccount {
-		if s.siteAccount[id] != account {
+	// Forget the clusters of this account that no longer exist.
+	for id := range s.clusterAccount {
+		if s.clusterAccount[id] != account {
 			continue
 		}
 		if _, ok := gateways[id]; !ok {
 			delete(s.gateways, id)
-			delete(s.siteAccount, id)
+			delete(s.clusterAccount, id)
 		}
 	}
 	for id, g := range gateways {
 		s.gateways[id] = g
-		s.siteAccount[id] = account
+		s.clusterAccount[id] = account
 	}
-	for k, site := range siteOf {
-		s.siteOf[k] = site
+	for k, cluster := range clusterOf {
+		s.clusterOf[k] = cluster
 	}
 	sort.Slice(infos, func(i, j int) bool { return infos[i].Key < infos[j].Key })
-	s.sitePods[account] = infos
+	s.clusterPods[account] = infos
 	s.mu.Unlock()
 
-	if !s.sitesChanged(account, gateways, infos) {
+	if !s.clustersChanged(account, gateways, infos) {
 		return false
 	}
-	s.pushSites(account, gateways, infos)
+	s.pushClusters(account, gateways, infos)
 	return true
 }
 
-// siteProtocol is the protocol of a site: the one its online pods mostly run, the highest winning
+// clusterProtocol is the protocol of a cluster: the one its online pods mostly run, the highest winning
 // a tie. A pod of another one is listed with its version but never elected gateway.
-func siteProtocol(keys []string, online map[string]*podConn) int {
+func clusterProtocol(keys []string, online map[string]*podConn) int {
 	best, count := 0, -1
 	for _, k := range keys {
 		pc := online[k]
@@ -333,19 +333,19 @@ func siteProtocol(keys []string, online map[string]*podConn) int {
 	return best
 }
 
-// protocolMismatch names what a pod that does not run the protocol of its site is: outdated (an
+// protocolMismatch names what a pod that does not run the protocol of its cluster is: outdated (an
 // older one, so *Update this pod*) or newer (this pod is the one to update).
-func protocolMismatch(p, site int) string {
+func protocolMismatch(p, cluster int) string {
 	switch {
-	case p < site:
+	case p < cluster:
 		return "outdated"
-	case p > site:
+	case p > cluster:
 		return "newer"
 	}
 	return ""
 }
 
-// betterGateway elects the gateway of a site: the preferred pod, else the one online the longest,
+// betterGateway elects the gateway of a cluster: the preferred pod, else the one online the longest,
 // ties broken by device key so both sides reach the same answer.
 func betterGateway(aSince time.Time, aPreferred bool, bSince time.Time, bPreferred bool) bool {
 	if aPreferred != bPreferred {
@@ -357,23 +357,23 @@ func betterGateway(aSince time.Time, aPreferred bool, bSince time.Time, bPreferr
 	return false
 }
 
-// sitesChanged reports whether the sites of an account moved since the last push, so a `site`
+// clustersChanged reports whether the clusters of an account moved since the last push, so a `site`
 // message that changes nothing does not wake every window.
-func (s *Server) sitesChanged(account string, gateways map[string]string, infos []PodInfo) bool {
+func (s *Server) clustersChanged(account string, gateways map[string]string, infos []PodInfo) bool {
 	var b strings.Builder
 	for _, id := range sortedKeys(gateways) {
 		b.WriteString(id + "=" + gateways[id] + ";")
 	}
 	for _, p := range infos {
-		b.WriteString(p.Key + "@" + p.Site + ";")
+		b.WriteString(p.Key + "@" + p.Cluster + ";")
 	}
 	now := b.String()
 	// The text is the state of the server, and two links can recompute the same account at the
 	// same moment (a pod registering while the grace of a gateway ends): it is read and written
 	// under the lock the other maps of the server use.
 	s.mu.Lock()
-	changed := s.siteText[account] != now
-	s.siteText[account] = now
+	changed := s.clusterText[account] != now
+	s.clusterText[account] = now
 	s.mu.Unlock()
 	return changed
 }
@@ -387,27 +387,27 @@ func sortedKeys(m map[string]string) []string {
 	return out
 }
 
-// sendSites gives a link that just proved possession the pods of its account and the gateway of
-// each site, as the relay sees them now.
-func (s *Server) sendSites(account string, c *identityConn, pc *podConn) {
+// sendClusters gives a link that just proved possession the pods of its account and the gateway of
+// each cluster, as the relay sees them now.
+func (s *Server) sendClusters(account string, c *identityConn, pc *podConn) {
 	if account == "" {
 		return
 	}
 	s.mu.Lock()
-	infos := append([]PodInfo{}, s.sitePods[account]...)
+	infos := append([]PodInfo{}, s.clusterPods[account]...)
 	gateways := map[string]string{}
 	for id, g := range s.gateways {
-		if s.siteAccount[id] == account {
+		if s.clusterAccount[id] == account {
 			gateways[id] = g
 		}
 	}
 	s.mu.Unlock()
 	for _, id := range sortedKeys(gateways) {
 		if c != nil {
-			_ = c.send(idMsg{Type: "gateway", Account: account, Site: id, Gateway: gateways[id]})
+			_ = c.send(idMsg{Type: "gateway", Account: account, Cluster: id, Gateway: gateways[id]})
 		}
 		if pc != nil {
-			_ = pc.send(sigMsg{Type: "gateway", Account: account, Site: id, Gateway: gateways[id]})
+			_ = pc.send(sigMsg{Type: "gateway", Account: account, Cluster: id, Gateway: gateways[id]})
 		}
 	}
 	if c != nil {
@@ -418,10 +418,10 @@ func (s *Server) sendSites(account string, c *identityConn, pc *podConn) {
 	}
 }
 
-// pushSites sends the sites of an account to its proven pods and its identity links: the pods list
-// (who is online, in which site) and the gateway of each site. The relay only says where it sees
+// pushClusters sends the clusters of an account to its proven pods and its identity links: the pods list
+// (who is online, in which cluster) and the gateway of each cluster. The relay only says where it sees
 // the pods; every pod checks the certificates itself.
-func (s *Server) pushSites(account string, gateways map[string]string, infos []PodInfo) {
+func (s *Server) pushClusters(account string, gateways map[string]string, infos []PodInfo) {
 	s.mu.Lock()
 	var links []*identityConn
 	for c := range s.links {
@@ -444,10 +444,10 @@ func (s *Server) pushSites(account string, gateways map[string]string, infos []P
 	}
 	for _, id := range sortedKeys(gateways) {
 		for _, c := range links {
-			_ = c.send(idMsg{Type: "gateway", Account: account, Site: id, Gateway: gateways[id]})
+			_ = c.send(idMsg{Type: "gateway", Account: account, Cluster: id, Gateway: gateways[id]})
 		}
 		for _, p := range pods {
-			_ = p.send(sigMsg{Type: "gateway", Account: account, Site: id, Gateway: gateways[id]})
+			_ = p.send(sigMsg{Type: "gateway", Account: account, Cluster: id, Gateway: gateways[id]})
 		}
 	}
 }

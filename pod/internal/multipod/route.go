@@ -8,14 +8,14 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/tunnel"
 )
 
-// LANRouter reaches a pod of this pod's site over its LAN link (pod/internal/lan.OpenTunnel).
+// LANRouter reaches a pod of this pod's cluster over its LAN link (pod/internal/lan.OpenTunnel).
 type LANRouter interface {
 	OpenTunnel(ctx context.Context, key, window, label string, via *identity.Cert, fpBrowser, fpPod string) (tunnel.MsgConn, error)
 }
 
 // Route opens the channels of another pod of the account, for a browser this pod serves as its
-// gateway (relay.md, *Multi-pod*): a pod of this pod's site over the LAN link, a pod of another
-// site pod to pod over WebRTC. It answers relayclient.PeerRoute.
+// gateway (relay.md, *Multi-pod*): a pod of this pod's cluster over the LAN link, a pod of another
+// cluster pod to pod over WebRTC. It answers relayclient.PeerRoute.
 type Route struct {
 	lan LANRouter
 }

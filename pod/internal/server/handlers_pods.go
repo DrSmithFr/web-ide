@@ -9,7 +9,7 @@ import (
 )
 
 // Pods is the view of the other pods of the account (pod/internal/multipod): the home page shows
-// one Projects block per pod, and Settings > Remote access says which pod of the site opens the
+// one Projects block per pod, and Settings > Remote access says which pod of the cluster opens the
 // others.
 type Pods interface {
 	// List is the merged view: the pods of the LAN, the pods the relay reports, and the pods whose
@@ -19,9 +19,9 @@ type Pods interface {
 	Preferred() bool
 	SetPreferred(on bool) error
 	// Gateway is the pod of the account the browser should open first ("" when the relay says
-	// nothing), and Site the site this pod belongs to.
+	// nothing), and Cluster the cluster this pod belongs to.
 	Gateway() string
-	Site() string
+	Cluster() string
 	// Own is the device key of this pod: the home page lists it among the pods.
 	Own() string
 	// Update carries a signed update request to the pod it names and answers what that pod said
@@ -98,7 +98,8 @@ func (s *Server) registerPods() {
 		if s.Pods == nil {
 			return nil, i18n.New("the pod is not paired")
 		}
-		out := map[string]any{"site": s.Pods.Site(), "gateway": s.Pods.Gateway(), "preferred": s.Pods.Preferred(),
+		out := map[string]any{ // "site" on the wire: the cluster (GLOSSARY.md)
+			"site": s.Pods.Cluster(), "gateway": s.Pods.Gateway(), "preferred": s.Pods.Preferred(),
 			"canUpdate": s.Pods.CanUpdate(), "power": s.Pods.CanPower(), "local": c.local}
 		if own := s.Pods.Own(); own != "" {
 			out["key"], out["fingerprint"] = own, identity.Fingerprint(own)

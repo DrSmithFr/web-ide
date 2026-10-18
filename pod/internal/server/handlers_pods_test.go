@@ -18,7 +18,7 @@ func (f *fakePods) List() any                  { return nil }
 func (f *fakePods) Preferred() bool            { return false }
 func (f *fakePods) SetPreferred(on bool) error { return nil }
 func (f *fakePods) Gateway() string            { return "" }
-func (f *fakePods) Site() string               { return "" }
+func (f *fakePods) Cluster() string            { return "" }
 func (f *fakePods) Own() string                { return "own" }
 func (f *fakePods) CanUpdate() bool            { return false }
 func (f *fakePods) CanPower() bool             { return false }

@@ -34,8 +34,8 @@ type Config struct {
 
 // Gateway configures how this pod takes part in the multi-pod home page.
 type Gateway struct {
-	// Preferred marks this pod as the entry point of its site: the browser opens it first, and it
-	// reaches the other pods of the site over the LAN.
+	// Preferred marks this pod as the entry point of its cluster: the browser opens it first, and it
+	// reaches the other pods of the cluster over the LAN.
 	Preferred bool `json:"preferred,omitempty"`
 }
 

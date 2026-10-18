@@ -16,7 +16,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/tunnel"
 )
 
-// A browser that reaches a pod of the site through its gateway (relay.md, *Multi-pod*) gets one
+// A browser that reaches a pod of the cluster through its gateway (relay.md, *Multi-pod*) gets one
 // channel of the pod per channel of its own tunnel: the gateway dials the LAN port of the peer
 // once per channel, with its own certificate, and pipes the bytes. No multiplexer — the peer
 // tells the channels of one window apart by the window id it is given.
@@ -136,7 +136,7 @@ func (m *Manager) serveTunnel(w http.ResponseWriter, r *http.Request, fp string)
 }
 
 // OpenTunnel dials one channel of a peer's bridged window: this pod is the gateway of a browser
-// it authenticated, and the peer is a pod of its site. The channel is returned as a
+// it authenticated, and the peer is a pod of its cluster. The channel is returned as a
 // whole-message connection, to be piped to the browser's DataChannel.
 //
 // window is the id of the browser's tunnel on this pod; fpBrowser and fpPod the DTLS fingerprints

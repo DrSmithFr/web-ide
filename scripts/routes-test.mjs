@@ -2,9 +2,9 @@
 // browser: which pod opens the page of another one, and under which label. Run by make test.
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { keyOf, nextGateway, pickGateway, pickSite, routeOf } from '../pod/internal/relay/web/routes.js'
+import { keyOf, nextGateway, pickGateway, pickCluster, routeOf } from '../pod/internal/relay/web/routes.js'
 
-// Site 1: A (preferred) and B, both registered at the relay. Site 2: C. D is a pod of the LAN of
+// Cluster 1: A (preferred) and B, both registered at the relay. Cluster 2: C. D is a pod of the LAN of
 // A that the relay never sees (it has no link of its own).
 const pods = [
   { key: 'ka', podId: 'pa', site: 's1', gateway: true, preferred: true },
@@ -12,16 +12,16 @@ const pods = [
   { key: 'kc', podId: 'pc', site: 's2', gateway: true },
 ]
 
-test('the gateway of a site is its preferred pod, else the elected one', () => {
+test('the gateway of a cluster is its preferred pod, else the elected one', () => {
   assert.equal(pickGateway(pods, 's1').key, 'ka')
   assert.equal(pickGateway(pods, 's2').key, 'kc')
   assert.equal(pickGateway(pods, 'nope'), null)
 })
 
-test('a window enters the site it used last, else the one with a preferred gateway', () => {
-  assert.equal(pickSite(pods, 's2').site, 's2')
-  assert.equal(pickSite(pods, 'gone').site, 's1')
-  assert.equal(pickSite(pods, 's2').pod.key, 'kc')
+test('a window enters the cluster it used last, else the one with a preferred gateway', () => {
+  assert.equal(pickCluster(pods, 's2').cluster, 's2')
+  assert.equal(pickCluster(pods, 'gone').cluster, 's1')
+  assert.equal(pickCluster(pods, 's2').pod.key, 'kc')
 })
 
 test('a pod registered at the relay gets its own tunnel', () => {
@@ -54,18 +54,18 @@ test('failover: when the gateway leaves, the same pod rides the new one', () => 
   assert.deepEqual(routeOf(after, 'kc', 'kb'), { via: 'kc', prefix: '' })
 })
 
-test('failover: the window follows a pod of the site it entered, not another site', () => {
+test('failover: the window follows a pod of the cluster it entered, not another cluster', () => {
   const prev = pods.map((p) => ({ ...p }))
-  // A left. B is alone on its own site now (a site is named after the pods of the local network),
+  // A left. B is alone on its own cluster now (a cluster is named after the pods of the local network),
   // C is the gateway of its own site: the window that entered through A goes to B.
   const after = [
     { key: 'kb', podId: 'pb', site: 'kb', gateway: true },
     { key: 'kc', podId: 'pc', site: 's2', gateway: true },
   ]
   assert.equal(nextGateway(after, prev, 's1', 'ka').key, 'kb')
-  // The site id did not move: the elected gateway of that site is taken.
+  // The cluster id did not move: the elected gateway of that cluster is taken.
   assert.equal(nextGateway([{ key: 'kb', podId: 'pb', site: 's1', gateway: true }], prev, 's1', 'ka').key, 'kb')
-  // Nobody of that site is online: another gateway carries the window.
+  // Nobody of that cluster is online: another gateway carries the window.
   assert.equal(nextGateway([{ key: 'kc', podId: 'pc', site: 's2', gateway: true }], prev, 's1', 'ka').key, 'kc')
   assert.equal(nextGateway([], prev, 's1', 'ka'), null)
 })

@@ -70,7 +70,7 @@ func main() {
 	mdns := flag.Bool("mdns", true, "find the other pods of the account on the LAN by mDNS (false: the addresses typed in Settings only)")
 	lanAddr := flag.String("lan", "", "listen address of the link to the other pods of the account on the LAN (default: config.json, else "+lan.DefaultAddr+"; off: none)")
 	relay := flag.String("relay", "", "relay URL the pod registers with (wss:// or ws://), or the word relay to enable")
-	preferred := flag.Bool("preferred", false, "make this pod the preferred gateway of its site: the browser opens the other pods through it")
+	preferred := flag.Bool("preferred", false, "make this pod the preferred gateway of its cluster: the browser opens the other pods through it")
 	multipodProtocol := flag.Int("multipod-protocol", multipod.Protocol, "the multi-pod protocol this pod speaks (tests: a pod of another one is listed with its version and never routed to)")
 	podVersion := flag.String("pod-version", "", "the version this pod reports (a build of the source tree reports a development version no pod will install: name the release this build stands for)")
 	forceTurn := flag.Bool("force-turn", false, "force the browser through TURN (no direct or STUN path)")
@@ -286,7 +286,7 @@ func main() {
 		return dir.Targets(key)
 	})
 	// What a change of the LAN links means: the page refreshes, the relay learns what this pod sees
-	// (the sites), and a pod with no link of its own publishes its key and its list through a peer.
+	// (the clusters), and a pod with no link of its own publishes its key and its list through a peer.
 	onLANChange := func() {
 		srv.LANChanged()
 		// The blocks of the home page come from the LAN too: a peer that connects or drops has to
@@ -302,7 +302,7 @@ func main() {
 			keys = append(keys, p.ID)
 		}
 		if c := relayCli.Load(); c != nil {
-			c.ReportSite(keys)
+			c.ReportCluster(keys)
 			return
 		}
 		if hub != nil && pub != nil && cfg.RelayURL == "" {
@@ -332,11 +332,11 @@ func main() {
 		pub = multipod.NewDebounce(hub, identity.ProjectsKind(podID.ID()), 2*time.Second)
 		srv.ProjectsChanged = pub.Touch
 		if cfg.RelayURL == "" && lanMgr != nil {
-			// A pod with no link to the relay sends its sync messages through a peer of its site.
+			// A pod with no link to the relay sends its sync messages through a peer of its cluster.
 			hub.SetTransport(lanTransport{m: lanMgr})
 		}
 	}
-	// A pod with a link of its own dials the pods of another site pod to pod: their page runs
+	// A pod with a link of its own dials the pods of another cluster pod to pod: their page runs
 	// under its own origin too (pod/internal/multipod.RemoteGateway).
 	dir.SetRemote(cfg.RelayURL != "")
 	dir.SetEmitter(srv.PodsChanged)
@@ -402,13 +402,13 @@ func main() {
 					dir.RelayPods(p)
 				}
 			},
-			OnGateway: func(site, key string) {
+			OnGateway: func(cluster, key string) {
 				if dir != nil {
-					dir.RelayGateway(site, key)
+					dir.RelayGateway(cluster, key)
 				}
 			},
 			OnForeignWrap: func(w *identity.WrapRecord) {
-				// The wrap is for a pod of this site that has no link of its own: it comes back the
+				// The wrap is for a pod of this cluster that has no link of its own: it comes back the
 				// way its key went out.
 				if lanMgr != nil {
 					lanMgr.PassWrap(w)
@@ -429,7 +429,7 @@ func main() {
 			cancel()
 			relayCli.Store(nil)
 			srv.PushSend = nil
-			// With no link of its own, the pod sends its sync messages through a peer of its site.
+			// With no link of its own, the pod sends its sync messages through a peer of its cluster.
 			if hub != nil && lanMgr != nil {
 				hub.SetTransport(lanTransport{m: lanMgr})
 			}
@@ -507,7 +507,7 @@ func main() {
 	}
 }
 
-// remoteGateway serves the pods of another site under this pod's /_lan/pod/ path, over a
+// remoteGateway serves the pods of another cluster under this pod's /_lan/pod/ path, over a
 // pod-to-pod WebRTC tunnel. The relay link and the directory of the pods come up later, so the
 // dialer reads them when a page asks (Settings > Remote access, relay.md).
 func remoteGateway(cli *atomic.Pointer[relayclient.Client], dir **multipod.Directory) http.Handler {
@@ -541,7 +541,7 @@ func (d relayDialer) Dial(ctx context.Context, key string) (multipod.RemotePod, 
 	return cli.Dial(ctx, podID, key, nil)
 }
 
-// podRoute is how this pod reaches the pods of its site that have no link of their own: a
+// podRoute is how this pod reaches the pods of its cluster that have no link of their own: a
 // browser tunneled to it gets their channels through the LAN link.
 func podRoute(m *lan.Manager) *multipod.Route {
 	if m == nil {
@@ -580,7 +580,7 @@ func startLAN(ctx context.Context, st *store.Store, cfg *config.Config, srv *ser
 		OnPower:       onPower,
 		Power:         func() ([]power.Target, bool) { return power.Interfaces(), power.Allowed() },
 		OnWrap: func(w *identity.WrapRecord) {
-			// The wrap the relay pushed for this pod, carried back by a peer of its site: it is the
+			// The wrap the relay pushed for this pod, carried back by a peer of its cluster: it is the
 			// only way a pod with no link of its own gets the key of the epoch.
 			if hub == nil {
 				return
@@ -793,8 +793,8 @@ func (v lanView) Status() lan.Status {
 	return v.m.Status()
 }
 
-// lanTransport sends the sync messages of a pod that has no link to the relay: a peer of its site
-// carries them on its own link. Reads cannot be relayed, so a peer answers them for its site.
+// lanTransport sends the sync messages of a pod that has no link to the relay: a peer of its cluster
+// carries them on its own link. Reads cannot be relayed, so a peer answers them for its cluster.
 type lanTransport struct{ m *lan.Manager }
 
 func (t lanTransport) Send(msg settingsync.Msg) error {
@@ -822,7 +822,7 @@ func (v *podsView) List() any { return v.dir.List() }
 func (v *podsView) Gateway() string {
 	return v.dir.Gateway()
 }
-func (v *podsView) Site() string { return v.dir.Site() }
+func (v *podsView) Cluster() string { return v.dir.Cluster() }
 
 // Own is the device key of this pod, paired ("" otherwise): known without a relay or a sync key.
 func (v *podsView) Own() string {
@@ -849,7 +849,7 @@ func (v *podsView) SetPreferred(on bool) error {
 func (v *podsView) CanUpdate() bool { return identity.IsReleaseTag(version) }
 
 // Update carries a signed update request to the pod it names: over the LAN link when it is a peer
-// of the site, else through the relay. The answer is what that pod said — this pod adds the route,
+// of the cluster, else through the relay. The answer is what that pod said — this pod adds the route,
 // not the trust.
 func (v *podsView) Update(ctx context.Context, req *identity.UpdateRequest) (any, error) {
 	if v.lan != nil {

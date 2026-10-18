@@ -169,7 +169,7 @@ func TestProofOfPossession(t *testing.T) {
 	ready(t, pc)
 	m := nextUntil(t, pc, "pods")
 	if len(m.Pods) != 1 || m.Pods[0].Key != identity.KeyID(p.key) || !m.Pods[0].Gateway {
-		t.Fatalf("a proven pod is present and the gateway of its own site: %+v", m.Pods)
+		t.Fatalf("a proven pod is present and the gateway of its own cluster: %+v", m.Pods)
 	}
 
 	// The same certificate, presented by a device that does not hold the private key.
@@ -261,9 +261,9 @@ func TestIdentityLinkNoProof(t *testing.T) {
 	}
 }
 
-// TestSiteElection: the pods that report each other form one site with one gateway — the oldest
-// online, the preferred one whatever its age. A pod that reports nothing is a site of its own.
-func TestSiteElection(t *testing.T) {
+// TestClusterElection: the pods that report each other form one cluster with one gateway — the oldest
+// online, the preferred one whatever its age. A pod that reports nothing is a cluster of its own.
+func TestClusterElection(t *testing.T) {
 	ts := newRelay(t)
 	a := testAccount(t)
 	kA, kC := identity.KeyID(podDevice(t, a, "A").key), identity.KeyID(podDevice(t, a, "C").key)
@@ -285,16 +285,16 @@ func TestSiteElection(t *testing.T) {
 		for _, x := range p {
 			switch x.PodID {
 			case "A":
-				sa = x.Site
+				sa = x.Cluster
 			case "B":
-				sb = x.Site
+				sb = x.Cluster
 			}
 		}
 		return len(p) == 3 && sa != "" && sa == sb
 	})
-	site := kA
-	if kB < site {
-		site = kB // A and B form a site, C is alone: the site id is the smallest key of each
+	cluster := kA
+	if kB < cluster {
+		cluster = kB // A and B form a cluster, C is alone: the cluster id is the smallest key of each
 	}
 	if len(pods) != 3 {
 		t.Fatalf("three pods online: %+v", pods)
@@ -307,13 +307,13 @@ func TestSiteElection(t *testing.T) {
 			t.Fatalf("the pods list carries the build of each pod: %+v", p)
 		}
 		if p.PodID == "C" {
-			if p.Site != kC || !p.Gateway {
-				t.Fatalf("C is a site of its own, its own gateway: %+v", p)
+			if p.Cluster != kC || !p.Gateway {
+				t.Fatalf("C is a cluster of its own, its own gateway: %+v", p)
 			}
 			continue
 		}
-		if p.Site != site {
-			t.Fatalf("A and B must share the site %s, got %s", site, p.Site)
+		if p.Cluster != cluster {
+			t.Fatalf("A and B must share the cluster %s, got %s", cluster, p.Cluster)
 		}
 		if p.Gateway {
 			abGateway = p.Key
@@ -322,15 +322,15 @@ func TestSiteElection(t *testing.T) {
 	if abGateway != kA {
 		t.Fatalf("the gateway must be the pod online the longest (A), got %s", abGateway)
 	}
-	g := gatewayUntil(t, bPod, func(m sigMsg) bool { return m.Gateway == kA && m.Site == site })
-	if g.Site != site {
-		t.Fatalf("the gateway must be pushed to the pods of the site: %+v", g)
+	g := gatewayUntil(t, bPod, func(m sigMsg) bool { return m.Gateway == kA && m.Cluster == cluster })
+	if g.Cluster != cluster {
+		t.Fatalf("the gateway must be pushed to the pods of the cluster: %+v", g)
 	}
 }
 
-// TestSitePreferredGateway: a pod marked preferred is the entry point of its site, even when it
+// TestClusterPreferredGateway: a pod marked preferred is the entry point of its cluster, even when it
 // came online after the others.
-func TestSitePreferredGateway(t *testing.T) {
+func TestClusterPreferredGateway(t *testing.T) {
 	ts := newRelay(t)
 	a := testAccount(t)
 	kB := identity.KeyID(podDevice(t, a, "B").key)
@@ -364,31 +364,31 @@ func TestSitePreferredGateway(t *testing.T) {
 	}
 }
 
-// TestSiteGraceFailover: a gateway whose link drops without saying bye keeps the role for the
-// grace, then the site moves; a pod that says bye moves it at once.
-func TestSiteGraceFailover(t *testing.T) {
-	siteGrace = 300 * time.Millisecond
-	t.Cleanup(func() { siteGrace = 10 * time.Second })
+// TestClusterGraceFailover: a gateway whose link drops without saying bye keeps the role for the
+// grace, then the cluster moves; a pod that says bye moves it at once.
+func TestClusterGraceFailover(t *testing.T) {
+	clusterGrace = 300 * time.Millisecond
+	t.Cleanup(func() { clusterGrace = 10 * time.Second })
 	ts := newRelay(t)
 	a := testAccount(t)
 	kA, kB := identity.KeyID(podDevice(t, a, "A").key), identity.KeyID(podDevice(t, a, "B").key)
 
 	aPod := registerPod(t, ts, "A", "s1", a.ID, podDevice(t, a, "A").cert, true, podDevice(t, a, "A").key, false)
 	ready(t, aPod)
-	// A reports its LAN peer before B registers: the site forms as B comes up, so B is never
-	// pushed as the gateway of a one-pod site — a message about the state before the site would
+	// A reports its LAN peer before B registers: the cluster forms as B comes up, so B is never
+	// pushed as the gateway of a one-pod cluster — a message about the state before the cluster would
 	// otherwise sit on the link and be read as if it were about the drop watched here.
 	aPod.send(t, sigMsg{Type: "site", Peers: []string{kB}})
 	bPod := registerPod(t, ts, "B", "s2", a.ID, podDevice(t, a, "B").cert, true, podDevice(t, a, "B").key, false)
 	defer bPod.close()
 	ready(t, bPod)
-	// Wait until the site is really there, with A (the oldest link) as its gateway.
+	// Wait until the cluster is really there, with A (the oldest link) as its gateway.
 	gatewayUntil(t, bPod, func(m sigMsg) bool { return m.Gateway == kA })
 
 	// A drops without a bye: B keeps seeing A as the gateway until the grace ends. The window
 	// watched is half of the grace: the relay starts its own clock when it notices the drop, a
 	// hair after this timer, and a move seen right at its end would be a tie between the two.
-	grace := time.After(siteGrace / 2)
+	grace := time.After(clusterGrace / 2)
 	aPod.close()
 	quiet := make(chan sigMsg, 8)
 	go func() {
@@ -414,7 +414,7 @@ loop:
 			break loop
 		}
 	}
-	// When it ends, the site elects the pod still online.
+	// When it ends, the cluster elects the pod still online.
 	end := time.After(3 * time.Second)
 	for {
 		select {
@@ -428,10 +428,10 @@ loop:
 	}
 }
 
-// TestSiteProtocolGateway: a pod of another multi-pod protocol is listed with its version and is
-// never elected gateway — a browser entering through it could not route the pods of its site. The
-// protocol of the site is the one its pods mostly run.
-func TestSiteProtocolGateway(t *testing.T) {
+// TestClusterProtocolGateway: a pod of another multi-pod protocol is listed with its version and is
+// never elected gateway — a browser entering through it could not route the pods of its cluster. The
+// protocol of the cluster is the one its pods mostly run.
+func TestClusterProtocolGateway(t *testing.T) {
 	ts := newRelay(t)
 	a := testAccount(t)
 	kA, kB := identity.KeyID(podDevice(t, a, "A").key), identity.KeyID(podDevice(t, a, "B").key)
@@ -456,11 +456,11 @@ func TestSiteProtocolGateway(t *testing.T) {
 		for _, x := range p {
 			switch x.PodID {
 			case "A":
-				sa = x.Site
+				sa = x.Cluster
 			case "B":
-				sb = x.Site
+				sb = x.Cluster
 			case "C":
-				sc = x.Site
+				sc = x.Cluster
 			}
 		}
 		return len(p) == 3 && sa != "" && sa == sb && sa == sc
@@ -469,14 +469,14 @@ func TestSiteProtocolGateway(t *testing.T) {
 		switch p.PodID {
 		case "C":
 			if p.Gateway {
-				t.Fatalf("a pod of another protocol is never the gateway of the site: %+v", p)
+				t.Fatalf("a pod of another protocol is never the gateway of the cluster: %+v", p)
 			}
 			if p.Protocol != 2 || p.Mismatch != "newer" {
 				t.Fatalf("the pod of another protocol is listed with its protocol and what it means: %+v", p)
 			}
 		default:
 			if p.Protocol != 1 || p.Mismatch != "" {
-				t.Fatalf("the pods of the protocol of the site carry no mismatch: %+v", p)
+				t.Fatalf("the pods of the protocol of the cluster carry no mismatch: %+v", p)
 			}
 		}
 	}
@@ -487,13 +487,13 @@ func TestSiteProtocolGateway(t *testing.T) {
 		}
 	}
 	if gateway != "A" {
-		t.Fatalf("the gateway must be a pod of the protocol of the site (A), got %s", gateway)
+		t.Fatalf("the gateway must be a pod of the protocol of the cluster (A), got %s", gateway)
 	}
 }
 
-// TestSiteProtocolTie: when the pods of a site split evenly, the highest protocol wins — the site
+// TestClusterProtocolTie: when the pods of a cluster split evenly, the highest protocol wins — the cluster
 // runs the newest build the majority can agree on, and the older pods are the ones to update.
-func TestSiteProtocolTie(t *testing.T) {
+func TestClusterProtocolTie(t *testing.T) {
 	ts := newRelay(t)
 	a := testAccount(t)
 	kB := identity.KeyID(podDevice(t, a, "B").key)
@@ -527,9 +527,9 @@ func TestSiteProtocolTie(t *testing.T) {
 	}
 }
 
-// TestSiteForeignEdge: an edge a pod reports to a key that is not a device of the account online
+// TestClusterForeignEdge: an edge a pod reports to a key that is not a device of the account online
 // here joins nothing — the relay does not trust what a pod says about the network.
-func TestSiteForeignEdge(t *testing.T) {
+func TestClusterForeignEdge(t *testing.T) {
 	ts := newRelay(t)
 	a := testAccount(t)
 	other, err := identity.FromPhrase("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art")
@@ -549,8 +549,8 @@ func TestSiteForeignEdge(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 	aPod.send(t, sigMsg{Type: "site", Peers: []string{}})
 	m := nextUntil(t, aPod, "pods")
-	if len(m.Pods) != 1 || m.Pods[0].Site != identity.KeyID(podDevice(t, a, "A").key) {
-		t.Fatalf("A must stay a site of its own: %+v", m.Pods)
+	if len(m.Pods) != 1 || m.Pods[0].Cluster != identity.KeyID(podDevice(t, a, "A").key) {
+		t.Fatalf("A must stay a cluster of its own: %+v", m.Pods)
 	}
 }
 

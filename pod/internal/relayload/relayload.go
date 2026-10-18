@@ -7,7 +7,7 @@
 //
 //	static  the pages, the Service Worker, the identity module: what TLS and HTTP cost
 //	signal  the pod links and the browser links, offer/answer/candidate/bye, and the `site`
-//	        messages that make the relay recompute its sites
+//	        messages that make the relay recompute its clusters
 //	turn    real tunnels through the embedded TURN server, with the tunnel handshake and a
 //	        payload pumped through the DataChannel: allocations, relay ports, bandwidth
 //

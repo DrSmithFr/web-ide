@@ -1,6 +1,6 @@
 package relayclient
 
-// Gateway routing (milestone 3b): a browser tunneled to a gateway pod reaches a pod of its site
+// Gateway routing (milestone 3b): a browser tunneled to a gateway pod reaches a pod of its cluster
 // that has no link of its own. Each channel of the end pod is a channel of the browser's tunnel
 // labelled @<device key>/<label>: the gateway pipes it over the LAN link (/_lan/tunnel), the end
 // pod runs the handshake with the browser's proof bound to the fingerprints of the browser's own
@@ -24,7 +24,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/tunnel"
 )
 
-// gateway is a gateway pod with a relay link, and a pod of its site with none: the two are
+// gateway is a gateway pod with a relay link, and a pod of its cluster with none: the two are
 // linked by their LAN managers, the gateway is the browser's entry point.
 type gateway struct {
 	env   *testEnv

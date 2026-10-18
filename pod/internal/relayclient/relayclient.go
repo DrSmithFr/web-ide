@@ -60,7 +60,7 @@ type sigMsg struct {
 	Kind    string                  `json:"kind,omitempty"`
 	Updated int64                   `json:"updated,omitempty"`
 	Message string                  `json:"message,omitempty"`
-	// Sites (milestone 3): register announces that this pod answers the proof of possession and
+	// Clusters (milestone 3): register announces that this pod answers the proof of possession and
 	// carries its version and the preferred switch, `site` the device keys of its LAN peers,
 	// `challenge`/`proof` the nonce, `pods`/`gateway` what the relay sees of the account.
 	Prove     bool      `json:"prove,omitempty"`
@@ -71,7 +71,7 @@ type sigMsg struct {
 	Protocol  int       `json:"protocol,omitempty"`
 	Preferred bool      `json:"preferred,omitempty"`
 	Peers     []string  `json:"peers,omitempty"`
-	Site      string    `json:"site,omitempty"`
+	Cluster   string    `json:"site,omitempty"` // "site" on the wire: the cluster (GLOSSARY.md)
 	Gateway   string    `json:"gateway,omitempty"`
 	Pods      []PodInfo `json:"pods,omitempty"`
 	// Update this pod (#60): the relay only carries a signed update request between two pods of the
@@ -105,7 +105,7 @@ type PodInfo struct {
 	Name     string `json:"name"`
 	Version  string `json:"version"`
 	Protocol int    `json:"protocol"`
-	Site     string `json:"site"`
+	Cluster  string `json:"site"` // "site" on the wire: the cluster (GLOSSARY.md)
 	Gateway  bool   `json:"gateway"`
 	Since    int64  `json:"since"`
 }
@@ -125,7 +125,7 @@ func toSync(m sigMsg) settingsync.Msg {
 }
 
 // PeerRoute opens one channel of a pod of the account this pod can reach without the relay: a
-// peer of its site, over the LAN link (pod/internal/lan.OpenTunnel). window is the id of the
+// peer of its cluster, over the LAN link (pod/internal/lan.OpenTunnel). window is the id of the
 // browser's tunnel on this pod, via the certificate of the browser this pod authenticated, and
 // fpBrowser / fpPod the DTLS fingerprints of that tunnel — the peer binds the browser's proof to
 // them. Implemented by pod/internal/multipod.Route.
@@ -170,16 +170,16 @@ type Config struct {
 	// Protocol is the multi-pod protocol of this pod (multipod.Protocol), told to the relay: a pod
 	// of another one is listed with its version and never elected gateway.
 	Protocol int
-	// Preferred marks this pod as the entry point of its site (Settings > Remote access).
+	// Preferred marks this pod as the entry point of its cluster (Settings > Remote access).
 	Preferred bool
 	// OnPods is called with the pods of the account the relay sees, OnGateway with the gateway of
-	// a site (multipod.Directory).
+	// a cluster (multipod.Directory).
 	OnPods    func([]PodInfo)
-	OnGateway func(site, key string)
+	OnGateway func(cluster, key string)
 	// OnForeignWrap is called with a wrap the relay pushed for another device: this pod passes it
 	// on over its LAN links, which is how a pod with no link of its own gets its key back.
 	OnForeignWrap func(*identity.WrapRecord)
-	// Route reaches a pod of this pod's site that has no link of its own: a browser tunneled to
+	// Route reaches a pod of this pod's cluster that has no link of its own: a browser tunneled to
 	// this pod gets its channels through it (relay.md, *Multi-pod*).
 	Route PeerRoute
 	// OnUpdate runs an update request the relay carried to this pod: the pod checks the request
@@ -356,7 +356,7 @@ func (c *Client) runOnce(ctx context.Context) error {
 			}
 		case "gateway":
 			if c.cfg.OnGateway != nil {
-				c.cfg.OnGateway(m.Site, m.Gateway)
+				c.cfg.OnGateway(m.Cluster, m.Gateway)
 			}
 		case "revocations":
 			if err := c.applyRevocations(m.List); err != nil {
@@ -387,7 +387,7 @@ func (c *Client) runOnce(ctx context.Context) error {
 			c.route(m.Session, func(s *session) { s.close() })
 		case "wrap", "blob":
 			if m.Type == "wrap" && m.Wrap != nil && c.cfg.Identity != nil && m.Wrap.Device != c.cfg.Identity.ID() {
-				// Not for this pod: it is for a pod of its site that has no link of its own.
+				// Not for this pod: it is for a pod of its cluster that has no link of its own.
 				if c.cfg.OnForeignWrap != nil {
 					c.cfg.OnForeignWrap(m.Wrap)
 				}
@@ -534,19 +534,19 @@ func randID() string {
 	return hex.EncodeToString(b)
 }
 
-// ReportSite tells the relay the device keys of the pods this pod sees on its LAN: the relay
-// builds the sites from what every pod reports, and elects one gateway per site.
-func (c *Client) ReportSite(peers []string) {
+// ReportCluster tells the relay the device keys of the pods this pod sees on its LAN: the relay
+// builds the clusters from what every pod reports, and elects one gateway per cluster.
+func (c *Client) ReportCluster(peers []string) {
 	c.mu.Lock()
 	link := c.link
 	c.mu.Unlock()
 	if link == nil {
 		return
 	}
-	_ = link.send(sigMsg{Type: "site", Peers: peers})
+	_ = link.send(sigMsg{Type: "site", Peers: peers}) // "site" on the wire: the cluster (GLOSSARY.md)
 }
 
-// PutBlob stores a blob a peer of the site handed over: a pod with no link to the relay publishes
+// PutBlob stores a blob a peer of the cluster handed over: a pod with no link to the relay publishes
 // its project list through this pod. The record is forwarded unchanged — the relay checks the
 // signature of the device that wrote it, so the hop adds no trust.
 func (c *Client) PutBlob(rec *identity.BlobRecord) error {
@@ -559,7 +559,7 @@ func (c *Client) PutBlob(rec *identity.BlobRecord) error {
 	return link.send(sigMsg{Type: "blobPut", Account: rec.Account, Device: rec.Device, Kind: rec.Kind, Blob: rec})
 }
 
-// PutSyncKey hands the X25519 key a peer of the site published to the relay, so an admin can wrap
+// PutSyncKey hands the X25519 key a peer of the cluster published to the relay, so an admin can wrap
 // the key of the epoch for a pod that has no link of its own. The record is forwarded unchanged.
 func (c *Client) PutSyncKey(rec *identity.SyncKeyRecord) error {
 	c.mu.Lock()
@@ -571,7 +571,7 @@ func (c *Client) PutSyncKey(rec *identity.SyncKeyRecord) error {
 	return link.send(sigMsg{Type: "syncKey", Account: rec.Account, Device: rec.Device, SyncKey: rec})
 }
 
-// SetPreferred marks this pod as the entry point of its site (Settings > Remote access), and tells
+// SetPreferred marks this pod as the entry point of its cluster (Settings > Remote access), and tells
 // the relay about the change.
 func (c *Client) SetPreferred(on bool) {
 	c.mu.Lock()
@@ -731,7 +731,7 @@ type session struct {
 	// chans carries every other DataChannel of this session (term:<id>, xfer:<n>,
 	// http:<n>), framed, to ServeTunnel.
 	chans chan tunnel.LabeledConn
-	// routed carries the channels of another pod of the site (@<key>/<label>): this pod is the
+	// routed carries the channels of another pod of the cluster (@<key>/<label>): this pod is the
 	// gateway of this browser and pipes them to that pod.
 	routed chan routedConn
 	// authed is closed once the browser proved itself on the rpc channel: only then does this
@@ -785,7 +785,7 @@ func (s *session) setupOffer(m sigMsg) error {
 		}
 		conn := tunnel.NewFramed(chunk, 8*1024*1024)
 		if key, rest, ok := splitRouted(dc.Label()); ok {
-			// A channel of another pod of the site: this pod is the gateway of this browser.
+			// A channel of another pod of the cluster: this pod is the gateway of this browser.
 			select {
 			case s.routed <- routedConn{key: key, label: rest, conn: conn}:
 			case <-s.ctx.Done():
@@ -921,7 +921,7 @@ func (s *session) serveRPC() {
 	s.close()
 }
 
-// serveRouted pipes the channels of another pod of the site to that pod, over the LAN link.
+// serveRouted pipes the channels of another pod of the cluster to that pod, over the LAN link.
 // The browser proved itself on this pod's rpc channel first: this pod vouches for it, and the
 // end pod checks its certificate against the list it holds itself.
 func (s *session) serveRouted() {

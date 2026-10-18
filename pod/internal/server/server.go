@@ -678,7 +678,7 @@ func (w *wsConn) Close() error {
 }
 
 func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
-	// Same origin only: another site open in the browser must not reach the pod.
+	// Same origin only: another cluster open in the browser must not reach the pod.
 	conn, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		return

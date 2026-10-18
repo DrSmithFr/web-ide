@@ -16,7 +16,7 @@ import (
 )
 
 // The directory of the pods: what the home page shows. The relay reports who is online and in which
-// site; the lists come as sealed blobs; the LAN peers come first, since their page is reachable even
+// cluster; the lists come as sealed blobs; the LAN peers come first, since their page is reachable even
 // with the relay down.
 
 const testPhrase = "lecture vapor excuse note pledge rough bundle start regular burden reveal theme banana pencil owner cube social job emotion member joy sting dash whisper"
@@ -137,9 +137,9 @@ func TestDirectoryProtocolMismatch(t *testing.T) {
 	hub.SetOther(func(m settingsync.Msg) { d.HandleBlob(m) })
 	d.HandleBlob(settingsync.Msg{Type: "blob", Blob: blobOfProto(t, a, "devList", 0, 1, "listed", Protocol+1, "quiet reader")})
 	d.RelayPods([]relayclient.PodInfo{
-		{Key: "devNew", Name: "newer", Site: "devOld", Protocol: Protocol + 1},
-		{Key: "devSame", Name: "same", Site: "devOld", Protocol: Protocol},
-		{Key: p.ID(), Name: "this pod", Site: "devOld", Gateway: true},
+		{Key: "devNew", Name: "newer", Cluster: "devOld", Protocol: Protocol + 1},
+		{Key: "devSame", Name: "same", Cluster: "devOld", Protocol: Protocol},
+		{Key: p.ID(), Name: "this pod", Cluster: "devOld", Gateway: true},
 	})
 
 	by := map[string]PodView{}
@@ -181,7 +181,7 @@ func TestDirectoryNoKeyYet(t *testing.T) {
 	hub, p, a := hubOf(t)
 	d := New(hub, fakeLAN{})
 	d.HandleBlob(settingsync.Msg{Type: "blob", Blob: blobOf(t, a, "devB", 0, 1, "bravo", "quiet reader")})
-	d.RelayPods([]relayclient.PodInfo{{Key: "devB", Name: "bravo", Site: "devA"}, {Key: p.ID(), Name: "this pod", Site: "devA", Gateway: true}})
+	d.RelayPods([]relayclient.PodInfo{{Key: "devB", Name: "bravo", Cluster: "devA"}, {Key: p.ID(), Name: "this pod", Cluster: "devA", Gateway: true}})
 
 	out := d.List()
 	if len(out) != 1 {
@@ -190,8 +190,8 @@ func TestDirectoryNoKeyYet(t *testing.T) {
 	if !out[0].NoKey || out[0].Name != "bravo" || !out[0].Online {
 		t.Fatalf("a pod online without a readable list must be greyed as waiting for the key: %+v", out[0])
 	}
-	if !out[0].Gateway && out[0].Site == "" {
-		t.Fatalf("the site and the gateway come from the relay: %+v", out[0])
+	if !out[0].Gateway && out[0].Cluster == "" {
+		t.Fatalf("the cluster and the gateway come from the relay: %+v", out[0])
 	}
 }
 
@@ -209,7 +209,7 @@ func TestDirectoryMergesSources(t *testing.T) {
 
 	d.HandleBlob(settingsync.Msg{Type: "blob", Blob: blobOf(t, a, "devB", 0, 1, "bravo", "quiet reader", "other"), Updated: 111})
 	d.HandleBlob(settingsync.Msg{Type: "blob", Blob: blobOf(t, a, "devO", 0, 2, "offline pod", "kept"), Updated: 222})
-	d.RelayPods([]relayclient.PodInfo{{Key: "devB", Name: "bravo", Site: "devL"}, {Key: p.ID(), Name: "this pod", Site: "devL", Gateway: true}})
+	d.RelayPods([]relayclient.PodInfo{{Key: "devB", Name: "bravo", Cluster: "devL"}, {Key: p.ID(), Name: "this pod", Cluster: "devL", Gateway: true}})
 
 	out := d.List()
 	by := map[string]PodView{}
@@ -223,7 +223,7 @@ func TestDirectoryMergesSources(t *testing.T) {
 		t.Fatalf("the LAN peer comes first, with its path: %+v", out[0])
 	}
 	b := by["devB"]
-	if !b.Online || b.Site != "devL" || b.Seen != 111 {
+	if !b.Online || b.Cluster != "devL" || b.Seen != 111 {
 		t.Fatalf("the pod the relay reports online: %+v", b)
 	}
 	var got []map[string]string
@@ -239,7 +239,7 @@ func TestDirectoryMergesSources(t *testing.T) {
 		t.Fatal("this pod is not among the others")
 	}
 	if d.Gateway() == "" {
-		t.Fatal("the gateway of the site of this pod must be known")
+		t.Fatal("the gateway of the cluster of this pod must be known")
 	}
 
 	// A list deleted by its pod: the block keeps its name, without projects.
@@ -269,7 +269,7 @@ func TestDirectoryOneWay(t *testing.T) {
 	if len(out) != 1 || out[0].Online || !out[0].OneWay {
 		t.Fatalf("without the relay, a one-way peer is offline and marked: %+v", out)
 	}
-	d.RelayPods([]relayclient.PodInfo{{Key: "devW", Name: "wsl", Site: "devW"}})
+	d.RelayPods([]relayclient.PodInfo{{Key: "devW", Name: "wsl", Cluster: "devW"}})
 	out = d.List()
 	if len(out) != 1 || !out[0].Online || !out[0].OneWay || out[0].Seen != 333 {
 		t.Fatalf("the relay sees the one-way peer online, with its cached list: %+v", out)
@@ -318,9 +318,9 @@ func TestDirectoryLANDownRelayUp(t *testing.T) {
 	if out := d.List(); len(out) != 1 || out[0].Online {
 		t.Fatalf("with no relay, a LAN peer whose link is down is offline: %+v", out)
 	}
-	d.RelayPods([]relayclient.PodInfo{{Key: "devD", Name: "down", Site: "devD"}})
+	d.RelayPods([]relayclient.PodInfo{{Key: "devD", Name: "down", Cluster: "devD"}})
 	out := d.List()
-	if len(out) != 1 || !out[0].Online || out[0].Site != "devD" {
+	if len(out) != 1 || !out[0].Online || out[0].Cluster != "devD" {
 		t.Fatalf("the relay sees it: it is online, from the relay: %+v", out)
 	}
 }

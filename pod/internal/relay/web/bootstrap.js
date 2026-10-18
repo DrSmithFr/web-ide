@@ -9,7 +9,7 @@
 // mode (M1), which a paired pod refuses. Recent browsers only: WebCrypto Ed25519 and WebAuthn
 // PRF are required, nothing is attempted without them.
 import * as id from './identity.js'
-import { keyOf, nextGateway, pickGateway, pickSite, routeOf } from './routes.js'
+import { keyOf, nextGateway, pickGateway, pickCluster, routeOf } from './routes.js'
 
 // What a load costs, phase by phase, and how much of the page it carried through the tunnel.
 // A reload cannot keep the tunnel (the PeerConnection dies with the document), so these are the
@@ -434,19 +434,20 @@ function remember(id) {
     localStorage.setItem('webide.relay.pod', id)
   } catch {}
 }
-function rememberedSite() {
+function rememberedCluster() {
   try {
+    // Key kept: the stored key says 'site' for the cluster (GLOSSARY.md), and older pages must still read it
     return localStorage.getItem('webide.relay.site')
   } catch {
     return null
   }
 }
-function rememberSite(id) {
+function rememberCluster(id) {
   try {
     if (id) localStorage.setItem('webide.relay.site', id)
   } catch {}
 }
-// Only a path of this origin: a link must not turn the frame into another site.
+// Only a path of this origin: a link must not turn the frame into another cluster.
 function safePath(p) {
   return p && p.startsWith('/') && !p.startsWith('//') && !p.startsWith('/\\') ? p : null
 }
@@ -500,12 +501,12 @@ const tunnels = new Map()
 let entry = null // the tunnel of the gateway this window entered through
 let entryKey = '' // its device key, and the pod id the relay knows it by
 let entryPod = ''
-let entrySite = ''
-let shownKey = '' // the pod the frame shows (a pod of the site, not always the gateway)
+let entryCluster = ''
+let shownKey = '' // the pod the frame shows (a pod of the cluster, not always the gateway)
 let swReady = null // the Service Worker of this origin, started at once and awaited by openApp
 let appPort = null
 let entryMode = 'token'
-let pods = [] // the pods the relay reports: {key, podId, name, site, gateway, preferred}
+let pods = [] // the pods the relay reports: {key, podId, name, site (the cluster, GLOSSARY.md), gateway, preferred}
 let podsPrev = [] // the pods list as it was before the last one
 let link = null // the identity link, kept for the pods list and the failover
 const buffers = new Map()
@@ -590,9 +591,9 @@ async function applyRevocations(l) {
 }
 
 // Milestone 3: a link with no pod in it enters the account through a gateway. The relay says who
-// is online and which pod it elected for each site — it is only the courier, the names come from
-// the certificates this device already verified. The site used last wins, else the first site.
-async function enterSite(l) {
+// is online and which pod it elected for each cluster — it is only the courier, the names come from
+// the certificates this device already verified. The cluster used last wins, else the first cluster.
+async function enterCluster(l) {
   await firstPods(l)
   if (!pods.length) {
     l.send({ type: 'devices' })
@@ -609,7 +610,7 @@ async function enterSite(l) {
     return lastError
   }
   const chosen = enterGateway()
-  rememberSite(chosen.site)
+  rememberCluster(chosen.site)
   pod = chosen.podId
   remember(pod)
   // The Service Worker answers the fetches of the app by finding the bootstrap page by its
@@ -619,10 +620,10 @@ async function enterSite(l) {
   return ''
 }
 
-// The gateway of the site this window enters (routes.js, tested by scripts/routes-test.mjs).
+// The gateway of the cluster this window enters (routes.js, tested by scripts/routes-test.mjs).
 function enterGateway() {
-  const { site, pod } = pickSite(pods, rememberedSite())
-  entrySite = site
+  const { cluster, pod } = pickCluster(pods, rememberedCluster())
+  entryCluster = cluster
   return pod ?? pods[0]
 }
 
@@ -818,7 +819,7 @@ async function enter(mode) {
     if (err) return giveUp(err)
     mark('revocations')
     if (!pod) {
-      const err = await enterSite(l)
+      const err = await enterCluster(l)
       if (err) return giveUp(err)
     } else {
       await firstPods(l)
@@ -830,7 +831,8 @@ async function enter(mode) {
   const p = pods.find((p) => p.podId === pod)
   entryKey = p?.key ?? ''
   entryPod = pod
-  entrySite = p?.site ?? ''
+  // p.site: "site" on the wire: the cluster (GLOSSARY.md)
+  entryCluster = p?.site ?? ''
   shownKey = entryKey
   connecting(1, p?.name || pod)
   while (early?.successor) early = early.successor // it fell back to the token mode
@@ -872,16 +874,16 @@ function onPush(m) {
     podsSeen = true
     podsPrev = pods // the list before this one: who was with whom before the gateway left
     pods = m.pods ?? []
-    syncSite()
+    syncCluster()
   }
 }
 
-// A site is named after the pods of the local network, so its id moves when a pod joins or leaves
-// it. The site this window entered through must follow that: a failover looks for the pods of the
-// site as the relay names it now.
-function syncSite() {
+// A cluster is named after the pods of the local network, so its id moves when a pod joins or leaves
+// it. The cluster this window entered through must follow that: a failover looks for the pods of the
+// cluster as the relay names it now.
+function syncCluster() {
   const e = pods.find((p) => p.key === entryKey)
-  if (e?.site) entrySite = e.site
+  if (e?.site) entryCluster = e.site
 }
 
 // The Service Worker is what answers the fetches of the app, so the page cannot open before it
@@ -1051,7 +1053,7 @@ function connect(key, podId, mode, want) {
 }
 
 // The tunnel that carries the channels of a pod: its own when the relay reports it online, else
-// the one of the gateway of its site, with every label prefixed by @<key>/ (the gateway opens
+// the one of the gateway of its cluster, with every label prefixed by @<key>/ (the gateway opens
 // them on its own link to the peer). Null when no tunnel can reach that pod.
 async function route(key) {
   const { via, prefix } = routeOf(pods, key || entryKey, entryKey)
@@ -1280,7 +1282,7 @@ function drop(t, msg) {
   else if (shownKey === t.key) notice(msg)
 }
 
-// The gateway left: ask the relay who carries the site now and reconnect through it, with a
+// The gateway left: ask the relay who carries the cluster now and reconnect through it, with a
 // waiting time that grows. The pages of the pods reached directly are not touched.
 async function failover() {
   if (failed) return
@@ -1295,7 +1297,7 @@ async function failover() {
       const old = entryKey
       entryKey = g.key
       entryPod = g.podId
-      rememberSite(g.site)
+      rememberCluster(g.site)
       busy(words.reconnecting + (g.name || g.podId))
       try {
         // The app may have asked its channels again before: the tunnel it opened is the one.
@@ -1309,7 +1311,7 @@ async function failover() {
         } else if (shownKey === old) {
           // This window showed the pod that left: the same path, on the new gateway. A page
           // reached on its own tunnel is left alone: the app asks its channels again, and a page
-          // of a pod of the site rides the new gateway under its own /pod/<key>/.
+          // of a pod of the cluster rides the new gateway under its own /pod/<key>/.
           shownKey = g.key
           openPath = appPath() ?? openPath
           openApp()
@@ -1333,8 +1335,8 @@ async function failover() {
 function entryGateway(first) {
   const self = first && pods.find((p) => p.key === entryKey)
   if (self) return self
-  return nextGateway(pods, podsPrev, entrySite, entryKey) ??
-    (pods.length || !entryPod ? null : { key: entryKey, podId: entryPod, site: entrySite })
+  return nextGateway(pods, podsPrev, entryCluster, entryKey) ??
+    (pods.length || !entryPod ? null : { key: entryKey, podId: entryPod, site: entryCluster })
 }
 
 // The pods as the relay sees them now: the link pushes them, and a gateway that just left has
@@ -1345,7 +1347,7 @@ async function refreshPods() {
     const m = await Promise.race([link.recv('pods'), new Promise((r) => setTimeout(() => r(null), 2000))])
     if (m?.pods) {
       pods = m.pods
-      syncSite()
+      syncCluster()
     }
   } catch {}
 }
