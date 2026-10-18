@@ -2,6 +2,8 @@
 
 The words used everywhere are defined in the [glossary](../GLOSSARY.md).
 
+These pages are also in the IDE, embedded in the pod: *Help › Documentation* (or the **?** next to a setting, the kanban, the Agents tool) opens them read only in a tab, matching the version you run, with no network.
+
 ## Install
 
 - [Linux](install/linux.md): the pod as a unit started at boot, optionally on your Tailscale network.

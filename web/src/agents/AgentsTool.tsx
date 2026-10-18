@@ -1,5 +1,6 @@
 // Agents tool: one tab per ACP session of a CLI agent (Claude Code, opencode, pi), its thread
 // streamed by the pod, a prompt box under it. Permissions are asked in the thread.
+import { HelpLink } from '../help/HelpLink'
 import { createEffect, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from 'solid-js'
 import { Icon } from '../ui/icons'
 import { EmptyState } from '../ui/EmptyState'
@@ -93,6 +94,7 @@ export function AgentsTool() {
         <button class="icon-btn small" title={t('New agent session')} onClick={(e) => void plus(e)} data-testid="agent-new">
           <Icon name="plus" />
         </button>
+        <HelpLink topic="agents" />
       </div>
       <div class="tool-body agents-body">
         <Show when={current()} keyed fallback={<Launcher />}>

@@ -95,10 +95,11 @@ Diagram edges are imports of the folders, checked with a script over the `import
 - [`pod/`](pod/): The pod as seen by the page: `rpc.ts` (requests, pushed events, reconnection), `transport.ts` (WebSocket, or a MessagePort to the bootstrap page through a tunnel), `remote.ts` (requests to another pod from the home page), `power.ts`, `update.ts` (signed requests), `push.ts`
 - [`state/`](state/): Open project and session (tabs, split tree, tool zones), settings, git state, folder marks, the phone layout (`mobile.ts`: the view shown, the keyboard, no zoom)
 - [`pages/`](pages/): `Home`, `ProjectPage` (menu bar, rails, side panels, editor area, bottom tools), `ProjectBar`, `DeskSwitcher`, `Detached` (one panel alone)
-- [`ui/`](ui/): Editor area, rendered Markdown files (`MarkdownView.tsx`), status bar, diff view, overlays (modal, prompt, pick list, context menu), toasts, icons, empty states, keyboard navigation of the toolbars and tab bars (`roving.ts`)
+- [`ui/`](ui/): Editor area, rendered Markdown files (`MarkdownView.tsx`) and the embedded docs (`DocView.tsx`, see `help/`), status bar, diff view, overlays (modal, prompt, pick list, context menu), toasts, icons, empty states, keyboard navigation of the toolbars and tab bars (`roving.ts`)
 - [`editor/`](editor/): `Doc` (buffer, revisions, undo, file format, indentation), `EditorView` (block rendering, Custom Highlight API, indentation guides, whitespace overlay, multiple carets, folding, soft wrap with rows read from the layout), `carets.ts` (words, occurrences), `folding.ts` (fold ranges), `indent.ts` (indentation detection), tokenizer and grammars, three-way merge, line diff, sub-word moves, find bar
 - [`keys/`](keys/): Binding table and QWERTY / AZERTY presets
 - [`lsp/`](lsp/): Client, completion, edits, rename and formatting
+- [`help/`](help/): `topics.json`, the map from a place of the interface to a page of the docs (`path#heading`, checked by `make test`), and the `HelpLink` (**?**); the pages open in `doc` tabs (`ui/DocView.tsx`, `state/docs.ts`)
 - [`popups/`](popups/): Search Everywhere, Recent Files and the switcher, paste from history (the history itself: `ui/clipboard.ts`)
 - [`panels/`](panels/): Explorer (with file type icons, `fileIcons.tsx`), global search, Git tool (`panels/git/`: tabs, tree of changes, graph lanes `graph.ts`, commit detail)
 - [`tools/`](tools/): Right-panel tools (conflicts, structure…), `InfoTool`, and `tools.tsx`, the registry of the tools of the window

@@ -96,7 +96,7 @@ run(async ({ page }) => {
   await page.keyboard.press('ArrowLeft')
   await page.keyboard.press('ArrowLeft')
   await page.waitForTimeout(50)
-  assert((await item())?.startsWith('Explorer'), 'ArrowLeft wraps to the Tools menu')
+  assert((await item())?.startsWith('Documentation'), 'ArrowLeft wraps to the Help menu')
   await page.keyboard.press('Escape')
   assert(!(await page.$('.ctx-menu')) && (await page.evaluate(() => document.activeElement?.classList.contains('ed-content'))), 'Escape closes the menu and gives the focus back')
   // File › New file: created beside the active file and opened.

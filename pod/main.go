@@ -21,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/DrSmithFr/web-ide/pod/docsdist"
 	"github.com/DrSmithFr/web-ide/pod/internal/config"
 	"github.com/DrSmithFr/web-ide/pod/internal/hfcache"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
@@ -176,6 +177,7 @@ func main() {
 		Models:      hfcache.New(st.Path("models", "hf")),
 		Pool:        sshx.NewPool(sshx.NewHostKeys(st.Path("known_hosts"))),
 		Static:      webdist.FS(),
+		Docs:        docsdist.FS(),
 		AllowRemote: *allowRemote,
 		Version:     version,
 		Name:        hostname(),

@@ -1,0 +1,12 @@
+{
+  "settings.language": "docs/howto/add-translation.md",
+  "settings.workspace": "docs/guide.md#projects",
+  "settings.remote": "docs/howto/account-and-devices.md",
+  "settings.remote.relay": "docs/design/relay.md",
+  "settings.remote.lan": "docs/howto/lan-pods.md",
+  "settings.notifications": "docs/howto/notifications.md",
+  "kanban": "docs/design/kanban.md",
+  "agents": "docs/guide.md#agents-claude-code-opencode-pi",
+  "assistant": "docs/guide.md#connect-a-model",
+  "docs": "docs/README.md"
+}

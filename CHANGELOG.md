@@ -4,6 +4,10 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+### Added
+
+- Help: the documentation is embedded in the pod and opens read only in a tab from *Help › Documentation* or the command palette, with working links and headings. A **?** next to the settings sections, the kanban and the Agents tool opens the page that explains it.
+
 ## [1.18.3] - 2026-10-17
 
 ### Changed

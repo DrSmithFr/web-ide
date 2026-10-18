@@ -782,3 +782,12 @@ button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 /* Selected item of a list, a menu or a tree: lighter background and an accent bar on the left,
    drawn a little inside, so that the focus outline at the edge of the zone never hides it. */
 :is(.tree-row.selected, .tree-row.active, .pick-item.selected, .completion-item.selected, .conn-item.selected, .history-item.selected, .git-log-row.selected, .settings-nav button.active, .dk-row.selected, .ai-chat-item.active, .ai-model-item.active, .ai-complete-item.active, .ctx-item:is(:hover, :focus-visible):not(:disabled)) { background-image: linear-gradient(var(--accent), var(--accent)); background-repeat: no-repeat; background-size: 3px calc(100% - 8px); background-position: 3px center; }
+
+/* Help: a page of the embedded documentation, and the "?" of the places that have one. */
+.doc-view { position: relative; }
+.doc-bar { display: flex; gap: 6px; padding: 4px 8px; border-bottom: 1px solid var(--line); flex: none; }
+.doc-scroll { position: static; flex: 1; min-height: 0; z-index: auto; }
+.doc-error { padding: 16px 24px; }
+.help-link { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 6px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: transparent; color: var(--fg-muted); font-size: 12px; line-height: 1; cursor: pointer; vertical-align: middle; }
+.help-link:hover, .help-link:focus-visible { color: var(--accent); border-color: var(--accent); }
+.settings-help { float: right; }

@@ -2101,5 +2101,13 @@
   "Next width of the column": "Largeur suivante de la colonne",
   "Stack the tile in the column on the left": "Empiler la tuile dans la colonne de gauche",
   "Take the tile out to a column of its own": "Sortir la tuile dans sa propre colonne",
-  "Close the tile": "Fermer la tuile"
+  "Close the tile": "Fermer la tuile",
+  "menu|Help": "Aide",
+  "Documentation": "Documentation",
+  "User guide": "Guide de l’utilisateur",
+  "Glossary": "Glossaire",
+  "Back": "Retour",
+  "Help": "Aide",
+  "Help: open the documentation page": "Aide : ouvrir la page de documentation",
+  "Not in the embedded documentation: {path}": "Ne fait pas partie de la documentation embarquée : {path}"
 }

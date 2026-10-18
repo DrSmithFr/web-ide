@@ -49,6 +49,8 @@ Each part of the map has a README with the map of its own code:
 
 The front end is built by Vite and embedded in the pod binary (`pod/webdist`), so the page and the WebSocket share one origin: no mixed content, and pairing is a cookie.
 
+The documentation is embedded the same way (`pod/docsdist`, a copy of `docs/`, `GLOSSARY.md` and the READMEs of the code made by `scripts/embed-docs.sh`, since `go:embed` cannot reach `../docs`), so a pod installed from a release has the docs of its version, offline. The pod serves it read only (`docs.read` for a page, `docs.image` for a picture; paths are those of the repo and cannot leave the copy) and the window shows it in a `doc` tab (`ui/DocView.tsx`, `state/docs.ts`). The places of the interface that have a page are listed once, in `web/src/help/topics.json`, and checked by `scripts/check-links.mjs`.
+
 The local terminals run in a second service, the **keeper** (`web-ide-pod keeper`, installed as `~/.local/lib/web-ide/web-ide-keeper` and the unit `web-ide-keeper.service`): it spawns them, holds their PTY and their output numbered by offset. The pod talks to it over `<data>/keeper.sock` and can restart freely: when it opens a project again, it adopts the terminals the keeper still runs for it (their console id, title and kind travel as metadata of the process) and the page attaches again from the offset it has. Without a keeper (tests, `-keeper off`, no socket), the pod runs the terminals itself and they end with it. Language servers stay in the pod.
 
 For an SSH project the keeper opens its own connection (`keeper/ssh.go`): the pod dials first and checks the host key (first use, its questions), then gives the keeper that key, pinned, and the secrets of the connection (kept in memory). The terminals and the commands of the agent of the project run on it (target `ssh:<key>`); the pod builds their remote command.
@@ -61,7 +63,7 @@ The keeper also relays HTTP requests (`keeper/http.go`): the completions of the 
 
 | Path | Content |
 |---|---|
-| [`pod/`](../../pod/README.md) | The pod: `main.go` (flags, wiring), [`internal/…`](../../pod/internal/README.md) packages, `webdist/` (embedded front end) |
+| [`pod/`](../../pod/README.md) | The pod: `main.go` (flags, wiring), [`internal/…`](../../pod/internal/README.md) packages, `webdist/` (embedded front end), `docsdist/` (embedded docs) |
 | [`web/`](../../web/README.md) | The front end (SolidJS + TypeScript, Vite), [`src/`](../../web/src/README.md) |
 | [`e2e/`](../../e2e/README.md) | Browser tests (Playwright core driving headless Chromium); `e2e/shots/` makes the pictures of the documentation |
 | `claude-mod/` | Claude Code mod: ticket and changed files above the prompt, opened in the IDE (`/open`) |

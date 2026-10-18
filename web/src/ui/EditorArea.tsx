@@ -44,6 +44,7 @@ import { detachTab, hiddenTools, tileMode, nextSplit, resizing, scrollMode, tile
 import { ScrollArea } from './ScrollArea'
 import { consoles, TermView } from '../console/consoles'
 import { Dynamic } from 'solid-js/web'
+import { DocView } from './DocView'
 import { isMarkdownPath, MarkdownView, showRaw, shownRaw, type MarkdownViewApi } from './MarkdownView'
 
 export function EditorArea(props: { detached?: boolean }) {
@@ -134,6 +135,7 @@ function tabTitle(tab: TabState) {
   }
   if (tab.kind === 'tool') return tileTools[tab.tool!] ? t(tileTools[tab.tool!].label) : tab.tool!
   if (tab.kind === 'console') return consoles().find((c) => c.id === tab.console)?.title ?? t('Console')
+  if (tab.kind === 'doc') return tab.title ?? t('Documentation')
   return tab.title ?? tab.kind
 }
 
@@ -323,6 +325,9 @@ function Pane(props: { id: string }) {
               </Match>
               <Match when={tab.kind === 'text'}>
                 <TextViewer tab={tab} paneId={props.id} />
+              </Match>
+              <Match when={tab.kind === 'doc'}>
+                <DocView tab={tab} paneId={props.id} />
               </Match>
               <Match when={tab.kind === 'diff'}>
                 <DiffView tab={tab} paneId={props.id} />

@@ -3,7 +3,7 @@ GO ?= $(shell command -v go || echo $(HOME)/sdk/go/bin/go)
 BIN := bin/web-ide-pod
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: build web pod run dev test e2e shots check clean install service deploy-relay relay-build relayload load-relay load-relay-down
+.PHONY: docs-content build web pod run dev test e2e shots check clean install service deploy-relay relay-build relayload load-relay load-relay-down
 
 build: web pod
 
@@ -14,7 +14,11 @@ web:
 pod/webdist/dist:
 	mkdir -p $@ && [ -e $@/index.html ] || echo '<!doctype html><p>Front end not built: run make web</p>' > $@/index.html
 
-pod: pod/webdist/dist
+# The docs embedded in the pod (Help): copied again on every build, so they match the version.
+docs-content:
+	./scripts/embed-docs.sh
+
+pod: pod/webdist/dist docs-content
 	cd pod && $(GO) build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o ../$(BIN) .
 
 run: build
@@ -28,7 +32,7 @@ run: build
 DEV_ADDR ?= 0.0.0.0:4434
 DEV_DATA ?= $(HOME)/.web-ide-dev
 # The dev pod has its own keeper: restarting the pod alone keeps its terminals.
-dev: pod/webdist/dist $(DEV_DATA)
+dev: pod/webdist/dist docs-content $(DEV_DATA)
 	cd pod && $(GO) build -o ../bin/web-ide-pod-dev . && (../bin/web-ide-pod-dev keeper -data $(DEV_DATA) &) && sleep 0.3 && \
 	  ../bin/web-ide-pod-dev -addr $(DEV_ADDR) -data $(DEV_DATA) -allow-remote & cd web && POD=http://127.0.0.1:$(lastword $(subst :, ,$(DEV_ADDR))) npm run dev -- --host 0.0.0.0
 
@@ -37,7 +41,7 @@ $(DEV_DATA):
 	[ ! -d $(HOME)/.web-ide ] || for f in $(HOME)/.web-ide/*; do \
 	  case $$f in */models) ln -s $$f $@/models ;; */config.json|*/keeper.sock) ;; *) cp -r $$f $@/ ;; esac; done
 
-test: pod/webdist/dist
+test: pod/webdist/dist docs-content
 	@unformatted="$$($(dir $(GO))gofmt -l pod)"; test -z "$$unformatted" || (echo "gofmt needed:"; echo "$$unformatted"; exit 1)
 	cd pod && $(GO) vet ./... && $(GO) test ./...
 	cd web && npm run check
@@ -89,7 +93,7 @@ deploy-relay:
 		./scripts/deploy-relay.sh --binary bin/web-ide-pod-relay --host $(RELAY_HOST) --unit $(RELAY_UNIT) --url $(RELAY_URL); \
 	fi
 
-relay-build: web pod/webdist/dist
+relay-build: web pod/webdist/dist docs-content
 	cd pod && GOOS=linux GOARCH=amd64 $(GO) build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o ../bin/web-ide-pod-relay .
 
 # The load test of the relay (#72): a second relay on the same host, with its own service, data
@@ -106,7 +110,7 @@ LOAD_TLS_PORT ?= 4443
 # The host of the relay, without the user the SSH runs as.
 RELAY_IP = $(lastword $(subst @, ,$(RELAY_HOST)))
 
-relayload: pod/webdist/dist
+relayload: pod/webdist/dist docs-content
 	cd pod && $(GO) build -trimpath -o ../bin/relayload ./cmd/relayload
 
 load-relay: relayload relay-build

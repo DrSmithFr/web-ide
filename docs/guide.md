@@ -11,6 +11,7 @@ How to install Web IDE, connect a model, and take a change from an idea to a mer
   3. [Development in a worktree](#3-development-in-a-worktree)
   4. [Test, feedback, merge](#4-test-feedback-merge)
 - [Working by hand](#working-by-hand)
+- [Help](#help)
 - [Where the data lives](#where-the-data-lives)
 - [Updating the pictures](#updating-the-pictures)
 
@@ -126,6 +127,10 @@ Everything the model does, you can do yourself, in the same windows:
 - When a program (the model, a formatter, another editor) changes an open file, the change is merged into your buffer; a real conflict opens a three-pane dialog.
 
 All shortcuts are in *Settings → Keyboard*, with QWERTY and AZERTY presets.
+
+## Help
+
+This documentation is inside the IDE, read only, and always the one of the version you run: *Help › Documentation* (also in the command palette) opens the index in a tab; links between pages, *Back* and the headings work as in a browser. A **?** next to a setting (Remote access, Notifications…), the kanban or the Agents tool opens the page that explains it, at its heading.
 
 ## Where the data lives
 
