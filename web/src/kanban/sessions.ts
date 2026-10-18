@@ -1,5 +1,5 @@
 // Conversations of the assistant linked to a ticket: briefing and plan in the project,
-// development and corrections in the worktree of the ticket (docs/kanban.md).
+// development and corrections in the worktree of the ticket (docs/design/kanban.md).
 import { mutate, project, showWorktree } from '../state/project'
 import { RpcError } from '../pod/rpc'
 import { toast, errorToast } from '../ui/toast'

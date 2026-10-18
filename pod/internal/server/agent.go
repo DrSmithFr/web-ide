@@ -17,7 +17,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
 )
 
-// The agent of the assistant runs in the pod (docs/architecture.md): a conversation goes on
+// The agent of the assistant runs in the pod (docs/design/architecture.md): a conversation goes on
 // when its window is closed, several run at once (a limit per model server), and the pages
 // only show them and send what the user does. The pod is the only writer of a conversation
 // while it runs; every change is saved and announced to the windows (agent.update).

@@ -6,6 +6,24 @@ base. A self-hosted relay has **every feature of the hosted one, without limits*
 and your pods keep working whatever relay they were given: nothing about the machine is stored in a
 pod or in a passkey, only the URL of the relay.
 
+## Quick start on one machine
+
+The relay is an optional piece: it only introduces the browser and the pod, the traffic between them is encrypted and the relay never sees your token. Run your own:
+
+```sh
+web-ide-pod relay            # signaling + STUN/TURN + bootstrap page, SQLite in ~/.web-ide-relay
+```
+
+Its own data folder (`~/.web-ide-relay`, `-data` only when given explicitly), so it does not share the pod's. Options: `-addr` (`127.0.0.1:4430`), `-turn-port` (3478), `-turn-ip` (the IP announced to clients), `-tls-port` (443, shared with HTTPS and TURN over TLS; a port below 1024 needs root, and TURN over TLS is simply off when it cannot be bound), `-push-subject` (the contact given to the push services, `mailto:` or `https:`; the VAPID key of the notifications is made once in `vapid.json`). Open the link the pod prints — `#pod=<id>&t=<token>`, the token stays in the hash and never reaches the relay.
+
+Then start a pod with `-relay http://127.0.0.1:4430` (or `relay` in `config.json`). The pod prints its remote link, also shown in Settings > Remote access:
+
+```
+remote : http://127.0.0.1:4430/#pod=<id>&t=<token>
+```
+
+Open that link from any browser on another network: a small bootstrap page and a Service Worker come from the relay, the app itself comes from your pod through the tunnel. The pod keeps one outbound WebSocket to its relay (no port to open on the machine) and reconnects by itself; the token is proved inside the DataChannel, bound to the fingerprints of both sides. If the relay is down, `127.0.0.1` keeps working as before. TURN credentials are short-lived and given only to a registered, online pod. See [relay.md](../design/relay.md).
+
 ## What you need
 
 - A machine with a public address (IPv4, and IPv6 if you publish an AAAA), ports 80, 443, 3478
@@ -43,7 +61,7 @@ run: fine on a tailnet, a browser will complain.
 
 The ICE URLs name the domain alone when the relay has one — `turn:relay.example.org:3478` over UDP
 and `turns:relay.example.org:443?transport=tcp` — so a client behind a restrictive network reaches
-TURN on 443. Each TURN URL costs a relay port on each end of a tunnel (see [load.md](load.md)):
+TURN on 443. Each TURN URL costs a relay port on each end of a tunnel (see [load.md](../design/load.md)):
 the addresses and TCP 3478 are only named when there is no domain.
 
 ## systemd

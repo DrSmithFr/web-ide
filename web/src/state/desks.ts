@@ -1,4 +1,4 @@
-// Desks of the project of the window (docs/desks.md): each desk is a session of its own (its
+// Desks of the project of the window (docs/design/desks.md): each desk is a session of its own (its
 // layout, tabs and tools), as the virtual desktops of a desktop environment. The window shows
 // one; the list and what the desks share (the Recent Files) come with project.open and are
 // saved by desks.update. The desk shown is also remembered per device: /project/:id opens it.

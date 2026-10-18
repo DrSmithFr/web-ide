@@ -4,7 +4,7 @@ How Web IDE is built, where things live, and the traps already met. Read [spec.m
 
 ## Overview
 
-The system map, in the words of the [glossary](../GLOSSARY.md):
+The system map, in the words of the [glossary](../../GLOSSARY.md):
 
 ```mermaid
 flowchart LR

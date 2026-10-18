@@ -2,7 +2,7 @@ package agent
 
 // Prompt texts of the assistant (moved from web/src/llm/prompt.ts): the default templates of
 // the modes, the text describing the tools of each mode, and the instructions of the roles of
-// a conversation linked to a ticket (docs/kanban.md). Read by the model: English.
+// a conversation linked to a ticket (docs/design/kanban.md). Read by the model: English.
 
 var (
 	defaultTemplate = `You are the programming assistant built into a web IDE. Open project: "{{project}}", root {{root}}{{host}}.

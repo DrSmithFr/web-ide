@@ -1,6 +1,6 @@
 // Package kanban keeps the tickets of a project in a SQLite base: <project>/.ide/kanban.db
 // for a local project (ignored by git), ~/.web-ide/kanban/<project>.db for a remote one.
-// See docs/kanban.md for the workflow.
+// See docs/design/kanban.md for the workflow.
 package kanban
 
 import (
@@ -58,7 +58,7 @@ const (
 // IsAgent tells whether a change comes from a model rather than from the user.
 func IsAgent(by string) bool { return by == ByModel || by == ByClaude }
 
-// modelMoves are the transitions the model may do (docs/kanban.md). New → To do also
+// modelMoves are the transitions the model may do (docs/design/kanban.md). New → To do also
 // happens by itself when a plan is written.
 var modelMoves = map[[2]string]bool{
 	{New, Todo}: true, {InProgress, Review}: true,

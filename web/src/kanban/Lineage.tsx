@@ -1,4 +1,4 @@
-// Lineage of a ticket (docs/kanban.md): its parent, its children in order (developed one
+// Lineage of a ticket (docs/design/kanban.md): its parent, its children in order (developed one
 // after the other in the worktree of the parent), the tickets of other lineages it waits
 // for, and what keeps it from starting.
 import { For, Show } from 'solid-js'

@@ -226,10 +226,10 @@ _Avoid_: planner, supervisor
 **Worktree holder** (#46)
 The step of a lineage whose development currently uses the lineage's worktree.
 
-**Agent desk** ([desks](docs/desks.md))
+**Agent desk** ([desks](docs/design/desks.md))
 A desk bound to an agent's session or a development conversation and its worktree; the AI acts there only.
 
-**Activity** ([desks](docs/desks.md))
+**Activity** ([desks](docs/design/desks.md))
 The list of the desks of every project with what runs in them, and the way to end them.
 
 ## Conflicts

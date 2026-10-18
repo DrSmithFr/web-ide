@@ -1,4 +1,4 @@
-// Routing of the sessions of a ticket by its complexity (docs/kanban.md): each level has an
+// Routing of the sessions of a ticket by its complexity (docs/design/kanban.md): each level has an
 // effort of the integrated assistant and a model of Claude Code. The click of a session
 // button runs the level recommended by the complexity; its arrow offers all of them.
 import type { Effort } from '../llm/state'

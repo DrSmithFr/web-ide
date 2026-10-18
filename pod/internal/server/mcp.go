@@ -10,7 +10,7 @@ import (
 )
 
 // MCP endpoint: Claude Code (or any MCP client) reads and changes the tickets of the
-// kanban, with the rules of the model and the author "claude" (docs/kanban.md). Streamable
+// kanban, with the rules of the model and the author "claude" (docs/design/kanban.md). Streamable
 // HTTP transport without streaming: each POST carries JSON-RPC messages and gets its
 // answers as JSON. Authenticated by the token of the pod as a bearer.
 

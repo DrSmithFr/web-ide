@@ -1,4 +1,4 @@
-// Kanban of the project: tickets kept by the pod in SQLite (see docs/kanban.md). The list
+// Kanban of the project: tickets kept by the pod in SQLite (see docs/design/kanban.md). The list
 // is shared by the board, the side panel and the ticket tabs, and follows the changes
 // made by other windows and by the assistant (event kanban.changed).
 import { podPath } from '../app/base'

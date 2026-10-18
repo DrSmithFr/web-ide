@@ -278,7 +278,7 @@ export interface Chat {
   queue?: QueuedMessage[]
   /** Plan: explore and propose without changing files; Build (default): act. */
   mode?: Mode
-  /** Kanban ticket this conversation works on, and its role (docs/kanban.md). */
+  /** Kanban ticket this conversation works on, and its role (docs/design/kanban.md). */
   /** project: where the conversation works (the worktree of its ticket for a development). */
   /** effort: chosen for the session from the complexity of the ticket, instead of the one of the options. */
   ticket?: { id: number; role: ChatRole; feedback?: number; project?: string; effort?: 'auto' | Effort }

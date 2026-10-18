@@ -9,7 +9,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 )
 
-// Lineages and dependencies on the git side (docs/kanban.md): a dependency resolves once
+// Lineages and dependencies on the git side (docs/design/kanban.md): a dependency resolves once
 // the branch of its lineage is merged, the children of a ticket work in its worktree.
 
 // mergedFunc tells whether the branch of a lineage root is merged into its local base.

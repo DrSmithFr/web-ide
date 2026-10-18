@@ -49,6 +49,8 @@ comm -12 <(git -C W diff --name-only $(git -C W merge-base HEAD B) HEAD | sort) 
 Compare the goals with the evidence: commits, tests run in the conversation.
 Flag a goal proved but not ticked, and a goal ticked without evidence.
 
+Check the docs rules of `AGENTS.md` too: a change of behaviour that contradicts `docs/design/` updates it in the same branch, a new term goes to `GLOSSARY.md`, and the docs the plan lists are touched.
+
 ## 5. The report to the user
 
 In the language of the user, one section per ticket:

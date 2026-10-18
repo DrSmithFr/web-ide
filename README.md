@@ -1,8 +1,6 @@
 # Web IDE
 
-*[Version française](README.fr.md)*
-
-A self-hosted IDE in your browser, with an AI agent that runs on **your** models (llama.cpp, Ollama) and a kanban that takes each change from an idea to a merged branch.
+A self-hosted IDE in your browser, with an AI assistant that runs on **your** models (llama.cpp, Ollama) and a kanban that takes each change from an idea to a merged branch.
 
 ![The model develops a ticket in its own git worktree: it reads the code, edits, runs the tests and commits](docs/images/develop.gif)
 
@@ -17,7 +15,7 @@ A self-hosted IDE in your browser, with an AI agent that runs on **your** models
 | **1. Briefing**: describe the need; the model reads the code, asks its questions, then writes the ticket. <br><br> ![Briefing](docs/images/briefing.gif) | **2. Plan**: the model writes the implementation plan and goals you can check. <br><br> ![Plan](docs/images/plan.png) |
 | **3. Development**: a branch and a worktree per ticket, in its own window; the model codes, tests, commits. <br><br> ![Development](docs/images/develop.png) | **4. Test and merge**: how to test, the goals, the diff; feedback goes back to the model; merge when it is right. <br><br> ![Review](docs/images/review.png) |
 
-The full walk-through is in the **[user guide](docs/guide.md)**.
+The full walk-through is in the **[user guide](docs/guide.md)**; every page of the documentation is listed in [docs/README.md](docs/README.md).
 
 ## And a real editor
 
@@ -38,7 +36,7 @@ The full walk-through is in the **[user guide](docs/guide.md)**.
 
 ## Install
 
-Linux, as a service started at boot ([details](docs/guide.md#install)):
+Linux, as a service started at boot ([details](docs/install/linux.md)):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/DrSmithFr/web-ide/main/scripts/install.sh | sh
@@ -63,7 +61,7 @@ The pod has the rights of your user: it reads and writes files and runs commands
 
 ## Contributing
 
-[CONTRIBUTING.md](CONTRIBUTING.md) to get started, [docs/architecture.md](docs/architecture.md) for the code, [docs/spec.md](docs/spec.md) for the intended behaviour, [CHANGELOG.md](CHANGELOG.md) for the releases.
+[CONTRIBUTING.md](CONTRIBUTING.md) to get started, [docs/design/architecture.md](docs/design/architecture.md) for the code, [docs/design/spec.md](docs/design/spec.md) for the intended behaviour, [CHANGELOG.md](CHANGELOG.md) for the releases.
 
 ## License
 

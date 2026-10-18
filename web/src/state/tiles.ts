@@ -1,4 +1,4 @@
-// Tiles (docs/desks.md): a tool or a console shown alone in a pane of the editor tree, the
+// Tiles (docs/design/desks.md): a tool or a console shown alone in a pane of the editor tree, the
 // files in groups of tabs. In the Grid mode of a desk they are the whole window, like i3: a new tile opens on the right
 // of the focused one or below it, the keyboard moves the focus, swaps and resizes tiles. In
 // the Scroll mode, like niri, the columns of the tree go side by side in a strip wider than
