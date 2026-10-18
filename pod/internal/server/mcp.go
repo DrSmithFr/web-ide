@@ -22,7 +22,7 @@ const mcpProtocol = "2025-06-18"
 var mcpProtocols = map[string]bool{"2024-11-05": true, "2025-03-26": true, "2025-06-18": true}
 
 const mcpInstructions = `Kanban of the Web IDE of the user: tickets go New → To do (plan written) → In progress (branch and worktree) → To test → Done.
-Milestones (kanban_milestone) group the tickets of one feature with its spec and user stories; only the user validates them.
+Milestones (kanban_milestone) group the tickets of one feature with its spec and user stories; only the user validates them. Objectives (kanban_objective) are named deadlines in order (MVP, a launch), taking tickets of several milestones; a ticket has one at most, apart from its milestone.
 Pass cwd (your working directory) to every tool: it selects the project; in the worktree of a ticket, that ticket is the default id.
 The saved commands of the project (list_commands, run_saved_command) run in consoles of the IDE that the user sees: use them for a development server or a command the user set up.
 The IDE itself: its consoles (list_consoles, read_console, console_input), Docker (docker_ps, docker_logs), app previews to try on any device (share_preview, list_previews), and what shows in its window (open_file, open_diff, focus, show_message, request_doodle for a drawing of the user).

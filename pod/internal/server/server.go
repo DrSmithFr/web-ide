@@ -172,6 +172,7 @@ func (s *Server) Init() {
 	s.registerPreviews()
 	s.registerKanban()
 	s.registerMilestones()
+	s.registerObjectives()
 	s.registerKanbanGit()
 	s.registerRelay()
 	s.registerLAN()

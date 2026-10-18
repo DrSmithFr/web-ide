@@ -88,6 +88,10 @@ func (a toolArgs) links(p *kanban.Patch) {
 		v := int64(a.num("milestone"))
 		p.Milestone = &v
 	}
+	if a.has("objective") {
+		v := int64(a.num("objective"))
+		p.Objective = &v
+	}
 }
 
 // attachDoodles joins the pages of the board not attached yet to a ticket, as PNG files: the
@@ -240,6 +244,18 @@ func (s *Server) kanbanCall(r *assistantRun, name string, a toolArgs, mode strin
 	r.mu.Unlock()
 	if name == "kanban_milestone" {
 		return s.assistantMilestone(r, loc, a, mode, chatID, chatTitle)
+	}
+	if name == "kanban_objective" {
+		var args objectiveArgs
+		raw, _ := json.Marshal(a)
+		if err := json.Unmarshal(raw, &args); err != nil {
+			return toolResult{}, usagef("invalid arguments: %v", err)
+		}
+		out, err := s.objectiveTool(r.root, loc, args, kanban.ByModel, chatID)
+		if err != nil {
+			return toolResult{}, err
+		}
+		return ok(out, assistant.T("objective", nil)), nil
 	}
 	if link == nil {
 		return toolResult{Content: "Error: this conversation is not linked to a ticket; only kanban_list, kanban_get and kanban_create are available.", Summary: assistant.T("no linked ticket", nil).Raw(), Status: "error"}, nil

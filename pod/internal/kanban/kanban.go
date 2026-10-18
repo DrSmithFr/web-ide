@@ -279,6 +279,30 @@ CREATE TABLE milestone_notes (
   chat_id TEXT NOT NULL DEFAULT '',
   created INTEGER NOT NULL DEFAULT 0
 );`,
+	// 9: objectives (named deadlines across milestones, in order); a ticket belongs to one
+	// objective at most, apart from its milestone; a milestone may give one to its tickets.
+	`ALTER TABLE tickets ADD COLUMN objective_id INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE milestones ADD COLUMN objective_id INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE objectives (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  due TEXT NOT NULL DEFAULT '',
+  pos INTEGER NOT NULL DEFAULT 0,
+  state TEXT NOT NULL DEFAULT 'open',
+  created INTEGER NOT NULL DEFAULT 0,
+  updated INTEGER NOT NULL DEFAULT 0,
+  closed INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE objective_notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  objective_id INTEGER NOT NULL REFERENCES objectives(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL DEFAULT 'note',
+  author TEXT NOT NULL DEFAULT 'user',
+  text TEXT NOT NULL,
+  chat_id TEXT NOT NULL DEFAULT '',
+  created INTEGER NOT NULL DEFAULT 0
+);`,
 }
 
 func migrate(db *sql.DB) error {

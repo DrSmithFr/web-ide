@@ -23,6 +23,7 @@ type milestoneArgs struct {
 	Kind        string
 	Complexity  string
 	Feedback    int64
+	Objective   *int64
 }
 
 // milestoneTool runs an action; created is the number of a milestone it created.
@@ -75,7 +76,7 @@ func (s *Server) milestoneTool(root string, loc kanban.Location, a milestoneArgs
 		if err := tooLong(a.Description, kanban.MaxDescription, "Keep the feature and its scope; the stories go apart (story_add)."); err != nil {
 			return "", 0, err
 		}
-		if err := s.Kanban.UpdateMilestone(loc, a.ID, kanban.MilestonePatch{Title: nonEmpty(a.Title), Description: nonEmpty(a.Description), Spec: a.Spec}); err != nil {
+		if err := s.Kanban.UpdateMilestone(loc, a.ID, kanban.MilestonePatch{Title: nonEmpty(a.Title), Description: nonEmpty(a.Description), Spec: a.Spec, Objective: a.Objective}, by); err != nil {
 			return "", 0, err
 		}
 		return fmt.Sprintf("Milestone %d updated.", a.ID), 0, nil

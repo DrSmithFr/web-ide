@@ -140,9 +140,9 @@ func setLinks(tx *sql.Tx, id int64, p Patch, by string, now int64) error {
 		if _, err := tx.Exec(`UPDATE tickets SET parent_id = ?, pos = ? WHERE id = ?`, np, pos, id); err != nil {
 			return err
 		}
-		// A step takes the milestone of its root.
+		// A step takes the milestone and the objective of its root.
 		if np != 0 {
-			if _, err := tx.Exec(`UPDATE tickets SET milestone_id = (SELECT milestone_id FROM tickets WHERE id = ?) WHERE id = ?`, np, id); err != nil {
+			if _, err := tx.Exec(`UPDATE tickets SET (milestone_id, objective_id) = (SELECT milestone_id, objective_id FROM tickets WHERE id = ?) WHERE id = ?`, np, id); err != nil {
 				return err
 			}
 		}
