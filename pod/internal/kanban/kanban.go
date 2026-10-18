@@ -237,6 +237,56 @@ CREATE TABLE deps (
 ALTER TABLE feedback ADD COLUMN complexity TEXT NOT NULL DEFAULT '';`,
 	// 7: the status To test is named to_test (it was review, which is a reading by a model).
 	`UPDATE tickets SET status = 'to_test' WHERE status = 'review';`,
+	// 8: milestones (the tickets of one feature), their user stories, feedback, linked
+	// conversations and history; a ticket belongs to one milestone at most.
+	`ALTER TABLE tickets ADD COLUMN milestone_id INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE milestones (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  spec TEXT NOT NULL DEFAULT '',
+  state TEXT NOT NULL DEFAULT 'open',
+  created INTEGER NOT NULL DEFAULT 0,
+  updated INTEGER NOT NULL DEFAULT 0,
+  closed INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE stories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  milestone_id INTEGER NOT NULL REFERENCES milestones(id) ON DELETE CASCADE,
+  pos INTEGER NOT NULL DEFAULT 0,
+  text TEXT NOT NULL,
+  done INTEGER NOT NULL DEFAULT 0,
+  created INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE milestone_feedback (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  milestone_id INTEGER NOT NULL REFERENCES milestones(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL DEFAULT 'info',
+  text TEXT NOT NULL,
+  done INTEGER NOT NULL DEFAULT 0,
+  author TEXT NOT NULL DEFAULT 'user',
+  chat_id TEXT NOT NULL DEFAULT '',
+  ticket_id INTEGER NOT NULL DEFAULT 0,
+  complexity TEXT NOT NULL DEFAULT '',
+  created INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE milestone_chats (
+  milestone_id INTEGER NOT NULL REFERENCES milestones(id) ON DELETE CASCADE,
+  chat_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  created INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (milestone_id, chat_id)
+);
+CREATE TABLE milestone_notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  milestone_id INTEGER NOT NULL REFERENCES milestones(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL DEFAULT 'note',
+  author TEXT NOT NULL DEFAULT 'user',
+  text TEXT NOT NULL,
+  chat_id TEXT NOT NULL DEFAULT '',
+  created INTEGER NOT NULL DEFAULT 0
+);`,
 }
 
 func migrate(db *sql.DB) error {

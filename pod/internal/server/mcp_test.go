@@ -124,6 +124,25 @@ func TestMCPKanban(t *testing.T) {
 	if !strings.Contains(md, "Status: To do · priority: Normal · size: M · complexity: High") || !strings.Contains(md, "(Claude, ") || !strings.Contains(md, "- [ ] (id 1) exported") {
 		t.Fatalf("get: %s", md)
 	}
+	// Milestones: created and filled by Claude, validated by the user only.
+	if text := m.ok("kanban_milestone", map[string]any{"cwd": cwd, "action": "create", "title": "Exports", "spec": "docs/export.md"}); !strings.Contains(text, "Milestone 1 created") {
+		t.Fatalf("milestone: %s", text)
+	}
+	a.waitEvent("kanban.changed", func(d map[string]any) bool { return d["milestone"] == float64(1) })
+	m.ok("kanban_milestone", map[string]any{"cwd": cwd, "action": "story_add", "id": 1, "text": "As a user, I export my orders"})
+	m.ok("kanban_update", map[string]any{"cwd": cwd, "id": 1, "milestone": 1})
+	if text, failed := m.tool("kanban_milestone", map[string]any{"cwd": cwd, "action": "feedback_add", "id": 1, "kind": "bug", "text": "x"}); !failed || !strings.Contains(text, "complexity is required") {
+		t.Fatalf("milestone feedback without a complexity: %s", text)
+	}
+	if text, failed := m.tool("kanban_milestone", map[string]any{"cwd": cwd, "action": "validate", "id": 1}); !failed || !strings.Contains(text, "unknown action") {
+		t.Fatalf("a model validated a milestone: %s", text)
+	}
+	if md := m.ok("kanban_milestone", map[string]any{"cwd": cwd, "action": "get", "id": 1}); !strings.Contains(md, "Spec: docs/export.md") || !strings.Contains(md, "- [ ] (id 1) As a user, I export my orders") || !strings.Contains(md, "- #1 [To do] Export") {
+		t.Fatalf("milestone get: %s", md)
+	}
+	if md := m.ok("kanban_get", map[string]any{"cwd": cwd, "id": 1}); !strings.Contains(md, "Milestone 1 · Exports") {
+		t.Fatalf("ticket of a milestone: %s", md)
+	}
 	tk := a.call("kanban.get", map[string]any{"id": 1})["result"].(map[string]any)
 	notes := tk["notes"].([]any)
 	if n := notes[len(notes)-1].(map[string]any); n["author"] != "claude" {

@@ -104,11 +104,13 @@ type Summary struct {
 	Size string `json:"size,omitempty"`
 	// Complexity: low | medium | high ("" when not estimated): it picks the model and the
 	// effort of the sessions.
-	Complexity string  `json:"complexity,omitempty"`
-	Parent     int64   `json:"parent,omitempty"`
-	Pos        int     `json:"pos,omitempty"`
-	StepDone   bool    `json:"stepDone,omitempty"`
-	DependsOn  []int64 `json:"dependsOn"`
+	Complexity string `json:"complexity,omitempty"`
+	Parent     int64  `json:"parent,omitempty"`
+	Pos        int    `json:"pos,omitempty"`
+	// Milestone: the one of the ticket (0: none); a step has the one of its root.
+	Milestone int64   `json:"milestone,omitempty"`
+	StepDone  bool    `json:"stepDone,omitempty"`
+	DependsOn []int64 `json:"dependsOn"`
 	// Blockers keep a ticket from starting (filled by the server for the tickets that may
 	// start: it needs git).
 	Blockers []Blocker `json:"blockers,omitempty"`
@@ -137,6 +139,8 @@ type Ticket struct {
 	Attachments  []Attachment `json:"attachments"`
 	// Children of the lineage, in order.
 	Children []Summary `json:"children"`
+	// MilestoneTitle: the title of its milestone.
+	MilestoneTitle string `json:"milestoneTitle,omitempty"`
 }
 
 var ErrNotFound = i18n.New("ticket not found")
@@ -146,12 +150,12 @@ const summaryCols = `t.id, t.title, t.priority, t.status, t.branch, t.worktree, 
   (SELECT COUNT(*) FROM goals g WHERE g.ticket_id = t.id),
   (SELECT COUNT(*) FROM chats c WHERE c.ticket_id = t.id),
   (SELECT COUNT(*) FROM feedback f WHERE f.ticket_id = t.id AND f.done = 0),
-  t.parent_id, t.pos, t.step_done, t.size, t.complexity`
+  t.parent_id, t.pos, t.step_done, t.size, t.complexity, t.milestone_id`
 
 func scanSummary(row interface{ Scan(...any) error }, s *Summary) error {
 	s.DependsOn = []int64{}
 	return row.Scan(&s.ID, &s.Title, &s.Priority, &s.Status, &s.Branch, &s.Worktree, &s.Created, &s.Updated, &s.Closed, &s.GoalsDone, &s.Goals, &s.Chats, &s.FeedbackOpen,
-		&s.Parent, &s.Pos, &s.StepDone, &s.Size, &s.Complexity)
+		&s.Parent, &s.Pos, &s.StepDone, &s.Size, &s.Complexity, &s.Milestone)
 }
 
 // summaries reads tickets with their dependencies (where: an SQL condition on t).
@@ -264,7 +268,7 @@ func get(db *sql.DB, id int64) (*Ticket, error) {
 	var snap string
 	row := db.QueryRow(`SELECT `+summaryCols+`, t.description, t.plan, t.test_summary, t.pr, t.base, t.setup, t.setup_log, t.snapshot FROM tickets t WHERE t.id = ?`, id)
 	err := row.Scan(&t.ID, &t.Title, &t.Priority, &t.Status, &t.Branch, &t.Worktree, &t.Created, &t.Updated, &t.Closed, &t.GoalsDone, &t.Goals, &t.Chats, &t.FeedbackOpen,
-		&t.Parent, &t.Pos, &t.StepDone, &t.Size, &t.Complexity,
+		&t.Parent, &t.Pos, &t.StepDone, &t.Size, &t.Complexity, &t.Milestone,
 		&t.Description, &t.Plan, &t.TestSummary, &t.PR, &t.Base, &t.Setup, &t.SetupLog, &snap)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -274,6 +278,9 @@ func get(db *sql.DB, id int64) (*Ticket, error) {
 	}
 	if t.Children, err = summaries(db, `WHERE t.parent_id = ? ORDER BY t.pos, t.id`, id); err != nil {
 		return nil, err
+	}
+	if t.Milestone != 0 {
+		_ = db.QueryRow(`SELECT title FROM milestones WHERE id = ?`, t.Milestone).Scan(&t.MilestoneTitle)
 	}
 	t.DependsOn = []int64{}
 	if deps, err := db.Query(`SELECT dep_id FROM deps WHERE ticket_id = ? ORDER BY dep_id`, id); err == nil {
@@ -369,6 +376,8 @@ type Patch struct {
 	// Parent: 0 takes the ticket out of its lineage. DependsOn replaces the dependencies.
 	Parent    *int64   `json:"parent"`
 	DependsOn *[]int64 `json:"dependsOn"`
+	// Milestone: 0 takes the ticket (and its steps) out of its milestone.
+	Milestone *int64 `json:"milestone"`
 	// PlanSize: the size comes with a plan, kept as is once the estimate is fixed.
 	PlanSize bool `json:"-"`
 }
@@ -451,30 +460,34 @@ func (m *Manager) Create(loc Location, p Patch, by string) (int64, error) {
 		return 0, err
 	}
 	var id int64
-	err := m.tx(loc, 0, func(tx *sql.Tx, now int64) error {
-		prio := "normal"
-		if p.Priority != nil {
-			prio = *p.Priority
-		}
-		desc := ""
-		if p.Description != nil {
-			desc = strings.TrimSpace(*p.Description)
-		}
-		res, err := tx.Exec(`INSERT INTO tickets (title, priority, status, description, created, updated) VALUES (?, ?, 'new', ?, ?, ?)`,
-			strings.TrimSpace(*p.Title), prio, desc, now, now)
-		if err != nil {
-			return err
-		}
-		id, _ = res.LastInsertId()
-		if err := setFiles(tx, id, p); err != nil {
-			return err
-		}
-		if err := event(tx, id, by, "Ticket created", nil, now); err != nil {
-			return err
-		}
-		return setLinks(tx, id, p, by, now)
+	err := m.tx(loc, 0, func(tx *sql.Tx, now int64) (err error) {
+		id, err = createTicket(tx, p, by, now)
+		return err
 	})
 	return id, err
+}
+
+func createTicket(tx *sql.Tx, p Patch, by string, now int64) (int64, error) {
+	prio := "normal"
+	if p.Priority != nil {
+		prio = *p.Priority
+	}
+	res, err := tx.Exec(`INSERT INTO tickets (title, priority, status, description, created, updated) VALUES (?, ?, 'new', ?, ?, ?)`,
+		strings.TrimSpace(*p.Title), prio, trimmed(p.Description), now, now)
+	if err != nil {
+		return 0, err
+	}
+	id, _ := res.LastInsertId()
+	if err := setFiles(tx, id, p); err != nil {
+		return 0, err
+	}
+	if err := event(tx, id, by, "Ticket created", nil, now); err != nil {
+		return 0, err
+	}
+	if err := setLinks(tx, id, p, by, now); err != nil {
+		return 0, err
+	}
+	return id, setMilestone(tx, id, p.Milestone, by, now)
 }
 
 func setFiles(tx *sql.Tx, id int64, p Patch) error {
@@ -543,6 +556,9 @@ func (m *Manager) Update(loc Location, id int64, p Patch, by string) error {
 			return err
 		}
 		if err := setComplexity(tx, id, p.Complexity, by, now); err != nil {
+			return err
+		}
+		if err := setMilestone(tx, id, p.Milestone, by, now); err != nil {
 			return err
 		}
 		if p.Plan != nil {
@@ -618,6 +634,10 @@ func (m *Manager) Move(loc Location, id int64, to, by, comment string) error {
 		}
 		if to == Done {
 			if err := feedbackHandled(tx, id); err != nil {
+				return err
+			}
+			// The feedback of a milestone made into this ticket is handled with it.
+			if _, err := tx.Exec(`UPDATE milestone_feedback SET done = 1 WHERE ticket_id = ?`, id); err != nil {
 				return err
 			}
 		}

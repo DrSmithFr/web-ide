@@ -2108,5 +2108,10 @@
   "Back": "Retour",
   "Help": "Aide",
   "Help: open the documentation page": "Aide : ouvrir la page de documentation",
-  "Not in the embedded documentation: {path}": "Ne fait pas partie de la documentation embarquée : {path}"
+  "Not in the embedded documentation: {path}": "Ne fait pas partie de la documentation embarquée : {path}",
+  "Milestone: “{milestone}”": "Jalon : « {milestone} »",
+  "Removed from the milestone “{milestone}”": "Retiré du jalon « {milestone} »",
+  "Made from a feedback of the milestone {milestone}": "Créé depuis un feedback du jalon {milestone}",
+  "Milestone created": "Jalon créé",
+  "milestone": "jalon"
 }

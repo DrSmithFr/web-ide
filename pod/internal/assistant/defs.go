@@ -220,7 +220,28 @@ var (
 	sizeProp       = enum("Estimated effort of the whole ticket: s (a few files, an hour of AI work), m, l, xl (many files across the pod and the page, several days)", sizes...)
 	lineageParent  = integer("Root ticket: this one becomes a step of its lineage, developed in the root's worktree after the previous steps (0 takes it out). Only before its development starts")
 	lineageDeps    = obj{"type": "array", "items": obj{"type": "integer"}, "description": "Tickets of other lineages this one waits for: it starts once they are merged or done (replaces the list)"}
+	milestoneOf    = integer("Milestone of the ticket and of its steps (0 takes it out; a step has the one of its root); see kanban_milestone")
 )
+
+// MaxStory is the longest user story of a milestone, in characters.
+const MaxStory = 500
+
+// MilestoneDescription and MilestoneProps: the kanban_milestone tool, for the assistant and the
+// MCP endpoint.
+const MilestoneDescription = `Milestones group the tickets of one feature (across lineages) with its spec, user stories and feedback; the user validates them. Actions: list; get (id); create (title, description, spec); update (id; title, description, spec); story_add (id, text: "As a <user>, I <can do>…"), story_edit (id, story, text), story_delete (id, story); feedback_add (id, kind, text, complexity), feedback_done / feedback_reopen (id, feedback); note (id, text: a decision). Only the user validates a story or a milestone. Put a ticket in a milestone with the milestone field of kanban_create / kanban_update.`
+
+var MilestoneProps = obj{
+	"action":      enum("What to do", "list", "get", "create", "update", "story_add", "story_edit", "story_delete", "feedback_add", "feedback_done", "feedback_reopen", "note"),
+	"id":          integer("Milestone number (all actions but list and create)"),
+	"title":       str("Title (create, update)"),
+	"description": str(fmt.Sprintf("Description in Markdown, %d characters max: the feature, its scope (create, update)", MaxDescription)),
+	"spec":        str("The spec: a path of the repository or an address (create, update)"),
+	"story":       integer("User story id (story_edit, story_delete)"),
+	"text":        str(fmt.Sprintf("User story (%d characters max), feedback or note (%d characters max)", MaxStory, MaxNote)),
+	"kind":        enum("Kind of feedback (feedback_add)", "bug", "feature", "info"),
+	"complexity":  enum("How hard handling the feedback is (feedback_add)", complexities...),
+	"feedback":    integer("Feedback id (feedback_done, feedback_reopen)"),
+}
 
 var kanbanReadDefs = []Def{
 	fn("kanban_list", "Lists the tickets of the kanban of the project (number, status, priority, title, goals, open feedback).", obj{"status": enum("Status", statuses...), "query": str("Filter on the title (optional)")}),
@@ -233,7 +254,9 @@ var kanbanReadDefs = []Def{
 			"files":       strList("Paths of the files concerned (relative to the root)"),
 			"parent":      lineageParent,
 			"depends_on":  lineageDeps,
+			"milestone":   milestoneOf,
 		}, "title"),
+	fn("kanban_milestone", MilestoneDescription+" A conversation changes only the milestones it created or is linked to.", MilestoneProps, "action"),
 }
 
 var kanbanWriteDefs = []Def{
@@ -249,6 +272,7 @@ var kanbanWriteDefs = []Def{
 			"complexity":   complexityProp,
 			"parent":       lineageParent,
 			"depends_on":   lineageDeps,
+			"milestone":    milestoneOf,
 		}),
 	fn("kanban_add_note", fmt.Sprintf("Adds a short note to the linked ticket (%d characters max), linked to this conversation: a decision, a fact found, an answer of the user worth keeping. Not for progress logs, restatements of the ticket or corrections of earlier notes.", MaxNote),
 		obj{"text": str(fmt.Sprintf("Note in Markdown, %d characters max", MaxNote))}, "text"),
@@ -327,7 +351,7 @@ func ToolsFor(mode string, ticket *TicketLink, sub, spawn, adopted bool) []json.
 			out = append(out, d.JSON)
 		}
 		for _, d := range append(append(append([]Def{}, dockerDefs...), kanbanReadDefs...), orchestratorDefs...) {
-			if d.Name != "kanban_create" { // ideas go to a Briefing conversation
+			if d.Name != "kanban_create" && d.Name != "kanban_milestone" { // ideas go to a Briefing conversation
 				out = append(out, d.JSON)
 			}
 		}

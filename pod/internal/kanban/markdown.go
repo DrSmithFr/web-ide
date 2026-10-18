@@ -18,8 +18,7 @@ func isoDate(ms int64) string { return time.UnixMilli(ms).UTC().Format("2006-01-
 
 func indent(s string) string { return strings.ReplaceAll(strings.TrimSpace(s), "\n", "\n  ") }
 
-// Markdown is a ticket as a model reads it: the port of ticketMarkdown
-// (web/src/llm/kanbanTools.ts), for the MCP endpoint.
+// Markdown is a ticket as a model reads it (assistant and MCP endpoint).
 func Markdown(t *Ticket) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Ticket #%d · %s\n", t.ID, t.Title)
@@ -41,6 +40,9 @@ func Markdown(t *Ticket) string {
 	}
 	if lines := lineageLines(t); len(lines) > 0 {
 		b.WriteString("\n\n## Lineage\n" + strings.Join(lines, "\n"))
+	}
+	if t.Milestone != 0 {
+		fmt.Fprintf(&b, "\n\n## Milestone\nMilestone %d · %s (kanban_milestone action get: its spec and user stories).", t.Milestone, t.MilestoneTitle)
 	}
 	desc := strings.TrimSpace(t.Description)
 	if desc == "" {
@@ -153,4 +155,81 @@ func BlockersText(bl []Blocker) string {
 		parts[i] = fmt.Sprintf("#%d (%s)", b.ID, BlockerNames[b.Kind])
 	}
 	return strings.Join(parts, ", ")
+}
+
+// MilestoneMarkdown is a milestone as a model reads it.
+func MilestoneMarkdown(ms *Milestone) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# Milestone %d · %s\n", ms.ID, ms.Title)
+	fmt.Fprintf(&b, "State: %s · tickets finished %d/%d · user stories validated %d/%d", MilestoneStateNames[ms.State], ms.TicketsDone, ms.Tickets, ms.StoriesDone, ms.Stories)
+	if ms.FeedbackOpen > 0 {
+		fmt.Fprintf(&b, " · open feedback %d", ms.FeedbackOpen)
+	}
+	if ms.Spec != "" {
+		fmt.Fprintf(&b, "\nSpec: %s", ms.Spec)
+	}
+	desc := strings.TrimSpace(ms.Description)
+	if desc == "" {
+		desc = "(empty)"
+	}
+	fmt.Fprintf(&b, "\n\n## Description\n%s\n", desc)
+	if len(ms.StoryList) > 0 {
+		b.WriteString("\n## User stories (validated by the user; the base of the e2e coverage)\n")
+		for _, s := range ms.StoryList {
+			mark := " "
+			if s.Done {
+				mark = "x"
+			}
+			fmt.Fprintf(&b, "- [%s] (id %d) %s\n", mark, s.ID, indent(s.Text))
+		}
+	}
+	if len(ms.TicketList) > 0 {
+		b.WriteString("\n## Tickets\n")
+		for _, t := range ms.TicketList {
+			line := fmt.Sprintf("- #%d [%s] %s", t.ID, StatusNames[t.Status], t.Title)
+			if t.Parent != 0 {
+				line += fmt.Sprintf(" (step of #%d)", t.Parent)
+			}
+			b.WriteString(line + "\n")
+		}
+	}
+	if len(ms.FeedbackList) > 0 {
+		b.WriteString("\n## Feedback\n")
+		for _, f := range ms.FeedbackList {
+			mark := " "
+			if f.Done {
+				mark = "x"
+			}
+			kind := FeedbackNames[f.Kind]
+			if f.Complexity != "" {
+				kind += ", complexity " + ComplexityNames[f.Complexity]
+			}
+			if f.Ticket != 0 {
+				kind += fmt.Sprintf(", made into #%d", f.Ticket)
+			}
+			fmt.Fprintf(&b, "- [%s] (id %d, %s, %s) %s\n", mark, f.ID, kind, isoDate(f.Created), indent(f.Text))
+		}
+	}
+	notes := false
+	for _, n := range ms.Notes {
+		if n.Kind == "event" {
+			continue
+		}
+		if !notes {
+			b.WriteString("\n## Notes\n")
+			notes = true
+		}
+		fmt.Fprintf(&b, "- (%s, %s) %s\n", authorNames[n.Author], isoDate(n.Created), strings.TrimSpace(n.Text))
+	}
+	if len(ms.ChatList) > 0 {
+		b.WriteString("\n## Linked conversations\n")
+		for _, c := range ms.ChatList {
+			title := c.Title
+			if title == "" {
+				title = c.ChatID
+			}
+			fmt.Fprintf(&b, "- %s: %s (chat %s)\n", RoleNames[c.Role], title, c.ChatID)
+		}
+	}
+	return strings.TrimRight(b.String(), "\n")
 }

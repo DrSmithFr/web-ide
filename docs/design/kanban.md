@@ -57,7 +57,7 @@ Work too big for one ticket is split into a **lineage**: a ticket (the root) and
 - In the worktree of a lineage, the default ticket of Claude Code is the current step: the step in progress, else the last one to test, else the root.
 - Cards show `↳ #n` (step of) and a lock with the blocking tickets; the ticket view has a *Lineage* section (root, steps with their order, dependencies with their state, blockers).
 
-## Milestones (planned, #104-#107)
+## Milestones
 
 A **milestone** groups the tickets of one feature: a functional grouping above lineages, spanning several lineages and lone tickets. It is the scope the agent loop will chain later.
 
@@ -68,6 +68,7 @@ A **milestone** groups the tickets of one feature: a functional grouping above l
 - The milestone page validates its stories, its tickets *To test* (their *How to test* shown there) and the milestone; each ticket recalls its milestone and stories in its *How to test* section.
 - User stories are not linked to tickets: they are the base of a review of the e2e coverage (#107), whose gaps become milestone feedback.
 - The Board gets a third view, *Milestones*, and a milestone filter on Board and Roadmap (#106).
+- Storage and API (#104): tables `milestones`, `stories`, `milestone_feedback`, `milestone_chats`, `milestone_notes`, and `tickets.milestone_id` (base version 8); RPC `kanban.milestone.*` (`kanban.changed` carries `milestone`); MCP and assistant tool `kanban_milestone` (no validation nor story check: the user's), `milestone` on `kanban_create` / `kanban_update`. The assistant changes only the milestones its conversation is linked to (a briefing is linked to those it creates). The page (#105, #106) is still to come.
 
 ## Statuses and transitions
 

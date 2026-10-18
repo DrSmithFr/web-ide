@@ -21,7 +21,11 @@ func TestMigrateReviewToToTest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := raw.Exec(`UPDATE tickets SET status = 'review'; PRAGMA user_version = 6`); err != nil {
+	// What the later versions added goes, as in a base of version 6.
+	if _, err := raw.Exec(`UPDATE tickets SET status = 'review';
+ALTER TABLE tickets DROP COLUMN milestone_id;
+DROP TABLE milestone_notes; DROP TABLE milestone_chats; DROP TABLE milestone_feedback; DROP TABLE stories; DROP TABLE milestones;
+PRAGMA user_version = 6`); err != nil {
 		t.Fatal(err)
 	}
 	raw.Close()

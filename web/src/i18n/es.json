@@ -2108,5 +2108,10 @@
   "Back": "Atrás",
   "Help": "Ayuda",
   "Help: open the documentation page": "Ayuda: abrir la página de documentación",
-  "Not in the embedded documentation: {path}": "No está en la documentación integrada: {path}"
+  "Not in the embedded documentation: {path}": "No está en la documentación integrada: {path}",
+  "Milestone: “{milestone}”": "Hito: «{milestone}»",
+  "Removed from the milestone “{milestone}”": "Retirado del hito «{milestone}»",
+  "Made from a feedback of the milestone {milestone}": "Creado a partir de un comentario del hito {milestone}",
+  "Milestone created": "Hito creado",
+  "milestone": "hito"
 }
