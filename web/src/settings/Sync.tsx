@@ -66,7 +66,7 @@ export function SyncPanel() {
     void refresh()
     onPod('sync.conflict', (d: { status: SyncStatus; payload: Conflict }) => {
       put(d.status)
-      errorToast(t('{path} changed on {device} too. Choose the value to keep.', { path: d.payload.path, device: d.payload.dev }))
+      errorToast(t('{path} changed on {member} too. Choose the value to keep.', { path: d.payload.path, member: d.payload.dev }))
     })
     onPod('sync.changed', (d: { status: SyncStatus }) => put(d.status))
     onPod('sync.error', (d: { status: SyncStatus; payload: string }) => {

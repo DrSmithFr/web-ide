@@ -240,7 +240,7 @@ export async function verifyCert(c, pinned, revoked) {
   if (c.account !== pinned) return 'certificate of another account'
   if (c.scope !== ScopeAll) return `scope ${c.scope}`
   if (!(await verify(c.account, c.sig, canonicalCert(c)))) return 'the certificate signature does not match'
-  if (revoked?.revoked?.includes(c.key)) return 'device revoked'
+  if (revoked?.revoked?.includes(c.key)) return 'device revoked' // wire text kept for older pages and pods: a revoked member
   return ''
 }
 

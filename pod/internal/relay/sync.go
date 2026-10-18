@@ -166,7 +166,7 @@ func (s *Server) sendBlobs(c *identityConn, pc *podConn, account, prefix string)
 // (it already got the answer). `from` is the link or the pod that wrote it.
 
 // pushSyncKey tells the admin links of an account that a device published its X25519 key: the
-// Devices panel wraps the epoch key for it.
+// Members panel wraps the epoch key for it.
 func (s *Server) pushSyncKey(account string, rec *identity.SyncKeyRecord, from any) {
 	s.mu.Lock()
 	var links []*identityConn

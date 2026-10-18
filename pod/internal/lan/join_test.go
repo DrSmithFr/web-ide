@@ -16,7 +16,7 @@ import (
 )
 
 // A pod joins with no relay: it waits on its LAN port, alpha finds it at the address typed,
-// the Devices panel (the local identity link) lists the request and approves it.
+// the Members panel (the local identity link) lists the request and approves it.
 func TestJoinOverTheLAN(t *testing.T) {
 	a := account(t, 1)
 	al := startPod(t, a, "alpha")

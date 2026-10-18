@@ -187,7 +187,7 @@ run(
       await openProject(appA)
       await openSettings(appA)
       await section(appA, 'Remote access')
-      await appA.waitForSelector('[data-testid=devices] [data-testid=device-list]', { timeout: 20000 })
+      await appA.waitForSelector('[data-testid=members] [data-testid=member-list]', { timeout: 20000 })
       // The admin browser is the only device that holds the account key, so it is the only one that
       // can wrap the key of the epoch: pod A, which never knew the phrase, gets it wrapped here.
       await appA.waitForSelector('[data-testid=sync] .check:has-text("settings") input', { timeout: 20000 })
@@ -206,7 +206,7 @@ run(
       fs.writeFileSync(path.join(DATA_B, 'llm.json'), JSON.stringify({ servers: [{ id: 'srv1', name: 'x', kind: 'openai', url: 'http://127.0.0.1:9999' }] }))
       // The admin invites a device; pod B posts its key to that code, so the fingerprint the
       // panel reads is the one of its key.
-      await appA.click('[data-testid=devices] button:has-text("Invite a device")')
+      await appA.click('[data-testid=members] button:has-text("Invite a device")')
       await appA.waitForSelector('.qr svg', { timeout: 20000 })
       const code = (await appA.textContent('.qr .mono')).trim()
       assert(/^[A-Z2-7]{8}$/.test(code), 'the invite code is 8 base32 characters: ' + code)
@@ -228,7 +228,7 @@ run(
       // pod paired without the phrase has no other way to get it.
       startPodB()
       assert(await waitOnline(POD_B), 'pod B is online at the relay')
-      const row = appA.locator(`[data-testid=device-list] tr:has-text("${fpB}")`)
+      const row = appA.locator(`[data-testid=member-list] tr:has-text("${fpB}")`)
       await row.waitFor({ timeout: 30000 })
       assert((await row.innerText()).includes('wrapped'), 'the key of the epoch is wrapped for pod B: ' + (await row.innerText()).trim())
 
@@ -329,7 +329,7 @@ run(
 
       // 10. A revocation moves to a new epoch and the data is encrypted again.
       await section(appA, 'Remote access')
-      await appA.click('[data-testid=device-list] tr:has-text("phone") button:has-text("Revoke")')
+      await appA.click('[data-testid=member-list] tr:has-text("phone") button:has-text("Revoke")')
       await appA.waitForSelector('.toast', { timeout: 20000 })
       const toasts = (await appA.locator('.toast').allInnerTexts()).join(' | ')
       assert(toasts.toLowerCase().includes('renew'), 'the panel suggests renewing the API keys: ' + toasts)

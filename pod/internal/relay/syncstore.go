@@ -92,7 +92,7 @@ func (s *Store) hasDevice(account, key string) error {
 		return err
 	}
 	if n == 0 {
-		return i18n.New("device not paired")
+		return i18n.New("member not paired")
 	}
 	return nil
 }
@@ -112,7 +112,7 @@ func (s *Store) StoreSyncKey(r *identity.SyncKeyRecord) error {
 		return err
 	}
 	if list.Has(r.Device) {
-		return i18n.New("device revoked")
+		return i18n.New("device revoked") // wire text, see identity.ErrRevoked
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

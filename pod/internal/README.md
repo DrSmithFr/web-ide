@@ -5,7 +5,7 @@ The packages of the pod, in five blocks. Each section has the map of its package
 | Block | Packages |
 |---|---|
 | [Server and protocol](#server-and-protocol) | `server`, `runtime`, `store`, `settings`, `projects`, `sessions`, `idedir`, `config`, `stats`, `update`, `i18n` |
-| [Files and processes](#files-and-processes) | `fsx`, `execx`, `sshx`, `sshtest`, `console`, `keeper`, `search`, `lsp`, `db`, `docker`, `tunnels`, `preview`, `clipboard`, `commands` |
+| [Files and processes](#files-and-processes) | `fsx`, `execx`, `sshx`, `sshtest`, `console`, `keeper`, `search`, `lsp`, `db`, `docker`, `forwards`, `preview`, `clipboard`, `commands` |
 | [AI](#ai) | `llm`, `agent`, `acp`, `hfcache` |
 | [Kanban and git](#kanban-and-git) | `kanban`, `git` |
 | [Network and identity](#network-and-identity) | `relay`, `relayclient`, `relayload`, `tunnel`, `multipod`, `lan`, `identity`, `pair`, `settingsync`, `push`, `power` |
@@ -103,7 +103,7 @@ flowchart LR
   commands["commands<br/>project commands"]
   clipboard["clipboard"]
   preview["preview"]
-  tunnels["tunnels<br/>port forwards"]
+  forwards["forwards<br/>port forwards"]
   sshtest["sshtest<br/>test SSH server"]
   console --> execx
   console -->|"adopts its processes"| keeper
@@ -136,16 +136,16 @@ flowchart LR
 - `keeper`: The keeper: protocol (frames of a length, a JSON header and raw bytes), server (processes known by pid and descriptors, output rings, attachments from an offset, GC of ended processes; HTTP relay of the completions; SSH connections; update by re-exec) and the client of the pod (reconnection, attachments resumed from their offset)
 - `search`: Project-wide search (RE2) and file list
 - `lsp`: Language servers per project and language
-- `db`: SQLite (modernc), PostgreSQL (pgx), Redis (go-redis), SSH tunnels
+- `db`: SQLite (modernc), PostgreSQL (pgx), Redis (go-redis), SSH port forwards
 - `docker`: Docker tool: status, Compose stack, containers, inspect, stats, log streams (the `docker` command, JSON formats only)
-- `tunnels`: Local ports forwarded to the SSH host of a project (open while a window of the pod is connected, closed `TunnelIdle` after the last one)
+- `forwards`: Port forwards: local ports that reach an address seen from the SSH host of a project (open while a window of the pod is connected, closed `ForwardIdle` after the last one)
 - `preview`: App previews: a reverse proxy per preview (cookie of the IDE, or the token of a public one), exposed by `tailscale serve` / `funnel` (`Tailscale` interface, faked in tests), stopped with the command of the app
 - `clipboard`: History of the texts copied in the IDE, shared by every window
 - `commands`: Saved commands of a project (`.ide/commands.json` of the main project): validation, load and save; run by the server (`commands.run`, `run_saved_command` of the assistant and the MCP, previews of `serve` commands) as tasks tagged with their id (`console.Info.CommandID`), one console per command; the `setup` ones make the setup script of a new worktree (`SetupScript`)
 
-`sshtest` is the in-memory SSH server of the tests; `sshtest/sshtestd` runs it for the `tunnels` suite. `lsp`, `search`, `docker` and `commands` run their commands through `execx`.
+`sshtest` is the in-memory SSH server of the tests; `sshtest/sshtestd` runs it for the `forwards` suite. `lsp`, `search`, `docker` and `commands` run their commands through `execx`.
 
-**Tests**: `cd pod && go test ./internal/{fsx,execx,sshx,console,keeper,search,lsp,db,docker,tunnels,preview,clipboard,commands}`; e2e: `keeper`, `features`, `commands`, `docker`, `tunnels`, `lsp`, `preview`, `popups`.
+**Tests**: `cd pod && go test ./internal/{fsx,execx,sshx,console,keeper,search,lsp,db,docker,forwards,preview,clipboard,commands}`; e2e: `keeper`, `features`, `commands`, `docker`, `forwards`, `lsp`, `preview`, `popups`.
 
 
 ## AI

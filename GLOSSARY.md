@@ -27,6 +27,7 @@ _Avoid_: relay link, channel
 **Port forward**
 A local port that reaches an address seen from the SSH host of a project.
 _Avoid_: tunnel, SSH tunnel
+The RPC methods and the event of the Port forwards tool are still `tunnels.*`, and `.ide/tunnels.json` is read when `forwards.json` is missing (older pages and projects).
 
 **Service**
 An HTTP service of a pod's machine (Ollama, a web UI) shared with the other pods of the account, which reach it on a port of their own machine.
@@ -47,6 +48,7 @@ _Avoid_: client, machine; a pod is not a device
 **Member**
 A device or a pod of the account.
 _Avoid_: device (for a pod), peer, node
+On the wire and in storage a member is still called a device (the relay's `devices` message and `device` fields, `device.key`, `identity.json`, the text `device revoked`), so that releases keep talking; each such name says so in a comment.
 
 **Pairing**
 Adding a browser or a pod to an account: the recovery phrase typed, or an invite approved by a device already in it.
@@ -237,10 +239,7 @@ The list of the desks of every project with what runs in them, and the way to en
 
 Naming problems found while writing this glossary, each to become a ticket.
 
-- **Tunnel**: the package `tunnels`, `tunnels.json` and the Tunnels tool name SSH port forwards; rename them *port forwards*.
 - **Service**: the docs call the systemd units of the pod and the keeper *services* (`install.sh`, guide); call them *units*.
-- **Access token**: the docs and the UI say *pairing token* and *pairs this browser* for the token of the first link.
-- **Device / member**: the code and the UI call a pod a device too (`device.key`, *Devices* panel, `identity.json`, the revocation list); a pod is a member, not a device. The *Devices* panel becomes *Members*.
 - **Session**: the state of a desk is stored as a session (`sessions/<project>.json`, package `sessions`); call it *desk state*, and keep *session* for agents.
 - **Projects folder**: the flag `-workspace`, `config.json` and the docs say *workspace*; rename to *projects folder* (`-projects`, the old flag kept as an alias).
 - **Tool call**: the code and the docs say *tool* for what a model calls; write *tool call* or *agent tool*.

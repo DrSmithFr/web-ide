@@ -8,6 +8,10 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 - Help: the documentation is embedded in the pod and opens read only in a tab from *Help › Documentation* or the command palette, with working links and headings. A **?** next to the settings sections, the kanban and the Agents tool opens the page that explains it.
 
+### Changed
+
+- Naming (glossary): the SSH *tunnels* are *port forwards* (Docker tool tab, home page, `.ide/forwards.json`: a project with `.ide/tunnels.json` is read and moved), the first link carries the *access token* (no longer *pairing token*), and the *Devices* panel of Settings > Remote access is *Members* (browsers and pods). Keys and wire formats (`device.key`, `identity.json`, RPC names) are unchanged.
+
 ## [1.18.3] - 2026-10-17
 
 ### Changed

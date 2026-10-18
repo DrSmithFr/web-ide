@@ -94,8 +94,8 @@ type Manager struct {
 	trusted   map[string]*trust             // by TLS fingerprint of a peer
 	joins     map[string]*joinReq           // joining pods, by address
 	tunnels   map[string]*tunnelWindow      // windows bridged by a gateway, by window id + peer TLS fp
-	browsers  map[string]*identity.Cert     // certificates of the browsers of the Devices panel
-	idLinks   map[*idLink]bool              // the open links of the Devices panel
+	browsers  map[string]*identity.Cert     // certificates of the browsers of the Members panel
+	idLinks   map[*idLink]bool              // the open links of the Members panel
 	updates   map[string]chan update.Answer // update and power requests this pod sent, by request id
 	seq       int64                         // the seq of the last revocation list passed on
 	announced string                        // the account announced by mDNS
@@ -715,7 +715,7 @@ func (m *Manager) PublishBlob(b *identity.BlobRecord) error {
 	return l.send("$blob", b)
 }
 
-// PublishSyncKey hands the X25519 key of this device to a peer, so an admin can wrap the epoch key
+// PublishSyncKey hands the X25519 key of this member to a peer, so an admin can wrap the epoch key
 // for a pod that has no link of its own.
 func (m *Manager) PublishSyncKey(k *identity.SyncKeyRecord) error {
 	l := m.publishLink()
@@ -826,7 +826,7 @@ func (m *Manager) publishLink() *link {
 	return nil
 }
 
-// spreadWrap passes a wrap for another device on to the other peers: the pod it is for reaches the
+// spreadWrap passes a wrap for another member on to the other peers: the pod it is for reaches the
 // relay through one of them, so the key comes back the same way.
 func (m *Manager) spreadWrap(w *identity.WrapRecord, from *link) {
 	m.mu.Lock()

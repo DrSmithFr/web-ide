@@ -184,7 +184,7 @@ run(
     assert(b1.acctFp === accountLine[2], 'the fingerprint of the account is the same in the pod and in the browser: ' + b1.acctFp)
     assert(b1.device !== podLine[1], 'the browser is its own device, not the pod: ' + b1.device)
 
-    // Settings > Remote access > Devices, on the relay origin. The app is the iframe of the
+    // Settings > Remote access > Members, on the relay origin. The app is the iframe of the
     // bootstrap page; a project must be open for the menubar.
     const app = page.mainFrame().childFrames()[0]
     await app.waitForSelector('.home .home-bar', { timeout: 30000 })
@@ -194,18 +194,18 @@ run(
     await app.click('.menubar button[title^="Settings"]')
     await app.waitForSelector('.settings')
     await app.click('.settings-nav button:has-text("Remote access")')
-    await app.waitForSelector('[data-testid=devices] [data-testid=device-list]', { timeout: 20000 })
-    const devices = await app.textContent('[data-testid=devices] [data-testid=device-list]')
-    assert(devices.includes(podLine[2]) && devices.includes(b1.fp), 'the panel lists the pod and this browser by their fingerprint: ' + devices.trim().slice(0, 200))
-    assert(devices.includes('pod') && devices.includes('browser'), 'the devices carry their kind')
-    assert((await app.locator('[data-testid=device-list] tr').count()) === 3, 'two devices and the header row')
+    await app.waitForSelector('[data-testid=members] [data-testid=member-list]', { timeout: 20000 })
+    const members = await app.textContent('[data-testid=members] [data-testid=member-list]')
+    assert(members.includes(podLine[2]) && members.includes(b1.fp), 'the panel lists the pod and this browser by their fingerprint: ' + members.trim().slice(0, 200))
+    assert(members.includes('pod') && members.includes('browser'), 'the members carry their kind')
+    assert((await app.locator('[data-testid=member-list] tr').count()) === 3, 'two members and the header row')
 
     // The GitHub link: only a device that proved its key may start it, so the panel's link
     // proves possession. The window goes on to GitHub with the OAuth App of the relay.
     await page.context().route((u) => u.hostname === 'github.com', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<p>GitHub</p>' }))
     const [authorize] = await Promise.all([
       page.context().waitForEvent('request', { predicate: (r) => r.url().startsWith('https://github.com/login/oauth/authorize'), timeout: 15000 }),
-      app.click('[data-testid=devices] button:has-text("Link a GitHub account")'),
+      app.click('[data-testid=members] button:has-text("Link a GitHub account")'),
     ])
     const ghURL = new URL(authorize.url())
     assert(ghURL.searchParams.get('client_id') === 'e2e-client' && ghURL.searchParams.get('state'), 'Link a GitHub account opens GitHub with the OAuth App and a state: ' + authorize.url())
@@ -234,7 +234,7 @@ db=sqlite3.connect(sys.argv[1]); db.execute("INSERT INTO github (account, github
     assert(unlimited.includes('/ ∞') && unlimited.includes('hugs'), 'Settings tells the new supporter at once: used / ∞ and a thank-you: ' + unlimited.slice(0, 300))
 
     // 4. An invite for a phone: the code, the QR, and the fingerprint the admin compares.
-    await app.click('[data-testid=devices] button:has-text("Invite a device")')
+    await app.click('[data-testid=members] button:has-text("Invite a device")')
     await app.waitForSelector('.qr svg', { timeout: 15000 })
     const code = (await app.textContent('.qr .mono')).trim()
     assert(/^[A-Z2-7]{8}$/.test(code), 'the invite code is 8 base32 characters: ' + code)
@@ -272,7 +272,7 @@ db=sqlite3.connect(sys.argv[1]); db.execute("INSERT INTO github (account, github
 
     // 7. The admin revokes browser 2: the relay stores the signed list and pushes it to the
     // pod, which checks it itself. The revoked device is refused at the next connection.
-    await app.click(`[data-testid=device-list] tr:has-text("${b2.fingerprint}") button:has-text("Revoke")`)
+    await app.click(`[data-testid=member-list] tr:has-text("${b2.fingerprint}") button:has-text("Revoke")`)
     await app.waitForSelector('.toast:has-text("epoch")', { timeout: 15000 })
     for (let i = 0; i < 20 && !status().includes('revocations'); i++) await new Promise((r) => setTimeout(r, 500))
     const after = status()
@@ -280,7 +280,7 @@ db=sqlite3.connect(sys.argv[1]); db.execute("INSERT INTO github (account, github
 
     // Back to the plain link (the invite code is single use): the revoked device is refused.
     const refused = await open(page2, `${ORIGIN}/#pod=${POD_ID}`)
-    assert(refused.includes('Device revoked'), 'the revoked device is refused: ' + refused)
+    assert(refused.includes('Member revoked'), 'the revoked member is refused: ' + refused)
     assert(await page.waitForSelector('#frame'), 'the admin device is still connected')
 
     // The revoked device ended its session: it would not open a pod even before the refusal.
@@ -334,7 +334,7 @@ db=sqlite3.connect(sys.argv[1]); db.execute("INSERT INTO github (account, github
     await page.waitForSelector('#frame', { state: 'visible', timeout: 30000 })
     assert((await assertions(auth1)) > used, 'the button asks the passkey')
 
-    // 10. Lock in Settings > Remote access > Devices ends the session at once.
+    // 10. Lock in Settings > Remote access > Members ends the session at once.
     const app10 = page.mainFrame().childFrames()[0]
     await app10.waitForSelector('.menubar, .home .home-bar', { timeout: 30000 })
     if (!(await app10.locator('.menubar').count())) {

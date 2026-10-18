@@ -3,7 +3,7 @@
 // typed in Settings); the suite pairs it with the CLI, starts four more pods on loopback —
 // bravo and echo joined with the phrase, charlie unpaired, delta of another account — and
 // checks the home page, a revocation made offline that spreads from pod to pod, foxtrot
-// joining over the LAN through the Devices panel, and a project of bravo opened through the
+// joining over the LAN through the Members panel, and a project of bravo opened through the
 // gateway. No relay process runs.
 const fs = require('fs')
 const path = require('path')
@@ -138,7 +138,7 @@ run(async ({ page }) => {
     assert(bravoStatus.includes('revocations : seq 1, epoch 1, 1 device(s)'), 'bravo got the list over the LAN: ' + bravoStatus.replace(/\n/g, ' | '))
 
     // 5. foxtrot joins on the LAN with no relay: an admin browser on localhost (a passkey
-    // cannot be made on 127.0.0.1) sees its request in Devices and approves it.
+    // cannot be made on 127.0.0.1) sees its request in Members and approves it.
     const fox = joinLAN('foxtrot', LAN_PORT + 30)
     const req = await fox.printed
     const admin = await page.context().newPage()
@@ -153,14 +153,14 @@ run(async ({ page }) => {
     const typed = await admin.inputValue('[data-testid=lan-manual]')
     await admin.fill('[data-testid=lan-manual]', typed + '\n' + fox.lan)
     await admin.click('[data-testid=lan-save]')
-    await admin.fill('[data-testid=devices] input', PHRASE)
-    await admin.click('[data-testid=devices] button:has-text("Pair this device as an admin")')
-    await admin.waitForSelector(`[data-testid=devices] .rules tr:has-text("${req.code}")`, { timeout: 20000 })
-    const row = await admin.textContent(`[data-testid=devices] .rules tr:has-text("${req.code}")`)
+    await admin.fill('[data-testid=members] input', PHRASE)
+    await admin.click('[data-testid=members] button:has-text("Pair this device as an admin")')
+    await admin.waitForSelector(`[data-testid=members] .rules tr:has-text("${req.code}")`, { timeout: 20000 })
+    const row = await admin.textContent(`[data-testid=members] .rules tr:has-text("${req.code}")`)
     assert(row.includes(req.fp) && row.includes('foxtrot'), 'the panel shows the request of foxtrot with its fingerprint: ' + row)
-    const listed = await admin.textContent('[data-testid=devices] [data-testid=device-list]')
-    assert(listed.includes('bravo') && !listed.includes('echo'), 'the panel lists the devices the pod knows, without the revoked one: ' + listed.trim().slice(0, 200))
-    await admin.click(`[data-testid=devices] .rules tr:has-text("${req.code}") button:has-text("Approve")`)
+    const listed = await admin.textContent('[data-testid=members] [data-testid=member-list]')
+    assert(listed.includes('bravo') && !listed.includes('echo'), 'the panel lists the members the pod knows, without the revoked one: ' + listed.trim().slice(0, 200))
+    await admin.click(`[data-testid=members] .rules tr:has-text("${req.code}") button:has-text("Approve")`)
     const code = await Promise.race([fox.exited, sleep(15000).then(() => 'timeout')])
     assert(code === 0 && fox.out().includes('Paired with account'), 'foxtrot is paired over the LAN: ' + fox.out().replace(/\n/g, ' | '))
     assert(pair(fox.data, ['status']).includes('certificate : foxtrot, pod'), 'foxtrot holds its certificate')

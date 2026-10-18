@@ -1,32 +1,33 @@
-// Open tunnels of every project, listed on the home page: they outlive the project windows
-// and close 5 minutes after the last window of the pod.
+// Open port forwards of every project, listed on the home page: they outlive the project windows
+// and close 5 minutes after the last window of the pod. The RPC methods keep the name tunnels.*
+// (GLOSSARY.md: port forward; a tunnel is the WebRTC connection).
 import { createResource, For, onCleanup, Show } from 'solid-js'
 import { on as onPod, request } from '../pod/rpc'
 import { errorToast } from '../ui/toast'
 import { Icon } from '../ui/icons'
 import { t } from '../i18n'
-import type { Tunnel } from './TunnelsTab'
+import type { Forward } from './ForwardsTab'
 
-type Open = Tunnel & { project: string; name: string; host: string }
+type Open = Forward & { project: string; name: string; host: string }
 
-export function OpenTunnels() {
+export function OpenForwards() {
   const [list, { refetch }] = createResource(() => request<Open[]>('tunnels.all'))
   onCleanup(onPod('tunnels.changed', () => refetch()))
   const close = (o?: Open) => request(o ? 'tunnels.close' : 'tunnels.closeAll', o ? { project: o.project, id: o.id } : {}).catch(errorToast)
   return (
     <Show when={list.latest?.length}>
-      <div class="home-tunnels" data-testid="home-tunnels">
+      <div class="home-forwards" data-testid="home-forwards">
         <div class="home-bar">
-          <h3 class="home-sub">{t('Open tunnels')}</h3>
+          <h3 class="home-sub">{t('Open port forwards')}</h3>
           <span class="muted small">{t('They close 5 minutes after the last window of the pod.')}</span>
           <span class="grow" />
-          <button class="btn small" onClick={() => close()} data-testid="tunnels-close-all">
+          <button class="btn small" onClick={() => close()} data-testid="forwards-close-all">
             {t('Close all')}
           </button>
         </div>
         <For each={list.latest}>
           {(o) => (
-            <div class="home-tunnel" data-testid={`home-tunnel-${o.localPort}`}>
+            <div class="home-forward" data-testid={`home-forward-${o.localPort}`}>
               <span class="mono">
                 {o.lan ? '0.0.0.0' : '127.0.0.1'}:{o.localPort}
               </span>
@@ -41,7 +42,7 @@ export function OpenTunnels() {
                 <span class="badge warn">{t('local network')}</span>
               </Show>
               <span class="grow" />
-              <button class="icon-btn small" title={t('Close the tunnel')} onClick={() => close(o)}>
+              <button class="icon-btn small" title={t('Close the port forward')} onClick={() => close(o)}>
                 <Icon name="close" size={12} />
               </button>
             </div>

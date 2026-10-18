@@ -15,7 +15,7 @@ The pods of one account ([account and devices](account-and-devices.md)) that see
 1. Pair the pods. With no relay, on the new machine:
 
    ```sh
-   web-ide-pod pair join            # waits on the LAN: approve it in Devices, on localhost of a pod of the account
+   web-ide-pod pair join            # waits on the LAN: approve it in Members, on localhost of a pod of the account
    web-ide-pod pair join --phrase   # no admin around: the phrase typed, the pod keeps its own key
    ```
 
@@ -23,7 +23,7 @@ The pods of one account ([account and devices](account-and-devices.md)) that see
 3. When mDNS does not find a pod (another subnet, multicast blocked), type its address (`192.168.1.20:4436`) in Settings > Remote access > Local network. The reason an address fails is shown next to it.
 4. To revoke a pod with no relay: `web-ide-pod pair revoke <key>`, the phrase typed. The list spreads from pod to pod, and one made offline goes to the relay as soon as a pod reaches it.
 
-The LAN listen address is `-lan` (or `lan.addr` in `config.json`); `-lan off` closes the port, and `-mdns=false` keeps only the addresses typed in Settings. With no relay, the Devices panel (on `localhost`) is answered by the pod itself: it lists the devices it knows, shows the pods waiting to join with their fingerprint, and passes a revocation on to the other pods. Inviting a phone by QR still needs a relay.
+The LAN listen address is `-lan` (or `lan.addr` in `config.json`); `-lan off` closes the port, and `-mdns=false` keeps only the addresses typed in Settings. With no relay, the Members panel (on `localhost`) is answered by the pod itself: it lists the devices it knows, shows the pods waiting to join with their fingerprint, and passes a revocation on to the other pods. Inviting a phone by QR still needs a relay.
 
 ## Check
 
@@ -50,7 +50,7 @@ With a relay, the pods of one account are listed on the home page of any of them
 
 With a relay, the pods of one account are listed on the home page of any of them, and the relay can send you to the right one. The pods that see each other on the local network form a **cluster**; the relay elects one **gateway** per cluster — the pod you marked *Preferred gateway* (Settings > Remote access > Pods of the account), else the one online the longest — and moves the role when it leaves. Opening the relay link with no `#pod=` goes to that gateway, and the browser remembers the cluster you used last.
 
-Each pod publishes its list of projects **encrypted** under its own key; the relay caches the ciphertext and never sees a project name, and the pods read the lists themselves. So the home page shows the pods that are offline too, greyed with the time they last published, and a pod with no link of its own is carried to the relay by a peer of its cluster. A pod that has no sync key yet is listed with *waiting for the sync key*: the Devices panel wraps the key for it.
+Each pod publishes its list of projects **encrypted** under its own key; the relay caches the ciphertext and never sees a project name, and the pods read the lists themselves. So the home page shows the pods that are offline too, greyed with the time they last published, and a pod with no link of its own is carried to the relay by a peer of its cluster. A pod that has no sync key yet is listed with *waiting for the sync key*: the Members panel wraps the key for it.
 
 A project opens with the front end of **the pod that holds it**, and the address never leaves the origin you opened: on the relay link its page lives under `/pod/<device key>/`, on `127.0.0.1` under `/_lan/pod/<device key>/`. A pod registered at the relay is reached directly, by its own tunnel; a pod with no link of its own is carried by the tunnel of its gateway, and a pod of another cluster, from `127.0.0.1`, is reached pod to pod. Every hop checks the certificates, and the pod at the end rechecks the browser behind a gateway: a revoked device is refused even when its gateway has not heard about it yet (the gateway does see the traffic it relays — end-to-end encryption of that hop is planned). If the gateway leaves, the browser reconnects through the new one within a few seconds, showing *Reconnecting through {name}…*: the page you had open keeps working, its terminals re-attach.
 

@@ -135,7 +135,7 @@ func relayList(ctx context.Context, relayURL, account string, own *identity.Revo
 }
 
 // JoinLAN waits on the local network for an admin, with no relay: the pod serves its request
-// on its LAN port and announces it by mDNS; a paired pod of the LAN shows it in the Devices
+// on its LAN port and announces it by mDNS; a paired pod of the LAN shows it in the Members
 // panel of its page, where the admin compares the fingerprint and approves.
 func JoinLAN(env *Env) error {
 	if env.LANAddr == "off" {
@@ -154,7 +154,7 @@ func JoinLAN(env *Env) error {
 		OnListen: func(code string, port int) {
 			fmt.Fprintf(env.Out, "Pairing code: %s\n", code)
 			fmt.Fprintf(env.Out, "Fingerprint of this device: %s\n", identity.Fingerprint(p.ID()))
-			fmt.Fprintf(env.Out, "Waiting on the local network: open Settings > Remote access > Devices on a paired pod (on localhost).\n")
+			fmt.Fprintf(env.Out, "Waiting on the local network: open Settings > Remote access > Members on a paired pod (on localhost).\n")
 			fmt.Fprintf(env.Out, "If it does not show up, type one of these addresses in its Local network settings: %s\n", strings.Join(lan.LocalAddrs(port), ", "))
 		},
 	})

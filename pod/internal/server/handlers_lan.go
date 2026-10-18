@@ -15,7 +15,7 @@ type LAN interface {
 	// View is the state shown in Settings > Remote access and on the home page.
 	View() any
 	SetManual(addrs []string) error
-	// ServeIdentity answers the Devices panel when the pod has no relay.
+	// ServeIdentity answers the Members panel when the pod has no relay.
 	ServeIdentity(w http.ResponseWriter, r *http.Request)
 	// ServeGateway serves the page of a peer under peerPrefix. base is the path the peer's page
 	// runs under for the browser ("" : peerPrefix + the device key, the plain gateway origin).

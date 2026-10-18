@@ -1,5 +1,5 @@
 // Connection editor: list on the left, form on the right (SQLite, Postgres, Redis, optional
-// SSH tunnel), with a Test button. Secrets go to the pod, never into .ide.
+// SSH port forward), with a Test button. Secrets go to the pod, never into .ide.
 import { createResource, createSignal, For, Show } from 'solid-js'
 import { createStore, unwrap } from 'solid-js/store'
 import { request } from '../pod/rpc'
@@ -201,7 +201,7 @@ export function ConnectionsModal(props: { initial?: string | 'new'; onClose: () 
               <legend>
                 <label class="check">
                   <input type="checkbox" checked={!!form.ssh?.enabled} onChange={(e) => setForm('ssh', 'enabled', e.currentTarget.checked)} />
-                  {t('SSH tunnel')}
+                  {t('SSH port forward')}
                 </label>
               </legend>
               <Show when={form.ssh?.enabled}>

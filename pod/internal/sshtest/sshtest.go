@@ -19,7 +19,7 @@ import (
 )
 
 // Start runs a minimal SSH server for the tests: password "pw", sftp subsystem, exec (in a PTY
-// when one is asked), shell in a PTY and port forwarding (direct-tcpip, used by the database tunnels). It returns the port.
+// when one is asked), shell in a PTY and port forwarding (direct-tcpip, used by the port forwards). It returns the port.
 func Start(t testing.TB) int {
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

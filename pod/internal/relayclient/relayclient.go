@@ -176,7 +176,7 @@ type Config struct {
 	// a cluster (multipod.Directory).
 	OnPods    func([]PodInfo)
 	OnGateway func(cluster, key string)
-	// OnForeignWrap is called with a wrap the relay pushed for another device: this pod passes it
+	// OnForeignWrap is called with a wrap the relay pushed for another member: this pod passes it
 	// on over its LAN links, which is how a pod with no link of its own gets its key back.
 	OnForeignWrap func(*identity.WrapRecord)
 	// Route reaches a pod of this pod's cluster that has no link of its own: a browser tunneled to
@@ -324,7 +324,7 @@ func (c *Client) runOnce(ctx context.Context) error {
 		c.mu.Unlock()
 	}()
 	c.tell("connected")
-	// The sync loop publishes the X25519 key of this device, reads the wrap an admin made for it
+	// The sync loop publishes the X25519 key of this member, reads the wrap an admin made for it
 	// and the state the relay holds: a pod that comes back online catches up here.
 	if c.cfg.Sync != nil {
 		c.cfg.Sync.SetTransport(&syncLink{c, link})

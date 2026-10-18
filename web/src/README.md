@@ -106,12 +106,12 @@ Diagram edges are imports of the folders, checked with a script over the `import
 - [`db/`](db/): Database explorer tool: connections, tables, SQL console, result grid (`api.ts`)
 - [`console/`](console/): Console tool: terminals and tasks (`consoles.tsx`, one xterm per tab), project commands (`commands.ts`, `CommandsModal.tsx`)
 - [`conflict/`](conflict/): Three-pane conflict dialog
-- [`settings/`](settings/): Settings modal and its pages: `Devices`, `Lan`, `Pods`, `Sync`, `Notifications` (remote access and account), themes (`themes.ts`)
+- [`settings/`](settings/): Settings modal and its pages: `Members`, `Lan`, `Pods`, `Sync`, `Notifications` (remote access and account), themes (`themes.ts`)
 - [`llm/`](llm/): AI assistant: state, agent loop, tools, prompt, Markdown, the editor of the message box shared with the Agents tool (`MessageBox.tsx`), attachments, speech recognition, sub-agents (`SubAgents.tsx`), doodles (`llm/doodle/`: document model, SVG rendering, export, modal), the board of a conversation (`llm/board/`), app previews (`previews.ts`, `PreviewCard.tsx`)
 - [`agents/`](agents/): Agents tool: sessions of the worktrees of the window and their threads (`state.ts`, events dropped when older than the thread loaded, by `seq`), tabs, launcher, thread, permission cards (`AgentsTool.tsx`), the follow mode (`state.ts`: an edit tool call completed opens its file when `follow` is set on the session, `agents.follow`), the message box of a session (`Composer.tsx`: `llm/MessageBox.tsx` with the agent's commands, attachments prepared by `llm/attachments.ts` sent as parts, drafts per session)
 - [`questions/`](questions/): Questions tool: the list (`state.ts`, asked again on `questions.changed`), the modal one question at a time and its auto-open (not for a question whose thread is on screen: `showsQuestions`), the forms of `elicitation/create` (`Form.tsx`, also in the Agents thread)
 - [`kanban/`](kanban/): Board, ticket view, workflow actions, linked conversations
-- [`docker/`](docker/): Docker tool: lists and polling (`state.ts`), detail pane, logs with ANSI colors (`ansi.ts`), disk usage, tunnels (and their list on the home page), app previews
+- [`docker/`](docker/): Docker tool: lists and polling (`state.ts`), detail pane, logs with ANSI colors (`ansi.ts`), disk usage, port forwards (and their list on the home page), app previews
 - [`i18n/`](i18n/): `t()` and the catalogs (English source strings, French translation)
 
 ## Invariants and pitfalls

@@ -131,7 +131,7 @@ func (w *wsClient) waitEvent(name string, match func(map[string]any) bool) map[s
 func TestPairing(t *testing.T) {
 	_, ts := newServer(t)
 	if _, err := dial(t, ts, "wrong"); err == nil {
-		t.Fatal("websocket accepted without the pairing token")
+		t.Fatal("websocket accepted without the access token")
 	}
 	res, _ := http.Get(ts.URL + "/project/x")
 	if res.StatusCode != http.StatusUnauthorized {
@@ -145,7 +145,7 @@ func TestPairing(t *testing.T) {
 	jar := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	res, _ = jar.Get(ts.URL + "/?token=secret-token-0123456789abcdef0123")
 	if res.StatusCode != http.StatusFound || !strings.Contains(res.Header.Get("Set-Cookie"), cookieName) {
-		t.Fatalf("pairing by URL failed: %d", res.StatusCode)
+		t.Fatalf("access token by URL failed: %d", res.StatusCode)
 	}
 }
 

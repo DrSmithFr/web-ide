@@ -17,7 +17,7 @@ Run the pod from the release archive: there is no unit that starts it, you launc
    ./web-ide-pod
    ```
 
-3. Open the address it prints, with the **access token**: the token goes into a cookie and pairs this browser. It is also in `~/.web-ide/token`.
+3. Open the address it prints, with the **access token**: the token goes into a cookie that opens the pod in this browser. It is also in `~/.web-ide/token`.
 
 The installer script, the keeper and the start at boot are Linux only (`scripts/install.sh` refuses to run on macOS). The pod stops when you close its terminal; to keep it, run it in a terminal multiplexer or write your own launchd job.
 

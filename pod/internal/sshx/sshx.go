@@ -220,7 +220,7 @@ func dial(t Target, c Creds, hostKey ssh.HostKeyCallback) (*ssh.Client, error) {
 	return client, err
 }
 
-// Pool shares one SSH connection per target (project files, consoles, LSP, DB tunnels).
+// Pool shares one SSH connection per target (project files, consoles, LSP, DB port forwards).
 type Pool struct {
 	mu      sync.Mutex
 	hk      *HostKeys

@@ -26,6 +26,7 @@ import (
 
 	"github.com/DrSmithFr/web-ide/pod/internal/config"
 	"github.com/DrSmithFr/web-ide/pod/internal/db"
+	"github.com/DrSmithFr/web-ide/pod/internal/forwards"
 	"github.com/DrSmithFr/web-ide/pod/internal/hfcache"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
@@ -41,7 +42,6 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
 	"github.com/DrSmithFr/web-ide/pod/internal/store"
 	"github.com/DrSmithFr/web-ide/pod/internal/tunnel"
-	"github.com/DrSmithFr/web-ide/pod/internal/tunnels"
 )
 
 const cookieName = "webide_token"
@@ -65,8 +65,8 @@ type Server struct {
 	Models *hfcache.Cache
 	// Sync is the settings sync loop of the pod (nil: the pod has no relay, so nothing is synced).
 	Sync *settingsync.Hub
-	// Tunnels are the port forwardings of the SSH projects.
-	Tunnels *tunnels.Manager
+	// Forwards are the port forwards of the SSH projects.
+	Forwards *forwards.Manager
 	// Previews serve the apps of the projects on temporary URLs (Tailscale by default).
 	Previews  *preview.Manager
 	PreviewTS preview.Tailscale
@@ -122,8 +122,8 @@ type Server struct {
 	asks askRegistry
 	// previewMu serializes preview.open (one command per app).
 	previewMu sync.Mutex
-	// tunnelIdle closes the tunnels once no window is left (windowsChanged).
-	tunnelIdle *time.Timer
+	// forwardIdle closes the port forwards once no window is left (windowsChanged).
+	forwardIdle *time.Timer
 }
 
 type handler func(ctx context.Context, c *Client, p json.RawMessage) (any, error)
@@ -146,7 +146,7 @@ func (s *Server) Init() {
 	if s.Clipboard == nil {
 		s.Clipboard = clipboard.Load(s.Store)
 	}
-	s.Tunnels = tunnels.New(func() { s.broadcast("tunnels.changed", nil, nil) })
+	s.Forwards = forwards.New(func() { s.broadcast("tunnels.changed", nil, nil) })
 	if s.PreviewTS == nil {
 		s.PreviewTS = &preview.CLI{}
 	}
@@ -163,7 +163,7 @@ func (s *Server) Init() {
 	s.registerDocker()
 	s.registerDockerLogs()
 	s.registerDockerDisk()
-	s.registerTunnels()
+	s.registerForwards()
 	s.registerIdeDir()
 	s.registerCommands()
 	s.registerAgents()
@@ -203,9 +203,9 @@ func loopback(r *http.Request) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-var pairPage = template.Must(template.New("pair").Parse(`<!doctype html>
+var tokenPage = template.Must(template.New("pair").Parse(`<!doctype html>
 <html lang="{{.Lang}}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
-<title>Web IDE · {{.T "pairing"}}</title>
+<title>Web IDE · {{.T "access token"}}</title>
 <style>
 :root{color-scheme:light dark;--bg:#f6f6f4;--fg:#1d1d1b;--muted:#6b6b66;--line:#d8d8d2;--accent:#2f6fde}
 @media (prefers-color-scheme:dark){:root{--bg:#18191b;--fg:#e6e6e3;--muted:#9a9a95;--line:#34363a;--accent:#6c9cff}}
@@ -217,28 +217,28 @@ button{padding:10px;border:0;border-radius:6px;background:var(--accent);color:#f
 .err{color:#d33}
 </style></head><body>
 <form method="post" action="/auth">
-<h1>{{.T "Pair this browser"}}</h1>
-<p>{{.T "Paste the token printed by the pod when it starts (also in"}} <code>~/.web-ide/token</code>).</p>
+<h1>{{.T "Access token"}}</h1>
+<p>{{.T "Paste the access token printed by the pod when it starts (also in"}} <code>~/.web-ide/token</code>).</p>
 {{if .Error}}<p class="err">{{.T .Error}}</p>{{end}}
-<input name="token" autocomplete="off" autofocus placeholder="{{.T "token"}}">
+<input name="token" autocomplete="off" autofocus placeholder="{{.T "access token"}}">
 <input type="hidden" name="next" value="/">
-<button>{{.T "Pair"}}</button>
+<button>{{.T "Open"}}</button>
 </form></body></html>`))
 
-// pairView fills the pairing page in the language of the browser.
-type pairView struct {
+// tokenView fills the page asking the access token in the language of the browser.
+type tokenView struct {
 	Lang  string
 	Error string
 }
 
-func (v pairView) T(text string) string { return i18n.T(v.Lang, text) }
+func (v tokenView) T(text string) string { return i18n.T(v.Lang, text) }
 
-func showPairing(w http.ResponseWriter, r *http.Request, errText string) {
+func showAccessToken(w http.ResponseWriter, r *http.Request, errText string) {
 	lang := "en"
 	if strings.HasPrefix(strings.ToLower(r.Header.Get("Accept-Language")), "fr") {
 		lang = "fr"
 	}
-	_ = pairPage.Execute(w, pairView{Lang: lang, Error: errText})
+	_ = tokenPage.Execute(w, tokenView{Lang: lang, Error: errText})
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -268,7 +268,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/auth" && r.Method == http.MethodPost {
 		if subtle.ConstantTimeCompare([]byte(strings.TrimSpace(r.FormValue("token"))), []byte(s.Token)) != 1 {
 			w.WriteHeader(http.StatusUnauthorized)
-			showPairing(w, r, "Invalid token.")
+			showAccessToken(w, r, "Invalid access token.")
 			return
 		}
 		s.setCookie(w)
@@ -276,7 +276,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// The browser fetches the manifest of the installable app without cookies: it and its
-	// icons are served before the pairing check (nothing private in them).
+	// icons are served before the access token check (nothing private in them).
 	if appFiles[r.URL.Path] {
 		s.serveStatic(w, r)
 		return
@@ -288,7 +288,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusUnauthorized)
-		showPairing(w, r, "")
+		showAccessToken(w, r, "")
 		return
 	}
 	if r.URL.Path == "/ws" {
@@ -1103,7 +1103,7 @@ func (s *Server) Shutdown() {
 	rts := s.runtimes
 	s.runtimes = map[string]*runtime.Runtime{}
 	s.mu.Unlock()
-	s.Tunnels.CloseAll()
+	s.Forwards.CloseAll()
 	s.Previews.Shutdown()
 	for _, rt := range rts {
 		rt.Release()

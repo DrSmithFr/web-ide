@@ -1,5 +1,5 @@
 // Package db is the backend of the Database explorer tool: SQLite, Postgres and Redis
-// connections, optionally through an SSH tunnel, all opened by the pod.
+// connections, optionally through an SSH port forward, all opened by the pod.
 package db
 
 import (
@@ -23,7 +23,8 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/store"
 )
 
-type SSHTunnel struct {
+// SSHForward is the SSH host a connection goes through (saved as `ssh`, a name kept from before the glossary).
+type SSHForward struct {
 	Enabled bool   `json:"enabled"`
 	Host    string `json:"host"`
 	Port    int    `json:"port"`
@@ -34,18 +35,18 @@ type SSHTunnel struct {
 
 // ConnConfig is stored in .ide/connections.json of the project. No secret in it.
 type ConnConfig struct {
-	ID               string     `json:"id"`
-	Name             string     `json:"name"`
-	Kind             string     `json:"kind"` // sqlite | postgres | redis
-	Path             string     `json:"path,omitempty"`
-	Host             string     `json:"host,omitempty"`
-	Port             int        `json:"port,omitempty"`
-	Database         string     `json:"database,omitempty"`
-	User             string     `json:"user,omitempty"`
-	SSLMode          string     `json:"sslMode,omitempty"`
-	RedisDB          int        `json:"redisDb,omitempty"`
-	RememberPassword bool       `json:"rememberPassword"`
-	SSH              *SSHTunnel `json:"ssh,omitempty"`
+	ID               string      `json:"id"`
+	Name             string      `json:"name"`
+	Kind             string      `json:"kind"` // sqlite | postgres | redis
+	Path             string      `json:"path,omitempty"`
+	Host             string      `json:"host,omitempty"`
+	Port             int         `json:"port,omitempty"`
+	Database         string      `json:"database,omitempty"`
+	User             string      `json:"user,omitempty"`
+	SSLMode          string      `json:"sslMode,omitempty"`
+	RedisDB          int         `json:"redisDb,omitempty"`
+	RememberPassword bool        `json:"rememberPassword"`
+	SSH              *SSHForward `json:"ssh,omitempty"`
 }
 
 // Secret is kept in ~/.web-ide/secrets.json (0600) when remembered, in memory otherwise.

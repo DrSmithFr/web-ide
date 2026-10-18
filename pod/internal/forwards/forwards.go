@@ -1,7 +1,8 @@
-// Package tunnels forwards local ports to addresses reached from the SSH host of a project,
-// like ssh -L. Tunnels belong to the pod, not to a window: they stay open while any window
-// is connected, and the server closes them all a while after the last one leaves.
-package tunnels
+// Package forwards opens port forwards: local ports that reach addresses seen from the SSH host
+// of a project, like ssh -L (glossary: not a port forward, which is the WebRTC connection). Port forwards
+// belong to the pod, not to a window: they stay open while any window is connected, and the server
+// closes them all a while after the last one leaves.
+package forwards
 
 import (
 	"context"
@@ -15,7 +16,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
 
-// Spec is a tunnel as saved in .ide/tunnels.json.
+// Spec is a port forward as saved in .ide/forwards.json.
 type Spec struct {
 	ID         string `json:"id"`
 	RemoteHost string `json:"remoteHost"` // as seen from the SSH host
@@ -49,7 +50,7 @@ func (s Spec) Local() string {
 	return net.JoinHostPort(host, strconv.Itoa(s.LocalPort))
 }
 
-// State is a tunnel with its live state.
+// State is a port forward with its live state.
 type State struct {
 	Spec
 	Project string `json:"project"`
@@ -63,7 +64,7 @@ type Dialer func(ctx context.Context, addr string) (net.Conn, error)
 
 type key struct{ project, id string }
 
-type tunnel struct {
+type forward struct {
 	spec    Spec
 	project string
 	l       net.Listener
@@ -72,14 +73,14 @@ type tunnel struct {
 
 type Manager struct {
 	mu     sync.Mutex
-	open   map[key]*tunnel
+	open   map[key]*forward
 	errs   map[key]string
 	notify func()
 }
 
-// New returns a manager calling changed after every change of the open tunnels.
+// New returns a manager calling changed after every change of the open port forwards.
 func New(changed func()) *Manager {
-	return &Manager{open: map[key]*tunnel{}, errs: map[key]string{}, notify: changed}
+	return &Manager{open: map[key]*forward{}, errs: map[key]string{}, notify: changed}
 }
 
 func (m *Manager) changed() {
@@ -88,7 +89,7 @@ func (m *Manager) changed() {
 	}
 }
 
-// Open starts listening for a tunnel (already open: closed and opened again with the spec).
+// Open starts listening for a port forward (already open: closed and opened again with the spec).
 func (m *Manager) Open(project string, s Spec, dial Dialer) error {
 	m.close(key{project, s.ID})
 	l, err := net.Listen("tcp", s.Local())
@@ -101,7 +102,7 @@ func (m *Manager) Open(project string, s Spec, dial Dialer) error {
 		return err
 	}
 	delete(m.errs, k)
-	t := &tunnel{spec: s, project: project, l: l, conns: map[net.Conn]bool{}}
+	t := &forward{spec: s, project: project, l: l, conns: map[net.Conn]bool{}}
 	m.open[k] = t
 	m.mu.Unlock()
 	go m.serve(t, dial)
@@ -109,7 +110,7 @@ func (m *Manager) Open(project string, s Spec, dial Dialer) error {
 	return nil
 }
 
-func (m *Manager) serve(t *tunnel, dial Dialer) {
+func (m *Manager) serve(t *forward, dial Dialer) {
 	for {
 		c, err := t.l.Accept()
 		if err != nil {
@@ -119,7 +120,7 @@ func (m *Manager) serve(t *tunnel, dial Dialer) {
 	}
 }
 
-func (m *Manager) forward(t *tunnel, c net.Conn, dial Dialer) {
+func (m *Manager) forward(t *forward, c net.Conn, dial Dialer) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	r, err := dial(ctx, t.spec.Remote())
 	cancel()
@@ -149,7 +150,7 @@ func (m *Manager) forward(t *tunnel, c net.Conn, dial Dialer) {
 	m.changed()
 }
 
-// close stops a tunnel and its connections; true when it was open.
+// close stops a port forward and its connections; true when it was open.
 func (m *Manager) close(k key) bool {
 	m.mu.Lock()
 	t := m.open[k]
@@ -178,7 +179,7 @@ func (m *Manager) Close(project, id string) {
 	}
 }
 
-// CloseAll closes every tunnel, of every project.
+// CloseAll closes every port forward, of every project.
 func (m *Manager) CloseAll() {
 	m.mu.Lock()
 	var keys []key
@@ -195,14 +196,14 @@ func (m *Manager) CloseAll() {
 	}
 }
 
-// IsOpen tells whether a tunnel listens.
+// IsOpen tells whether a port forward listens.
 func (m *Manager) IsOpen(project, id string) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.open[key{project, id}] != nil
 }
 
-// State gives the live state of the saved tunnels of a project.
+// State gives the live state of the saved port forwards of a project.
 func (m *Manager) State(project string, specs []Spec) []State {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -217,7 +218,7 @@ func (m *Manager) State(project string, specs []Spec) []State {
 	return out
 }
 
-// List gives the open tunnels of every project.
+// List gives the open port forwards of every project.
 func (m *Manager) List() []State {
 	m.mu.Lock()
 	defer m.mu.Unlock()
