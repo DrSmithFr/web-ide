@@ -8,6 +8,7 @@ import { openChat, send } from '../llm/assistant'
 import { feedbackOp, inWorktreeOf, moveTicket, roleLabels, startWork, worktreeProject, type Feedback, type Ticket } from './state'
 import { t } from '../i18n'
 import { devAgent, startAgentSession } from './agentSession'
+import { linkMilestoneChat, type Milestone } from './milestones'
 
 const firstMessage: Record<ChatRole, (tk: Ticket, f?: Feedback) => string> = {
   briefing: (k) => t("Let's do the briefing of ticket #{id} “{title}”: help me clarify it.", { id: k.id, title: k.title }),
@@ -41,6 +42,26 @@ export async function startTicketChat(tk: Ticket, role: ChatRole, text?: string,
       return
     }
     await send(text ?? firstMessage[role](tk, feedback), [], [])
+  } catch (e) {
+    errorToast(e)
+  }
+}
+
+/** A Briefing conversation on a milestone: linked to it, it refines it with kanban_milestone
+ *  (stories, description) and writes its tickets. */
+export async function startMilestoneBriefing(ms: Milestone) {
+  resetChat()
+  const title = `${t('Milestone')} · ${ms.title}`.slice(0, 80)
+  setChat({ mode: 'briefing', title })
+  showAssistant()
+  try {
+    await linkMilestoneChat(ms.id, chat.id, title)
+    await loadConfig()
+    if (!config.server || !config.model) {
+      toast(t('Choose a server and a model in the assistant, then try again.'), 'warn')
+      return
+    }
+    await send(t('Let\'s do the briefing of milestone {id} “{title}” (kanban_milestone action get): help me clarify it, write its user stories, then its tickets.', { id: ms.id, title: ms.title }), [], [])
   } catch (e) {
     errorToast(e)
   }

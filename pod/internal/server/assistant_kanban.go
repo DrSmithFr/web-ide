@@ -84,6 +84,10 @@ func (a toolArgs) links(p *kanban.Patch) {
 		}
 		p.DependsOn = &deps
 	}
+	if a.has("milestone") {
+		v := int64(a.num("milestone"))
+		p.Milestone = &v
+	}
 }
 
 // attachDoodles joins the pages of the board not attached yet to a ticket, as PNG files: the
@@ -232,7 +236,11 @@ func (s *Server) kanbanCall(r *assistantRun, name string, a toolArgs, mode strin
 	r.mu.Lock()
 	link := r.chat.Ticket
 	chatID := r.chat.ID
+	chatTitle := r.chat.Title
 	r.mu.Unlock()
+	if name == "kanban_milestone" {
+		return s.assistantMilestone(r, loc, a, mode, chatID, chatTitle)
+	}
 	if link == nil {
 		return toolResult{Content: "Error: this conversation is not linked to a ticket; only kanban_list, kanban_get and kanban_create are available.", Summary: assistant.T("no linked ticket", nil).Raw(), Status: "error"}, nil
 	}
@@ -415,3 +423,31 @@ func (s *Server) kanbanCall(r *assistantRun, name string, a toolArgs, mode strin
 }
 
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+
+// assistantMilestone runs kanban_milestone: every conversation reads the milestones and creates
+// some (in Briefing mode it is linked to the ones it creates); it changes only the milestones
+// it is linked to.
+func (s *Server) assistantMilestone(r *assistantRun, loc kanban.Location, a toolArgs, mode, chatID, chatTitle string) (toolResult, error) {
+	var args milestoneArgs
+	raw, _ := json.Marshal(a)
+	if err := json.Unmarshal(raw, &args); err != nil {
+		return toolResult{}, usagef("invalid arguments: %v", err)
+	}
+	switch args.Action {
+	case "list", "get", "create":
+	default:
+		if !s.Kanban.MilestoneLinked(loc, args.ID, chatID) {
+			return toolResult{}, failf("this conversation is not linked to milestone %d: only list, get and create are available on it", args.ID)
+		}
+	}
+	out, created, err := s.milestoneTool(r.root, loc, args, kanban.ByModel, chatID)
+	if err != nil {
+		return toolResult{}, err
+	}
+	if created != 0 && mode == assistant.Briefing {
+		if err := s.Kanban.LinkMilestoneChat(loc, created, chatID, "briefing", chatTitle); err == nil {
+			out += " This conversation is linked to it: it can change it."
+		}
+	}
+	return ok(out, assistant.T("milestone", nil)), nil
+}

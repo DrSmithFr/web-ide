@@ -171,6 +171,7 @@ func (s *Server) Init() {
 	s.registerKanbanAgent()
 	s.registerPreviews()
 	s.registerKanban()
+	s.registerMilestones()
 	s.registerKanbanGit()
 	s.registerRelay()
 	s.registerLAN()

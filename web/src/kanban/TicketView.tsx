@@ -20,6 +20,7 @@ import { runClaude } from './claude'
 import { startWorkSession } from './sessions'
 import { TicketAgentSession } from './agentSession'
 import { LineageSection } from './Lineage'
+import { MilestoneReminder, MilestoneSelect } from './MilestoneView'
 import { TicketAgentStats } from '../agents/stats'
 import { fmtDate, fmtSize, t } from '../i18n'
 import './kanban.css'
@@ -132,6 +133,7 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
       case 'test':
         return (
           <Section title={t('How to test')} folded={folded(p)}>
+            <MilestoneReminder tk={tk()} />
             <EditableMarkdown
               value={tk().testSummary}
               empty={t('Filled in by the model when it finishes the development.')}
@@ -192,6 +194,7 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
           >
             <ComplexitySelect value={tk().complexity} onChange={(c) => props.apply(updateTicket(tk().id, { complexity: c }))} testid="ticket-complexity" />
           </Show>
+          <MilestoneSelect tk={tk()} apply={props.apply} />
           <span class="muted small">{t('created on {date}', { date: fmtDate(tk().created) })}</span>
           <TicketAgentStats ticket={tk().id} />
           <span class="grow" />
@@ -332,7 +335,7 @@ const filled: Record<Part, (tk: Ticket) => boolean> = {
 }
 
 /** Characters used out of the maximum of a text. */
-function Count(props: { text: string; max: number }) {
+export function Count(props: { text: string; max: number }) {
   const n = () => [...props.text.trim()].length
   return (
     <span class="tk-count small" classList={{ over: n() > props.max }} data-testid="ticket-count">
@@ -341,7 +344,7 @@ function Count(props: { text: string; max: number }) {
   )
 }
 
-const tooLong = (text: string, max: number) => [...text.trim()].length > max
+export const tooLong = (text: string, max: number) => [...text.trim()].length > max
 
 function Notes(props: { tk: Ticket; apply: Apply; folded?: boolean }) {
   const [text, setText] = createSignal('')
@@ -517,7 +520,7 @@ async function openAttachment(id: number, aid: number) {
 // ---------- pieces ----------
 
 /** The complexity of a ticket, or of a feedback (inherit: "" is the one of its ticket). */
-function ComplexitySelect(props: { value?: Complexity | ''; inherit?: boolean; onChange: (c: Complexity | '') => void; testid?: string }) {
+export function ComplexitySelect(props: { value?: Complexity | ''; inherit?: boolean; onChange: (c: Complexity | '') => void; testid?: string }) {
   return (
     <select
       class="small"
@@ -575,7 +578,7 @@ function RoutedBtn(props: { b: ActionButton; icon?: string }) {
   )
 }
 
-function ActionBtn(props: { b: ActionButton; icon?: string }) {
+export function ActionBtn(props: { b: ActionButton; icon?: string }) {
   const b = props.b
   const main = (
     <button class={`btn small ${b.primary ? 'primary' : ''} ${b.danger ? 'danger' : ''}`} disabled={b.disabled} title={b.title} onClick={b.run} data-testid={b.testid}>
@@ -631,7 +634,7 @@ export function Section(props: { title: string; children: JSX.Element; folded?: 
   )
 }
 
-function EditableText(props: { value: string; class?: string; onSave: (v: string) => void; testid?: string }) {
+export function EditableText(props: { value: string; class?: string; onSave: (v: string) => void; testid?: string }) {
   const [editing, setEditing] = createSignal(false)
   let input!: HTMLInputElement
   const save = () => {

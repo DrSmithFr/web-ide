@@ -5,15 +5,17 @@ import { createMemo, For, Show } from 'solid-js'
 import { Icon } from '../ui/icons'
 import { EmptyState } from '../ui/EmptyState'
 import { layoutRoadmap, type Block, type BlockState } from './roadmap'
-import { openTicket, sizeNames, statusLabels, type Summary } from './state'
+import { board, openTicket, sizeNames, statusLabels, type Summary } from './state'
+import { milestoneMatch, type MilestoneFilter } from './milestones'
 import { blockerText } from './Lineage'
 import { t } from '../i18n'
 
 /** Pixels of one size unit and of one row. */
 const UNIT = 56
 const ROW = 40
-/** Space between two groups of linked lineages. */
+/** Space between two groups of linked lineages, and above the label of a milestone band. */
 const GAP = 16
+const BAND = 20
 
 const stateLabels: Record<BlockState, string> = {
   ready: 'Ready to start',
@@ -30,14 +32,23 @@ function tooltip(b: Block) {
   return lines.join('\n')
 }
 
-export function Roadmap(props: { tickets: Summary[]; query: string }) {
+export function Roadmap(props: { tickets: Summary[]; query: string; milestone?: MilestoneFilter }) {
   const layout = createMemo(() => layoutRoadmap(props.tickets))
   const match = (s: Summary) => {
     const q = props.query.trim().toLowerCase()
     return !q || s.title.toLowerCase().includes(q) || `#${s.id}` === q || String(s.id) === q
   }
   // A row is shown when one of its blocks matches the filter; arrows only between shown rows.
-  const shown = createMemo(() => layout().rows.map((r, i) => ({ r, i })).filter(({ r }) => r.blocks.some((b) => match(b.ticket))))
+  // The lineages of a milestone (that of their root) follow each other in a labelled band.
+  const band = (r: { root: Summary }) => r.root.milestone ?? 0
+  const bandRank = (id: number) => (id ? board.milestones.findIndex((m) => m.id === id) : board.milestones.length)
+  const shown = createMemo(() =>
+    layout()
+      .rows.map((r, i) => ({ r, i }))
+      .filter(({ r }) => r.blocks.some((b) => match(b.ticket)) && milestoneMatch(props.milestone ?? 'all', band(r)))
+      .sort((a, b) => bandRank(band(a.r)) - bandRank(band(b.r)) || a.i - b.i),
+  )
+  const banded = () => (props.milestone ?? 'all') === 'all' && shown().some(({ r }) => band(r))
   const place = createMemo(() => new Map(shown().map(({ i }, k) => [i, k])))
   const arrows = createMemo(() => layout().arrows.filter((a) => place().has(a.from.row) && place().has(a.to.row)))
   // Top of each shown row: a gap around a group of linked lineages, none between lone lineages.
@@ -48,9 +59,19 @@ export function Roadmap(props: { tickets: Summary[]; query: string }) {
     return shown().map(({ r }, k) => {
       const prev = shown()[k - 1]?.r
       if (prev) y += prev.group !== r.group && (size.get(prev.group)! > 1 || size.get(r.group)! > 1) ? ROW + GAP : ROW
+      if (banded() && (prev ? band(prev) !== band(r) : band(r) !== 0)) y += BAND + (prev ? GAP : 0)
       return y
     })
   })
+  // The label above the first row of each band.
+  const bands = createMemo(() =>
+    banded()
+      ? shown()
+          .map(({ r }, k) => ({ id: band(r), y: tops()[k] - BAND, first: k === 0 || band(shown()[k - 1].r) !== band(r) }))
+          .filter((b) => b.first)
+          .map((b) => ({ ...b, title: b.id ? (board.milestones.find((m) => m.id === b.id)?.title ?? '') : t('No milestone') }))
+      : [],
+  )
   const height = () => (tops().at(-1) ?? 0) + ROW
   const width = () => Math.max(...shown().map(({ r }) => r.blocks[r.blocks.length - 1].x + r.blocks[r.blocks.length - 1].w), 4) * UNIT + 24
 
@@ -93,6 +114,16 @@ export function Roadmap(props: { tickets: Summary[]; query: string }) {
           <div class="rm-scroll">
             <div class="rm-tracks" style={{ width: `${width()}px`, height: `${height()}px` }}>
               <For each={tops()}>{(y) => <div class="rm-track" style={{ top: `${y}px`, height: `${ROW}px` }} />}</For>
+              <For each={bands()}>
+                {(b) => (
+                  <div class="rm-band" style={{ top: `${b.y}px`, height: `${BAND}px` }} data-testid="roadmap-band">
+                    <Show when={b.id}>
+                      <Icon name="flag" size={11} />
+                    </Show>
+                    {b.title}
+                  </div>
+                )}
+              </For>
               <svg class="rm-arrows" width={width()} height={height()}>
                 <defs>
                   <marker id="rm-head" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">

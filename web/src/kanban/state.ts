@@ -7,6 +7,7 @@ import { createStore, reconcile } from 'solid-js/store'
 import { on, request } from '../pod/rpc'
 import { openTab, project } from '../state/project'
 import { t } from '../i18n'
+import { bumpMilestone, type MilestoneSummary } from './milestones'
 
 export type Status = 'new' | 'todo' | 'in_progress' | 'to_test' | 'done' | 'abandoned'
 export type Priority = 'low' | 'normal' | 'high' | 'critical'
@@ -39,6 +40,8 @@ export interface Summary {
   pos?: number
   /** A parent's own work validated: its first child may start. */
   stepDone?: boolean
+  /** Its milestone (a step has the one of its root). */
+  milestone?: number
   /** Tickets of other lineages this one waits for. */
   dependsOn: number[]
   /** What keeps a ticket from starting (New or To do only). */
@@ -120,6 +123,8 @@ export interface Ticket extends Summary {
   attachments: { id: number; name: string; mime: string; size: number; created: number }[]
   /** Children of the lineage, in order. */
   children: Summary[]
+  milestoneTitle?: string
+  milestoneStories?: { id: number; text: string; done: boolean }[]
 }
 
 export const statusOrder: Status[] = ['new', 'todo', 'in_progress', 'to_test', 'done', 'abandoned']
@@ -150,9 +155,10 @@ export const priorityLabels = translated(priorityNames)
 export const roleLabels = translated(roleNames)
 export const complexityLabels = translated(complexityNames)
 
-export const [board, setBoard] = createStore<{ project: string; tickets: Summary[]; meta: Record<string, string>; loaded: boolean; error: string }>({
+export const [board, setBoard] = createStore<{ project: string; tickets: Summary[]; milestones: MilestoneSummary[]; meta: Record<string, string>; loaded: boolean; error: string }>({
   project: '',
   tickets: [],
+  milestones: [],
   meta: {},
   loaded: false,
   error: '',
@@ -174,8 +180,9 @@ export function refreshBoard(): Promise<void> {
   if (loading) return loading
   loading = (async () => {
     try {
-      const r = await request<{ project: string; tickets: Summary[]; meta: Record<string, string> }>('kanban.list')
+      const r = await request<{ project: string; tickets: Summary[]; milestones?: MilestoneSummary[]; meta: Record<string, string> }>('kanban.list')
       setBoard('tickets', reconcile(r.tickets.map(fixStatus), { key: 'id' }))
+      setBoard('milestones', reconcile(r.milestones ?? [], { key: 'id' }))
       setBoard({ project: r.project, meta: r.meta ?? {}, loaded: true, error: '' })
     } catch (e) {
       setBoard({ error: (e as Error).message, loaded: true })
@@ -193,14 +200,15 @@ export function ensureBoard() {
   const pid = project()?.parent || project()?.id || ''
   if (pid && pid !== loadedFor) {
     loadedFor = pid
-    setBoard({ tickets: [], loaded: false })
+    setBoard({ tickets: [], milestones: [], loaded: false })
     refreshBoard()
   }
 }
 
 let refreshTimer: number | undefined
-on('kanban.changed', (e: { project: string; id: number }) => {
+on('kanban.changed', (e: { project: string; id: number; milestone?: number }) => {
   if (e.id) setVersions(e.id, (v) => (v ?? 0) + 1)
+  if (e.milestone) bumpMilestone(e.milestone)
   clearTimeout(refreshTimer)
   refreshTimer = window.setTimeout(() => refreshBoard(), 60)
 })
@@ -258,6 +266,8 @@ export interface TicketPatch {
   /** 0 takes the ticket out of its lineage. */
   parent?: number
   dependsOn?: number[]
+  /** 0 takes the ticket (and its steps) out of its milestone. */
+  milestone?: number
 }
 
 export const createTicket = (p: TicketPatch & { title: string }, by: By = 'user') => request<Ticket>('kanban.create', { ...p, by })
@@ -373,11 +383,12 @@ export function openWorktreeWindow(projectId: string, assistant = false) {
 
 // ---------- tabs ----------
 
-export type BoardView = 'board' | 'roadmap'
+export type BoardView = 'board' | 'roadmap' | 'milestones'
 const VIEW_KEY = 'webide.kanban.view'
 function savedView(): BoardView {
   try {
-    return localStorage.getItem(VIEW_KEY) === 'roadmap' ? 'roadmap' : 'board'
+    const v = localStorage.getItem(VIEW_KEY)
+    return v === 'roadmap' || v === 'milestones' ? v : 'board'
   } catch {
     return 'board'
   }
@@ -402,6 +413,10 @@ export function openBoard(view?: BoardView) {
 
 export function openTicket(id: number) {
   openTab({ kind: 'ticket', ticket: id, title: `#${id}` })
+}
+
+export function openMilestone(id: number) {
+  openTab({ kind: 'milestone', milestone: id, title: t('Milestone') })
 }
 
 export const [newTicketOpen, setNewTicketOpen] = createSignal(false)

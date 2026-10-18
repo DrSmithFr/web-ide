@@ -29,7 +29,8 @@ import { useCompletion } from './Completion'
 import { DiffView } from './DiffView'
 import { Board } from '../kanban/Board'
 import { TicketView } from '../kanban/TicketView'
-import { summary } from '../kanban/state'
+import { MilestoneView } from '../kanban/MilestoneView'
+import { board, summary } from '../kanban/state'
 import { gitRevision, gitStatus } from '../state/git'
 import { lineMarks } from '../editor/linediff'
 import { formatDocument, renameSymbol } from '../lsp/refactor'
@@ -132,6 +133,10 @@ function tabTitle(tab: TabState) {
   if (tab.kind === 'ticket') {
     const s = summary(tab.ticket!)
     return s ? `#${s.id} ${s.title.length > 28 ? s.title.slice(0, 27) + '…' : s.title}` : `#${tab.ticket}`
+  }
+  if (tab.kind === 'milestone') {
+    const m = board.milestones.find((x) => x.id === tab.milestone)
+    return m ? (m.title.length > 32 ? m.title.slice(0, 31) + '…' : m.title) : t('Milestone')
   }
   if (tab.kind === 'tool') return tileTools[tab.tool!] ? t(tileTools[tab.tool!].label) : tab.tool!
   if (tab.kind === 'console') return consoles().find((c) => c.id === tab.console)?.title ?? t('Console')
@@ -337,6 +342,9 @@ function Pane(props: { id: string }) {
               </Match>
               <Match when={tab.kind === 'ticket'}>
                 <TicketView tab={tab} paneId={props.id} />
+              </Match>
+              <Match when={tab.kind === 'milestone'}>
+                <MilestoneView tab={tab} paneId={props.id} />
               </Match>
               <Match when={tab.kind === 'tool'}>
                 <div class="tile-tool panel-tile" data-tool={tab.tool}>

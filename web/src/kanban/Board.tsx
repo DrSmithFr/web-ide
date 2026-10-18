@@ -16,6 +16,8 @@ import {
 } from './state'
 import { blockerText } from './Lineage'
 import { Roadmap } from './Roadmap'
+import { Milestones } from './Milestones'
+import { milestoneMatch, type MilestoneFilter } from './milestones'
 import { t } from '../i18n'
 import './kanban.css'
 
@@ -28,10 +30,11 @@ export function Board() {
   const [settingsOpen, setSettingsOpen] = createSignal(false)
   const view = boardView
   const choose = setBoardView
+  const [ms, setMs] = createSignal<MilestoneFilter>('all')
   const filtered = createMemo(() => {
     const q = query().trim().toLowerCase()
     return board.tickets.filter(
-      (tk) => !q || tk.title.toLowerCase().includes(q) || `#${tk.id}` === q || String(tk.id) === q,
+      (tk) => (!q || tk.title.toLowerCase().includes(q) || `#${tk.id}` === q || String(tk.id) === q) && milestoneMatch(ms(), tk.milestone),
     )
   })
   const column = (s: Status) => filtered().filter((tk) => tk.status === s)
@@ -50,7 +53,35 @@ export function Board() {
           <button class="btn small" classList={{ on: view() === 'roadmap' }} aria-pressed={view() === 'roadmap'} onClick={() => choose('roadmap')} data-testid="kanban-view-roadmap">
             <Icon name="history" size={13} /> {t('Roadmap')}
           </button>
+          <button class="btn small" classList={{ on: view() === 'milestones' }} aria-pressed={view() === 'milestones'} onClick={() => choose('milestones')} data-testid="kanban-view-milestones">
+            <Icon name="flag" size={13} /> {t('Milestones')}
+          </button>
         </div>
+        <Show when={view() !== 'milestones' && board.milestones.length}>
+          <select
+            class="small"
+            title={t('Milestone')}
+            onChange={(e) => {
+              const v = e.currentTarget.value
+              setMs(v === 'all' || v === 'none' ? v : Number(v))
+            }}
+            data-testid="kanban-milestone-filter"
+          >
+            <option value="all" selected={ms() === 'all'}>
+              {t('All milestones')}
+            </option>
+            <option value="none" selected={ms() === 'none'}>
+              {t('No milestone')}
+            </option>
+            <For each={board.milestones.filter((m) => m.state === 'open' || m.id === ms())}>
+              {(m) => (
+                <option value={m.id} selected={ms() === m.id}>
+                  {m.title}
+                </option>
+              )}
+            </For>
+          </select>
+        </Show>
         <span class="grow" />
         <button class="btn small" onClick={() => setSettingsOpen(true)} data-testid="kanban-settings">
           <Icon name="gear" size={13} /> {t('Settings')}
@@ -69,7 +100,10 @@ export function Board() {
         <KanbanSettings onClose={() => setSettingsOpen(false)} />
       </Show>
       <Show when={view() === 'roadmap'}>
-        <Roadmap tickets={board.tickets} query={query()} />
+        <Roadmap tickets={board.tickets} query={query()} milestone={ms()} />
+      </Show>
+      <Show when={view() === 'milestones'}>
+        <Milestones />
       </Show>
       <div class="kb-columns" hidden={view() !== 'board'}>
         <For each={active}>
@@ -124,6 +158,13 @@ export function Card(props: { tk: Summary; compact?: boolean; closed?: boolean }
           <span class="kb-badge" title={t('Step of #{id}', { id: tk().parent! })} data-testid="card-parent">
             ↳ #{tk().parent}
           </span>
+        </Show>
+        <Show when={board.milestones.find((m) => m.id === tk().milestone)}>
+          {(m) => (
+            <span class="kb-badge kb-milestone ellipsis" title={t('Milestone: {title}', { title: m().title })} data-testid="card-milestone">
+              <Icon name="flag" size={10} /> {m().title}
+            </span>
+          )}
         </Show>
         <Show when={tk().blockers?.length}>
           <span class="kb-badge blocked" title={t('Cannot start yet: {blockers}', { blockers: tk().blockers!.map(blockerText).join(', ') })} data-testid="card-blocked">

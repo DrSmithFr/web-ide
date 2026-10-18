@@ -109,7 +109,11 @@ func (s *Server) registerKanban() {
 			}
 		}
 		meta, err := s.Kanban.Meta(k.loc)
-		return map[string]any{"project": k.root.ID, "tickets": list, "meta": meta}, err
+		if err != nil {
+			return nil, err
+		}
+		milestones, err := s.Kanban.Milestones(k.loc)
+		return map[string]any{"project": k.root.ID, "tickets": list, "meta": meta, "milestones": milestones}, err
 	}))
 	s.handle("kanban.get", h(func(ctx context.Context, c *Client, k kctx, p json.RawMessage) (any, error) {
 		a, err := bind[idArg](p)

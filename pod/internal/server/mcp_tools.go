@@ -57,6 +57,7 @@ var (
 	complexityProp = enum("How hard the work is, which picks the model and the effort of its sessions: low (a small obvious change: a color, a label, a one-line fix), medium (usual work), high (a delicate design, concurrency, security, a bug hard to find)", kanban.Complexities...)
 	sizeProp       = enum("Estimated effort of the whole ticket: s (a few files, an hour of AI work), m, l, xl (many files across the pod and the page, several days)", kanban.Sizes...)
 	dependsOnProp  = map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "Tickets of other lineages this one waits for: it starts once they are merged or done (replaces the list)"}
+	milestoneProp  = map[string]any{"type": "integer", "description": "Milestone of the ticket and of its steps (0 takes it out; a step has the one of its root); see kanban_milestone"}
 )
 
 // mcpScope is the kanban a call works on, found from the working directory of the client.
@@ -326,13 +327,14 @@ var mcpTools = []mcpTool{
 			"files":       strList("Paths of the files concerned (relative to the root of the project)"),
 			"parent":      parentProp,
 			"depends_on":  dependsOnProp,
+			"milestone":   milestoneProp,
 		},
 		required: []string{"title"},
 		run: func(ctx context.Context, s *Server, raw json.RawMessage) (string, error) {
 			a, err := bind[struct {
 				Cwd, Title, Description, Priority string
 				Files                             []string
-				Parent                            *int64
+				Parent, Milestone                 *int64
 				DependsOn                         *[]int64 `json:"depends_on"`
 			}](raw)
 			if err != nil {
@@ -345,7 +347,7 @@ var mcpTools = []mcpTool{
 			if err != nil {
 				return "", err
 			}
-			id, err := s.Kanban.Create(sc.loc, kanban.Patch{Title: &a.Title, Description: nonEmpty(a.Description), Priority: nonEmpty(a.Priority), AddFiles: a.Files, Parent: a.Parent, DependsOn: a.DependsOn}, kanban.ByClaude)
+			id, err := s.Kanban.Create(sc.loc, kanban.Patch{Title: &a.Title, Description: nonEmpty(a.Description), Priority: nonEmpty(a.Priority), AddFiles: a.Files, Parent: a.Parent, DependsOn: a.DependsOn, Milestone: a.Milestone}, kanban.ByClaude)
 			if err != nil {
 				return "", err
 			}
@@ -368,25 +370,47 @@ var mcpTools = []mcpTool{
 			"complexity":   complexityProp,
 			"parent":       parentProp,
 			"depends_on":   dependsOnProp,
+			"milestone":    milestoneProp,
 		},
 		run: ticketTool(func(ctx context.Context, s *Server, sc mcpScope, id int64, a struct {
 			Title, Description, Priority string
 			TestSummary                  string   `json:"test_summary"`
 			AddFiles                     []string `json:"add_files"`
 			RemoveFiles                  []string `json:"remove_files"`
-			Parent                       *int64
+			Parent, Milestone            *int64
 			DependsOn                    *[]int64 `json:"depends_on"`
 			Size, Complexity             string
 		}) (string, error) {
 			if err := tooLong(a.Description, kanban.MaxDescription, descriptionAdvice); err != nil {
 				return "", err
 			}
-			p := kanban.Patch{Title: nonEmpty(a.Title), Description: nonEmpty(a.Description), Priority: nonEmpty(a.Priority), TestSummary: nonEmpty(a.TestSummary), AddFiles: a.AddFiles, RemoveFiles: a.RemoveFiles, Parent: a.Parent, DependsOn: a.DependsOn, Size: nonEmpty(a.Size), Complexity: nonEmpty(a.Complexity)}
+			p := kanban.Patch{Title: nonEmpty(a.Title), Description: nonEmpty(a.Description), Priority: nonEmpty(a.Priority), TestSummary: nonEmpty(a.TestSummary), AddFiles: a.AddFiles, RemoveFiles: a.RemoveFiles, Parent: a.Parent, DependsOn: a.DependsOn, Size: nonEmpty(a.Size), Complexity: nonEmpty(a.Complexity), Milestone: a.Milestone}
 			if err := s.Kanban.Update(sc.loc, id, p, kanban.ByClaude); err != nil {
 				return "", err
 			}
 			return fmt.Sprintf("Ticket #%d updated.", id), nil
 		}),
+	},
+	{
+		name:        "kanban_milestone",
+		description: assistant.MilestoneDescription,
+		props:       assistant.MilestoneProps,
+		required:    []string{"action"},
+		run: func(ctx context.Context, s *Server, raw json.RawMessage) (string, error) {
+			a, err := bind[struct {
+				Cwd string
+				milestoneArgs
+			}](raw)
+			if err != nil {
+				return "", err
+			}
+			sc, err := s.mcpScope(a.Cwd)
+			if err != nil {
+				return "", err
+			}
+			out, _, err := s.milestoneTool(sc.root.ID, sc.loc, a.milestoneArgs, kanban.ByClaude, "")
+			return out, err
+		},
 	},
 	{
 		name:        "kanban_add_note",
