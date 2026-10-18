@@ -10,7 +10,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 )
 
-// A pod with no link to the relay publishes through a peer of its site: the peer puts the record on
+// A pod with no link to the relay publishes through a peer of its cluster: the peer puts the record on
 // its own link unchanged, and the relay checks the signature of the device that wrote it. The hop
 // adds no trust, so what matters on the LAN side is that a record travels byte for byte.
 
@@ -72,7 +72,7 @@ func await[T any](t *testing.T, ch <-chan T, what string) T {
 	}
 }
 
-// TestBlobTravelsUnchanged: the list of a pod reaches a peer of its site as the exact bytes its
+// TestBlobTravelsUnchanged: the list of a pod reaches a peer of its cluster as the exact bytes its
 // device signed — the peer can put them on its own link, where the relay checks that signature.
 func TestBlobTravelsUnchanged(t *testing.T) {
 	a := account(t, 3)

@@ -63,6 +63,7 @@ _Avoid_: ban
 **Cluster**
 The pods of one account that see each other on the local network.
 _Avoid_: site, LAN
+On the wire and in storage the cluster is still called `site` (the relay protocol fields and the `site` message, the `/api/pods` field, the `webide.relay.site` key of the bootstrap), so that a relay and pods of different releases keep talking; each such field says so in a comment.
 
 **Gateway**
 The pod of a cluster the relay sends browsers to; the role moves when it leaves.
@@ -247,4 +248,3 @@ Naming problems found while writing this glossary, each to become a ticket.
 - **Assistant**: the menu says *AI assistant*, the docs also *integrated assistant*; say *Assistant*.
 - **To test**: the status shown *To test* is `review` in the code, the base and the MCP API, while *Review* is a reading by a model; rename it `to_test` (migration, `review` kept as an alias of the API).
 - **Lineage**: the docs say *child*, *step* and *next step*; say *root* and *steps*. The API field `parent` stays and means the root.
-- **Cluster**: the code (`relay/sites.go`, `multipod`, `lan`, `relayclient`), the docs and the UI say *site*; say *cluster*.

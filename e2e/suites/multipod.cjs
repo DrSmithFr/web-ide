@@ -1,14 +1,14 @@
-// Multi-pod (milestone 3): three pods of one account, alpha and bravo on one site (they are
+// Multi-pod (milestone 3): three pods of one account, alpha and bravo on one cluster (they are
 // linked by the LAN), charlie on another one. run.sh starts the relay and pod alpha with -relay,
 // -lan and -preferred; the suite pairs alpha with the CLI, starts bravo (no relay link of its
 // own) and charlie (-lan off), then opens the relay origin with no #pod: the bootstrap picks the
-// gateway of the site and the home page lists the three pods with their projects. The relay only
+// gateway of the cluster and the home page lists the three pods with their projects. The relay only
 // caches ciphertext, so a dump of its base holds no project name.
 //
 // Relay 3b (routing): every project opens with the front end of the pod that holds it, on the one
 // origin of the relay — /pod/<key>/ for a pod registered there, and the same path carried by the
 // gateway for a LAN-only one; /_lan/pod/<key>/ on 127.0.0.1, pod to pod over WebRTC for a pod of
-// another site. When the gateway leaves, the browser reconnects through the new one, an open
+// another cluster. When the gateway leaves, the browser reconnects through the new one, an open
 // project keeps working, and notifications enabled on one pod reach every pod of the account.
 const fs = require('fs')
 const path = require('path')
@@ -231,12 +231,12 @@ async function termRun(page, app, cmd, want) {
 /** The pod a channel of this window goes to, as the bootstrap page keeps it. */
 const tunnelKeys = (page) => page.evaluate(() => [...(window.tunnels?.keys() ?? [])])
 
-/** The gateway of the site, as the settings panel of a pod shows it. */
-async function siteGateway(page) {
+/** The gateway of the cluster, as the settings panel of a pod shows it. */
+async function clusterGateway(page) {
   await openPods(page)
   return await page.$eval('[data-testid=pods-settings] .props', (el) => {
     for (const dt of el.querySelectorAll('dt')) {
-      if (dt.textContent.includes('Gateway of the site')) return dt.nextElementSibling.textContent.trim()
+      if (dt.textContent.includes('Gateway of the cluster')) return dt.nextElementSibling.textContent.trim()
     }
     return ''
   })
@@ -303,8 +303,8 @@ run(
       }
       assert(await waitOnline(process.env.E2E_POD_ID), 'alpha is registered with the relay')
 
-      // 2. Bravo has no link to the relay: only a peer of its site reaches it. Charlie is on
-      // another site: it has its relay link and no LAN peer.
+      // 2. Bravo has no link to the relay: only a peer of its cluster reaches it. Charlie is on
+      // another cluster: it has its relay link and no LAN peer.
       dataB = path.join(TMP, 'mp-bravo', 'data')
       dataC = path.join(TMP, 'mp-charlie', 'data')
       const portB = await pickPort(LAN_PORT + 70)
@@ -316,7 +316,7 @@ run(
       const keyB = deviceKey(dataB)
 
       // 3. A browser pairs with the phrase on the relay origin, with no pod in the link: it
-      // enters the account through the gateway of the site, which is alpha (preferred).
+      // enters the account through the gateway of the cluster, which is alpha (preferred).
       await authenticator(page)
       const msg = await open(page, `${ORIGIN}/`)
       assert(!msg.includes('No pod given'), 'the bootstrap finds a gateway on its own: ' + msg)
@@ -342,7 +342,7 @@ run(
       assert(rows.filter((r) => r.includes('pod')).length === 2 && rows.some((r) => r.includes('browser')), 'the account lists its two pods and this browser: ' + rows.join(' / ').slice(0, 300))
 
       // 4. One list of the projects of every pod, each with the badge of its pod. Bravo has no link to the relay: it is listed through the
-      // LAN link of alpha. Charlie is on another site: its list comes from the cache of the relay,
+      // LAN link of alpha. Charlie is on another cluster: its list comes from the cache of the relay,
       // which only ever holds ciphertext — so its projects appear once the pod published it.
       await app.waitForSelector('.project-card[data-pod=bravo] [data-testid=pod-project]:has-text("bravo-app")', { timeout: 90000 })
       const written = () => py("select count(*) from blobs where kind like 'projects:%'").trim() === '2'
@@ -359,7 +359,7 @@ run(
       assert(cards.includes('alpha') && cards.includes('bravo') && cards.includes('charlie'), 'one list holds the projects of every pod: ' + cards.join(','))
       assert((await app.textContent('.project-card[data-pod=bravo] [data-testid=project-pod]')).includes('bravo'), 'a project shows the badge of its pod')
       const href = await app.getAttribute('.project-card[data-pod=bravo] [data-testid=pod-project]', 'href')
-      assert(href && href.startsWith('/pod/' + keyB), 'on the relay origin, the page of a pod of the site runs under /pod/: ' + href)
+      assert(href && href.startsWith('/pod/' + keyB), 'on the relay origin, the page of a pod of the cluster runs under /pod/: ' + href)
       // A project of bravo is edited from this home page: the request rides a side channel routed
       // through the gateway, and bravo saves it.
       await app.click('.project-card[data-pod=bravo] [data-testid=project-edit]')
@@ -412,13 +412,13 @@ run(
       await local.waitForSelector('[data-testid=pod-block][data-name=charlie]', { timeout: 30000 })
       const keyC = deviceKey(dataC)
       // Bravo is a peer of the LAN of alpha: its page runs under /_lan/pod/ of alpha. Charlie is
-      // of another site: alpha dials it pod to pod over WebRTC, under the same path.
+      // of another cluster: alpha dials it pod to pod over WebRTC, under the same path.
       await openProject(local, local, 'bravo', path.join(TMP, 'mp-bravo', 'ws'), 'alpha')
       assert(new URL(local.url()).pathname === `/_lan/pod/${keyB}/project/bravo-app`, 'the page of bravo runs under /_lan/pod/: ' + local.url())
       await local.goto(`http://127.0.0.1:${PORT_A}/?token=${TOKEN}`)
       await local.waitForSelector('.home .home-bar', { timeout: 40000 })
       await openProject(local, local, 'charlie', path.join(TMP, 'mp-charlie', 'ws'), 'alpha')
-      assert(new URL(local.url()).pathname === `/_lan/pod/${keyC}/project/charlie-app`, 'a pod of another site is reached pod to pod: ' + local.url())
+      assert(new URL(local.url()).pathname === `/_lan/pod/${keyC}/project/charlie-app`, 'a pod of another cluster is reached pod to pod: ' + local.url())
       await local.close()
 
       // 10. Each pod registered at the relay gets its own tunnel: a project of alpha and a project
@@ -582,7 +582,7 @@ run(
       const xrows = await app.textContent('.xterm-rows')
       assert(xrows.includes('before-the-gateway-left') && xrows.includes('after-the-gateway-left'), 'the terminal of the page survived the gateway: ' + xrows.slice(-200))
 
-      // The relay elected a new gateway for the site, and this window followed it: the home page
+      // The relay elected a new gateway for the cluster, and this window followed it: the home page
       // of the origin is bravo's, alpha is greyed.
       let gate = ''
       for (let i = 0; i < 40 && gate !== keyB; i++) {
@@ -590,10 +590,10 @@ run(
         const bp = await ctx.newPage()
         await bp.goto(`http://127.0.0.1:${portB}/?token=${fs.readFileSync(path.join(dataB, 'token'), 'utf8').trim()}`)
         await bp.waitForSelector('.home .home-bar', { timeout: 40000 })
-        gate = await siteGateway(bp)
+        gate = await clusterGateway(bp)
         await bp.close()
       }
-      assert(gate === keyB, `bravo is the gateway of the site now: ${gate}`)
+      assert(gate === keyB, `bravo is the gateway of the cluster now: ${gate}`)
       await app.goto(`${ORIGIN}/app`, { waitUntil: 'domcontentloaded' })
       await app.waitForSelector('.home .home-bar', { timeout: 40000 })
       assert((await app.textContent('.home-bar')).includes(bravoWs), 'the window enters through the new gateway: ' + (await app.textContent('.home-bar')))

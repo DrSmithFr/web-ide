@@ -50,7 +50,7 @@ flowchart LR
 - `mcptools`: Tools of the IDE in its MCP (#68), called as a CLI agent does: a file and a diff opened in the window, a message
 - `mobile`: Phone layout (375×812, touch): one bar of three rows (project and status, the menus, the icons of the views)
 - `mousenav`: Side buttons of the mouse (back, forward): they move in the history of the focused part, wherever the pointer is
-- `multipod`: Multi-pod (milestone 3): three pods of one account, alpha and bravo on one site (they are linked by the LAN)
+- `multipod`: Multi-pod (milestone 3): three pods of one account, alpha and bravo on one cluster (they are linked by the LAN)
 - `orchestrator`: Orchestrator mode, the default of a new conversation
 - `perf`: Performance on a 100 000-line file: each keystroke and each scroll must fit in a few frames
 - `plan`: AI assistant, Plan / Build modes: Shift+Tab, Plan prompt and tools (scratch files only, exit_plan_mode), dedicated Plan model

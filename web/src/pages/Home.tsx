@@ -292,7 +292,7 @@ function RemoteCard(props: {
       ? t('{name} runs another multi-pod protocol: update it', { name: pod().name })
       : !pod().online
         ? t('This pod is offline.')
-        : t('Opening the projects of another site comes with the next version')
+        : t('Opening the projects of another cluster comes with the next version')
   const body = () => (
     <>
       <img class="project-icon" src={iconURL(icon())} alt="" />
@@ -366,7 +366,7 @@ function PodRow(props: { pod: PodInfo; self?: boolean }) {
     return t('seen {time}', { time: d.toLocaleString() })
   }
   // *Update this pod*: only a pod running a release version has a version to offer, and only a pod
-  // the site says runs an older one is worth offering it to (the pod asked does the checking).
+  // the cluster says runs an older one is worth offering it to (the pod asked does the checking).
   const [offer, setOffer] = createSignal<{ can: boolean; version: string } | null>(null)
   const [answer, setAnswer] = createSignal<UpdateAnswer | null>(null)
   const [busy, setBusy] = createSignal(false)

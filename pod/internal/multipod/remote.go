@@ -18,7 +18,7 @@ import (
 )
 
 // The local pod is the gateway of its own origin (127.0.0.1, a LAN address): a pod of another
-// site, which no LAN link reaches, is served through a pod-to-pod WebRTC tunnel dialled at the
+// cluster, which no LAN link reaches, is served through a pod-to-pod WebRTC tunnel dialled at the
 // relay (relay.md, *Multi-pod*). Its page runs under /_lan/pod/<key>/ like a peer's, its fetches
 // become http:<n> channels and its WebSocket the rpc channel of one window.
 //

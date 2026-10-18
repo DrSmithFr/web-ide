@@ -38,7 +38,7 @@ type Config struct {
 	// Handler serves a request of a trusted peer as a request of the machine itself
 	// (server.ServeTrusted): the peer proved it is a device of the account.
 	Handler http.Handler
-	// ServeTunnel runs the protocol of a window a gateway of the site bridged to this pod: its
+	// ServeTunnel runs the protocol of a window a gateway of the cluster bridged to this pod: its
 	// channels arrive on the LAN port (/_lan/tunnel), the rpc one having passed the handshake of
 	// the browser the gateway vouches for.
 	ServeTunnel func(ctx context.Context, rpc tunnel.MsgConn, chans <-chan tunnel.LabeledConn)
@@ -57,13 +57,13 @@ type Config struct {
 	// brought it (the relay link passes it on).
 	OnRevocations func(*identity.Revocations)
 	// OnBlob, OnWrap and OnSyncKey are called with a sync record a peer passed on: a pod with no
-	// link to the relay publishes its project list and reads its wrap through a peer of its site,
+	// link to the relay publishes its project list and reads its wrap through a peer of its cluster,
 	// which forwards them on its own link. The relay checks the original signature, so this adds
 	// no trust.
 	OnBlob func(*identity.BlobRecord)
 	OnWrap func(*identity.WrapRecord)
 	OnSync func(*identity.SyncKeyRecord)
-	// OnUpdate runs an update request a peer of the site carried to this pod ($update): the pod
+	// OnUpdate runs an update request a peer of the cluster carried to this pod ($update): the pod
 	// checks it itself, whatever brought it.
 	OnUpdate func(*identity.UpdateRequest) update.Answer
 	// OnPower runs a power request a peer carried to this pod ($power), checked the same way.
@@ -587,7 +587,7 @@ func (m *Manager) run(l *link, peerFP string) {
 				m.cfg.OnSync(&k)
 			}
 		case "$update":
-			// A peer of the site carried an update request for this pod. The pod checks it itself:
+			// A peer of the cluster carried an update request for this pod. The pod checks it itself:
 			// a peer is a device of the account, not an authority.
 			var u updateMsg
 			if json.Unmarshal(msg.Params, &u) == nil && m.cfg.OnUpdate != nil {
@@ -704,7 +704,7 @@ func (m *Manager) recheck() {
 	}
 }
 
-// PublishBlob hands a sealed blob to a peer of the site: a pod with no link to the relay publishes
+// PublishBlob hands a sealed blob to a peer of the cluster: a pod with no link to the relay publishes
 // its project list this way, and the peer puts it on its own link unchanged. The relay checks the
 // signature of the device that wrote it, so the hop adds no trust.
 func (m *Manager) PublishBlob(b *identity.BlobRecord) error {
@@ -730,7 +730,7 @@ func (m *Manager) PublishSyncKey(k *identity.SyncKeyRecord) error {
 // by hand.
 const UpdateWait = 10 * time.Second
 
-// SendUpdate carries a signed update request to a peer of the site over its control link and waits
+// SendUpdate carries a signed update request to a peer of the cluster over its control link and waits
 // for its answer. The peer runs the checks itself: what this pod adds is the route, not the trust.
 func (m *Manager) SendUpdate(ctx context.Context, key string, req *identity.UpdateRequest) (*update.Answer, error) {
 	// No answer: the pod on the other side is older than #60. The user runs the command.
@@ -738,7 +738,7 @@ func (m *Manager) SendUpdate(ctx context.Context, key string, req *identity.Upda
 		update.Answer{Status: update.StatusNotService, Command: update.Command(req.Version)})
 }
 
-// SendPower carries a signed power request to a peer of the site, as SendUpdate does. A pod that
+// SendPower carries a signed power request to a peer of the cluster, as SendUpdate does. A pod that
 // knows no $power never answers: it is refused with that reason.
 func (m *Manager) SendPower(ctx context.Context, key string, req *identity.PowerRequest) (*update.Answer, error) {
 	return m.carry(ctx, key, "$power", func(id string) any { return powerMsg{Req: id, Power: req} },
@@ -783,7 +783,7 @@ func (m *Manager) carry(ctx context.Context, key, method string, body func(id st
 	}
 }
 
-// PassWrap forwards a wrap the relay pushed for a pod of this site that has no link of its own: it
+// PassWrap forwards a wrap the relay pushed for a pod of this cluster that has no link of its own: it
 // is the only way that pod can read the epoch key.
 func (m *Manager) PassWrap(w *identity.WrapRecord) error {
 	m.mu.Lock()

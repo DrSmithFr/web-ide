@@ -1,7 +1,7 @@
 // Package multipod is the pod's view of the other pods of its account (milestone 3): the pods of
-// its site it sees on the LAN, the presence the relay reports, and the project lists the pods
+// its cluster it sees on the LAN, the presence the relay reports, and the project lists the pods
 // published as encrypted blobs. The relay never sees a project name: it caches ciphertext, and a
-// pod that holds the sync key reads the lists itself — the gateway of a site first, since the
+// pod that holds the sync key reads the lists itself — the gateway of a cluster first, since the
 // browser opens its tunnel there.
 package multipod
 
@@ -30,7 +30,7 @@ type PodView struct {
 	Name        string `json:"name"`
 	Version     string `json:"version"`
 	Fingerprint string `json:"fingerprint"`
-	Site        string `json:"site,omitempty"`
+	Cluster     string `json:"site,omitempty"` // "site" on the wire: the cluster (GLOSSARY.md)
 	Gateway     bool   `json:"gateway,omitempty"`
 	Online      bool   `json:"online"`
 	// Protocol is the multi-pod protocol of the pod (multipod.Protocol): 0 for a pod that tells
@@ -63,9 +63,9 @@ type Directory struct {
 
 	mu      sync.Mutex
 	relay   []relayclient.PodInfo
-	site    string
+	cluster string
 	gateway string
-	// remote: this pod has a link to the relay, so it can dial a pod of another site pod to pod
+	// remote: this pod has a link to the relay, so it can dial a pod of another cluster pod to pod
 	// (pod/internal/multipod.RemoteGateway) and serve its page under its own /_lan/pod/.
 	remote bool
 	lists  map[string]*List // device key → the list read from a blob
@@ -93,14 +93,14 @@ func (d *Directory) Changed() {
 	}
 }
 
-// RelayPods takes the presence the relay reported: who is online, in which site, and which pod is
-// the gateway of each site.
+// RelayPods takes the presence the relay reported: who is online, in which cluster, and which pod is
+// the gateway of each cluster.
 func (d *Directory) RelayPods(pods []relayclient.PodInfo) {
 	d.mu.Lock()
 	d.relay = pods
 	for _, p := range pods {
 		if p.Key == d.own {
-			d.site, d.gateway = p.Site, ""
+			d.cluster, d.gateway = p.Cluster, ""
 			if p.Gateway {
 				d.gateway = p.Key
 			}
@@ -110,10 +110,10 @@ func (d *Directory) RelayPods(pods []relayclient.PodInfo) {
 	d.Changed()
 }
 
-// RelayGateway records the gateway of a site the relay elected.
-func (d *Directory) RelayGateway(site, key string) {
+// RelayGateway records the gateway of a cluster the relay elected.
+func (d *Directory) RelayGateway(cluster, key string) {
 	d.mu.Lock()
-	if site == d.site {
+	if cluster == d.cluster {
 		d.gateway = key
 	}
 	d.mu.Unlock()
@@ -140,18 +140,18 @@ func (d *Directory) SetRemote(on bool) {
 	d.remote = on
 }
 
-// Gateway is the device key of the gateway of this pod's site ("" when the relay says nothing).
+// Gateway is the device key of the gateway of this pod's cluster ("" when the relay says nothing).
 func (d *Directory) Gateway() string {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.gateway
 }
 
-// Site is the site of this pod: the smallest device key of the pods linked by the local network.
-func (d *Directory) Site() string {
+// Cluster is the cluster of this pod: the smallest device key of the pods linked by the local network.
+func (d *Directory) Cluster() string {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	return d.site
+	return d.cluster
 }
 
 // Pull asks the relay for the project lists of the account: a blobGet of the kind prefix answers
@@ -281,7 +281,7 @@ func (d *Directory) List() []PodView {
 			continue
 		}
 		v := PodView{Key: p.Key, Name: p.Name, Version: p.Version, Fingerprint: identity.Fingerprint(p.Key),
-			Site: p.Site, Gateway: p.Gateway, Online: true, Protocol: p.Protocol, OneWay: oneway[p.Key]}
+			Cluster: p.Cluster, Gateway: p.Gateway, Online: true, Protocol: p.Protocol, OneWay: oneway[p.Key]}
 		if d.remote {
 			// Reachable pod to pod: its page runs under this pod's origin too.
 			v.Path = lan.PeerPrefix + p.Key

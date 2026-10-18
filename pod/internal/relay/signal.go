@@ -49,7 +49,7 @@ type sigMsg struct {
 	Kind    string                  `json:"kind,omitempty"`
 	Updated int64                   `json:"updated,omitempty"` // time the stored blob or wrap was written
 	Message string                  `json:"message,omitempty"`
-	// Sites (milestone 3): register carries the pod version, its multi-pod protocol and the
+	// Clusters (milestone 3): register carries the pod version, its multi-pod protocol and the
 	// preferred switch, `site` the device keys of its LAN peers, `challenge`/`proof` the nonce of
 	// the proof of possession, and `pods`/`gateway` what the relay sees of the account.
 	Prove     bool      `json:"prove,omitempty"`
@@ -60,7 +60,7 @@ type sigMsg struct {
 	Protocol  int       `json:"protocol,omitempty"`
 	Preferred bool      `json:"preferred,omitempty"`
 	Peers     []string  `json:"peers,omitempty"`
-	Site      string    `json:"site,omitempty"`
+	Cluster   string    `json:"site,omitempty"` // "site" on the wire: the cluster (GLOSSARY.md)
 	Gateway   string    `json:"gateway,omitempty"`
 	Pods      []PodInfo `json:"pods,omitempty"`
 	// Update this pod (#60): the relay is a plain carrier of a signed update request between two
@@ -85,22 +85,22 @@ type sigMsg struct {
 // proved inside the DataChannel, bound to both DTLS fingerprints, so the relay cannot
 // MITM.
 type Server struct {
-	store       *Store
-	turn        *Turn
-	mu          sync.Mutex
-	pods        map[string]*podConn      // online pods, by pod id
-	browsers    map[string]*browserConn  // active browsers, by session id
-	links       map[*identityConn]bool   // live pairing/admin links
-	codes       map[string]*identityConn // pairing code → the link that created it
-	joiners     map[string]*identityConn // pairing code → the link that posted its key to it
-	since       map[string]time.Time     // device key → when its link came up (sites.go)
-	gateways    map[string]string        // site id → the device key elected gateway
-	siteOf      map[string]string        // device key → the site it was last seen in
-	siteAccount map[string]string        // site id → the account it belongs to
-	siteText    map[string]string        // account → the last sites pushed
-	sitePods    map[string][]PodInfo     // account → the pods as last computed (sites.go)
-	grace       map[string]*graceEntry   // device key → a gateway kept after an unclean drop
-	updateHops  map[string]*updateHop    // an update request being carried, by the id of the hop
+	store          *Store
+	turn           *Turn
+	mu             sync.Mutex
+	pods           map[string]*podConn      // online pods, by pod id
+	browsers       map[string]*browserConn  // active browsers, by session id
+	links          map[*identityConn]bool   // live pairing/admin links
+	codes          map[string]*identityConn // pairing code → the link that created it
+	joiners        map[string]*identityConn // pairing code → the link that posted its key to it
+	since          map[string]time.Time     // device key → when its link came up (clusters.go)
+	gateways       map[string]string        // cluster id → the device key elected gateway
+	clusterOf      map[string]string        // device key → the cluster it was last seen in
+	clusterAccount map[string]string        // cluster id → the account it belongs to
+	clusterText    map[string]string        // account → the last clusters pushed
+	clusterPods    map[string][]PodInfo     // account → the pods as last computed (clusters.go)
+	grace          map[string]*graceEntry   // device key → a gateway kept after an unclean drop
+	updateHops     map[string]*updateHop    // an update request being carried, by the id of the hop
 	// App is the front end of the pod: the relay serves its manifest and icons (static.go).
 	App fs.FS
 	// Push sends the Web Push notifications of the pods (push.go); nil: off.
@@ -123,7 +123,7 @@ type podConn struct {
 	// certified is the account when the pod registered with a certificate of it that the relay
 	// checked, not revoked: the only account it may send push notifications to.
 	certified string
-	// The site presence (sites.go): the device key the link proved possession of (empty: an old
+	// The cluster presence (clusters.go): the device key the link proved possession of (empty: an old
 	// pod in token mode, which gets no presence), what it reported about its LAN peers, when its
 	// link came up, and whether it ended cleanly (a bye).
 	key       string
@@ -248,21 +248,21 @@ func (s *Server) browserSignal(bc *browserConn, m sigMsg) {
 // New builds a relay Server over the given store and TURN server.
 func New(st *Store, turn *Turn) *Server {
 	return &Server{
-		store:       st,
-		turn:        turn,
-		pods:        map[string]*podConn{},
-		browsers:    map[string]*browserConn{},
-		links:       map[*identityConn]bool{},
-		codes:       map[string]*identityConn{},
-		joiners:     map[string]*identityConn{},
-		since:       map[string]time.Time{},
-		gateways:    map[string]string{},
-		siteOf:      map[string]string{},
-		siteAccount: map[string]string{},
-		siteText:    map[string]string{},
-		sitePods:    map[string][]PodInfo{},
-		grace:       map[string]*graceEntry{},
-		startedAt:   time.Now(),
+		store:          st,
+		turn:           turn,
+		pods:           map[string]*podConn{},
+		browsers:       map[string]*browserConn{},
+		links:          map[*identityConn]bool{},
+		codes:          map[string]*identityConn{},
+		joiners:        map[string]*identityConn{},
+		since:          map[string]time.Time{},
+		gateways:       map[string]string{},
+		clusterOf:      map[string]string{},
+		clusterAccount: map[string]string{},
+		clusterText:    map[string]string{},
+		clusterPods:    map[string][]PodInfo{},
+		grace:          map[string]*graceEntry{},
+		startedAt:      time.Now(),
 	}
 }
 
@@ -335,7 +335,7 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 		s.podLeaves(pc)
 		s.mu.Unlock()
 		s.store.Offline(pc.id)
-		s.recomputeSites(pc.account)
+		s.recomputeClusters(pc.account)
 		_ = ws.CloseNow()
 	}()
 	for {
@@ -402,20 +402,20 @@ func (s *Server) servePod(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			pc.send(sigMsg{Type: "ready", Account: m.Account, List: list, Quota: s.quotaState(s.credKey(m.ID))})
-			if pc.key != "" && !s.recomputeSites(m.Account) {
-				s.sendSites(m.Account, nil, pc)
+			if pc.key != "" && !s.recomputeClusters(m.Account) {
+				s.sendClusters(m.Account, nil, pc)
 			}
-		case "site":
+		case "site": // "site" on the wire: the cluster (GLOSSARY.md)
 			s.mu.Lock()
-			s.setSite(pc, m.Peers)
+			s.setCluster(pc, m.Peers)
 			s.mu.Unlock()
-			s.recomputeSites(pc.account)
+			s.recomputeClusters(pc.account)
 		case "preferred":
-			// Settings > Remote access: the user says which pod of the site opens the others.
+			// Settings > Remote access: the user says which pod of the cluster opens the others.
 			s.mu.Lock()
 			pc.preferred = m.Preferred
 			s.mu.Unlock()
-			s.recomputeSites(pc.account)
+			s.recomputeClusters(pc.account)
 		case "bye":
 			if m.Session == "" {
 				// The pod is leaving on its own: a clean goodbye. Its gateway role moves at once

@@ -185,7 +185,7 @@ func (s *Server) pushSyncKey(account string, rec *identity.SyncKeyRecord, from a
 // wrap is only read by the device it names, so it is sent to that link or pod; a link that never
 // published a sync key is an admin panel, which shows the wraps of the whole account. It also goes
 // to every pod of the account: a pod with no link to the relay gets its wrap through a peer of its
-// site, which passes it on over the LAN. The wrap is sealed for its device, so the others learn
+// cluster, which passes it on over the LAN. The wrap is sealed for its device, so the others learn
 // nothing from it.
 func (s *Server) pushWrap(account string, w *identity.WrapRecord, from any) {
 	s.mu.Lock()

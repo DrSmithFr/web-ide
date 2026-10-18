@@ -126,7 +126,7 @@ func sessionID() string {
 
 // runSignal is the middle tier: the links and the signaling, without any WebRTC. A fake SDP goes
 // offer → pod → answer → browser, and the pods report LAN peers so the relay recomputes its
-// sites on every event (the one place its work grows with the number of pods).
+// clusters on every event (the one place its work grows with the number of pods).
 func runSignal(ctx context.Context, c *Config, rep *Report, mu *sync.Mutex) error {
 	pods, err := registerPods(ctx, c, rep)
 	if err != nil {
@@ -229,7 +229,7 @@ func answerer(p *podLink) {
 }
 
 // peerReporter keeps telling the relay which pods this pod sees on its LAN: each message makes it
-// recompute the sites of the account and push them (sites.go).
+// recompute the clusters of the account and push them (clusters.go).
 func peerReporter(ctx context.Context, p *podLink, pods []*podLink) {
 	t := time.NewTicker(2 * time.Second)
 	defer t.Stop()
@@ -244,7 +244,7 @@ func peerReporter(ctx context.Context, p *podLink, pods []*podLink) {
 					peers = append(peers, o.id)
 				}
 			}
-			_ = p.send(msg{Type: "site", Peers: peers})
+			_ = p.send(msg{Type: "site", Peers: peers}) // "site" on the wire: the cluster (GLOSSARY.md)
 		}
 	}
 }

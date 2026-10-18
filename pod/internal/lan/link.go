@@ -83,7 +83,7 @@ type info struct {
 }
 
 // updateMsg is the body of $update: a signed update request of a browser of the account, carried
-// by the gateway of the site to the pod it names. req is the id of this hop, so the answer lands
+// by the gateway of the cluster to the pod it names. req is the id of this hop, so the answer lands
 // on the request that asked for it.
 type updateMsg struct {
 	Req    string                  `json:"req"`

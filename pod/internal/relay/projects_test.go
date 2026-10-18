@@ -12,7 +12,7 @@ import (
 )
 
 // The project lists of the pods (milestone 3): each pod writes its list under its own kind
-// "projects:<device key>", and a pod with no link of its own has a peer of its site put it for it.
+// "projects:<device key>", and a pod with no link of its own has a peer of its cluster put it for it.
 // The relay keeps its rule unchanged: it checks the signature against the device the blob names,
 // so a forwarded write is trusted exactly as far as the device that signed it.
 

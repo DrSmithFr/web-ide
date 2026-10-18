@@ -2,7 +2,7 @@ package relayclient
 
 // Pod to pod WebRTC (milestone 3b): a pod plays the browser against another pod of the account,
 // through the relay's signaling, and becomes the gateway of its own origin for the pods of
-// another site (127.0.0.1 has no relay page of its own). The handshake is the same v2 as a
+// another cluster (127.0.0.1 has no relay page of its own). The handshake is the same v2 as a
 // browser's, bound to the two DTLS fingerprints of this tunnel: a relay that swaps the offer
 // changes one, so a signature fails.
 

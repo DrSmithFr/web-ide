@@ -1,6 +1,6 @@
 // The other pods of the account (pod/internal/multipod): the pods this pod sees on the LAN, the
 // ones the relay reports online, and the ones whose encrypted list the relay cached. The home page
-// shows one Projects block per pod; Settings > Remote access says which pod of the site opens the
+// shows one Projects block per pod; Settings > Remote access says which pod of the cluster opens the
 // others.
 import { createSignal, onCleanup } from 'solid-js'
 import { on, request } from '../pod/rpc'
@@ -29,9 +29,9 @@ export interface PodInfo {
   /** "outdated": it runs an older release, this pod can offer it the version it runs itself.
    *  "newer": this pod is the one to update. */
   mismatch?: string
-  /** The site it belongs to (the pods linked by the local network). */
-  site?: string
-  /** The relay opens the other pods of the site through this one. */
+  /** The cluster it belongs to (the pods linked by the local network). */
+  cluster?: string
+  /** The relay opens the other pods of the cluster through this one. */
   gateway?: boolean
   online: boolean
   /** Where the page of the pod runs through this pod (a pod of the LAN). */

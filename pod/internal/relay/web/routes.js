@@ -2,25 +2,26 @@
 // (scripts/routes-test.mjs, node --test): which pod opens the page of another one, and under
 // which label its channels go (relay.md, *Multi-pod*).
 
-/** The gateway of a site, as the relay elected it: the preferred one, else the elected one,
- * else any pod of the site. Null when the site has no pod online. */
-export function pickGateway(pods, site) {
-  const group = pods.filter((p) => p.site === site)
+/** The gateway of a cluster, as the relay elected it: the preferred one, else the elected one,
+ * else any pod of the cluster. Null when the cluster has no pod online. */
+export function pickGateway(pods, cluster) {
+  // p.site: "site" on the wire: the cluster (GLOSSARY.md)
+  const group = pods.filter((p) => p.site === cluster)
   return group.find((p) => p.gateway && p.preferred) ?? group.find((p) => p.gateway) ?? group[0] ?? null
 }
 
-/** The site a window enters, and its gateway: the site used last, else the one with a preferred
+/** The cluster a window enters, and its gateway: the cluster used last, else the one with a preferred
  * gateway, else the first. "Preferred gateway" is the pod its user marked as the entry point. */
-export function pickSite(pods, last) {
-  const sites = new Map()
+export function pickCluster(pods, last) {
+  const clusters = new Map()
   for (const p of pods) {
-    if (!sites.has(p.site)) sites.set(p.site, [])
-    sites.get(p.site).push(p)
+    if (!clusters.has(p.site)) clusters.set(p.site, [])
+    clusters.get(p.site).push(p)
   }
-  const order = [...sites.keys()].sort()
-  const preferred = order.find((s) => (sites.get(s) ?? []).some((p) => p.gateway && p.preferred))
-  const site = order.includes(last) ? last : (preferred ?? order[0])
-  return { site, pod: pickGateway(pods, site) }
+  const order = [...clusters.keys()].sort()
+  const preferred = order.find((s) => (clusters.get(s) ?? []).some((p) => p.gateway && p.preferred))
+  const cluster = order.includes(last) ? last : (preferred ?? order[0])
+  return { cluster, pod: pickGateway(pods, cluster) }
 }
 
 /** The pod a message of the app or the Service Worker is about: the base of its page names it.
@@ -31,14 +32,15 @@ export function keyOf(base) {
 }
 
 /** The gateway to reconnect through when the one this window entered through left: a pod of the
- * site as this window knew it (a site is named after the pods of the local network, so its id
- * changes when the gateway leaves — the pods seen before are what to follow), elected for the site
- * it is on now; else the gateway of the site as it is named now; else any gateway the relay
+ * cluster as this window knew it (a cluster is named after the pods of the local network, so its id
+ * changes when the gateway leaves — the pods seen before are what to follow), elected for the cluster
+ * it is on now; else the gateway of the cluster as it is named now; else any gateway the relay
  * reports, then any pod that is not the one that left. */
-export function nextGateway(pods, podsPrev, entrySite, entryKey) {
-  const same = new Set(podsPrev.filter((p) => p.site === entrySite).map((p) => p.key))
+export function nextGateway(pods, podsPrev, entryCluster, entryKey) {
+  const same = new Set(podsPrev.filter((p) => p.site === entryCluster).map((p) => p.key))
+  // p.site: "site" on the wire: the cluster (GLOSSARY.md)
   const group = pods.filter((p) => same.has(p.key) && p.key !== entryKey)
-  return pickGateway(group, group[0]?.site) ?? pickGateway(pods, entrySite) ??
+  return pickGateway(group, group[0]?.site) ?? pickGateway(pods, entryCluster) ??
     pods.find((p) => p.gateway && same.has(p.key)) ?? pods.find((p) => p.gateway) ??
     pods.find((p) => p.key !== entryKey) ?? null
 }

@@ -39,12 +39,12 @@ type idMsg struct {
 	Updated  int64                    `json:"updated,omitempty"` // time the stored blob or wrap was written
 	Lang     string                   `json:"lang,omitempty"`    // language of the link, for the errors it is sent
 	Message  string                   `json:"message,omitempty"`
-	// Sites (milestone 3): `challenge`/`proof` for the proof of possession, `pods` the pods of the
-	// account the relay sees, `gateway` the entry point of each site.
+	// Clusters (milestone 3): `challenge`/`proof` for the proof of possession, `pods` the pods of the
+	// account the relay sees, `gateway` the entry point of each cluster.
 	Prove   bool      `json:"prove,omitempty"`
 	Nonce   string    `json:"nonce,omitempty"`
 	Sig     string    `json:"sig,omitempty"`
-	Site    string    `json:"site,omitempty"`
+	Cluster string    `json:"site,omitempty"` // "site" on the wire: the cluster (GLOSSARY.md)
 	Gateway string    `json:"gateway,omitempty"`
 	Pods    []PodInfo `json:"pods,omitempty"`
 	// GitHub (milestone 5): the login an account is linked to, whether it sponsors the project,
@@ -216,8 +216,8 @@ func (s *Server) serveIdentity(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			_ = c.send(idMsg{Type: "ready", Account: m.Account, List: list})
-			if c.key != "" && !s.recomputeSites(m.Account) {
-				s.sendSites(m.Account, c, nil)
+			if c.key != "" && !s.recomputeClusters(m.Account) {
+				s.sendClusters(m.Account, c, nil)
 			}
 		case "devices":
 			devs, err := s.store.Devices(c.account)
