@@ -114,7 +114,7 @@ export function Members() {
   const localhostLink = () => `${location.protocol}//localhost:${location.port || (location.protocol === 'https:' ? 443 : 80)}`
 
   async function showFp(key: string) {
-    if (!wordlist.length || fp()[key]) return
+    if (!key || !wordlist.length || fp()[key]) return
     const read = await id()!.fingerprint(key, wordlist)
     setFp((f) => ({ ...f, [key]: read }))
   }
@@ -401,9 +401,10 @@ export function Members() {
                   <tr>
                     <td class="mono">{p.code}</td>
                     <td class="small">{p.name || p.kind}</td>
-                    <td class="mono small">{fp()[p.key] || p.key}</td>
+                    {/* An invite no device opened yet has no key: nothing to compare nor approve. */}
+                    <td class="mono small">{p.key ? fp()[p.key] || p.key : <span class="muted">{t('waiting for the device')}</span>}</td>
                     <td>
-                      <Show when={!p.used}>
+                      <Show when={!p.used && p.key}>
                         <button class="btn small" onClick={() => void approve(p)}>{t('Approve')}</button>
                       </Show>
                       <Show when={p.used}>

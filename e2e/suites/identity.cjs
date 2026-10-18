@@ -317,6 +317,11 @@ db=sqlite3.connect(sys.argv[1]); db.execute("INSERT INTO github (account, github
     const linkText = (await app.textContent('.qr p.mono')).trim()
     assert(linkText.includes(`#pod=${POD_ID}&join=${code}`), 'the invite link carries the pod and the code: ' + linkText)
 
+    // Before a device opens the link, the invite has no key: nothing to compare nor approve.
+    await app.waitForSelector(`.settings-body .rules tr:has-text("${code}")`, { timeout: 15000 })
+    const waiting = await app.textContent(`.settings-body .rules tr:has-text("${code}")`)
+    assert(waiting.includes('waiting for the device') && !(await app.isVisible(`.settings-body .rules tr:has-text("${code}") button:has-text("Approve")`)), 'an invite no device opened shows no fingerprint and no Approve: ' + waiting.trim())
+
     // 5. Browser 2 joins by the invite link. Its key must be the one the admin reads. The
     // extra contexts keep the English locale of the suites, since the page words follow the
     // browser language.
@@ -328,7 +333,8 @@ db=sqlite3.connect(sys.argv[1]); db.execute("INSERT INTO github (account, github
     const b2 = await page2.evaluate(() => window.identity)
     assert((await page2.textContent('#msg')).includes(b2.fingerprint), 'the joining device shows its fingerprint')
 
-    await app.waitForSelector(`.settings-body .rules tr:has-text("${code}")`, { timeout: 15000 })
+    // The row of the invite shows as soon as the invite is made, waiting for the device.
+    await app.waitForSelector(`.settings-body .rules tr:has-text("${code}"):has-text("${b2.fingerprint}")`, { timeout: 15000 }).catch(() => {})
     const row = await app.textContent(`.settings-body .rules tr:has-text("${code}")`)
     assert(row.includes(b2.fingerprint), 'the admin reads the key the device posted, by its fingerprint: ' + row.trim())
     await app.click(`.settings-body .rules tr:has-text("${code}") button:has-text("Approve")`)

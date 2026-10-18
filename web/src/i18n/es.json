@@ -2214,5 +2214,6 @@
   "Removed from the objective “{objective}”": "Retirado del objetivo «{objective}»",
   "Default objective: “{objective}”": "Objetivo por defecto: «{objective}»",
   "No default objective": "Sin objetivo por defecto",
-  "objective": "objetivo"
+  "objective": "objetivo",
+  "waiting for the device": "esperando el dispositivo"
 }

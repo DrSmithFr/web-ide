@@ -338,6 +338,13 @@ run(
       await app.waitForSelector('[data-testid=members] [data-testid=member-list]', { timeout: 20000 })
       const py = (sql) => execFileSync('python3', ['-c',
         "import sqlite3,sys,os;c=sqlite3.connect(os.environ['E2E_RELAY_DATA']+'/relay.db');print(' | '.join(' '.join(str(x) for x in r) for r in c.execute(sys.argv[1]).fetchall()))", sql], { encoding: 'utf8' })
+      // The table shows before its rows on a slow runner.
+      await app
+        .waitForFunction(() => {
+          const rows = [...document.querySelectorAll('[data-testid=members] [data-testid=member-list] tr')].map((e) => e.textContent)
+          return rows.filter((r) => r.includes('pod')).length === 2 && rows.some((r) => r.includes('browser'))
+        }, null, { timeout: 15000 })
+        .catch(() => {})
       const rows = await app.$$eval('[data-testid=members] [data-testid=member-list] tr', (els) => els.map((e) => e.textContent))
       assert(rows.filter((r) => r.includes('pod')).length === 2 && rows.some((r) => r.includes('browser')), 'the account lists its two pods and this browser: ' + rows.join(' / ').slice(0, 300))
 

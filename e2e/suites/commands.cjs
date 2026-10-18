@@ -60,7 +60,7 @@ run(async ({ page }) => {
   await page.fill('[data-testid=cmd-name]', 'Build!')
   answer = false
   await page.keyboard.press('Escape')
-  await page.waitForTimeout(200)
+  for (let end = Date.now() + 5000; !/unsaved/.test(asked) && Date.now() < end; ) await page.waitForTimeout(100)
   assert(/unsaved/.test(asked) && (await page.isVisible('.cmd-modal')), 'closing with unsaved changes asks')
   answer = true
   await page.click('.cmd-modal .modal-foot button:has-text("Cancel")')
