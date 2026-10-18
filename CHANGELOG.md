@@ -4,6 +4,18 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ## [Unreleased]
 
+## [1.23.0] - 2026-10-18
+
+### Fixed
+
+- Relay: a tunnel through TURN no longer loses its relayed path after one hour. Its credentials are renewed at three quarters of their life, and ICE restarts on the same tunnel, so the app and its channels stay. Over the monthly quota the renewal gives no credential: the tunnel keeps its direct paths, and a bar over the app says the quota is reached. The relay logged `Expired time-windowed username` every 30 s for such a tunnel. A pod tells the relay it handles the renewal, and an older pod is never asked to.
+- Relay: when the pod closes a tunnel (its ICE failed), the page is told and reconnects, instead of waiting on a dead path.
+- Relay page: a tunnel that drops before the app opens is dialled again, not taken for a failover. In Members, an invite that no device opened shows no fingerprint and no *Approve*.
+
+### Changed
+
+- Kanban: the progress bar of a milestone or an objective fills with the finished tickets, then the tickets to test in their color.
+
 ## [1.22.0] - 2026-10-18
 
 ### Added
