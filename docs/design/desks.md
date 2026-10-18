@@ -17,7 +17,7 @@ Project (or worktree)
      ├─ layout mode (Full / Scroll / Grid) and its tree of tiles
      ├─ open tabs (views: the documents and their buffers stay shared in the core)
      ├─ consoles and commands     (owner = the desk, in the keeper)
-     └─ previews and tunnels opened from it
+     └─ previews and port forwards opened from it
 ```
 
 - A resource belongs to the **desk**, not to whoever started it: a console the user opens in the desk of an agent belongs to that desk.
@@ -72,7 +72,7 @@ Done in #81 (see [spec.md](spec.md#9-session-and-persistence)):
 A section of the home page, and the same list as a popup in a project:
 
 - Per project, one **card per desk**: holder, state (working, waiting for an answer, idle), age, its **active conversations**, processes (count, CPU, memory), listening ports (link to the preview), unsaved buffers.
-- **Kill levels**: *Stop the agent* (its consoles stay, e.g. the dev server it started) or *End the desk* (everything). A confirmation lists what ends: the agent process, N consoles, M commands, previews, tunnels; unsaved buffers are a question apart.
+- **Kill levels**: *Stop the agent* (its consoles stay, e.g. the dev server it started) or *End the desk* (everything). A confirmation lists what ends: the agent process, N consoles, M commands, previews, port forwards; unsaved buffers are a question apart.
 - **Orphans**: processes without a desk (the consoles of today before migration, a console whose desk closed), listed and killable.
 
 ### Cascade

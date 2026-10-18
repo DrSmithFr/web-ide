@@ -1,4 +1,4 @@
-// Package config holds the pod configuration (~/.web-ide/config.json) and the pairing token.
+// Package config holds the pod configuration (~/.web-ide/config.json) and the access token.
 package config
 
 import (
@@ -73,7 +73,7 @@ func ExpandHome(p string) string {
 	return p
 }
 
-// Token returns the pairing token, generating it on first start.
+// Token returns the access token, generating it on first start.
 func Token(st *store.Store) (string, error) {
 	data, err := os.ReadFile(st.Path("token"))
 	if err == nil && len(strings.TrimSpace(string(data))) >= 32 {

@@ -12,7 +12,7 @@ export function PreviewsTab() {
       <p class="muted small pad">{t('Apps the assistant offered to try, served on temporary URLs. A preview stops with its command, after 24 hours at most.')}</p>
       <For each={previews()} fallback={<p class="muted small pad">{t('No preview.')}</p>}>
         {(p) => (
-          <div class="dk-tunnel" data-testid={`preview-${p.port}`}>
+          <div class="dk-forward" data-testid={`preview-${p.port}`}>
             <span class="dk-dot up" />
             <b class="ellipsis">{p.title}</b>
             <a class="mono ellipsis" href={p.url} target="_blank" rel="noopener" title={t('Open in the browser')}>

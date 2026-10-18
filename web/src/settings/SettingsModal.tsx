@@ -17,7 +17,7 @@ import { copyText } from '../ui/clipboard'
 import { Doc } from '../editor/doc'
 import { EditorView } from '../editor/view'
 import { samples } from './samples'
-import { Devices } from './Devices'
+import { Members } from './Members'
 import { SyncPanel } from './Sync'
 import { LanSection } from './Lan'
 import { PodsSection } from './Pods'
@@ -98,7 +98,7 @@ export function SettingsHost() {
             <Show when={open() === 'remote'}>
               <RemoteAccess />
               <SyncPanel />
-              <Devices />
+              <Members />
             </Show>
             <Show when={open() === 'notifications'}>
               <Notifications />

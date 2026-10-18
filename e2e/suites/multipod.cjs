@@ -330,15 +330,15 @@ run(
       assert(bar.includes(WS), 'the page runs on alpha, the preferred gateway')
       assert((await app.textContent('.home')).includes('alpha-app'), 'the projects of alpha are its own block')
 
-      // The Devices panel is where an admin wraps the key of the epoch for the pods that
+      // The Members panel is where an admin wraps the key of the epoch for the pods that
       // published their X25519 key: without it no list can be read.
       await app.click('.home-head button[title="Settings"]')
       await app.waitForSelector('.settings')
       await app.click('.settings-nav button:has-text("Remote access")')
-      await app.waitForSelector('[data-testid=devices] [data-testid=device-list]', { timeout: 20000 })
+      await app.waitForSelector('[data-testid=members] [data-testid=member-list]', { timeout: 20000 })
       const py = (sql) => execFileSync('python3', ['-c',
         "import sqlite3,sys,os;c=sqlite3.connect(os.environ['E2E_RELAY_DATA']+'/relay.db');print(' | '.join(' '.join(str(x) for x in r) for r in c.execute(sys.argv[1]).fetchall()))", sql], { encoding: 'utf8' })
-      const rows = await app.$$eval('[data-testid=devices] [data-testid=device-list] tr', (els) => els.map((e) => e.textContent))
+      const rows = await app.$$eval('[data-testid=members] [data-testid=member-list] tr', (els) => els.map((e) => e.textContent))
       assert(rows.filter((r) => r.includes('pod')).length === 2 && rows.some((r) => r.includes('browser')), 'the account lists its two pods and this browser: ' + rows.join(' / ').slice(0, 300))
 
       // 4. One list of the projects of every pod, each with the badge of its pod. Bravo has no link to the relay: it is listed through the

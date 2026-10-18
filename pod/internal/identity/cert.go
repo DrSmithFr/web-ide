@@ -17,7 +17,9 @@ var (
 	ErrNoCert         = i18n.New("no certificate")
 	ErrForeignAccount = i18n.New("certificate of another account")
 	ErrBadSignature   = i18n.New("the certificate signature does not match")
-	ErrRevoked        = i18n.New("device revoked")
+	// ErrRevoked: the text stays "device revoked" on the wire (older pages and pods match it); the
+	// glossary says member, and every display of it reads "member revoked".
+	ErrRevoked = i18n.New("device revoked")
 )
 
 // Kinds of device, as written in the certificate.

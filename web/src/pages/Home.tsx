@@ -17,7 +17,7 @@ import { openSettings } from '../settings/SettingsModal'
 import { t } from '../i18n'
 import { defaultSpec, iconOf, iconURL, type IconSpec, loadIcon, loadIcons, renderIcon, setFavicon } from '../ui/projectIcon'
 import { IconEditor } from '../ui/IconEditor'
-import { OpenTunnels } from '../docker/OpenTunnels'
+import { OpenForwards } from '../docker/OpenForwards'
 import { useLan } from '../state/lan'
 import { podOpenable, podURL, usePods, type PodInfo, type PodProject } from '../state/pods'
 import { askUpdate, updateOffer, type UpdateAnswer } from '../pod/update'
@@ -194,7 +194,7 @@ export function Home() {
         <Show when={(pods() ?? []).length}>
           <Pods pods={pods()!} name={ws()?.name ?? ''} version={ws()?.version ?? ''} />
         </Show>
-        <OpenTunnels />
+        <OpenForwards />
         <Show when={available().length}>
           <h3 class="home-sub">{t('In the workspace')}</h3>
           <div class="ws-dirs">

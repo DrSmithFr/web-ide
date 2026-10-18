@@ -119,7 +119,7 @@ run(async ({ page, ctx }) => {
     // Stop: the command and the URL end.
     await page.click('[data-testid=ai-preview-close]')
     await page.waitForSelector('[data-testid=ai-preview-open]:has-text("Start and open the app")')
-    await page.waitForFunction(() => !document.querySelector('[data-testid=docker-previews] .dk-tunnel'))
+    await page.waitForFunction(() => !document.querySelector('[data-testid=docker-previews] .dk-forward'))
     assert((await get(url))[0] === 0, 'the URL is dead once stopped')
     await page.waitForFunction(() => ![...document.querySelectorAll('.bottom .console-tabs .tab')].some((x) => x.textContent.includes('node -e')), null, { timeout: 5000 })
     assert(true, 'its console is closed')

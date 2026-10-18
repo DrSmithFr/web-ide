@@ -122,7 +122,7 @@ func Restore(env *Env) error {
 	return save(env, a)
 }
 
-// Join posts the public key of this device to the relay, prints the code an admin reads, the
+// Join posts the public key of this member to the relay, prints the code an admin reads, the
 // QR of the invite link and the 4-word fingerprint of the key, then waits for the approval.
 // With a code, the key is posted to the code an admin already showed: the fingerprint the admin
 // reads is the one of this key, and the code stays the one the panel displays.

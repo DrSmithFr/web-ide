@@ -66,14 +66,14 @@ flowchart LR
 - `speech`: Local speech recognition: Whisper (tiny) in the browser, fed by a fake microphone playing e2e/audio/jfk.wav
 - `subagents`: Sub-agents: the parent delegates with spawn_agent (a card in its thread); the child notes and asks; the parent
 - `sync`: Settings sync (milestone 4): two pods of one account
-- `tunnels`: Port forwards of an SSH project (Docker tool, Tunnels tab) through the SSH server of the tests (sshtestd, built here): add, use
+- `forwards`: Port forwards of an SSH project (Docker tool, Port forwards tab) through the SSH server of the tests (sshtestd, built here): add, use
 
 ## Invariants and pitfalls
 
 - A suite takes its ports from the `E2E_*_PORT` variables or `listen(0)`, and names what it creates outside its folder (Docker projects, volumes) after its pid, so that suites can run side by side.
 - A suite name ending with `+` in `run.sh` reuses the pod of the previous one (`restore+` runs after `features`).
 - The suites run without keeper, except `keeper` (`run.sh` starts one and gives it the script restarting the pod, `E2E_RESTART_POD`). Every pod but the ones of the `lan` suite runs with `-lan off`.
-- Needs: `lsp` needs `gopls`; `docker` needs Docker with Compose and `postgres:17-alpine` (skipped otherwise); `speech` downloads `whisper-tiny` once; `tunnels` builds `sshtestd`.
+- Needs: `lsp` needs `gopls`; `docker` needs Docker with Compose and `postgres:17-alpine` (skipped otherwise); `speech` downloads `whisper-tiny` once; `forwards` builds `sshtestd`.
 - **E2E tests** must wait actively (`waitForFunction`): language servers start cold. `<option>` elements are never "visible" for Playwright (`state: 'attached'`).
 - **E2E suites that need the relay** (`relay`, `identity`, `sync`, `push`, `multipod`): `run.sh` starts the relay **before** the pod, else the pod fails its first dial and sits in exponential backoff; the suite waits until the pod is registered (the signaling path answers 404 before that).
 

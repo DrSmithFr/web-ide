@@ -1,5 +1,5 @@
-// Tunnels of an SSH project (Docker tool, Tunnels tab) through the SSH server of the tests
-// (sshtestd, built here): add, use, stop and start, saved in .ide/tunnels.json, reopened with
+// Port forwards of an SSH project (Docker tool, Port forwards tab) through the SSH server of the tests
+// (sshtestd, built here): add, use, stop and start, saved in .ide/forwards.json, reopened with
 // the project, listed and closed from the home page.
 const fs = require('fs')
 const os = require('os')
@@ -48,12 +48,12 @@ const get = (port) =>
       })
   })
 
-// Shows the Tunnels tab of the Docker tool (the bottom zone may be closed after a navigation).
-const showTunnels = async (page) => {
+// Shows the Port forwards tab of the Docker tool (the bottom zone may be closed after a navigation).
+const showForwards = async (page) => {
   await page.waitForSelector('.menubar', { timeout: 15000 })
-  if (!(await page.isVisible('[data-testid=docker-tab-tunnels]'))) await page.click('.rail-right .rail-btn[title="Docker"]')
-  await page.click('[data-testid=docker-tab-tunnels]')
-  await page.waitForSelector('[data-testid=tunnel-form]')
+  if (!(await page.isVisible('[data-testid=docker-tab-forwards]'))) await page.click('.rail-right .rail-btn[title="Docker"]')
+  await page.click('[data-testid=docker-tab-forwards]')
+  await page.waitForSelector('[data-testid=forward-form]')
 }
 
 run(async ({ page }) => {
@@ -78,51 +78,51 @@ run(async ({ page }) => {
   await page.waitForSelector('.menubar', { timeout: 15000 })
   assert(true, 'SSH project opened')
 
-  await showTunnels(page)
-  await page.check('[data-testid=tunnel-lan]')
-  assert((await page.textContent('[data-testid=tunnel-form]')).includes('without authentication'), 'local network scope warned')
-  await page.uncheck('[data-testid=tunnel-lan]')
-  await page.fill('[data-testid=tunnel-remote]', String(remote))
-  await page.fill('[data-testid=tunnel-local]', String(local))
-  await page.click('[data-testid=tunnel-form] button[type=submit]')
-  await page.waitForSelector(`[data-testid=tunnel-${local}] .dk-dot.up`, { timeout: 10000 })
-  assert((await get(local)) === 'hello from the ssh host', 'service of the SSH host reached through the tunnel')
-  assert(fs.readFileSync(dir + '/.ide/tunnels.json', 'utf8').includes(`"remotePort": ${remote}`), 'tunnel saved in .ide/tunnels.json')
-  await page.screenshot({ path: OUT + '/tunnels-tab.png' })
+  await showForwards(page)
+  await page.check('[data-testid=forward-lan]')
+  assert((await page.textContent('[data-testid=forward-form]')).includes('without authentication'), 'local network scope warned')
+  await page.uncheck('[data-testid=forward-lan]')
+  await page.fill('[data-testid=forward-remote]', String(remote))
+  await page.fill('[data-testid=forward-local]', String(local))
+  await page.click('[data-testid=forward-form] button[type=submit]')
+  await page.waitForSelector(`[data-testid=forward-${local}] .dk-dot.up`, { timeout: 10000 })
+  assert((await get(local)) === 'hello from the ssh host', 'service of the SSH host reached through the port forward')
+  assert(fs.readFileSync(dir + '/.ide/forwards.json', 'utf8').includes(`"remotePort": ${remote}`), 'port forward saved in .ide/forwards.json')
+  await page.screenshot({ path: OUT + '/forwards-tab.png' })
 
-  await page.click(`[data-testid=tunnel-${local}] [data-action=stop]`)
-  await page.waitForSelector(`[data-testid=tunnel-${local}] .dk-dot.down`)
-  assert((await get(local)) === '', 'stopped tunnel closed')
-  await page.click(`[data-testid=tunnel-${local}] [data-action=start]`)
-  await page.waitForSelector(`[data-testid=tunnel-${local}] .dk-dot.up`)
-  assert((await get(local)) === 'hello from the ssh host', 'tunnel started again')
+  await page.click(`[data-testid=forward-${local}] [data-action=stop]`)
+  await page.waitForSelector(`[data-testid=forward-${local}] .dk-dot.down`)
+  assert((await get(local)) === '', 'stopped port forward closed')
+  await page.click(`[data-testid=forward-${local}] [data-action=start]`)
+  await page.waitForSelector(`[data-testid=forward-${local}] .dk-dot.up`)
+  assert((await get(local)) === 'hello from the ssh host', 'port forward started again')
 
-  // Home page: the open tunnels of every project, closed one by one or all at once.
+  // Home page: the open port forwards of every project, closed one by one or all at once.
   await page.click('.menubar button[title="Projects"]')
-  await page.waitForSelector(`[data-testid=home-tunnel-${local}]`)
-  assert((await page.textContent(`[data-testid=home-tunnel-${local}]`)).includes('remote'), 'home page lists the open tunnel with its project')
-  await page.screenshot({ path: OUT + '/tunnels-home.png' })
-  await page.click(`[data-testid=home-tunnel-${local}] button`)
-  await page.waitForSelector('[data-testid=home-tunnels]', { state: 'detached' })
-  assert((await get(local)) === '', 'tunnel closed from the home page')
+  await page.waitForSelector(`[data-testid=home-forward-${local}]`)
+  assert((await page.textContent(`[data-testid=home-forward-${local}]`)).includes('remote'), 'home page lists the open port forward with its project')
+  await page.screenshot({ path: OUT + '/forwards-home.png' })
+  await page.click(`[data-testid=home-forward-${local}] button`)
+  await page.waitForSelector('[data-testid=home-forwards]', { state: 'detached' })
+  assert((await get(local)) === '', 'port forward closed from the home page')
 
   // Still enabled: opening the project opens it again.
   await page.click('.project-open:has-text("remote")')
-  await showTunnels(page)
-  await page.waitForSelector(`[data-testid=tunnel-${local}] .dk-dot.up`, { timeout: 10000 })
-  assert((await get(local)) === 'hello from the ssh host', 'enabled tunnel reopened with the project')
+  await showForwards(page)
+  await page.waitForSelector(`[data-testid=forward-${local}] .dk-dot.up`, { timeout: 10000 })
+  assert((await get(local)) === 'hello from the ssh host', 'enabled port forward reopened with the project')
   await page.click('.menubar button[title="Projects"]')
-  await page.click('[data-testid=tunnels-close-all]')
-  await page.waitForSelector('[data-testid=home-tunnels]', { state: 'detached' })
+  await page.click('[data-testid=forwards-close-all]')
+  await page.waitForSelector('[data-testid=home-forwards]', { state: 'detached' })
   assert((await get(local)) === '', 'close all')
 
   // Deleted from the tab.
   await page.click('.project-open:has-text("remote")')
-  await showTunnels(page)
-  await page.waitForSelector(`[data-testid=tunnel-${local}]`, { timeout: 15000 })
-  await page.click(`[data-testid=tunnel-${local}] [data-action=delete]`)
-  await page.waitForSelector(`[data-testid=tunnel-${local}]`, { state: 'detached' })
-  assert(!fs.readFileSync(dir + '/.ide/tunnels.json', 'utf8').includes(String(remote)), 'tunnel deleted')
+  await showForwards(page)
+  await page.waitForSelector(`[data-testid=forward-${local}]`, { timeout: 15000 })
+  await page.click(`[data-testid=forward-${local}] [data-action=delete]`)
+  await page.waitForSelector(`[data-testid=forward-${local}]`, { state: 'detached' })
+  assert(!fs.readFileSync(dir + '/.ide/forwards.json', 'utf8').includes(String(remote)), 'port forward deleted')
   service.close()
   sshd.kill()
 })

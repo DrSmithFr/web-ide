@@ -75,7 +75,7 @@ export interface SessionData {
   /** Git tool: shown tab, heights of the commit form and of the commit detail. */
   git: { tab: 'commit' | 'history'; form: number; detail: number }
   /** Docker tool: shown tab, chosen Compose profiles, tab of the detail pane. */
-  docker: { tab: 'project' | 'host' | 'disk' | 'tunnels' | 'previews'; profiles: string[]; detail: 'infos' | 'logs' }
+  docker: { tab: 'project' | 'host' | 'disk' | 'forwards' | 'tunnels' | 'previews'; profiles: string[]; detail: 'infos' | 'logs' }
   /** Other worktrees of the repository open in the window, and the one shown (none: the project of the window). */
   attached: string[]
   worktree?: string

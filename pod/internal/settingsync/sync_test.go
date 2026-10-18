@@ -93,7 +93,7 @@ func (f *fakeRelay) run(from string, m Msg) error {
 	return nil
 }
 
-// wrapFor is the admin browser of the Devices panel: it reads the published key of a device,
+// wrapFor is the admin browser of the Members panel: it reads the published key of a device,
 // derives the key of the current epoch from the phrase, and posts the wrap.
 func (f *fakeRelay) wrapFor(device string) error {
 	rec, err := f.st.SyncKey(f.admin.ID, device)

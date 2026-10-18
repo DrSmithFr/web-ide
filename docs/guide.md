@@ -123,7 +123,7 @@ Everything the model does, you can do yourself, in the same windows:
 - **Language servers** (gopls, typescript-language-server, pyright, intelephense…, from the pod's `PATH`): go to definition, references, completion, rename, formatting, diagnostics.
 - **Terminals** in the bottom panel (Ctrl+Shift+`), detachable in their own window.
 - **Git**: changes, staging, commits, branches, history graph, side-by-side diffs, other worktrees.
-- **Databases** (SQLite, PostgreSQL, Redis), **Docker** (Compose stack, containers, logs) and SSH tunnels.
+- **Databases** (SQLite, PostgreSQL, Redis), **Docker** (Compose stack, containers, logs) and SSH port forwards.
 - When a program (the model, a formatter, another editor) changes an open file, the change is merged into your buffer; a real conflict opens a three-pane dialog.
 
 All shortcuts are in *Settings → Keyboard*, with QWERTY and AZERTY presets.

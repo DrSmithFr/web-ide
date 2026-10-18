@@ -6,7 +6,7 @@ import { home } from '../state/project'
 import { prompt } from '../ui/overlay'
 import { t } from '../i18n'
 
-export interface SSHTunnel {
+export interface SSHForward {
   enabled: boolean
   host: string
   port: number
@@ -27,7 +27,7 @@ export interface ConnConfig {
   sslMode?: string
   redisDb?: number
   rememberPassword: boolean
-  ssh?: SSHTunnel
+  ssh?: SSHForward
 }
 
 export interface ConnView extends ConnConfig {

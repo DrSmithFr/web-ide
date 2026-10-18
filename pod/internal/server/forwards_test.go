@@ -62,10 +62,10 @@ func roundTrip(addr string) (string, error) {
 	return bufio.NewReader(c).ReadString('\n')
 }
 
-func TestTunnels(t *testing.T) {
-	old := TunnelIdle
-	TunnelIdle = 200 * time.Millisecond
-	t.Cleanup(func() { TunnelIdle = old })
+func TestForwards(t *testing.T) {
+	old := ForwardIdle
+	ForwardIdle = 200 * time.Millisecond
+	t.Cleanup(func() { ForwardIdle = old })
 	sshPort := sshtest.Start(t)
 	remote := echoServer(t)
 	local := freePort(t)
@@ -85,16 +85,16 @@ func TestTunnels(t *testing.T) {
 	}
 	addr := "127.0.0.1:" + strconv.Itoa(local)
 	if got, err := roundTrip(addr); err != nil || got != "echo:ping\n" {
-		t.Fatalf("through the tunnel: %q %v", got, err)
+		t.Fatalf("through the port forward: %q %v", got, err)
 	}
-	if data, _ := os.ReadFile(filepath.Join(dir, ".ide", "tunnels.json")); !strings.Contains(string(data), strconv.Itoa(remote)) {
-		t.Fatalf("tunnels.json = %s", data)
+	if data, _ := os.ReadFile(filepath.Join(dir, ".ide", "forwards.json")); !strings.Contains(string(data), strconv.Itoa(remote)) {
+		t.Fatalf("forwards.json = %s", data)
 	}
 	all := a.call("tunnels.all", nil)["result"].([]any)
 	if len(all) != 1 || all[0].(map[string]any)["host"] != "127.0.0.1" {
 		t.Fatalf("all = %v", all)
 	}
-	// A second tunnel on the same local port cannot listen: its error is kept in its state.
+	// A second port forward on the same local port cannot listen: its error is kept in its state.
 	res = a.callRaw("tunnels.save", map[string]any{"remotePort": remote, "localPort": local, "enabled": true})
 	if res["error"] == nil {
 		t.Fatal("local port in use accepted")
@@ -105,25 +105,25 @@ func TestTunnels(t *testing.T) {
 	}
 	a.call("tunnels.delete", map[string]any{"id": st[1].(map[string]any)["id"]})
 
-	// The last window leaves: the tunnel closes after TunnelIdle.
+	// The last window leaves: the port forward closes after ForwardIdle.
 	a.c.CloseNow()
 	time.Sleep(600 * time.Millisecond)
 	if _, err := roundTrip(addr); err == nil {
-		t.Fatal("tunnel still open without window")
+		t.Fatal("port forward still open without window")
 	}
-	// Opening the project again opens the enabled tunnels.
+	// Opening the project again opens the enabled port forwards.
 	b, _ := dial(t, ts, "secret-token-0123456789abcdef0123")
 	b.call("project.open", map[string]any{"id": id})
 	if got, err := roundTrip(addr); err != nil || got != "echo:ping\n" {
-		t.Fatalf("tunnel not reopened: %q %v", got, err)
+		t.Fatalf("port forward not reopened: %q %v", got, err)
 	}
 	// Closed from the home page: still enabled, the project opens it again.
 	b.call("tunnels.closeAll", nil)
 	if _, err := roundTrip(addr); err == nil {
-		t.Fatal("close all left the tunnel open")
+		t.Fatal("close all left the port forward open")
 	}
 	if st := b.call("tunnels.get", nil)["result"].([]any); st[0].(map[string]any)["enabled"] != true {
-		t.Fatalf("closing disabled the tunnel: %v", st)
+		t.Fatalf("closing disabled the port forward: %v", st)
 	}
 	// Disabled: closed and not opened with the project.
 	sp := st[0].(map[string]any)
@@ -131,6 +131,6 @@ func TestTunnels(t *testing.T) {
 	b.call("tunnels.save", sp)
 	b.call("project.open", map[string]any{"id": id})
 	if _, err := roundTrip(addr); err == nil {
-		t.Fatal("disabled tunnel opened")
+		t.Fatal("disabled port forward opened")
 	}
 }

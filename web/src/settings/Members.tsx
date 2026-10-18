@@ -1,5 +1,6 @@
-// Settings > Remote access > Devices: the devices of the account, the pairing requests to
-// approve, the invite QR for a phone, and the revocation of a device.
+// Settings > Remote access > Members: the members of the account (devices and pods), the pairing
+// requests to approve, the invite QR for a phone, and the revocation of a member. The messages of
+// the identity link keep their old names (`devices`, `device`: wire format, see GLOSSARY.md).
 //
 // The panel runs on the relay origin and on http://localhost. WebAuthn refuses an IP address
 // as a relying-party id, so a passkey cannot be made on http://127.0.0.1: there the panel
@@ -71,10 +72,10 @@ function qrSvg(text: string) {
   return q.createSvgTag({ cellSize: 4, margin: 2, scalable: true })
 }
 
-export function Devices() {
+export function Members() {
   const [id, setId] = createSignal<Identity | null>(null)
   const [error, setError] = createSignal('')
-  const [devices, setDevices] = createSignal<Device[]>([])
+  const [members, setMembers] = createSignal<Device[]>([])
   const [pairings, setPairings] = createSignal<Pairing[]>([])
   const [revoked, setRevoked] = createSignal<Revocations | null>(null)
   const [fp, setFp] = createSignal<Record<string, string>>({})
@@ -162,7 +163,7 @@ export function Devices() {
     const w = await id()!.wrapFor(accountKey, account(), k.device, k.key, seed, syncSeed, epoch())
     link?.send({ type: 'wrap', wrap: w })
     setWraps((ws) => [...ws.filter((x) => x.device !== k.device), w])
-    toast(t('Sync key wrapped for {device}.', { device: fp()[k.device] || k.device }), 'ok')
+    toast(t('Sync key wrapped for {member}.', { member: fp()[k.device] || k.device }), 'ok')
   }
 
   // Wraps for every device that published a key and has none for the current epoch: a device paired
@@ -221,16 +222,16 @@ export function Devices() {
   })
 
   // The pairing and admin link. The own certificate is posted with the account: the relay
-  // lists the devices of an account from the certificates it can verify, so this device
+  // lists the members of an account from the certificates it can verify, so this device
   // appears in the list.
   async function startLink() {
     link = await id()!.link((msg: any) => {
       if (msg.type === 'error') return errorToast(t(msg.message))
-      if (msg.type === 'devices') setDevices(msg.devices ?? [])
+      if (msg.type === 'devices') setMembers(msg.devices ?? [])
       else if (msg.type === 'pairings') setPairings(msg.pairings ?? [])
       else if (msg.type === 'revocations') {
         setRevoked(msg.list)
-        // The epoch moved: the wraps of the old epoch no longer open, so the remaining devices
+        // The epoch moved: the wraps of the old epoch no longer open, so the remaining members
         // must be wrapped again for the new one.
         void wrapMissing()
       } else if (msg.type === 'syncKeys') {
@@ -246,7 +247,7 @@ export function Devices() {
       else if (msg.type === 'pair' && msg.pairing) setPairings((p) => [...p.filter((x) => x.code !== msg.pairing.code), msg.pairing])
       else if (msg.type === 'github') setGh({ login: msg.login ?? '', supporter: !!msg.supporter })
       else if (msg.type === 'githubStart' && msg.loginUrl) openGitHubLink(msg.loginUrl)
-      for (const key of [...devices().map((d) => d.key), ...pairings().map((p) => p.key)]) void showFp(key)
+      for (const key of [...members().map((d) => d.key), ...pairings().map((p) => p.key)]) void showFp(key)
     })
     const prove = !!(deviceKey && own?.cert && relayHost)
     link.send({ type: 'register', account: account(), name: deviceName(), cert: own?.cert ?? null, lang: lang(), prove })
@@ -283,7 +284,7 @@ export function Devices() {
   async function approve(p: Pairing) {
     const cert = await id()!.signCert(accountKey!, account(), p.key, p.name || deviceName(), p.kind)
     link?.send({ type: 'pairApprove', code: p.code, cert })
-    toast(t('Device approved.'), 'ok')
+    toast(t('Member approved.'), 'ok')
     void refresh()
     // The wrap is made at approval when the device already published its X25519 key; a device that
     // pairs first gets it when it publishes, on its first connection.
@@ -327,8 +328,8 @@ export function Devices() {
     const names = keyServers().map((s) => s.name || s.id)
     toast(
       names.length
-        ? t('Device revoked. The sync key epoch moved to {n}. Renew the API keys shared with the other pods: {servers}.', { n: list.epoch, servers: names.join(', ') })
-        : t('Device revoked. The sync key epoch moved to {n}.', { n: list.epoch }),
+        ? t('Member revoked. The sync key epoch moved to {n}. Renew the API keys shared with the other pods: {servers}.', { n: list.epoch, servers: names.join(', ') })
+        : t('Member revoked. The sync key epoch moved to {n}.', { n: list.epoch }),
       'ok',
     )
     void refresh()
@@ -342,13 +343,13 @@ export function Devices() {
   }
 
   return (
-    <section class="form" data-testid="devices">
+    <section class="form" data-testid="members">
       <Show when={error()}>
         <p class="err">{t(error())}</p>
       </Show>
       <Show when={isLoopback()}>
         <p class="muted small">
-          {t('A passkey cannot be made on an IP address: open the pod on {link} to unlock the devices of this account.', { link: localhostLink() })}
+          {t('A passkey cannot be made on an IP address: open the pod on {link} to manage the members of this account.', { link: localhostLink() })}
         </p>
         <div class="field-row">
           <a class="btn" href={localhostLink()}>{t('Open on localhost')}</a>
@@ -376,7 +377,7 @@ export function Devices() {
             <thead>
               <tr>
                 <th>{t('Code')}</th>
-                <th>{t('Device')}</th>
+                <th>{t('Member')}</th>
                 <th>{t('Fingerprint')}</th>
                 <th></th>
               </tr>
@@ -403,8 +404,8 @@ export function Devices() {
           </table>
         </Show>
 
-        <h3>{t('Devices of the account')}</h3>
-        <table class="rules" data-testid="device-list">
+        <h3>{t('Members of the account')}</h3>
+        <table class="rules" data-testid="member-list">
           <thead>
             <tr>
               <th>{t('Name')}</th>
@@ -416,7 +417,7 @@ export function Devices() {
             </tr>
           </thead>
           <tbody>
-            <For each={devices()}>
+            <For each={members()}>
               {(d) => (
                 <tr>
                   <td class="small">{d.cert?.name || '—'}</td>
@@ -460,7 +461,7 @@ export function Devices() {
         <Show when={revoked()?.revoked.length && keyServers().length}>
           <div class="field-row" data-testid="renew-keys">
             <p class="muted small">
-              {t('A device was revoked: the API keys the vault shares with the other pods must be renewed — {servers}.', { servers: keyServers().map((s) => s.name || s.id).join(', ') })}
+              {t('A member was revoked: the API keys the vault shares with the other pods must be renewed — {servers}.', { servers: keyServers().map((s) => s.name || s.id).join(', ') })}
             </p>
           </div>
         </Show>
@@ -504,7 +505,7 @@ export function Devices() {
             </div>
           </div>
         </Show>
-        <p class="muted small">{t('The relay only carries the pairing link: it cannot approve a device or sign a revocation list, and it never holds the phrase.')}</p>
+        <p class="muted small">{t('The relay only carries the pairing link: it cannot approve a member or sign a revocation list, and it never holds the phrase.')}</p>
       </Show>
     </section>
   )

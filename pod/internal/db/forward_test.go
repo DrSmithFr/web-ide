@@ -12,9 +12,9 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/store"
 )
 
-// The database connection goes through the SSH host: the pod opens the tunnel, then dials the
+// The database connection goes through the SSH host: the pod opens the port forward, then dials the
 // database address as seen from the server.
-func TestSSHTunnel(t *testing.T) {
+func TestSSHForward(t *testing.T) {
 	// A line echo server standing for the database, reachable only "from the SSH host".
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -39,7 +39,7 @@ func TestSSHTunnel(t *testing.T) {
 	pool := sshx.NewPool(sshx.NewHostKeys(st.Path("known_hosts")))
 	defer pool.CloseAll()
 	m := NewManager(Deps{Pool: pool, Store: st})
-	cfg := ConnConfig{Kind: "redis", Host: "127.0.0.1", SSH: &SSHTunnel{Enabled: true, Host: "127.0.0.1", Port: port, Auth: "password"}}
+	cfg := ConnConfig{Kind: "redis", Host: "127.0.0.1", SSH: &SSHForward{Enabled: true, Host: "127.0.0.1", Port: port, Auth: "password"}}
 
 	if _, err := m.dialer(cfg, Secret{}); err == nil {
 		t.Fatal("SSH password not asked")
@@ -56,6 +56,6 @@ func TestSSHTunnel(t *testing.T) {
 	c.Write([]byte("PING\n"))
 	reply, _ := bufio.NewReader(c).ReadString('\n')
 	if strings.TrimSpace(reply) != "echo:PING" {
-		t.Fatalf("reply through the tunnel = %q", reply)
+		t.Fatalf("reply through the port forward = %q", reply)
 	}
 }

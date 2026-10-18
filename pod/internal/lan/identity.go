@@ -12,7 +12,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/identity"
 )
 
-// The pairing and admin link of the Devices panel when the pod has no relay: the same
+// The pairing and admin link of the Members panel when the pod has no relay: the same
 // messages as the link of the relay (pod/internal/relay/identity.go), answered from what the
 // pod knows — its certificate, the pods of the LAN, the browsers that registered here, the
 // pods waiting to join on the LAN. The pod still signs nothing: the admin browser signs the
@@ -57,7 +57,7 @@ func (l *idLink) send(m idMsg) {
 
 func (l *idLink) fail(err error) { l.send(idMsg{Type: "error", Message: i18n.Translate(l.lang, err)}) }
 
-// ServeIdentity answers the Devices panel of the page on /_relay/identity.
+// ServeIdentity answers the Members panel of the page on /_relay/identity.
 func (m *Manager) ServeIdentity(w http.ResponseWriter, r *http.Request) {
 	ws, err := websocket.Accept(w, r, nil)
 	if err != nil {

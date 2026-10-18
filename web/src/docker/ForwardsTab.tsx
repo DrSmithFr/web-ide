@@ -1,12 +1,13 @@
-// Tunnels tab of the Docker tool (SSH projects): ports reached from the SSH host made
-// available on the machine of the pod, like ssh -L. Kept in .ide/tunnels.json by the pod.
+// Port forwards tab of the Docker tool (SSH projects): ports reached from the SSH host made
+// available on the machine of the pod, like ssh -L. Kept in .ide/forwards.json by the pod; its
+// RPC methods and event keep the name tunnels.* (GLOSSARY.md: port forward; a tunnel is WebRTC).
 import { createResource, createSignal, For, onCleanup, Show } from 'solid-js'
 import { on as onPod, request } from '../pod/rpc'
 import { errorToast } from '../ui/toast'
 import { Icon } from '../ui/icons'
 import { t } from '../i18n'
 
-export interface Tunnel {
+export interface Forward {
   id: string
   remoteHost: string
   remotePort: number
@@ -18,17 +19,17 @@ export interface Tunnel {
   conns: number
 }
 
-export function TunnelsTab() {
-  const [list, { refetch, mutate }] = createResource(() => request<Tunnel[]>('tunnels.get'))
+export function ForwardsTab() {
+  const [list, { refetch, mutate }] = createResource(() => request<Forward[]>('tunnels.get'))
   onCleanup(onPod('tunnels.changed', () => refetch()))
   const [host, setHost] = createSignal('127.0.0.1')
   const [remote, setRemote] = createSignal('')
   const [local, setLocal] = createSignal('')
   const [lan, setLan] = createSignal(false)
 
-  const save = async (spec: Partial<Tunnel>) => {
+  const save = async (spec: Partial<Forward>) => {
     try {
-      mutate(await request<Tunnel[]>('tunnels.save', spec))
+      mutate(await request<Forward[]>('tunnels.save', spec))
       return true
     } catch (e) {
       errorToast(e)
@@ -45,21 +46,21 @@ export function TunnelsTab() {
       setLan(false)
     }
   }
-  const remove = async (tn: Tunnel) => {
-    if (!confirm(t('Delete the tunnel to {remote}?', { remote: `${tn.remoteHost}:${tn.remotePort}` }))) return
+  const remove = async (tn: Forward) => {
+    if (!confirm(t('Delete the port forward to {remote}?', { remote: `${tn.remoteHost}:${tn.remotePort}` }))) return
     try {
-      mutate(await request<Tunnel[]>('tunnels.delete', { id: tn.id }))
+      mutate(await request<Forward[]>('tunnels.delete', { id: tn.id }))
     } catch (e) {
       errorToast(e)
     }
   }
   return (
-    <div class="dk-disk" data-testid="docker-tunnels">
-      <p class="muted small pad">{t('Ports reached from the SSH host, made available on this machine (like ssh -L). Enabled tunnels open with the project and close 5 minutes after the last window of the pod.')}</p>
-      <For each={list.latest ?? []} fallback={<p class="muted small pad">{list.loading ? t('Loading…') : t('No tunnel.')}</p>}>
+    <div class="dk-disk" data-testid="docker-forwards">
+      <p class="muted small pad">{t('Ports reached from the SSH host, made available on this machine (like ssh -L). Enabled port forwards open with the project and close 5 minutes after the last window of the pod.')}</p>
+      <For each={list.latest ?? []} fallback={<p class="muted small pad">{list.loading ? t('Loading…') : t('No port forward.')}</p>}>
         {(tn) => (
-          <div class="dk-tunnel" data-testid={`tunnel-${tn.localPort}`}>
-            <span class={`dk-dot ${tn.open ? 'up' : tn.error ? 'bad' : 'down'}`} title={tn.open ? t('tunnel|Open') : tn.error ? tn.error : t('Closed')} />
+          <div class="dk-forward" data-testid={`forward-${tn.localPort}`}>
+            <span class={`dk-dot ${tn.open ? 'up' : tn.error ? 'bad' : 'down'}`} title={tn.open ? t('forward|Open') : tn.error ? tn.error : t('Closed')} />
             <a class="mono" href={`http://127.0.0.1:${tn.localPort}`} target="_blank" rel="noreferrer" title={t('Open in the browser')}>
               {tn.lan ? '0.0.0.0' : '127.0.0.1'}:{tn.localPort}
             </a>
@@ -99,21 +100,21 @@ export function TunnelsTab() {
           </div>
         )}
       </For>
-      <form class="dk-tunnel-form" onSubmit={add} data-testid="tunnel-form">
+      <form class="dk-forward-form" onSubmit={add} data-testid="forward-form">
         <label>
           <span class="muted small">{t('Remote address')}</span>
           <input class="input small mono" value={host()} onInput={(e) => setHost(e.currentTarget.value)} placeholder="127.0.0.1" />
         </label>
         <label>
           <span class="muted small">{t('Remote port')}</span>
-          <input class="input small mono" type="number" min="1" max="65535" required value={remote()} onInput={(e) => setRemote(e.currentTarget.value)} data-testid="tunnel-remote" />
+          <input class="input small mono" type="number" min="1" max="65535" required value={remote()} onInput={(e) => setRemote(e.currentTarget.value)} data-testid="forward-remote" />
         </label>
         <label>
           <span class="muted small">{t('Local port')}</span>
-          <input class="input small mono" type="number" min="1" max="65535" value={local()} placeholder={remote() || t('same')} onInput={(e) => setLocal(e.currentTarget.value)} data-testid="tunnel-local" />
+          <input class="input small mono" type="number" min="1" max="65535" value={local()} placeholder={remote() || t('same')} onInput={(e) => setLocal(e.currentTarget.value)} data-testid="forward-local" />
         </label>
         <label class="dk-check">
-          <input type="checkbox" checked={lan()} onChange={(e) => setLan(e.currentTarget.checked)} data-testid="tunnel-lan" />
+          <input type="checkbox" checked={lan()} onChange={(e) => setLan(e.currentTarget.checked)} data-testid="forward-lan" />
           <span class="small">{t('Reachable from the local network')}</span>
         </label>
         <button class="btn small primary" type="submit">

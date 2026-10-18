@@ -24,7 +24,7 @@ The full walk-through is in the **[user guide](docs/guide.md)**; every page of t
 - **Editor**: fast on 100,000-line files, splits, multiple carets, folding, Search Everywhere, Recent Files, clipboard history, themes (this is *High contrast*), QWERTY and AZERTY shortcuts, full keyboard navigation.
 - **Language servers**: definition, references, completion, rename, formatting, diagnostics (gopls, typescript-language-server, pyright, intelephense…).
 - **Git**: changes, staging, commits, branches, history graph, side-by-side diffs, worktrees.
-- **Terminals**, **databases** (SQLite, PostgreSQL, Redis), **Docker** (Compose, containers, logs) and SSH tunnels.
+- **Terminals**, **databases** (SQLite, PostgreSQL, Redis), **Docker** (Compose, containers, logs) and SSH port forwards.
 - **Local and SSH projects**, with your local keys.
 - **Safe with other tools**: changes made to open files by another program are merged into your buffer.
 - **Assistant**: Build, Plan and Briefing modes, `CLAUDE.md` / `AGENTS.md` and skills, Mermaid diagrams, image / PDF / audio attachments, local dictation (Whisper in the browser), doodles.
@@ -44,7 +44,7 @@ curl -fsSL https://raw.githubusercontent.com/DrSmithFr/web-ide/main/scripts/inst
 curl -fsSL https://raw.githubusercontent.com/DrSmithFr/web-ide/main/scripts/install.sh | sh -s -- --tailscale
 ```
 
-It prints the address to open once, with the pairing token. On macOS, download the archive of the [latest release](https://github.com/DrSmithFr/web-ide/releases/latest) and run `./web-ide-pod` ([details](docs/install/macos.md)). On Windows, install it inside WSL 2 ([steps](docs/install/windows-wsl.md)).
+It prints the address to open once, with the access token. On macOS, download the archive of the [latest release](https://github.com/DrSmithFr/web-ide/releases/latest) and run `./web-ide-pod` ([details](docs/install/macos.md)). On Windows, install it inside WSL 2 ([steps](docs/install/windows-wsl.md)).
 
 From the sources (Go 1.27+, Node.js 20.19+):
 
@@ -57,7 +57,7 @@ Optional: `git`, language servers in the `PATH`, a [llama.cpp](https://github.co
 
 ## Security
 
-The pod has the rights of your user: it reads and writes files and runs commands for the page. It only answers the local machine, every request needs the pairing token, and the assistant should only be connected to model servers you trust. See [SECURITY.md](SECURITY.md).
+The pod has the rights of your user: it reads and writes files and runs commands for the page. It only answers the local machine, every request needs the access token, and the assistant should only be connected to model servers you trust. See [SECURITY.md](SECURITY.md).
 
 ## Contributing
 

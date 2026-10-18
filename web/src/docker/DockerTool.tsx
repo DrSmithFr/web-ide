@@ -12,16 +12,17 @@ import {
 } from './state'
 import { Detail } from './Detail'
 import { DiskTab } from './DiskTab'
-import { TunnelsTab } from './TunnelsTab'
+import { ForwardsTab } from './ForwardsTab'
 import { PreviewsTab } from './PreviewsTab'
 import './docker.css'
 
-type Tab = 'project' | 'host' | 'disk' | 'tunnels' | 'previews'
+type Tab = 'project' | 'host' | 'disk' | 'forwards' | 'previews'
 
 export function DockerTool() {
   const tab = (): Tab => {
-    const id = session.docker.tab
-    return id === 'host' || id === 'disk' || id === 'previews' || (id === 'tunnels' && !isLocal()) ? id : 'project'
+    // 'tunnels' is the id this tab had in a desk state saved before the glossary (port forwards).
+    const id = session.docker.tab === 'tunnels' ? 'forwards' : session.docker.tab
+    return id === 'host' || id === 'disk' || id === 'previews' || (id === 'forwards' && !isLocal()) ? id : 'project'
   }
   const setTab = (id: Tab) => mutate((s) => (s.docker.tab = id))
 
@@ -69,8 +70,8 @@ export function DockerTool() {
           <span class="tab-title">{t('Disk')}</span>
         </div>
         <Show when={!isLocal()}>
-          <div class="tab" role="tab" data-testid="docker-tab-tunnels" aria-selected={tab() === 'tunnels'} classList={{ active: tab() === 'tunnels' }} onClick={() => switchTab('tunnels')}>
-            <span class="tab-title">{t('Tunnels')}</span>
+          <div class="tab" role="tab" data-testid="docker-tab-forwards" aria-selected={tab() === 'forwards'} classList={{ active: tab() === 'forwards' }} onClick={() => switchTab('forwards')}>
+            <span class="tab-title">{t('Port forwards')}</span>
           </div>
         </Show>
         <div class="tab" role="tab" data-testid="docker-tab-previews" aria-selected={tab() === 'previews'} classList={{ active: tab() === 'previews' }} onClick={() => switchTab('previews')}>
@@ -78,13 +79,13 @@ export function DockerTool() {
         </div>
       </div>
       <div class="tool-body">
-        <Show when={tab() === 'tunnels'}>
-          <TunnelsTab />
+        <Show when={tab() === 'forwards'}>
+          <ForwardsTab />
         </Show>
         <Show when={tab() === 'previews'}>
           <PreviewsTab />
         </Show>
-        <Show when={tab() !== 'tunnels' && tab() !== 'previews'}>
+        <Show when={tab() !== 'forwards' && tab() !== 'previews'}>
           <Show when={status()} fallback={<p class="muted pad">{t('Loading…')}</p>}>
             <Show when={status()!.available} fallback={<Unavailable />}>
               <Show when={tab() !== 'disk'} fallback={<DiskTab />}>

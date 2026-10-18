@@ -18,7 +18,7 @@ import (
 )
 
 // Pairing over the LAN, with no relay: the joining pod serves its request on its LAN port
-// (and announces it by mDNS); a paired pod that finds it shows it in the Devices panel of
+// (and announces it by mDNS); a paired pod that finds it shows it in the Members panel of
 // its page, where an admin compares the 4-word fingerprint and signs the certificate. The
 // certificate is posted back to the joining pod, which checks it is for its own key.
 
@@ -26,7 +26,7 @@ import (
 const joinPath = "/_lan/join"
 
 // JoinRequest is what a joining pod shows: the same shape as a pairing of the relay, so the
-// Devices panel reads both.
+// Members panel reads both.
 type JoinRequest struct {
 	Code    string         `json:"code"`
 	Account string         `json:"account"`
@@ -182,7 +182,7 @@ func (m *Manager) probeJoin(ctx context.Context, addr string) {
 	m.pushIdentity(idMsg{Type: "pairings", Account: account, Pairings: m.Joins()}, nil)
 }
 
-// Joins are the joining pods found on the LAN, for the Devices panel.
+// Joins are the joining pods found on the LAN, for the Members panel.
 func (m *Manager) Joins() []JoinRequest {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -211,7 +211,7 @@ func (m *Manager) ApproveJoin(ctx context.Context, code string, cert *identity.C
 		return nil, i18n.New("no pairing request with this code")
 	}
 	if cert.Key != j.Key {
-		return nil, i18n.New("the certificate is not for the device of this request")
+		return nil, i18n.New("the certificate is not for the member of this request")
 	}
 	body, _ := json.Marshal(map[string]any{"code": code, "cert": cert})
 	cli := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{

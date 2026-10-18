@@ -28,7 +28,7 @@ On Windows, follow [Windows with WSL](windows-wsl.md); on macOS, [macOS](macos.m
    Open: http://127.0.0.1:4433/?token=…
    ```
 
-   The **access token** goes into a cookie and pairs this browser. It is also in `~/.web-ide/token`.
+   The **access token** goes into a cookie that opens the pod in this browser. It is also in `~/.web-ide/token`.
 
 3. Optional, to use the pod from your laptop, phone or tablet: serve it on your tailnet.
 

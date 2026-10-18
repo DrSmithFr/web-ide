@@ -141,7 +141,7 @@ func shownKind(kind string) bool {
 	return !strings.HasPrefix(kind, identity.ProjectsPrefix)
 }
 
-// Record is the X25519 key of this device, signed by its device key: the pod publishes it so an
+// Record is the X25519 key of this member, signed by its device key: the pod publishes it so an
 // admin can wrap the key of the epoch for it. The key is derived from the device seed, so a pod
 // rebuilds it after a restart without a new file on disk.
 func (h *Hub) Record() (*identity.SyncKeyRecord, error) {
@@ -154,7 +154,7 @@ func (h *Hub) Record() (*identity.SyncKeyRecord, error) {
 	return r, nil
 }
 
-// Publish sends the key of this device to the relay, then asks for the wrap made for it and for the
+// Publish sends the key of this member to the relay, then asks for the wrap made for it and for the
 // stored state of every source. It is what a pod does when its link comes up.
 func (h *Hub) Publish() error {
 	if !h.ident.Paired() {
@@ -188,8 +188,8 @@ func (h *Hub) PullAll() error {
 }
 
 // SetWrap opens the wrap an admin made for this device: the only way a pod that does not know the
-// phrase gets the key of the epoch. A wrap of another account, for another device, or that does not
-// open with the key of this device is refused.
+// phrase gets the key of the epoch. A wrap of another account, for another member, or that does not
+// open with the key of this member is refused.
 func (h *Hub) SetWrap(w *identity.WrapRecord) error {
 	if w == nil {
 		return i18n.New("no wrap")
@@ -198,7 +198,7 @@ func (h *Hub) SetWrap(w *identity.WrapRecord) error {
 		return i18n.New("wrap of another account")
 	}
 	if w.Device != h.ident.ID() {
-		return i18n.New("wrap made for another device")
+		return i18n.New("wrap made for another member")
 	}
 	if err := identity.VerifySig(w.Account, w.Sig, w.Canonical()); err != nil {
 		return err
@@ -213,7 +213,7 @@ func (h *Hub) SetWrap(w *identity.WrapRecord) error {
 	}
 	plain, err := identity.Unseal(identity.WrapKey(shared), identity.WrapAAD(w.Account, w.Device, w.Epoch), w.Nonce, w.Data)
 	if err != nil {
-		return i18n.New("the wrap does not open with the key of this device")
+		return i18n.New("the wrap does not open with the key of this member")
 	}
 	h.mu.Lock()
 	hadKey := h.key != nil
