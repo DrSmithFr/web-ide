@@ -42,11 +42,11 @@ export function LineageSection(props: { tk: Ticket; apply: Apply }) {
   // A change of another ticket (a child): this one is read again.
   const reload = () => getTicket(tk().id)
   const setParent = async () => {
-    const id = await pickTicket(t('Parent ticket: this one becomes its next step'), (s) => s.id !== tk().id && !s.parent && s.status !== 'done' && s.status !== 'abandoned')
+    const id = await pickTicket(t('Root ticket: this one becomes a step of it'), (s) => s.id !== tk().id && !s.parent && s.status !== 'done' && s.status !== 'abandoned')
     if (id) await props.apply(updateTicket(tk().id, { parent: id }))
   }
   const addChild = async () => {
-    const id = await pickTicket(t('Ticket to add as the next step'), (s) => s.id !== tk().id && !s.parent && startable(s) && !board.tickets.some((c) => c.parent === s.id))
+    const id = await pickTicket(t('Ticket to add as a step'), (s) => s.id !== tk().id && !s.parent && startable(s) && !board.tickets.some((c) => c.parent === s.id))
     if (id) await props.apply(updateTicket(id, { parent: tk().id }).then(reload))
   }
   const addDep = async () => {
@@ -102,7 +102,7 @@ export function LineageSection(props: { tk: Ticket; apply: Apply }) {
 
         <Show when={!tk().parent}>
           <Show when={tk().children.length}>
-            <p class="muted small">{t('Next steps, developed in this worktree in this order; the ticket is merged once they are finished.')}</p>
+            <p class="muted small">{t('Steps, developed in this worktree in this order; the ticket is merged once they are finished.')}</p>
           </Show>
           <ol class="tk-children" data-testid="ticket-children">
             <For each={tk().children}>

@@ -174,7 +174,7 @@ A unit of work of a project's kanban, from its description to its merge. Its til
 _Avoid_: issue, task
 
 **Status**
-Where a ticket stands: New → To do → In progress → To test → Done, or Abandoned.
+Where a ticket stands: New → To do → In progress → To test (`to_test`) → Done, or Abandoned.
 _Avoid_: column, stage
 
 **Briefing**
@@ -246,5 +246,3 @@ Naming problems found while writing this glossary, each to become a ticket.
 - **Tool call**: the code and the docs say *tool* for what a model calls; write *tool call* or *agent tool*.
 - **Agent**: the package `agent` and the docs (“the agent of the assistant”, “the agent of the project”) use *agent* for the assistant; rename the package `assistant` and keep *agent* for Claude Code, opencode and pi.
 - **Assistant**: the menu says *AI assistant*, the docs also *integrated assistant*; say *Assistant*.
-- **To test**: the status shown *To test* is `review` in the code, the base and the MCP API, while *Review* is a reading by a model; rename it `to_test` (migration, `review` kept as an alias of the API).
-- **Lineage**: the docs say *child*, *step* and *next step*; say *root* and *steps*. The API field `parent` stays and means the root.

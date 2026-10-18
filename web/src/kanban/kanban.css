@@ -2,7 +2,7 @@
 .st-new { --st: var(--fg-muted); }
 .st-todo { --st: var(--info); }
 .st-in_progress { --st: var(--warn); }
-.st-review { --st: #b48ef0; }
+.st-to_test { --st: #b48ef0; }
 .st-done { --st: var(--ok); }
 .st-abandoned { --st: var(--fg-faint); }
 .kb-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--st); flex: none; }

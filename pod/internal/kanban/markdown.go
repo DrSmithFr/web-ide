@@ -125,10 +125,10 @@ func Markdown(t *Ticket) string {
 func lineageLines(t *Ticket) []string {
 	var out []string
 	if t.Parent != 0 {
-		out = append(out, fmt.Sprintf("- Child of #%d: developed in its worktree, on its branch, after the previous steps; merged with it.", t.Parent))
+		out = append(out, fmt.Sprintf("- Step of #%d (the root): developed in its worktree, on its branch, after the previous steps; merged with it.", t.Parent))
 	}
 	if len(t.Children) > 0 {
-		out = append(out, "- Children, in order (developed in this worktree after this ticket; it is merged once they are finished):")
+		out = append(out, "- Steps, in order (developed in this worktree after this ticket, the root; it is merged once they are finished):")
 		for _, c := range t.Children {
 			out = append(out, fmt.Sprintf("  - #%d [%s] %s", c.ID, StatusNames[c.Status], c.Title))
 		}

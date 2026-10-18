@@ -112,7 +112,7 @@ func Next(list []Summary) []Summary {
 func Waiting(list []Summary) []Summary {
 	var out []Summary
 	for _, t := range list {
-		if t.Status == Review || t.Status == InProgress && t.FeedbackOpen > 0 {
+		if t.Status == ToTest || t.Status == InProgress && t.FeedbackOpen > 0 {
 			out = append(out, t)
 		}
 	}

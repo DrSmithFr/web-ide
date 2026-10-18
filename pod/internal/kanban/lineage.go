@@ -28,7 +28,7 @@ const (
 
 // BlockerNames are the English texts of the blockers (models, errors).
 var BlockerNames = map[string]string{
-	BlockParent:    "parent not started",
+	BlockParent:    "root not started",
 	BlockPrevious:  "previous step not validated",
 	BlockDepends:   "dependency not merged",
 	BlockAbandoned: "dependency abandoned",
@@ -131,7 +131,7 @@ func setLinks(tx *sql.Tx, id int64, p Patch, by string, now int64) error {
 				return i18n.Errorf("ticket #%d not found", np)
 			}
 			if finished(pst) {
-				return i18n.Errorf("ticket #%d is closed: it cannot get children", np)
+				return i18n.Errorf("ticket #%d is closed: it cannot get steps", np)
 			}
 			if err := tx.QueryRow(`SELECT COALESCE(MAX(pos), 0) + 1 FROM tickets WHERE parent_id = ?`, np).Scan(&pos); err != nil {
 				return err
@@ -144,7 +144,7 @@ func setLinks(tx *sql.Tx, id int64, p Patch, by string, now int64) error {
 			if err := event(tx, id, by, "Removed from the lineage of #{parent}", Params{"parent": parent}, now); err != nil {
 				return err
 			}
-		} else if err := event(tx, id, by, "Child of #{parent}", Params{"parent": np}, now); err != nil {
+		} else if err := event(tx, id, by, "Step of #{parent}", Params{"parent": np}, now); err != nil {
 			return err
 		}
 	}
@@ -225,10 +225,10 @@ func checkGraph(tx *sql.Tx) error {
 	rows.Close()
 	for id, p := range parent {
 		if p == id {
-			return i18n.New("a ticket cannot be its own parent")
+			return i18n.New("a ticket cannot be its own root")
 		}
 		if p != 0 && parent[p] != 0 {
-			return i18n.Errorf("#%d is already the child of #%d: a lineage has one level", p, parent[p])
+			return i18n.Errorf("#%d is already a step of #%d: a lineage has one level", p, parent[p])
 		}
 	}
 	root := func(id int64) int64 {
@@ -304,7 +304,7 @@ func (m *Manager) MoveChild(loc Location, id int64, delta int, by string) error 
 			return err
 		}
 		if parent == 0 {
-			return i18n.New("this ticket has no parent")
+			return i18n.New("this ticket has no root")
 		}
 		q := `SELECT id, pos, status FROM tickets WHERE parent_id = ? AND (pos > ? OR pos = ? AND id > ?) ORDER BY pos, id LIMIT 1`
 		if delta < 0 {
@@ -317,7 +317,7 @@ func (m *Manager) MoveChild(loc Location, id int64, delta int, by string) error 
 			return nil // already first or last
 		}
 		if !Startable(status) || !Startable(ostatus) {
-			return i18n.New("only children not started yet can change places")
+			return i18n.New("only steps not started yet can change places")
 		}
 		if opos == pos {
 			opos = pos + 1
@@ -345,9 +345,9 @@ func (m *Manager) ValidateStep(loc Location, id int64, by string) error {
 			return err
 		}
 		if children == 0 {
-			return i18n.New("this ticket has no children")
+			return i18n.New("this ticket has no steps")
 		}
-		if status != Review {
+		if status != ToTest {
 			return i18n.New("the step of a ticket is validated once it is “To test”")
 		}
 		if err := feedbackHandled(tx, id); err != nil {

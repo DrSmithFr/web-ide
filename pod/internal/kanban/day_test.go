@@ -13,7 +13,7 @@ func TestHistory(t *testing.T) {
 	c, _ := m.Create(loc, Patch{Title: ptr("Closed")}, ByUser)
 	_ = m.SetPlan(loc, c, "plan", nil, ByModel)
 	_ = m.Move(loc, c, InProgress, ByUser, "")
-	_ = m.Move(loc, c, Review, ByUser, "")
+	_ = m.Move(loc, c, ToTest, ByUser, "")
 	clock = 2_500_000
 	_ = m.Move(loc, c, Done, ByUser, "")
 	_ = m.Move(loc, b, InProgress, ByUser, "")
@@ -42,7 +42,7 @@ func TestNext(t *testing.T) {
 		{ID: 5, Status: InProgress, Priority: "low"},
 		{ID: 6, Status: Todo, Priority: "low", Parent: 5, Created: 6}, // next step of a lineage in progress
 		{ID: 7, Status: Todo, Priority: "normal", Created: 7},         // no size: after the sized ones
-		{ID: 8, Status: Review},
+		{ID: 8, Status: ToTest},
 		{ID: 10, Status: InProgress, FeedbackOpen: 2},
 	}
 	var ids []int64

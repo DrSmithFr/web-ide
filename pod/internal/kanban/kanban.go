@@ -24,13 +24,13 @@ const (
 	New        = "new"         // backlog without a plan
 	Todo       = "todo"        // backlog with a plan, shown as “To do”
 	InProgress = "in_progress" // en cours
-	Review     = "review"      // shown as “To test”
+	ToTest     = "to_test"     // shown as “To test” (named `review` before the base version 7)
 	Done       = "done"        // closed
 	Abandoned  = "abandoned"
 )
 
 var (
-	Statuses   = []string{New, Todo, InProgress, Review, Done, Abandoned}
+	Statuses   = []string{New, Todo, InProgress, ToTest, Done, Abandoned}
 	Priorities = []string{"low", "normal", "high", "critical"}
 	// Sizes: the estimated effort of a whole ticket, written with its plan.
 	Sizes = []string{"s", "m", "l", "xl"}
@@ -55,24 +55,34 @@ const (
 	ByClaude = "claude"
 )
 
+// NormStatus maps the old name of To test, `review`, to its name: the API keeps it as an
+// alias on input.
+func NormStatus(s string) string {
+	if s == "review" {
+		return ToTest
+	}
+	return s
+}
+
 // IsAgent tells whether a change comes from a model rather than from the user.
 func IsAgent(by string) bool { return by == ByModel || by == ByClaude }
 
 // modelMoves are the transitions the model may do (docs/design/kanban.md). New → To do also
 // happens by itself when a plan is written.
 var modelMoves = map[[2]string]bool{
-	{New, Todo}: true, {InProgress, Review}: true,
+	{New, Todo}: true, {InProgress, ToTest}: true,
 }
 
 // userMoves are the transitions of the buttons. Done and Abandoned are reached through
 // Close and Abandon.
 var userMoves = map[[2]string]bool{
-	{New, Todo}: true, {Todo, New}: true, {Todo, InProgress}: true, {InProgress, Review}: true,
-	{Review, InProgress}: true, {Review, Done}: true, {Done, Review}: true, {Abandoned, New}: true,
+	{New, Todo}: true, {Todo, New}: true, {Todo, InProgress}: true, {InProgress, ToTest}: true,
+	{ToTest, InProgress}: true, {ToTest, Done}: true, {Done, ToTest}: true, {Abandoned, New}: true,
 }
 
 // CanMove tells whether an actor may move a ticket from one status to another.
 func CanMove(from, to, by string) bool {
+	from, to = NormStatus(from), NormStatus(to)
 	if to == Abandoned && by == ByUser {
 		return from != Done && from != Abandoned
 	}
@@ -225,6 +235,8 @@ CREATE TABLE deps (
 	// 6: estimated complexity of a ticket and of a test feedback.
 	`ALTER TABLE tickets ADD COLUMN complexity TEXT NOT NULL DEFAULT '';
 ALTER TABLE feedback ADD COLUMN complexity TEXT NOT NULL DEFAULT '';`,
+	// 7: the status To test is named to_test (it was review, which is a reading by a model).
+	`UPDATE tickets SET status = 'to_test' WHERE status = 'review';`,
 }
 
 func migrate(db *sql.DB) error {

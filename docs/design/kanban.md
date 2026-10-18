@@ -42,18 +42,20 @@ Aside: lineage, linked files, attachments, history.
 
 Time of work: each linked conversation shows the time of its answers, its sub-agents included (the tooltip splits the conversation, its sub-agents and the thinking); a card of the board shows the total of its conversations at the top right, and lists the titles of its goals, checked or not. Only the assistant of the IDE is counted: Claude Code runs in a terminal.
 
+The status *To test* is named `to_test` in the code, the base and the API (it was `review` until the base version 7, which migrated it; *Review* is the reading of a change by a model). The RPC and the MCP tools still accept `review` as an alias on input (status filters, `kanban_move`); every output says `to_test`. The page translates a `review` left in the history of older tickets.
+
 ## Lineages and dependencies
 
-Work too big for one ticket is split into a **lineage**: a ticket (the root) and its children, the next steps, in order. A ticket has at most one parent and a child has no children (one level).
+Work too big for one ticket is split into a **lineage**: a ticket (the root) and its **steps**, in order. A step has one root (the API field `parent`) and a step has no steps (one level).
 
-- The children have no branch of their own: they are developed in the worktree and on the branch of the root, one after the other. A child starts once the previous step is validated: the root by **Validate the step** (it stays *To test*, its worktree kept), a child by being closed (*Done*, without merge; its worktree and branch stay). Its change is counted from the commit it started at, and frozen when it is closed.
-- The root is merged, gets its pull request and is closed once every child is *Done* or *Abandoned*; a child has no merge, rebase or pull request of its own. Abandoning the root with open children abandons them too; an abandoned child warns that its commits stay on the branch.
-- The parent and the order of a child change only before its development starts; a ticket with children cannot be deleted.
+- The steps have no branch of their own: they are developed in the worktree and on the branch of the root, one after the other. A step starts once the previous one is validated: the root by **Validate the step** (it stays *To test*, its worktree kept), a step by being closed (*Done*, without merge; its worktree and branch stay). Its change is counted from the commit it started at, and frozen when it is closed.
+- The root is merged, gets its pull request and is closed once every step is *Done* or *Abandoned*; a step has no merge, rebase or pull request of its own. Abandoning the root with open steps abandons them too; an abandoned step warns that its commits stay on the branch.
+- The root and the order of a step change only before its development starts; a ticket with steps cannot be deleted.
 - A ticket may also **depend on** tickets of other lineages (no loop, not inside its own lineage): it waits until their lineage is merged into its base or its root is *Done*. An abandoned dependency keeps blocking it.
-- Only the start of the development is blocked (briefing and plan stay open). *Start development*, `kanban.start` and the MCP `kanban_start` refuse with the blockers (`parent not started`, `previous step not validated`, `dependency not merged`, `dependency abandoned`); the user can start anyway (*Start anyway…*, written in the history), a model cannot.
+- Only the start of the development is blocked (briefing and plan stay open). *Start development*, `kanban.start` and the MCP `kanban_start` refuse with the blockers (`root not started`, `previous step not validated`, `dependency not merged`, `dependency abandoned`); the user can start anyway (*Start anyway…*, written in the history), a model cannot.
 - A dependency merged in the local base branch only (`main`, never pushed by the IDE) and not in the base of the ticket (`origin/main`): the ticket starts from the local branch, and the history says so.
-- In the worktree of a lineage, the default ticket of Claude Code is the current step: the child in progress, else the last one to test, else the root.
-- Cards show `↳ #n` (step of) and a lock with the blocking tickets; the ticket view has a *Lineage* section (parent, steps with their order, dependencies with their state, blockers).
+- In the worktree of a lineage, the default ticket of Claude Code is the current step: the step in progress, else the last one to test, else the root.
+- Cards show `↳ #n` (step of) and a lock with the blocking tickets; the ticket view has a *Lineage* section (root, steps with their order, dependencies with their state, blockers).
 
 ## Statuses and transitions
 
@@ -86,12 +88,12 @@ The system prompt receives the ticket as it is now and the instructions of the r
 ## Steering the day: the Orchestrator mode
 
 A new conversation starts in Orchestrator mode (setting *Mode of a new conversation*). It reads the project and the kanban and changes nothing:
-- `kanban_next`: the tickets that can start now, in order (the next step of a lineage in progress, then priority, smaller size, age; blocked tickets listed apart with what they wait for), then those waiting for the user (to test, open feedback);
+- `kanban_next`: the tickets that can start now, in order (the first open step of a lineage in progress, then priority, smaller size, age; blocked tickets listed apart with what they wait for), then those waiting for the user (to test, open feedback);
 - `kanban_history { from, to }`: the tickets whose history has events in a period (yesterday 00:00 to now by default, local time of the pod), closed ones first, with their moves;
 - `list_conversations`: the conversations of the project (mode, linked ticket, state, sub-agents);
 - `action_card { kind, ticket | chat, label, reason }`: a button in the thread, run only on the user's click: *start_dev* (as *Start development*, refused with the blockers of a blocked ticket), *generate_plan*, *open_ticket*, *open_conversation*; the card then shows what happened and stays disabled;
 - `open_conversation { chat | mode, title, ticket, message, send }`: opens an existing conversation, or creates one (Briefing or Plan, maybe linked to a ticket; Build without ticket) whose first message is sent at once or left in the message box; the windows showing the orchestrator conversation switch to it, and its thread keeps a link back.
-Its sub-agents may start sub-agents of their own (depth 2); a child of the Orchestrator works in Plan mode unless told otherwise.
+Its sub-agents may start sub-agents of their own (depth 2); a sub-agent of the Orchestrator works in Plan mode unless told otherwise.
 
 ## From an idea to tickets: the Briefing mode
 

@@ -78,7 +78,7 @@ func TestLineageLinks(t *testing.T) {
 	}
 	refused("reparent a started child", m.Update(loc, c2, Patch{Parent: ptr(int64(0))}, ByUser))
 	refused("move a started child", m.MoveChild(loc, c1, -1, ByUser))
-	for _, s := range []string{Todo, InProgress, Review} {
+	for _, s := range []string{Todo, InProgress, ToTest} {
 		if err := m.Move(loc, root, s, ByUser, ""); err != nil {
 			t.Fatal(err)
 		}
@@ -101,14 +101,14 @@ func TestLineageLinks(t *testing.T) {
 	if body := PRBody(tk, "en"); !strings.Contains(body, "## Steps\n- [ ] #3 child 2") {
 		t.Fatalf("pull request body: %s", body)
 	}
-	if md := Markdown(tk); !strings.Contains(md, "## Lineage\n- Children, in order") || !strings.Contains(md, "  - #3 [In progress] child 2") {
+	if md := Markdown(tk); !strings.Contains(md, "## Lineage\n- Steps, in order") || !strings.Contains(md, "  - #3 [In progress] child 2") {
 		t.Fatalf("markdown: %s", md)
 	}
 }
 
 func TestBlockers(t *testing.T) {
 	all := []Summary{
-		{ID: 1, Status: Review, Worktree: "/w1"},
+		{ID: 1, Status: ToTest, Worktree: "/w1"},
 		{ID: 2, Status: Todo, Parent: 1, Pos: 1},
 		{ID: 3, Status: Todo, Parent: 1, Pos: 2},
 		{ID: 4, Status: Todo, DependsOn: []int64{3}},

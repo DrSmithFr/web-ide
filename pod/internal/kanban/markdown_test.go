@@ -24,7 +24,7 @@ func TestClaudeAuthor(t *testing.T) {
 	if n := tk.Notes[len(tk.Notes)-1]; n.Author != ByClaude {
 		t.Fatalf("note: %+v", n)
 	}
-	if !CanMove(Todo, InProgress, ByClaude) || CanMove(Todo, InProgress, ByModel) || CanMove(Review, Done, ByClaude) {
+	if !CanMove(Todo, InProgress, ByClaude) || CanMove(Todo, InProgress, ByModel) || CanMove(ToTest, Done, ByClaude) {
 		t.Fatal("moves of Claude")
 	}
 	md := Markdown(tk)

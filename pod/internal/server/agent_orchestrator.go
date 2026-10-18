@@ -59,7 +59,7 @@ func (s *Server) kanbanNext(r *agentRun) (toolResult, error) {
 		b.WriteString("\nWaiting for the user:\n")
 		for _, t := range w {
 			line := "- " + ticketLine(t)
-			if t.Status == kanban.Review {
+			if t.Status == kanban.ToTest {
 				line += " · to test and validate"
 			}
 			if t.FeedbackOpen > 0 {

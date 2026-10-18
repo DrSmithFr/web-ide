@@ -77,7 +77,7 @@ const fake = http.createServer(async (req, res) => {
             ['d1', 'kanban_goal', { action: 'check', id: ids[0] }],
             ['d2', 'kanban_goal', { action: 'check', id: ids[1] }],
             ['d3', 'kanban_move', { status: 'done' }],
-            ['d4', 'kanban_move', { status: 'review', test_summary: 'Open **/export** and check the CSV.' }],
+            ['d4', 'kanban_move', { status: 'to_test', test_summary: 'Open **/export** and check the CSV.' }],
             ['d5', 'kanban_add_note', { text: 'Erratum: '.repeat(120) }],
             ['d6', 'kanban_add_note', { text: 'The CSV uses `;` as separator.' }],
             ['d7', 'kanban_goal', { action: 'add', title: 'Temporary goal' }],
@@ -307,7 +307,7 @@ run(async ({ page }) => {
     await page.waitForSelector('[data-testid=ticket-chat]:has-text("Plan")', { timeout: 5000 })
     assert(true, 'conversation listed in the ticket')
 
-    // Development session: goals checked, the model cannot close, moves to review.
+    // Development session: goals checked, the model cannot close, moves to To test.
     // Not a git repository: after confirmation, development in the project folder itself.
     const before2 = requests.length
     await page.click('[data-testid=ticket-start]')

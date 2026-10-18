@@ -76,7 +76,7 @@ func blockedError(bl []kanban.Blocker) error {
 // lineageOpen refuses to merge or close a lineage before its children are finished.
 func lineageOpen(t *kanban.Ticket) error {
 	if t.Parent != 0 {
-		return i18n.Errorf("a child ticket is merged with its lineage: see #%d", t.Parent)
+		return i18n.Errorf("a step is merged with its lineage: see #%d", t.Parent)
 	}
 	if open := kanban.OpenChildren(t); len(open) > 0 {
 		ids := make([]string, len(open))
@@ -151,7 +151,7 @@ func (s *Server) activeStep(loc kanban.Location, id int64) int64 {
 		switch c.Status {
 		case kanban.InProgress:
 			return c.ID
-		case kanban.Review:
+		case kanban.ToTest:
 			step = c.ID
 		}
 	}

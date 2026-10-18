@@ -142,12 +142,12 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
     case 'in_progress':
       return [
         review,
-        { label: t('Send to testing'), primary: true, run: () => void ctx.move('review'), testid: 'ticket-to-review' },
+        { label: t('Send to testing'), primary: true, run: () => void ctx.move('to_test'), testid: 'ticket-to-test' },
         ...worktree,
         { label: t('New dev session'), run: () => dev.ai!(recommended(dev)), more: true },
         { label: t('Develop with Claude Code'), run: () => dev.claude(recommended(dev)), more: true },
       ]
-    case 'review':
+    case 'to_test':
       return [
         { label: t('Add feedback'), run: ctx.focusFeedback, testid: 'ticket-feedback' },
         review,
@@ -170,7 +170,7 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
                     {
                       label: t('Validate the step'),
                       primary: true,
-                      title: t('Its work is tested: the next step of the lineage (#{id}) may start in this worktree', { id: openChildren[0].id }),
+                      title: t('Its work is tested: the first open step of the lineage (#{id}) may start in this worktree', { id: openChildren[0].id }),
                       run: () => void ctx.apply(validateStep(tk.id)),
                       testid: 'ticket-step',
                     },
@@ -186,7 +186,7 @@ export function ticketActions(tk: Ticket, ctx: Ctx): ActionButton[] {
         { label: t('Develop with Claude Code'), run: () => dev.claude(recommended(dev)), more: true },
       ]
     case 'done':
-      return [{ label: t('Reopen (→ To test)'), run: () => void ctx.move('review'), testid: 'ticket-reopen' }]
+      return [{ label: t('Reopen (→ To test)'), run: () => void ctx.move('to_test'), testid: 'ticket-reopen' }]
     case 'abandoned':
       return [{ label: t('Reopen'), run: () => void ctx.move('new'), testid: 'ticket-reopen' }]
   }
@@ -552,7 +552,7 @@ export function PullRequest(props: { tk: Ticket; apply: Apply; folded?: boolean 
             <div class="tk-git-row">
               <button
                 class="btn small"
-                classList={{ primary: tk().status === 'review' }}
+                classList={{ primary: tk().status === 'to_test' }}
                 disabled={busy() || openChildren().length > 0}
                 title={
                   openChildren().length

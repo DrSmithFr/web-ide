@@ -53,7 +53,7 @@ func enum(description string, values ...string) map[string]any {
 var ticketID = map[string]any{"type": "integer", "description": "Ticket number (default: the ticket of the worktree you are in)"}
 
 var (
-	parentProp     = map[string]any{"type": "integer", "description": "Parent ticket: this one becomes the next step of its lineage, developed in the parent's worktree after it (0 takes it out). Only before its development starts"}
+	parentProp     = map[string]any{"type": "integer", "description": "Root ticket: this one becomes a step of its lineage, developed in the root's worktree after the previous steps (0 takes it out). Only before its development starts"}
 	complexityProp = enum("How hard the work is, which picks the model and the effort of its sessions: low (a small obvious change: a color, a label, a one-line fix), medium (usual work), high (a delicate design, concurrency, security, a bug hard to find)", kanban.Complexities...)
 	sizeProp       = enum("Estimated effort of the whole ticket: s (a few files, an hour of agent work), m, l, xl (many files across the pod and the page, several days)", kanban.Sizes...)
 	dependsOnProp  = map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "Tickets of other lineages this one waits for: it starts once they are merged or done (replaces the list)"}
@@ -167,7 +167,7 @@ var mcpTools = []mcpTool{
 	{
 		name:        "kanban_list",
 		description: "Lists the tickets of the kanban of the project (number, status, priority, title, goals, open feedback).",
-		props:       map[string]any{"status": enum("Status filter (optional)", kanban.Statuses...), "query": str("Filter on the title (optional)")},
+		props:       map[string]any{"status": enum("Status filter (optional; review is the old name of to_test)", append(append([]string{}, kanban.Statuses...), "review")...), "query": str("Filter on the title (optional)")},
 		run: func(ctx context.Context, s *Server, raw json.RawMessage) (string, error) {
 			a, err := bind[struct{ Cwd, Status, Query string }](raw)
 			if err != nil {
@@ -177,6 +177,7 @@ var mcpTools = []mcpTool{
 			if err != nil {
 				return "", err
 			}
+			a.Status = kanban.NormStatus(a.Status)
 			list, err := s.Kanban.List(sc.loc)
 			if err != nil {
 				return "", err
@@ -206,7 +207,7 @@ var mcpTools = []mcpTool{
 					fmt.Fprintf(&b, " · open feedback %d", t.FeedbackOpen)
 				}
 				if t.Parent != 0 {
-					fmt.Fprintf(&b, " · child of #%d", t.Parent)
+					fmt.Fprintf(&b, " · step of #%d", t.Parent)
 				}
 				if len(t.Blockers) > 0 {
 					fmt.Fprintf(&b, " · blocked by %s", kanban.BlockersText(t.Blockers))
@@ -535,10 +536,10 @@ var mcpTools = []mcpTool{
 	},
 	{
 		name:        "kanban_move",
-		description: `Moves a ticket from In progress to To test (status review), with test_summary: how to test it. Other changes of status belong to the user.`,
+		description: `Moves a ticket from In progress to To test (status to_test), with test_summary: how to test it. Other changes of status belong to the user.`,
 		props: map[string]any{
 			"id":           ticketID,
-			"status":       enum("New status", kanban.Review),
+			"status":       enum("New status (review is the old name of to_test)", kanban.ToTest, "review"),
 			"test_summary": str("What to test and how (steps, commands, expected results), in Markdown"),
 			"comment":      str("Comment for the history (optional)"),
 		},
@@ -547,6 +548,7 @@ var mcpTools = []mcpTool{
 			Status, Comment string
 			TestSummary     string `json:"test_summary"`
 		}) (string, error) {
+			a.Status = kanban.NormStatus(a.Status)
 			if strings.TrimSpace(a.TestSummary) == "" {
 				return "", fmt.Errorf(`test_summary is required to move to "To test"`)
 			}

@@ -202,7 +202,7 @@ func (s *Server) registerKanban() {
 		// of its lineage, and a parent keeps its children.
 		t, err := s.Kanban.Get(k.loc, a.ID)
 		if err == nil && len(t.Children) > 0 {
-			return nil, i18n.New("this ticket has children: take them out of its lineage first")
+			return nil, i18n.New("this ticket has steps: take them out of its lineage first")
 		}
 		if err == nil && t.Worktree != "" && t.Parent == 0 {
 			if rt, err := c.runtime(); err == nil {

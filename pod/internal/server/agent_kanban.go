@@ -158,7 +158,7 @@ func (s *Server) kanbanCall(r *agentRun, name string, a toolArgs, mode string) (
 			return toolResult{}, err
 		}
 		s.fillBlockers(r.ctx, s.kanbanGit(r), list)
-		status, q := a.str("status"), strings.ToLower(a.str("query"))
+		status, q := kanban.NormStatus(a.str("status")), strings.ToLower(a.str("query"))
 		var lines []string
 		for _, t := range list {
 			if status != "" && t.Status != status || q != "" && !strings.Contains(strings.ToLower(t.Title), q) {
@@ -178,7 +178,7 @@ func (s *Server) kanbanCall(r *agentRun, name string, a toolArgs, mode string) (
 				line += fmt.Sprintf(" · open feedback %d", t.FeedbackOpen)
 			}
 			if t.Parent != 0 {
-				line += fmt.Sprintf(" · child of #%d", t.Parent)
+				line += fmt.Sprintf(" · step of #%d", t.Parent)
 			}
 			if len(t.Blockers) > 0 {
 				line += " · blocked by " + kanban.BlockersText(t.Blockers)
@@ -392,8 +392,8 @@ func (s *Server) kanbanCall(r *agentRun, name string, a toolArgs, mode string) (
 		}
 		return okPlain(fmt.Sprintf("Feedback %s: %s. %d open feedback left.", word, string(short[:min(80, len(short))]), left), mark+" "+string(short[:min(60, len(short))])), nil
 	case "kanban_move":
-		status := a.str("status")
-		if status == kanban.Review {
+		status := kanban.NormStatus(a.str("status"))
+		if status == kanban.ToTest {
 			summary := strings.TrimSpace(a.str("test_summary"))
 			if summary == "" {
 				return toolResult{}, failf(`test_summary is required to move to "To test"`)

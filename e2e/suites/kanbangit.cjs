@@ -44,7 +44,7 @@ const fake = http.createServer(async (req, res) => {
         tool_calls: calls([
           ['b1', 'bash', { command: "while [ ! -f setup.log ]; do sleep 0.1; done; printf 'export\\n' > export.txt && git add -A && git commit -q -m '#1 export' && pwd" }],
           ['b3', 'kanban_goal', { action: 'check', id: goal }],
-          ['b4', 'kanban_move', { status: 'review', test_summary: 'Read `export.txt`.' }],
+          ['b4', 'kanban_move', { status: 'to_test', test_summary: 'Read `export.txt`.' }],
         ]),
       }),
       end(res, 'tool_calls')

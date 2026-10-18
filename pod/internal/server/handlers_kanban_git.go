@@ -284,7 +284,7 @@ func (s *Server) registerKanbanGit() {
 			return nil, i18n.New("this ticket has no worktree")
 		}
 		if t.Parent != 0 {
-			return nil, i18n.Errorf("a child ticket is rebased with its lineage: see #%d", t.Parent)
+			return nil, i18n.Errorf("a step is rebased with its lineage: see #%d", t.Parent)
 		}
 		_ = k.git.Fetch(ctx)
 		base := firstOf(t.Base)

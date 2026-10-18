@@ -31,7 +31,7 @@ When the conversation gets long, you can summarize it with compact_conversation.
 ` + batchText
 
 var (
-	kanbanNextDef = fn("kanban_next", "Lists the tickets that can start now, in the order to take them (next step of a lineage in progress, priority, smaller size, age), then the tickets waiting for the user (to test, feedback to handle).", obj{})
+	kanbanNextDef = fn("kanban_next", "Lists the tickets that can start now, in the order to take them (first open step of a lineage in progress, priority, smaller size, age), then the tickets waiting for the user (to test, feedback to handle).", obj{})
 	kanbanHistDef = fn("kanban_history", "Lists the tickets that moved in a period, with their moves (closed ones first). Default: yesterday 00:00 to now.",
 		obj{
 			"from": str(`Start, "YYYY-MM-DD" or "YYYY-MM-DD HH:MM" (local time); default yesterday`),
