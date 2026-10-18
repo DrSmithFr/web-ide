@@ -3,15 +3,21 @@ package i18n
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
 )
 
 func TestTranslate(t *testing.T) {
+	// The test adds entries to the French catalog: put it back for the other tests.
+	saved := maps.Clone(catalogs["fr"])
+	t.Cleanup(func() { catalogs["fr"] = saved })
+	catalogs["fr"] = maps.Clone(saved)
 	catalogs["fr"]["file %s not found"] = "fichier %s introuvable"
 	catalogs["fr"]["reading %s: %w"] = "lecture de %s : %w"
 	catalogs["fr"]["empty"] = "vide"
@@ -40,7 +46,7 @@ func TestTranslate(t *testing.T) {
 	}
 }
 
-// Every message written with New / Errorf / T in the pod has a French translation.
+// Every message written with New / Errorf / T in the pod has a translation in every language.
 func TestCatalogComplete(t *testing.T) {
 	call := regexp.MustCompile(`i18n\.(?:New|Errorf|T\([^,]+,)\s*\(?\s*("(?:[^"\\]|\\.)*")`)
 	missing := 0
@@ -58,9 +64,11 @@ func TestCatalogComplete(t *testing.T) {
 				t.Errorf("%s: %v", path, err)
 				continue
 			}
-			if _, ok := catalogs["fr"][key]; !ok {
-				t.Errorf("%s: missing French translation of %q", path, key)
-				missing++
+			for _, lang := range Languages[1:] {
+				if _, ok := catalogs[lang][key]; !ok {
+					t.Errorf("%s: missing %s translation of %q", path, lang, key)
+					missing++
+				}
 			}
 		}
 		return nil
@@ -70,5 +78,53 @@ func TestCatalogComplete(t *testing.T) {
 	}
 	if missing > 0 {
 		t.Logf("%d missing", missing)
+	}
+}
+
+var verb = regexp.MustCompile(`%[-+# 0-9.]*[a-zA-Z]`)
+
+// The catalogs of the languages have the same keys (no extra, none missing) and a translation
+// keeps the format verbs of its key, in the same number.
+func TestCatalogsAgree(t *testing.T) {
+	if Languages[0] != "en" || len(Languages) < 2 {
+		t.Fatalf("Languages: %v", Languages)
+	}
+	for _, lang := range Languages[1:] {
+		for key, text := range catalogs[lang] {
+			if _, ok := catalogs[Languages[1]][key]; !ok {
+				t.Errorf("%s: %q is not in the %s catalog", lang, key, Languages[1])
+			}
+			want := strings.Join(verb.FindAllString(strings.ReplaceAll(key, "%%", ""), -1), " ")
+			got := strings.Join(verb.FindAllString(strings.ReplaceAll(text, "%%", ""), -1), " ")
+			if want != got && sorted(want) != sorted(got) {
+				t.Errorf("%s: verbs of %q: %q", lang, key, text)
+			}
+		}
+		for key := range catalogs[Languages[1]] {
+			if _, ok := catalogs[lang][key]; !ok {
+				t.Errorf("%s: missing %q", lang, key)
+			}
+		}
+	}
+}
+
+func sorted(s string) string {
+	f := strings.Fields(s)
+	sort.Strings(f)
+	return strings.Join(f, " ")
+}
+
+func TestDetect(t *testing.T) {
+	for header, want := range map[string]string{
+		"":                        "en",
+		"fr-FR,fr;q=0.9,en;q=0.8": "fr",
+		"es-ES,es;q=0.9":          "es",
+		"de,es;q=0.5":             "es",
+		"de-DE":                   "en",
+		"EN-us":                   "en",
+	} {
+		if got := Detect(header); got != want {
+			t.Errorf("Detect(%q) = %q, want %q", header, got, want)
+		}
 	}
 }

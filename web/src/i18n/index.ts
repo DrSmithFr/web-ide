@@ -1,22 +1,26 @@
 // Translation of the interface. The English text is the key (and the English version);
 // other languages map it to their text in a catalog. Parameters are written {name}.
 import { createSignal } from 'solid-js'
-import fr from './fr.json'
+import list from './languages.json'
 
-export type Lang = 'en' | 'fr'
+/** A language of the interface: the one list (languages.json) every place reads. */
+export type Language = { id: string; name: string; locale: string; singularBelow2?: boolean }
+export type Lang = string
 export type LangSetting = 'auto' | Lang
 
-export const languages: { id: Lang; name: string }[] = [
-  { id: 'en', name: 'English' },
-  { id: 'fr', name: 'Français' },
-]
+export const languages: Language[] = list
 
-const catalogs: Record<Lang, Record<string, string>> = { en: {}, fr }
+// English is the source text and has no catalog; every other language of the list has a
+// `<id>.json` next to this file (the check script and `tsc` fail when one is missing).
+const files = import.meta.glob<Record<string, string>>('./*.json', { eager: true, import: 'default' })
+const catalogs: Record<Lang, Record<string, string>> = Object.fromEntries(
+  languages.map((l) => [l.id, files[`./${l.id}.json`] ?? {}]),
+)
 
 /** Language of the browser when it is one of ours, else English. */
 export function browserLang(): Lang {
   const l = (navigator.languages?.[0] ?? navigator.language ?? 'en').slice(0, 2).toLowerCase()
-  return l in catalogs ? (l as Lang) : 'en'
+  return l in catalogs ? l : 'en'
 }
 
 const [lang, setLangSignal] = createSignal<Lang>(browserLang())
@@ -54,15 +58,17 @@ export function t(text: string, params?: Params): string {
   return fill(tr ?? text.slice(text.indexOf('|') + 1), params)
 }
 
+const current = () => languages.find((l) => l.id === lang()) ?? languages[0]
+
 /** Singular or plural form for n (n is also available as {n}). */
 export function tn(n: number, one: string, other: string, params?: Params): string {
-  const singular = lang() === 'fr' ? Math.abs(n) < 2 : Math.abs(n) === 1
+  const singular = current().singularBelow2 ? Math.abs(n) < 2 : Math.abs(n) === 1
   return t(singular ? one : other, { n, ...params })
 }
 
 /** Locale for dates and numbers. */
 export function locale(): string {
-  return lang() === 'fr' ? 'fr-FR' : 'en-US'
+  return current().locale
 }
 
 export const fmtDate = (d: number | string | Date) => new Date(d).toLocaleString(locale())

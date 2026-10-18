@@ -1,0 +1,5 @@
+[
+  { "id": "en", "name": "English", "locale": "en-US" },
+  { "id": "fr", "name": "Français", "locale": "fr-FR", "singularBelow2": true },
+  { "id": "es", "name": "Español", "locale": "es-ES" }
+]

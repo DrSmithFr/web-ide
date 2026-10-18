@@ -234,10 +234,7 @@ type tokenView struct {
 func (v tokenView) T(text string) string { return i18n.T(v.Lang, text) }
 
 func showAccessToken(w http.ResponseWriter, r *http.Request, errText string) {
-	lang := "en"
-	if strings.HasPrefix(strings.ToLower(r.Header.Get("Accept-Language")), "fr") {
-		lang = "fr"
-	}
+	lang := i18n.Detect(r.Header.Get("Accept-Language"))
 	_ = tokenPage.Execute(w, tokenView{Lang: lang, Error: errText})
 }
 

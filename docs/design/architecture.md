@@ -112,10 +112,10 @@ A window opens one project on one of its desks (`project.open {id, desk}`: the s
 
 ## Languages
 
-- The interface is translated with `t()` (`web/src/i18n`): the English text is the key, `fr.json` gives the French one, `{name}` marks a parameter and `tn()` picks the plural. A key may carry a context (`'menu|Edit'`) when one English word has two translations. Data tables keep English labels and are translated where they are shown. The language is a setting (`language`: auto, en, fr), auto follows the browser.
-- Each window tells the pod its language (`client.lang`); errors created with `i18n.New` / `i18n.Errorf` are translated when they are sent (`pod/internal/i18n/fr.json`). Lines of the history of a ticket are stored as `{"key", "params"}` and translated by the page.
+- The interface is translated with `t()` (`web/src/i18n`): the English text is the key, `fr.json` gives the French one, `{name}` marks a parameter and `tn()` picks the plural. A key may carry a context (`'menu|Edit'`) when one English word has two translations. Data tables keep English labels and are translated where they are shown. The languages are listed once, in `web/src/i18n/languages.json` (English, French, Spanish); the language is a setting (`language`: auto or one of them), auto follows the browser.
+- Each window tells the pod its language (`client.lang`); errors created with `i18n.New` / `i18n.Errorf` are translated when they are sent (one catalog per language in `pod/internal/i18n/`, listed by `i18n.Languages`; `i18n.Detect` reads `Accept-Language` for the pages the pod writes). Lines of the history of a ticket are stored as `{"key", "params"}` and translated by the page.
 - Text read by the model (system prompt, tool descriptions and results) is always English; the model answers in the language of the user.
-- `npm run check` and the Go tests of `internal/i18n` fail on a missing French translation. The e2e suites run in English (`E2E_LOCALE` to change it); the `i18n` suite checks French and the switch.
+- `npm run check` and the Go tests of `internal/i18n` fail on a missing or extra key in any language. The e2e suites run in English (`E2E_LOCALE` to change it); the `i18n` suite checks French, Spanish and the switch.
 
 ## Building and testing
 

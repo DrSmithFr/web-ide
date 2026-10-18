@@ -206,7 +206,7 @@ On a screen 720 px wide or less (phones; tablets keep the layout above):
 
 ### Settings
 
-Large modal with navigation on the left: themes (with the accent color and the visual focus mode), fonts, editor (tab size, word wrap, indentation with spaces, current line, indentation guides, whitespace), keyboard shortcuts, syntax highlighting (add, edit, export rules as JSON per language), language of the interface.
+Large modal with navigation on the left: themes (with the accent color and the visual focus mode), fonts, editor (tab size, word wrap, indentation with spaces, current line, indentation guides, whitespace), keyboard shortcuts, syntax highlighting (add, edit, export rules as JSON per language), language of the interface (English, French or Spanish, or the language of the browser).
 
 ### Help
 

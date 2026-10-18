@@ -3,7 +3,6 @@ package lan
 import (
 	"html/template"
 	"net/http"
-	"strings"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
@@ -30,10 +29,7 @@ a{color:inherit}
 
 // UpdatePage answers the path of a pod the gateway cannot route to (multipod.Mismatch).
 func UpdatePage(w http.ResponseWriter, r *http.Request, name, version string, outdated bool) {
-	lang := "en"
-	if strings.HasPrefix(strings.ToLower(r.Header.Get("Accept-Language")), "fr") {
-		lang = "fr"
-	}
+	lang := i18n.Detect(r.Header.Get("Accept-Language"))
 	text := i18n.T(lang, "%s runs a newer version (%s): this pod is the one to update.", name, version)
 	if outdated {
 		text = i18n.T(lang, "%s runs an older version (%s): its projects cannot be opened from this pod.", name, version)

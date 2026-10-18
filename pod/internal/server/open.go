@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 )
@@ -69,9 +68,6 @@ func (s *Server) serveOpen(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	lang := "en"
-	if strings.HasPrefix(strings.ToLower(r.Header.Get("Accept-Language")), "fr") {
-		lang = "fr"
-	}
+	lang := i18n.Detect(r.Header.Get("Accept-Language"))
 	_ = openPage.Execute(w, map[string]string{"Text": i18n.T(lang, "Opened in the IDE:"), "Path": path})
 }

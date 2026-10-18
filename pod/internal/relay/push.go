@@ -369,10 +369,7 @@ func (s *Server) pushFromPod(pc *podConn, raw []byte) {
 }
 
 func pushError(w http.ResponseWriter, r *http.Request, code int, err error) {
-	lang := "en"
-	if strings.HasPrefix(strings.ToLower(r.Header.Get("Accept-Language")), "fr") {
-		lang = "fr"
-	}
+	lang := i18n.Detect(r.Header.Get("Accept-Language"))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": i18n.Translate(lang, err)})

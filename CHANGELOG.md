@@ -10,6 +10,7 @@ All notable changes of Web IDE. The release workflow publishes the section of a 
 
 ### Added
 
+- Spanish (`es`) as a third language of the interface, the pod messages and the relay pages; the languages are listed once on each side (`web/src/i18n/languages.json`, `i18n.Languages`), so adding one is a list entry plus its catalogs.
 - Help: the documentation is embedded in the pod and opens read only in a tab from *Help › Documentation* or the command palette, with working links and headings. A **?** next to the settings sections, the kanban and the Agents tool opens the page that explains it.
 
 ### Changed

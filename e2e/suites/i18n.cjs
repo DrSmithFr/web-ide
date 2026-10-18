@@ -1,5 +1,6 @@
 // Languages: a French browser gets the French interface; the language setting switches it
-// at once (menus, panels) and is kept by the pod; English is the fallback.
+// at once (menus, panels) and is kept by the pod; English is the fallback; Spanish is
+// selectable.
 const { run, openProject, assert, OUT } = require('../common.cjs')
 
 run(
@@ -26,6 +27,16 @@ run(
     await page.waitForSelector('.menubar')
     await page.waitForFunction(() => document.querySelector('.menubar .menus')?.textContent.includes('File'), null, { timeout: 5000 }).catch(() => {})
     assert((await page.textContent('.menubar .menus')).includes('File'), 'language kept after a reload')
+
+    // Spanish: listed by its native name, the interface and the lang attribute follow.
+    await page.click('.menubar button[title^="Settings"]')
+    await page.click('.settings-nav button:has-text("Language")')
+    await page.selectOption('[data-testid=settings-language]', 'es')
+    await page.waitForFunction(() => document.querySelector('.menubar .menus')?.textContent.includes('Archivo'))
+    assert(await page.isVisible('.settings-nav button:has-text("Idioma")'), 'settings switched to Spanish at once')
+    assert(await page.isVisible('.rail-left .rail-btn[title="Explorador"]'), 'panels switched to Spanish')
+    assert((await page.getAttribute('html', 'lang')) === 'es', 'lang attribute is es')
+    assert((await page.textContent('[data-testid=settings-language]')).includes('Español'), 'Español in the list')
   },
   { locale: 'fr-FR' },
 )
