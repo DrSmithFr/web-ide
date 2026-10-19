@@ -77,13 +77,13 @@ run(async ({ page }) => {
   assert(!r.result.isError, 'enabled again: ' + text(r))
   await closeSettings()
 
-  // Docker: its tab chosen is kept in the desk; disabled, it goes with its assistant tools and the
-  // Forwards tool takes its place; enabled again, it is back on the same tab.
+  // Docker: its tab chosen is kept in the desk; disabled, it goes with its assistant tools and
+  // its command, the Port forwards and previews tool stays; enabled again, it is back on its tab.
   const docker = '.rail-group[data-zone=bottomRight] .rail-btn[data-id=docker]'
   const forwards = '.rail-group[data-zone=bottomRight] .rail-btn[data-id=forwards]'
+  await page.waitForSelector(forwards)
   await page.click(docker)
-  await page.click('[data-testid=docker-tab-previews]')
-  assert(!(await page.$(forwards)), 'no Forwards tool beside Docker')
+  await page.click('[data-testid=docker-tab-disk]')
   assert((await tools()).includes('docker_ps'), 'docker_ps listed by the MCP')
   const setDocker = async (on) => {
     await palette('settings')
@@ -96,7 +96,7 @@ run(async ({ page }) => {
   await setDocker(false)
   await page.waitForSelector(docker, { state: 'detached' })
   await page.click(forwards)
-  await page.waitForSelector('[data-testid=forwards-tool] .tab.active:has-text("Previews")')
+  await page.waitForSelector('[data-testid=forwards-tab-previews][aria-selected=true]')
   r = await mcp('docker_ps', {})
   assert(r.result.isError && text(r).includes('the Docker plugin is disabled on this project'), 'docker_ps refused: ' + text(r))
   await palette('docker')
@@ -104,9 +104,8 @@ run(async ({ page }) => {
   assert(!(await page.$('.pick-item:has-text("Docker")')), 'no Docker command in Search Everywhere')
   await page.keyboard.press('Escape')
   await setDocker(true)
-  await page.waitForSelector(forwards, { state: 'detached' })
   await page.click(docker)
-  await page.waitForSelector('[data-testid=docker-tab-previews][aria-selected=true]')
+  await page.waitForSelector('[data-testid=docker-tab-disk][aria-selected=true]')
   r = await mcp('docker_ps', {})
   assert(!text(r).includes('disabled'), 'docker_ps back: ' + text(r))
 })

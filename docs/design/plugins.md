@@ -52,7 +52,7 @@ As long as Console and Git stay in the core, `terminal` and `worktrees` are prov
 
 The assistant becomes a **consumer**: today `assistant/defs.go`, `assistant_tools.go` and `mcp_ide.go` know Docker, the consoles, the previews; tomorrow each plugin declares its tools and the assistant offers those of the plugins enabled on the project (a shorter prompt where Docker is off).
 
-Coupling measured on the front end (imports, 2026-10-16): Docker, database, Git and Console depend on the core (`ui/`, `pod/rpc`, `i18n`, `keys`, `state/project`) plus `console/consoles`, `llm/previews` or `editor/doc` only; the kanban and above all the assistant (`llm/`, which imports kanban, docker, doodle, console, editor, questions…) are the hubs. The Docker tool also holds the Port forwards and Previews tabs: they are core parts (`web/src/forwards/`) the Docker plugin shows through the `api`; where Docker is disabled, a *Port forwards and previews* tool of the core takes its place.
+Coupling measured on the front end (imports, 2026-10-16): Docker, database, Git and Console depend on the core (`ui/`, `pod/rpc`, `i18n`, `keys`, `state/project`) plus `console/consoles`, `llm/previews` or `editor/doc` only; the kanban and above all the assistant (`llm/`, which imports kanban, docker, doodle, console, editor, questions…) are the hubs. The Docker tool held the Port forwards and Previews tabs: since #114 they are a tool of the core of their own, *Port forwards and previews* (`web/src/forwards/`), also offered to plugins through the `api`.
 
 ## What Docker added to the API
 

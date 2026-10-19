@@ -110,16 +110,16 @@ run(async ({ page, ctx }) => {
     const [code, body] = await get(url)
     assert(code === 401 && body.includes('private'), `refused without the cookie: ${code}`)
 
-    // Listed in the Docker tool.
-    if (!(await page.isVisible('[data-testid=docker-tab-previews]'))) await page.click('.rail-right .rail-btn[title="Docker"]')
-    await page.click('[data-testid=docker-tab-previews]')
+    // Listed in the Port forwards and previews tool.
+    if (!(await page.isVisible('[data-testid=forwards-tab-previews]'))) await page.click('.rail-btn[data-id=forwards]')
+    await page.click('[data-testid=forwards-tab-previews]')
     await page.waitForSelector(`[data-testid=preview-${appPort}]`)
     assert((await page.textContent(`[data-testid=preview-${appPort}]`)).includes('Demo app'), 'listed in the Previews tab')
 
     // Stop: the command and the URL end.
     await page.click('[data-testid=ai-preview-close]')
     await page.waitForSelector('[data-testid=ai-preview-open]:has-text("Start and open the app")')
-    await page.waitForFunction(() => !document.querySelector('[data-testid=docker-previews] .dk-forward'))
+    await page.waitForFunction(() => !document.querySelector('[data-testid=previews-list] .dk-forward'))
     assert((await get(url))[0] === 0, 'the URL is dead once stopped')
     await page.waitForFunction(() => ![...document.querySelectorAll('.bottom .console-tabs .tab')].some((x) => x.textContent.includes('node -e')), null, { timeout: 5000 })
     assert(true, 'its console is closed')

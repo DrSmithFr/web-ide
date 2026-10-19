@@ -2223,5 +2223,6 @@
   "Off: needs {list}": "Désactivé : nécessite {list}",
   "Permissions: {list}": "Permissions : {list}",
   "The plugin of this tab is disabled": "Le plugin de cet onglet est désactivé",
-  "greeted": "salué"
+  "greeted": "salué",
+  "Port forwards and previews": "Redirections de port et aperçus"
 }

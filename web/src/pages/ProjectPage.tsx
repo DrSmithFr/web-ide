@@ -10,7 +10,7 @@ import {
 } from '../state/project'
 import { desk, desks, onDeskGone } from '../state/desks'
 import { cycleWidth, focusDirection, moveColumnBy, scrollMode, stackTile, tileMode, unstackTile, openTile, registerTileTools, resizeTile, showToolTile, startResize, swapDirection, tileTools, toggleSplit } from '../state/tiles'
-import { pluginEnabled, pluginStates, pluginTools, setPluginStates } from '../plugins/registry'
+import { pluginTools, setPluginStates } from '../plugins/registry'
 import { tileLauncher } from '../ui/tileLauncher'
 import { deskPath, navigate, route } from '../app/router'
 import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, toggleTool, toolsIn, zoneOf, zones, type Zone } from '../state/zones'
@@ -65,6 +65,7 @@ export const toolPanels: Record<string, { label: string; icon: string; component
   kanban: { label: 'Kanban', icon: 'kanban', component: KanbanPanel },
   console: { label: 'Console', icon: 'terminal', component: ConsoleTool },
   problems: { label: 'Problems', icon: 'problems', component: ProblemsTool, badge: problemCount },
+  forwards: { label: 'Port forwards and previews', icon: 'ports', component: ForwardsTool },
   database: { label: 'Database explorer', icon: 'database', component: DatabaseTool },
   assistant: { label: 'Assistant', icon: 'sparkle', component: AssistantTool },
   agents: { label: 'Agents', icon: 'comment', component: AgentsTool },
@@ -98,22 +99,6 @@ createRoot(() =>
   }),
 )
 
-// The port forwards and previews of the core have a tool of their own where the Docker plugin,
-// which shows them, is disabled (known but off: before project.open nothing is shown).
-const forwardsTool = { label: 'Port forwards and previews', icon: 'docker', component: ForwardsTool }
-createRoot(() =>
-  createEffect(() => {
-    const own = pluginStates().length > 0 && !pluginEnabled('docker')
-    untrack(() => {
-      if (own) toolPanels.forwards = tileTools.forwards = forwardsTool
-      else {
-        delete toolPanels.forwards
-        delete tileTools.forwards
-      }
-    })
-    if (own) onCleanup(registerAction('tool.forwards', () => toggleToolFocus('forwards')))
-  }),
-)
 
 /** Opens a project, asking for the SSH password / passphrase when the pod needs one. */
 export async function openWithAuth(id: string, desk = 1) {
@@ -279,7 +264,7 @@ const menus: [string, string[]][] = [
   ['menu|Navigate', ['search.everywhere', 'nav.recentFiles', '-', 'nav.back', 'nav.forward', '-', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', '-', 'nav.related', 'nav.test']],
   ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover', '-', 'lsp.rename', 'lsp.format', '-', 'edit.fold', 'edit.unfold', 'edit.foldAll', 'edit.unfoldAll']],
   ['menu|View', ['view.splitRight', 'view.splitDown', '-', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', '-', 'view.visualFocus', 'view.focusOutline', 'view.focusDim', '-', 'view.whitespace', 'view.wordWrap', 'view.markdown', '-', 'console.new', 'palette.open']],
-  ['menu|Tools', ['tool.explorer', 'tool.search', 'tool.git', 'tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.questions', 'tool.database', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.console', 'tool.problems', '@tools']],
+  ['menu|Tools', ['tool.explorer', 'tool.search', 'tool.git', 'tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.questions', 'tool.database', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.console', 'tool.problems', 'tool.forwards', '@tools']],
   ['menu|Help', ['help.docs', 'help.guide', 'help.glossary', '-', 'help.shortcuts']],
 ]
 
@@ -296,8 +281,8 @@ function openMenu(e: MouseEvent, ids: string[]) {
   const r = btn.getBoundingClientRect()
   // The action runs where the focus was (the menu buttons do not take it), the editor otherwise.
   const prev = focusBeforeMenus()
-  // @tools: the tools of the enabled plugins, and the core's that show only without them.
-  ids = ids.flatMap((id) => (id === '@tools' ? [...pluginTools().map((p) => `tool.${p.id}`), ...(toolPanels.forwards ? ['tool.forwards'] : [])] : [id]))
+  // @tools: the tools of the enabled plugins.
+  ids = ids.flatMap((id) => (id === '@tools' ? pluginTools().map((p) => `tool.${p.id}`) : [id]))
   const items: MenuItem[] = ids.map((id) =>
     id === '-'
       ? { separator: true, label: '' }

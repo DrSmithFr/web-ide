@@ -7,7 +7,7 @@ export let api: PluginApi
 
 /** The state of the Docker tool in the desk: shown tab, chosen Compose profiles, tab of the detail pane. */
 export interface DockerDesk extends Record<string, unknown> {
-  tab: 'project' | 'host' | 'disk' | 'forwards' | 'tunnels' | 'previews'
+  tab: 'project' | 'host' | 'disk'
   profiles: string[]
   detail: 'infos' | 'logs'
 }
@@ -23,8 +23,6 @@ export function bindApi(a: PluginApi) {
 export const t: PluginApi['t'] = (...a) => api.t(...a)
 export const Icon = (p: Parameters<PluginApi['ui']['Icon']>[0]): JSX.Element => api.ui.Icon(p)
 export const EmptyState = (p: Parameters<PluginApi['ui']['EmptyState']>[0]): JSX.Element => api.ui.EmptyState(p)
-export const ForwardsTab = (): JSX.Element => api.forwards.Tab()
-export const PreviewsTab = (): JSX.Element => api.previews.Tab()
 export const contextMenu: PluginApi['ui']['contextMenu'] = (...a) => api.ui.contextMenu(...a)
 export const prompt: PluginApi['ui']['prompt'] = (...a) => api.ui.prompt(...a)
 export const toast: PluginApi['ui']['toast'] = (...a) => api.ui.toast(...a)

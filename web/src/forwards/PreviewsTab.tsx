@@ -1,4 +1,4 @@
-// Previews tab, a core part shown by the Docker plugin or the Forwards tool: the apps served on temporary URLs (share_preview), for
+// Previews tab of the Port forwards and previews tool: the apps served on temporary URLs (share_preview), for
 // every project of the pod. A preview stops with its command.
 import { For, Show } from 'solid-js'
 import { errorToast } from '../ui/toast'
@@ -8,7 +8,7 @@ import { closePreview, previews, setPublic } from '../llm/previews'
 
 export function PreviewsTab() {
   return (
-    <div class="dk-disk" data-testid="docker-previews">
+    <div class="dk-disk" data-testid="previews-list">
       <p class="muted small pad">{t('Apps the assistant offered to try, served on temporary URLs. A preview stops with its command, after 24 hours at most.')}</p>
       <For each={previews()} fallback={<p class="muted small pad">{t('No preview.')}</p>}>
         {(p) => (

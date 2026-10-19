@@ -1,4 +1,4 @@
-/* Port forwards and app previews (shown in the Docker tool, the Forwards tool and the home page). */
+/* Port forwards and app previews (their tool and the home page). */
 .dk-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--fg-faint); justify-self: center; }
 .dk-dot.up { background: var(--ok); }
 .dk-dot.starting { background: var(--warn); }

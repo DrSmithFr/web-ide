@@ -2,7 +2,7 @@
 // detail pane beside the list. Lists and statistics are refreshed while the tool is shown.
 import { For, onCleanup, onMount, Show, type JSX } from 'solid-js'
 import type { MenuItem } from '../api'
-import { api, contextMenu, desk, EmptyState, ForwardsTab, Icon, PreviewsTab, prompt, t } from './plugin'
+import { contextMenu, desk, EmptyState, Icon, prompt, t } from './plugin'
 import {
   busy, composeAction, composeTask, containerAction, host, portLabel, profiles, refreshHost, refreshStack, refreshStats, refreshStatus, selected, setSelected, shell,
   stack, stats, status, type Container,
@@ -11,13 +11,13 @@ import { Detail } from './Detail'
 import { DiskTab } from './DiskTab'
 import './docker.css'
 
-type Tab = 'project' | 'host' | 'disk' | 'forwards' | 'previews'
+type Tab = 'project' | 'host' | 'disk'
 
 export function DockerTool() {
   const tab = (): Tab => {
-    // 'tunnels' is the id this tab had in a desk state saved before the glossary (port forwards).
-    const id = desk.get().tab === 'tunnels' ? 'forwards' : desk.get().tab
-    return id === 'host' || id === 'disk' || id === 'previews' || (id === 'forwards' && !api.project.isLocal()) ? id : 'project'
+    // The port forwards and previews tabs left for a tool of their own (#114).
+    const id = desk.get().tab
+    return id === 'host' || id === 'disk' ? id : 'project'
   }
   const setTab = (id: Tab) => desk.set((s) => (s.tab = id))
 
@@ -64,37 +64,21 @@ export function DockerTool() {
         <div class="tab" role="tab" data-testid="docker-tab-disk" aria-selected={tab() === 'disk'} classList={{ active: tab() === 'disk' }} onClick={() => switchTab('disk')}>
           <span class="tab-title">{t('Disk')}</span>
         </div>
-        <Show when={!api.project.isLocal()}>
-          <div class="tab" role="tab" data-testid="docker-tab-forwards" aria-selected={tab() === 'forwards'} classList={{ active: tab() === 'forwards' }} onClick={() => switchTab('forwards')}>
-            <span class="tab-title">{t('Port forwards')}</span>
-          </div>
-        </Show>
-        <div class="tab" role="tab" data-testid="docker-tab-previews" aria-selected={tab() === 'previews'} classList={{ active: tab() === 'previews' }} onClick={() => switchTab('previews')}>
-          <span class="tab-title">{t('Previews')}</span>
-        </div>
       </div>
       <div class="tool-body">
-        <Show when={tab() === 'forwards'}>
-          <ForwardsTab />
-        </Show>
-        <Show when={tab() === 'previews'}>
-          <PreviewsTab />
-        </Show>
-        <Show when={tab() !== 'forwards' && tab() !== 'previews'}>
-          <Show when={status()} fallback={<p class="muted pad">{t('Loading…')}</p>}>
-            <Show when={status()!.available} fallback={<Unavailable />}>
-              <Show when={tab() !== 'disk'} fallback={<DiskTab />}>
-                <div class="dk-main">
-                  <div class="dk-list">
-                    <Show when={tab() === 'project'} fallback={<HostList />}>
-                      <ProjectList />
-                    </Show>
-                  </div>
-                  <Show when={selected()}>
-                    <Detail />
+        <Show when={status()} fallback={<p class="muted pad">{t('Loading…')}</p>}>
+          <Show when={status()!.available} fallback={<Unavailable />}>
+            <Show when={tab() !== 'disk'} fallback={<DiskTab />}>
+              <div class="dk-main">
+                <div class="dk-list">
+                  <Show when={tab() === 'project'} fallback={<HostList />}>
+                    <ProjectList />
                   </Show>
                 </div>
-              </Show>
+                <Show when={selected()}>
+                  <Detail />
+                </Show>
+              </div>
             </Show>
           </Show>
         </Show>

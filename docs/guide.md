@@ -129,12 +129,12 @@ Everything the model does, you can do yourself, in the same windows:
 - **Language servers** (gopls, typescript-language-server, pyright, intelephense…, from the pod's `PATH`): go to definition, references, completion, rename, formatting, diagnostics.
 - **Terminals** in the bottom panel (Ctrl+Shift+`), detachable in their own window.
 - **Git**: changes, staging, commits, branches, history graph, side-by-side diffs, other worktrees.
-- **Databases** (SQLite, PostgreSQL, Redis), **Docker** (Compose stack, containers, logs) and SSH port forwards.
+- **Databases** (SQLite, PostgreSQL, Redis), **Docker** (Compose stack, containers, logs), and the *Port forwards and previews* tool (SSH port forwards, app previews).
 - When a program (the model, a formatter, another editor) changes an open file, the change is merged into your buffer; a real conflict opens a three-pane dialog.
 
 All shortcuts are in *Settings → Keyboard*, with QWERTY and AZERTY presets.
 
-*Settings → Plugins*, with a project open, turns the plugins of the IDE on or off for that project and its worktrees: a plugin turned off takes away its tool, its commands and the tools it gives the assistant, and gets its place back when turned on again. Docker is one of them: without it, the port forwards and the previews it shows move to a *Port forwards and previews* tool in the same place.
+*Settings → Plugins*, with a project open, turns the plugins of the IDE on or off for that project and its worktrees: a plugin turned off takes away its tool, its commands and the tools it gives the assistant, and gets its place back when turned on again. Docker is one of them.
 
 ## Help
 

@@ -1,4 +1,4 @@
-// Port forwards tab, a core part shown by the Docker plugin or the Forwards tool (SSH projects): ports reached from the SSH host made
+// Port forwards tab of the Port forwards and previews tool (SSH projects): ports reached from the SSH host made
 // available on the machine of the pod, like ssh -L. Kept in .ide/forwards.json by the pod; its
 // RPC methods and event keep the name tunnels.* (GLOSSARY.md: port forward; a tunnel is WebRTC).
 import { createResource, createSignal, For, onCleanup, Show } from 'solid-js'
@@ -56,7 +56,7 @@ export function ForwardsTab() {
     }
   }
   return (
-    <div class="dk-disk" data-testid="docker-forwards">
+    <div class="dk-disk" data-testid="forwards-list">
       <p class="muted small pad">{t('Ports reached from the SSH host, made available on this machine (like ssh -L). Enabled port forwards open with the project and close 5 minutes after the last window of the pod.')}</p>
       <For each={list.latest ?? []} fallback={<p class="muted small pad">{list.loading ? t('Loading…') : t('No port forward.')}</p>}>
         {(tn) => (
