@@ -10,7 +10,8 @@ Web IDE: a Go program, the pod (`pod/`), serving a SolidJS front end (`web/`) ov
 - [docs/design/kanban.md](docs/design/kanban.md): the kanban and its git workflow.
 - [docs/design/relay.md](docs/design/relay.md): remote access through a relay, and the hosted one at `antennae.space`.
 - [docs/howto/self-host-relay.md](docs/howto/self-host-relay.md): running your own relay (domain, flags, firewall, backups).
-- [docs/design/plugins.md](docs/design/plugins.md) and [docs/design/desks.md](docs/design/desks.md): drafts under discussion (plugins, desks and agent desks).
+- [docs/design/plugins.md](docs/design/plugins.md): the plugin system (phase 1 decided: core, Docker, database).
+- [docs/design/desks.md](docs/design/desks.md): draft under discussion (desks and agent desks).
 
 ## Commands
 

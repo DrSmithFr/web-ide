@@ -1,20 +1,20 @@
-# Plugins (draft)
+# Plugins
 
-Status: **under discussion**, nothing is decided or developed. This page records the direction explored on 2026-10-16 and the questions still open.
+Status: **phase 1 decided** (2026-10-19), milestone *Plugins, phase 1*: the core of the plugin system (#113), then Docker (#114) and the database (#115) moved onto it, all built-in, one lineage. Whether Git, the editor, the kanban and the assistant become plugins too is decided after Docker (see [Decisions](#decisions)). The direction was explored on 2026-10-16.
 
 ## Vision
 
-The IDE becomes a **window manager**: the core handles the connection (pod, relay, LAN, identity), the layout (rails, tool zones, panes, tabs, session), the settings and the **documents**. Everything else is a plugin, enabled per project: Git, Console, kanban, Docker, database, assistant, agents, questions, conflicts, structure… Even the text editor is a plugin: the default view of a text document, one alternative view among others (rendered Markdown, diff…).
+The IDE becomes a **window manager**: the core handles the connection (pod, relay, LAN, identity), the layout (rails, tool zones, panes, tabs, desks), the settings and the **buffers**. Everything else is a plugin, enabled per project: Git, Console, kanban, Docker, database, assistant, agents, questions, conflicts, structure… Even the text editor is a plugin: the default view of a buffer, one alternative view among others (rendered Markdown, diff…).
 
 The tools that ship with the IDE are **built-in plugins**: same manifest, same API as an external one, compiled into the binary. The API is then complete by construction, since the IDE's own tools use nothing else.
 
-## Why the documents stay in the core
+## Why the buffers stay in the core
 
-The buffer of a file, its sync with the disk (`buffer.synced`, `fs.changed`) and its conflicts are read by the assistant, the language servers, the diff, the conflict resolution and every alternative view. The view of a document is a plugin; the document itself is not. A rendered Markdown view reads the document, not the disk, so it follows the edits live.
+The buffer of a file, its sync with the disk (`buffer.synced`, `fs.changed`) and its conflicts are read by the assistant, the language servers, the diff, the conflict resolution and every alternative view. The view of a buffer is a plugin; the buffer itself is not. A rendered Markdown view reads the buffer, not the disk, so it follows the edits live.
 
 ## Shape of a plugin
 
-A folder (`~/.web-ide/plugins/<id>/` for an external one):
+A folder (`~/.web-ide/plugins/<id>/` for an external one, later):
 
 ```
 plugin.json   id, version, apiVersion, permissions, provides / requires, contributions
@@ -24,46 +24,57 @@ i18n/fr.json  its own catalog (the English text is the key, as in the IDE)
 ```
 
 - **Backend**: a built-in plugin implements a Go interface inside the pod; an external one is a process started by the pod on demand and stopped a while after the last window leaves, like a language server. Same contract on both transports. Go's `plugin` package is ruled out (same toolchain, same build, Linux only).
-- **Front end**: the module receives an `api` object: `rpc()` to its backend, events (`fs.changed`, `git.changed`, `session.changed`…), `openFile`, `t()`, the components of `ui/`. Solid is shared through an import map, so a plugin does not ship its own.
+- **Front end**: the module receives an `api` object: `rpc()` to its backend, events (`fs.changed`, `git.changed`, `session.changed`…), `openFile`, `t()`, the components of `ui/`. Solid is shared through an import map, so a plugin does not ship its own. A built-in plugin is a folder of `web/src/plugins/` imported by the bundle, given the same `api`.
 - **Lazy loading**: only the plugins enabled on the project are loaded, which also shortens the first load (the iPhone through the relay).
 
 ## Contribution points
 
 | Point | Notes |
 |---|---|
-| Tab view | `TabKind` (`state/project.ts`) becomes open: `plugin:<id>/<view>`, with a serializable state for the session (diff, table, ticket today) |
+| Tab view | `TabKind` (`state/project.ts`) becomes open: `plugin:<id>/<view>`, with a serializable state for the desk (diff, table, ticket today) |
 | Alternative view | by file pattern (`openWith`), source ↔ rendered toggle or side by side; the editor is the default view of text |
-| Tool | `zones.ts` takes plugin ids, each with a default zone; a badge on the rail icon (like Problems) |
+| Tool | `zones.ts` takes plugin ids, each with a default zone; a badge on the rail icon (like Problems); a tool also renders as a tile ([desks](desks.md)) |
 | Assistant tools | schema + backend handler, offered to the assistant, to Claude Code (`/mcp`) and to the ACP agents from one declaration |
 | Commands | Search Everywhere, keymap shortcuts, menus (explorer, editor, tab context menus) |
 | Settings | a JSON schema rendered as a section of the settings, synced like the others |
 | Languages | grammars (already one module per language), language server command, test patterns |
 | Decorations | explorer badges, status bar items |
 
-## Services between plugins
+Phase 1 opens the points the moved tools need: tool, tab view, assistant tools, commands. The others open when a plugin needs them.
 
-Plugins depend on each other: Docker, Git and the kanban open consoles; the kanban needs the worktrees of Git and the conversations of the assistant. A manifest declares what it `provides` and `requires` (`console` provides `terminal`, `git` provides `worktrees`, `kanban` requires both). Disabling a plugin on a project warns about the plugins that require it.
+## Capabilities between plugins
 
-The assistant becomes a **consumer**: today `assistant_tools.go` and `mcp_ide.go` know Docker, the consoles, the previews; tomorrow each plugin declares its tools and the assistant offers those of the plugins enabled on the project (a shorter prompt where Docker is off).
+Plugins depend on each other: Docker, Git and the kanban open consoles; the kanban needs the worktrees of Git and the conversations of the assistant. A manifest declares the **capabilities** it `provides` and `requires` (`console` provides `terminal`, `git` provides `worktrees`, `kanban` requires both). Disabling a plugin on a project warns about the plugins that require it. (Not *services*: a service is an HTTP service shared between pods, see the [glossary](../../GLOSSARY.md).)
 
-Coupling measured on the front end (imports, 2026-10-16): Docker, database, Git and Console depend on the core (`ui/`, `pod/rpc`, `i18n`, `keys`, `state/project`) plus `console/consoles`, `llm/previews` or `editor/doc` only; the kanban and above all the assistant (`llm/`, which imports kanban, docker, doodle, console, editor, questions…) are the hubs.
+As long as Console and Git stay in the core, `terminal` and `worktrees` are provided by the core itself, so a plugin can already require them.
 
-## Migration order (if decided)
+The assistant becomes a **consumer**: today `assistant/defs.go`, `assistant_tools.go` and `mcp_ide.go` know Docker, the consoles, the previews; tomorrow each plugin declares its tools and the assistant offers those of the plugins enabled on the project (a shorter prompt where Docker is off).
+
+Coupling measured on the front end (imports, 2026-10-16): Docker, database, Git and Console depend on the core (`ui/`, `pod/rpc`, `i18n`, `keys`, `state/project`) plus `console/consoles`, `llm/previews` or `editor/doc` only; the kanban and above all the assistant (`llm/`, which imports kanban, docker, doodle, console, editor, questions…) are the hubs. The Docker tool also holds the Port forwards and Previews tabs: they stay in the core in phase 1, shown as tabs the Docker plugin hosts.
+
+## Decisions
+
+Taken on 2026-10-19:
+
+1. **Trust**: plugins are trusted code, with their permissions declared in the manifest and shown at install (the VS Code model). Phase 1 has only built-in plugins, so nothing is installed yet. A sandboxed iframe for third-party views stays possible later, behind the same `api`.
+2. **SSH projects**: the backend of a plugin runs on the pod and reaches the project through `runtime` (local or SSH), as the assistant tools do. A `runsOn: "target"` may come later.
+3. **Install**: not in phase 1. A plugin is enabled or disabled per project in `.ide/plugins.json`; every built-in plugin is enabled by default.
+4. **Developing a plugin**: not in phase 1. Loading from a folder with hot reload comes once the API is stable.
+5. **How far**: step by step. Phase 1 is the core, Docker, then the database. Moving Console, Git, the editor, the kanban and the assistant is decided after Docker has proved the API.
+
+## Migration order
 
 One ticket per step, the e2e suites of the moved tool passing before each merge:
 
-1. Core: manifest, registry, services, open zones and tab kinds, per-project enabling.
-2. Docker: the least coupled, it proves the API.
-3. Database, then Console (the `terminal` service).
-4. Git (the `worktrees` service), then the editor and rendered Markdown as views of a document.
+1. Core: manifest, registry, capabilities, open zones and tab kinds, assistant tools from the plugins, per-project enabling. *(phase 1)*
+2. Docker: the least coupled, it proves the API. *(phase 1)*
+3. Database *(phase 1)*, then Console (the `terminal` capability).
+4. Git (the `worktrees` capability), then the editor and rendered Markdown as views of a buffer.
 5. Kanban, then the assistant last.
 
 `apiVersion: 1` is frozen only after Git: until then every plugin is internal and the API may change with each step.
 
 ## Open questions
 
-1. **Trust and sandbox.** Behind the relay, the page holds the device key and signs updates and power requests; a module loaded in the page has the same rights. Trusted plugins with declared permissions shown at install (the VS Code model), or views in a sandboxed iframe of another origin talking by `postMessage` (safer, heavier, and the single origin of the relay complicates it)?
-2. **SSH projects.** Does the backend of a plugin run on the pod (through `runtime`, like the assistant tools) or on the remote host (`runsOn: "target"`)?
-3. **Install.** A git URL and a tag, `web/` shipped built? Enabled per project in `.ide/`? The list of installed plugins synced between pods?
-4. **Developing a plugin.** Load from a folder with hot reload, a `make plugin` scaffold?
-5. **How far.** Is the "everything is a plugin" core worth the refactor, or do the editor, Git, Console, the assistant and the kanban stay in the core with only the leaf tools (Docker, database, Markdown render) as plugins?
+- External plugins: the install source (a git URL and a tag, `web/` shipped built), whether the list of installed plugins syncs between pods.
+- Views of an external plugin: same origin with the device key in reach, or a sandboxed iframe (the single origin of the relay complicates it).

@@ -272,6 +272,20 @@ A desk bound to an agent's session or a development conversation and its worktre
 **Activity** ([desks](docs/design/desks.md))
 The list of the desks of every project with what runs in them, and the way to end them.
 
+**Plugin** ([plugins](docs/design/plugins.md))
+A part of the IDE enabled per project, declared by a manifest: tools, tab views, assistant tools, commands, and an optional backend in the pod.
+_Avoid_: extension, add-on, module
+
+**Built-in plugin** ([plugins](docs/design/plugins.md))
+A plugin that ships compiled into the IDE, with the same manifest and API as an external one.
+
+**Contribution** ([plugins](docs/design/plugins.md))
+What a plugin adds at one contribution point of the IDE: a tool, a tab view, an assistant tool, a command, a settings section…
+
+**Capability** ([plugins](docs/design/plugins.md))
+A named feature a plugin or the core provides and other plugins require (`terminal`, `worktrees`).
+_Avoid_: service (an HTTP service shared between pods), dependency (a ticket waiting for another)
+
 ## Conflicts
 
 None open: every conflict found while writing this glossary was fixed (#96-#100). A naming problem found later goes here, then to a ticket.

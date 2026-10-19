@@ -34,7 +34,8 @@ How the IDE is built and why, kept up to date with the code.
 - [Relay](design/relay.md): identity, multi-pod, transport, the hosted service.
 - [Load](design/load.md): what a relay costs per session.
 - [Doodle](design/doodle.md): drawings attached for the assistant.
-- Drafts under discussion: [Desks](design/desks.md), [Plugins](design/plugins.md).
+- [Plugins](design/plugins.md): the plugin system, phase 1 decided.
+- Drafts under discussion: [Desks](design/desks.md).
 
 ## Code
 
