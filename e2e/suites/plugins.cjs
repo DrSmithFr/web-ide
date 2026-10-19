@@ -5,6 +5,7 @@
 // Database explorer (#115) too: its tabs are views of it, a console keeps its text in its tab,
 // and a desk saved before (sql tabs and sqlText) is migrated. Exec (#116) provides terminal:
 // off, the Console goes and Docker with it (it needs terminal); on again, the terminals are back.
+// Search (#117) gives Search Everywhere its Text tab: off, the tab and the Search tool go.
 const fs = require('fs')
 const path = require('path')
 const { execSync } = require('child_process')
@@ -191,4 +192,28 @@ run(async ({ page }) => {
   if (!(await page.isVisible('.xterm-rows'))) await page.click(consoleIcon)
   await page.waitForFunction(() => document.querySelector('.xterm-rows')?.textContent.includes('plugin-42'))
   assert(await page.$(docker), 'Docker back with Exec')
+
+  // Search: its tool in the left zone, before Git; the Text tab of Search Everywhere is its.
+  const seTabs = async () => {
+    await palette('x')
+    await page.waitForSelector('.pick.se')
+    const list = await page.$$eval('.se-tab', (l) => l.map((b) => b.textContent))
+    await page.keyboard.press('Escape')
+    return list
+  }
+  const left = await page.$$eval('.rail-group[data-zone=left] .rail-btn', (l) => l.map((b) => b.dataset.id))
+  assert(left.indexOf('search') === left.indexOf('git') - 1, 'Search before Git: ' + left)
+  assert(JSON.stringify(await seTabs()) === JSON.stringify(['All', 'Files', 'Symbols', 'Actions', 'Text']), 'the tabs of Search Everywhere')
+  await setPlugin('search', false)
+  await page.waitForSelector('.rail-btn[data-id=search]', { state: 'detached' })
+  assert(JSON.stringify(await seTabs()) === JSON.stringify(['All', 'Files', 'Symbols', 'Actions']), 'no Text tab with Search off')
+  await palette('notes')
+  await page.keyboard.press('Shift+Tab') // Symbols
+  await page.keyboard.press('Shift+Tab') // Files
+  await page.waitForSelector('.se-tab.active:has-text("Files")')
+  await page.waitForSelector('.pick-item:has-text("notes.txt")')
+  await page.keyboard.press('Escape')
+  await setPlugin('search', true)
+  await page.waitForSelector('.rail-btn[data-id=search]')
+  assert((await seTabs()).includes('Text'), 'the Text tab is back')
 })

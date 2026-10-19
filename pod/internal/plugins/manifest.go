@@ -53,6 +53,8 @@ type Tool struct {
 	Icon  string `json:"icon"`
 	// Zone is the default tool zone: left, bottomLeft, bottomRight or right.
 	Zone string `json:"zone"`
+	// Before is the tool it comes before in its zone by default (else it comes last).
+	Before string `json:"before,omitempty"`
 }
 
 // TabView is a kind of tab, opened as plugin:<plugin>/<id>.

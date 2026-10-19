@@ -1,9 +1,6 @@
-// Global search in the project (run by the pod: local walk, or grep on the SSH host).
+// Search tool: the text of the project (run by the pod: local walk, or grep on the SSH host).
 import { createEffect, createSignal, For, on, onCleanup, Show } from 'solid-js'
-import { request } from '../pod/rpc'
-import { openFile, relPath } from '../state/project'
-import { registerAction } from '../keys/bindings'
-import { t } from '../i18n'
+import { api, t } from './plugin'
 
 interface Match {
   path: string
@@ -49,7 +46,7 @@ export function GlobalSearch() {
       ctrl = c
       setBusy(true)
       try {
-        const r = await request('search.grep', opts, c.signal)
+        const r = await api.rpc('grep', opts, c.signal)
         setResults(r.matches)
         const files = new Set(r.matches.map((m: Match) => m.path)).size
         setInfo(t('{n} result(s) in {files} file(s)', { n: `${r.matches.length}${r.truncated ? '+' : ''}`, files }))
@@ -72,7 +69,7 @@ export function GlobalSearch() {
     return [...m.entries()]
   }
 
-  const off = registerAction('search.global', () => {
+  const off = api.keys.register('search.global', () => {
     focusGlobalSearch()
     return false
   })
@@ -126,7 +123,7 @@ export function GlobalSearch() {
                 <span class="tree-twist" classList={{ open: !collapsed().has(path) }}>
                   ›
                 </span>
-                <span class="search-path">{relPath(path)}</span>
+                <span class="search-path">{api.project.relPath(path)}</span>
                 <span class="badge">{list.length}</span>
               </div>
               <Show when={!collapsed().has(path)}>
@@ -134,7 +131,7 @@ export function GlobalSearch() {
                   {(m) => (
                     <div
                       class="search-hit"
-                      onClick={() => openFile({ path: m.path, line: m.line - 1, col: m.col })}
+                      onClick={() => api.openFile({ path: m.path, line: m.line - 1, col: m.col })}
                     >
                       <span class="search-line">{m.line}</span>
                       <span class="search-text">

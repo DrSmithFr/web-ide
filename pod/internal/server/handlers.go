@@ -488,20 +488,6 @@ func (s *Server) registerProject() {
 		return readImage(rt.FS, path)
 	}))
 
-	s.handle("search.grep", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
-		o, err := bind[search.Options](p)
-		if err != nil {
-			return nil, err
-		}
-		if o.Query == "" {
-			return search.Result{Matches: []search.Match{}}, nil
-		}
-		o.Exclude = rt.Excluded()
-		if rt.Local {
-			return search.Local(ctx, rt.Root, o)
-		}
-		return search.Remote(ctx, rt.Runner, rt.Root, o)
-	}))
 	s.handle("search.files", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
 		files, err := rt.Files(ctx)
 		return search.WithoutExcluded(files, rt.Excluded()), err

@@ -5,7 +5,7 @@
   "apiVersion": 0,
   "permissions": ["net"],
   "contributes": {
-    "tools": [{ "id": "database", "label": "Database explorer", "icon": "database", "zone": "right" }],
+    "tools": [{ "id": "database", "label": "Database explorer", "icon": "database", "zone": "right", "before": "assistant" }],
     "tabViews": [
       { "id": "sql", "label": "Console" },
       { "id": "table", "label": "Table" }

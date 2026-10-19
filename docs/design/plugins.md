@@ -83,6 +83,13 @@ Exec (#116) is the first plugin the rest of the IDE *uses*: a dozen parts of the
 - The console shown and the order of the console tabs moved from `session.bottom` to the desk state of the plugin (`plugins.exec`), migrated when read. The Problems tool left the console module for the core (`tools/problems.tsx`) until Languages.
 - The setup command of the old kanban settings moves to the saved commands when the project opens.
 
+## What Search added to the API
+
+- **Search providers** (`searchProviders` contribution, `web/src/popups/searchProviders.ts`): Search Everywhere is a shell with a tab per provider (id, label, placeholder, order, `inAll`: its share of All, `delay`, `max`, `minChars`, `find`). The core gives the files, the symbols and the actions; Search gives the text. A tab whose provider is off falls back to All.
+- **Tool placement**: a tool of the manifest names the tool it comes `before` in its zone by default (Search before Git, the Database explorer before the Assistant), so that a plugin keeps the place the tool had in the core.
+- `api.rpc` takes an `AbortSignal`; `api.project.relPath`.
+- On the pod, the plugin holds `search.grep`; `search.files` stays core (the explorer, Search Everywhere, the assistant's `find_files`), and so does the assistant's `search_text`, which moves with AI.
+
 ## Decisions
 
 Taken on 2026-10-19:
@@ -97,7 +104,7 @@ Taken on 2026-10-19:
 
 Decided on 2026-10-19, once Docker and the database had proved the API (decision 5 answered: yes). The core keeps the window manager: connection, layout, desks, tabs, settings, keymap, buffers and their sync, conflict resolution, help, the plugin registry; plus **shells** that plugins feed:
 
-- **Search Everywhere** is a shell; each plugin contributes a **search provider** (files, symbols, actions, text, tickets…), a new contribution point.
+- **Search Everywhere** is a shell; each plugin contributes a **search provider** (files, symbols, actions, text, tickets…), a new contribution point (#117).
 - **The diff view** is generic (two texts, or a change); Git, the kanban and the assistant give it their content.
 - **Questions** stays in the core: the assistant, the agents and `ask_user` of the MCP all use it.
 
@@ -106,7 +113,7 @@ The plugins, grouped by domain (one plugin, several tools and views), in their o
 | Plugin | Tools and views | Provides / requires |
 |---|---|---|
 | Exec | Console tool (terminals, tasks), project commands (#116, done) | provides `terminal`, `commands` |
-| Search | Search tool (text, regex), the text provider of Search Everywhere | |
+| Search | Search tool (text, regex), the text provider of Search Everywhere (#117, done) | |
 | Git | Git tool, git content of the diff view | provides `worktrees` |
 | Previews | Port forwards and previews tool | requires `terminal` |
 | Languages | language servers, Problems, Structure, `lsp_*` tools, symbol provider | provides `symbols` |

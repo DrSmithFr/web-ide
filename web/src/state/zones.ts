@@ -8,21 +8,28 @@ export type Zone = 'left' | 'bottomLeft' | 'bottomRight' | 'right'
 export const zones: Zone[] = ['left', 'bottomLeft', 'bottomRight', 'right']
 
 const corePlacement: Record<Zone, string[]> = {
-  left: ['explorer', 'search', 'git', 'kanban'],
+  left: ['explorer', 'git', 'kanban'],
   bottomLeft: [],
   bottomRight: ['problems', 'forwards'],
   right: ['assistant', 'agents', 'questions', 'structure', 'conflicts', 'info'],
 }
 
 // The tools of every plugin the pod knows, enabled or not (project.open).
-let pluginZones: { id: string; zone: Zone }[] = []
-export function setPluginZones(plugins: { manifest: { contributes: { tools?: { id: string; zone: Zone }[] } } }[] | undefined) {
+let pluginZones: { id: string; zone: Zone; before?: string }[] = []
+export function setPluginZones(plugins: { manifest: { contributes: { tools?: { id: string; zone: Zone; before?: string }[] } } }[] | undefined) {
   pluginZones = (plugins ?? []).flatMap((p) => p.manifest.contributes.tools ?? []).filter((t) => zones.includes(t.zone))
 }
 
 export function defaultPlacement(): Record<Zone, string[]> {
   const out = {} as Record<Zone, string[]>
-  for (const z of zones) out[z] = [...corePlacement[z], ...pluginZones.filter((t) => t.zone === z).map((t) => t.id)]
+  for (const z of zones) {
+    const list = [...corePlacement[z]]
+    for (const t of pluginZones.filter((x) => x.zone === z)) {
+      const i = t.before ? list.indexOf(t.before) : -1
+      list.splice(i < 0 ? list.length : i, 0, t.id)
+    }
+    out[z] = list
+  }
   return out
 }
 
