@@ -13,7 +13,6 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/desks"
 	"github.com/DrSmithFr/web-ide/pod/internal/fsx"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
-	"github.com/DrSmithFr/web-ide/pod/internal/lsp"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
 	"github.com/DrSmithFr/web-ide/pod/internal/search"
@@ -507,38 +506,4 @@ func (s *Server) registerProject() {
 		return m, err
 	}))
 
-	s.handle("lsp.status", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
-		return rt.LSP.Status(), nil
-	}))
-	s.handle("lsp.langOf", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
-		a, err := bind[pathArg](p)
-		return lsp.LangOf(a.Path), err
-	})
-	s.handle("lsp.capabilities", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
-		a, err := bind[struct{ Lang string }](p)
-		if err != nil {
-			return nil, err
-		}
-		return rt.LSP.Capabilities(a.Lang)
-	}))
-	s.handle("lsp.request", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
-		a, err := bind[struct {
-			Lang, Method string
-			Params       json.RawMessage
-		}](p)
-		if err != nil {
-			return nil, err
-		}
-		return rt.LSP.Request(ctx, a.Lang, a.Method, a.Params)
-	}))
-	s.handle("lsp.notify", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
-		a, err := bind[struct {
-			Lang, Method string
-			Params       json.RawMessage
-		}](p)
-		if err != nil {
-			return nil, err
-		}
-		return nil, rt.LSP.Notify(a.Lang, a.Method, a.Params)
-	}))
 }

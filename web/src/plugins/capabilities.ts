@@ -3,6 +3,8 @@
 // plugins get it with capability() / api.use(), undefined while the plugin providing it is off.
 import { createMutable } from 'solid-js/store'
 import type { JSX } from 'solid-js'
+import type { Doc } from '../editor/doc'
+import type { CompletionItem, CompletionList } from '../editor/completion'
 
 /** A console of a project: a terminal or a task (one command). */
 export interface ConsoleInfo {
@@ -128,11 +130,35 @@ export interface PreviewsService {
   same(p: PreviewSpec, s: PreviewSpec): boolean
 }
 
+/** A diagnostic of a language server (LSP). */
+export interface LspDiagnostic {
+  range: { start: { line: number; character: number }; end: { line: number; character: number } }
+  severity?: number
+  message: string
+  source?: string
+  code?: string | number
+}
+
+/** language (the Languages plugin): what the editor asks the language servers. */
+export interface LanguageService {
+  /** The diagnostics of a file (reactive). */
+  diagnostics(path: string): LspDiagnostic[]
+  /** The completion of a server at a caret; null when the file has none (the editor offers its words). */
+  complete(doc: Doc, offset: number, trigger: string | null, signal: AbortSignal): Promise<CompletionList | null>
+  resolve(doc: Doc, item: CompletionItem): Promise<CompletionItem>
+  triggerCharacters(doc: Doc): Promise<string[]>
+  /** Ctrl+click: the declaration (or the usages) of the symbol at an offset. */
+  gotoDeclaration(doc: Doc, offset: number): void
+  /** Shows the Problems tool on its list. */
+  showProblems(): void
+}
+
 export interface Capabilities {
   terminal: TerminalService
   commands: CommandsService
   git: GitService
   previews: PreviewsService
+  language: LanguageService
 }
 
 // The implementations, by capability, and the plugin providing each.

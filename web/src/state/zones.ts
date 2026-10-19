@@ -10,8 +10,8 @@ export const zones: Zone[] = ['left', 'bottomLeft', 'bottomRight', 'right']
 const corePlacement: Record<Zone, string[]> = {
   left: ['explorer', 'kanban'],
   bottomLeft: [],
-  bottomRight: ['problems'],
-  right: ['assistant', 'agents', 'questions', 'structure', 'conflicts', 'info'],
+  bottomRight: [],
+  right: ['assistant', 'agents', 'questions', 'conflicts', 'info'],
 }
 
 // The tools of every plugin the pod knows, enabled or not (project.open).

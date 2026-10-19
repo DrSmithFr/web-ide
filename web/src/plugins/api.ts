@@ -3,7 +3,7 @@
 import { notifyIn, notifyOn, on, openChannel, request, requestIn, type Channel } from '../pod/rpc'
 import { fmtAgo, fmtDate, t, tn } from '../i18n'
 import { FileIcon } from '../panels/fileIcons'
-import { attached, basename, findLeaf, home, isLocal, mutate, openFile, openTab, openTextTab, project, relPath, root, session, setActivePane, type TabState } from '../state/project'
+import { activeTab, attached, basename, docsVersion, fileUri, findLeaf, getDoc, home, onBufferClose, onBufferOpen, onBufferSave, openBuffers, pathFromUri, isLocal, mutate, openFile, openTab, openTextTab, project, relPath, root, session, setActivePane, type TabState } from '../state/project'
 import { showTool } from '../state/zones'
 import { detachTab, openTile, tileMode } from '../state/tiles'
 import { phone } from '../state/mobile'
@@ -18,7 +18,11 @@ import { inTunnel } from '../pod/transport'
 import { EmptyState } from '../ui/EmptyState'
 import { Icon } from '../ui/icons'
 import { errorToast, toast } from '../ui/toast'
-import { contextMenu, Modal, pick, prompt } from '../ui/overlay'
+import { contextMenu, fuzzy, Modal, pick, prompt } from '../ui/overlay'
+import { lspLanguage, lspLanguageId } from '../editor/languages'
+import { isWordChar, wordStart } from '../editor/completion'
+import { applyToString, toOffsets } from '../editor/textEdits'
+import { activeTextEditor } from '../ui/EditorArea'
 import { copyText } from '../ui/clipboard'
 import { setCursorInfo } from '../ui/status'
 import { useEditorView } from '../ui/EditorArea'
@@ -40,6 +44,7 @@ export function makeApi(id: string) {
     rpc: <T = any>(method: string, params?: any, signal?: AbortSignal) => request<T>(full(method), params, signal),
     /** The same in a worktree attached to the window, and a notification without answer. */
     rpcIn: <T = any>(project: string | undefined, method: string, params?: any) => requestIn<T>(project, full(method), params),
+    notify: (method: string, params?: any) => notifyIn(undefined, full(method), params),
     notifyIn: (project: string | undefined, method: string, params?: any) => notifyIn(project, full(method), params),
     /** A channel of its own in the tunnel (a terminal's input and output; null on a WebSocket). */
     channel: { open: openChannel, notify: (ch: Channel | null, method: string, params?: any, project?: string) => notifyOn(ch, full(method), params, project) },
@@ -62,6 +67,9 @@ export function makeApi(id: string) {
       /** A path of the project as shown (relative to its root). */
       relPath,
       basename,
+      /** The file:// URI of a path and back (the language servers). */
+      fileUri,
+      pathFromUri,
     },
     /** Capabilities as services: the plugin's own (provide) and those of the others (use). */
     provide: <K extends keyof Capabilities>(name: K, impl: Capabilities[K]) => provide(id, name, impl),
@@ -80,8 +88,15 @@ export function makeApi(id: string) {
       },
       tabSize: () => settings.editor.tabSize,
     },
+    /** The buffers of the window: loaded, saved, forgotten (a language server follows them). */
+    buffers: { list: openBuffers, get: getDoc, version: docsVersion, onOpen: onBufferOpen, onSave: onBufferSave, onClose: onBufferClose },
+    /** The file of the active tab, if it is a file. */
+    activeFile: () => (activeTab()?.kind === 'file' ? activeTab()!.path : undefined),
     /** The files of the project, as the pod reads them (from the disk, not the buffers). */
-    files: { read: (path: string) => request<{ content?: string }>('fs.read', { path }) },
+    files: {
+      read: (path: string) => request<{ content: string; binary?: boolean; readOnly?: boolean }>('fs.read', { path }),
+      write: (path: string, content: string) => request('fs.write', { path, content }),
+    },
     /** The SSH settings of the pod (agent, keys), for a form offering an SSH tunnel. */
     ssh: { info: () => request('ssh.info') },
     /**
@@ -116,17 +131,38 @@ export function makeApi(id: string) {
       activate: setActivePane,
     },
     /** The text editor of the IDE, for a view editing a text of its own (a SQL console). */
-    editor: { Doc, View: EditorView, useView: useEditorView, setCursor: setCursorInfo },
+    editor: {
+      Doc,
+      View: EditorView,
+      useView: useEditorView,
+      setCursor: setCursorInfo,
+      /** The text editor of the active tab, with its buffer (null: none, or another editor has the focus). */
+      active: activeTextEditor,
+      /** The language server language of a path (go, typescript…), and the languageId it is announced with. */
+      serverLanguage: lspLanguage,
+      serverLanguageId: lspLanguageId,
+      /** Editor settings: indentation, trailing whitespace. */
+      settings: () => settings.editor,
+      /** Words of a buffer (a symbol at the caret), and LSP text edits as offsets. */
+      wordStart,
+      isWordChar,
+      toOffsets,
+      applyToString,
+    },
     /** The keymap: a handler of an action while the view is shown, and the shortcut of an action. */
     keys: { register: registerAction, shortcut: shortcutOf, setDynamic: setDynamicActions },
     /** The transport of the page: in the tunnel of the relay, or a WebSocket to the pod. */
     transport: { inTunnel },
-    ui: { EmptyState, Icon, FileIcon, Modal, toast, errorToast, contextMenu, prompt, pick, copyText, parseAnsi, stripAnsi, WorktreeChip, tabDrop: { dropClasses, dropIndex, moveItem, setDropAt } },
+    ui: { fuzzy, EmptyState, Icon, FileIcon, Modal, toast, errorToast, contextMenu, prompt, pick, copyText, parseAnsi, stripAnsi, WorktreeChip, tabDrop: { dropClasses, dropIndex, moveItem, setDropAt } },
   }
 }
 
 export type PluginApi = ReturnType<typeof makeApi>
-export type { MenuItem } from '../ui/overlay'
+export type { MenuItem, PickItem } from '../ui/overlay'
 export type { TabState }
+export type { Doc } from '../editor/doc'
+export type { EditorView } from '../editor/view'
+export type { CompletionItem, CompletionList } from '../editor/completion'
+export type { TextEdit } from '../editor/textEdits'
 export type { SearchHit, SearchProvider } from '../popups/searchProviders'
 export type { DiffSource } from '../ui/diffSources'

@@ -1,12 +1,9 @@
-// Tools of the right panel (besides the Database explorer and Infos): conflicts, structure
-// of the active file.
-import { createEffect, createResource, createSignal, For, on, onCleanup, Show } from 'solid-js'
-import { activeTab, conflictedDocs, docsVersion, getDoc, openFile, relPath } from '../state/project'
+// Conflicts tool: the files whose merge with the disk failed (the buffers are the core's).
+import { For } from 'solid-js'
+import { conflictedDocs, docsVersion, openFile, relPath } from '../state/project'
 import { openConflict } from '../conflict/ConflictDialog'
-import * as lspc from '../lsp/client'
 import { shortcutOf } from '../keys/bindings'
 import { t } from '../i18n'
-import { Icon } from '../ui/icons'
 import { EmptyState } from '../ui/EmptyState'
 
 export function ConflictsTool() {
@@ -33,68 +30,6 @@ export function ConflictsTool() {
             </div>
           )}
         </For>
-      </div>
-    </div>
-  )
-}
-
-export function StructureTool() {
-  const path = () => (activeTab()?.kind === 'file' ? activeTab()!.path! : '')
-  const [tick, setTick] = createSignal(0)
-  let timer: number | undefined
-  createEffect(
-    on([path, docsVersion], () => {
-      const d = path() ? getDoc(path()) : null
-      if (!d) return
-      const off = d.onChange(() => {
-        clearTimeout(timer)
-        timer = window.setTimeout(() => setTick((t) => t + 1), 1200)
-      })
-      onCleanup(off)
-    }),
-  )
-  const [symbols] = createResource(
-    () => (path() ? { p: path(), t: tick(), v: docsVersion() } : null),
-    async ({ p }) => {
-      try {
-        return { list: lspc.flatten(await lspc.documentSymbols(p)), error: '' }
-      } catch (e) {
-        return { list: [], error: (e as Error).message }
-      }
-    },
-  )
-  return (
-    <div class="panel">
-      <div class="panel-head">
-        <span class="panel-title">{t('Structure')}</span>
-        <span class="grow" />
-        <button class="icon-btn" title={t('Refresh')} onClick={() => setTick((t) => t + 1)}>
-          <Icon name="refresh" size={14} />
-        </button>
-      </div>
-      <div class="panel-body tree">
-        <Show when={path()} fallback={<EmptyState icon="outline" text={t('No active file.')} />}>
-          <Show when={symbols()?.error}>
-            <p class="muted pad small">{symbols()!.error}</p>
-          </Show>
-          <For each={symbols()?.list ?? []}>
-            {({ s, depth }) => (
-              <div
-                class="tree-row"
-                style={{ 'padding-left': `${depth * 14 + 8}px` }}
-                onClick={() => openFile({ path: path(), line: s.selectionRange.start.line, col: s.selectionRange.start.character })}
-              >
-                <span class="sym-kind" title={t(lspc.symbolKinds[s.kind]?.[0] ?? "")}>
-                  {lspc.symbolKinds[s.kind]?.[1] ?? '·'}
-                </span>
-                <span class="tree-name">{s.name}</span>
-                <Show when={s.detail}>
-                  <span class="tree-detail">{s.detail}</span>
-                </Show>
-              </div>
-            )}
-          </For>
-        </Show>
       </div>
     </div>
   )

@@ -84,12 +84,12 @@ async function focus(a: Record<string, any>, base?: string): Promise<UiResult> {
       term.show(c.id)
       return ok(`Console "${c.title}" shown.`, `console ${c.title}`)
     }
-    case 'problems':
-      mutate((s) => {
-        showTool(s, 'problems')
-        s.bottom.problemsTab = 'problems'
-      })
+    case 'problems': {
+      const lang = capability('language')
+      if (!lang) throw new Error('the language servers are off on this project (the Language servers plugin)')
+      lang.showProblems()
       return ok('Problems list shown.', t('problems'))
+    }
   }
   throw new Error('target must be file, panel, console or problems')
 }

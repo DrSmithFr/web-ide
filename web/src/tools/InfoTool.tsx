@@ -2,7 +2,7 @@
 // (target of the project, local SSH keys and hosts), language servers (extensions).
 import { createResource, For, onCleanup, Show } from 'solid-js'
 import { request, on as onPod, podState } from '../pod/rpc'
-import { activeTab, basename, docsVersion, getDoc, project, relPath, root, isLocal, diagnostics } from '../state/project'
+import { activeTab, basename, docsVersion, getDoc, project, relPath, root, isLocal } from '../state/project'
 import { capability } from '../plugins/capabilities'
 import { ProjectAgentStats } from '../agents/stats'
 import { Icon } from '../ui/icons'
@@ -92,7 +92,7 @@ function ActiveTabCard() {
     () => (tab()?.kind === 'file' ? tab()!.path : null),
     (p) => request('fs.stat', { path: p }).catch(() => null),
   )
-  const errors = () => (tab()?.path ? (diagnostics[tab()!.path!] ?? []).length : 0)
+  const errors = () => (tab()?.path ? (capability('language')?.diagnostics(tab()!.path!) ?? []).length : 0)
   return (
     <Show when={tab()}>
       <section class="card">

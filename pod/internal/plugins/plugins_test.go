@@ -111,7 +111,7 @@ func TestEnabledFile(t *testing.T) {
 }
 
 func TestBuiltinManifests(t *testing.T) {
-	for _, f := range []string{"hello/plugin.json", "docker/plugin.json", "database/plugin.json", "exec/plugin.json", "search/plugin.json", "git/plugin.json", "previews/plugin.json"} {
+	for _, f := range []string{"hello/plugin.json", "docker/plugin.json", "database/plugin.json", "exec/plugin.json", "search/plugin.json", "git/plugin.json", "previews/plugin.json", "languages/plugin.json"} {
 		data, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)
