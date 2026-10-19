@@ -1,17 +1,18 @@
-// Desks of the project in the menu bar (docs/design/desks.md): 1 2 3 +. A desk is a link: a click
-// switches the window, a middle click opens it in a new tab. A tab dropped on a desk moves there.
+// Desks of the project, on the left of the status bar (docs/design/desks.md): 1 2 3 +. A desk is a
+// link: a click switches the window, a middle click opens it in a new tab. A tab dropped on a desk
+// moves there. On a phone it stays in the bar of the window (pages/ProjectPage.tsx).
 import { createSignal, For, Show } from 'solid-js'
 import { podPath } from '../app/base'
 import { deskPath, navigate } from '../app/router'
 import { home, moveTabToDesk, switchDesk } from '../state/project'
 import { addDesk, desk, deskLabel, desks, removeDesk, renameDesk, type Desk } from '../state/desks'
 import { changeMode, tileMode, nextSplit, resizing, toggleSplit } from '../state/tiles'
-import { tileLauncher } from '../ui/tileLauncher'
-import { Icon } from '../ui/icons'
-import { draggedTab } from '../ui/EditorArea'
+import { tileLauncher } from './tileLauncher'
+import { Icon } from './icons'
+import { draggedTab } from './EditorArea'
 import { shortcutOf } from '../keys/bindings'
-import { contextMenu, prompt } from '../ui/overlay'
-import { toast } from '../ui/toast'
+import { contextMenu, prompt } from './overlay'
+import { toast } from './toast'
 import { t } from '../i18n'
 
 export function DeskSwitcher() {
@@ -63,11 +64,11 @@ export function DeskSwitcher() {
     void moveTabToDesk(d.pane, d.tab, n).catch((err) => toast((err as Error).message, 'warn'))
   }
   return (
-    <nav class="mb-desks" aria-label={t('Desks')} data-testid="desks">
+    <nav class="sb-desks" aria-label={t('Desks')} data-testid="desks">
       <For each={desks.desks}>
         {(d) => (
           <a
-            class="mb-desk"
+            class="sb-desk"
             classList={{ active: d.n === desk(), over: over() === d.n }}
             href={podPath(path(d.n))}
             aria-current={d.n === desk() ? 'page' : undefined}
@@ -87,23 +88,24 @@ export function DeskSwitcher() {
           </a>
         )}
       </For>
-      <button class="mb-desk add" title={t('New desk')} onClick={add} data-testid="desk-add">
+      <button class="sb-desk add" title={t('New desk')} onClick={add} data-testid="desk-add">
         +
       </button>
       <Show when={tileMode()}>
         <button
-          class="mb-desk tile-add"
+          class="sb-desk tile-add"
           title={[t('Open in a new tile…'), shortcutOf('tile.launcher')].filter(Boolean).join(' · ')}
           onClick={(e) => {
             const r = e.currentTarget.getBoundingClientRect()
-            void tileLauncher({ left: r.left, top: r.bottom + 2 })
+            // The launcher opens above the bar (overlay clamps the popup to the viewport).
+            void tileLauncher({ left: r.left, top: r.top })
           }}
           data-testid="tile-launcher"
         >
           <Icon name="split" size={13} />
         </button>
         <button
-          class="mb-desk tile-split"
+          class="sb-desk tile-split"
           title={[nextSplit() === 'row' ? t('New tiles open on the right') : t('New tiles open below'), shortcutOf('tile.toggleSplit')].filter(Boolean).join(' · ')}
           onClick={toggleSplit}
           data-testid="tile-split"
@@ -112,7 +114,7 @@ export function DeskSwitcher() {
           {nextSplit() === 'row' ? '◨' : '⬓'}
         </button>
         <Show when={resizing()}>
-          <span class="mb-resizing" data-testid="tile-resizing">
+          <span class="sb-resizing" data-testid="tile-resizing">
             {t('Resize: arrows, Shift for more, Esc to end')}
           </span>
         </Show>

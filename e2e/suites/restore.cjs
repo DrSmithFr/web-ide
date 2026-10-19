@@ -22,6 +22,10 @@ run(async ({ ctx, page }) => {
   await win.goto(url.origin + url.pathname + '/editor')
   await win.waitForSelector('.detached .pane')
   await win.waitForTimeout(500)
+  assert(
+    await win.$eval('[data-testid=status-bar]', (e) => e.parentElement?.classList.contains('detached') && e.parentElement.lastElementChild === e && Math.abs(e.getBoundingClientRect().bottom - innerHeight) < 2),
+    'the detached editor window has the status bar at the bottom of its frame',
+  )
   // main window: open notes.txt and type
   await page.click('.rail-left .rail-btn[title="Explorer"]')
   await page.dblclick('.tree-row:has-text("notes.txt")')
@@ -39,5 +43,6 @@ run(async ({ ctx, page }) => {
   const tool = await ctx.newPage()
   await tool.goto(url.origin + url.pathname + '/tool/database')
   await tool.waitForSelector('.db-tool .conn-row')
+  assert(!(await tool.$('[data-testid=status-bar]')), 'a detached tool window has no status bar')
   assert(true, 'detached tool window')
 })

@@ -4,6 +4,7 @@ import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js'
 import { Dynamic } from 'solid-js/web'
 import { project, closeProject, reopenProject, panelAliases } from '../state/project'
 import { EditorArea } from '../ui/EditorArea'
+import { StatusBar } from '../ui/StatusBar'
 import { capability } from '../plugins/capabilities'
 import { refreshPlugins } from '../plugins/registry'
 import { NewTicketHost } from '../kanban/Board'
@@ -36,7 +37,7 @@ function useProject(id: string, title: (name: string) => string) {
   return { ready, error }
 }
 
-function Frame(props: { title: string; ready: boolean; error: string; children: any }) {
+function Frame(props: { title: string; ready: boolean; error: string; statusBar?: boolean; children: any }) {
   return (
     <div class="detached">
       <header class="detached-head">
@@ -49,6 +50,10 @@ function Frame(props: { title: string; ready: boolean; error: string; children: 
           {props.children}
         </Show>
       </div>
+      {/* Same window-level bar as the project window, at the bottom of the frame. */}
+      <Show when={props.statusBar}>
+        <StatusBar />
+      </Show>
     </div>
   )
 }
@@ -57,7 +62,7 @@ export function DetachedEditor(props: { id: string }) {
   const s = useProject(props.id, (n) => t('{name} · editor', { name: n }))
   useProjectActions()
   return (
-    <Frame title={`${project()?.name ?? ''} · ${t('editor')}`} ready={s.ready()} error={s.error()}>
+    <Frame title={`${project()?.name ?? ''} · ${t('editor')}`} ready={s.ready()} error={s.error()} statusBar>
       <EditorArea detached />
     </Frame>
   )

@@ -1,15 +1,20 @@
-// Status bar under the editor area: caret position (a click opens "Go to line"), then the
-// format of the active file (line separator, encoding, indentation) and its language. A
-// click on a format item opens a menu to convert the file (saved at once) or to choose its
-// indentation.
+// Status bar at the bottom of the window: the desks on the left (where asked: the window-level bar
+// of a project window), then the caret position (a click opens "Go to line"), then the format of
+// the focused file (line separator, encoding, indentation) and its language. A click on a format
+// item opens a menu to convert the file (saved at once) or to choose its indentation. The bar is
+// about the focused view only: when the focus is elsewhere (a tool zone, the bottom strip, a
+// console or a tool tab), the items of the file are hidden and the bar keeps its row.
 import { createMemo, Show } from 'solid-js'
 import { activeTab, docsVersion, getDoc, saveDoc } from '../state/project'
+import { focusPart } from '../state/focus'
+import { mobileView, phone } from '../state/mobile'
 import { settings } from '../state/settings'
 import type { Doc, FileFormat } from '../editor/doc'
 import type { Indent } from '../editor/indent'
 import { contextMenu, type MenuItem } from './overlay'
 import { cursorInfo } from './status'
 import { runAction, shortcutOf } from '../keys/bindings'
+import { DeskSwitcher } from './DeskSwitcher'
 import { t, tn } from '../i18n'
 
 const encodings: [string, string][] = [
@@ -38,16 +43,25 @@ function menuAt(e: MouseEvent, items: MenuItem[]) {
   contextMenu(new MouseEvent('contextmenu', { clientX: r.left, clientY: r.top - 4 }), items)
 }
 
-export function StatusBar() {
+export function StatusBar(props: { desks?: boolean }) {
+  // The file the bar talks about: the one shown in the pane in focus. On a phone, one view
+  // shows at a time, so the editor shown is the one in focus.
   const doc = createMemo(() => {
     docsVersion()
+    if (phone() ? mobileView() !== 'editor' : focusPart() !== 'editor') return null
     const tab = activeTab()
     return tab?.kind === 'file' && tab.path ? getDoc(tab.path) : null
   })
+  // The caret of the focused editor only (the signal itself is kept when the focus goes away).
+  const caret = createMemo(() => (doc() ? cursorInfo() : null))
   return (
     <div class="status-bar" data-testid="status-bar">
+      {/* The desks of the project, on the left of the bar (ui/DeskSwitcher.tsx). */}
+      <Show when={props.desks}>
+        <DeskSwitcher />
+      </Show>
       <span class="grow" />
-      <Show when={cursorInfo()}>
+      <Show when={caret()}>
         {(c) => (
           <button class="sb-item" data-testid="status-cursor" title={`${t('Go to line…')} (${shortcutOf('nav.gotoLine')})`} onClick={() => runAction('nav.gotoLine')}>
             {c().line}:{c().col}
@@ -102,7 +116,7 @@ export function StatusBar() {
           </>
         )}
       </Show>
-      <Show when={cursorInfo()}>{(c) => <span class="sb-item">{c().lang}</span>}</Show>
+      <Show when={caret()}>{(c) => <span class="sb-item">{c().lang}</span>}</Show>
     </div>
   )
 }

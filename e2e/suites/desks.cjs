@@ -114,6 +114,10 @@ run(async ({ ctx, page }) => {
   await page.click('.ctx-menu >> text=Grid of tiles')
   await page.waitForSelector('.workbench.grid-desk')
   assert(!(await page.$('.rail-left')) && (await page.isVisible('[data-testid=tile-launcher]')), 'a Grid desk has no rails and offers the tile launcher')
+  assert(
+    await page.$eval('[data-testid=status-bar]', (e) => e.parentElement?.classList.contains('app') && Math.abs(e.getBoundingClientRect().width - innerWidth) < 2 && Math.abs(e.getBoundingClientRect().bottom - innerHeight) < 2),
+    'on a Grid desk the status bar still spans the whole window',
+  )
 
   const panes = () => page.$$eval('.pane', (l) => l.length)
   const activeTool = () => page.evaluate(() => {
@@ -139,6 +143,7 @@ run(async ({ ctx, page }) => {
   const [conWin] = await Promise.all([ctx.waitForEvent('page'), page.click('.tile-console [data-testid=tile-detach]')])
   await conWin.waitForSelector('.detached .xterm')
   assert(new URL(conWin.url()).pathname.includes('/console/'), 'a console tile opens in its own window: ' + conWin.url())
+  assert(!(await conWin.$('[data-testid=status-bar]')), 'a detached console window has no status bar')
   await conWin.close()
   const [gitWin] = await Promise.all([ctx.waitForEvent('page'), page.click('[data-tool=git] [data-testid=tile-detach]')])
   await gitWin.waitForSelector('.detached .tool-full .panel')
@@ -230,6 +235,10 @@ run(async ({ ctx, page }) => {
   await page.click('.ctx-menu >> text=Scrolling columns')
   await page.waitForSelector('[data-testid=scroll-strip]')
   assert(!(await page.$('.rail-left')), 'a Scroll desk has no rails')
+  assert(
+    await page.$eval('[data-testid=status-bar]', (e) => Math.abs(e.getBoundingClientRect().width - innerWidth) < 2 && Math.abs(e.getBoundingClientRect().bottom - innerHeight) < 2),
+    'on a Scroll desk the status bar spans the window',
+  )
   const cols = () => page.$$eval('.scroll-col', (l) => l.length)
   const strip = () => page.$eval('[data-testid=scroll-strip]', (s) => ({ left: s.scrollLeft, width: s.clientWidth }))
   const colOf = () => page.evaluate(() => {
@@ -258,6 +267,10 @@ run(async ({ ctx, page }) => {
   await page.waitForFunction(() => document.activeElement?.classList.contains('xterm-helper-textarea') && document.querySelector('.pane.active')?.contains(document.activeElement), null, { timeout: 3000 }).catch(() => {})
   assert(await page.evaluate(() => document.activeElement?.classList.contains('xterm-helper-textarea')), 'the new terminal has the keyboard, not the buttons of its corner')
   assert(await page.isVisible('[data-testid=scroll-overview] .scroll-sight'), 'the overview strip shows when the columns overflow')
+  assert(
+    await page.$eval('[data-testid=scroll-overview]', (e) => e.getBoundingClientRect().bottom <= document.querySelector('[data-testid=status-bar]').getBoundingClientRect().top + 1),
+    'the overview strip stays just above the status bar',
+  )
   await page.screenshot({ path: OUT + '/desks-scroll.png' })
 
   // Tablet width: two columns in sight, live.
