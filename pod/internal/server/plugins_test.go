@@ -2,11 +2,13 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/DrSmithFr/web-ide/pod/internal/plugins"
 	"github.com/DrSmithFr/web-ide/pod/internal/plugins/builtin"
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
 )
@@ -19,7 +21,7 @@ func TestPlugins(t *testing.T) {
 	dir := t.TempDir()
 	id := a.call("projects.create", map[string]any{"type": "local", "path": dir})["result"].(map[string]any)["id"].(string)
 	opened := a.call("project.open", map[string]any{"id": id})["result"].(map[string]any)
-	if list := opened["plugins"].([]any); len(list) != 2 || list[1].(map[string]any)["enabled"] != true {
+	if list := opened["plugins"].([]any); len(list) != 3 || list[2].(map[string]any)["enabled"] != true {
 		t.Fatalf("plugins of project.open: %v", opened["plugins"])
 	}
 	name := filepath.Base(dir)
@@ -57,5 +59,13 @@ func TestPlugins(t *testing.T) {
 	}
 	if e := a.callRawIn("", "plugins.set", map[string]any{"id": "nope", "enabled": false})["error"]; e == nil {
 		t.Fatal("unknown plugin accepted")
+	}
+}
+
+// A coded error of a plugin reaches the page with its code and data (db_password asks the password).
+func TestPluginCodedError(t *testing.T) {
+	e := toRPCError(&plugins.CodedError{Code: "db_password", Data: map[string]string{"kind": "dbpassword"}, Err: errors.New("password needed")}, "en")
+	if e.Code != "db_password" || e.Message != "password needed" || e.Data.(map[string]string)["kind"] != "dbpassword" {
+		t.Fatalf("%+v", e)
 	}
 }

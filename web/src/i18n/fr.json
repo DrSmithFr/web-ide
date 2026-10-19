@@ -2224,5 +2224,7 @@
   "Permissions: {list}": "Permissions : {list}",
   "The plugin of this tab is disabled": "Le plugin de cet onglet est désactivé",
   "greeted": "salué",
-  "Port forwards and previews": "Redirections de port et aperçus"
+  "Port forwards and previews": "Redirections de port et aperçus",
+  "SSH passphrase": "Phrase de passe SSH",
+  "Table": "Table"
 }

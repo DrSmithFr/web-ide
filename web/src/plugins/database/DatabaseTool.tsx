@@ -1,18 +1,12 @@
 // Database explorer tool: connections > databases > tables > columns and indexes
 // (Redis: databases > typed keys with TTL). Click expands, right click opens the menu,
 // double click on a table opens the spreadsheet view.
-import { batch, createSignal, For, onMount, Show } from 'solid-js'
+import { createSignal, For, onMount, Show } from 'solid-js'
 import { createStore } from 'solid-js/store'
-import { request } from '../pod/rpc'
-import { mutate, openTab, openTextTab } from '../state/project'
-import { contextMenu } from '../ui/overlay'
-import { errorToast } from '../ui/toast'
-import { Icon } from '../ui/icons'
-import { connect, connections, connById, refreshConnections, withAuth, type ConnView, type DbNode } from './api'
+import { connect, connections, connById, refreshConnections, withAuth, type ConnView, type DbNode } from './connections'
 import { ConnectionsModal } from './ConnectionForm'
-import { t } from '../i18n'
-import { EmptyState } from '../ui/EmptyState'
-import { copyText } from '../ui/clipboard'
+import { api, contextMenu, copyText, EmptyState, errorToast, Icon, t } from './plugin'
+import { openConsole, openTable } from './views'
 
 interface Sel {
   connId: string
@@ -29,7 +23,7 @@ async function load(connId: string, n: DbNode | null) {
   const k = key(connId, n)
   setErrors(k, undefined)
   try {
-    const list = await withAuth(connId, () => request<DbNode[]>('db.children', { id: connId, node: n ?? { id: '', kind: '' } }))
+    const list = await withAuth(connId, () => api.rpc<DbNode[]>('children', { id: connId, node: n ?? { id: '', kind: '' } }))
     setChildren(k, list)
   } catch (e) {
     setErrors(k, (e as Error).message)
@@ -44,18 +38,6 @@ function toggle(connId: string, n: DbNode | null) {
   if (open && !children[k]) load(connId, n)
 }
 
-export function openConsole(connId: string, db?: string, text?: string) {
-  const c = connById(connId)
-  // In one batch, so the console starts with its text.
-  batch(() => {
-    const id = openTab({ kind: 'sql', title: `${t('Console')} · ${c?.name ?? ''}${db ? ' · ' + db : ''}`, connId, db: db ?? '' })
-    if (text) mutate((s) => (s.sqlText[id] = (s.sqlText[id] ? s.sqlText[id] + '\n' : '') + text))
-  })
-}
-
-function openTable(connId: string, n: DbNode) {
-  openTab({ kind: 'table', title: n.label, connId, db: n.db, table: n.table })
-}
 
 function quoteIdent(kind: string, name: string) {
   if (kind === 'postgres') return name.split('.').map((p) => `"${p.replace(/"/g, '""')}"`).join('.')
@@ -79,20 +61,20 @@ export function DatabaseTool() {
     load(c.id, null)
   }
   const close = async (c: ConnView) => {
-    await request('db.disconnect', { id: c.id }).catch(errorToast)
+    await api.rpc('disconnect', { id: c.id }).catch(errorToast)
     for (const k of Object.keys(expanded)) if (k.startsWith(c.id + '|')) setExpanded(k, false)
   }
   const duplicate = async (c: ConnView) => {
     const { status: _s, hasSecret: _h, ...cfg } = c
     try {
-      await request('db.save', { config: { ...cfg, id: '', name: c.name + ' (copie)' }, secret: {} })
+      await api.rpc('save', { config: { ...cfg, id: '', name: c.name + ' (copie)' }, secret: {} })
     } catch (e) {
       errorToast(e)
     }
   }
   const remove = async (c: ConnView) => {
     if (!confirm(t('Delete the connection “{name}”? The open consoles switch to disconnected mode.', { name: c.name }))) return
-    await request('db.delete', { id: c.id }).catch(errorToast)
+    await api.rpc('delete', { id: c.id }).catch(errorToast)
   }
 
   const connMenu = (e: MouseEvent, c: ConnView) =>
@@ -109,7 +91,7 @@ export function DatabaseTool() {
   const nodeMenu = (e: MouseEvent, c: ConnView, n: DbNode) => {
     const showText = async (title: string, f: () => Promise<string>) => {
       try {
-        openTextTab(title, await f(), c.kind === 'redis' ? 'redis' : 'sql')
+        api.openText(title, await f(), c.kind === 'redis' ? 'redis' : 'sql')
       } catch (err) {
         errorToast(err)
       }
@@ -124,7 +106,7 @@ export function DatabaseTool() {
       case 'view':
         return contextMenu(e, [
           { label: t('View the data'), action: () => openTable(c.id, n) },
-          { label: t('View the DDL'), action: () => showText(`DDL · ${n.label}`, () => request('db.ddl', { id: c.id, db: n.db, table: n.table })) },
+          { label: t('View the DDL'), action: () => showText(`DDL · ${n.label}`, () => api.rpc('ddl', { id: c.id, db: n.db, table: n.table })) },
           { label: t('Empty query on the table'), action: () => openConsole(c.id, n.db, `SELECT *\nFROM ${quoteIdent(c.kind, n.table!)}\nLIMIT 100;`) },
           { separator: true, label: '' },
           { label: t('Copy the name'), action: () => copyText(n.table!) },
@@ -137,7 +119,7 @@ export function DatabaseTool() {
         ])
       case 'index':
         return contextMenu(e, [
-          { label: t('View the definition'), action: () => showText(`Index · ${n.label}`, () => request('db.indexDef', { id: c.id, db: n.db, table: n.table, index: n.label })) },
+          { label: t('View the definition'), action: () => showText(`Index · ${n.label}`, () => api.rpc('indexDef', { id: c.id, db: n.db, table: n.table, index: n.label })) },
           { label: t('Copy the name'), action: () => copyText(n.label) },
         ])
       case 'key':

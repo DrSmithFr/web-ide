@@ -1,13 +1,11 @@
 // Spreadsheet view of a table (or of a Redis key): paginated, no query to write. Same
 // connection as the consoles; the pod shares the result cache between them.
 import { createEffect, createSignal, on, Show } from 'solid-js'
-import { request } from '../pod/rpc'
-import { openTab, type TabState } from '../state/project'
-import { Icon } from '../ui/icons'
+import type { TabState } from '../api'
 import { ResultGrid } from './ResultGrid'
-import { connById, connect, withAuth, type Result } from './api'
-import { errorToast } from '../ui/toast'
-import { t } from '../i18n'
+import { connById, connect, withAuth, type Result } from './connections'
+import { api, errorToast, Icon, t, viewState } from './plugin'
+import { openConsole } from './views'
 
 export function TableView(props: { tab: TabState; paneId: string }) {
   const tab = props.tab
@@ -16,14 +14,15 @@ export function TableView(props: { tab: TabState; paneId: string }) {
   const [result, setResult] = createSignal<Result | null>(null)
   const [error, setError] = createSignal('')
   const [busy, setBusy] = createSignal(false)
-  const conn = () => connById(tab.connId)
+  const st = viewState(tab)
+  const conn = () => connById(st.connId)
 
   const load = async (refresh = false) => {
     setBusy(true)
     setError('')
     try {
-      const r = await withAuth(tab.connId!, () =>
-        request<Result>('db.page', { id: tab.connId, db: tab.db, table: tab.table, offset: offset(), limit: limit(), refresh }),
+      const r = await withAuth(st.connId, () =>
+        api.rpc<Result>('page', { id: st.connId, db: st.db, table: st.table, offset: offset(), limit: limit(), refresh }),
       )
       setResult(r)
     } catch (e) {
@@ -69,11 +68,11 @@ export function TableView(props: { tab: TabState; paneId: string }) {
         </button>
         <span class="grow" />
         <span class="muted small">
-          {conn()?.name} · {tab.db} · {tab.table}
+          {conn()?.name} · {st.db} · {st.table}
         </span>
         <button
           class="btn small"
-          onClick={() => openTab({ kind: 'sql', title: `${t('Console')} · ${conn()?.name ?? ''}`, connId: tab.connId, db: tab.db })}
+          onClick={() => openConsole(st.connId, st.db)}
         >
           {t('Console')}
         </button>
@@ -82,7 +81,7 @@ export function TableView(props: { tab: TabState; paneId: string }) {
         <div class="sql-error">
           <pre>{error()}</pre>
           <Show when={conn()?.status.state === 'closed'}>
-            <button class="btn small" onClick={() => connect(tab.connId!).then(() => load(true)).catch(errorToast)}>
+            <button class="btn small" onClick={() => connect(st.connId).then(() => load(true)).catch(errorToast)}>
               {t('Reopen the connection')}
             </button>
           </Show>

@@ -22,8 +22,6 @@ import { openConflict } from '../conflict/ConflictDialog'
 import { request } from '../pod/rpc'
 import * as lspc from '../lsp/client'
 import { toast } from './toast'
-import { SqlConsole } from '../db/SqlConsole'
-import { TableView } from '../db/TableView'
 import { setCursorInfo } from './status'
 import { StatusBar } from './StatusBar'
 import { useCompletion } from './Completion'
@@ -328,12 +326,6 @@ function Pane(props: { id: string }) {
             <Switch>
               <Match when={tab.kind === 'file'}>
                 <FileEditor tab={tab} paneId={props.id} />
-              </Match>
-              <Match when={tab.kind === 'sql'}>
-                <SqlConsole tab={tab} paneId={props.id} />
-              </Match>
-              <Match when={tab.kind === 'table'}>
-                <TableView tab={tab} paneId={props.id} />
               </Match>
               <Match when={tab.kind === 'text'}>
                 <TextViewer tab={tab} paneId={props.id} />

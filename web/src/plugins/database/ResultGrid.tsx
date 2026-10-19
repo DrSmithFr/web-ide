@@ -1,7 +1,6 @@
 import { createSignal, For, Show } from 'solid-js'
-import type { Result } from './api'
-import { t } from '../i18n'
-import { copyText } from '../ui/clipboard'
+import type { Result } from './connections'
+import { copyText, t } from './plugin'
 
 function cell(v: unknown) {
   if (v === null || v === undefined) return null

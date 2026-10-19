@@ -25,6 +25,10 @@ export interface ActionDef {
   detail?: string
   /** Runs the action when no handler is registered (dynamic actions). */
   run?: () => void
+  /** Default shortcuts outside the presets (actions of the plugins). */
+  keys?: string[]
+  /** Former id of the action: its shortcuts, set by the user or in the presets, still apply. */
+  replaces?: string
 }
 
 export const actions: ActionDef[] = [
@@ -103,7 +107,6 @@ export const actions: ActionDef[] = [
   { id: 'tool.questions', label: 'Questions', category: 'Tools', inTerminal: true },
   { id: 'assistant.doodle', label: 'New doodle', category: 'Tools', inTerminal: true },
   { id: 'assistant.fullComposer', label: 'Message box in full screen', category: 'Tools' },
-  { id: 'tool.database', label: 'Database explorer', category: 'Tools', inTerminal: true },
   { id: 'tool.structure', label: 'Structure', category: 'Tools', inTerminal: true },
   { id: 'tool.problems', label: 'Problems', category: 'Tools', inTerminal: true },
   { id: 'tool.forwards', label: 'Port forwards and previews', category: 'Tools', inTerminal: true },
@@ -119,7 +122,6 @@ export const actions: ActionDef[] = [
   { id: 'palette.open', label: 'Command palette', category: 'General', inTerminal: true },
   { id: 'menu.open', label: 'Open the menu bar', category: 'General', inTerminal: true },
   { id: 'console.new', label: 'New terminal', category: 'Consoles', inTerminal: true },
-  { id: 'sql.execute', label: 'Run the active statement', category: 'Database' },
   { id: 'tile.launcher', label: 'Open in a new tile…', category: 'Desks', inTerminal: true },
   { id: 'tile.toggleSplit', label: 'New tiles: right / below', category: 'Desks', inTerminal: true },
   { id: 'tile.resize', label: 'Resize the tile (arrows, Esc)', category: 'Desks', inTerminal: true },
@@ -203,7 +205,11 @@ export const effectiveBindings = createRoot(() =>
   createMemo(() => {
     const base = presets[activeLayout()].bindings
     const out: Record<string, string[]> = {}
-    for (const a of allActions()) out[a.id] = settings.keyboard.overrides[a.id] ?? base[a.id] ?? []
+    const { overrides } = settings.keyboard
+    for (const a of allActions()) {
+      const old = a.replaces
+      out[a.id] = overrides[a.id] ?? (old && overrides[old]) ?? base[a.id] ?? (old && base[old]) ?? a.keys ?? []
+    }
     return out
   }),
 )

@@ -47,7 +47,9 @@ func (h pluginHost) Handle(method string, f plugins.Handler) {
 		if !h.s.pluginOn(rt, id) {
 			return nil, i18n.Errorf("the %s plugin is disabled on this project", h.m.Name)
 		}
-		return f(ctx, plugins.Call{Runtime: rt, Params: p, Lang: c.language(), Window: clientWindow{c}})
+		emit := h.s.emitter(c.project)
+		return f(ctx, plugins.Call{Runtime: rt, Params: p, Lang: c.language(), Window: clientWindow{c},
+			Emit: func(event string, data any) { emit(event, data, "") }})
 	}))
 }
 

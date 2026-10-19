@@ -1,6 +1,6 @@
 # Plugins
 
-Status: **phase 1 decided** (2026-10-19), milestone *Plugins, phase 1*: the core of the plugin system (#113), then Docker (#114) and the database (#115) moved onto it, all built-in, one lineage. The core is in place (#113) and Docker is a plugin (#114); the database still sits in the core until #115 moves it. Whether Git, the editor, the kanban and the assistant become plugins too is decided after Docker (see [Decisions](#decisions)). The direction was explored on 2026-10-16.
+Status: **phase 1 decided** (2026-10-19), milestone *Plugins, phase 1*: the core of the plugin system (#113), then Docker (#114) and the database (#115) moved onto it, all built-in, one lineage. The core is in place (#113), and Docker (#114) and the Database explorer (#115) are plugins: phase 1 is done. Whether Git, the editor, the kanban and the assistant become plugins too is decided after Docker (see [Decisions](#decisions)). The direction was explored on 2026-10-16.
 
 ## Vision
 
@@ -64,6 +64,13 @@ Moving Docker (#114) found what the API of #113 lacked; each gap was added to th
 - **A plain summary** of a tool result (`Result.Summary`, raw: a text to translate or a plain one).
 - On the page: the plugin's **state in the desk** (`api.desk(defaults)`, saved under `plugins.<id>` of the desk; the former `docker` key is moved there), the **project** (`isLocal`), the **terminal** capability (`terminal.open`), menus, prompt and ANSI colors in `ui`.
 
+## What the database added to the API
+
+- **Events to every window of the project** (`Call.Emit`: `db.changed`, `db.consoleState`).
+- **Coded errors** (`plugins.CodedError{Code, Data}`): `db_password` reaches the page as before, which asks the password and tries again; the core no longer knows the error of the database.
+- **Tab views with their state**: `plugin:database/sql` and `plugin:database/table`, their connection, database, table and the text of a console in `tab.state` (`api.setViewState`), so the state goes with the tab when it splits or moves to another desk. A desk saved before (kinds `sql` / `table`, `sqlText`) is migrated when read.
+- On the page: the **editor** (`api.editor`: `Doc`, the view of a tab, the cursor of the status bar), the **keymap** (`api.keys`; a command of the manifest has default `keys` and `replaces`, the former id whose shortcuts still apply: `sql.execute` is now `database.execute`), the **panes** (`isActive`, `activate`), `openText`, `Modal`, `pick`, `copyText`, `tn`, `fmtDate`, `ssh.info`, and the `opened` contribution (called when the project opens, after a reconnection, or when the plugin is enabled again).
+
 ## Decisions
 
 Taken on 2026-10-19:
@@ -80,7 +87,7 @@ One ticket per step, the e2e suites of the moved tool passing before each merge:
 
 1. Core: manifest, registry, capabilities, open zones and tab kinds, assistant tools from the plugins, per-project enabling. *(phase 1, #113, done; proved by the test plugin `hello`)*
 2. Docker: the least coupled, it proves the API. *(phase 1, #114, done)*
-3. Database *(phase 1)*, then Console (the `terminal` capability).
+3. Database *(phase 1, #115, done)*, then Console (the `terminal` capability).
 4. Git (the `worktrees` capability), then the editor and rendered Markdown as views of a buffer.
 5. Kanban, then the assistant last.
 

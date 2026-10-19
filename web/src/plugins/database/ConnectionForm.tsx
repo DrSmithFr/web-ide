@@ -2,11 +2,8 @@
 // SSH port forward), with a Test button. Secrets go to the pod, never into .ide.
 import { createResource, createSignal, For, Show } from 'solid-js'
 import { createStore, unwrap } from 'solid-js/store'
-import { request } from '../pod/rpc'
-import { Modal } from '../ui/overlay'
-import { errorToast, toast } from '../ui/toast'
-import { connections, type ConnConfig, type Secret } from './api'
-import { t } from '../i18n'
+import { connections, type ConnConfig, type Secret } from './connections'
+import { api, errorToast, Modal, t, toast } from './plugin'
 
 const blank = (kind: ConnConfig['kind'] = 'postgres'): ConnConfig => ({
   id: '',
@@ -30,7 +27,7 @@ export function ConnectionsModal(props: { initial?: string | 'new'; onClose: () 
   const [secret, setSecret] = createStore<Secret>({})
   const [test, setTest] = createSignal<{ ok: boolean; text: string } | null>(null)
   const [busy, setBusy] = createSignal(false)
-  const [sshInfo] = createResource(() => request('ssh.info'))
+  const [sshInfo] = createResource(() => api.ssh.info())
 
   function withDefaults(c: ConnConfig): ConnConfig {
     const b = blank(c.kind)
@@ -59,7 +56,7 @@ export function ConnectionsModal(props: { initial?: string | 'new'; onClose: () 
     setBusy(true)
     setTest(null)
     try {
-      setTest({ ok: true, text: await request('db.test', payload()) })
+      setTest({ ok: true, text: await api.rpc('test', payload()) })
     } catch (e) {
       setTest({ ok: false, text: (e as Error).message })
     } finally {
@@ -68,7 +65,7 @@ export function ConnectionsModal(props: { initial?: string | 'new'; onClose: () 
   }
   const save = async () => {
     try {
-      const v = await request('db.save', payload())
+      const v = await api.rpc('save', payload())
       setSelected(v.id)
       setForm('id', v.id)
       toast(t('Connection “{name}” saved', { name: v.name }), 'ok')
@@ -83,7 +80,7 @@ export function ConnectionsModal(props: { initial?: string | 'new'; onClose: () 
   const remove = async () => {
     if (!form.id || !confirm(t('Delete the connection “{name}”?', { name: form.name }))) return
     try {
-      await request('db.delete', { id: form.id })
+      await api.rpc('delete', { id: form.id })
       fresh()
     } catch (e) {
       errorToast(e)

@@ -1,10 +1,7 @@
 // Database explorer state: connections of the project (stored in .ide/connections.json,
 // secrets kept by the pod) and helpers asking for passwords when the pod needs them.
 import { createSignal } from 'solid-js'
-import { on, request, RpcError } from '../pod/rpc'
-import { home } from '../state/project'
-import { prompt } from '../ui/overlay'
-import { t } from '../i18n'
+import { api, prompt, t } from './plugin'
 
 export interface SSHForward {
   enabled: boolean
@@ -78,12 +75,15 @@ export { connections }
 
 export async function refreshConnections() {
   try {
-    setConnections(await request('db.list'))
+    setConnections(await api.rpc('list'))
   } catch {
     /* no project */
   }
 }
-on('db.changed', (list: ConnView[], from) => (!from || from === home()?.id) && setConnections(list))
+/** Listens to the changes of the connections, pushed by the pod to every window of the project. */
+export function watchConnections() {
+  api.on('db.changed', (list: ConnView[], from?: string) => (!from || from === api.project.id()) && setConnections(list))
+}
 
 export function connById(id?: string) {
   return connections().find((c) => c.id === id)
@@ -95,16 +95,17 @@ export async function withAuth<T>(connId: string, f: () => Promise<T>): Promise<
     try {
       return await f()
     } catch (e) {
-      if (!(e instanceof RpcError) || attempt > 2) throw e
+      const err = e as { code?: string; message: string; data?: { kind?: string } }
+      if (!err.code || attempt > 2) throw e
       let secret: Secret | null = null
-      if (e.code === 'db_password') {
-        const pw = await prompt({ title: t('Password'), label: e.message, password: true })
+      if (err.code === 'db_password') {
+        const pw = await prompt({ title: t('Password'), label: err.message, password: true })
         if (pw === null) throw e
         secret = { password: pw }
-      } else if (e.code === 'auth_required') {
-        const pw = await prompt({ title: e.data?.kind === 'passphrase' ? 'Phrase de passe SSH' : t('SSH password'), label: e.message, password: true })
+      } else if (err.code === 'auth_required') {
+        const pw = await prompt({ title: err.data?.kind === 'passphrase' ? t('SSH passphrase') : t('SSH password'), label: err.message, password: true })
         if (pw === null) throw e
-        secret = e.data?.kind === 'passphrase' ? { sshPassphrase: pw } : { sshPassword: pw }
+        secret = err.data?.kind === 'passphrase' ? { sshPassphrase: pw } : { sshPassword: pw }
       } else throw e
       await connectWith(connId, secret)
     }
@@ -113,15 +114,16 @@ export async function withAuth<T>(connId: string, f: () => Promise<T>): Promise<
 
 async function connectWith(id: string, secret: Secret) {
   try {
-    await request('db.connect', { id, secret })
+    await api.rpc('connect', { id, secret })
   } catch (e) {
-    if (e instanceof RpcError && (e.code === 'db_password' || e.code === 'auth_required')) return
+    const code = (e as { code?: string }).code
+    if (code === 'db_password' || code === 'auth_required') return
     throw e
   }
 }
 
 export function connect(id: string) {
-  return withAuth(id, () => request('db.connect', { id, secret: {} }))
+  return withAuth(id, () => api.rpc('connect', { id, secret: {} }))
 }
 
 export function queryLanguage(c?: ConnView) {

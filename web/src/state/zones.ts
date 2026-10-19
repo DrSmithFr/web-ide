@@ -11,7 +11,7 @@ const corePlacement: Record<Zone, string[]> = {
   left: ['explorer', 'search', 'git', 'kanban'],
   bottomLeft: ['console'],
   bottomRight: ['problems', 'forwards'],
-  right: ['database', 'assistant', 'agents', 'questions', 'structure', 'conflicts', 'info'],
+  right: ['assistant', 'agents', 'questions', 'structure', 'conflicts', 'info'],
 }
 
 // The tools of every plugin the pod knows, enabled or not (project.open).

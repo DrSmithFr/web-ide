@@ -50,11 +50,16 @@ type TabView struct {
 	Label string `json:"label"`
 }
 
-// Command is an action of the keymap, Search Everywhere and the menus.
+// Command is an action of the keymap, Search Everywhere and the menus, named <plugin>.<id>.
 type Command struct {
 	ID       string `json:"id"`
 	Label    string `json:"label"`
 	Category string `json:"category,omitempty"`
+	// Keys are its default shortcuts (physical keys: Ctrl+Enter, Alt+KeyD…).
+	Keys []string `json:"keys,omitempty"`
+	// Replaces is the id the action had before (a tool of the core moved to a plugin): the
+	// shortcuts set by the user for it are kept.
+	Replaces string `json:"replaces,omitempty"`
 }
 
 // Parse reads and checks a plugin.json.

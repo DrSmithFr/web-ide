@@ -10,7 +10,7 @@ import {
 } from '../state/project'
 import { desk, desks, onDeskGone } from '../state/desks'
 import { cycleWidth, focusDirection, moveColumnBy, scrollMode, stackTile, tileMode, unstackTile, openTile, registerTileTools, resizeTile, showToolTile, startResize, swapDirection, tileTools, toggleSplit } from '../state/tiles'
-import { pluginTools, setPluginStates } from '../plugins/registry'
+import { pluginsOpened, pluginTools, refreshPlugins } from '../plugins/registry'
 import { tileLauncher } from '../ui/tileLauncher'
 import { deskPath, navigate, route } from '../app/router'
 import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, toggleTool, toolsIn, zoneOf, zones, type Zone } from '../state/zones'
@@ -29,7 +29,6 @@ import { NewTicketHost } from '../kanban/Board'
 import { CommandsHost } from '../console/CommandsModal'
 import { openBoard, openMilestone, openObjective, openTicket } from '../kanban/state'
 import { refreshGit } from '../state/git'
-import { DatabaseTool } from '../db/DatabaseTool'
 import { AssistantTool } from '../llm/AssistantTool'
 import { ConflictsTool, StructureTool } from '../tools/tools'
 import { InfoTool } from '../tools/InfoTool'
@@ -46,7 +45,6 @@ import { onMouseNav } from '../keys/mouse'
 import { navigateChats, openChat } from '../llm/assistant'
 import { contextMenu, focusBeforeMenus, prompt, type MenuItem } from '../ui/overlay'
 import { Icon } from '../ui/icons'
-import { refreshConnections } from '../db/api'
 import { offerIdeUntrack } from '../state/ideTracked'
 import { toast } from '../ui/toast'
 import { t, tn } from '../i18n'
@@ -66,7 +64,6 @@ export const toolPanels: Record<string, { label: string; icon: string; component
   console: { label: 'Console', icon: 'terminal', component: ConsoleTool },
   problems: { label: 'Problems', icon: 'problems', component: ProblemsTool, badge: problemCount },
   forwards: { label: 'Port forwards and previews', icon: 'ports', component: ForwardsTool },
-  database: { label: 'Database explorer', icon: 'database', component: DatabaseTool },
   assistant: { label: 'Assistant', icon: 'sparkle', component: AssistantTool },
   agents: { label: 'Agents', icon: 'comment', component: AgentsTool },
   questions: { label: 'Questions', icon: 'question', component: QuestionsTool, badge: () => questions().length },
@@ -106,9 +103,8 @@ export async function openWithAuth(id: string, desk = 1) {
   for (;;) {
     try {
       const r = await openProject(id, creds, desk)
-      setPluginStates(r.plugins)
+      pluginsOpened(r.plugins)
       setConsoleList(r.consoles)
-      refreshConnections()
       offerIdeUntrack(r.ideTracked)
       return r
     } catch (e) {
@@ -264,7 +260,7 @@ const menus: [string, string[]][] = [
   ['menu|Navigate', ['search.everywhere', 'nav.recentFiles', '-', 'nav.back', 'nav.forward', '-', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', '-', 'nav.related', 'nav.test']],
   ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover', '-', 'lsp.rename', 'lsp.format', '-', 'edit.fold', 'edit.unfold', 'edit.foldAll', 'edit.unfoldAll']],
   ['menu|View', ['view.splitRight', 'view.splitDown', '-', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', '-', 'view.visualFocus', 'view.focusOutline', 'view.focusDim', '-', 'view.whitespace', 'view.wordWrap', 'view.markdown', '-', 'console.new', 'palette.open']],
-  ['menu|Tools', ['tool.explorer', 'tool.search', 'tool.git', 'tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.questions', 'tool.database', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.console', 'tool.problems', 'tool.forwards', '@tools']],
+  ['menu|Tools', ['tool.explorer', 'tool.search', 'tool.git', 'tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.questions', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.console', 'tool.problems', 'tool.forwards', '@tools']],
   ['menu|Help', ['help.docs', 'help.guide', 'help.glossary', '-', 'help.shortcuts']],
 ]
 
@@ -742,7 +738,7 @@ export function ProjectPage(props: { id: string }) {
       void refreshConsoles()
       void refreshAgents()
       void refreshQuestions()
-      refreshConnections()
+      void refreshPlugins()
     }),
     // A worktree shown besides goes by itself (state/project).
     onPod('project.closed', (e: { id: string }) => {

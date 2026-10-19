@@ -1,19 +1,10 @@
 // SQL / Redis console, opened as a tab of the main editor. The statement under the caret is
 // framed; Ctrl+Enter runs it (or opens a chooser when the console holds several).
 import { createEffect, createSignal, For, onCleanup, onMount, Show, untrack } from 'solid-js'
-import { request } from '../pod/rpc'
-import { Doc } from '../editor/doc'
-import { useEditorView } from '../ui/EditorArea'
-import { findLeaf, mutate, session, setActivePane, type TabState } from '../state/project'
-import { registerAction, shortcutOf } from '../keys/bindings'
-import { Modal, pick } from '../ui/overlay'
-import { errorToast, toast } from '../ui/toast'
-import { Icon } from '../ui/icons'
+import type { TabState } from '../api'
 import { ResultGrid } from './ResultGrid'
-import { activeStatement, connById, connect, splitStatements, withAuth, type ConsoleState, type Result } from './api'
-import { setCursorInfo } from '../ui/status'
-import { fmtDate, t, tn } from '../i18n'
-import { copyText } from '../ui/clipboard'
+import { activeStatement, connById, connect, splitStatements, withAuth, type ConsoleState, type Result } from './connections'
+import { api, copyText, errorToast, fmtDate, Icon, Modal, pick, t, tn, toast, viewState } from './plugin'
 
 interface HistoryEntry {
   ts: string
@@ -25,9 +16,10 @@ interface HistoryEntry {
 
 export function SqlConsole(props: { tab: TabState; paneId: string }) {
   const tab = props.tab
-  const conn = () => connById(tab.connId)
+  const st = viewState(tab)
+  const conn = () => connById(st.connId)
   const lang = conn()?.kind === 'redis' ? 'redis' : 'sql'
-  const doc = new Doc(`console:${tab.id}`, untrack(() => session.sqlText[tab.id]) ?? '', { lang })
+  const doc = new api.editor.Doc(`console:${tab.id}`, untrack(() => viewState(tab).text) ?? '', { lang })
   let host!: HTMLDivElement
   const [hostEl, setHostEl] = createSignal<HTMLElement>()
   const [state, setState] = createSignal<ConsoleState | null>(null)
@@ -40,24 +32,24 @@ export function SqlConsole(props: { tab: TabState; paneId: string }) {
   onMount(async () => {
     setHostEl(host)
     try {
-      setState(await request('db.consoleOpen', { id: tab.id, connId: tab.connId, db: tab.db ?? '' }))
+      setState(await api.rpc('consoleOpen', { id: tab.id, connId: st.connId, db: st.db ?? '' }))
     } catch (e) {
       errorToast(e)
     }
   })
 
-  // Keep the text in the session (it survives reloads and is shared with the other windows).
+  // Keep the text in the state of the tab (it survives reloads and is shared with the other windows).
   let saveTimer: number | undefined
   const off = doc.onChange(() => {
     clearTimeout(saveTimer)
-    saveTimer = window.setTimeout(() => mutate((s) => (s.sqlText[tab.id] = doc.text)), 500)
+    saveTimer = window.setTimeout(() => api.setViewState<{ text?: string }>(tab.id, (s) => (s.text = doc.text)), 500)
   })
   onCleanup(() => {
     off()
     clearTimeout(saveTimer)
   })
 
-  const isActive = () => session.activePane === props.paneId && findLeaf(session.layout, props.paneId)?.active === tab.id
+  const isActive = () => api.panes.isActive(props.paneId, tab.id)
 
   const statements = () => splitStatements(doc.text, lang)
   const frame = () => {
@@ -68,13 +60,13 @@ export function SqlConsole(props: { tab: TabState; paneId: string }) {
     v.setStatement(list.length > 1 && i >= 0 ? list[i] : null)
   }
 
-  const view = useEditorView(() => doc, hostEl, {
+  const view = api.editor.useView(() => doc, hostEl, {
     onSelection: (v) => {
       frame()
       const { line, col } = doc.pos(v.getSelection().head)
-      setCursorInfo({ line: line + 1, col: col + 1, sel: 0, lang: lang === 'redis' ? 'Redis' : 'SQL' })
+      api.editor.setCursor({ line: line + 1, col: col + 1, sel: 0, lang: lang === 'redis' ? 'Redis' : 'SQL' })
     },
-    onFocus: () => setActivePane(props.paneId),
+    onFocus: () => api.panes.activate(props.paneId),
   })
   createEffect(() => {
     if (view()) requestAnimationFrame(() => view()!.focus())
@@ -86,7 +78,7 @@ export function SqlConsole(props: { tab: TabState; paneId: string }) {
     setError('')
     setLastQuery(query)
     try {
-      const r = await withAuth(tab.connId!, () => request('db.exec', { id: tab.id, query }))
+      const r = await withAuth(st.connId, () => api.rpc('exec', { id: tab.id, query }))
       setResult(r.result)
       setState(r.state)
     } catch (e) {
@@ -129,32 +121,32 @@ export function SqlConsole(props: { tab: TabState; paneId: string }) {
 
   const call = async (method: string, extra: object = {}) => {
     try {
-      setState(await request(method, { id: tab.id, ...extra }))
+      setState(await api.rpc(method, { id: tab.id, ...extra }))
     } catch (e) {
       errorToast(e)
     }
   }
 
   const offs = [
-    registerAction('sql.execute', () => {
+    api.keys.register('database.execute', () => {
       if (!isActive()) return false
       runActive()
     }),
-    registerAction('edit.undo', () => (view()?.hasFocus() ? view()!.undo() : false)),
-    registerAction('edit.redo', () => (view()?.hasFocus() ? view()!.redo() : false)),
-    registerAction('edit.toggleComment', () => (view()?.hasFocus() ? view()!.toggleComment() : false)),
-    registerAction('edit.duplicateLine', () => (view()?.hasFocus() ? view()!.duplicateLine() : false)),
-    registerAction('edit.deleteLine', () => (view()?.hasFocus() ? view()!.deleteLine() : false)),
-    registerAction('nav.subwordLeft', () => (view()?.hasFocus() ? view()!.moveSubword(-1, false) : false)),
-    registerAction('nav.subwordRight', () => (view()?.hasFocus() ? view()!.moveSubword(1, false) : false)),
-    registerAction('nav.subwordLeftSelect', () => (view()?.hasFocus() ? view()!.moveSubword(-1, true) : false)),
-    registerAction('nav.subwordRightSelect', () => (view()?.hasFocus() ? view()!.moveSubword(1, true) : false)),
+    api.keys.register('edit.undo', () => (view()?.hasFocus() ? view()!.undo() : false)),
+    api.keys.register('edit.redo', () => (view()?.hasFocus() ? view()!.redo() : false)),
+    api.keys.register('edit.toggleComment', () => (view()?.hasFocus() ? view()!.toggleComment() : false)),
+    api.keys.register('edit.duplicateLine', () => (view()?.hasFocus() ? view()!.duplicateLine() : false)),
+    api.keys.register('edit.deleteLine', () => (view()?.hasFocus() ? view()!.deleteLine() : false)),
+    api.keys.register('nav.subwordLeft', () => (view()?.hasFocus() ? view()!.moveSubword(-1, false) : false)),
+    api.keys.register('nav.subwordRight', () => (view()?.hasFocus() ? view()!.moveSubword(1, false) : false)),
+    api.keys.register('nav.subwordLeftSelect', () => (view()?.hasFocus() ? view()!.moveSubword(-1, true) : false)),
+    api.keys.register('nav.subwordRightSelect', () => (view()?.hasFocus() ? view()!.moveSubword(1, true) : false)),
   ]
   onCleanup(() => offs.forEach((f) => f()))
 
   const showHistory = async () => {
     try {
-      setHistory(await request('db.history', { connId: tab.connId }))
+      setHistory(await api.rpc('history', { connId: st.connId }))
     } catch (e) {
       errorToast(e)
     }
@@ -167,7 +159,7 @@ export function SqlConsole(props: { tab: TabState; paneId: string }) {
   return (
     <div class="sql-console">
       <div class="toolbar">
-        <button class="btn small primary" disabled={running()} onClick={runActive} title={`${t('Run the active statement')} (${shortcutOf('sql.execute')})`}>
+        <button class="btn small primary" disabled={running()} onClick={runActive} title={`${t('Run the active statement')} (${api.keys.shortcut('database.execute')})`}>
           <Icon name="play" size={12} /> {t('Run')}
         </button>
         <button class="btn small" onClick={showHistory} title={t('Command history')}>
@@ -176,16 +168,16 @@ export function SqlConsole(props: { tab: TabState; paneId: string }) {
         <Show when={lang === 'sql'}>
           <span class="sep" />
           <label class="check" title={t('Automatic transaction')}>
-            <input type="checkbox" checked={auto()} onChange={(e) => call('db.autocommit', { on: e.currentTarget.checked })} /> Auto-commit
+            <input type="checkbox" checked={auto()} onChange={(e) => call('autocommit', { on: e.currentTarget.checked })} /> Auto-commit
           </label>
-          <button class="btn small" disabled={auto() || !inTx()} onClick={() => call('db.commit')}>
+          <button class="btn small" disabled={auto() || !inTx()} onClick={() => call('commit')}>
             <Icon name="check" size={13} /> Commit
           </button>
-          <button class="btn small" disabled={auto() || !inTx()} onClick={() => call('db.rollback')}>
+          <button class="btn small" disabled={auto() || !inTx()} onClick={() => call('rollback')}>
             <Icon name="undo" size={13} /> Rollback
           </button>
         </Show>
-        <button class="btn small" disabled={!running()} onClick={() => request('db.cancel', { id: tab.id }).catch(errorToast)} title={t('Cancel the running statement')}>
+        <button class="btn small" disabled={!running()} onClick={() => api.rpc('cancel', { id: tab.id }).catch(errorToast)} title={t('Cancel the running statement')}>
           <Icon name="stop" size={12} /> {t('Cancel')}
         </button>
         <span class="grow" />
@@ -195,9 +187,9 @@ export function SqlConsole(props: { tab: TabState; paneId: string }) {
         <span class="conn-label" title={conn()?.status.error}>
           <span class={`dot dot-${connected() ? 'connected' : conn()?.status.state === 'error' ? 'error' : 'disconnected'}`} />
           {conn()?.name ?? t('connection deleted')}
-          {tab.db ? ` · ${tab.db}` : ''}
+          {st.db ? ` · ${st.db}` : ''}
           <Show when={!connected()}>
-            <button class="link" onClick={() => connect(tab.connId!).catch(errorToast)}>
+            <button class="link" onClick={() => connect(st.connId).catch(errorToast)}>
               {conn()?.status.state === 'closed' ? 'rouvrir' : 'connecter'}
             </button>
           </Show>
@@ -236,7 +228,7 @@ export function SqlConsole(props: { tab: TabState; paneId: string }) {
           </Show>
           <Show when={!running() && !error() && !result()}>
             <div class="muted pad small">
-              {t('{shortcut} runs the statement under the caret.', { shortcut: shortcutOf('sql.execute') })} {lang === 'redis' ? t('One command per line (GET, HGETALL, SCAN…).') : t('Separate the statements with “;”.')}
+              {t('{shortcut} runs the statement under the caret.', { shortcut: api.keys.shortcut('database.execute') })} {lang === 'redis' ? t('One command per line (GET, HGETALL, SCAN…).') : t('Separate the statements with “;”.')}
             </div>
           </Show>
         </div>

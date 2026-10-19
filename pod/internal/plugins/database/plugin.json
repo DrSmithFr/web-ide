@@ -1,0 +1,15 @@
+{
+  "id": "database",
+  "name": "Database explorer",
+  "version": "1.0.0",
+  "apiVersion": 0,
+  "permissions": ["net"],
+  "contributes": {
+    "tools": [{ "id": "database", "label": "Database explorer", "icon": "database", "zone": "right" }],
+    "tabViews": [
+      { "id": "sql", "label": "Console" },
+      { "id": "table", "label": "Table" }
+    ],
+    "commands": [{ "id": "execute", "label": "Run the active statement", "category": "Database", "keys": ["Ctrl+Enter"], "replaces": "sql.execute" }]
+  }
+}

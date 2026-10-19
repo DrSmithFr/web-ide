@@ -24,7 +24,8 @@ export interface PluginManifest {
     tools?: PluginTool[]
     tabViews?: { id: string; label: string }[]
     assistantTools?: string[]
-    commands?: { id: string; label: string; category?: string }[]
+    /** Actions <plugin>.<id>; keys: default shortcuts; replaces: the id of the action before it moved to a plugin. */
+    commands?: { id: string; label: string; category?: string; keys?: string[]; replaces?: string }[]
   }
 }
 
@@ -42,6 +43,8 @@ export interface PluginContributions {
   /** Tab views, opened as tabs of kind plugin:<plugin>/<view>. */
   views?: Record<string, (props: { tab: TabState; paneId: string }) => JSX.Element>
   commands?: Record<string, () => void>
+  /** Called when the window opens a project, and again after a reconnection (lists to fetch again). */
+  opened?: () => void
   /** The plugin's options of a conversation of the assistant, given to its assistant tools. */
   assistantOptions?: () => unknown
 }

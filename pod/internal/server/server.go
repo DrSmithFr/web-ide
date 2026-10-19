@@ -25,7 +25,6 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/config"
-	"github.com/DrSmithFr/web-ide/pod/internal/db"
 	"github.com/DrSmithFr/web-ide/pod/internal/desks"
 	"github.com/DrSmithFr/web-ide/pod/internal/forwards"
 	"github.com/DrSmithFr/web-ide/pod/internal/hfcache"
@@ -158,7 +157,6 @@ func (s *Server) Init() {
 	s.Previews = preview.New(s.PreviewTS, s.authorized, func() { s.broadcast("preview.changed", s.Previews.List(), nil) })
 	s.registerGlobal()
 	s.registerProject()
-	s.registerDB()
 	s.registerGit()
 	s.registerIcons()
 	s.registerWorktrees()
@@ -1029,14 +1027,17 @@ func toRPCError(err error, lang string) *rpcError {
 		return &rpcError{Code: ce.code, Message: i18n.Translate(lang, ce.error)}
 	}
 	var ar *sshx.AuthRequired
-	var np *db.NeedPassword
+	var pe *plugins.CodedError
 	switch {
 	case errors.As(err, &ar):
 		msg := i18n.Translate(lang, ar.Msg)
 		return &rpcError{Code: "auth_required", Message: msg, Data: map[string]string{"kind": ar.Kind, "prompt": msg}}
-	case errors.As(err, &np):
-		msg := i18n.Translate(lang, np.Msg)
-		return &rpcError{Code: "db_password", Message: msg, Data: map[string]string{"kind": "dbpassword", "prompt": msg}}
+	case errors.As(err, &pe):
+		e := &rpcError{Code: pe.Code, Message: i18n.Translate(lang, pe.Err)}
+		if pe.Data != nil {
+			e.Data = pe.Data
+		}
+		return e
 	case errors.Is(err, context.Canceled):
 		return &rpcError{Code: "canceled", Message: i18n.T(lang, "canceled")}
 	}

@@ -30,6 +30,8 @@ type Call struct {
 	Lang    string
 	// Window is the window of an RPC call (nil for an assistant tool).
 	Window Window
+	// Emit sends an event to every window of the project (nil for an assistant tool).
+	Emit func(event string, data any)
 	// Options are the plugin's options of the assistant's conversation (nil from the MCP): what
 	// the page module gave for it (assistantOptions), e.g. the Compose profiles active.
 	Options json.RawMessage
@@ -65,6 +67,17 @@ type AssistantTool struct {
 type UsageError struct{ Msg string }
 
 func (e UsageError) Error() string { return e.Msg }
+
+// CodedError is an error the page tells apart by its code (db_password: ask the password and
+// try again), with data for it; its message is Err, translated.
+type CodedError struct {
+	Code string
+	Data map[string]string
+	Err  error
+}
+
+func (e *CodedError) Error() string { return e.Err.Error() }
+func (e *CodedError) Unwrap() error { return e.Err }
 
 // Result of an assistant tool: the text read by the model, the summary shown to the user.
 // An error status tells the model the call failed.

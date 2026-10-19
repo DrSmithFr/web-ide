@@ -8,15 +8,22 @@ import { makeApi } from './api'
 import type { PluginContributions, PluginModule, PluginState } from './types'
 import { hello } from './hello'
 import { docker } from './docker'
+import { database } from './database'
 
-const builtins: Record<string, PluginModule> = { docker, hello }
+const builtins: Record<string, PluginModule> = { database, docker, hello }
 
 const [states, setStates] = createSignal<PluginState[]>([])
 export const pluginStates = states
 const active: Record<string, PluginContributions> = {}
 
-/** Takes the states of the plugins of the project: the enabled ones are activated. */
-export function setPluginStates(list: PluginState[] | undefined) {
+// The plugins enabled in the window at the last states.
+let running = new Set<string>()
+
+/**
+ * Takes the states of the plugins of the project: the enabled ones are activated, and those
+ * just enabled (all of them when the project was just opened) refresh.
+ */
+export function setPluginStates(list: PluginState[] | undefined, opened = false) {
   list ??= []
   for (const s of list) {
     const mod = builtins[s.manifest.id]
@@ -26,13 +33,26 @@ export function setPluginStates(list: PluginState[] | undefined) {
   setPluginActions(
     enabled().flatMap((s) => [
       ...(s.manifest.contributes.tools ?? []).map((x) => ({ id: `tool.${x.id}`, label: x.label, category: 'Tools', inTerminal: true })),
-      ...(s.manifest.contributes.commands ?? []).map((c) => ({ id: `${s.manifest.id}.${c.id}`, label: c.label, category: c.category ?? s.manifest.name, run: active[s.manifest.id]?.commands?.[c.id] })),
+      ...(s.manifest.contributes.commands ?? []).map((c) => ({ id: `${s.manifest.id}.${c.id}`, label: c.label, category: c.category ?? s.manifest.name, keys: c.keys, replaces: c.replaces, run: active[s.manifest.id]?.commands?.[c.id] })),
     ]),
   )
+  const now = new Set(enabled().map((s) => s.manifest.id))
+  for (const id of now) if (opened || !running.has(id)) active[id].opened?.()
+  running = now
 }
 
 on('plugins.changed', (e: { plugins: PluginState[] }) => setPluginStates(e?.plugins))
-on('pod.reconnected', () => void request<{ plugins: PluginState[] }>('plugins.list').then((r) => setPluginStates(r.plugins), () => {}))
+/** The window opened a project (project.open gave the states): each enabled plugin refreshes. */
+export const pluginsOpened = (list: PluginState[] | undefined) => setPluginStates(list, true)
+
+/** After a reconnection, once the project is open again. */
+export async function refreshPlugins() {
+  try {
+    pluginsOpened((await request<{ plugins: PluginState[] }>('plugins.list')).plugins)
+  } catch {
+    /* no project */
+  }
+}
 
 const enabled = () => states().filter((s) => s.enabled && active[s.manifest.id])
 
