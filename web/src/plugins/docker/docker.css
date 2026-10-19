@@ -51,11 +51,4 @@
 .dk-obj { display: flex; align-items: center; gap: 8px; height: 24px; padding: 0 10px; font-size: 12.5px; }
 .dk-obj:hover { background: var(--bg-hover); }
 .dk-obj .num { min-width: 70px; }
-.dk-forward { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px; font-size: 12.5px; }
-.dk-forward:hover { background: var(--bg-hover); }
-.dk-forward a { text-decoration: none; }
-.dk-forward-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 10px; margin: 8px 10px; padding-top: 10px; border-top: 1px solid var(--line); }
-.dk-forward-form label { display: flex; flex-direction: column; gap: 2px; }
-.dk-forward-form input.input { width: 120px; }
-.dk-forward-form label.dk-check { flex-direction: row; align-items: center; gap: 6px; height: 26px; }
 .dk-lan-warn { flex-basis: 100%; margin: 0; }

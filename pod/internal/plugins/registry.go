@@ -9,7 +9,7 @@ import (
 var CoreCapabilities = []string{"terminal", "worktrees"}
 
 // CoreTools are the ids of the tools of the core, which no plugin may take.
-var CoreTools = []string{"explorer", "search", "git", "kanban", "console", "problems", "docker", "database",
+var CoreTools = []string{"explorer", "search", "git", "kanban", "console", "problems", "forwards", "database",
 	"assistant", "agents", "questions", "structure", "conflicts", "info"}
 
 // Registry holds the built-in plugins, in their order of registration.

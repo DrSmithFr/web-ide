@@ -7,8 +7,9 @@ import { setPluginActions } from '../keys/bindings'
 import { makeApi } from './api'
 import type { PluginContributions, PluginModule, PluginState } from './types'
 import { hello } from './hello'
+import { docker } from './docker'
 
-const builtins: Record<string, PluginModule> = { hello }
+const builtins: Record<string, PluginModule> = { docker, hello }
 
 const [states, setStates] = createSignal<PluginState[]>([])
 export const pluginStates = states
@@ -54,6 +55,16 @@ export function pluginView(kind: string) {
   const m = /^plugin:([^/]+)\/(.+)$/.exec(kind)
   if (!m || !pluginEnabled(m[1])) return undefined
   return active[m[1]]?.views?.[m[2]]
+}
+
+/** The options of the enabled plugins for a conversation of the assistant, by plugin id. */
+export function pluginAssistantOptions(): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const s of enabled()) {
+    const f = active[s.manifest.id].assistantOptions
+    if (f) out[s.manifest.id] = f()
+  }
+  return out
 }
 
 /** The label of a tab view, as its manifest declares it. */

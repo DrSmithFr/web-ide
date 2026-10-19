@@ -42,6 +42,8 @@ export interface PluginContributions {
   /** Tab views, opened as tabs of kind plugin:<plugin>/<view>. */
   views?: Record<string, (props: { tab: TabState; paneId: string }) => JSX.Element>
   commands?: Record<string, () => void>
+  /** The plugin's options of a conversation of the assistant, given to its assistant tools. */
+  assistantOptions?: () => unknown
 }
 
 /** The page module of a plugin: activated once, when the plugin is first enabled in the window. */

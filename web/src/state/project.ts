@@ -85,8 +85,8 @@ export interface SessionData {
   explorer: { hidden: boolean; excluded: boolean; singleClick: boolean; follow: boolean }
   /** Git tool: shown tab, heights of the commit form and of the commit detail. */
   git: { tab: 'commit' | 'history'; form: number; detail: number }
-  /** Docker tool: shown tab, chosen Compose profiles, tab of the detail pane. */
-  docker: { tab: 'project' | 'host' | 'disk' | 'forwards' | 'tunnels' | 'previews'; profiles: string[]; detail: 'infos' | 'logs' }
+  /** The state of each plugin in the desk (plugins/api.ts desk()), by plugin id. */
+  plugins: Record<string, Record<string, unknown>>
   /** Other worktrees of the repository open in the window, and the one shown (none: the project of the window). */
   attached: string[]
   worktree?: string
@@ -138,7 +138,7 @@ function emptySession(): SessionData {
     expanded: [],
     explorer: { hidden: true, excluded: true, singleClick: false, follow: false },
     git: { tab: 'commit', form: 150, detail: 260 },
-    docker: { tab: 'project', profiles: [], detail: 'infos' },
+    plugins: {},
     attached: [],
     sizes: {},
   }
@@ -222,13 +222,16 @@ on('session.changed', (e: { session: SessionData; desk: number }, from?: string)
 function normalize(raw: any): SessionData {
   const d = emptySession()
   if (!raw || typeof raw !== 'object' || !raw.layout) return d
-  const s: SessionData = { ...d, ...raw, left: { ...d.left, ...raw.left }, right: { ...d.right, ...raw.right }, bottom: { ...d.bottom, ...raw.bottom }, explorer: { ...d.explorer, ...raw.explorer }, git: { ...d.git, ...raw.git }, docker: { ...d.docker, ...raw.docker }, sizes: { ...raw.sizes } }
+  const s: SessionData = { ...d, ...raw, left: { ...d.left, ...raw.left }, right: { ...d.right, ...raw.right }, bottom: { ...d.bottom, ...raw.bottom }, explorer: { ...d.explorer, ...raw.explorer }, git: { ...d.git, ...raw.git }, plugins: { ...raw.plugins }, sizes: { ...raw.sizes } }
   if (s.left.panel && panelAliases[s.left.panel]) {
     s.right.panel = panelAliases[s.left.panel]
     s.left.panel = null
   }
   if (s.right.panel && panelAliases[s.right.panel]) s.right.panel = panelAliases[s.right.panel]
   s.placement = normalizePlacement(raw.placement)
+  // The Docker tool became a plugin (#114): its state moved under plugins.
+  if (raw.docker && !s.plugins.docker) s.plugins.docker = raw.docker
+  delete (s as any).docker
   // The Recent Files moved to the desk list (state/desks.ts), shared by the desks.
   delete (s as any).recent
   if (!Array.isArray(s.attached)) s.attached = []

@@ -1,19 +1,14 @@
 // Docker tool: Project tab (Compose stack of the project), Host tab (every container), and a
 // detail pane beside the list. Lists and statistics are refreshed while the tool is shown.
 import { For, onCleanup, onMount, Show, type JSX } from 'solid-js'
-import { isLocal, mutate, session } from '../state/project'
-import { contextMenu, prompt, type MenuItem } from '../ui/overlay'
-import { Icon } from '../ui/icons'
-import { EmptyState } from '../ui/EmptyState'
-import { t } from '../i18n'
+import type { MenuItem } from '../api'
+import { api, contextMenu, desk, EmptyState, ForwardsTab, Icon, PreviewsTab, prompt, t } from './plugin'
 import {
   busy, composeAction, composeTask, containerAction, host, portLabel, profiles, refreshHost, refreshStack, refreshStats, refreshStatus, selected, setSelected, shell,
   stack, stats, status, type Container,
 } from './state'
 import { Detail } from './Detail'
 import { DiskTab } from './DiskTab'
-import { ForwardsTab } from './ForwardsTab'
-import { PreviewsTab } from './PreviewsTab'
 import './docker.css'
 
 type Tab = 'project' | 'host' | 'disk' | 'forwards' | 'previews'
@@ -21,10 +16,10 @@ type Tab = 'project' | 'host' | 'disk' | 'forwards' | 'previews'
 export function DockerTool() {
   const tab = (): Tab => {
     // 'tunnels' is the id this tab had in a desk state saved before the glossary (port forwards).
-    const id = session.docker.tab === 'tunnels' ? 'forwards' : session.docker.tab
-    return id === 'host' || id === 'disk' || id === 'previews' || (id === 'forwards' && !isLocal()) ? id : 'project'
+    const id = desk.get().tab === 'tunnels' ? 'forwards' : desk.get().tab
+    return id === 'host' || id === 'disk' || id === 'previews' || (id === 'forwards' && !api.project.isLocal()) ? id : 'project'
   }
-  const setTab = (id: Tab) => mutate((s) => (s.docker.tab = id))
+  const setTab = (id: Tab) => desk.set((s) => (s.tab = id))
 
   // One refresh at a time: docker stats takes about a second.
   let timer: number | undefined
@@ -69,7 +64,7 @@ export function DockerTool() {
         <div class="tab" role="tab" data-testid="docker-tab-disk" aria-selected={tab() === 'disk'} classList={{ active: tab() === 'disk' }} onClick={() => switchTab('disk')}>
           <span class="tab-title">{t('Disk')}</span>
         </div>
-        <Show when={!isLocal()}>
+        <Show when={!api.project.isLocal()}>
           <div class="tab" role="tab" data-testid="docker-tab-forwards" aria-selected={tab() === 'forwards'} classList={{ active: tab() === 'forwards' }} onClick={() => switchTab('forwards')}>
             <span class="tab-title">{t('Port forwards')}</span>
           </div>
@@ -208,7 +203,7 @@ function containerItems(c: Container): MenuItem[] {
 
 function openDetail(id: string, tab: 'infos' | 'logs') {
   setSelected({ kind: 'container', id })
-  mutate((s) => (s.docker.detail = tab))
+  desk.set((s) => (s.detail = tab))
 }
 
 // ---------- Project tab ----------
@@ -245,7 +240,7 @@ function ProjectList() {
     { label: t('Rebuild'), action: () => composeTask('rebuild') },
     { label: t('Pull'), action: () => composeTask('pull') },
     { separator: true, label: '' },
-    { label: t('Logs'), action: () => (setSelected({ kind: 'stack' }), mutate((s) => (s.docker.detail = 'logs'))) },
+    { label: t('Logs'), action: () => (setSelected({ kind: 'stack' }), desk.set((s) => (s.detail = 'logs'))) },
     { separator: true, label: '' },
     { label: t('docker|Down'), danger: true, action: down },
     { label: t('Down with volumes…'), danger: true, action: downVolumes },
@@ -268,9 +263,9 @@ function ProjectList() {
       e,
       (st().profiles ?? []).map((p) => ({
         label: p,
-        checked: session.docker.profiles.includes(p),
+        checked: desk.get().profiles.includes(p),
         action: () => {
-          mutate((s) => (s.docker.profiles = s.docker.profiles.includes(p) ? s.docker.profiles.filter((x) => x !== p) : [...s.docker.profiles, p]))
+          desk.set((s) => (s.profiles = s.profiles.includes(p) ? s.profiles.filter((x) => x !== p) : [...s.profiles, p]))
           void refreshStack()
         },
       })),

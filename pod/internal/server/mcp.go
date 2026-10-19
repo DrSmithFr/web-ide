@@ -161,7 +161,7 @@ func (s *Server) mcpCall(ctx context.Context, m mcpMessage) mcpReply {
 		t := findMCPTool(a.Name)
 		if p := s.findPluginTool(a.Name); t == nil && p != nil {
 			t = &mcpTool{run: ideTool(func(ctx context.Context, s *Server, _ toolArgs, _ mcpScope, rt *runtime.Runtime) (toolResult, error) {
-				return s.runPluginTool(ctx, rt, p, a.Arguments, "en")
+				return s.runPluginTool(ctx, rt, p, a.Arguments, "en", nil)
 			})}
 		}
 		if t == nil {

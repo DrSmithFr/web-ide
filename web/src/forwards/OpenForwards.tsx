@@ -6,6 +6,7 @@ import { on as onPod, request } from '../pod/rpc'
 import { errorToast } from '../ui/toast'
 import { Icon } from '../ui/icons'
 import { t } from '../i18n'
+import './forwards.css'
 import type { Forward } from './ForwardsTab'
 
 type Open = Forward & { project: string; name: string; host: string }

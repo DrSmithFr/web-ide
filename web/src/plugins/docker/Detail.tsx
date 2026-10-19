@@ -1,10 +1,7 @@
 // Detail pane of the Docker tool: Infos (inspect and live statistics) and Logs of the selected
 // container, or a summary and the logs of the stack.
 import { createResource, For, Show, type JSX } from 'solid-js'
-import { request } from '../pod/rpc'
-import { mutate, session } from '../state/project'
-import { Icon } from '../ui/icons'
-import { t } from '../i18n'
+import { api, desk, Icon, t } from './plugin'
 import { Logs } from './Logs'
 import { portLabel, profiles, selected, selectedContainer, setSelected, shell, stack, stats, status, type Port } from './state'
 
@@ -24,8 +21,8 @@ interface Details {
 }
 
 export function Detail() {
-  const tab = () => session.docker.detail
-  const setTab = (id: 'infos' | 'logs') => mutate((s) => (s.docker.detail = id))
+  const tab = () => desk.get().detail
+  const setTab = (id: 'infos' | 'logs') => desk.set((s) => (s.detail = id))
   const c = selectedContainer
   const isStack = () => selected()?.kind === 'stack'
   const title = () => (isStack() ? stack()?.stack?.name ?? '' : c()?.service || c()?.name || '')
@@ -101,7 +98,7 @@ function Infos(props: { id: string; state: string }) {
   // Read again when the state of the container changes.
   const [d] = createResource(
     () => `${props.id}:${props.state}`,
-    () => request<Details>('docker.inspect', { id: props.id }),
+    () => api.rpc<Details>('inspect', { id: props.id }),
   )
   const st = () => stats()[props.id]
   return (

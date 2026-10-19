@@ -1,6 +1,6 @@
 # Plugins
 
-Status: **phase 1 decided** (2026-10-19), milestone *Plugins, phase 1*: the core of the plugin system (#113), then Docker (#114) and the database (#115) moved onto it, all built-in, one lineage. The core is in place (#113): Docker and the database still sit in the core until #114 and #115 move them. Whether Git, the editor, the kanban and the assistant become plugins too is decided after Docker (see [Decisions](#decisions)). The direction was explored on 2026-10-16.
+Status: **phase 1 decided** (2026-10-19), milestone *Plugins, phase 1*: the core of the plugin system (#113), then Docker (#114) and the database (#115) moved onto it, all built-in, one lineage. The core is in place (#113) and Docker is a plugin (#114); the database still sits in the core until #115 moves it. Whether Git, the editor, the kanban and the assistant become plugins too is decided after Docker (see [Decisions](#decisions)). The direction was explored on 2026-10-16.
 
 ## Vision
 
@@ -25,6 +25,7 @@ i18n/fr.json  its own catalog (the English text is the key, as in the IDE)
 
 - **Backend**: a built-in plugin implements the Go interface `plugins.Plugin` inside the pod (`pod/internal/plugins/<id>/`, its `plugin.json` embedded): `Register(host)` adds its RPC methods, named `<id>.<method>`, and its assistant tools, each one a schema and a handler that gets the project's `runtime`; an external one is a process started by the pod on demand and stopped a while after the last window leaves, like a language server. Same contract on both transports. Go's `plugin` package is ruled out (same toolchain, same build, Linux only).
 - **Front end**: the module's `activate(api)` returns the components of its contributions, by id (`tools`, `views`, `commands`). The `api` (`web/src/plugins/api.ts`): `rpc()` to its backend, `on()` for the events (`fs.changed`, `git.changed`, `plugins.changed`…), `openFile`, `openView` (a tab of one of its views, with a serializable state), `t()`, the port forwards and the app previews of the core (`forwards`, `previews`: core features any plugin may show), and components of `ui/`. Solid is shared through an import map, so a plugin does not ship its own. A built-in plugin is a folder of `web/src/plugins/` imported by the bundle, given the same `api`.
+- **Example**: Docker. `pod/internal/plugins/docker/` (manifest, the `docker.*` methods, the log streams, `docker_ps` / `docker_logs`) and `web/src/plugins/docker/` (the tool; `plugin.ts` keeps the `api` it was given, the only door to the core).
 - **The manifest is the pod's**: the page gets the manifests and their state on the project in `project.open`, then `plugins.changed`; the page module brings only the components.
 - **Lazy loading**: only the plugins enabled on the project are loaded, which also shortens the first load (the iPhone through the relay).
 
@@ -51,7 +52,17 @@ As long as Console and Git stay in the core, `terminal` and `worktrees` are prov
 
 The assistant becomes a **consumer**: today `assistant/defs.go`, `assistant_tools.go` and `mcp_ide.go` know Docker, the consoles, the previews; tomorrow each plugin declares its tools and the assistant offers those of the plugins enabled on the project (a shorter prompt where Docker is off).
 
-Coupling measured on the front end (imports, 2026-10-16): Docker, database, Git and Console depend on the core (`ui/`, `pod/rpc`, `i18n`, `keys`, `state/project`) plus `console/consoles`, `llm/previews` or `editor/doc` only; the kanban and above all the assistant (`llm/`, which imports kanban, docker, doodle, console, editor, questions…) are the hubs. The Docker tool also holds the Port forwards and Previews tabs: they stay in the core in phase 1, shown as tabs the Docker plugin hosts.
+Coupling measured on the front end (imports, 2026-10-16): Docker, database, Git and Console depend on the core (`ui/`, `pod/rpc`, `i18n`, `keys`, `state/project`) plus `console/consoles`, `llm/previews` or `editor/doc` only; the kanban and above all the assistant (`llm/`, which imports kanban, docker, doodle, console, editor, questions…) are the hubs. The Docker tool also holds the Port forwards and Previews tabs: they are core parts (`web/src/forwards/`) the Docker plugin shows through the `api`; where Docker is disabled, a *Port forwards and previews* tool of the core takes its place.
+
+## What Docker added to the API
+
+Moving Docker (#114) found what the API of #113 lacked; each gap was added to the API, not worked around:
+
+- **The calling window** (`plugins.Call.Window`): events pushed to it (`docker.log`) and streams it holds until it stops them or leaves (`Hold` / `Release`).
+- **Options of a conversation** (`Call.Options`): what the page module gives for the assistant (`assistantOptions`: the Compose profiles chosen in the tool), read by its assistant tools. The MCP passes none; the tool then takes its own parameters.
+- **Usage errors** (`plugins.UsageError`), counted apart by the statistics of the assistant.
+- **A plain summary** of a tool result (`Result.Summary`, raw: a text to translate or a plain one).
+- On the page: the plugin's **state in the desk** (`api.desk(defaults)`, saved under `plugins.<id>` of the desk; the former `docker` key is moved there), the **project** (`isLocal`), the **terminal** capability (`terminal.open`), menus, prompt and ANSI colors in `ui`.
 
 ## Decisions
 
@@ -68,7 +79,7 @@ Taken on 2026-10-19:
 One ticket per step, the e2e suites of the moved tool passing before each merge:
 
 1. Core: manifest, registry, capabilities, open zones and tab kinds, assistant tools from the plugins, per-project enabling. *(phase 1, #113, done; proved by the test plugin `hello`)*
-2. Docker: the least coupled, it proves the API. *(phase 1)*
+2. Docker: the least coupled, it proves the API. *(phase 1, #114, done)*
 3. Database *(phase 1)*, then Console (the `terminal` capability).
 4. Git (the `worktrees` capability), then the editor and rendered Markdown as views of a buffer.
 5. Kanban, then the assistant last.

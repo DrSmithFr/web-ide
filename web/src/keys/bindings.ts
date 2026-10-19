@@ -106,7 +106,7 @@ export const actions: ActionDef[] = [
   { id: 'tool.database', label: 'Database explorer', category: 'Tools', inTerminal: true },
   { id: 'tool.structure', label: 'Structure', category: 'Tools', inTerminal: true },
   { id: 'tool.problems', label: 'Problems', category: 'Tools', inTerminal: true },
-  { id: 'tool.docker', label: 'Docker', category: 'Tools', inTerminal: true },
+  { id: 'tool.forwards', label: 'Port forwards and previews', category: 'Tools', inTerminal: true },
   { id: 'tool.info', label: 'Infos', category: 'Tools', inTerminal: true },
   { id: 'tool.console', label: 'Console', category: 'Tools', inTerminal: true },
   { id: 'tool.conflicts', label: 'Conflicts', category: 'Tools', inTerminal: true },

@@ -13,10 +13,10 @@ import (
 )
 
 // Tools of the MCP endpoint on the IDE itself, moved from the assistant so that the CLI
-// agents get them (#68): consoles, Docker, previews, and what shows in a window (files,
-// diffs, messages, doodles). Each one reuses the code of the tool of the assistant and keeps
-// its rule: reading and typing in a console or reading Docker run freely there too, and
-// nothing of share_preview runs before the user clicks.
+// agents get them (#68): consoles, previews, and what shows in a window (files, diffs,
+// messages, doodles); the tools of the plugins (Docker) are added by handlers_plugins.go. Each
+// one reuses the code of the tool of the assistant and keeps its rule: reading and typing in a
+// console run freely there too, and nothing of share_preview runs before the user clicks.
 
 // mcpIDE binds the arguments of a tool of the IDE and opens the runtime of the folder of the
 // client (a worktree has its own).
@@ -101,8 +101,6 @@ func uiTextTool(name string, args func(a toolArgs) any) func(context.Context, *S
 	}
 }
 
-var profilesProp = strList("Compose profiles to include (optional)")
-
 var mcpIDETools = []mcpTool{
 	{
 		name:        "list_consoles",
@@ -127,23 +125,6 @@ var mcpIDETools = []mcpTool{
 		required:    []string{"console_id", "text"},
 		run: ideTool(func(ctx context.Context, s *Server, a toolArgs, sc mcpScope, rt *runtime.Runtime) (toolResult, error) {
 			return consoleInput(ctx, rt, a.str("console_id"), a.str("text"), a.boolean("enter", true))
-		}),
-	},
-	{
-		name:        "docker_ps",
-		description: "State of the Docker Compose services of the project (Compose file at the project root): container, state, health, image, published ports. Without Compose file, lists every container of the host.",
-		props:       map[string]any{"profiles": profilesProp},
-		run: ideTool(func(ctx context.Context, s *Server, a toolArgs, sc mcpScope, rt *runtime.Runtime) (toolResult, error) {
-			return dockerToolIn(ctx, rt, "docker_ps", a, strArray(a, "profiles"))
-		}),
-	},
-	{
-		name:        "docker_logs",
-		description: "Last lines of the logs of a Compose service of the project, or of any container (name or id), stdout and stderr together, with timestamps.",
-		props: map[string]any{"service": str("Compose service of the project"), "container": str("Container name or id (instead of service)"),
-			"lines": map[string]any{"type": "integer", "description": "Number of lines (200 by default, 2000 max)"}, "filter": str("Keep only the lines containing this text (case-insensitive)"), "profiles": profilesProp},
-		run: ideTool(func(ctx context.Context, s *Server, a toolArgs, sc mcpScope, rt *runtime.Runtime) (toolResult, error) {
-			return dockerToolIn(ctx, rt, "docker_logs", a, strArray(a, "profiles"))
 		}),
 	},
 	{

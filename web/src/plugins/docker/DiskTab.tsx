@@ -1,11 +1,7 @@
 // Disk tab of the Docker tool: space used by images, containers, volumes and the build cache,
 // prune buttons (confirmed), and the images and volumes with removal of the unused ones.
 import { createResource, createSignal, For, Show } from 'solid-js'
-import { request } from '../pod/rpc'
-import { contextMenu } from '../ui/overlay'
-import { errorToast, toast } from '../ui/toast'
-import { Icon } from '../ui/icons'
-import { t } from '../i18n'
+import { api, contextMenu, errorToast, Icon, t, toast } from './plugin'
 
 interface Disk {
   usage: { type: string; total: number; active: number; size: string; reclaimable: string }[]
@@ -33,14 +29,14 @@ const prunes: Record<string, { what: Prune; label: string; confirm: string }[]> 
 const types: Record<string, string> = { Images: 'Images', Containers: 'Containers', 'Local Volumes': 'Volumes', 'Build Cache': 'Build cache' }
 
 export function DiskTab() {
-  const [disk, { refetch }] = createResource(() => request<Disk>('docker.disk'))
+  const [disk, { refetch }] = createResource(() => api.rpc<Disk>('disk'))
   const [running, setRunning] = createSignal('')
 
   const prune = async (p: { what: Prune; confirm: string }) => {
     if (!confirm(t(p.confirm))) return
     setRunning(p.what)
     try {
-      const r = await request<{ reclaimed: string }>('docker.prune', { what: p.what })
+      const r = await api.rpc<{ reclaimed: string }>('prune', { what: p.what })
       toast(t('Space freed: {size}', { size: r.reclaimed }), 'ok')
     } catch (e) {
       errorToast(e)
@@ -52,7 +48,7 @@ export function DiskTab() {
   const remove = async (kind: 'image' | 'volume', id: string, label: string) => {
     if (!confirm(kind === 'image' ? t('Remove the image {name}?', { name: label }) : t('Remove the volume {name}? Its data is lost.', { name: label }))) return
     try {
-      await request('docker.remove', { kind, id })
+      await api.rpc('remove', { kind, id })
       toast(t('{name} removed', { name: label }), 'ok', undefined, 2000)
     } catch (e) {
       errorToast(e)

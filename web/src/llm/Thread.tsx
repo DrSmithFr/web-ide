@@ -22,7 +22,7 @@ import { PreviewCard } from './PreviewCard'
 import { ChildCard, ChildHeader, EventCard, TaskCard } from './SubAgents'
 import { ActionCard, OpenedCard } from './Orchestrator'
 import { t, tn } from '../i18n'
-import { parseAnsi } from '../docker/ansi'
+import { parseAnsi } from '../ui/ansi'
 
 const textOf = (m: ChatMessage) =>
   m.display !== undefined

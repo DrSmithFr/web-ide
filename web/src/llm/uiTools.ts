@@ -8,6 +8,7 @@ import { doodleSession, openDoodle } from './doodle/session'
 import { chat } from './state'
 import { consoles } from '../console/consoles'
 import { showTool, toolIds } from '../state/zones'
+import { tileTools } from '../state/tiles'
 import { t } from '../i18n'
 import { buildPage, type DrawArgs } from './board/build'
 import { describe, MAX_SIDE, png } from './doodle/export'
@@ -68,7 +69,8 @@ async function focus(a: Record<string, any>, base?: string): Promise<UiResult> {
     }
     case 'panel': {
       const id = String(a.panel ?? '')
-      if (!toolIds().includes(id)) throw new Error(`unknown panel: ${id} (${toolIds().join(', ')})`)
+      const shown = toolIds().filter((x) => tileTools[x])
+      if (!shown.includes(id)) throw new Error(`unknown panel: ${id} (${shown.join(', ')})`)
       mutate((s) => showTool(s, id))
       return ok(`Panel ${id} shown.`, t('panel {id}', { id }))
     }

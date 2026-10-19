@@ -1,10 +1,7 @@
 // Logs of a container or of the stack: the last 500 lines, then followed live. Text filter,
 // service filter (stack), timestamps, ANSI colors; scrolling up pauses the following.
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from 'solid-js'
-import { on as onPod, request } from '../pod/rpc'
-import { Icon } from '../ui/icons'
-import { t } from '../i18n'
-import { parseAnsi, stripAnsi } from './ansi'
+import { api, Icon, parseAnsi, stripAnsi, t } from './plugin'
 import { profiles } from './state'
 
 const maxLines = 10000
@@ -47,7 +44,7 @@ export function Logs(props: { id: string; services?: string[]; running: boolean 
   let box!: HTMLDivElement
 
   const stop = () => {
-    if (stream) request('docker.logsStop', { stream }).catch(() => {})
+    if (stream) api.rpc('logsStop', { stream }).catch(() => {})
     stream = ''
   }
   const start = async () => {
@@ -57,21 +54,21 @@ export function Logs(props: { id: string; services?: string[]; running: boolean 
     setError('')
     const key = props.id
     try {
-      const r = await request<{ stream: string }>('docker.logs', { id: key, profiles: key ? [] : profiles(), tail: 500 })
-      if (key !== props.id) return void request('docker.logsStop', { stream: r.stream }).catch(() => {})
+      const r = await api.rpc<{ stream: string }>('logs', { id: key, profiles: key ? [] : profiles(), tail: 500 })
+      if (key !== props.id) return void api.rpc('logsStop', { stream: r.stream }).catch(() => {})
       stream = r.stream
     } catch (e) {
       setError((e as Error).message)
     }
   }
-  const offLog = onPod('docker.log', (e: { stream: string; lines: string[] }) => {
+  const offLog = api.on('docker.log', (e: { stream: string; lines: string[] }) => {
     if (e.stream !== stream) return
     setLines((l) => {
       const next = l.concat(e.lines.map((x) => parse(x, ++seq)))
       return next.length > maxLines ? next.slice(next.length - maxLines) : next
     })
   })
-  const offEnd = onPod('docker.logEnd', (e: { stream: string }) => {
+  const offEnd = api.on('docker.logEnd', (e: { stream: string }) => {
     if (e.stream === stream) {
       stream = ''
       setEnded(true)

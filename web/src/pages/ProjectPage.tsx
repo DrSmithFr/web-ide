@@ -10,7 +10,7 @@ import {
 } from '../state/project'
 import { desk, desks, onDeskGone } from '../state/desks'
 import { cycleWidth, focusDirection, moveColumnBy, scrollMode, stackTile, tileMode, unstackTile, openTile, registerTileTools, resizeTile, showToolTile, startResize, swapDirection, tileTools, toggleSplit } from '../state/tiles'
-import { pluginTools, setPluginStates } from '../plugins/registry'
+import { pluginEnabled, pluginStates, pluginTools, setPluginStates } from '../plugins/registry'
 import { tileLauncher } from '../ui/tileLauncher'
 import { deskPath, navigate, route } from '../app/router'
 import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, toggleTool, toolsIn, zoneOf, zones, type Zone } from '../state/zones'
@@ -33,7 +33,7 @@ import { DatabaseTool } from '../db/DatabaseTool'
 import { AssistantTool } from '../llm/AssistantTool'
 import { ConflictsTool, StructureTool } from '../tools/tools'
 import { InfoTool } from '../tools/InfoTool'
-import { DockerTool } from '../docker/DockerTool'
+import { ForwardsTool } from '../forwards/ForwardsTool'
 import { AgentsTool } from '../agents/AgentsTool'
 import { QuestionModal, QuestionsTool } from '../questions/QuestionsTool'
 import { questions, refreshQuestions, resetQuestions, showQuestion } from '../questions/state'
@@ -41,7 +41,7 @@ import { refreshAgents } from '../agents/state'
 import { openConflict } from '../conflict/ConflictDialog'
 import { docsIndex, openDoc } from '../state/docs'
 import { openSettings } from '../settings/SettingsModal'
-import { actions, registerAction, runAction, shortcutOf } from '../keys/bindings'
+import { actionOf, registerAction, runAction, shortcutOf } from '../keys/bindings'
 import { onMouseNav } from '../keys/mouse'
 import { navigateChats, openChat } from '../llm/assistant'
 import { contextMenu, focusBeforeMenus, prompt, type MenuItem } from '../ui/overlay'
@@ -65,7 +65,6 @@ export const toolPanels: Record<string, { label: string; icon: string; component
   kanban: { label: 'Kanban', icon: 'kanban', component: KanbanPanel },
   console: { label: 'Console', icon: 'terminal', component: ConsoleTool },
   problems: { label: 'Problems', icon: 'problems', component: ProblemsTool, badge: problemCount },
-  docker: { label: 'Docker', icon: 'docker', component: DockerTool },
   database: { label: 'Database explorer', icon: 'database', component: DatabaseTool },
   assistant: { label: 'Assistant', icon: 'sparkle', component: AssistantTool },
   agents: { label: 'Agents', icon: 'comment', component: AgentsTool },
@@ -96,6 +95,23 @@ createRoot(() =>
         delete tileTools[p.id]
       }
     })
+  }),
+)
+
+// The port forwards and previews of the core have a tool of their own where the Docker plugin,
+// which shows them, is disabled (known but off: before project.open nothing is shown).
+const forwardsTool = { label: 'Port forwards and previews', icon: 'docker', component: ForwardsTool }
+createRoot(() =>
+  createEffect(() => {
+    const own = pluginStates().length > 0 && !pluginEnabled('docker')
+    untrack(() => {
+      if (own) toolPanels.forwards = tileTools.forwards = forwardsTool
+      else {
+        delete toolPanels.forwards
+        delete tileTools.forwards
+      }
+    })
+    if (own) onCleanup(registerAction('tool.forwards', () => toggleToolFocus('forwards')))
   }),
 )
 
@@ -224,6 +240,7 @@ function keepZoneFocus(zone: Zone, frames: number) {
 
 /** Shortcut of a tool: shows it and gives it the focus; hides it when it has the focus already. */
 function toggleToolFocus(id: string) {
+  if (!toolPanels[id]) return false
   // A Grid desk has no zones: the tool is a tile.
   if (tileMode() && !phone()) return showToolTile(id)
   const z = zoneOf(session, id)
@@ -262,7 +279,7 @@ const menus: [string, string[]][] = [
   ['menu|Navigate', ['search.everywhere', 'nav.recentFiles', '-', 'nav.back', 'nav.forward', '-', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', '-', 'nav.related', 'nav.test']],
   ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover', '-', 'lsp.rename', 'lsp.format', '-', 'edit.fold', 'edit.unfold', 'edit.foldAll', 'edit.unfoldAll']],
   ['menu|View', ['view.splitRight', 'view.splitDown', '-', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', '-', 'view.visualFocus', 'view.focusOutline', 'view.focusDim', '-', 'view.whitespace', 'view.wordWrap', 'view.markdown', '-', 'console.new', 'palette.open']],
-  ['menu|Tools', ['tool.explorer', 'tool.search', 'tool.git', 'tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.questions', 'tool.database', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.console', 'tool.problems', 'tool.docker']],
+  ['menu|Tools', ['tool.explorer', 'tool.search', 'tool.git', 'tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.questions', 'tool.database', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.console', 'tool.problems', '@tools']],
   ['menu|Help', ['help.docs', 'help.guide', 'help.glossary', '-', 'help.shortcuts']],
 ]
 
@@ -279,11 +296,13 @@ function openMenu(e: MouseEvent, ids: string[]) {
   const r = btn.getBoundingClientRect()
   // The action runs where the focus was (the menu buttons do not take it), the editor otherwise.
   const prev = focusBeforeMenus()
+  // @tools: the tools of the enabled plugins, and the core's that show only without them.
+  ids = ids.flatMap((id) => (id === '@tools' ? [...pluginTools().map((p) => `tool.${p.id}`), ...(toolPanels.forwards ? ['tool.forwards'] : [])] : [id]))
   const items: MenuItem[] = ids.map((id) =>
     id === '-'
       ? { separator: true, label: '' }
       : {
-          label: t(actions.find((a) => a.id === id)?.label ?? id),
+          label: t(actionOf(id)?.label ?? id),
           hint: shortcutOf(id),
           checked: menuChecks[id]?.(),
           action: () => {

@@ -1,4 +1,4 @@
-// Port forwards tab of the Docker tool (SSH projects): ports reached from the SSH host made
+// Port forwards tab, a core part shown by the Docker plugin or the Forwards tool (SSH projects): ports reached from the SSH host made
 // available on the machine of the pod, like ssh -L. Kept in .ide/forwards.json by the pod; its
 // RPC methods and event keep the name tunnels.* (GLOSSARY.md: port forward; a tunnel is WebRTC).
 import { createResource, createSignal, For, onCleanup, Show } from 'solid-js'
@@ -6,6 +6,7 @@ import { on as onPod, request } from '../pod/rpc'
 import { errorToast } from '../ui/toast'
 import { Icon } from '../ui/icons'
 import { t } from '../i18n'
+import './forwards.css'
 
 export interface Forward {
   id: string

@@ -19,7 +19,7 @@ func TestPlugins(t *testing.T) {
 	dir := t.TempDir()
 	id := a.call("projects.create", map[string]any{"type": "local", "path": dir})["result"].(map[string]any)["id"].(string)
 	opened := a.call("project.open", map[string]any{"id": id})["result"].(map[string]any)
-	if list := opened["plugins"].([]any); len(list) != 1 || list[0].(map[string]any)["enabled"] != true {
+	if list := opened["plugins"].([]any); len(list) != 2 || list[1].(map[string]any)["enabled"] != true {
 		t.Fatalf("plugins of project.open: %v", opened["plugins"])
 	}
 	name := filepath.Base(dir)
@@ -27,11 +27,11 @@ func TestPlugins(t *testing.T) {
 		t.Fatalf("hello.greet: %v", r)
 	}
 	rt, _ := s.openRuntime(id, sshx.Creds{})
-	if defs := s.pluginDefs(rt); len(defs) != 1 || !strings.Contains(string(defs[0]), `"hello_greet"`) {
+	if defs := s.pluginDefs(rt); len(defs) != 3 || !strings.Contains(string(defs[2]), `"hello_greet"`) {
 		t.Fatalf("assistant tools: %s", defs)
 	}
 	m := &mcpClient{t: t, url: ts.URL, token: s.Token}
-	if tools := m.rpc("tools/list", nil)["tools"].([]any); len(tools) != len(mcpTools)+1 {
+	if tools := m.rpc("tools/list", nil)["tools"].([]any); len(tools) != len(mcpTools)+3 {
 		t.Fatalf("tools/list: %d tools", len(tools))
 	}
 	if text := m.ok("hello_greet", map[string]any{"cwd": dir, "name": "y"}); text != "Hello y from "+name {
@@ -49,7 +49,7 @@ func TestPlugins(t *testing.T) {
 	if e := a.callRawIn("", "hello.greet", nil)["error"]; e == nil || !strings.Contains(e.(map[string]any)["message"].(string), "disabled") {
 		t.Fatalf("hello.greet disabled: %v", e)
 	}
-	if defs := s.pluginDefs(rt); len(defs) != 0 {
+	if defs := s.pluginDefs(rt); len(defs) != 2 {
 		t.Fatalf("assistant tools of a disabled plugin: %s", defs)
 	}
 	if text, failed := m.tool("hello_greet", map[string]any{"cwd": dir}); !failed || !strings.Contains(text, "disabled") {

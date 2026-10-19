@@ -1,10 +1,7 @@
 // State of the Docker tool: status of docker, Compose stack of the project, containers of the
 // host, instant statistics, selection. Lists are refreshed while the tool is shown.
 import { createSignal } from 'solid-js'
-import { request } from '../pod/rpc'
-import { session } from '../state/project'
-import { newConsole } from '../console/consoles'
-import { errorToast } from '../ui/toast'
+import { api, desk, errorToast } from './plugin'
 
 export interface Port {
   ip?: string
@@ -60,11 +57,11 @@ const [selected, setSelected] = createSignal<Selection>(null)
 const [busy, setBusy] = createSignal<Set<string>>(new Set())
 export { status, stack, host, stats, selected, setSelected, busy }
 
-export const profiles = () => session.docker.profiles.filter((p) => status()?.profiles?.includes(p))
+export const profiles = () => desk.get().profiles.filter((p) => status()?.profiles?.includes(p))
 
 export async function refreshStatus() {
   try {
-    setStatus(await request<DockerStatus>('docker.status'))
+    setStatus(await api.rpc<DockerStatus>('status'))
   } catch (e) {
     setStatus({ available: false, compose: false, error: (e as Error).message })
   }
@@ -73,7 +70,7 @@ export async function refreshStatus() {
 export async function refreshStack() {
   if (!status()?.available || !status()?.compose || !status()?.composeFile) return
   try {
-    setStack({ stack: await request<Stack>('docker.stack', { profiles: profiles() }) })
+    setStack({ stack: await api.rpc<Stack>('stack', { profiles: profiles() }) })
   } catch (e) {
     setStack({ error: (e as Error).message })
   }
@@ -82,7 +79,7 @@ export async function refreshStack() {
 export async function refreshHost() {
   if (!status()?.available) return
   try {
-    setHost({ list: await request<Container[]>('docker.containers') })
+    setHost({ list: await api.rpc<Container[]>('containers') })
   } catch (e) {
     setHost({ error: (e as Error).message })
   }
@@ -92,7 +89,7 @@ export async function refreshHost() {
 export async function refreshStats(list: Container[]) {
   const ids = list.filter((c) => c.state === 'running').map((c) => c.id)
   try {
-    setStats(ids.length ? await request<Record<string, Stats>>('docker.stats', { ids }) : {})
+    setStats(ids.length ? await api.rpc<Record<string, Stats>>('stats', { ids }) : {})
   } catch {
     /* the list shows the error */
   }
@@ -124,10 +121,10 @@ async function busyWhile(key: string, f: () => Promise<unknown>) {
 
 /** Start, stop or restart of the stack (service empty) or of a service, run by the pod. */
 export const composeAction = (action: 'start' | 'stop' | 'restart', service = '') =>
-  busyWhile(service || 'stack', () => request('docker.compose', { profiles: profiles(), action, service }))
+  busyWhile(service || 'stack', () => api.rpc('compose', { profiles: profiles(), action, service }))
 
 export const containerAction = (action: 'start' | 'stop' | 'restart' | 'remove', id: string) =>
-  busyWhile(id, () => request('docker.container', { action, id }))
+  busyWhile(id, () => api.rpc('container', { action, id }))
 
 const quote = (s: string) => (/^[\w./:=@,+-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`)
 
@@ -146,12 +143,12 @@ export function composeTask(kind: 'recreate' | 'rebuild' | 'pull' | 'down' | 'do
     downVolumes: [[...base, 'down', '-v']],
   }[kind]
   const line = cmds.map((c) => c.map(quote).join(' ')).join(' && ')
-  return newConsole({ kind: 'task', command: ['sh', '-c', line], title: line.replace(/^docker compose /, 'compose ') })
+  return api.terminal.open({ kind: 'task', command: ['sh', '-c', line], title: line.replace(/^docker compose /, 'compose ') })
 }
 
 /** A terminal in a container: bash when it has one, else sh. */
 export function shell(c: Container, root = false) {
-  return newConsole({
+  return api.terminal.open({
     command: ['docker', 'exec', '-it', ...(root ? ['-u', 'root'] : []), c.id, 'sh', '-c', 'command -v bash >/dev/null && exec bash || exec sh'],
     title: `${c.service || c.name}${root ? ' (root)' : ''}`,
   })

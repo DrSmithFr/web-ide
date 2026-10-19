@@ -36,7 +36,7 @@ func (p *Plugin) Register(h plugins.Host) {
 		Props:       map[string]any{"name": map[string]any{"type": "string", "description": "Who to greet"}},
 		Run: func(ctx context.Context, c plugins.Call) (plugins.Result, error) {
 			text := greet(c)
-			return plugins.Result{Content: text, Summary: assistant.T("greeted", nil)}, nil
+			return plugins.Result{Content: text, Summary: assistant.T("greeted", nil).Raw()}, nil
 		},
 	})
 }

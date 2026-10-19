@@ -48,7 +48,8 @@ flowchart LR
   llm["llm<br/>assistant"]
   agents["agents<br/>Agents tool"]
   questions["questions<br/>Questions tool"]
-  docker["docker"]
+  plugins["plugins<br/>Docker, the api"]
+  forwards["forwards<br/>port forwards, previews"]
   console["console<br/>terminals, tasks"]
   db["db<br/>database explorer"]
   editor["editor"]
@@ -56,7 +57,8 @@ flowchart LR
   pages --> agents
   pages --> console
   pages --> db
-  pages --> docker
+  pages --> forwards
+  pages --> plugins
   pages --> kanban
   pages --> llm
   pages --> questions
@@ -68,7 +70,7 @@ flowchart LR
   kanban --> console
   kanban --> llm
   llm --> console
-  llm --> docker
+  llm -->|"assistant options"| plugins
   llm --> editor
   llm -->|"tickets"| kanban
   llm -->|"ask_user"| questions
@@ -76,8 +78,10 @@ flowchart LR
   agents -->|"MessageBox"| llm
   agents --> questions
   questions --> llm
-  docker --> console
-  docker --> llm
+  plugins -->|"terminal"| console
+  plugins --> forwards
+  plugins -->|"previews"| llm
+  forwards --> llm
   console --> editor
   console --> llm
   db --> editor
@@ -95,7 +99,7 @@ Diagram edges are imports of the folders, checked with a script over the `import
 - [`pod/`](pod/): The pod as seen by the page: `rpc.ts` (requests, pushed events, reconnection), `transport.ts` (WebSocket, or a MessagePort to the bootstrap page through a tunnel), `remote.ts` (requests to another pod from the home page), `power.ts`, `update.ts` (signed requests), `push.ts`
 - [`state/`](state/): Open project and session (tabs, split tree, tool zones), settings, git state, folder marks, the phone layout (`mobile.ts`: the view shown, the keyboard, no zoom)
 - [`pages/`](pages/): `Home`, `ProjectPage` (menu bar, rails, side panels, editor area, bottom tools), `ProjectBar`, `DeskSwitcher`, `Detached` (one panel alone)
-- [`ui/`](ui/): Editor area, rendered Markdown files (`MarkdownView.tsx`) and the embedded docs (`DocView.tsx`, see `help/`), status bar, diff view, overlays (modal, prompt, pick list, context menu), toasts, icons, empty states, keyboard navigation of the toolbars and tab bars (`roving.ts`)
+- [`ui/`](ui/): Editor area, ANSI colors of an output (`ansi.ts`), rendered Markdown files (`MarkdownView.tsx`) and the embedded docs (`DocView.tsx`, see `help/`), status bar, diff view, overlays (modal, prompt, pick list, context menu), toasts, icons, empty states, keyboard navigation of the toolbars and tab bars (`roving.ts`)
 - [`editor/`](editor/): `Doc` (buffer, revisions, undo, file format, indentation), `EditorView` (block rendering, Custom Highlight API, indentation guides, whitespace overlay, multiple carets, folding, soft wrap with rows read from the layout), `carets.ts` (words, occurrences), `folding.ts` (fold ranges), `indent.ts` (indentation detection), tokenizer and grammars, three-way merge, line diff, sub-word moves, find bar
 - [`keys/`](keys/): Binding table and QWERTY / AZERTY presets
 - [`lsp/`](lsp/): Client, completion, edits, rename and formatting
@@ -111,8 +115,8 @@ Diagram edges are imports of the folders, checked with a script over the `import
 - [`agents/`](agents/): Agents tool: sessions of the worktrees of the window and their threads (`state.ts`, events dropped when older than the thread loaded, by `seq`), tabs, launcher, thread, permission cards (`AgentsTool.tsx`), the follow mode (`state.ts`: an edit tool call completed opens its file when `follow` is set on the session, `agents.follow`), the message box of a session (`Composer.tsx`: `llm/MessageBox.tsx` with the agent's commands, attachments prepared by `llm/attachments.ts` sent as parts, drafts per session)
 - [`questions/`](questions/): Questions tool: the list (`state.ts`, asked again on `questions.changed`), the modal one question at a time and its auto-open (not for a question whose thread is on screen: `showsQuestions`), the forms of `elicitation/create` (`Form.tsx`, also in the Agents thread)
 - [`kanban/`](kanban/): Board, ticket view, workflow actions, linked conversations, milestones and objectives
-- [`docker/`](docker/): Docker tool: lists and polling (`state.ts`), detail pane, logs with ANSI colors (`ansi.ts`), disk usage, port forwards (and their list on the home page), app previews
-- [`plugins/`](plugins/): The plugins of the window ([plugins.md](../../docs/design/plugins.md)): `registry.ts` (the states sent by the pod in `project.open` and `plugins.changed`, the page modules of the built-ins activated once when first enabled, their tools, tab views `plugin:<id>/<view>` and commands), `api.ts` (the `api` a module gets: `rpc` to its backend, events, `openFile`, `openView`, port forwards and previews of the core, `ui`), `types.ts`; one folder per built-in (`hello/`: the test plugin). The tools of the enabled plugins join `toolPanels` (`pages/ProjectPage.tsx`) and the tiles; their default zone comes from `state/zones.ts` (`setPluginZones`), which keeps the place of a disabled one
+- [`forwards/`](forwards/): Port forwards and app previews of the core: their tabs (shown by the Docker plugin), the Forwards tool that holds them where Docker is disabled, the list of the open forwards on the home page
+- [`plugins/`](plugins/): The plugins of the window ([plugins.md](../../docs/design/plugins.md)): `registry.ts` (the states sent by the pod in `project.open` and `plugins.changed`, the page modules of the built-ins activated once when first enabled, their tools, tab views `plugin:<id>/<view>` and commands), `api.ts` (the `api` a module gets: `rpc` to its backend, events, `openFile`, `openView`, port forwards and previews of the core, `ui`), `types.ts`; one folder per built-in: `docker/` (the Docker tool: lists and polling `state.ts`, detail pane, logs with ANSI colors, disk usage; `plugin.ts` holds its `api` and its desk state, nothing else of the core is imported) and `hello/` (the test plugin). The tools of the enabled plugins join `toolPanels` (`pages/ProjectPage.tsx`) and the tiles; their default zone comes from `state/zones.ts` (`setPluginZones`), which keeps the place of a disabled one
 - [`i18n/`](i18n/): `t()` and the catalogs (English source strings, `languages.json`, one catalog per other language)
 
 ## Invariants and pitfalls

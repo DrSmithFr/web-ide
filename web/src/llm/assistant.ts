@@ -5,9 +5,10 @@
 import { produce, reconcile } from 'solid-js/store'
 import { createSignal } from 'solid-js'
 import { on, request } from '../pod/rpc'
-import { activeTab, attachWorktree, home, relPath, session } from '../state/project'
+import { activeTab, attachWorktree, home, relPath } from '../state/project'
 import { approval, chat, chatTrail, config, emptyChat, leaveChat, live, loadModels, newId, prefs, refreshChats, setApproval, setChat, setIncomingDraft, setLive, type Chat, type ChatMessage, type Mode, type Part } from './state'
 import { runUiTool } from './uiTools'
+import { pluginAssistantOptions } from '../plugins/registry'
 import { answerStrings, type AnswerEntry } from './ask'
 import { toast } from '../ui/toast'
 import { t } from '../i18n'
@@ -324,7 +325,7 @@ export function assistantOptions() {
     planServer: prefs.planServer,
     planModel: prefs.planModel,
     activeFile: tab?.kind === 'file' && tab.path ? relPath(tab.path) : undefined,
-    dockerProfiles: session.docker?.profiles ?? [],
+    plugins: pluginAssistantOptions(),
   }
 }
 

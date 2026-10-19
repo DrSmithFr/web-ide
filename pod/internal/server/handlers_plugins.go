@@ -47,7 +47,7 @@ func (h pluginHost) Handle(method string, f plugins.Handler) {
 		if !h.s.pluginOn(rt, id) {
 			return nil, i18n.Errorf("the %s plugin is disabled on this project", h.m.Name)
 		}
-		return f(ctx, plugins.Call{Runtime: rt, Params: p, Lang: c.language()})
+		return f(ctx, plugins.Call{Runtime: rt, Params: p, Lang: c.language(), Window: clientWindow{c}})
 	}))
 }
 
@@ -143,17 +143,41 @@ func (s *Server) findPluginTool(name string) *pluginTool {
 }
 
 // runPluginTool runs an assistant tool of a plugin on rt's project (the assistant and the MCP).
-func (s *Server) runPluginTool(ctx context.Context, rt *runtime.Runtime, t *pluginTool, args json.RawMessage, lang string) (toolResult, error) {
+func (s *Server) runPluginTool(ctx context.Context, rt *runtime.Runtime, t *pluginTool, args json.RawMessage, lang string, options json.RawMessage) (toolResult, error) {
 	if !s.pluginOn(rt, t.plugin) {
 		m, _ := s.Plugins.Get(t.plugin)
 		return toolResult{}, i18n.Errorf("the %s plugin is disabled on this project", m.Manifest().Name)
 	}
-	res, err := t.tool.Run(ctx, plugins.Call{Runtime: rt, Params: args, Lang: lang})
+	res, err := t.tool.Run(ctx, plugins.Call{Runtime: rt, Params: args, Lang: lang, Options: options})
 	if err != nil {
 		return toolResult{}, err
 	}
 	if res.Error {
-		return toolResult{Content: "Error: " + res.Content, Summary: res.Summary.Raw(), Status: "error"}, nil
+		return toolResult{Content: "Error: " + res.Content, Summary: res.Summary, Status: "error"}, nil
 	}
-	return ok(res.Content, res.Summary), nil
+	return toolResult{Content: res.Content, Summary: res.Summary, Status: "ok"}, nil
+}
+
+// clientWindow is the window of an RPC call of a plugin.
+type clientWindow struct{ c *Client }
+
+func (w clientWindow) Push(event string, data any) { w.c.push(event, data) }
+func (w clientWindow) Done() <-chan struct{}       { return w.c.ctx.Done() }
+func (w clientWindow) Hold(id string, stop func()) { w.c.streams.Store(id, stop) }
+func (w clientWindow) Release(id string) {
+	if stop, ok := w.c.streams.LoadAndDelete(id); ok {
+		stop.(func())()
+	}
+}
+
+// pluginOptions are the options of a plugin in a conversation of the assistant.
+func pluginOptions(o assistant.Options, plugin string) json.RawMessage {
+	if raw, ok := o.Plugins[plugin]; ok {
+		return raw
+	}
+	if plugin == "docker" && o.DockerProfiles != nil { // a page from before the Docker plugin
+		data, _ := json.Marshal(map[string]any{"profiles": o.DockerProfiles})
+		return data
+	}
+	return nil
 }

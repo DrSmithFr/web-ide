@@ -1,6 +1,7 @@
 // Plugins (#113): the test plugin hello (WEBIDE_TEST_PLUGINS) adds a tool in the right zone, an
 // RPC method and an assistant tool of the MCP; disabled on the project in Settings > Plugins,
-// its icon, its command and its tool go, its place in the zone stays.
+// its icon, its command and its tool go, its place in the zone stays. Docker (#114) is a
+// built-in plugin: disabled, its tools go and the Forwards tool of the core keeps the previews.
 const fs = require('fs')
 const { run, openProject, assert, mcp, WS } = require('../common.cjs')
 
@@ -38,6 +39,11 @@ run(async ({ page }) => {
     await page.keyboard.press('Control+a')
     await page.keyboard.type(q)
   }
+  // Settings closed by their button (the focus may be on the page after a change).
+  const closeSettings = async () => {
+    await page.click('.modal-settings .modal-head button[title^="Close"]')
+    await page.waitForSelector('.modal-settings', { state: 'detached' })
+  }
   await palette('hello')
   await page.waitForSelector('.pick-item:has-text("Hello")')
   await page.keyboard.press('Escape')
@@ -53,7 +59,7 @@ run(async ({ page }) => {
   assert(JSON.stringify(saved.disabled) === '["hello"]', 'disabled in .ide/plugins.json: ' + JSON.stringify(saved))
   r = await mcp('hello_greet', {})
   assert(r.result.isError && text(r).includes('the Hello plugin is disabled on this project'), 'refused when disabled: ' + text(r))
-  await page.keyboard.press('Escape')
+  await closeSettings()
 
   // Still off after a reload.
   await page.reload()
@@ -69,4 +75,38 @@ run(async ({ page }) => {
   await page.waitForSelector(icon)
   r = await mcp('hello_greet', {})
   assert(!r.result.isError, 'enabled again: ' + text(r))
+  await closeSettings()
+
+  // Docker: its tab chosen is kept in the desk; disabled, it goes with its assistant tools and the
+  // Forwards tool takes its place; enabled again, it is back on the same tab.
+  const docker = '.rail-group[data-zone=bottomRight] .rail-btn[data-id=docker]'
+  const forwards = '.rail-group[data-zone=bottomRight] .rail-btn[data-id=forwards]'
+  await page.click(docker)
+  await page.click('[data-testid=docker-tab-previews]')
+  assert(!(await page.$(forwards)), 'no Forwards tool beside Docker')
+  assert((await tools()).includes('docker_ps'), 'docker_ps listed by the MCP')
+  const setDocker = async (on) => {
+    await palette('settings')
+    await page.waitForSelector('.pick-item.selected:has-text("Settings")')
+    await page.keyboard.press('Enter')
+    await page.click('.settings-nav button:has-text("Plugins")')
+    await (on ? page.check('[data-testid=plugin-docker]') : page.uncheck('[data-testid=plugin-docker]'))
+    await closeSettings()
+  }
+  await setDocker(false)
+  await page.waitForSelector(docker, { state: 'detached' })
+  await page.click(forwards)
+  await page.waitForSelector('[data-testid=forwards-tool] .tab.active:has-text("Previews")')
+  r = await mcp('docker_ps', {})
+  assert(r.result.isError && text(r).includes('the Docker plugin is disabled on this project'), 'docker_ps refused: ' + text(r))
+  await palette('docker')
+  await page.waitForTimeout(300)
+  assert(!(await page.$('.pick-item:has-text("Docker")')), 'no Docker command in Search Everywhere')
+  await page.keyboard.press('Escape')
+  await setDocker(true)
+  await page.waitForSelector(forwards, { state: 'detached' })
+  await page.click(docker)
+  await page.waitForSelector('[data-testid=docker-tab-previews][aria-selected=true]')
+  r = await mcp('docker_ps', {})
+  assert(!text(r).includes('disabled'), 'docker_ps back: ' + text(r))
 })
