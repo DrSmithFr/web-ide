@@ -22,7 +22,6 @@ import { EditorArea } from '../ui/EditorArea'
 import { ProblemsTool, problemCount } from '../tools/problems'
 import { capability } from '../plugins/capabilities'
 import { createIn, Explorer } from '../panels/Explorer'
-import { GlobalSearch, focusGlobalSearch } from '../panels/GlobalSearch'
 import { GitPanel } from '../panels/git/GitPanel'
 import { KanbanPanel } from '../kanban/Panel'
 import { NewTicketHost } from '../kanban/Board'
@@ -57,7 +56,6 @@ import { DoodleHost } from '../llm/doodle/DoodleModal'
 /** Tools of the four zones, the core's then those of the enabled plugins; their placement comes from state/zones. */
 export const toolPanels: Record<string, { label: string; icon: string; component: () => JSX.Element; badge?: () => number }> = createMutable({
   explorer: { label: 'Explorer', icon: 'files', component: Explorer },
-  search: { label: 'Search', icon: 'search', component: GlobalSearch },
   git: { label: 'Git', icon: 'branch', component: GitPanel },
   kanban: { label: 'Kanban', icon: 'kanban', component: KanbanPanel },
   problems: { label: 'Problems', icon: 'problems', component: ProblemsTool, badge: problemCount },
@@ -257,7 +255,7 @@ const menus: [string, string[]][] = [
   ['menu|Navigate', ['search.everywhere', 'nav.recentFiles', '-', 'nav.back', 'nav.forward', '-', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', '-', 'nav.related', 'nav.test']],
   ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover', '-', 'lsp.rename', 'lsp.format', '-', 'edit.fold', 'edit.unfold', 'edit.foldAll', 'edit.unfoldAll']],
   ['menu|View', ['view.splitRight', 'view.splitDown', '-', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', '-', 'view.visualFocus', 'view.focusOutline', 'view.focusDim', '-', 'view.whitespace', 'view.wordWrap', 'view.markdown', '-', 'console.new', 'palette.open']],
-  ['menu|Tools', ['tool.explorer', 'tool.search', 'tool.git', 'tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.questions', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.problems', 'tool.forwards', '@tools']],
+  ['menu|Tools', ['tool.explorer', 'tool.git', 'tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.questions', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.problems', 'tool.forwards', '@tools']],
   ['menu|Help', ['help.docs', 'help.guide', 'help.glossary', '-', 'help.shortcuts']],
 ]
 
@@ -721,10 +719,6 @@ export function ProjectPage(props: { id: string }) {
     ...[1, 2, 3, 4, 5, 6, 7, 8, 9].flatMap((n) => [registerAction(`desk.go.${n}`, () => goDesk(n)), registerAction(`desk.send.${n}`, () => sendToDesk(n))]),
     registerAction('view.toggleBottom', () => mutate((s) => toggleTool(s, 'console'))),
     ...Object.keys(toolPanels).map((id) => registerAction(`tool.${id}`, () => toggleToolFocus(id))),
-    registerAction('search.global', () => {
-      mutate((s) => (s.left.panel = 'search'))
-      requestAnimationFrame(focusGlobalSearch)
-    }),
     onPod('pod.reconnected', async () => {
       await reopenProject()
       void refreshAgents()

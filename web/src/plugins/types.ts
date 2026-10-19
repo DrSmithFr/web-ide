@@ -4,12 +4,15 @@ import type { JSX } from 'solid-js'
 import type { TabState } from '../state/project'
 import type { Zone } from '../state/zones'
 import type { PluginApi } from './api'
+import type { SearchProvider } from '../popups/searchProviders'
 
 export interface PluginTool {
   id: string
   label: string
   icon: string
   zone: Zone
+  /** The tool it comes before in its zone by default. */
+  before?: string
 }
 
 export interface PluginManifest {
@@ -44,6 +47,8 @@ export interface PluginContributions {
   /** Tab views, opened as tabs of kind plugin:<plugin>/<view>. */
   views?: Record<string, (props: { tab: TabState; paneId: string }) => JSX.Element>
   commands?: Record<string, () => void>
+  /** Kinds of results of Search Everywhere, each with its tab. */
+  searchProviders?: SearchProvider[]
   /** Components mounted once in the project window (a modal the plugin opens). */
   hosts?: (() => JSX.Element)[]
   /** Called when the window opens a project, and again after a reconnection (lists to fetch again). */

@@ -2,7 +2,7 @@
 // so that a built-in plugin uses nothing an external one could not.
 import { notifyIn, notifyOn, on, openChannel, request, requestIn, type Channel } from '../pod/rpc'
 import { fmtDate, t, tn } from '../i18n'
-import { attached, findLeaf, home, isLocal, mutate, openFile, openTab, openTextTab, project, root, session, setActivePane, type TabState } from '../state/project'
+import { attached, findLeaf, home, isLocal, mutate, openFile, openTab, openTextTab, project, relPath, root, session, setActivePane, type TabState } from '../state/project'
 import { showTool } from '../state/zones'
 import { detachTab, openTile, tileMode } from '../state/tiles'
 import { phone } from '../state/mobile'
@@ -35,7 +35,7 @@ export function makeApi(id: string) {
      * Calls a method of the plugin's backend, in the project of the window: <id>.<method>, or the
      * method as named when it has a prefix (one of the namespaces of the manifest: console.create).
      */
-    rpc: <T = any>(method: string, params?: any) => request<T>(full(method), params),
+    rpc: <T = any>(method: string, params?: any, signal?: AbortSignal) => request<T>(full(method), params, signal),
     /** The same in a worktree attached to the window, and a notification without answer. */
     rpcIn: <T = any>(project: string | undefined, method: string, params?: any) => requestIn<T>(project, full(method), params),
     notifyIn: (project: string | undefined, method: string, params?: any) => notifyIn(project, full(method), params),
@@ -56,6 +56,8 @@ export function makeApi(id: string) {
       root,
       /** The worktrees attached to the window (the project included). */
       attached: () => Object.keys(attached),
+      /** A path of the project as shown (relative to its root). */
+      relPath,
     },
     /** Capabilities as services: the plugin's own (provide) and those of the others (use). */
     provide: <K extends keyof Capabilities>(name: K, impl: Capabilities[K]) => provide(id, name, impl),
@@ -119,3 +121,4 @@ export function makeApi(id: string) {
 export type PluginApi = ReturnType<typeof makeApi>
 export type { MenuItem } from '../ui/overlay'
 export type { TabState }
+export type { SearchHit, SearchProvider } from '../popups/searchProviders'

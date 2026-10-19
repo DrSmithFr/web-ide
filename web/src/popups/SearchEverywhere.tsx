@@ -1,7 +1,8 @@
-// Search Everywhere: one popup with tabs over the files, the symbols of the language servers,
-// the actions and the text of the project. Double Shift opens it on All; Go to file, Go to
-// symbol and the command palette open it on their own tab. Tab / Shift+Tab change the tab.
-import { batch, createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show } from 'solid-js'
+// Search Everywhere: one popup with a tab per search provider (searchProviders.ts): the files,
+// the symbols of the language servers and the actions of the core, and those of the plugins (the
+// text of the project: Search). Double Shift opens it on All; Go to file, Go to symbol and the
+// command palette open it on their own tab. Tab / Shift+Tab change the tab.
+import { batch, createEffect, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js'
 import { Portal } from 'solid-js/web'
 import { request } from '../pod/rpc'
 import { activeTab, basename, openFile, relPath } from '../state/project'
@@ -14,32 +15,15 @@ import { FileIcon } from '../panels/fileIcons'
 import { Icon } from '../ui/icons'
 import { keepFocus } from '../state/focus'
 import { t } from '../i18n'
+import { searchProviders, setCoreProviders, type SearchHit } from './searchProviders'
 import './popups.css'
 
-export type SearchTab = 'all' | 'files' | 'symbols' | 'actions' | 'text'
-const tabs: [SearchTab, string][] = [
-  ['all', 'All'],
-  ['files', 'Files'],
-  ['symbols', 'Symbols'],
-  ['actions', 'Actions'],
-  ['text', 'Text'],
-]
+/** All, or the id of a provider (files, symbols, actions, text…). */
+export type SearchTab = string
 
-interface Hit {
-  label: string
-  detail?: string
-  hint?: string
-  icon?: () => JSX.Element
-  /** Code labels (symbols, lines of text) and path details in monospace. */
-  code?: boolean
-  path?: boolean
-  /** Ranges of the label to highlight (text matches). */
-  ranges?: [number, number][]
-  run: () => void
-}
+type Hit = SearchHit
 
 interface Source {
-  /** Wait after the last key before searching (slow sources). */
   delay: number
   find: (q: string, signal: AbortSignal) => Promise<Hit[]>
 }
@@ -127,50 +111,27 @@ function findActions(q: string, max: number) {
   )
 }
 
-interface Match {
-  path: string
-  line: number
-  col: number
-  text: string
-  ranges: [number, number][]
+// The providers of the core; the text of the project is the Search plugin's.
+setCoreProviders([
+  { id: 'files', label: 'Files', placeholder: 'Go to file (name or path, fuzzy search)', order: 10, inAll: 8, delay: 0, max: 100, find: (q, _s, max) => findFiles(q, max) },
+  { id: 'symbols', label: 'Symbols', placeholder: 'Go to symbol (class, function, method…)', order: 20, inAll: 8, delay: 150, minChars: 2, find: (q, s, max) => findSymbols(q, max, s) },
+  { id: 'actions', label: 'Actions', placeholder: 'Command…', order: 30, inAll: 8, delay: 0, find: async (q, _s, max) => findActions(q, max) },
+])
+
+/** The tab shown: the one asked, All when its provider is not there (its plugin is off). */
+const shown = () => (tabs().some(([id]) => id === tab()) ? tab() : 'all')
+
+/** The tabs: All, then a tab per provider. */
+const tabs = () => [['all', 'All'] as [string, string], ...searchProviders().map((p): [string, string] => [p.id, p.label])]
+
+/** The sources of a tab: All shows the first results of the providers that take part in it. */
+function sourcesOf(tab: SearchTab): [string, Source][] {
+  if (tab === 'all') return searchProviders().filter((p) => p.inAll).map((p) => [p.label, { delay: p.delay, find: (q, s) => p.find(q, s, p.inAll!) }])
+  const p = searchProviders().find((x) => x.id === tab)
+  return p ? [['', { delay: p.delay, find: (q, s) => p.find(q, s, p.max ?? 200) }]] : []
 }
 
-async function findText(q: string, signal: AbortSignal) {
-  if (q.length < 2) return []
-  const r = await request<{ matches: Match[] }>('search.grep', { query: q, max: 200 }, signal)
-  return r.matches.map((m): Hit => {
-    const indent = m.text.length - m.text.trimStart().length
-    return {
-      label: m.text.trim(),
-      code: true,
-      path: true,
-      ranges: m.ranges.map(([a, b]) => [a - indent, b - indent]),
-      detail: `${relPath(m.path)}:${m.line}`,
-      run: () => void openFile({ path: m.path, line: m.line - 1, col: m.col }),
-    }
-  })
-}
-
-// Sources of each tab; All shows the first results of the files, symbols and actions.
-const sources: Record<SearchTab, [string, Source][]> = {
-  all: [
-    ['Files', { delay: 0, find: (q) => findFiles(q, 8) }],
-    ['Symbols', { delay: 150, find: (q, s) => findSymbols(q, 8, s) }],
-    ['Actions', { delay: 0, find: async (q) => findActions(q, 8) }],
-  ],
-  files: [['', { delay: 0, find: (q) => findFiles(q, 100) }]],
-  symbols: [['', { delay: 150, find: (q, s) => findSymbols(q, 200, s) }]],
-  actions: [['', { delay: 0, find: async (q) => findActions(q, 200) }]],
-  text: [['', { delay: 250, find: findText }]],
-}
-
-const placeholders: Record<SearchTab, string> = {
-  all: 'Search files, symbols and actions',
-  files: 'Go to file (name or path, fuzzy search)',
-  symbols: 'Go to symbol (class, function, method…)',
-  actions: 'Command…',
-  text: 'Search the text of the project',
-}
+const placeholderOf = (tab: SearchTab) => (tab === 'all' ? 'Search files, symbols and actions' : (searchProviders().find((p) => p.id === tab)?.placeholder ?? ''))
 
 // ---------- popup ----------
 
@@ -225,7 +186,7 @@ export function SearchEverywhereHost() {
   createEffect(() => {
     if (!open()) return
     const q = query().trim()
-    const list = sources[tab()]
+    const list = sourcesOf(shown())
     ctrl?.abort()
     const c = new AbortController()
     ctrl = c
@@ -255,8 +216,9 @@ export function SearchEverywhereHost() {
     else if (e.key === 'PageDown') setIndex((i) => Math.min(n - 1, i + 10))
     else if (e.key === 'PageUp') setIndex((i) => Math.max(0, i - 10))
     else if (e.key === 'Tab') {
-      const i = tabs.findIndex(([id]) => id === tab())
-      setTab(tabs[(i + (e.shiftKey ? -1 : 1) + tabs.length) % tabs.length][0])
+      const list = tabs()
+      const i = list.findIndex(([id]) => id === shown())
+      setTab(list[(i + (e.shiftKey ? -1 : 1) + list.length) % list.length][0])
     } else if (e.key === 'Enter') {
       const h = hits()[index()]
       if (h) close(h)
@@ -296,9 +258,9 @@ export function SearchEverywhereHost() {
         <div class="pick-backdrop" onMouseDown={(e) => e.target === e.currentTarget && close()}>
           <div class="pick se" role="dialog" aria-label={t('Search everywhere')} onKeyDown={key}>
             <div class="se-tabs" role="tablist">
-              <For each={tabs}>
+              <For each={tabs()}>
                 {([id, label]) => (
-                  <button role="tab" tabindex="-1" class="se-tab" aria-selected={tab() === id} classList={{ active: tab() === id }} onMouseDown={(e) => e.preventDefault()} onClick={() => setTab(id)}>
+                  <button role="tab" tabindex="-1" class="se-tab" aria-selected={shown() === id} classList={{ active: shown() === id }} onMouseDown={(e) => e.preventDefault()} onClick={() => setTab(id)}>
                     {t(label)}
                   </button>
                 )}
@@ -306,7 +268,7 @@ export function SearchEverywhereHost() {
               <span class="grow" />
               <span class="se-help">{t('Tab: next tab')}</span>
             </div>
-            <input ref={input} class="pick-input" placeholder={t(placeholders[tab()])} value={query()} onInput={(e) => setQuery(e.currentTarget.value)} />
+            <input ref={input} class="pick-input" placeholder={t(placeholderOf(shown()))} value={query()} onInput={(e) => setQuery(e.currentTarget.value)} />
             <div class="pick-list" ref={list} role="listbox">
               <For each={groups()}>
                 {(g) => (
@@ -350,7 +312,7 @@ export function SearchEverywhereHost() {
                 )}
               </For>
               <Show when={!hits().length}>
-                <div class="pick-empty">{busy() ? t('Searching…') : query().trim().length < 2 && (tab() === 'symbols' || tab() === 'text') ? t('Type at least two characters') : t('No result')}</div>
+                <div class="pick-empty">{busy() ? t('Searching…') : query().trim().length < (searchProviders().find((p) => p.id === shown())?.minChars ?? 0) ? t('Type at least two characters') : t('No result')}</div>
               </Show>
             </div>
           </div>

@@ -7,12 +7,14 @@ import { setPluginActions } from '../keys/bindings'
 import { makeApi } from './api'
 import type { PluginContributions, PluginModule, PluginState } from './types'
 import { setCapabilityGate } from './capabilities'
+import { setPluginProviders } from '../popups/searchProviders'
 import { hello } from './hello'
 import { exec } from './exec'
+import { search } from './search'
 import { docker } from './docker'
 import { database } from './database'
 
-const builtins: Record<string, PluginModule> = { database, docker, exec, hello }
+const builtins: Record<string, PluginModule> = { database, docker, exec, hello, search }
 
 const [states, setStates] = createSignal<PluginState[]>([])
 export const pluginStates = states
@@ -38,6 +40,7 @@ export function setPluginStates(list: PluginState[] | undefined, opened = false)
       ...(s.manifest.contributes.commands ?? []).map((c) => ({ id: c.id.includes('.') ? c.id : `${s.manifest.id}.${c.id}`, label: c.label, category: c.category ?? s.manifest.name, keys: c.keys, replaces: c.replaces, inTerminal: c.inTerminal, run: active[s.manifest.id]?.commands?.[c.id] })),
     ]),
   )
+  setPluginProviders(enabled().flatMap((s) => active[s.manifest.id].searchProviders ?? []))
   const now = new Set(enabled().map((s) => s.manifest.id))
   for (const id of now) if (opened || !running.has(id)) active[id].opened?.()
   running = now
