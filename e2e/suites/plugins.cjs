@@ -352,6 +352,13 @@ run(async ({ page }) => {
   assert(!(await mcp('kanban_list', {})).result.isError, 'the MCP answers with AI off')
   r = await mcp('request_doodle', { title: 'x' })
   assert(r.result.isError && text(r).includes('needs the assistant capability'), 'request_doodle refused: ' + text(r))
+  // A briefing asked from a ticket says AI is off, nothing breaks.
+  const nid = Number(/#(\d+)/.exec(text(await mcp('kanban_create', { title: 'Without AI' })))[1])
+  if (!(await page.isVisible('[data-testid=kanban-panel]'))) await page.click('.rail-btn[data-id=kanban]')
+  await page.click(`[data-testid=kanban-panel] [data-testid=ticket-card-${nid}]`)
+  await page.click('[data-testid=ticket-view] [data-testid=ticket-briefing]')
+  await page.waitForSelector('.toast:has-text("The AI plugin is disabled")')
+  await page.click(`.tab:has-text("#${id} Plugin ticket")`)
   await setPlugin('ai', true)
   await page.waitForSelector('.rail-btn[data-id=assistant]')
   if (!(await page.isVisible('.ai-panel'))) await page.click('.rail-btn[data-id=assistant]')

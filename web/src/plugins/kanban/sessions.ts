@@ -24,12 +24,20 @@ function showAssistant() {
   api.showTool('assistant')
 }
 
-/** The assistant of the window (a service of the core until AI is a plugin). */
+/** The assistant of the window (the AI plugin). */
 const assistant = () => capability('assistant')!
+
+/** Without the AI plugin, a conversation cannot start: the user is told so. */
+function aiOff() {
+  if (capability('assistant')) return false
+  toast(t('The AI plugin is disabled on this project (Settings > Plugins).'), 'warn')
+  return true
+}
 
 /** Starts a conversation linked to a ticket in this window, with its first message (adoptedBy: the Orchestrator whose card started it, which follows it). */
 /** effort: the one of the complexity of the ticket for this session (else the options of the user). */
 export async function startTicketChat(tk: Ticket, role: ChatRole, text?: string, feedback?: Feedback, adoptedBy?: string, effort?: 'auto' | Effort) {
+  if (aiOff()) return
   assistant().newChat({ adoptedBy, ticket: { id: tk.id, role, ...(feedback ? { feedback: feedback.id } : {}), ...(effort ? { effort } : {}) }, mode: role === 'briefing' ? 'briefing' : role === 'plan' ? 'plan' : 'build', title: `#${tk.id} ${roleLabels[role]} · ${tk.title}`.slice(0, 80) })
   void linkFeedback(tk, feedback, assistant().chat().id)
   showAssistant()
@@ -48,6 +56,7 @@ export async function startTicketChat(tk: Ticket, role: ChatRole, text?: string,
 /** A Briefing conversation on a milestone: linked to it, it refines it with kanban_milestone
  *  (stories, description) and writes its tickets. */
 export async function startMilestoneBriefing(ms: Milestone) {
+  if (aiOff()) return
   const title = `${t('Milestone')} · ${ms.title}`.slice(0, 80)
   assistant().newChat({ mode: 'briefing', title })
   showAssistant()
@@ -66,6 +75,7 @@ export async function startMilestoneBriefing(ms: Milestone) {
 
 /** Opens a conversation of a ticket in the assistant of this window. */
 export async function openTicketChat(chatId: string) {
+  if (aiOff()) return
   showAssistant()
   if (assistant().chat().id === chatId) return
   try {

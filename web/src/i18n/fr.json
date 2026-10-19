@@ -2231,5 +2231,6 @@
   "The previews are off on this project (Settings > Plugins)": "Les aperçus sont désactivés sur ce projet (Réglages > Plugins)",
   "Always on": "Toujours actif",
   "The Kanban plugin is disabled": "Le plugin Kanban est désactivé",
-  "Status": "Statut"
+  "Status": "Statut",
+  "The AI plugin is disabled on this project (Settings > Plugins).": "Le plugin IA est désactivé sur ce projet (Réglages > Plugins)."
 }
