@@ -1,0 +1,10 @@
+{
+  "id": "files",
+  "name": "Files",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "required": true,
+  "contributes": {
+    "tools": [{ "id": "explorer", "label": "Explorer", "icon": "files", "zone": "left", "before": "search" }]
+  }
+}

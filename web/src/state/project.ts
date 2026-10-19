@@ -78,9 +78,6 @@ export interface SessionData {
   placement: Record<Zone, string[]>
   /** Strip under the editor: tools of the two bottom zones, split at `split` (fraction); shown console and order of the console tabs. */
   bottom: { left: string | null; right: string | null; height: number; split: number }
-  expanded: string[]
-  /** Options of the explorer. */
-  explorer: { hidden: boolean; excluded: boolean; singleClick: boolean; follow: boolean }
   /** The state of each plugin in the desk (plugins/api.ts desk()), by plugin id. */
   plugins: Record<string, Record<string, unknown>>
   /** Other worktrees of the repository open in the window, and the one shown (none: the project of the window). */
@@ -130,8 +127,6 @@ function emptySession(): SessionData {
     right: { panel: null, width: 300 },
     bottom: { left: null, right: null, height: 240, split: 0.5 },
     placement: normalizePlacement(null),
-    expanded: [],
-    explorer: { hidden: true, excluded: true, singleClick: false, follow: false },
     plugins: {},
     attached: [],
     sizes: {},
@@ -207,7 +202,7 @@ on('session.changed', (e: { session: SessionData; desk: number }, from?: string)
 function normalize(raw: any): SessionData {
   const d = emptySession()
   if (!raw || typeof raw !== 'object' || !raw.layout) return d
-  const s: SessionData = { ...d, ...raw, left: { ...d.left, ...raw.left }, right: { ...d.right, ...raw.right }, bottom: { ...d.bottom, ...raw.bottom }, explorer: { ...d.explorer, ...raw.explorer }, plugins: { ...raw.plugins }, sizes: { ...raw.sizes } }
+  const s: SessionData = { ...d, ...raw, left: { ...d.left, ...raw.left }, right: { ...d.right, ...raw.right }, bottom: { ...d.bottom, ...raw.bottom }, plugins: { ...raw.plugins }, sizes: { ...raw.sizes } }
   if (s.left.panel && panelAliases[s.left.panel]) {
     s.right.panel = panelAliases[s.left.panel]
     s.left.panel = null
@@ -226,6 +221,10 @@ function normalize(raw: any): SessionData {
     delete t.table
   }
   delete (s as any).sqlText
+  // The Explorer became the Files plugin (#121): the folders expanded and its options.
+  if (!s.plugins.files && (raw.expanded || raw.explorer)) s.plugins.files = { expanded: raw.expanded ?? [], ...raw.explorer }
+  delete (s as any).expanded
+  delete (s as any).explorer
   // The language servers became a plugin (#120): the tab of the Problems tool.
   if (raw.bottom?.problemsTab && !s.plugins.languages) s.plugins.languages = { tab: raw.bottom.problemsTab }
   delete (s.bottom as any).problemsTab

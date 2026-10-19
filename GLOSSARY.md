@@ -154,6 +154,9 @@ A plugin that ships compiled into the IDE, with the same manifest and API as an 
 **Contribution**
 What a plugin adds at one contribution point of the IDE: a tool, a tab view, an assistant tool, a command, a settings section…
 
+**Locked plugin**
+A built-in plugin the IDE cannot run without (Files, Code): always enabled, shown greyed in Settings → Plugins.
+
 **Diff source**
 What gives the diff view the two sides of a diff tab (Git: the working tree, the index, HEAD, a commit).
 
@@ -291,9 +294,6 @@ A desk bound to an agent's session or a development conversation and its worktre
 
 **Activity** ([desks](docs/design/desks.md))
 The list of the desks of every project with what runs in them, and the way to end them.
-
-**Locked plugin** ([plugins](docs/design/plugins.md))
-A built-in plugin the IDE cannot run without (Files, Code): always enabled, shown greyed in Settings → Plugins.
 
 ## Conflicts
 

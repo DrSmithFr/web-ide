@@ -97,8 +97,12 @@ func (s *Server) registerPlugins() {
 		if err != nil {
 			return nil, err
 		}
-		if _, ok := s.Plugins.Get(a.ID); !ok {
+		pl, ok := s.Plugins.Get(a.ID)
+		if !ok {
 			return nil, i18n.Errorf("unknown plugin: %s", a.ID)
+		}
+		if pl.Manifest().Required && !a.Enabled {
+			return nil, i18n.Errorf("the %s plugin is always on: the IDE needs it", pl.Manifest().Name)
 		}
 		s.plugins.mu.Lock()
 		list, err := plugins.SetEnabled(rt.FS, rt.IdeDir, a.ID, a.Enabled)

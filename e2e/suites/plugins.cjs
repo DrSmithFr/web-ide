@@ -9,6 +9,7 @@
 // (#118) gives the diff view its git sides: off, a diff tab says so, open_diff is refused.
 // Previews (#119) needs terminal: off (or Exec off), its tool and list_previews go. Languages
 // (#120): off, Problems, Structure, the Symbols tab and the code actions go, the editor still edits.
+// Files and Code (#121) are locked; the Explorer takes the colors of Git and the terminal of Exec.
 const fs = require('fs')
 const path = require('path')
 const { execSync } = require('child_process')
@@ -270,4 +271,37 @@ run(async ({ page }) => {
   await setPlugin('languages', true)
   await page.waitForSelector(problems)
   assert((await seTabs()).includes('Symbols'), 'the Symbols tab is back')
+
+  // Files and Code are locked: checked and greyed.
+  await palette('settings')
+  await page.waitForSelector('.pick-item.selected:has-text("Settings")')
+  await page.keyboard.press('Enter')
+  await page.click('.settings-nav button:has-text("Plugins")')
+  for (const id of ['files', 'code']) {
+    const box = await page.$(`[data-testid=plugin-${id}]`)
+    assert((await box.isChecked()) && (await box.isDisabled()), id + ' locked')
+  }
+  assert((await page.textContent('[data-plugin=files]')).includes('Always on'), 'Always on')
+  await closeSettings()
+
+  // The Explorer: the colors are Git's, "Open a terminal here" is Exec's.
+  fs.writeFileSync(WS + '/demo/untracked.txt', 'new\n')
+  const untracked = `.explorer .tree-row[data-path="${WS}/demo/untracked.txt"] .tree-name`
+  if (!(await page.isVisible('.explorer'))) await page.click('.rail-btn[data-id=explorer]')
+  await page.waitForSelector(untracked + '.git-untracked')
+  await setPlugin('git', false)
+  await page.waitForSelector(untracked + '.git-clean')
+  await setPlugin('git', true)
+  await page.waitForSelector(untracked + '.git-untracked')
+  const terminalItem = async () => {
+    await page.click(untracked, { button: 'right' })
+    await page.waitForSelector('.ctx-menu')
+    const has = await page.isVisible('.ctx-menu .ctx-item:has-text("Open a terminal here")')
+    await page.keyboard.press('Escape')
+    return has
+  }
+  assert(await terminalItem(), 'a terminal here with Exec')
+  await setPlugin('exec', false)
+  assert(!(await terminalItem()), 'no terminal here without Exec')
+  await setPlugin('exec', true)
 })

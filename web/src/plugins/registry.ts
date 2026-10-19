@@ -5,7 +5,7 @@ import { createMemo, createRoot, createSignal } from 'solid-js'
 import { on, request } from '../pod/rpc'
 import { setPluginActions } from '../keys/bindings'
 import { API_VERSION, makeApi } from './api'
-import type { PluginContributions, PluginModule, PluginState } from './types'
+import type { ExplorerEntry, PluginContributions, PluginModule, PluginState } from './types'
 import { setCapabilityGate } from './capabilities'
 import { setPluginProviders } from '../popups/searchProviders'
 import { setDiffSources } from '../ui/diffSources'
@@ -15,10 +15,12 @@ import { search } from './search'
 import { git } from './git'
 import { previews } from './previews'
 import { languages } from './languages'
+import { files } from './files'
+import { code } from './code'
 import { docker } from './docker'
 import { database } from './database'
 
-const builtins: Record<string, PluginModule> = { database, docker, exec, git, hello, languages, previews, search }
+const builtins: Record<string, PluginModule> = { code, database, docker, exec, files, git, hello, languages, previews, search }
 
 const [states, setStates] = createSignal<PluginState[]>([])
 export const pluginStates = states
@@ -86,6 +88,12 @@ export function homeParts() {
   return Object.entries(builtins).flatMap(([id, m]) => (m.home ? [m.home(makeApi(id))] : []))
 }
 
+/** The items of the Explorer menu of an entry, given by the enabled plugins. */
+export const explorerItems = (entry: ExplorerEntry) => enabled().flatMap((s) => active[s.manifest.id].explorerItems?.(entry) ?? [])
+
+/** The decorations of the Explorer of the enabled plugins. */
+export const fileDecorations = () => enabled().flatMap((s) => (active[s.manifest.id].fileDecorations ? [active[s.manifest.id].fileDecorations!] : []))
+
 /** The hosts of the enabled plugins (modals), mounted by the project window. */
 export const pluginHosts = createRoot(() => createMemo(() => enabled().flatMap((s) => active[s.manifest.id].hosts ?? [])))
 
@@ -104,6 +112,15 @@ export function pluginAssistantOptions(): Record<string, unknown> {
     if (f) out[s.manifest.id] = f()
   }
   return out
+}
+
+/** The view of the file tabs, given by an enabled plugin (Code). */
+export function pluginFileView() {
+  for (const s of enabled()) {
+    const v = active[s.manifest.id].fileView
+    if (v) return v
+  }
+  return undefined
 }
 
 /** The label of a tab view, as its manifest declares it. */

@@ -21,6 +21,8 @@ type Manifest struct {
 	Name       string `json:"name"`
 	Version    string `json:"version"`
 	APIVersion int    `json:"apiVersion"`
+	// Required: a locked plugin, always enabled (the IDE does not run without it: Files, Code).
+	Required bool `json:"required,omitempty"`
 	// Permissions are shown to the user (exec:docker, net…); not enforced for trusted plugins.
 	Permissions []string `json:"permissions,omitempty"`
 	Provides    []string `json:"provides,omitempty"`

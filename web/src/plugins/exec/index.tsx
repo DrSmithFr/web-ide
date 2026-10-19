@@ -15,6 +15,7 @@ export const exec: PluginModule = {
     a.provide('commands', { list: commands, load: loadCommands, edit: openCommands })
     return {
       tools: { console: { component: ConsoleTool } },
+      explorerItems: (e) => [{ label: a.t('Open a terminal here'), action: () => void newConsole({ cwd: e.folder }) }],
       hosts: [CommandsHost],
       commands: {
         // A new terminal: a tile of its own in the Grid and Scroll modes.

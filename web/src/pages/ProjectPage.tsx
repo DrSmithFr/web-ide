@@ -5,7 +5,7 @@ import { createMutable } from 'solid-js/store'
 import { Dynamic } from 'solid-js/web'
 import { RpcError, formatRate, on as onPod, podRates, podState } from '../pod/rpc'
 import {
-  activeLeaf, activeTab, closeTab, conflictedDocs, cycleTab, docsVersion, home, mutate, navigate as navHistory, openProject, project, relPath, reopenProject, root,
+  activeLeaf, activeTab, closeTab, conflictedDocs, cycleTab, docsVersion, home, mutate, navigate as navHistory, openProject, project, reopenProject,
   openFile, closeEmptyPane, saveAll, session, setConflictOpener, setSize, sizesFor, splitPane, closeProject, moveTabToDesk, switchDesk,
 } from '../state/project'
 import { desk, desks, onDeskGone } from '../state/desks'
@@ -20,7 +20,6 @@ import { settings, updateSettings } from '../state/settings'
 import { goHome } from '../app/home'
 import { EditorArea } from '../ui/EditorArea'
 import { capability } from '../plugins/capabilities'
-import { createIn, Explorer } from '../panels/Explorer'
 import { KanbanPanel } from '../kanban/Panel'
 import { NewTicketHost } from '../kanban/Board'
 import { openBoard, openMilestone, openObjective, openTicket } from '../kanban/state'
@@ -51,7 +50,6 @@ import { DoodleHost } from '../llm/doodle/DoodleModal'
 
 /** Tools of the four zones, the core's then those of the enabled plugins; their placement comes from state/zones. */
 export const toolPanels: Record<string, { label: string; icon: string; component: () => JSX.Element; badge?: () => number }> = createMutable({
-  explorer: { label: 'Explorer', icon: 'files', component: Explorer },
   kanban: { label: 'Kanban', icon: 'kanban', component: KanbanPanel },
   assistant: { label: 'Assistant', icon: 'sparkle', component: AssistantTool },
   agents: { label: 'Agents', icon: 'comment', component: AgentsTool },
@@ -127,8 +125,6 @@ export function useProjectActions() {
       ;[...l.tabs].forEach((x) => closeTab(l.id, x))
     }),
     // New file or folder: beside the active file, else at the root.
-    registerAction('file.newFile', () => void createIn(newEntryDir(), false)),
-    registerAction('file.newFolder', () => void createIn(newEntryDir(), true)),
     registerAction('menu.open', () => document.querySelector<HTMLElement>('.menubar .menu-btn')?.click()),
     registerAction('view.nextTab', () => cycleTab(1)),
     registerAction('view.prevTab', () => cycleTab(-1)),
@@ -172,10 +168,6 @@ export function useProjectActions() {
   onCleanup(() => offs.forEach((f) => f()))
 }
 
-function newEntryDir() {
-  const path = activeTab()?.kind === 'file' ? activeTab()!.path! : ''
-  return path && relPath(path) !== path ? path.slice(0, path.lastIndexOf('/')) : root()
-}
 
 // Where the keyboard lands in a tool given the focus: its terminal, its prompt, the selected
 // row of its tree, its first field, else its first button.
@@ -247,7 +239,7 @@ const menus: [string, string[]][] = [
   ['menu|Navigate', ['search.everywhere', 'nav.recentFiles', '-', 'nav.back', 'nav.forward', '-', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', '-', 'nav.related', 'nav.test']],
   ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover', '-', 'lsp.rename', 'lsp.format', '-', 'edit.fold', 'edit.unfold', 'edit.foldAll', 'edit.unfoldAll']],
   ['menu|View', ['view.splitRight', 'view.splitDown', '-', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', '-', 'view.visualFocus', 'view.focusOutline', 'view.focusDim', '-', 'view.whitespace', 'view.wordWrap', 'view.markdown', '-', 'console.new', 'palette.open']],
-  ['menu|Tools', ['tool.explorer', 'tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.questions', 'tool.conflicts', 'tool.info', '-', '@tools']],
+  ['menu|Tools', ['tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.questions', 'tool.conflicts', 'tool.info', '-', '@tools']],
   ['menu|Help', ['help.docs', 'help.guide', 'help.glossary', '-', 'help.shortcuts']],
 ]
 
