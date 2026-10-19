@@ -1,10 +1,10 @@
-package server
+package kanban
 
 import (
 	"fmt"
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
+	kb "github.com/DrSmithFr/web-ide/pod/internal/kanban"
 )
 
 // The kanban_objective tool, shared by the MCP endpoint and the assistant (its schema:
@@ -22,7 +22,7 @@ type objectiveArgs struct {
 }
 
 // objectiveTool runs an action.
-func (s *Server) objectiveTool(root string, loc kanban.Location, a objectiveArgs, by, chatID string) (string, error) {
+func (s *K) objectiveTool(root string, loc kb.Location, a objectiveArgs, by, chatID string) (string, error) {
 	switch a.Action {
 	case "list":
 		list, err := s.Kanban.Objectives(loc)
@@ -34,7 +34,7 @@ func (s *Server) objectiveTool(root string, loc kanban.Location, a objectiveArgs
 		}
 		var b strings.Builder
 		for _, o := range list {
-			fmt.Fprintf(&b, "Objective %d [%s] %s · tickets finished %d/%d", o.ID, kanban.ObjectiveStateNames[o.State], o.Title, o.TicketsDone, o.Tickets)
+			fmt.Fprintf(&b, "Objective %d [%s] %s · tickets finished %d/%d", o.ID, kb.ObjectiveStateNames[o.State], o.Title, o.TicketsDone, o.Tickets)
 			if o.Due != "" {
 				fmt.Fprintf(&b, " · due %s", o.Due)
 			}
@@ -45,10 +45,10 @@ func (s *Server) objectiveTool(root string, loc kanban.Location, a objectiveArgs
 		if strings.TrimSpace(a.Title) == "" {
 			return "", fmt.Errorf("title is missing")
 		}
-		if err := tooLong(a.Description, kanban.MaxDescription, "Say what reaching it means, in short sentences."); err != nil {
+		if err := TooLong(a.Description, kb.MaxDescription, "Say what reaching it means, in short sentences."); err != nil {
 			return "", err
 		}
-		id, err := s.Kanban.CreateObjective(loc, kanban.ObjectivePatch{Title: &a.Title, Description: nonEmpty(a.Description), Due: a.Due}, by)
+		id, err := s.Kanban.CreateObjective(loc, kb.ObjectivePatch{Title: &a.Title, Description: NonEmpty(a.Description), Due: a.Due}, by)
 		if err != nil {
 			return "", err
 		}
@@ -64,18 +64,18 @@ func (s *Server) objectiveTool(root string, loc kanban.Location, a objectiveArgs
 		if err != nil {
 			return "", err
 		}
-		return kanban.ObjectiveMarkdown(o), nil
+		return kb.ObjectiveMarkdown(o), nil
 	case "update":
-		if err := tooLong(a.Description, kanban.MaxDescription, "Say what reaching it means, in short sentences."); err != nil {
+		if err := TooLong(a.Description, kb.MaxDescription, "Say what reaching it means, in short sentences."); err != nil {
 			return "", err
 		}
-		if err := s.Kanban.UpdateObjective(loc, a.ID, kanban.ObjectivePatch{Title: nonEmpty(a.Title), Description: nonEmpty(a.Description), Due: a.Due}); err != nil {
+		if err := s.Kanban.UpdateObjective(loc, a.ID, kb.ObjectivePatch{Title: NonEmpty(a.Title), Description: NonEmpty(a.Description), Due: a.Due}); err != nil {
 			return "", err
 		}
 		s.emitObjective(root, a.ID, 0)
 		return fmt.Sprintf("Objective %d updated.", a.ID), nil
 	case "note":
-		if err := tooLong(a.Text, kanban.MaxNote, "Keep only what is worth remembering, in a few lines."); err != nil {
+		if err := TooLong(a.Text, kb.MaxNote, "Keep only what is worth remembering, in a few lines."); err != nil {
 			return "", err
 		}
 		if err := s.Kanban.AddObjectiveNote(loc, a.ID, a.Text, by, chatID); err != nil {

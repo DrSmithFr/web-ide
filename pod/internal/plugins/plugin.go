@@ -4,9 +4,18 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/DrSmithFr/web-ide/pod/internal/acp"
+	"github.com/DrSmithFr/web-ide/pod/internal/commands"
+	"github.com/DrSmithFr/web-ide/pod/internal/config"
+	"github.com/DrSmithFr/web-ide/pod/internal/desks"
 	"github.com/DrSmithFr/web-ide/pod/internal/forwards"
+	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
+	"github.com/DrSmithFr/web-ide/pod/internal/keeper"
+	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 	"github.com/DrSmithFr/web-ide/pod/internal/preview"
+	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
+	"github.com/DrSmithFr/web-ide/pod/internal/store"
 )
 
 // Plugin is a built-in plugin: its manifest, and what it registers in the pod.
@@ -49,6 +58,36 @@ type Pod interface {
 	Emit(project, event string, data any)
 	Forwards() *forwards.Manager
 	Previews() *preview.Manager
+	// EmitFamily sends an event to the windows of a main project and of its worktrees, but the
+	// window except ("" for none).
+	EmitFamily(root, event string, data any, except string)
+	// CloseRuntime closes the runtime of a project (a worktree removed).
+	CloseRuntime(project string)
+	// Services are the stores and managers of the pod (the kanban, the conversations…).
+	Services() *Services
+	// CapabilityOn tells whether a project has a capability (worktrees, terminal…).
+	CapabilityOn(rt *runtime.Runtime, capability string) bool
+}
+
+// Services are the stores and managers of the pod lent to the built-in plugins, with the
+// address the agents reach the pod at.
+type Services struct {
+	Store    *store.Store
+	Projects *projects.Registry
+	Cfg      *config.Config
+	Keeper   *keeper.Client
+	LLM      *llm.Manager
+	Desks    *desks.Store
+	Kanban   *kanban.Manager
+	// Token of the pod and MCPBase, the address of its MCP endpoint for the agents.
+	Token   string
+	MCPBase string
+	// Commands are the saved commands of the project of rt (the kanban settings migrated).
+	Commands func(rt *runtime.Runtime) ([]commands.Command, error)
+	// ChatLoc is where the conversations of a project are kept.
+	ChatLoc func(project string) (llm.ChatLocation, string, error)
+	// AgentsMCP is the MCP server of the IDE as the sessions of the agents reach it.
+	AgentsMCP func() []acp.MCPServer
 }
 
 // Call is one call of a plugin: the project it runs in (local or SSH, through its runtime),
@@ -79,8 +118,9 @@ type Window interface {
 	// Hold keeps a stream of the window under an id; Release stops and forgets it.
 	Hold(id string, stop func())
 	Release(id string)
-	// Project is the project the window shows ("" on the home page).
+	// Project is the project the window shows ("" on the home page); ID tells windows apart.
 	Project() string
+	ID() string
 }
 
 // Handler answers an RPC method of a plugin.

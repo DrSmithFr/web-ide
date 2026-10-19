@@ -123,6 +123,15 @@ Exec (#116) is the first plugin the rest of the IDE *uses*: a dozen parts of the
 - `api.buffers` (`load`, `error`, `save`, `cursor`, `saveCursor`, `target`), `api.conflicts.open`, `api.keys.actionOf` / `run`, `api.folders` (the marks of the folders), `api.explorer`, `api.recentFiles`, `api.activePath`, `api.project.name`. The folders expanded and the options of the Explorer moved to the desk state of Files (migrated).
 - `api.desk().set` changes the state in place, created once from a copy of the defaults: an array pushed (the folders expanded) is seen, and the defaults are never shared.
 
+## What Kanban added to the API
+
+- **The tickets service** (`tickets`): the tickets of the project, a summary, a whole ticket with its blockers, open a ticket, the board, a milestone, an objective, start a conversation or the development of a ticket, the labels of a status and of a role, the worktree of a ticket. The assistant (the ticket bar), the Orchestrator and the project bar (the worktrees of the tickets, the ticket banner) use it, and hide their ticket parts without it.
+- **Services of the core** until AI is a plugin (#123): `assistant` (the conversation shown, a new one, send, open one) and `agents` (the catalog, show a session, the stats of a ticket), provided by `'core'` (`plugins/coreServices.ts`), always on.
+- **View contributions**: `viewTitle(tab)`, the title of a tab from its state (`#126 Status bar…`), and `aloneViews`, the views alone in their tile on a desk of tiles, like a tool (the board).
+- The board, ticket, milestone and objective tabs are views `plugin:kanban/<view>`, the number in the tab state; a desk saved before is migrated. The links `?ticket=`, `?milestone=`, `?objective=` open them through the service. The hosts of the plugins are mounted in a detached tool window too.
+- `api.panes.closeTab`, `api.project.info` / `showWorktree`, `api.ui.Markdown` / `HelpLink`, `api.fmtSize`, `api.podPath`.
+- On the pod: the methods moved to `plugins/kanban`; the core services reach it through `Pod().Services()` (store, projects, config, keeper, the assistant's model, desks, the kanban, the token and the MCP address). The `kanban_*` tools of the assistant and the MCP stay theirs until #123, offered with `tickets` on.
+
 ## API v1
 
 Frozen with #118: `apiVersion: 1` in every manifest. An addition keeps v1; a removal or a change of what follows is a new version.
@@ -131,9 +140,9 @@ Frozen with #118: `apiVersion: 1` in every manifest. An addition keeps v1; a rem
 
 **Pod** (`pod/internal/plugins`): `Plugin{Manifest(), Register(Host)}`; `Host.Handle(method, handler)`, `Host.HandleGlobal`, `Host.AssistantTool(tool)`, `Host.Pod()`, `Host.OnProjectOpen`, `Host.OnWindows`; a `Call` carries the `Runtime` of the project, `Params`, `Lang`, the `Window` (push, held streams), `Emit` / `EmitOthers` / `EmitFamily`, the `Options` of a conversation; `Result`, `UsageError`, `CodedError`.
 
-**Page** (`web/src/plugins/api.ts`): `rpc` / `rpcIn` / `notify` / `notifyIn` / `channel`, `on`, `t` / `tn` / `fmtDate` / `fmtAgo`, `project`, `files`, `buffers`, `activeFile`, `ssh`, `desk` (its state in the desk), `provide` / `use` (capabilities), `showTool`, `tiles`, `theme`, `openFile` / `openView` / `setViewState` / `openDiff` / `openText`, `panes`, `editor`, `keys`, `transport`, `ui`. The module's `activate(api)` returns its contributions: `tools`, `views`, `fileView`, `commands`, `hosts`, `searchProviders`, `diffSources`, `explorerItems`, `fileDecorations`, `assistantOptions`, `opened`; its `home(api)` a part of the home page.
+**Page** (`web/src/plugins/api.ts`): `rpc` / `rpcIn` / `notify` / `notifyIn` / `channel`, `on`, `t` / `tn` / `fmtDate` / `fmtAgo`, `project`, `files`, `buffers`, `activeFile`, `ssh`, `desk` (its state in the desk), `provide` / `use` (capabilities), `showTool`, `tiles`, `theme`, `openFile` / `openView` / `setViewState` / `openDiff` / `openText`, `panes`, `editor`, `keys`, `transport`, `ui`. The module's `activate(api)` returns its contributions: `tools`, `views`, `fileView`, `commands`, `hosts`, `searchProviders`, `diffSources`, `explorerItems`, `fileDecorations`, `assistantOptions`, `viewTitle`, `aloneViews`, `opened`; its `home(api)` a part of the home page.
 
-**Capabilities**: `terminal` and `commands` (Exec), `git` and `worktrees` (Git), `previews` (Previews), `language` (Languages), `files` (Files), their types in `web/src/plugins/capabilities.ts`.
+**Capabilities**: `terminal` and `commands` (Exec), `git` and `worktrees` (Git), `previews` (Previews), `language` (Languages), `files` (Files), `tickets` (Kanban), `assistant` and `agents` (the core's until #123), their types in `web/src/plugins/capabilities.ts`.
 
 ## Decisions
 
@@ -164,7 +173,7 @@ The plugins, grouped by domain (one plugin, several tools and views), in their o
 | Languages | language servers, Problems, Structure, the Symbols provider (#120, done) | provides `language` |
 | Files | Explorer, file provider (locked, #121, done) | provides `files` |
 | Code | file editor, the default view of a text buffer (locked, #121, done) | |
-| Kanban | Kanban tool and views, its MCP and assistant tools | requires `terminal`, `worktrees` |
+| Kanban | Kanban tool, board, ticket, milestone and objective views (#122, done; its MCP and assistant tools move with AI) | provides `tickets`, requires `terminal`, `worktrees` |
 | AI | Assistant, Agents, doodles, whiteboard | |
 
 - **Locked plugins** (`required` in the manifest): Files and Code cannot be disabled; Settings → Plugins shows them checked and greyed.

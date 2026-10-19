@@ -1,14 +1,7 @@
 // Board of the kanban (tab of the editor): one column per status, Done and Abandoned
 // folded. Tickets move with the buttons of their view, never by drag and drop.
-import { HelpLink } from '../help/HelpLink'
 import { createMemo, createResource, createSignal, For, onMount, Show } from 'solid-js'
-import { Icon } from '../ui/icons'
-import { Modal } from '../ui/overlay'
-import { errorToast } from '../ui/toast'
-import { copyText } from '../ui/clipboard'
 import { mcpAddCommand } from './claude'
-import { catalog } from '../agents/state'
-import { capability } from '../plugins/capabilities'
 import {
   board, boardView, createTicket, setBoardView, ensureBoard, setMeta, newTicketOpen, openTicket, priorityLabels, setNewTicketOpen, statusLabels, workTime,
   MAX_DESCRIPTION, type Priority, type Status, type Summary,
@@ -18,8 +11,8 @@ import { Roadmap } from './Roadmap'
 import { Milestones } from './Milestones'
 import { milestoneMatch, type MilestoneFilter } from './milestones'
 import { objectiveMatch, type ObjectiveFilter } from './objectives'
-import { t } from '../i18n'
 import './kanban.css'
+import { capability, copyText, errorToast, HelpLink, Icon, Modal, t } from './plugin'
 
 const active: Status[] = ['new', 'todo', 'in_progress', 'to_test']
 
@@ -255,7 +248,7 @@ function KanbanSettings(props: { onClose: () => void }) {
   const [base, setBase] = createSignal(board.meta.base ?? '')
   const [agent, setAgent] = createSignal(board.meta.devAgent || 'assistant')
   // The agents of the Agents tool that are installed (the one chosen stays listed).
-  const [agents] = createResource(() => catalog().then((c) => (c.local ? c.agents.filter((a) => a.installed || a.id === agent()) : []), () => []))
+  const [agents] = createResource(() => (capability('agents')?.catalog() ?? Promise.reject()).then((c) => (c.local ? c.agents.filter((a) => a.installed || a.id === agent()) : []), () => []))
   const [mcp] = createResource(mcpAddCommand)
   // The setup of a new worktree: the project commands flagged setup.
   onMount(() => void capability('commands')?.load())

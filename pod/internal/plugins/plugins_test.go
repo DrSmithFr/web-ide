@@ -41,7 +41,7 @@ func TestAdd(t *testing.T) {
 	for name, m := range map[string]Manifest{
 		"twice":     {ID: "a"},
 		"tool":      {ID: "b", Contributes: Contributions{Tools: []Tool{{ID: "a", Zone: "left"}}}},
-		"core tool": {ID: "c", Contributes: Contributions{Tools: []Tool{{ID: "kanban", Zone: "left"}}}},
+		"core tool": {ID: "c", Contributes: Contributions{Tools: []Tool{{ID: "assistant", Zone: "left"}}}},
 		"assistant": {ID: "d", Contributes: Contributions{AssistantTools: []string{"a_x"}}},
 	} {
 		if r.Add(fake{m}) == nil {
@@ -117,7 +117,7 @@ func TestEnabledFile(t *testing.T) {
 }
 
 func TestBuiltinManifests(t *testing.T) {
-	for _, f := range []string{"hello/plugin.json", "docker/plugin.json", "database/plugin.json", "exec/plugin.json", "search/plugin.json", "git/plugin.json", "previews/plugin.json", "languages/plugin.json", "files/plugin.json", "code/plugin.json"} {
+	for _, f := range []string{"hello/plugin.json", "docker/plugin.json", "database/plugin.json", "exec/plugin.json", "search/plugin.json", "git/plugin.json", "previews/plugin.json", "languages/plugin.json", "files/plugin.json", "code/plugin.json", "kanban/plugin.json"} {
 		data, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)

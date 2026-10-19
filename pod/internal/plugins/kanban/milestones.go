@@ -1,50 +1,35 @@
-package server
+package kanban
 
 import (
 	"context"
 	"encoding/json"
 
-	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
+	kb "github.com/DrSmithFr/web-ide/pod/internal/kanban"
 )
 
 // emitMilestone tells the windows of a project that a milestone changed (kanban.changed with
 // its number; id names a ticket that changed with it).
-func (s *Server) emitMilestone(root string, ms, id int64) {
-	s.mu.Lock()
-	var targets []*Client
-	for c := range s.clients {
-		if c.project == "" {
-			continue
-		}
-		if c.project == root {
-			targets = append(targets, c)
-		} else if p, ok := s.Projects.Get(c.project); ok && p.Parent == root {
-			targets = append(targets, c)
-		}
-	}
-	s.mu.Unlock()
-	for _, c := range targets {
-		c.push("kanban.changed", map[string]any{"project": root, "id": id, "milestone": ms})
-	}
+func (s *K) emitMilestone(root string, ms, id int64) {
+	s.pod.EmitFamily(root, "kanban.changed", map[string]any{"project": root, "id": id, "milestone": ms}, "")
 }
 
 // registerMilestones: the milestones of the kanban (docs/design/kanban.md). Only the user
 // validates, abandons or reopens one, and checks its user stories.
-func (s *Server) registerMilestones() {
+func (s *K) registerMilestones() {
 	type msArg struct {
 		ID int64  `json:"id"`
 		By string `json:"by"`
 	}
 	by := func(b string) string {
-		if b == kanban.ByModel {
+		if b == kb.ByModel {
 			return b
 		}
-		return kanban.ByUser
+		return kb.ByUser
 	}
 	// change binds the arguments, runs f on the kanban of the project, announces the
 	// milestone (and the ticket f answers) and returns the milestone.
-	change := func(f func(loc kanban.Location, a msArg, p json.RawMessage) (int64, error)) handler {
-		return func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+	change := func(f func(loc kb.Location, a msArg, p json.RawMessage) (int64, error)) handler {
+		return func(ctx context.Context, c *client, p json.RawMessage) (any, error) {
 			root, err := s.kanbanProject(c.project)
 			if err != nil {
 				return nil, err
@@ -63,14 +48,14 @@ func (s *Server) registerMilestones() {
 			return s.Kanban.GetMilestone(loc, a.ID)
 		}
 	}
-	s.handle("kanban.milestone.list", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+	s.handle("kanban.milestone.list", func(ctx context.Context, c *client, p json.RawMessage) (any, error) {
 		root, err := s.kanbanProject(c.project)
 		if err != nil {
 			return nil, err
 		}
 		return s.Kanban.Milestones(kanbanLoc(root))
 	})
-	s.handle("kanban.milestone.get", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+	s.handle("kanban.milestone.get", func(ctx context.Context, c *client, p json.RawMessage) (any, error) {
 		root, err := s.kanbanProject(c.project)
 		if err != nil {
 			return nil, err
@@ -81,13 +66,13 @@ func (s *Server) registerMilestones() {
 		}
 		return s.Kanban.GetMilestone(kanbanLoc(root), a.ID)
 	})
-	s.handle("kanban.milestone.create", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+	s.handle("kanban.milestone.create", func(ctx context.Context, c *client, p json.RawMessage) (any, error) {
 		root, err := s.kanbanProject(c.project)
 		if err != nil {
 			return nil, err
 		}
 		a, err := bind[struct {
-			kanban.MilestonePatch
+			kb.MilestonePatch
 			By string `json:"by"`
 		}](p)
 		if err != nil {
@@ -101,16 +86,16 @@ func (s *Server) registerMilestones() {
 		s.emitMilestone(root.ID, id, 0)
 		return s.Kanban.GetMilestone(loc, id)
 	})
-	s.handle("kanban.milestone.update", change(func(loc kanban.Location, a msArg, p json.RawMessage) (int64, error) {
+	s.handle("kanban.milestone.update", change(func(loc kb.Location, a msArg, p json.RawMessage) (int64, error) {
 		b, err := bind[struct {
-			Patch kanban.MilestonePatch `json:"patch"`
+			Patch kb.MilestonePatch `json:"patch"`
 		}](p)
 		if err != nil {
 			return 0, err
 		}
 		return 0, s.Kanban.UpdateMilestone(loc, a.ID, b.Patch, a.By)
 	}))
-	s.handle("kanban.milestone.delete", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+	s.handle("kanban.milestone.delete", func(ctx context.Context, c *client, p json.RawMessage) (any, error) {
 		root, err := s.kanbanProject(c.project)
 		if err != nil {
 			return nil, err
@@ -125,9 +110,9 @@ func (s *Server) registerMilestones() {
 		s.emitMilestone(root.ID, a.ID, 0)
 		return nil, nil
 	})
-	s.handle("kanban.milestone.story", change(func(loc kanban.Location, a msArg, p json.RawMessage) (int64, error) {
+	s.handle("kanban.milestone.story", change(func(loc kb.Location, a msArg, p json.RawMessage) (int64, error) {
 		b, err := bind[struct {
-			Story kanban.StoryOp `json:"story"`
+			Story kb.StoryOp `json:"story"`
 		}](p)
 		if err != nil {
 			return 0, err
@@ -135,9 +120,9 @@ func (s *Server) registerMilestones() {
 		_, err = s.Kanban.Story(loc, a.ID, b.Story, a.By)
 		return 0, err
 	}))
-	s.handle("kanban.milestone.feedback", change(func(loc kanban.Location, a msArg, p json.RawMessage) (int64, error) {
+	s.handle("kanban.milestone.feedback", change(func(loc kb.Location, a msArg, p json.RawMessage) (int64, error) {
 		b, err := bind[struct {
-			Feedback kanban.FeedbackOp `json:"feedback"`
+			Feedback kb.FeedbackOp `json:"feedback"`
 		}](p)
 		if err != nil {
 			return 0, err
@@ -146,7 +131,7 @@ func (s *Server) registerMilestones() {
 		return 0, err
 	}))
 	// kanban.milestone.feedback.ticket makes a ticket of the milestone from a feedback.
-	s.handle("kanban.milestone.feedback.ticket", change(func(loc kanban.Location, a msArg, p json.RawMessage) (int64, error) {
+	s.handle("kanban.milestone.feedback.ticket", change(func(loc kb.Location, a msArg, p json.RawMessage) (int64, error) {
 		b, err := bind[struct {
 			Feedback int64 `json:"feedback"`
 		}](p)
@@ -155,10 +140,10 @@ func (s *Server) registerMilestones() {
 		}
 		return s.Kanban.FeedbackTicket(loc, a.ID, b.Feedback, a.By)
 	}))
-	s.handle("kanban.milestone.validate", change(func(loc kanban.Location, a msArg, p json.RawMessage) (int64, error) {
+	s.handle("kanban.milestone.validate", change(func(loc kb.Location, a msArg, p json.RawMessage) (int64, error) {
 		return 0, s.Kanban.ValidateMilestone(loc, a.ID, a.By)
 	}))
-	s.handle("kanban.milestone.state", change(func(loc kanban.Location, a msArg, p json.RawMessage) (int64, error) {
+	s.handle("kanban.milestone.state", change(func(loc kb.Location, a msArg, p json.RawMessage) (int64, error) {
 		b, err := bind[struct {
 			State string `json:"state"`
 		}](p)
@@ -167,7 +152,7 @@ func (s *Server) registerMilestones() {
 		}
 		return 0, s.Kanban.SetMilestoneState(loc, a.ID, b.State, a.By)
 	}))
-	s.handle("kanban.milestone.chat.link", change(func(loc kanban.Location, a msArg, p json.RawMessage) (int64, error) {
+	s.handle("kanban.milestone.chat.link", change(func(loc kb.Location, a msArg, p json.RawMessage) (int64, error) {
 		b, err := bind[struct {
 			ChatID string `json:"chatId"`
 			Role   string `json:"role"`
@@ -178,7 +163,7 @@ func (s *Server) registerMilestones() {
 		}
 		return 0, s.Kanban.LinkMilestoneChat(loc, a.ID, b.ChatID, b.Role, b.Title)
 	}))
-	s.handle("kanban.milestone.chat.unlink", change(func(loc kanban.Location, a msArg, p json.RawMessage) (int64, error) {
+	s.handle("kanban.milestone.chat.unlink", change(func(loc kb.Location, a msArg, p json.RawMessage) (int64, error) {
 		b, err := bind[struct {
 			ChatID string `json:"chatId"`
 		}](p)
@@ -187,7 +172,7 @@ func (s *Server) registerMilestones() {
 		}
 		return 0, s.Kanban.UnlinkMilestoneChat(loc, a.ID, b.ChatID)
 	}))
-	s.handle("kanban.milestone.note", change(func(loc kanban.Location, a msArg, p json.RawMessage) (int64, error) {
+	s.handle("kanban.milestone.note", change(func(loc kb.Location, a msArg, p json.RawMessage) (int64, error) {
 		b, err := bind[struct {
 			Text   string `json:"text"`
 			ChatID string `json:"chatId"`
@@ -197,7 +182,7 @@ func (s *Server) registerMilestones() {
 		}
 		return 0, s.Kanban.AddMilestoneNote(loc, a.ID, b.Text, a.By, b.ChatID)
 	}))
-	s.handle("kanban.milestone.note.delete", change(func(loc kanban.Location, a msArg, p json.RawMessage) (int64, error) {
+	s.handle("kanban.milestone.note.delete", change(func(loc kb.Location, a msArg, p json.RawMessage) (int64, error) {
 		b, err := bind[struct {
 			NoteID int64 `json:"noteId"`
 		}](p)

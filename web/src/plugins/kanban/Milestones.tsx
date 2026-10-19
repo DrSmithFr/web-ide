@@ -3,16 +3,12 @@
 // one. A card shows the progress of a milestone (tickets finished, stories validated, tickets
 // to test, open feedback); a click opens its page.
 import { createSignal, For, Show } from 'solid-js'
-import { Icon } from '../ui/icons'
-import { prompt } from '../ui/overlay'
-import { errorToast } from '../ui/toast'
-import { EmptyState } from '../ui/EmptyState'
 import { board, openMilestone, openObjective } from './state'
 import { ProgressBar } from './ProgressBar'
 import { createMilestone, milestoneStateNames, type MilestoneSummary } from './milestones'
 import { moveObjective, objectiveStateNames, type ObjectiveSummary } from './objectives'
 import { fmtDue, newObjective } from './ObjectiveView'
-import { t } from '../i18n'
+import { EmptyState, errorToast, Icon, prompt, t } from './plugin'
 
 export async function newMilestone() {
   const title = await prompt({ title: t('New milestone'), label: t('Title of the feature') })

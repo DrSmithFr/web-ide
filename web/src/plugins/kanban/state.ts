@@ -1,14 +1,11 @@
 // Kanban of the project: tickets kept by the pod in SQLite (see docs/design/kanban.md). The list
 // is shared by the board, the side panel and the ticket tabs, and follows the changes
 // made by other windows and by the assistant (event kanban.changed).
-import { podPath } from '../app/base'
 import { createSignal } from 'solid-js'
 import { createStore, reconcile } from 'solid-js/store'
-import { on, request } from '../pod/rpc'
-import { openTab, project } from '../state/project'
-import { t } from '../i18n'
 import { bumpMilestone, type MilestoneSummary } from './milestones'
 import { bumpObjective, type ObjectiveSummary } from './objectives'
+import { api, on, project, request, t } from './plugin'
 
 export type Status = 'new' | 'todo' | 'in_progress' | 'to_test' | 'done' | 'abandoned'
 export type Priority = 'low' | 'normal' | 'high' | 'critical'
@@ -219,17 +216,22 @@ export function ensureBoard() {
   }
 }
 
-let refreshTimer: number | undefined
-on('kanban.changed', (e: { project: string; id: number; milestone?: number; objective?: number }) => {
-  if (e.id) setVersions(e.id, (v) => (v ?? 0) + 1)
-  if (e.milestone) bumpMilestone(e.milestone)
-  if (e.objective) bumpObjective(e.objective)
-  clearTimeout(refreshTimer)
-  refreshTimer = window.setTimeout(() => refreshBoard(), 60)
-})
-on('pod.reconnected', () => {
+/** The board loaded again (the project opened again, a reconnection, the plugin enabled again). */
+export function reloadBoard() {
   if (loadedFor) refreshBoard()
-})
+}
+
+let refreshTimer: number | undefined
+/** Follows the changes of the kanban (once, when the plugin is activated). */
+export function watchBoard() {
+  on('kanban.changed', (e: { project: string; id: number; milestone?: number; objective?: number }) => {
+    if (e.id) setVersions(e.id, (v) => (v ?? 0) + 1)
+    if (e.milestone) bumpMilestone(e.milestone)
+    if (e.objective) bumpObjective(e.objective)
+    clearTimeout(refreshTimer)
+    refreshTimer = window.setTimeout(() => refreshBoard(), 60)
+  })
+}
 
 /** A line of the history: the pod stores events as {"key", "params"} (English text and its values). */
 export function eventText(text: string): string {
@@ -385,19 +387,6 @@ export function childProject(ticket: number) {
   return `${p?.parent || p?.id}-t${ticket}`
 }
 
-/**
- * Opens a project (the worktree of a ticket…) in its own window, or brings back the window
- * already open on it (project windows are named after their project).
- */
-export function openWorktreeWindow(projectId: string, assistant = false) {
-  const query = assistant ? '?assistant=1' : ''
-  const url = podPath(`/project/${encodeURIComponent(projectId)}${query}`)
-  const w = window.open('', `project-${projectId}`)
-  if (!w) return
-  if (query || w.location.href === 'about:blank') w.location.href = url
-  w.focus()
-}
-
 // ---------- tabs ----------
 
 export type BoardView = 'board' | 'roadmap' | 'milestones'
@@ -425,19 +414,19 @@ export function setBoardView(v: BoardView) {
 /** Opens the board, on a view when given. */
 export function openBoard(view?: BoardView) {
   if (view) setBoardView(view)
-  openTab({ kind: 'kanban', title: 'Kanban' })
+  api.openView('board', { title: 'Kanban' })
 }
 
 export function openTicket(id: number) {
-  openTab({ kind: 'ticket', ticket: id, title: `#${id}` })
+  api.openView('ticket', { key: String(id), state: { ticket: id } })
 }
 
 export function openMilestone(id: number) {
-  openTab({ kind: 'milestone', milestone: id, title: t('Milestone') })
+  api.openView('milestone', { key: String(id), state: { milestone: id } })
 }
 
 export function openObjective(id: number) {
-  openTab({ kind: 'objective', objective: id, title: t('Objective') })
+  api.openView('objective', { key: String(id), state: { objective: id } })
 }
 
 export const [newTicketOpen, setNewTicketOpen] = createSignal(false)

@@ -45,7 +45,7 @@ func (s *Server) kanbanNext(r *assistantRun) (toolResult, error) {
 	if err != nil {
 		return toolResult{}, err
 	}
-	s.fillBlockers(r.ctx, s.kanbanGit(r), list)
+	s.kb().FillBlockers(r.ctx, s.kanbanGit(r), list)
 	objectives, err := s.Kanban.Objectives(kanbanLocOf(r.loc))
 	if err != nil {
 		return toolResult{}, err

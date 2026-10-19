@@ -10,6 +10,8 @@
 // Previews (#119) needs terminal: off (or Exec off), its tool and list_previews go. Languages
 // (#120): off, Problems, Structure, the Symbols tab and the code actions go, the editor still edits.
 // Files and Code (#121) are locked; the Explorer takes the colors of Git and the terminal of Exec.
+// Kanban (#122): off, its tool and the kanban_* tools go, a ticket tab says its plugin is off;
+// a ticket tab of a desk saved before is migrated.
 const fs = require('fs')
 const path = require('path')
 const { execSync } = require('child_process')
@@ -304,4 +306,37 @@ run(async ({ page }) => {
   await setPlugin('exec', false)
   assert(!(await terminalItem()), 'no terminal here without Exec')
   await setPlugin('exec', true)
+
+  // Kanban: a ticket opened from its tool; off, the tool, the view and kanban_list go; on, back.
+  r = await mcp('kanban_create', { title: 'Plugin ticket' })
+  const id = Number(/#(\d+)/.exec(text(r))[1])
+  await page.click('.rail-btn[data-id=kanban]')
+  await page.click(`[data-testid=kanban-panel] [data-testid=ticket-card-${id}]`)
+  await page.waitForSelector(`[data-testid=ticket-view] .tk-num:has-text("#${id}")`)
+  assert((await page.textContent('.tab.active .tab-title')).startsWith(`#${id} Plugin ticket`), 'ticket tab titled by the plugin')
+  await setPlugin('kanban', false)
+  await page.waitForSelector('.rail-btn[data-id=kanban]', { state: 'detached' })
+  await page.waitForSelector('.pane:has-text("The plugin of this tab is disabled")')
+  r = await mcp('kanban_list', {})
+  assert(r.result.isError && text(r).includes('needs the tickets capability'), 'kanban_list refused: ' + text(r))
+  await setPlugin('kanban', true)
+  await page.waitForSelector(`[data-testid=ticket-view] .tk-num:has-text("#${id}")`)
+  assert(!(await mcp('kanban_list', {})).result.isError, 'kanban_list back')
+
+  // A desk saved before #122 (a tab of kind ticket) opens the ticket view of the plugin.
+  await page.waitForTimeout(800)
+  const deskFile = fs.readdirSync(dir).map((f) => path.join(dir, f)).find((f) => fs.readFileSync(f, 'utf8').includes('plugin:kanban/ticket'))
+  const podPid = fs.readFileSync(path.join(process.env.E2E_TMP, 'pod.pid'), 'utf8').trim()
+  execSync(`kill -TERM ${podPid}; while kill -0 ${podPid} 2>/dev/null; do sleep 0.1; done`)
+  const old = JSON.parse(fs.readFileSync(deskFile, 'utf8'))
+  for (const t of Object.values((old.session ?? old).tabs)) {
+    if (t.kind !== 'plugin:kanban/ticket') continue
+    Object.assign(t, { kind: 'ticket', ticket: t.state.ticket })
+    delete t.state
+    delete t.key
+  }
+  fs.writeFileSync(deskFile, JSON.stringify(old))
+  execSync(`bash ${path.join(process.env.E2E_TMP, 'launch-pod.sh')}`)
+  await page.reload()
+  await page.waitForSelector(`[data-testid=ticket-view] .tk-num:has-text("#${id}")`, { timeout: 15000 })
 })

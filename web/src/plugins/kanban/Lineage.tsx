@@ -2,11 +2,9 @@
 // after the other in the worktree of the parent), the tickets of other lineages it waits
 // for, and what keeps it from starting.
 import { For, Show } from 'solid-js'
-import { Icon } from '../ui/icons'
-import { fuzzy, pick } from '../ui/overlay'
 import { board, blockerNames, getTicket, moveChild, openTicket, statusLabels, updateTicket, type Blocker, type Summary, type Ticket } from './state'
 import { Section, type Apply } from './TicketView'
-import { t } from '../i18n'
+import { fuzzy, Icon, pick, t } from './plugin'
 
 const startable = (s: Summary) => s.status === 'new' || s.status === 'todo'
 const titleOf = (id: number) => board.tickets.find((x) => x.id === id)?.title ?? ''

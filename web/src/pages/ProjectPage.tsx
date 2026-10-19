@@ -21,9 +21,7 @@ import { goHome } from '../app/home'
 import { EditorArea } from '../ui/EditorArea'
 import { StatusBar } from '../ui/StatusBar'
 import { capability } from '../plugins/capabilities'
-import { KanbanPanel } from '../kanban/Panel'
-import { NewTicketHost } from '../kanban/Board'
-import { openBoard, openMilestone, openObjective, openTicket } from '../kanban/state'
+import '../plugins/coreServices'
 import { AssistantTool } from '../llm/AssistantTool'
 import { ConflictsTool } from '../tools/tools'
 import { InfoTool } from '../tools/InfoTool'
@@ -52,7 +50,6 @@ import { DoodleHost } from '../llm/doodle/DoodleModal'
 
 /** Tools of the four zones, the core's then those of the enabled plugins; their placement comes from state/zones. */
 export const toolPanels: Record<string, { label: string; icon: string; component: () => JSX.Element; badge?: () => number }> = createMutable({
-  kanban: { label: 'Kanban', icon: 'kanban', component: KanbanPanel },
   assistant: { label: 'Assistant', icon: 'sparkle', component: AssistantTool },
   agents: { label: 'Agents', icon: 'comment', component: AgentsTool },
   questions: { label: 'Questions', icon: 'question', component: QuestionsTool, badge: () => questions().length },
@@ -145,7 +142,6 @@ export function useProjectActions() {
       else if (tool === 'console') capability('terminal')?.navigate(dir)
     }),
     registerAction('settings.open', () => openSettings()),
-    registerAction('kanban.open', () => openBoard()),
     registerAction('help.docs', () => openDoc(docsIndex)),
     registerAction('help.guide', () => openDoc('docs/guide.md')),
     registerAction('help.glossary', () => openDoc('GLOSSARY.md')),
@@ -241,7 +237,7 @@ const menus: [string, string[]][] = [
   ['menu|Navigate', ['search.everywhere', 'nav.recentFiles', '-', 'nav.back', 'nav.forward', '-', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', '-', 'nav.related', 'nav.test']],
   ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover', '-', 'lsp.rename', 'lsp.format', '-', 'edit.fold', 'edit.unfold', 'edit.foldAll', 'edit.unfoldAll']],
   ['menu|View', ['view.splitRight', 'view.splitDown', '-', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', '-', 'view.visualFocus', 'view.focusOutline', 'view.focusDim', '-', 'view.whitespace', 'view.wordWrap', 'view.markdown', '-', 'console.new', 'palette.open']],
-  ['menu|Tools', ['tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.questions', 'tool.conflicts', 'tool.info', '-', '@tools']],
+  ['menu|Tools', ['tool.assistant', 'tool.agents', 'tool.questions', 'tool.conflicts', 'tool.info', '-', '@tools']],
   ['menu|Help', ['help.docs', 'help.guide', 'help.glossary', '-', 'help.shortcuts']],
 ]
 
@@ -608,20 +604,14 @@ export function ProjectPage(props: { id: string }) {
         history.replaceState(null, '', location.pathname)
       }
       // A ticket link of Claude Code: /project/<id>?ticket=<n>.
-      const ticket = Number(new URLSearchParams(location.search).get('ticket'))
-      if (ticket > 0) {
-        history.replaceState(null, '', location.pathname)
-        openTicket(ticket)
-      }
-      const milestone = Number(new URLSearchParams(location.search).get('milestone'))
-      if (milestone > 0) {
-        history.replaceState(null, '', location.pathname)
-        openMilestone(milestone)
-      }
-      const objective = Number(new URLSearchParams(location.search).get('objective'))
-      if (objective > 0) {
-        history.replaceState(null, '', location.pathname)
-        openObjective(objective)
+      // Also ?milestone=<n> and ?objective=<n>, with the Kanban plugin.
+      const k = capability('tickets')
+      for (const [param, open] of [['ticket', k?.open], ['milestone', k?.openMilestone], ['objective', k?.openObjective]] as const) {
+        const n = Number(new URLSearchParams(location.search).get(param))
+        if (n > 0) {
+          history.replaceState(null, '', location.pathname)
+          open?.(n)
+        }
       }
       // A push notification of a conversation: /project/<id>?chat=<id> shows it in the assistant.
       const chatId = new URLSearchParams(location.search).get('chat')
@@ -743,7 +733,6 @@ export function ProjectPage(props: { id: string }) {
       <div class="app" classList={{ 'visual-focus': settings.visualFocus, 'focus-outline': settings.focusOutline, 'focus-dim': settings.focusDim, phone: phone() }}>
         <MenuBar />
         <MobileSync />
-        <NewTicketHost />
         <For each={pluginHosts()}>{(Host) => <Host />}</For>
         <SearchEverywhereHost />
         <RecentFilesHost tools={switcherTools} onTool={toggleToolFocus} />

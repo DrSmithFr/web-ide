@@ -17,26 +17,32 @@ import { DoodleHost } from './doodle/DoodleModal'
 import { Board } from './board/Board'
 import { boardShown, pages, setBoardWide, showBoard, showSide, toggleSide } from './board/pages'
 import { Stats } from './Stats'
-import { board, ensureBoard, openTicket, roleLabels, statusLabels, summary, type ChatRole } from '../kanban/state'
+import { capability, type TicketRole, type TicketsService } from '../plugins/capabilities'
 import { pick } from '../ui/overlay'
 import { request } from '../pod/rpc'
 import { setChat } from './state'
 import { t } from '../i18n'
 import './assistant.css'
 
-/** Ticket linked to the conversation (link, unlink, link another one). */
+/** Ticket linked to the conversation (link, unlink, link another one), with the Kanban plugin. */
 function TicketBar() {
-  const tk = () => (chat.ticket ? summary(chat.ticket.id) : undefined)
-  const roleFor = (status: string): ChatRole => (status === 'new' ? 'briefing' : status === 'todo' ? 'plan' : status === 'to_test' ? 'correction' : 'dev')
+  return <Show when={capability('tickets')}>{(k) => <TicketLink tickets={k()} />}</Show>
+}
+
+function TicketLink(props: { tickets: TicketsService }) {
+  const k = props.tickets
+  const tk = () => (chat.ticket ? k.summary(chat.ticket.id) : undefined)
+  const roleFor = (status: string): TicketRole => (status === 'new' ? 'briefing' : status === 'todo' ? 'plan' : status === 'to_test' ? 'correction' : 'dev')
   const link = async () => {
-    ensureBoard()
+    k.ensure()
     const id = await pick<number>({
       placeholder: t('Link this conversation to a ticket'),
-      items: board.tickets
+      items: k
+        .tickets()
         .filter((x) => x.status !== 'done' && x.status !== 'abandoned')
-        .map((x) => ({ label: `#${x.id} ${x.title}`, detail: statusLabels[x.status], value: x.id })),
+        .map((x) => ({ label: `#${x.id} ${x.title}`, detail: k.statusLabel(x.status), value: x.id })),
     })
-    const s = id ? summary(id) : undefined
+    const s = id ? k.summary(id) : undefined
     if (!s) return
     const ticket = { id: s.id, role: roleFor(s.status) }
     setChat('ticket', ticket)
@@ -55,14 +61,14 @@ function TicketBar() {
     >
       <div class="ai-ticket-bar" data-testid="ai-ticket-bar">
         <Icon name="kanban" size={13} />
-        <button class="link" onClick={() => openTicket(chat.ticket!.id)} title={tk()?.title}>
+        <button class="link" onClick={() => k.open(chat.ticket!.id)} title={tk()?.title}>
           {t('Ticket #{n}', { n: chat.ticket!.id })}
         </button>
         <Show when={tk()}>
-          <span class={`kb-status st-${tk()!.status}`}>{statusLabels[tk()!.status]}</span>
+          <span class={`kb-status st-${tk()!.status}`}>{k.statusLabel(tk()!.status)}</span>
         </Show>
         <span class="grow" />
-        <span class={`kb-role r-${chat.ticket!.role}`}>{roleLabels[chat.ticket!.role]}</span>
+        <span class={`kb-role r-${chat.ticket!.role}`}>{k.roleLabel(chat.ticket!.role)}</span>
       </div>
     </Show>
   )

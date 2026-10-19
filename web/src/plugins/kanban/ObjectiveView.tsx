@@ -3,11 +3,6 @@
 // (docs/design/kanban.md). Also the objective of a ticket and of a milestone, chosen in their
 // views.
 import { createResource, createSignal, For, Show } from 'solid-js'
-import { Icon } from '../ui/icons'
-import { contextMenu, prompt } from '../ui/overlay'
-import { errorToast } from '../ui/toast'
-import { Markdown } from '../llm/parts'
-import { closeTab, leaves, type TabState } from '../state/project'
 import { board, ensureBoard, eventText, openMilestone, openObjective, openTicket, statusLabels, updateTicket, type Summary, type Ticket } from './state'
 import { ProgressBar } from './ProgressBar'
 import { updateMilestone, type Milestone } from './milestones'
@@ -17,13 +12,14 @@ import {
 import { blockerText } from './Lineage'
 import { Count, EditableMarkdown, EditableText, Section, tooLong } from './TicketView'
 import { MAX_DESCRIPTION, MAX_NOTE } from './state'
-import { fmtDate, t } from '../i18n'
 import './kanban.css'
+import { api, contextMenu, errorToast, fmtDate, Icon, Markdown, prompt, t } from './plugin'
+import type { TabState } from '../api'
 
 export type OApply = (p: Promise<Objective>) => Promise<void>
 
 export function ObjectiveView(props: { tab: TabState }) {
-  const id = props.tab.objective!
+  const id = (props.tab.state as { objective: number }).objective
   ensureBoard()
   const [o, { mutate }] = createResource(
     () => objectiveVersion(id) + 1,
@@ -72,7 +68,7 @@ function ObjectiveBody(props: { o: Objective; apply: OApply; tabId: string }) {
     if (!confirm(t('Delete the objective “{title}”? Its tickets and milestones stay.', { title: o().title }))) return
     try {
       await deleteObjective(o().id)
-      for (const l of leaves()) if (l.tabs.includes(props.tabId)) closeTab(l.id, props.tabId, true)
+      api.panes.closeTab(props.tabId)
     } catch (e) {
       errorToast(e)
     }

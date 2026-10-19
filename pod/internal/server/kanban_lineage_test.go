@@ -3,6 +3,7 @@ package server
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -56,7 +57,7 @@ func TestKanbanLineage(t *testing.T) {
 		list, _ := get(n)["blockers"].([]any)
 		for _, b := range list {
 			m := b.(map[string]any)
-			out = append(out, "#"+itoa(int64(m["id"].(float64)))+" "+m["kind"].(string))
+			out = append(out, "#"+strconv.Itoa(int(m["id"].(float64)))+" "+m["kind"].(string))
 		}
 		return strings.Join(out, ", ")
 	}

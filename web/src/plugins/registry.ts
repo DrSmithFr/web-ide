@@ -19,8 +19,11 @@ import { files } from './files'
 import { code } from './code'
 import { docker } from './docker'
 import { database } from './database'
+import { kanban } from './kanban'
+import { setAloneView } from '../state/tiles'
+import type { TabState } from '../state/project'
 
-const builtins: Record<string, PluginModule> = { code, database, docker, exec, files, git, hello, languages, previews, search }
+const builtins: Record<string, PluginModule> = { code, database, docker, exec, files, git, hello, kanban, languages, previews, search }
 
 const [states, setStates] = createSignal<PluginState[]>([])
 export const pluginStates = states
@@ -122,6 +125,17 @@ export function pluginFileView() {
   }
   return undefined
 }
+
+/** The title of a tab of a plugin view: the plugin's viewTitle, then the tab's own title. */
+export function pluginViewTitle(tab: TabState) {
+  const m = /^plugin:([^/]+)\//.exec(tab.kind)
+  return m && pluginEnabled(m[1]) ? active[m[1]]?.viewTitle?.(tab) : undefined
+}
+
+setAloneView((kind) => {
+  const m = /^plugin:([^/]+)\/(.+)$/.exec(kind)
+  return !!m && pluginEnabled(m[1]) && !!active[m[1]]?.aloneViews?.includes(m[2])
+})
 
 /** The label of a tab view, as its manifest declares it. */
 export function pluginViewLabel(kind: string) {

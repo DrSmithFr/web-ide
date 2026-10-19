@@ -49,7 +49,7 @@ type Question struct {
 // questionRoot is the project whose windows show the questions of a project (a worktree shows in
 // the window of its parent).
 func (s *Server) questionRoot(projectID string) string {
-	if p, err := s.kanbanProject(projectID); err == nil {
+	if p, err := s.Projects.Root(projectID); err == nil {
 		return p.ID
 	}
 	return projectID

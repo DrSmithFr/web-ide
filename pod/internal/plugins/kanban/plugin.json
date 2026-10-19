@@ -1,0 +1,18 @@
+{
+  "id": "kanban",
+  "name": "Kanban",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "provides": ["tickets"],
+  "requires": ["terminal", "worktrees"],
+  "contributes": {
+    "tools": [{ "id": "kanban", "label": "Kanban", "icon": "kanban", "zone": "left" }],
+    "tabViews": [
+      { "id": "board", "label": "Kanban" },
+      { "id": "ticket", "label": "Ticket" },
+      { "id": "milestone", "label": "Milestone" },
+      { "id": "objective", "label": "Objective" }
+    ],
+    "commands": [{ "id": "kanban.open", "label": "Open the kanban", "category": "General" }]
+  }
+}

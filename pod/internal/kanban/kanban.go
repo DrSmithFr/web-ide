@@ -16,6 +16,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
+	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 	"github.com/DrSmithFr/web-ide/pod/internal/store"
 )
 
@@ -104,6 +105,16 @@ type Location struct {
 	Project string
 	// IdeDir is the .ide folder of a local project ("" for a remote one).
 	IdeDir string
+}
+
+// LocationOf is where the kanban of a main project is kept: its .ide (a local project), else the
+// data folder of the pod.
+func LocationOf(p *projects.Project) Location {
+	l := Location{Project: p.ID}
+	if p.Type == "local" {
+		l.IdeDir = filepath.Join(p.Path, ".ide")
+	}
+	return l
 }
 
 type Manager struct {

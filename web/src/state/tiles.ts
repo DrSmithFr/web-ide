@@ -80,8 +80,14 @@ export function openEmptyTile(): string {
 
 type Leaf = Extract<LayoutNode, { type: 'leaf' }>
 
-/** Tabs alone in their tile: a tool, a console, and the kanban board in a desk of tiles. */
-export const aloneTab = (x: Pick<TabState, 'kind'> | undefined) => !!x && (x.kind === 'tool' || x.kind === 'console' || (x.kind === 'kanban' && tileMode()))
+let aloneView: (kind: string) => boolean = () => false
+/** Set by the plugin registry: whether a plugin view sits alone in its tile (aloneViews). */
+export function setAloneView(f: (kind: string) => boolean) {
+  aloneView = f
+}
+
+/** Tabs alone in their tile: a tool, a console, and some plugin views (the Kanban board) in a desk of tiles. */
+export const aloneTab = (x: Pick<TabState, 'kind'> | undefined) => !!x && (x.kind === 'tool' || x.kind === 'console' || (x.kind.startsWith('plugin:') && tileMode() && aloneView(x.kind)))
 const toolLeaf = (l: Leaf) => l.tabs.some((x) => aloneTab(session.tabs[x]))
 const sameTool = (a: Omit<TabState, 'id'> | undefined, b: Omit<TabState, 'id'>) => !!a && a.kind === b.kind && a.tool === b.tool && a.console === b.console
 

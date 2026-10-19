@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	kbp "github.com/DrSmithFr/web-ide/pod/internal/plugins/kanban"
 	"strings"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/assistant"
@@ -20,16 +21,14 @@ func kanbanLocOf(loc llm.ChatLocation) kanban.Location {
 }
 
 // kanbanGit is the git side of the kanban of a run (blockers need git).
-func (s *Server) kanbanGit(r *assistantRun) gctx {
+func (s *Server) kanbanGit(r *assistantRun) kbp.GitCtx {
 	root, _ := s.Projects.Get(r.root)
-	k := gctx{loc: kanbanLocOf(r.loc), root: root}
-	if root == nil {
-		return k
+	if root != nil {
+		if rt, err := s.assistantRuntime(r.root); err == nil {
+			return kbp.NewGitCtx(kanbanLocOf(r.loc), root, rt.rt, kanban.Git{Run: rt.rt.Runner, Root: root.Path})
+		}
 	}
-	if rt, err := s.assistantRuntime(r.root); err == nil {
-		k.rt, k.git = rt.rt, kanban.Git{Run: rt.rt.Runner, Root: root.Path}
-	}
-	return k
+	return kbp.NewGitCtx(kanbanLocOf(r.loc), root, nil, kanban.Git{})
 }
 
 // ticketPrompt is the ticket part of the system prompt of a conversation linked to a ticket.
@@ -158,14 +157,14 @@ func (s *Server) kanbanTool(r *assistantRun, name string, a toolArgs, mode strin
 
 func (s *Server) kanbanCall(r *assistantRun, name string, a toolArgs, mode string) (toolResult, error) {
 	loc := kanbanLocOf(r.loc)
-	changed := func(id int64) { s.emitKanban(r.root, id, nil) }
+	changed := func(id int64) { s.kb().Emit(r.root, id) }
 	switch name {
 	case "kanban_list":
 		list, err := s.Kanban.List(loc)
 		if err != nil {
 			return toolResult{}, err
 		}
-		s.fillBlockers(r.ctx, s.kanbanGit(r), list)
+		s.kb().FillBlockers(r.ctx, s.kanbanGit(r), list)
 		status, q := kanban.NormStatus(a.str("status")), strings.ToLower(a.str("query"))
 		var lines []string
 		for _, t := range list {
@@ -203,7 +202,7 @@ func (s *Server) kanbanCall(r *assistantRun, name string, a toolArgs, mode strin
 			return toolResult{}, err
 		}
 		if kanban.Startable(t.Status) && (t.Parent != 0 || len(t.DependsOn) > 0) {
-			t.Blockers, _ = s.ticketBlockers(r.ctx, s.kanbanGit(r), t.ID)
+			t.Blockers, _ = s.kb().TicketBlockers(r.ctx, s.kanbanGit(r), t.ID)
 		}
 		return okPlain(kanban.Markdown(t), fmt.Sprintf("#%d %s", t.ID, t.Title)), nil
 	case "kanban_create":
@@ -246,12 +245,12 @@ func (s *Server) kanbanCall(r *assistantRun, name string, a toolArgs, mode strin
 		return s.assistantMilestone(r, loc, a, mode, chatID, chatTitle)
 	}
 	if name == "kanban_objective" {
-		var args objectiveArgs
+		var args kbp.ObjectiveArgs
 		raw, _ := json.Marshal(a)
 		if err := json.Unmarshal(raw, &args); err != nil {
 			return toolResult{}, usagef("invalid arguments: %v", err)
 		}
-		out, err := s.objectiveTool(r.root, loc, args, kanban.ByModel, chatID)
+		out, err := s.kb().ObjectiveTool(r.root, loc, args, kanban.ByModel, chatID)
 		if err != nil {
 			return toolResult{}, err
 		}
@@ -444,7 +443,7 @@ func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''
 // some (in Briefing mode it is linked to the ones it creates); it changes only the milestones
 // it is linked to.
 func (s *Server) assistantMilestone(r *assistantRun, loc kanban.Location, a toolArgs, mode, chatID, chatTitle string) (toolResult, error) {
-	var args milestoneArgs
+	var args kbp.MilestoneArgs
 	raw, _ := json.Marshal(a)
 	if err := json.Unmarshal(raw, &args); err != nil {
 		return toolResult{}, usagef("invalid arguments: %v", err)
@@ -456,7 +455,7 @@ func (s *Server) assistantMilestone(r *assistantRun, loc kanban.Location, a tool
 			return toolResult{}, failf("this conversation is not linked to milestone %d: only list, get and create are available on it", args.ID)
 		}
 	}
-	out, created, err := s.milestoneTool(r.root, loc, args, kanban.ByModel, chatID)
+	out, created, err := s.kb().MilestoneTool(r.root, loc, args, kanban.ByModel, chatID)
 	if err != nil {
 		return toolResult{}, err
 	}

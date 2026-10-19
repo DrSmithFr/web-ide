@@ -26,7 +26,7 @@ func TestPlugins(t *testing.T) {
 	dir := t.TempDir()
 	id := a.call("projects.create", map[string]any{"type": "local", "path": dir})["result"].(map[string]any)["id"].(string)
 	opened := a.call("project.open", map[string]any{"id": id})["result"].(map[string]any)
-	if list := opened["plugins"].([]any); len(list) != 10 || list[9].(map[string]any)["enabled"] != true {
+	if list := opened["plugins"].([]any); len(list) != 11 || list[10].(map[string]any)["enabled"] != true {
 		t.Fatalf("plugins of project.open: %v", opened["plugins"])
 	}
 	name := filepath.Base(dir)

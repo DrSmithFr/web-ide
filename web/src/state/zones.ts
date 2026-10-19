@@ -8,7 +8,7 @@ export type Zone = 'left' | 'bottomLeft' | 'bottomRight' | 'right'
 export const zones: Zone[] = ['left', 'bottomLeft', 'bottomRight', 'right']
 
 const corePlacement: Record<Zone, string[]> = {
-  left: ['kanban'],
+  left: [],
   bottomLeft: [],
   bottomRight: [],
   right: ['assistant', 'agents', 'questions', 'conflicts', 'info'],

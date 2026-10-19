@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"github.com/DrSmithFr/web-ide/pod/internal/commands"
 	"path"
 	"strings"
 
@@ -155,7 +156,7 @@ func (s *Server) registerWorktrees() {
 		if err != nil {
 			return nil, err
 		}
-		if err := s.ignoreWorktrees(root, rt); err != nil {
+		if err := rt.KeepIdeOut(root); err != nil {
 			return nil, err
 		}
 		local := a.Branch
@@ -180,7 +181,8 @@ func (s *Server) registerWorktrees() {
 		}
 		s.emitter(root.ID)("git.changed", nil, "")
 		// The setup commands of the project (npm install…) run in the window of the worktree.
-		setup, _ := s.setupScript(rt)
+		list, _ := s.projectCommands(rt)
+		setup := commands.SetupScript(list)
 		return map[string]string{"project": v.ID, "setup": setup}, nil
 	})
 	// Removes a worktree opened from the menu bar (a ticket one goes with its ticket) and

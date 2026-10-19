@@ -16,7 +16,7 @@ import { settings } from './settings'
 import { closeDesks, desk, loadDesks, showDesk, touchRecent, type DeskList } from './desks'
 
 /** plugin:<plugin>/<view>: a tab view of a plugin (plugins/registry.ts). */
-export type TabKind = 'file' | 'text' | 'diff' | 'kanban' | 'ticket' | 'milestone' | 'objective' | 'tool' | 'console' | 'doc' | `plugin:${string}`
+export type TabKind = 'file' | 'text' | 'diff' | 'tool' | 'console' | 'doc' | `plugin:${string}`
 
 export interface TabState {
   id: string
@@ -32,10 +32,6 @@ export interface TabState {
   from?: string
   /** Diff tabs: the source of their sides (ui/diffSources.ts), git when unset. */
   source?: string
-  /** Number of the kanban ticket shown (kind ticket), of the milestone (kind milestone), or of the objective (kind objective). */
-  ticket?: number
-  milestone?: number
-  objective?: number
   /** A tool shown as a tab or a tile (kind tool: id of the tool) or a console (kind console: its id). */
   tool?: string
   console?: string
@@ -215,6 +211,13 @@ function normalize(raw: any): SessionData {
       Object.assign(t, { kind: 'plugin:database/sql', key: t.id, state: { connId: t.connId, db: t.db ?? '', text: raw.sqlText?.[t.id] ?? '' } })
     } else if (t.kind === 'table') {
       Object.assign(t, { kind: 'plugin:database/table', key: `${t.connId}/${t.db ?? ''}/${t.table}`, state: { connId: t.connId, db: t.db ?? '', table: t.table } })
+    } else if (t.kind === 'kanban') {
+      Object.assign(t, { kind: 'plugin:kanban/board', key: undefined, state: {} })
+    } else if (t.kind === 'ticket' || t.kind === 'milestone' || t.kind === 'objective') {
+      // The Kanban became a plugin (#122): the board and the ticket, milestone and objective tabs.
+      Object.assign(t, { kind: `plugin:kanban/${t.kind}`, key: String(t[t.kind]), state: { [t.kind]: t[t.kind] } })
+      delete t[t.kind]
+      continue
     } else continue
     delete t.connId
     delete t.db
@@ -330,10 +333,6 @@ export function openTab(tab: Omit<TabState, 'id'>, paneId = session.activePane):
     if (!t || t.kind !== tab.kind) return false
     if (tab.kind === 'file') return t.path === tab.path
     if (tab.kind === 'diff') return t.path === tab.path && !!t.staged === !!tab.staged && !!t.head === !!tab.head && t.rev === tab.rev
-    if (tab.kind === 'kanban') return true
-    if (tab.kind === 'ticket') return t.ticket === tab.ticket
-    if (tab.kind === 'milestone') return t.milestone === tab.milestone
-    if (tab.kind === 'objective') return t.objective === tab.objective
     if (tab.kind === 'tool') return t.tool === tab.tool
     if (tab.kind === 'console') return t.console === tab.console
     if (tab.kind === 'doc') return true
