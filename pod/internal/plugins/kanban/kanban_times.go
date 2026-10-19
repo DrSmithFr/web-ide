@@ -1,7 +1,7 @@
-package server
+package kanban
 
 import (
-	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
+	kb "github.com/DrSmithFr/web-ide/pod/internal/kanban"
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 )
 
@@ -14,8 +14,8 @@ type chatTimes struct {
 }
 
 // chatTimes of the conversations of a project (nil when they cannot be read).
-func (s *Server) chatTimes(projectID string) *chatTimes {
-	loc, _, err := s.chatLoc(projectID)
+func (s *K) chatTimes(projectID string) *chatTimes {
+	loc, _, err := s.ChatLoc(projectID)
 	if err != nil {
 		return nil
 	}
@@ -54,9 +54,9 @@ func (ct *chatTimes) of(ids ...string) int64 {
 }
 
 // withTimes fills the times of a ticket answered by a handler.
-func (s *Server) withTimes(projectID string) func(any, error) (any, error) {
+func (s *K) withTimes(projectID string) func(any, error) (any, error) {
 	return func(res any, err error) (any, error) {
-		if t, ok := res.(*kanban.Ticket); ok && err == nil && t != nil {
+		if t, ok := res.(*kb.Ticket); ok && err == nil && t != nil {
 			if ct := s.chatTimes(projectID); ct != nil {
 				ids := make([]string, len(t.ChatList))
 				for i := range t.ChatList {

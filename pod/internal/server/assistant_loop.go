@@ -6,6 +6,7 @@ import (
 	"errors"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -871,7 +872,7 @@ func cut(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}
-	return s[:n/2] + "\n… (" + itoa(int64(len(s)-n)) + " characters cut) …\n" + s[len(s)-n/2:]
+	return s[:n/2] + "\n… (" + strconv.Itoa(len(s)-n) + " characters cut) …\n" + s[len(s)-n/2:]
 }
 
 func transcriptOf(m *assistant.Message, budget int) string {

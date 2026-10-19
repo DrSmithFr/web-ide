@@ -1,6 +1,7 @@
 package server
 
 import (
+	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
 	"log"
 	"strings"
 	"sync"
@@ -53,11 +54,11 @@ func (s *Server) projectCommands(rt *runtime.Runtime) ([]commands.Command, error
 	if err != nil {
 		return nil, err
 	}
-	root, err := s.kanbanProject(rt.P.ID)
-	if err != nil || !s.Kanban.Has(kanbanLoc(root)) {
+	root, err := s.Projects.Root(rt.P.ID)
+	if err != nil || !s.Kanban.Has(kanban.LocationOf(root)) {
 		return list, nil
 	}
-	loc := kanbanLoc(root)
+	loc := kanban.LocationOf(root)
 	meta, err := s.Kanban.Meta(loc)
 	setup := strings.TrimSpace(meta["setup"])
 	if err != nil || setup == "" {

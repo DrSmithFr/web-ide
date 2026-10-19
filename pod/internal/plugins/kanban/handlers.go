@@ -1,69 +1,39 @@
-package server
+package kanban
 
 import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"path/filepath"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
-	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
+	kb "github.com/DrSmithFr/web-ide/pod/internal/kanban"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 )
 
 // kanbanProject is the project whose kanban (and conversations) a project uses: itself,
 // or its parent for the worktree of a ticket.
-func (s *Server) kanbanProject(id string) (*projects.Project, error) {
-	p, ok := s.Projects.Get(id)
-	if !ok {
-		return nil, i18n.New("no project open on this connection")
-	}
-	if p.Parent != "" {
-		if parent, ok := s.Projects.Get(p.Parent); ok {
-			return parent, nil
-		}
-		return nil, i18n.New("parent project not found")
-	}
-	return p, nil
-}
+func (s *K) kanbanProject(id string) (*projects.Project, error) { return s.Projects.Root(id) }
 
-func kanbanLoc(p *projects.Project) kanban.Location {
-	l := kanban.Location{Project: p.ID}
-	if p.Type == "local" {
-		l.IdeDir = filepath.Join(p.Path, ".ide")
-	}
-	return l
-}
+func kanbanLoc(p *projects.Project) kb.Location { return kb.LocationOf(p) }
 
 // emitKanban tells the windows of a project and of its worktrees that a ticket changed.
-func (s *Server) emitKanban(root string, id int64, except *Client) {
-	s.mu.Lock()
-	var targets []*Client
-	for c := range s.clients {
-		if c == except || c.project == "" {
-			continue
-		}
-		if c.project == root {
-			targets = append(targets, c)
-		} else if p, ok := s.Projects.Get(c.project); ok && p.Parent == root {
-			targets = append(targets, c)
-		}
+func (s *K) emitKanban(root string, id int64, except *client) {
+	ex := ""
+	if except != nil {
+		ex = except.id
 	}
-	s.mu.Unlock()
-	for _, c := range targets {
-		c.push("kanban.changed", map[string]any{"project": root, "id": id})
-	}
+	s.pod.EmitFamily(root, "kanban.changed", map[string]any{"project": root, "id": id}, ex)
 }
 
-func (s *Server) registerKanban() {
+func (s *K) registerKanban() {
 	type kctx struct {
-		loc  kanban.Location
+		loc  kb.Location
 		root *projects.Project
 	}
 	// Changes are announced to every window, the asking one included (it may show the
 	// ticket in several places).
-	h := func(f func(ctx context.Context, c *Client, k kctx, p json.RawMessage) (any, error)) handler {
-		return func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+	h := func(f func(ctx context.Context, c *client, k kctx, p json.RawMessage) (any, error)) handler {
+		return func(ctx context.Context, c *client, p json.RawMessage) (any, error) {
 			root, err := s.kanbanProject(c.project)
 			if err != nil {
 				return nil, err
@@ -76,14 +46,14 @@ func (s *Server) registerKanban() {
 		By string `json:"by"`
 	}
 	by := func(b string) string {
-		if b == kanban.ByModel {
+		if b == kb.ByModel {
 			return b
 		}
-		return kanban.ByUser
+		return kb.ByUser
 	}
 	// change binds the arguments, runs f and announces the ticket.
 	change := func(f func(k kctx, a idArg, p json.RawMessage) error) handler {
-		return h(func(ctx context.Context, c *Client, k kctx, p json.RawMessage) (any, error) {
+		return h(func(ctx context.Context, c *client, k kctx, p json.RawMessage) (any, error) {
 			a, err := bind[idArg](p)
 			if err != nil {
 				return nil, err
@@ -97,7 +67,7 @@ func (s *Server) registerKanban() {
 		})
 	}
 
-	s.handle("kanban.list", h(func(ctx context.Context, c *Client, k kctx, p json.RawMessage) (any, error) {
+	s.handle("kanban.list", h(func(ctx context.Context, c *client, k kctx, p json.RawMessage) (any, error) {
 		list, err := s.Kanban.List(k.loc)
 		if err != nil {
 			return nil, err
@@ -119,20 +89,20 @@ func (s *Server) registerKanban() {
 		objectives, err := s.Kanban.Objectives(k.loc)
 		return map[string]any{"project": k.root.ID, "tickets": list, "meta": meta, "milestones": milestones, "objectives": objectives}, err
 	}))
-	s.handle("kanban.get", h(func(ctx context.Context, c *Client, k kctx, p json.RawMessage) (any, error) {
+	s.handle("kanban.get", h(func(ctx context.Context, c *client, k kctx, p json.RawMessage) (any, error) {
 		a, err := bind[idArg](p)
 		if err != nil {
 			return nil, err
 		}
 		t, err := s.Kanban.Get(k.loc, a.ID)
-		if err == nil && kanban.Startable(t.Status) && (t.Parent != 0 || len(t.DependsOn) > 0) {
+		if err == nil && kb.Startable(t.Status) && (t.Parent != 0 || len(t.DependsOn) > 0) {
 			t.Blockers, _ = s.ticketBlockers(ctx, s.clientGit(c, k.root), t.ID)
 		}
 		return t, err
 	}))
-	s.handle("kanban.create", h(func(ctx context.Context, c *Client, k kctx, p json.RawMessage) (any, error) {
+	s.handle("kanban.create", h(func(ctx context.Context, c *client, k kctx, p json.RawMessage) (any, error) {
 		a, err := bind[struct {
-			kanban.Patch
+			kb.Patch
 			By string `json:"by"`
 		}](p)
 		if err != nil {
@@ -147,14 +117,14 @@ func (s *Server) registerKanban() {
 	}))
 	s.handle("kanban.update", change(func(k kctx, a idArg, p json.RawMessage) error {
 		b, err := bind[struct {
-			Patch kanban.Patch `json:"patch"`
+			Patch kb.Patch `json:"patch"`
 		}](p)
 		if err != nil {
 			return err
 		}
 		return s.Kanban.Update(k.loc, a.ID, b.Patch, a.By)
 	}))
-	s.handle("kanban.move", h(func(ctx context.Context, c *Client, k kctx, p json.RawMessage) (any, error) {
+	s.handle("kanban.move", h(func(ctx context.Context, c *client, k kctx, p json.RawMessage) (any, error) {
 		a, err := bind[struct {
 			ID      int64  `json:"id"`
 			By      string `json:"by"`
@@ -166,13 +136,13 @@ func (s *Server) registerKanban() {
 			return nil, err
 		}
 		// Developing without a worktree (no git) keeps the order of the lineages too.
-		if a.Status == kanban.InProgress {
-			if t, err := s.Kanban.Get(k.loc, a.ID); err == nil && t.Status == kanban.Todo {
+		if a.Status == kb.InProgress {
+			if t, err := s.Kanban.Get(k.loc, a.ID); err == nil && t.Status == kb.Todo {
 				if bl, err := s.ticketBlockers(ctx, s.clientGit(c, k.root), t.ID); err == nil && len(bl) > 0 {
-					if !a.Force || by(a.By) != kanban.ByUser {
+					if !a.Force || by(a.By) != kb.ByUser {
 						return nil, blockedError(bl)
 					}
-					_ = s.Kanban.Event(k.loc, t.ID, kanban.ByUser, "Started despite: {blockers}", kanban.Params{"blockers": kanban.BlockersText(bl)})
+					_ = s.Kanban.Event(k.loc, t.ID, kb.ByUser, "Started despite: {blockers}", kb.Params{"blockers": kb.BlockersText(bl)})
 				}
 			}
 		}
@@ -184,7 +154,7 @@ func (s *Server) registerKanban() {
 	}))
 	// kanban.step validates the own work of a parent: its first child may start.
 	s.handle("kanban.step", change(func(k kctx, a idArg, p json.RawMessage) error {
-		if err := s.Kanban.ValidateStep(k.loc, a.ID, kanban.ByUser); err != nil {
+		if err := s.Kanban.ValidateStep(k.loc, a.ID, kb.ByUser); err != nil {
 			return err
 		}
 		if t, err := s.Kanban.Get(k.loc, a.ID); err == nil {
@@ -201,7 +171,7 @@ func (s *Server) registerKanban() {
 		}
 		return s.Kanban.MoveChild(k.loc, a.ID, b.Delta, a.By)
 	}))
-	s.handle("kanban.delete", h(func(ctx context.Context, c *Client, k kctx, p json.RawMessage) (any, error) {
+	s.handle("kanban.delete", h(func(ctx context.Context, c *client, k kctx, p json.RawMessage) (any, error) {
 		a, err := bind[idArg](p)
 		if err != nil {
 			return nil, err
@@ -218,7 +188,7 @@ func (s *Server) registerKanban() {
 				if _, err := rt.FS.Stat(wt); err != nil {
 					wt = ""
 				}
-				if err := s.removeWorktree(ctx, k.loc, k.root, kanban.Git{Run: rt.Runner, Root: k.root.Path}, t, wt); err != nil {
+				if err := s.removeWorktree(ctx, k.loc, k.root, kb.Git{Run: rt.Runner, Root: k.root.Path}, t, wt); err != nil {
 					return nil, err
 				}
 			}
@@ -250,16 +220,16 @@ func (s *Server) registerKanban() {
 	}))
 	s.handle("kanban.plan", change(func(k kctx, a idArg, p json.RawMessage) error {
 		b, err := bind[struct {
-			Plan       string             `json:"plan"`
-			Goals      []kanban.GoalInput `json:"goals"`
-			Size       *string            `json:"size"`
-			Complexity *string            `json:"complexity"`
+			Plan       string         `json:"plan"`
+			Goals      []kb.GoalInput `json:"goals"`
+			Size       *string        `json:"size"`
+			Complexity *string        `json:"complexity"`
 		}](p)
 		if err != nil {
 			return err
 		}
 		if b.Size != nil || b.Complexity != nil {
-			if err := s.Kanban.Update(k.loc, a.ID, kanban.Patch{Size: b.Size, Complexity: b.Complexity, PlanSize: true}, a.By); err != nil {
+			if err := s.Kanban.Update(k.loc, a.ID, kb.Patch{Size: b.Size, Complexity: b.Complexity, PlanSize: true}, a.By); err != nil {
 				return err
 			}
 		}
@@ -267,7 +237,7 @@ func (s *Server) registerKanban() {
 	}))
 	s.handle("kanban.goal", change(func(k kctx, a idArg, p json.RawMessage) error {
 		b, err := bind[struct {
-			Goal kanban.GoalOp `json:"goal"`
+			Goal kb.GoalOp `json:"goal"`
 		}](p)
 		if err != nil {
 			return err
@@ -276,7 +246,7 @@ func (s *Server) registerKanban() {
 	}))
 	s.handle("kanban.feedback", change(func(k kctx, a idArg, p json.RawMessage) error {
 		b, err := bind[struct {
-			Feedback kanban.FeedbackOp `json:"feedback"`
+			Feedback kb.FeedbackOp `json:"feedback"`
 		}](p)
 		if err != nil {
 			return err
@@ -316,7 +286,7 @@ func (s *Server) registerKanban() {
 		_, err = s.Kanban.AddAttachment(k.loc, a.ID, b.Name, b.Mime, data)
 		return err
 	}))
-	s.handle("kanban.attachment.get", h(func(ctx context.Context, c *Client, k kctx, p json.RawMessage) (any, error) {
+	s.handle("kanban.attachment.get", h(func(ctx context.Context, c *client, k kctx, p json.RawMessage) (any, error) {
 		a, err := bind[struct {
 			ID  int64 `json:"id"`
 			AID int64 `json:"aid"`
@@ -339,7 +309,7 @@ func (s *Server) registerKanban() {
 		}
 		return s.Kanban.DeleteAttachment(k.loc, a.ID, b.AID)
 	}))
-	s.handle("kanban.meta.set", h(func(ctx context.Context, c *Client, k kctx, p json.RawMessage) (any, error) {
+	s.handle("kanban.meta.set", h(func(ctx context.Context, c *client, k kctx, p json.RawMessage) (any, error) {
 		a, err := bind[struct {
 			Values map[string]string `json:"values"`
 		}](p)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/DrSmithFr/web-ide/pod/internal/assistant"
+	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
 	"path"
 	"path/filepath"
 	"strings"
@@ -153,8 +154,8 @@ func (s *Server) registerLLM() {
 	loc := func(c *Client, rt *runtime.Runtime) llm.ChatLocation {
 		// The worktree of a ticket keeps its conversations with those of its parent.
 		if p, ok := s.Projects.Get(c.project); ok && p.Parent != "" {
-			if parent, err := s.kanbanProject(c.project); err == nil {
-				k := kanbanLoc(parent)
+			if parent, err := s.Projects.Root(c.project); err == nil {
+				k := kanban.LocationOf(parent)
 				return llm.ChatLocation{Project: k.Project, IdeDir: k.IdeDir}
 			}
 		}
@@ -213,8 +214,8 @@ func (s *Server) registerLLM() {
 			return nil, err
 		}
 		// The tickets linking this conversation show its new title.
-		if root, err := s.kanbanProject(c.project); err == nil {
-			s.Kanban.RenameChat(kanbanLoc(root), a.ID, a.Title)
+		if root, err := s.Projects.Root(c.project); err == nil {
+			s.Kanban.RenameChat(kanban.LocationOf(root), a.ID, a.Title)
 		}
 		return nil, nil
 	}))

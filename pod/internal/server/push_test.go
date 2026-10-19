@@ -4,6 +4,7 @@ import (
 	"crypto/ecdh"
 	"crypto/rand"
 	"encoding/json"
+	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
 	"strings"
 	"testing"
 	"time"
@@ -110,7 +111,7 @@ func TestPushNotifications(t *testing.T) {
 	a.call("kanban.feedback", map[string]any{"id": 1, "feedback": map[string]any{"op": "add", "kind": "info", "text": "mine"}})
 	none("feedback by the user")
 	p, _ := s.Projects.Get(id)
-	s.notifyFeedback(kanbanLoc(p), 1, "the export fails")
+	s.notifyFeedback(kanban.LocationOf(p), 1, "the export fails")
 	m = read("feedback")
 	if m["title"] != "Retour sur #1 Export" || !strings.HasSuffix(m["body"], "the export fails") || !strings.Contains(m["url"], "ticket%3D1") {
 		t.Fatalf("feedback: %+v", m)

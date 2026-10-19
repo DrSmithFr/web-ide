@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/DrSmithFr/web-ide/pod/internal/plugins"
+	kbp "github.com/DrSmithFr/web-ide/pod/internal/plugins/kanban"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -77,14 +79,14 @@ func (s *Server) mcpScope(cwd string) (mcpScope, error) {
 	if !ok {
 		return mcpScope{}, fmt.Errorf("no project of the IDE holds %s: open the folder as a project in the IDE first", cwd)
 	}
-	root, err := s.kanbanProject(p.ID)
+	root, err := s.Projects.Root(p.ID)
 	if err != nil {
 		return mcpScope{}, err
 	}
-	sc := mcpScope{here: p, root: root, loc: kanbanLoc(root), ticket: p.Ticket}
+	sc := mcpScope{here: p, root: root, loc: kanban.LocationOf(root), ticket: p.Ticket}
 	// The worktree of a lineage works on its current step.
 	if sc.ticket != 0 {
-		sc.ticket = s.activeStep(sc.loc, sc.ticket)
+		sc.ticket = s.kb().ActiveStep(sc.loc, sc.ticket)
 	}
 	return sc, nil
 }
@@ -110,12 +112,12 @@ func (sc mcpScope) id(given int64) (int64, error) {
 }
 
 // git opens the runtime of the project for the git side of the tickets.
-func (s *Server) mcpGit(sc mcpScope) (gctx, error) {
+func (s *Server) mcpGit(sc mcpScope) (kbp.GitCtx, error) {
 	rt, err := s.openRuntime(sc.root.ID, sshx.Creds{})
 	if err != nil {
-		return gctx{}, err
+		return kbp.GitCtx{}, err
 	}
-	return gctx{loc: sc.loc, root: sc.root, rt: rt, git: kanban.Git{Run: rt.Runner, Root: sc.root.Path}}, nil
+	return kbp.NewGitCtx(sc.loc, sc.root, rt, kanban.Git{Run: rt.Runner, Root: sc.root.Path}), nil
 }
 
 // ticketTool binds the arguments of a tool on one ticket and announces the change.
@@ -144,7 +146,7 @@ func ticketTool[T any](f func(ctx context.Context, s *Server, sc mcpScope, id in
 		if err != nil {
 			return "", err
 		}
-		s.emitKanban(sc.root.ID, id, nil)
+		s.kb().Emit(sc.root.ID, id)
 		return out, nil
 	}
 }
@@ -185,7 +187,7 @@ var mcpTools = []mcpTool{
 				return "", err
 			}
 			if k, err := s.mcpGit(sc); err == nil {
-				s.fillBlockers(ctx, k, list)
+				s.kb().FillBlockers(ctx, k, list)
 			}
 			var b strings.Builder
 			fmt.Fprintf(&b, "Kanban of %s (%s)\nProject in the IDE: %s\n", sc.root.Name(), sc.root.Path, s.projectURL(sc.here.ID))
@@ -233,11 +235,11 @@ var mcpTools = []mcpTool{
 			}
 			if kanban.Startable(t.Status) && (t.Parent != 0 || len(t.DependsOn) > 0) {
 				if k, err := s.mcpGit(sc); err == nil {
-					t.Blockers, _ = s.ticketBlockers(ctx, k, id)
+					t.Blockers, _ = s.kb().TicketBlockers(ctx, k, id)
 				}
 			}
 			md := kanban.Markdown(t)
-			if _, info, _, ok := s.ticketSession(sc.root, t); ok {
+			if _, info, _, ok := s.kb().TicketSession(sc.root, t); ok {
 				md += fmt.Sprintf("\n\n## Agent session\n- %s (%s, %s): read it with kanban_conversation chat=%s", info.Title, info.Name, info.State, info.ID)
 			}
 			return fmt.Sprintf("%s\n\nTicket in the IDE: %s\nProject in the IDE: %s", md, s.ticketURL(sc, id), s.projectURL(sc.here.ID)), nil
@@ -263,7 +265,7 @@ var mcpTools = []mcpTool{
 			for _, c := range t.ChatList {
 				linked = linked || c.ChatID == a.Chat
 			}
-			if _, info, entries, ok := s.ticketSession(sc.root, t); !linked && ok && info.ID == a.Chat {
+			if _, info, entries, ok := s.kb().TicketSession(sc.root, t); !linked && ok && info.ID == a.Chat {
 				return acpThreadText(info, entries, a.Last, a.Tools), nil
 			}
 			if !linked {
@@ -353,7 +355,7 @@ var mcpTools = []mcpTool{
 			if err != nil {
 				return "", err
 			}
-			s.emitKanban(sc.root.ID, id, nil)
+			s.kb().Emit(sc.root.ID, id)
 			return fmt.Sprintf("Ticket #%d created in the backlog (status New): %s", id, s.ticketURL(sc, id)), nil
 		},
 	},
@@ -402,7 +404,7 @@ var mcpTools = []mcpTool{
 		run: func(ctx context.Context, s *Server, raw json.RawMessage) (string, error) {
 			a, err := bind[struct {
 				Cwd string
-				milestoneArgs
+				kbp.MilestoneArgs
 			}](raw)
 			if err != nil {
 				return "", err
@@ -411,7 +413,7 @@ var mcpTools = []mcpTool{
 			if err != nil {
 				return "", err
 			}
-			out, _, err := s.milestoneTool(sc.root.ID, sc.loc, a.milestoneArgs, kanban.ByClaude, "")
+			out, _, err := s.kb().MilestoneTool(sc.root.ID, sc.loc, a.MilestoneArgs, kanban.ByClaude, "")
 			return out, err
 		},
 	},
@@ -423,7 +425,7 @@ var mcpTools = []mcpTool{
 		run: func(ctx context.Context, s *Server, raw json.RawMessage) (string, error) {
 			a, err := bind[struct {
 				Cwd string
-				objectiveArgs
+				kbp.ObjectiveArgs
 			}](raw)
 			if err != nil {
 				return "", err
@@ -432,7 +434,7 @@ var mcpTools = []mcpTool{
 			if err != nil {
 				return "", err
 			}
-			return s.objectiveTool(sc.root.ID, sc.loc, a.objectiveArgs, kanban.ByClaude, "")
+			return s.kb().ObjectiveTool(sc.root.ID, sc.loc, a.ObjectiveArgs, kanban.ByClaude, "")
 		},
 	},
 	{
@@ -624,10 +626,10 @@ var mcpTools = []mcpTool{
 			if err != nil {
 				return "", err
 			}
-			t, child, err := s.startTicket(ctx, k, id, a.Base, kanban.ByClaude, false)
-			var ce *codeError
-			if errors.As(err, &ce) && ce.code == "blocked" {
-				if bl, e := s.ticketBlockers(ctx, k, id); e == nil && len(bl) > 0 {
+			t, child, err := s.kb().StartTicket(ctx, k, id, a.Base, kanban.ByClaude, false)
+			var ce *plugins.CodedError
+			if errors.As(err, &ce) && ce.Code == "blocked" {
+				if bl, e := s.kb().TicketBlockers(ctx, k, id); e == nil && len(bl) > 0 {
 					return "", fmt.Errorf("ticket #%d cannot start yet: %s. Only the user can start it anyway, from the IDE", id, kanban.BlockersText(bl))
 				}
 			}

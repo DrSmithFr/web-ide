@@ -103,6 +103,22 @@ func (r *Registry) List() []View {
 	return out
 }
 
+// Root is the main project of a project: itself, or its parent for the worktree of a ticket
+// (the kanban, the conversations and the saved commands are the main project's).
+func (r *Registry) Root(id string) (*Project, error) {
+	p, ok := r.Get(id)
+	if !ok {
+		return nil, i18n.New("no project open on this connection")
+	}
+	if p.Parent != "" {
+		if parent, ok := r.Get(p.Parent); ok {
+			return parent, nil
+		}
+		return nil, i18n.New("parent project not found")
+	}
+	return p, nil
+}
+
 func (r *Registry) Get(id string) (*Project, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/DrSmithFr/web-ide/pod/internal/acp"
+	kbp "github.com/DrSmithFr/web-ide/pod/internal/plugins/kanban"
+	"net"
 	"slices"
 	"strings"
 	"sync"
@@ -188,6 +191,7 @@ func (w clientWindow) Push(event string, data any) { w.c.push(event, data) }
 func (w clientWindow) Done() <-chan struct{}       { return w.c.ctx.Done() }
 func (w clientWindow) Hold(id string, stop func()) { w.c.streams.Store(id, stop) }
 func (w clientWindow) Project() string             { return w.c.project }
+func (w clientWindow) ID() string                  { return w.c.id }
 func (w clientWindow) Release(id string) {
 	if stop, ok := w.c.streams.LoadAndDelete(id); ok {
 		stop.(func())()
@@ -221,9 +225,18 @@ var toolNeeds = map[string]string{
 	"lsp_hover": "language", "lsp_diagnostics": "language",
 }
 
+// needsOf is the capability a core tool needs: toolNeeds, and tickets for the kanban tools
+// (kanban_*, of the assistant, the Orchestrator and the MCP).
+func needsOf(tool string) string {
+	if strings.HasPrefix(tool, "kanban_") {
+		return "tickets"
+	}
+	return toolNeeds[tool]
+}
+
 // missingFor is the error of a core tool whose capability the project of rt lacks (nil: it runs).
 func (s *Server) missingFor(rt *runtime.Runtime, tool string) error {
-	if c := toolNeeds[tool]; c != "" && !s.capabilityOn(rt, c) {
+	if c := needsOf(tool); c != "" && !s.capabilityOn(rt, c) {
 		return i18n.Errorf("%s needs the %s capability, off on this project (Settings > Plugins)", tool, c)
 	}
 	return nil
@@ -319,4 +332,66 @@ func (s *Server) windowsChanged() {
 	for _, f := range s.plugins.onWindows {
 		f(len(s.clients))
 	}
+}
+
+func (p podLend) EmitFamily(root, event string, data any, except string) {
+	p.s.mu.Lock()
+	var targets []*Client
+	for c := range p.s.clients {
+		if c.project == "" || c.id == except {
+			continue
+		}
+		if c.project == root {
+			targets = append(targets, c)
+		} else if pr, ok := p.s.Projects.Get(c.project); ok && pr.Parent == root {
+			targets = append(targets, c)
+		}
+	}
+	p.s.mu.Unlock()
+	for _, c := range targets {
+		c.push(event, data)
+	}
+}
+
+func (p podLend) CloseRuntime(project string) { p.s.closeRuntime(project) }
+
+func (p podLend) CapabilityOn(rt *runtime.Runtime, c string) bool { return p.s.capabilityOn(rt, c) }
+
+func (p podLend) Services() *plugins.Services {
+	s := p.s
+	return &plugins.Services{Store: s.Store, Projects: s.Projects, Cfg: s.Cfg, Keeper: s.Keeper, LLM: s.LLM, Desks: s.Desks, Kanban: s.Kanban,
+		Token: s.Token, MCPBase: s.MCPBase, Commands: s.projectCommands, ChatLoc: s.chatLoc, AgentsMCP: s.agentsMCP}
+}
+
+// agentsMCP is the MCP server of the IDE as the sessions of the Agents tool reach it: the
+// listen address of the pod, the token as a bearer. Named like the server users add to Claude
+// Code (web-ide), so that the session's one replaces it instead of doubling its tools.
+func (s *Server) agentsMCP() []acp.MCPServer {
+	base := s.MCPBase
+	if base == "" && s.Cfg != nil && s.Cfg.Addr != "" {
+		host, port, err := net.SplitHostPort(s.Cfg.Addr)
+		if err != nil {
+			return nil
+		}
+		if host == "" || host == "0.0.0.0" || host == "::" {
+			host = "127.0.0.1"
+		}
+		base = "http://" + net.JoinHostPort(host, port)
+	}
+	if base == "" {
+		return nil
+	}
+	return []acp.MCPServer{{Type: "http", Name: "web-ide", URL: strings.TrimSuffix(base, "/") + mcpPath,
+		Headers: []acp.Header{{Name: "Authorization", Value: "Bearer " + s.Token}}}}
+}
+
+// kb is the Kanban plugin: the kanban tools of the assistant and of the MCP, the Orchestrator ask
+// it (nil when the pod has no such plugin).
+func (s *Server) kb() *kbp.K {
+	for _, p := range s.Plugins.All() {
+		if k, ok := p.(*kbp.K); ok {
+			return k
+		}
+	}
+	return nil
 }

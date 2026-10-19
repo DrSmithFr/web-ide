@@ -442,3 +442,12 @@ func (r *Runtime) changed(p string) {
 	r.mu.Unlock()
 	r.emit("fs.changed", map[string]any{"path": p, "content": text, "rev": rev, "encoding": f.Encoding, "eol": f.EOL}, "")
 }
+
+// KeepIdeOut keeps the .ide folder of the main project root out of git (the worktrees of its
+// tickets live there).
+func (r *Runtime) KeepIdeOut(root *projects.Project) error {
+	if root.Type == "local" {
+		return idedir.Local(path.Join(root.Path, ".ide"))
+	}
+	return idedir.Ensure(r.FS, path.Join(r.Root, ".ide"))
+}
