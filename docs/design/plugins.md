@@ -140,6 +140,16 @@ Exec (#116) is the first plugin the rest of the IDE *uses*: a dozen parts of the
 - `api.window.detached`, `api.settings.open`, `api.plugins.assistantOptions`, `api.questions` (`AskCard`, `Form`, `formAnswerText`, `answerStrings`, `showsQuestions`), `api.editor.lineHunks`, `api.ui.openDiagram` / `Switch`, `api.project.rootOf` / `resolve`.
 - On the pod: `Host.OnStart` / `OnStop` (the conversations that ran are taken back, saved when the pod stops); `Pod.Stopping`, `Plugin(id)` (a plugin uses another's exports: the AI the Kanban's), `UICall`, `AssistantTools` / `RunAssistantTool` (the tools of the other plugins), `Notify` / `NotifyFeedback`, `NoteAsks`, `CommandsText` / `StartSaved`, `SharePreview`; `Window.Watch` (the conversation a window shows); `Services.Models`. The kit of the tools (arguments, results, console tools, a conversation read) moved to `internal/assistant`, the shell commands without a terminal to `runtime` (`RunShell`, `FollowShell`), both shared with the MCP.
 
+## Loading on demand
+
+The page module of each built-in is a chunk of its own, `plugin-<id>` (`web/vite.config.ts`: rolldown's `advancedChunks`, only the files of the plugin's folder, without their dependencies, so what the core shares stays with it; a library only a plugin uses, such as xterm, gets a chunk loaded with it). The registry (`plugins/registry.tsx`) maps each id to a loader and loads a plugin when it is first enabled in the window, the locked ones first; the module is then activated once, and the contributions follow as each arrives. A disabled plugin is never downloaded.
+
+- While a module loads, its tools and its tab views show a **placeholder** (*Loading…*), not the fallback of a disabled plugin; the file tabs wait for Code.
+- What asks a service as the project opens waits for it (`whenProvided`: a `?ticket=` link waits for the Kanban, `?chat=` for the AI).
+- The modules subscribe to the events of the pod as they load: a gateway keeps those subscribed before the activation (the AI's `on`).
+- The home page loads only the built-ins that have a part of it (`homeIds`: Previews).
+- Measured by the `perf` suite (2026-10-19, local): the home page went from 1636 KB of JS (one bundle) to 827 KB; a project window with every plugin enabled still loads them all (1682 KB, about 150 ms to the editor and its tools either way), less for each plugin off (the AI 256 KB, the Kanban 127 KB, Exec and xterm 355 KB…).
+
 ## What the status bar added to the API
 
 - **`StatusItem`**: `id`, `text`, `icon`, `title`, `testid`, and an `action` (a click) or a `menu` (its options, opened above the item). Read in a memo: an item changes with what it shows.
@@ -193,7 +203,7 @@ The plugins, grouped by domain (one plugin, several tools and views), in their o
 - **Locked plugins** (`required` in the manifest): Files and Code cannot be disabled; Settings → Plugins shows them checked and greyed.
 - **Languages apart from Code**: the editor without language servers (a slow SSH project).
 - `apiVersion: 1` is frozen after Git ([API v1](#api-v1)).
-- Then the **page modules load on demand** (`import()`): a disabled plugin is not downloaded.
+- Then the **page modules load on demand** (`import()`, #124, done): a disabled plugin is not downloaded ([Loading on demand](#loading-on-demand)).
 - A **semantic search** (embeddings by a local model) is a new provider of Search, after the move.
 
 ## Migration order

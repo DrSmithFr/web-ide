@@ -194,7 +194,7 @@ for s in "${SUITES[@]}"; do
     # fails its first dial and sits in exponential backoff.
     if [ "$s" = relay ] || [ "$s" = identity ] || [ "$s" = sync ] || [ "$s" = push ] || [ "$s" = multipod ] || [ "$s" = quota ] || [ "$s" = renew ]; then
       # The quota suite runs the relay with a monthly TURN quota (milestone 5).
-      if [ "$s" = quota ]; then export E2E_RELAY_QUOTA=1MB; else unset E2E_RELAY_QUOTA; fi
+      if [ "$s" = quota ]; then export E2E_RELAY_QUOTA=512KB; else unset E2E_RELAY_QUOTA; fi
       # The renew and quota suites shorten the TURN credentials: a tunnel renews them (#86).
       if [ "$s" = renew ] || [ "$s" = quota ]; then export E2E_TURN_TTL=10s; else unset E2E_TURN_TTL; fi
       start_relay

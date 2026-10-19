@@ -1,7 +1,8 @@
 // Plugins of the window (docs/design/plugins.md): the states the pod sends (project.open,
-// plugins.changed), the page modules of the built-in plugins, activated once when first enabled,
-// and the contributions of the enabled ones (tools, tab views, commands).
-import { createMemo, createRoot, createSignal } from 'solid-js'
+// plugins.changed), the page modules of the built-in plugins, each a chunk loaded when the plugin
+// is first enabled and activated once, and the contributions of the enabled ones (tools, tab
+// views, commands). While a module loads, its tools and views show a placeholder.
+import { createMemo, createRoot, createSignal, type JSX } from 'solid-js'
 import { on, request } from '../pod/rpc'
 import { setPluginActions } from '../keys/bindings'
 import { API_VERSION, makeApi } from './api'
@@ -9,42 +10,77 @@ import type { ExplorerEntry, PluginContributions, PluginModule, PluginState, Sta
 import { setCapabilityGate } from './capabilities'
 import { setPluginProviders } from '../popups/searchProviders'
 import { setDiffSources } from '../ui/diffSources'
-import { hello } from './hello'
-import { exec } from './exec'
-import { search } from './search'
-import { git } from './git'
-import { previews } from './previews'
-import { languages } from './languages'
-import { files } from './files'
-import { code } from './code'
-import { docker } from './docker'
-import { database } from './database'
-import { kanban } from './kanban'
-import { ai } from './ai'
 import { setPluginUiTools } from '../ui/uiCalls'
 import { setAloneView } from '../state/tiles'
+import { t } from '../i18n'
 import type { TabState } from '../state/project'
 
-const builtins: Record<string, PluginModule> = { ai, code, database, docker, exec, files, git, hello, kanban, languages, previews, search }
+// The page module of each built-in, a chunk of its own (vite.config.ts: plugin-<id>).
+const builtins: Record<string, () => Promise<PluginModule>> = {
+  ai: () => import('./ai').then((m) => m.ai),
+  code: () => import('./code').then((m) => m.code),
+  database: () => import('./database').then((m) => m.database),
+  docker: () => import('./docker').then((m) => m.docker),
+  exec: () => import('./exec').then((m) => m.exec),
+  files: () => import('./files').then((m) => m.files),
+  git: () => import('./git').then((m) => m.git),
+  hello: () => import('./hello').then((m) => m.hello),
+  kanban: () => import('./kanban').then((m) => m.kanban),
+  languages: () => import('./languages').then((m) => m.languages),
+  previews: () => import('./previews').then((m) => m.previews),
+  search: () => import('./search').then((m) => m.search),
+}
+/** The built-ins with a part of the home page (no project there: no states to wait for). */
+const homeIds = ['previews']
 
 const [states, setStates] = createSignal<PluginState[]>([])
 export const pluginStates = states
 const active: Record<string, PluginContributions> = {}
+const modules: Record<string, PluginModule> = {}
+// Bumped when a module arrives: what reads the active plugins follows.
+const [version, setVersion] = createSignal(0)
+const loading: Record<string, Promise<PluginModule | undefined>> = {}
 
-// The plugins enabled in the window at the last states.
+/** The page module of a built-in, loaded once (undefined when it cannot be). */
+function load(id: string): Promise<PluginModule | undefined> {
+  return (loading[id] ??= builtins[id]().then(
+    (m) => (modules[id] = m),
+    (e) => {
+      console.warn('plugin', id, e)
+      delete loading[id] // asked again at the next states
+      return undefined
+    },
+  ))
+}
+
+// The plugins enabled in the window at the last states, and those to refresh (the project just
+// opened) once their module is in.
 let running = new Set<string>()
+const toRefresh = new Set<string>()
 
 /**
- * Takes the states of the plugins of the project: the enabled ones are activated, and those
- * just enabled (all of them when the project was just opened) refresh.
+ * Takes the states of the plugins of the project: the enabled ones are loaded (the locked ones
+ * first) and activated, and those just enabled (all of them when the project was just opened)
+ * refresh.
  */
 export function setPluginStates(list: PluginState[] | undefined, opened = false) {
   list ??= []
-  for (const s of list) {
-    const mod = builtins[s.manifest.id]
-    if (s.enabled && mod && !active[s.manifest.id] && s.manifest.apiVersion === API_VERSION) active[s.manifest.id] = mod.activate(makeApi(s.manifest.id))
-  }
   setStates(list)
+  if (opened) for (const s of list) if (s.enabled) toRefresh.add(s.manifest.id)
+  const wanted = list.filter((s) => s.enabled && builtins[s.manifest.id] && !active[s.manifest.id] && s.manifest.apiVersion === API_VERSION)
+  wanted.sort((a, b) => Number(!!b.manifest.required) - Number(!!a.manifest.required))
+  for (const s of wanted)
+    void load(s.manifest.id).then((m) => {
+      if (!m || active[s.manifest.id]) return
+      active[s.manifest.id] = m.activate(makeApi(s.manifest.id))
+      setVersion((v) => v + 1)
+      contribute()
+    })
+  contribute()
+}
+
+/** The contributions of the enabled plugins given to the core, and the refresh of those just running. */
+function contribute() {
   setPluginActions(
     enabled().flatMap((s) => [
       ...(s.manifest.contributes.tools ?? []).map((x) => ({ id: `tool.${x.id}`, label: x.label, category: 'Tools', inTerminal: true })),
@@ -55,7 +91,10 @@ export function setPluginStates(list: PluginState[] | undefined, opened = false)
   setDiffSources(enabled().flatMap((s) => active[s.manifest.id].diffSources ?? []))
   setPluginUiTools(Object.assign({}, ...enabled().map((s) => active[s.manifest.id].uiTools ?? {})))
   const now = new Set(enabled().map((s) => s.manifest.id))
-  for (const id of now) if (opened || !running.has(id)) active[id].opened?.()
+  for (const id of now) {
+    if (toRefresh.has(id) || !running.has(id)) active[id].opened?.()
+    toRefresh.delete(id)
+  }
   running = now
 }
 
@@ -72,26 +111,49 @@ export async function refreshPlugins() {
   }
 }
 
-const enabled = () => states().filter((s) => s.enabled && active[s.manifest.id])
+const enabled = () => (version(), states().filter((s) => s.enabled && active[s.manifest.id]))
+
+/** An enabled plugin whose module is still loading. */
+const pending = (id: string) => (version(), states().some((s) => s.manifest.id === id && s.enabled && !!builtins[id] && !active[id]))
+
+/** What a tool or a view of a plugin shows while its module loads. */
+function Loading(): JSX.Element {
+  return (
+    <div class="panel plugin-loading" data-testid="plugin-loading">
+      <div class="muted pad">
+        <span class="spinner" /> {t('Loading…')}
+      </div>
+    </div>
+  )
+}
 
 export const pluginEnabled = (id: string) => states().some((s) => s.manifest.id === id && s.enabled)
 setCapabilityGate(pluginEnabled)
 
-/** The tools of the enabled plugins that have a page module. */
+/** The tools of the enabled plugins: their component, or the placeholder while the module loads. */
 export const pluginTools = createRoot(() =>
   createMemo(() =>
-    enabled().flatMap((s) =>
-      (s.manifest.contributes.tools ?? []).flatMap((x) => {
+    states().flatMap((s) => {
+      if (!s.enabled || !builtins[s.manifest.id]) return []
+      if (pending(s.manifest.id)) return (s.manifest.contributes.tools ?? []).map((x) => ({ ...x, component: Loading, badge: undefined }))
+      if (!active[s.manifest.id]) return []
+      return (s.manifest.contributes.tools ?? []).flatMap((x) => {
         const c = active[s.manifest.id].tools?.[x.id]
         return c ? [{ ...x, component: c.component, badge: c.badge }] : []
-      }),
-    ),
+      })
+    }),
   ),
 )
 
-/** The parts of the home page the built-ins give (no project: whether it is enabled is moot). */
+const [homeList, setHomeList] = createSignal<(() => JSX.Element)[]>([])
+let homeAsked = false
+/** The parts of the home page the built-ins give (no project: whether it is enabled is moot), loaded the first time. */
 export function homeParts() {
-  return Object.entries(builtins).flatMap(([id, m]) => (m.home ? [m.home(makeApi(id))] : []))
+  if (!homeAsked) {
+    homeAsked = true
+    void Promise.all(homeIds.map((id) => load(id).then((m) => (m?.home ? [m.home(makeApi(id))] : [])))).then((l) => setHomeList(l.flat()))
+  }
+  return homeList()
 }
 
 /** The items of the Explorer menu of an entry, given by the enabled plugins. */
@@ -107,6 +169,7 @@ export const pluginHosts = createRoot(() => createMemo(() => enabled().flatMap((
 export function pluginView(kind: string) {
   const m = /^plugin:([^/]+)\/(.+)$/.exec(kind)
   if (!m || !pluginEnabled(m[1])) return undefined
+  if (pending(m[1])) return Loading
   return active[m[1]]?.views?.[m[2]]
 }
 
@@ -126,7 +189,8 @@ export function pluginFileView() {
     const v = active[s.manifest.id].fileView
     if (v) return v
   }
-  return undefined
+  // Code (locked) is loading: the file tabs wait for it.
+  return states().some((s) => s.manifest.required && pending(s.manifest.id)) ? Loading : undefined
 }
 
 /** The title of a tab of a plugin view: the plugin's viewTitle, then the tab's own title. */

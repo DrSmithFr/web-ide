@@ -29,8 +29,27 @@ const measure = (page, kind, n = 20) =>
     [kind, n],
   )
 
-run(async ({ page }) => {
+run(async ({ ctx, page }) => {
   await openProject(page)
+  // First load of a project window: the JS it downloads until the editor and its tools show
+  // (the page modules of the enabled plugins load after project.open, #124), and the time.
+  const fresh = await ctx.newPage()
+  const t1 = Date.now()
+  await fresh.goto(page.url())
+  await fresh.waitForSelector('.rail-btn[data-id=explorer]')
+  await fresh.waitForSelector('.pane')
+  const firstMs = Date.now() - t1
+  const js = await fresh.evaluate(() => performance.getEntriesByType('resource').filter((e) => /\.js(\?|$)/.test(e.name)).reduce((n, e) => n + e.decodedBodySize, 0))
+  console.log(`  first load: ${Math.round(js / 1024)} KB of JS, editor and tools in ${firstMs} ms`)
+  await fresh.close()
+  const home = await ctx.newPage()
+  const t2 = Date.now()
+  await home.goto(new URL(page.url()).origin + '/')
+  await home.waitForSelector('.home .home-bar')
+  const homeMs = Date.now() - t2
+  const homeJs = await home.evaluate(() => performance.getEntriesByType('resource').filter((e) => /\.js(\?|$)/.test(e.name)).reduce((n, e) => n + e.decodedBodySize, 0))
+  console.log(`  home page: ${Math.round(homeJs / 1024)} KB of JS, shown in ${homeMs} ms`)
+  await home.close()
   const t0 = Date.now()
   await open(page, 'big.js')
   console.log(`  opening: ${Date.now() - t0} ms`)

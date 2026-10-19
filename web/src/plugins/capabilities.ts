@@ -2,7 +2,7 @@
 // registers its implementation when it is activated (api.provide); the core and the other
 // plugins get it with capability() / api.use(), undefined while the plugin providing it is off.
 import { createMutable } from 'solid-js/store'
-import type { JSX } from 'solid-js'
+import { createEffect, createRoot, type JSX } from 'solid-js'
 import type { Doc } from '../editor/doc'
 import type { CompletionItem, CompletionList } from '../editor/completion'
 
@@ -250,4 +250,24 @@ export function provide<K extends keyof Capabilities>(plugin: string, name: K, i
 export function capability<K extends keyof Capabilities>(name: K): Capabilities[K] | undefined {
   const by = services.by[name]
   return by && (by === 'core' || enabledNow(by)) ? (services.impl[name] as Capabilities[K]) : undefined
+}
+
+/**
+ * The service once it is there: the module of its plugin loads after the project opens (a link
+ * that opens a ticket waits for the Kanban). Never resolved while the plugin is off.
+ */
+export function whenProvided<K extends keyof Capabilities>(name: K): Promise<Capabilities[K]> {
+  const now = capability(name)
+  if (now) return Promise.resolve(now)
+  return new Promise((resolve) =>
+    createRoot((dispose) =>
+      createEffect(() => {
+        const c = capability(name)
+        if (c) {
+          dispose()
+          resolve(c)
+        }
+      }),
+    ),
+  )
 }

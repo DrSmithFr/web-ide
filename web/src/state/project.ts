@@ -15,7 +15,7 @@ import { deviceId, layoutFor } from './device'
 import { settings } from './settings'
 import { closeDesks, desk, loadDesks, showDesk, touchRecent, type DeskList } from './desks'
 
-/** plugin:<plugin>/<view>: a tab view of a plugin (plugins/registry.ts). */
+/** plugin:<plugin>/<view>: a tab view of a plugin (plugins/registry.tsx). */
 export type TabKind = 'file' | 'text' | 'diff' | 'tool' | 'console' | 'doc' | `plugin:${string}`
 
 export interface TabState {

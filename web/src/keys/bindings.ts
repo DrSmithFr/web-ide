@@ -124,7 +124,7 @@ export const actions: ActionDef[] = [
 const [dynamicActions, setDynamicActions] = createSignal<ActionDef[]>([])
 export { setDynamicActions }
 
-// Actions of the enabled plugins: their tools and commands (plugins/registry.ts).
+// Actions of the enabled plugins: their tools and commands (plugins/registry.tsx).
 const [pluginActions, setPluginActions] = createSignal<ActionDef[]>([])
 export { setPluginActions }
 
