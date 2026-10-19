@@ -43,6 +43,9 @@ run(
     const width = await page.evaluate(() => document.documentElement.scrollWidth)
     assert(width <= 375, 'nothing wider than the screen: ' + width)
     assert((await view(page)) === 'editor' && (await active(page)) === 'editor', 'the editor first')
+    // The bar stays under the editor pane (not a row of the window, as on the desktop).
+    assert(await visible(page, '.phone-body > .center [data-testid=status-bar]'), 'the status bar stays under the editor pane')
+    assert(!(await page.$('.app > [data-testid=status-bar]')), 'no window-level bar on a phone')
     await page.screenshot({ path: OUT + '/mobile-editor.png' })
 
     // The menus open from row 2 and fit the screen.
@@ -59,6 +62,7 @@ run(
     await page.click('[data-testid=mobile-rail] [data-id=explorer]')
     await page.waitForSelector('.phone-body > .zone[data-tool=explorer]')
     assert((await view(page)) === 'explorer' && (await active(page)) === 'explorer', 'the explorer full screen, alone')
+    assert(!(await visible(page, '[data-testid=status-bar]')), 'the bar is hidden with the editor when a tool view is shown')
     await page.screenshot({ path: OUT + '/mobile-explorer.png' })
     await page.click('.tree-row:has-text("long.txt")')
     await page.waitForFunction(() => document.querySelector('.phone-body > .center:not(.hidden) .tab.active')?.textContent.includes('long.txt'))

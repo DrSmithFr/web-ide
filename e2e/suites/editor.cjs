@@ -255,6 +255,24 @@ run(async ({ page }) => {
   const item = (id) => page.textContent(`[data-testid=status-${id}]`)
   assert(!(await page.$('.menubar [data-testid=status-cursor]')) && /^\d+:\d+$/.test(await item('cursor')), 'caret position in the status bar ' + (await item('cursor')))
   assert((await page.textContent('[data-testid=status-bar]')).includes('YAML') && (await item('indent')) === '2 spaces', 'YAML indented by 2 spaces')
+
+  // The bar is the last row of the window: full width, below the icon rails and the bottom strip.
+  const box = (sel) => page.$eval(sel, (e) => e.getBoundingClientRect().toJSON())
+  const win = () => page.evaluate(() => ({ w: innerWidth, h: innerHeight }))
+  const barIsLast = () => page.$eval('[data-testid=status-bar]', (e) => e.parentElement?.classList.contains('app') && e.parentElement.lastElementChild === e)
+  {
+    const bar = await box('[data-testid=status-bar]')
+    const { w, h } = await win()
+    assert(await barIsLast(), 'the status bar is the last child of .app')
+    assert(Math.abs(bar.width - w) < 2 && Math.abs(bar.bottom - h) < 2, 'the bar spans the whole window at its bottom')
+    for (const rail of ['.rail-left', '.rail-right'])
+      assert((await box(rail)).bottom <= bar.top + 1, `the ${rail} stops above the bar`)
+    await page.click('.rail-left .rail-btn[title="Console"]')
+    await page.waitForSelector('.bottom [data-tool=console]')
+    assert((await box('.bottom')).bottom <= (await box('[data-testid=status-bar]')).top + 1, 'the bottom strip sits above the bar')
+    await page.click('.rail-left .rail-btn[title="Console"]')
+    await page.waitForFunction(() => !document.querySelector('.bottom'))
+  }
   await open(page, 'main.go')
   await page.click('[data-testid=status-cursor]')
   await page.keyboard.type('3')

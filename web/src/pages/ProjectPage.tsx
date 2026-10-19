@@ -19,6 +19,7 @@ import { focusEditorQuietly, isTyping, lockEditor, mobileView, phone, revealCare
 import { settings, updateSettings } from '../state/settings'
 import { goHome } from '../app/home'
 import { EditorArea } from '../ui/EditorArea'
+import { StatusBar } from '../ui/StatusBar'
 import { capability } from '../plugins/capabilities'
 import { KanbanPanel } from '../kanban/Panel'
 import { NewTicketHost } from '../kanban/Board'
@@ -570,7 +571,7 @@ function BottomStrip() {
   const both = () => !!left() && !!right()
   return (
     <>
-      <Resizer dir="y" onDrag={(d) => setSize('bottom', Math.max(100, Math.min(innerHeight - 200, sizesFor().bottom - d)))} />
+      <Resizer dir="y" onDrag={(d) => setSize('bottom', Math.max(100, Math.min(innerHeight - 224, sizesFor().bottom - d)))} />
       <div class="bottom" ref={el} style={{ height: `${sizesFor().bottom}px` }}>
         <Show when={left()}>
           <ZonePanel zone="bottomLeft" style={{ flex: both() ? `0 0 ${sizesFor().split * 100}%` : '1 1 0' }} />
@@ -750,7 +751,7 @@ export function ProjectPage(props: { id: string }) {
           {/* One view at a time, full screen: the editor stays mounted under the tools. */}
           <div class="workbench phone-body" onPointerDown={trackFocus} onFocusIn={trackFocus}>
             <main class="center" data-focus="editor" classList={{ hidden: mobileView() !== 'editor' }} onFocusIn={() => setTimeout(revealCaret, 300)}>
-              <EditorArea />
+              <EditorArea statusBar />
             </main>
             <Show when={mobileView() !== 'editor' && zoneOf(session, mobileView())}>{(z) => <ZonePanel zone={z()} />}</Show>
           </div>
@@ -786,6 +787,11 @@ export function ProjectPage(props: { id: string }) {
           </div>
           <Rail side="right" />
         </div>
+        </Show>
+        {/* The status bar is the last row of the window: full width, under the bottom strip and
+            the icon rails. The phone keeps it inside the editor pane, hidden with it. */}
+        <Show when={!phone()}>
+          <StatusBar />
         </Show>
       </div>
     </Show>

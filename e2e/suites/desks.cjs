@@ -139,6 +139,7 @@ run(async ({ ctx, page }) => {
   const [conWin] = await Promise.all([ctx.waitForEvent('page'), page.click('.tile-console [data-testid=tile-detach]')])
   await conWin.waitForSelector('.detached .xterm')
   assert(new URL(conWin.url()).pathname.includes('/console/'), 'a console tile opens in its own window: ' + conWin.url())
+  assert(!(await conWin.$('[data-testid=status-bar]')), 'a detached console window has no status bar')
   await conWin.close()
   const [gitWin] = await Promise.all([ctx.waitForEvent('page'), page.click('[data-tool=git] [data-testid=tile-detach]')])
   await gitWin.waitForSelector('.detached .tool-full .panel')

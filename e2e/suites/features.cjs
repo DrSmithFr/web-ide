@@ -129,8 +129,8 @@ run(async ({ page }) => {
   const box = (sel) => page.$eval(sel, (e) => e.getBoundingClientRect().toJSON())
   assert(await page.isVisible('.rail-left [data-zone=bottomLeft] .rail-btn.active[title="Console"]'), 'Console in the bottom group of the left rail')
   assert(await page.isVisible('.rail-right [data-zone=bottomRight] .rail-btn[title="Problems"]'), 'Problems in the bottom group of the right rail')
-  const [railL, strip, sideL] = [await box('.rail-left'), await box('.bottom'), await box('.zone-left')]
-  assert(Math.abs(railL.bottom - (await page.evaluate(() => innerHeight))) < 2, 'the rails take the full height')
+  const [railL, strip, sideL, bar] = [await box('.rail-left'), await box('.bottom'), await box('.zone-left'), await box('[data-testid=status-bar]')]
+  assert(Math.abs(bar.bottom - (await page.evaluate(() => innerHeight))) < 2 && Math.abs(railL.bottom - bar.top) < 2, 'the rails stop above the status bar, last row of the window')
   assert(strip.left >= railL.right - 1 && sideL.bottom <= strip.top + 1, 'the strip spans under the side panels')
   assert((await box('[data-tool=console]')).width > strip.width - 2, 'Console alone takes the whole strip')
   await page.click('.rail-right .rail-btn[title="Problems"]')

@@ -33,7 +33,7 @@ import { capability } from '../plugins/capabilities'
 import { Dynamic } from 'solid-js/web'
 import { DocView } from './DocView'
 
-export function EditorArea(props: { detached?: boolean }) {
+export function EditorArea(props: { detached?: boolean; statusBar?: boolean }) {
   return (
     <div class="editor-area">
       <div class="editor-panes">
@@ -41,7 +41,10 @@ export function EditorArea(props: { detached?: boolean }) {
           <ScrollArea cell={(c) => <Node node={c} />} />
         </Show>
       </div>
-      <StatusBar />
+      {/* Only the phone keeps the bar inside the editor pane (pages/ProjectPage.tsx). */}
+      <Show when={props.statusBar}>
+        <StatusBar />
+      </Show>
     </div>
   )
 }
