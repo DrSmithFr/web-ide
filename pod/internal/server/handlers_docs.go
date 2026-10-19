@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"github.com/DrSmithFr/web-ide/pod/internal/assistant"
 	"io/fs"
 	"path"
 	"strings"
@@ -41,7 +42,7 @@ func (s *Server) registerDocs() {
 		if err != nil {
 			return nil, err
 		}
-		mime, ok := imageTypes[strings.ToLower(path.Ext(name))]
+		mime, ok := assistant.ImageTypes[strings.ToLower(path.Ext(name))]
 		if !ok {
 			return nil, i18n.New("not an image")
 		}
@@ -49,7 +50,7 @@ func (s *Server) registerDocs() {
 		if err != nil {
 			return nil, i18n.New("no such documentation page")
 		}
-		if len(b) > maxImage {
+		if len(b) > assistant.MaxImage {
 			return nil, i18n.New("image too large")
 		}
 		return map[string]string{"url": "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(b)}, nil

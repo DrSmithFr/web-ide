@@ -7,7 +7,8 @@ import { EditorArea } from '../ui/EditorArea'
 import { StatusBar } from '../ui/StatusBar'
 import { capability } from '../plugins/capabilities'
 import { pluginHosts, refreshPlugins } from '../plugins/registry'
-import '../plugins/coreServices'
+import '../ui/uiCalls'
+import { DiagramViewer } from '../ui/DiagramViewer'
 import { openWithAuth, toolPanels, useProjectActions, PodStatus } from './ProjectPage'
 import { on as onPod } from '../pod/rpc'
 import { t } from '../i18n'
@@ -54,6 +55,8 @@ function Frame(props: { title: string; ready: boolean; error: string; statusBar?
       <Show when={props.statusBar}>
         <StatusBar />
       </Show>
+      {/* A diagram of rendered Markdown opened in full screen. */}
+      <DiagramViewer />
     </div>
   )
 }

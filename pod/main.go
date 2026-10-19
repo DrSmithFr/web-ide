@@ -201,7 +201,7 @@ func main() {
 		srv.LLM.Relay = llm.KeeperRelay{C: srv.Keeper} // the answers being written survive the pod too
 	}
 	srv.Init()
-	srv.ResumeRuns()
+	srv.Started()
 
 	// Remote access: one outbound link to the relay (no port to open). The pod id and its
 	// secret live in relay.json (0600); the token is proved inside the tunnel, never to the

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -336,19 +335,6 @@ func TestProjectFilesAndRemoteChanges(t *testing.T) {
 	at := a.call("console.attach", map[string]any{"id": c["id"]})["result"].(map[string]any)
 	if at["data"] == "" {
 		t.Fatal("empty scrollback")
-	}
-}
-
-func TestCappedOutput(t *testing.T) {
-	c := &capped{}
-	big := bytes.Repeat([]byte("x"), execHead+execTail+1000)
-	if n, _ := c.Write(big); n != len(big) {
-		t.Fatalf("write returned %d", n)
-	}
-	_, _ = c.Write([]byte("FIN"))
-	text, cut := c.String()
-	if !cut || !strings.HasSuffix(text, "FIN") || !strings.Contains(text, "output cut") || len(text) > execHead+execTail+100 {
-		t.Fatalf("capped: cut=%v len=%d", cut, len(text))
 	}
 }
 

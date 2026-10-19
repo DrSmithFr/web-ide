@@ -39,7 +39,7 @@ func podAt(t *testing.T, dir, sock string) (*Server, *httptest.Server) {
 	}
 	s.Keeper, s.LLM.Relay = c, llm.KeeperRelay{C: c}
 	s.Init()
-	s.ResumeRuns()
+	s.Started()
 	ts := httptest.NewServer(s)
 	return s, ts
 }
@@ -159,13 +159,7 @@ func TestResumeRuns(t *testing.T) {
 
 	// 2. The edit waits for its approval: it is asked again by the next pod.
 	waitFor(t, "the approval", func() bool {
-		r := s2.run("rs")
-		if r == nil {
-			return false
-		}
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		return r.chat.Approval != nil
+		return aiOf(s2).Approval("rs") != ""
 	})
 	stopPod(s2, ts2)
 	s3, ts3 := podAt(t, data, sock)
@@ -175,13 +169,7 @@ func TestResumeRuns(t *testing.T) {
 	// Asked again, maybe before this window opened the project: read from the run.
 	var approval string
 	waitFor(t, "the approval asked again", func() bool {
-		if r := s3.run("rs"); r != nil {
-			r.mu.Lock()
-			defer r.mu.Unlock()
-			if r.chat.Approval != nil {
-				approval = r.chat.Approval.ID
-			}
-		}
+		approval = aiOf(s3).Approval("rs")
 		return approval != ""
 	})
 	b.call("assistant.approve", map[string]any{"id": "rs", "approval": approval, "allow": true})
@@ -211,17 +199,17 @@ func TestResumeWithoutRelay(t *testing.T) {
 	a, _ := dial(t, ts1, "secret-token-0123456789abcdef0123")
 	id := a.call("projects.create", map[string]any{"type": "local", "path": t.TempDir()})["result"].(map[string]any)["id"].(string)
 	loc, root, _ := s1.chatLoc(id)
-	if err := s1.saveChat(loc, &assistant.Chat{ID: "gone", Server: "s1", Model: "m", Running: &assistant.Running{Stream: "unknown"},
+	if err := saveTestChat(s1, loc, &assistant.Chat{ID: "gone", Server: "s1", Model: "m", Running: &assistant.Running{Stream: "unknown"},
 		Messages: []*assistant.Message{{Role: "user", Content: assistant.String("Go")}}}); err != nil {
 		t.Fatal(err)
 	}
 	stopPod(s1, ts1)
-	data2, _ := json.Marshal([]runningEntry{{ID: "gone", Loc: loc, Root: root, Project: id}})
+	data2, _ := json.Marshal([]map[string]any{{"id": "gone", "loc": loc, "root": root, "project": id}})
 	os.WriteFile(filepath.Join(data, "running.json"), data2, 0o600)
 
 	s2, ts2 := podAt(t, data, sock)
 	defer func() { ts2.Close(); s2.Shutdown() }()
-	if s2.run("gone") != nil {
+	if aiOf(s2).Running("gone") {
 		t.Fatal("taken back without its stream")
 	}
 	b, _ := dial(t, ts2, "secret-token-0123456789abcdef0123")

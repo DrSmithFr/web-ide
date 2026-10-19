@@ -54,59 +54,58 @@ func TestSavedCommandsForModels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := &assistantRun{id: "c", ctx: context.Background(), chat: &assistant.Chat{}, project: id, root: id}
-	args := func(js string) toolArgs {
-		var a toolArgs
+	args := func(js string) assistant.Args {
+		var a assistant.Args
 		if err := json.Unmarshal([]byte(js), &a); err != nil {
 			t.Fatal(err)
 		}
 		return a
 	}
-	list, err := s.listCommandsTool(rt)
-	if err != nil || !strings.Contains(list.Content, dev+" · serve · Dev — the app · port") || !strings.Contains(list.Content, "    sleep 30") || !strings.Contains(list.Content, "not running") {
-		t.Fatalf("list_commands: %v\n%s", err, list.Content)
+	list, _, err := s.commandsText(rt)
+	if err != nil || !strings.Contains(list, dev+" · serve · Dev — the app · port") || !strings.Contains(list, "    sleep 30") || !strings.Contains(list, "not running") {
+		t.Fatalf("list_commands: %v\n%s", err, list)
 	}
 
 	// run_saved_command: the output of a command that ends; a running one is not started again.
-	res, err := s.runSavedTool(r, rt, args(`{"id":"`+tests+`"}`), func(string) {})
-	if err != nil || !strings.Contains(res.Content, "Exit code: 0") || !strings.Contains(res.Content, "tests-ok") {
-		t.Fatalf("run tests: %v %+v", err, res)
+	out, err := s.mcpRunSaved(context.Background(), rt, tests, false, 0)
+	if err != nil || !strings.Contains(out, "Exit code: 0") || !strings.Contains(out, "tests-ok") {
+		t.Fatalf("run tests: %v %s", err, out)
 	}
-	res, _ = s.runSavedTool(r, rt, args(`{"id":"`+dev+`","timeout":1}`), func(string) {})
-	if !strings.Contains(res.Content, "still running") || !strings.Contains(res.Content, "serving") {
-		t.Fatalf("run dev: %+v", res)
+	out, _ = s.mcpRunSaved(context.Background(), rt, dev, false, 1)
+	if !strings.Contains(out, "still running") || !strings.Contains(out, "serving") {
+		t.Fatalf("run dev: %s", out)
 	}
 	first := rt.Consoles.OfCommand(dev)[0].ID
-	res, _ = s.runSavedTool(r, rt, args(`{"id":"`+dev+`"}`), func(string) {})
-	if !strings.Contains(res.Content, "already running in console "+first) || !strings.Contains(res.Content, "restart=true") {
-		t.Fatalf("running: %+v", res)
+	out, _ = s.mcpRunSaved(context.Background(), rt, dev, false, 0)
+	if !strings.Contains(out, "already running in console "+first) || !strings.Contains(out, "restart=true") {
+		t.Fatalf("running: %s", out)
 	}
-	if _, err := s.runSavedTool(r, rt, args(`{"id":"nope"}`), nil); err == nil {
+	if _, err := s.mcpRunSaved(context.Background(), rt, "nope", false, 0); err == nil {
 		t.Fatal("unknown command run")
 	}
-	res, _ = s.runSavedTool(r, rt, args(`{"id":"`+dev+`","restart":true,"timeout":1}`), func(string) {})
-	if cs := rt.Consoles.OfCommand(dev); len(cs) != 1 || cs[0].ID == first || !strings.Contains(res.Content, "still running") {
-		t.Fatalf("restart: %+v %+v", cs, res)
+	out, _ = s.mcpRunSaved(context.Background(), rt, dev, true, 1)
+	if cs := rt.Consoles.OfCommand(dev); len(cs) != 1 || cs[0].ID == first || !strings.Contains(out, "still running") {
+		t.Fatalf("restart: %+v %s", cs, out)
 	}
-	if list, _ := s.listCommandsTool(rt); !strings.Contains(list.Content, "running (console ") {
-		t.Fatalf("state: %s", list.Content)
+	if list, _, _ := s.commandsText(rt); !strings.Contains(list, "running (console ") {
+		t.Fatalf("state: %s", list)
 	}
 
 	// share_preview: the only serve command with a port when no command is given; the
 	// saved command of the same text; an unknown id refused.
-	res, err = s.sharePreview(r, rt, args(`{"title":"Try it"}`))
+	res, err := s.sharePreviewIn(id, rt, args(`{"title":"Try it"}`))
 	if err != nil || res.Preview.CommandID != dev || res.Preview.Port != port || res.Preview.Command != "echo serving\nsleep 30" {
 		t.Fatalf("share_preview: %v %+v", err, res.Preview)
 	}
-	res, _ = s.sharePreview(r, rt, args(`{"title":"x","command":"echo serving\nsleep 30"}`))
+	res, _ = s.sharePreviewIn(id, rt, args(`{"title":"x","command":"echo serving\nsleep 30"}`))
 	if res.Preview == nil || res.Preview.CommandID != dev {
 		t.Fatalf("same text: %+v", res.Preview)
 	}
-	res, _ = s.sharePreview(r, rt, args(`{"title":"x","command":"npm run dev","port":3000}`))
+	res, _ = s.sharePreviewIn(id, rt, args(`{"title":"x","command":"npm run dev","port":3000}`))
 	if res.Preview == nil || res.Preview.CommandID != "" {
 		t.Fatalf("other command: %+v", res.Preview)
 	}
-	if _, err := s.sharePreview(r, rt, args(`{"title":"x","command_id":"nope"}`)); err == nil {
+	if _, err := s.sharePreviewIn(id, rt, args(`{"title":"x","command_id":"nope"}`)); err == nil {
 		t.Fatal("unknown command_id")
 	}
 

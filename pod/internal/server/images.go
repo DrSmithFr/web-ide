@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/base64"
+	"github.com/DrSmithFr/web-ide/pod/internal/assistant"
 	"path"
 	"strings"
 
@@ -10,9 +11,9 @@ import (
 )
 
 // readImage gives an image file as a data URL (the page shows it in an img, where an SVG
-// runs no script). Other files and images over maxImage are refused.
+// runs no script). Other files and images over assistant.MaxImage are refused.
 func readImage(fs fsx.FS, p string) (map[string]string, error) {
-	mime, ok := imageTypes[strings.ToLower(path.Ext(p))]
+	mime, ok := assistant.ImageTypes[strings.ToLower(path.Ext(p))]
 	if !ok {
 		return nil, i18n.New("not an image")
 	}
@@ -20,7 +21,7 @@ func readImage(fs fsx.FS, p string) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	if st.Dir || st.Size > maxImage {
+	if st.Dir || st.Size > assistant.MaxImage {
 		return nil, i18n.New("image too large")
 	}
 	data, err := fs.Read(p)

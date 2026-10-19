@@ -3,6 +3,10 @@ package plugins
 import (
 	"context"
 	"encoding/json"
+	"time"
+
+	"github.com/DrSmithFr/web-ide/pod/internal/assistant"
+	"github.com/DrSmithFr/web-ide/pod/internal/hfcache"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/acp"
 	"github.com/DrSmithFr/web-ide/pod/internal/commands"
@@ -42,6 +46,10 @@ type Host interface {
 	// OnWindows is called with the number of windows of the pod each time it changes, in order;
 	// the pod is locked meanwhile: f must not call it back (it arms a timer, say).
 	OnWindows(f func(n int))
+	// OnStart is called once the pod is ready (the conversations that ran are resumed), OnStop
+	// when it stops (they are saved for the next pod).
+	OnStart(f func())
+	OnStop(f func())
 }
 
 // Pod is the pod as a built-in plugin sees it: the projects, the events to every window, and
@@ -67,6 +75,40 @@ type Pod interface {
 	Services() *Services
 	// CapabilityOn tells whether a project has a capability (worktrees, terminal…).
 	CapabilityOn(rt *runtime.Runtime, capability string) bool
+	// Stopping tells that the pod is stopping (the work running is left to the next pod).
+	Stopping() bool
+	// Plugin is a plugin of the pod by id, to use its exports (the AI uses the Kanban's).
+	Plugin(id string) (Plugin, bool)
+	// UICall asks a window of project to run a tool of the interface (open_file, focus…): the
+	// window showing the conversation chat first. With wait, it waits for its answer: window
+	// tells whether a window was there, answered whether it answered in time.
+	UICall(ctx context.Context, project, chat, tool string, args any, wait bool, timeout time.Duration) (res UIResult, window, answered bool)
+	// AssistantTools are the definitions of the assistant tools of the plugins enabled on the
+	// project of rt; RunAssistantTool runs one (found: a plugin has it).
+	AssistantTools(rt *runtime.Runtime) []json.RawMessage
+	RunAssistantTool(ctx context.Context, rt *runtime.Runtime, name string, args json.RawMessage, lang string, opts assistant.Options) (res assistant.ToolResult, found bool, err error)
+	// Notify sends the push notification of a conversation that ended or asks (asks), and
+	// NotifyFeedback the one of a test feedback added to a ticket.
+	Notify(asks bool, root, chatID, title string)
+	NotifyFeedback(loc kanban.Location, id int64, text string)
+	// NoteAsks records the questions a conversation asks from message from (the Questions tool).
+	NoteAsks(root string, c *assistant.Chat, from int)
+	// The saved commands of a project, as the tools read them, and one started (a console).
+	CommandsText(rt *runtime.Runtime) (text string, n int, err error)
+	StartSaved(rt *runtime.Runtime, id string, restart bool) (cmd commands.Command, console, running string, err error)
+	// SharePreview shows the card of an app preview in the windows of project (share_preview).
+	SharePreview(project string, rt *runtime.Runtime, a assistant.Args) (assistant.ToolResult, error)
+}
+
+// UIResult is the answer of a window to a tool of the interface.
+type UIResult struct {
+	Content string          `json:"content"`
+	Summary json.RawMessage `json:"summary"`
+	Status  string          `json:"status"`
+	// A page drawn by board_draw.
+	Page *assistant.Page `json:"page,omitempty"`
+	// Image drawn by the user for request_doodle of the MCP (a data URL of a PNG).
+	Image string `json:"image,omitempty"`
 }
 
 // Services are the stores and managers of the pod lent to the built-in plugins, with the
@@ -88,6 +130,8 @@ type Services struct {
 	ChatLoc func(project string) (llm.ChatLocation, string, error)
 	// AgentsMCP is the MCP server of the IDE as the sessions of the agents reach it.
 	AgentsMCP func() []acp.MCPServer
+	// Models caches the speech recognition models downloaded for the page.
+	Models *hfcache.Cache
 }
 
 // Call is one call of a plugin: the project it runs in (local or SSH, through its runtime),
@@ -121,6 +165,9 @@ type Window interface {
 	// Project is the project the window shows ("" on the home page); ID tells windows apart.
 	Project() string
 	ID() string
+	// Watch records the conversation of the assistant the window shows (the tools of the
+	// interface run in that window first).
+	Watch(chat string)
 }
 
 // Handler answers an RPC method of a plugin.

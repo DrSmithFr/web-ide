@@ -3,10 +3,10 @@
 // the block; links open the files of the project, images are read through the pod.
 import { createEffect, createSignal, onCleanup, onMount } from 'solid-js'
 import type { Doc } from '../editor/doc'
-import { onMarkdownClick, renderMarkdownFile, renderMermaid } from '../llm/markdown'
+import { onMarkdownClick, renderMarkdownFile, renderMermaid } from './markdown'
 import { openFile, root } from '../state/project'
 import { request } from '../pod/rpc'
-import '../llm/assistant.css'
+import './markdown.css'
 
 // Tabs shown raw: the others show their Markdown rendered (until the page reloads).
 const [rawTabs, setRawTabs] = createSignal(new Set<string>())

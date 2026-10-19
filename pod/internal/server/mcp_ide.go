@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/DrSmithFr/web-ide/pod/internal/assistant"
+	"github.com/DrSmithFr/web-ide/pod/internal/plugins"
 	"strings"
 	"time"
 
@@ -20,12 +22,12 @@ import (
 
 // mcpIDE binds the arguments of a tool of the IDE and opens the runtime of the folder of the
 // client (a worktree has its own).
-func (s *Server) mcpIDE(raw json.RawMessage) (toolArgs, mcpScope, *runtime.Runtime, error) {
-	var a toolArgs
+func (s *Server) mcpIDE(raw json.RawMessage) (assistant.Args, mcpScope, *runtime.Runtime, error) {
+	var a assistant.Args
 	if err := json.Unmarshal(raw, &a); err != nil {
 		return nil, mcpScope{}, nil, err
 	}
-	sc, err := s.mcpScope(a.str("cwd"))
+	sc, err := s.mcpScope(a.Str("cwd"))
 	if err != nil {
 		return nil, sc, nil, err
 	}
@@ -34,7 +36,7 @@ func (s *Server) mcpIDE(raw json.RawMessage) (toolArgs, mcpScope, *runtime.Runti
 }
 
 // mcpText is the text of a result of a tool of the assistant, its failure as an error.
-func mcpText(res toolResult, err error) (string, error) {
+func mcpText(res assistant.ToolResult, err error) (string, error) {
 	if err != nil {
 		return "", err
 	}
@@ -45,7 +47,7 @@ func mcpText(res toolResult, err error) (string, error) {
 }
 
 // ideTool is a tool of the IDE answered with text.
-func ideTool(f func(ctx context.Context, s *Server, a toolArgs, sc mcpScope, rt *runtime.Runtime) (toolResult, error)) func(context.Context, *Server, json.RawMessage) (string, error) {
+func ideTool(f func(ctx context.Context, s *Server, a assistant.Args, sc mcpScope, rt *runtime.Runtime) (assistant.ToolResult, error)) func(context.Context, *Server, json.RawMessage) (string, error) {
 	return func(ctx context.Context, s *Server, raw json.RawMessage) (string, error) {
 		a, sc, rt, err := s.mcpIDE(raw)
 		if err != nil {
@@ -55,7 +57,7 @@ func ideTool(f func(ctx context.Context, s *Server, a toolArgs, sc mcpScope, rt 
 	}
 }
 
-func strArray(a toolArgs, k string) []string {
+func strArray(a assistant.Args, k string) []string {
 	var out []string
 	_ = json.Unmarshal(a[k], &out)
 	return out
@@ -74,10 +76,10 @@ func (s *Server) mcpWindow(sc mcpScope) (*Client, error) {
 }
 
 // mcpUI runs a tool in a window of the project and waits for its result.
-func (s *Server) mcpUI(ctx context.Context, sc mcpScope, name string, args any, timeout time.Duration) (uiResult, error) {
+func (s *Server) mcpUI(ctx context.Context, sc mcpScope, name string, args any, timeout time.Duration) (plugins.UIResult, error) {
 	c, err := s.mcpWindow(sc)
 	if err != nil {
-		return uiResult{}, err
+		return plugins.UIResult{}, err
 	}
 	res, _, answered := s.uiCallIn(ctx, c, sc.here.ID, "", name, args, true, timeout)
 	if !answered {
@@ -90,7 +92,7 @@ func (s *Server) mcpUI(ctx context.Context, sc mcpScope, name string, args any, 
 }
 
 // uiTextTool is a tool run by a window, answered with the text of the window.
-func uiTextTool(name string, args func(a toolArgs) any) func(context.Context, *Server, json.RawMessage) (string, error) {
+func uiTextTool(name string, args func(a assistant.Args) any) func(context.Context, *Server, json.RawMessage) (string, error) {
 	return func(ctx context.Context, s *Server, raw json.RawMessage) (string, error) {
 		a, sc, _, err := s.mcpIDE(raw)
 		if err != nil {
@@ -105,8 +107,8 @@ var mcpIDETools = []mcpTool{
 	{
 		name:        "list_consoles",
 		description: "Lists the consoles of the IDE (terminals and commands) of the project of your folder, with their state.",
-		run: ideTool(func(ctx context.Context, s *Server, a toolArgs, sc mcpScope, rt *runtime.Runtime) (toolResult, error) {
-			return listConsoles(rt), nil
+		run: ideTool(func(ctx context.Context, s *Server, a assistant.Args, sc mcpScope, rt *runtime.Runtime) (assistant.ToolResult, error) {
+			return assistant.ListConsoles(rt), nil
 		}),
 	},
 	{
@@ -114,8 +116,8 @@ var mcpIDETools = []mcpTool{
 		description: "Reads the end of the output of a console of the IDE (see list_consoles): a development server, a watcher, a terminal of the user.",
 		props:       map[string]any{"console_id": str("Console id"), "lines": map[string]any{"type": "integer", "description": "Number of lines (200 by default)"}},
 		required:    []string{"console_id"},
-		run: ideTool(func(ctx context.Context, s *Server, a toolArgs, sc mcpScope, rt *runtime.Runtime) (toolResult, error) {
-			return readConsole(rt, a.str("console_id"), a.num("lines"))
+		run: ideTool(func(ctx context.Context, s *Server, a assistant.Args, sc mcpScope, rt *runtime.Runtime) (assistant.ToolResult, error) {
+			return assistant.ReadConsole(rt, a.Str("console_id"), a.Num("lines"))
 		}),
 	},
 	{
@@ -123,8 +125,8 @@ var mcpIDETools = []mcpTool{
 		description: "Types text in a console of the IDE (an interactive terminal, a program waiting for an answer). A newline is added unless enter is false. Returns the end of its output.",
 		props:       map[string]any{"console_id": str("Console id"), "text": str("Text to type"), "enter": map[string]any{"type": "boolean", "description": "Press Enter after the text (true by default)"}},
 		required:    []string{"console_id", "text"},
-		run: ideTool(func(ctx context.Context, s *Server, a toolArgs, sc mcpScope, rt *runtime.Runtime) (toolResult, error) {
-			return consoleInput(ctx, rt, a.str("console_id"), a.str("text"), a.boolean("enter", true))
+		run: ideTool(func(ctx context.Context, s *Server, a assistant.Args, sc mcpScope, rt *runtime.Runtime) (assistant.ToolResult, error) {
+			return assistant.ConsoleInput(ctx, rt, a.Str("console_id"), a.Str("text"), a.Bool("enter", true))
 		}),
 	},
 	{
@@ -189,8 +191,8 @@ var mcpIDETools = []mcpTool{
 		props: map[string]any{"path": str("File: absolute, or relative to your folder"), "line": map[string]any{"type": "integer", "description": "First line to show (starting at 1)"},
 			"end_line": map[string]any{"type": "integer", "description": "Last line to select"}},
 		required: []string{"path"},
-		run: uiTextTool("open_file", func(a toolArgs) any {
-			return map[string]any{"path": a.str("path"), "line": a.num("line"), "end_line": a.num("end_line")}
+		run: uiTextTool("open_file", func(a assistant.Args) any {
+			return map[string]any{"path": a.Str("path"), "line": a.Num("line"), "end_line": a.Num("end_line")}
 		}),
 	},
 	{
@@ -198,8 +200,8 @@ var mcpIDETools = []mcpTool{
 		description: "Opens the uncommitted changes of a file (against git HEAD) in the diff view of the IDE, to show the user what changed.",
 		props:       map[string]any{"path": str("File: absolute, or relative to your folder")},
 		required:    []string{"path"},
-		run: uiTextTool("open_diff", func(a toolArgs) any {
-			return map[string]any{"path": a.str("path")}
+		run: uiTextTool("open_diff", func(a assistant.Args) any {
+			return map[string]any{"path": a.Str("path")}
 		}),
 	},
 	{
@@ -208,8 +210,8 @@ var mcpIDETools = []mcpTool{
 		props: map[string]any{"target": enum("Kind of element", "file", "panel", "console", "problems"), "path": str("File (target=file)"),
 			"panel": str("Panel (target=panel)"), "console_id": str("Console id (target=console), see list_consoles")},
 		required: []string{"target"},
-		run: uiTextTool("focus", func(a toolArgs) any {
-			return map[string]any{"target": a.str("target"), "path": a.str("path"), "panel": a.str("panel"), "console_id": a.str("console_id")}
+		run: uiTextTool("focus", func(a assistant.Args) any {
+			return map[string]any{"target": a.Str("target"), "path": a.Str("path"), "panel": a.Str("panel"), "console_id": a.Str("console_id")}
 		}),
 	},
 	{
@@ -217,8 +219,8 @@ var mcpIDETools = []mcpTool{
 		description: "Shows a short message to the user in the IDE (a notification of a few seconds): a long task finished, something to look at. Not for questions.",
 		props:       map[string]any{"text": str("The message, one or two sentences"), "kind": enum("Look of the message (info by default)", "info", "ok", "warn", "error")},
 		required:    []string{"text"},
-		run: uiTextTool("show_message", func(a toolArgs) any {
-			return map[string]any{"text": a.str("text"), "kind": a.str("kind")}
+		run: uiTextTool("show_message", func(a assistant.Args) any {
+			return map[string]any{"text": a.Str("text"), "kind": a.Str("kind")}
 		}),
 	},
 	{
@@ -232,7 +234,7 @@ var mcpIDETools = []mcpTool{
 			if err != nil {
 				return nil, err
 			}
-			res, err := s.mcpUI(ctx, sc, "request_doodle", map[string]any{"title": a.str("title")}, 15*time.Minute)
+			res, err := s.mcpUI(ctx, sc, "request_doodle", map[string]any{"title": a.Str("title")}, 15*time.Minute)
 			if err != nil {
 				return nil, err
 			}

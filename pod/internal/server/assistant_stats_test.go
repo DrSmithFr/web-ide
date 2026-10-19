@@ -60,15 +60,15 @@ func TestAssistantStats(t *testing.T) {
 		{Role: "tool", Name: "read_file", Status: "denied"},
 	}}
 	kid.Messages[1].ToolCalls[0].Function.Name = "read_file"
-	if err := s.saveChat(loc, kid); err != nil {
+	if err := saveTestChat(s, loc, kid); err != nil {
 		t.Fatal(err)
 	}
-	if r := s.run("st"); r != nil {
+	if aiOf(s).Running("st") {
 		t.Fatal("still running")
 	}
-	st, _ := s.loadChat(loc, "st")
+	st, _ := assistant.LoadChat(s.LLM, loc, "st")
 	st.Children = []string{"kid"}
-	if err := s.saveChat(loc, st); err != nil {
+	if err := saveTestChat(s, loc, st); err != nil {
 		t.Fatal(err)
 	}
 

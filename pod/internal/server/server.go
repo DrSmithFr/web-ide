@@ -118,8 +118,9 @@ type Server struct {
 	runtimes map[string]*runtime.Runtime
 	opening  map[string]*sync.Mutex
 	handlers map[string]handler
-	// assistants are the conversations of the assistant running in the pod.
-	assistants assistants
+	// uiWait: the tools of the interface waiting for a window (open_file, focus), by request id.
+	uiMu   sync.Mutex
+	uiWait map[string]chan plugins.UIResult
 	// asks: the questions of the MCP tool ask_user, and the conversations asking (Questions tool).
 	asks askRegistry
 	// plugins: the assistant tools of the plugins and their enabling per project.
@@ -139,7 +140,7 @@ func (s *Server) Init() {
 	s.runtimes = map[string]*runtime.Runtime{}
 	s.opening = map[string]*sync.Mutex{}
 	s.handlers = map[string]handler{}
-	s.assistants = assistants{runs: map[string]*assistantRun{}, slots: map[string]chan struct{}{}, waiting: map[string]int{}, ui: map[string]chan uiResult{}}
+	s.uiWait = map[string]chan plugins.UIResult{}
 	if s.Kanban == nil {
 		s.Kanban = kanban.NewManager(s.Store)
 	}
@@ -155,11 +156,9 @@ func (s *Server) Init() {
 	s.registerProject()
 	s.registerIcons()
 	s.registerWorktrees()
-	s.registerLLM()
-	s.registerAssistant()
+	s.registerUI()
 	s.registerExec()
 	s.registerIdeDir()
-	s.registerAgents()
 	s.registerQuestions()
 	s.registerRelay()
 	s.registerLAN()
@@ -1088,7 +1087,9 @@ func (s *Server) broadcast(name string, data any, except *Client) {
 // terminals of the keeper keep running.
 func (s *Server) Shutdown() {
 	s.stopped.Store(true)
-	s.saveRunning()
+	for _, f := range s.plugins.onStop {
+		f()
+	}
 	s.mu.Lock()
 	rts := s.runtimes
 	s.runtimes = map[string]*runtime.Runtime{}

@@ -88,4 +88,4 @@ The doodle lives in the conversation, in the message that sent it: the PNG, the 
 
 ## Code
 
-Hand-made, no drawing library: SVG for the elements, a canvas only for the export. `web/src/llm/doodle/`: the document model and its undo stack, the tools, the layout tree, the export (PNG and description), the modal, the drawing of the elements shared with the board (`Elements.tsx`). `web/src/llm/board/`: the pages of the conversation, the read-only view and the board panel.
+Hand-made, no drawing library: SVG for the elements, a canvas only for the export. `web/src/plugins/ai/llm/doodle/`: the document model and its undo stack, the tools, the layout tree, the export (PNG and description), the modal, the drawing of the elements shared with the board (`Elements.tsx`). `web/src/llm/board/`: the pages of the conversation, the read-only view and the board panel.

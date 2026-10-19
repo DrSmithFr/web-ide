@@ -41,7 +41,7 @@ func TestAdd(t *testing.T) {
 	for name, m := range map[string]Manifest{
 		"twice":     {ID: "a"},
 		"tool":      {ID: "b", Contributes: Contributions{Tools: []Tool{{ID: "a", Zone: "left"}}}},
-		"core tool": {ID: "c", Contributes: Contributions{Tools: []Tool{{ID: "assistant", Zone: "left"}}}},
+		"core tool": {ID: "c", Contributes: Contributions{Tools: []Tool{{ID: "questions", Zone: "left"}}}},
 		"assistant": {ID: "d", Contributes: Contributions{AssistantTools: []string{"a_x"}}},
 	} {
 		if r.Add(fake{m}) == nil {

@@ -276,7 +276,7 @@ var mcpTools = []mcpTool{
 				return "", err
 			}
 			text := conversationText(raw, a.Last, a.Tools)
-			if s.run(a.Chat) != nil {
+			if c, err := s.conversations(sc.root.ID); err == nil && c.Running(a.Chat) {
 				return text + "\n\n(The assistant is answering now: read the conversation again later.)", nil
 			}
 			var chat assistant.Chat
@@ -766,7 +766,7 @@ func conversationText(raw json.RawMessage, last int, tools bool) string {
 				t = text(m.Content)
 			}
 			label := "User"
-			if m.Author == AuthorClaude {
+			if m.Author == assistant.AuthorClaude {
 				label = "Claude Code (you)"
 			}
 			if m.Kind == "summary" {
@@ -782,7 +782,7 @@ func conversationText(raw json.RawMessage, last int, tools bool) string {
 					asks[c.ID] = true
 					fmt.Fprintf(&b, "\n## Assistant asks (ask_user)\n%s\n", c.Function.Arguments)
 				} else if tools {
-					fmt.Fprintf(&b, "- call %s %s\n", c.Function.Name, cut(c.Function.Arguments, 300))
+					fmt.Fprintf(&b, "- call %s %s\n", c.Function.Name, assistant.Cut(c.Function.Arguments, 300))
 				}
 			}
 			if tools && m.Error != "" {
@@ -795,7 +795,7 @@ func conversationText(raw json.RawMessage, last int, tools bool) string {
 			case tools && (m.Name == "agent_note" || m.Name == "agent_report"):
 				// The note itself is in the call; its result says nothing more.
 			case tools && (m.Status == "error" || m.Status == "denied" || strings.HasPrefix(text(m.Content), "Interrupted")):
-				fmt.Fprintf(&b, "  → %s: %s\n", m.Status, cut(strings.TrimSpace(text(m.Content)), 300))
+				fmt.Fprintf(&b, "  → %s: %s\n", m.Status, assistant.Cut(strings.TrimSpace(text(m.Content)), 300))
 			}
 		}
 	}

@@ -3,7 +3,16 @@
 import { notifyIn, notifyOn, on, openChannel, request, requestIn, type Channel } from '../pod/rpc'
 import { fmtAgo, fmtDate, fmtSize, t, tn } from '../i18n'
 import { podPath } from '../app/base'
-import { Markdown } from '../llm/parts'
+import { Markdown } from '../ui/Markdown'
+import { Switch } from '../ui/Switch'
+import { openDiagram } from '../ui/DiagramViewer'
+import { resolvePath } from '../ui/uiCalls'
+import { route } from '../app/router'
+import { openSettings } from '../settings/SettingsModal'
+import { AskCard } from '../questions/AskCard'
+import { answerStrings } from '../questions/ask'
+import { formAnswerText, QuestionForm } from '../questions/Form'
+import { showsQuestions } from '../questions/state'
 import { HelpLink } from '../help/HelpLink'
 import { FileIcon } from '../ui/fileIcons'
 import { activeTab, attached, basename, closeTab, docError, leaves, showWorktree, docsVersion, fileUri, loadDoc, reveal, saveCursor, saveDoc, findLeaf, getDoc, home, onBufferClose, onBufferOpen, onBufferSave, openBuffers, pathFromUri, isLocal, mutate, openFile, openTab, openTextTab, project, relPath, root, session, setActivePane, type TabState } from '../state/project'
@@ -16,7 +25,7 @@ import { WorktreeChip } from '../ui/WorktreeChip'
 import { dropClasses, dropIndex, moveItem, setDropAt } from '../ui/tabDrop'
 import { EditorView } from '../editor/view'
 import { capability, provide, type Capabilities } from './capabilities'
-import { explorerItems, fileDecorations } from './registry'
+import { explorerItems, fileDecorations, pluginAssistantOptions } from './registry'
 import { folderMark, inExcluded, loadFolderMarks, markFolder } from '../state/folders'
 import { desks } from '../state/desks'
 import { setDynamicActions } from '../keys/bindings'
@@ -33,7 +42,7 @@ import { toggleWrap } from '../ui/EditorArea'
 import { useCompletion } from '../ui/Completion'
 import { FindBar } from '../editor/FindBar'
 import { isMarkdownPath, MarkdownView, showRaw, shownRaw } from '../ui/MarkdownView'
-import { lineMarks } from '../editor/linediff'
+import { lineHunks, lineMarks } from '../editor/linediff'
 import { openConflict } from '../conflict/ConflictDialog'
 import { copyText } from '../ui/clipboard'
 import { cursorInfo, setCursorInfo } from '../ui/status'
@@ -84,6 +93,10 @@ export function makeApi(id: string) {
       root,
       /** The worktrees attached to the window (the project included). */
       attached: () => Object.keys(attached),
+      /** The root folder of an attached worktree (undefined when it is not attached). */
+      rootOf: (id: string) => attached[id]?.root,
+      /** The absolute path of a path a model gives, from base (the root by default). */
+      resolve: resolvePath,
       /** A path of the project as shown (relative to its root). */
       relPath,
       basename,
@@ -203,6 +216,8 @@ export function makeApi(id: string) {
       shownRaw,
       toggleWrap,
       lineMarks,
+      /** The hunks between two texts (a diff of lines). */
+      lineHunks,
       languageName,
       /** The language server language of a path (go, typescript…), and the languageId it is announced with. */
       serverLanguage: lspLanguage,
@@ -216,10 +231,18 @@ export function makeApi(id: string) {
       applyToString,
     },
     /** The keymap: a handler of an action while the view is shown, and the shortcut of an action. */
+    /** The window: a detached window shows one tool alone (/project/<id>/tool/<tool>). */
+    window: { detached: () => route().name === 'tool' },
+    /** The Settings of the IDE, on a section (themes by default). */
+    settings: { open: openSettings },
+    /** The other plugins: their options of a conversation of the assistant, by plugin id. */
+    plugins: { assistantOptions: pluginAssistantOptions },
+    /** The questions to the user: the card of ask_user, the form of an agent, which ones a view shows already. */
+    questions: { AskCard, Form: QuestionForm, formAnswerText, answerStrings, showsQuestions },
     keys: { register: registerAction, shortcut: shortcutOf, actionOf, run: runAction, setDynamic: setDynamicActions },
     /** The transport of the page: in the tunnel of the relay, or a WebSocket to the pod. */
     transport: { inTunnel },
-    ui: { Markdown, HelpLink, fuzzy, EmptyState, Icon, FileIcon, Modal, toast, errorToast, contextMenu, prompt, pick, copyText, parseAnsi, stripAnsi, WorktreeChip, tabDrop: { dropClasses, dropIndex, moveItem, setDropAt } },
+    ui: { Markdown, Switch, openDiagram, HelpLink, fuzzy, EmptyState, Icon, FileIcon, Modal, toast, errorToast, contextMenu, prompt, pick, copyText, parseAnsi, stripAnsi, WorktreeChip, tabDrop: { dropClasses, dropIndex, moveItem, setDropAt } },
   }
 }
 

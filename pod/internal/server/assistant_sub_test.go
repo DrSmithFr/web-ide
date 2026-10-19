@@ -107,7 +107,7 @@ func TestSubAgents(t *testing.T) {
 		}
 	}
 	// The child: its task, fresh context, ended with its report.
-	for time.Now().Before(deadline) && s.run(cid) != nil {
+	for time.Now().Before(deadline) && aiOf(s).Running(cid) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	child := open(cid)
@@ -187,13 +187,13 @@ func TestSubAgents(t *testing.T) {
 	ca, cb := kids[0].(string), kids[1].(string)
 	a.call("assistant.send", map[string]any{"id": "p3", "text": "Stop " + ca, "server": "s1", "model": "m"})
 	a.waitUpdate("p3", idle)
-	for time.Now().Before(deadline.Add(20*time.Second)) && s.run(ca) != nil {
+	for time.Now().Before(deadline.Add(20*time.Second)) && aiOf(s).Running(ca) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	if st := open(ca)["agent"].(map[string]any)["status"]; st != "stopped" {
 		t.Fatalf("stopped by the parent: %v", st)
 	}
-	for time.Now().Before(deadline.Add(20*time.Second)) && s.run(cb) == nil {
+	for time.Now().Before(deadline.Add(20*time.Second)) && !aiOf(s).Running(cb) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	a.call("assistant.stop", map[string]any{"id": cb})
@@ -385,7 +385,7 @@ func TestAssistantAdopt(t *testing.T) {
 	}
 	// A sub-agent that failed, abandoned by the user: stopped, no longer failed, its parent told.
 	loc, _, _ := s.chatLoc(id)
-	if err := s.saveChat(loc, &assistant.Chat{ID: "kid", Title: "Kid", Parent: "orc", Agent: &assistant.SubAgent{Task: "t", Status: assistant.AgentError, Depth: 1},
+	if err := saveTestChat(s, loc, &assistant.Chat{ID: "kid", Title: "Kid", Parent: "orc", Agent: &assistant.SubAgent{Task: "t", Status: assistant.AgentError, Depth: 1},
 		Messages: []*assistant.Message{{Role: "user", Content: assistant.String("go")}, {Role: "assistant", Error: "boom"}}}); err != nil {
 		t.Fatal(err)
 	}
@@ -403,7 +403,7 @@ func TestAssistantAdopt(t *testing.T) {
 
 	// A conversation that failed on its own: resumed by the Orchestrator from its last step,
 	// adopted on the way; one that did not fail is not resumed.
-	if err := s.saveChat(loc, &assistant.Chat{ID: "broken", Title: "Broken", Server: "s1", Model: "m", Mode: "build",
+	if err := saveTestChat(s, loc, &assistant.Chat{ID: "broken", Title: "Broken", Server: "s1", Model: "m", Mode: "build",
 		Messages: []*assistant.Message{{Role: "user", Content: assistant.String("go")}, {Role: "assistant", Error: "Interrupted: the pod stopped."}}}); err != nil {
 		t.Fatal(err)
 	}
@@ -417,12 +417,12 @@ func TestAssistantAdopt(t *testing.T) {
 		t.Fatalf("resumed: parent %v\n%s", b["parent"], bc)
 	}
 	waitFor("orc", "note] Ticket 1")
-	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline) && s.run("broken") != nil; {
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline) && aiOf(s).Running("broken"); {
 		time.Sleep(50 * time.Millisecond)
 	}
 
 	// Runs still writing would outlive the temporary folder.
-	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline) && (s.run("dev2") != nil || s.run("orc") != nil || s.run("dev") != nil); {
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline) && (aiOf(s).Running("dev2") || aiOf(s).Running("orc") || aiOf(s).Running("dev")); {
 		time.Sleep(50 * time.Millisecond)
 	}
 }

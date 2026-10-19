@@ -6,8 +6,7 @@
 import { createRoot, createSignal } from 'solid-js'
 import { on as onPod, request } from '../pod/rpc'
 import { settings } from '../state/settings'
-import type { Question as AskQuestion } from '../llm/state'
-import { answerStrings, type AnswerEntry } from '../llm/ask'
+import { answerStrings, type AnswerEntry, type Question as AskQuestion } from './ask'
 
 export interface PermissionOption {
   optionId: string

@@ -3,6 +3,7 @@ package builtin
 
 import (
 	"github.com/DrSmithFr/web-ide/pod/internal/plugins"
+	"github.com/DrSmithFr/web-ide/pod/internal/plugins/ai"
 	"github.com/DrSmithFr/web-ide/pod/internal/plugins/code"
 	"github.com/DrSmithFr/web-ide/pod/internal/plugins/database"
 	"github.com/DrSmithFr/web-ide/pod/internal/plugins/docker"
@@ -19,7 +20,7 @@ import (
 // Registry holds the built-in plugins; tests adds the plugins of the browser tests.
 func Registry(tests bool) *plugins.Registry {
 	r := plugins.NewRegistry()
-	list := []plugins.Plugin{files.New(), code.New(), exec.New(), search.New(), git.New(), kanban.New(), previews.New(), languages.New(), database.New(), docker.New()}
+	list := []plugins.Plugin{files.New(), code.New(), exec.New(), search.New(), git.New(), kanban.New(), ai.New(), previews.New(), languages.New(), database.New(), docker.New()}
 	if tests {
 		list = append(list, hello.New())
 	}

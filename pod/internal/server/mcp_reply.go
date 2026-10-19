@@ -3,6 +3,9 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/DrSmithFr/web-ide/pod/internal/llm"
+	"github.com/DrSmithFr/web-ide/pod/internal/plugins/ai"
+	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
 	"strings"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/assistant"
@@ -15,12 +18,10 @@ import (
 // (kanban_answer). Its messages carry the author "claude" and the conversation goes on as
 // if the user had sent them.
 
-// AuthorClaude marks the messages and answers written by Claude Code.
-const AuthorClaude = "claude"
-
 // linkedChat is a conversation linked to a ticket, with where it runs.
 type linkedChat struct {
-	cc      chatCtx
+	loc     llm.ChatLocation
+	root    string
 	project string
 }
 
@@ -40,7 +41,7 @@ func (s *Server) linkedChat(sc mcpScope, id int64, chatID string) (linkedChat, e
 	if err != nil {
 		return linkedChat{}, err
 	}
-	return linkedChat{cc: chatCtx{loc, root}, project: s.ticketChatProject(sc, t, chatID)}, nil
+	return linkedChat{loc: loc, root: root, project: s.ticketChatProject(sc, t, chatID)}, nil
 }
 
 // ticketChatProject is where the tools of a linked conversation work: the worktree of the
@@ -79,86 +80,6 @@ func (s *Server) uiLanguage() string {
 	return "en"
 }
 
-// mcpReply sends a message of Claude Code into a linked conversation: queued while it runs,
-// else added (the questions waiting for the user are left aside) and the conversation started.
-func (s *Server) mcpReply(lc linkedChat, id, text string) (string, error) {
-	if strings.TrimSpace(text) == "" {
-		return "", fmt.Errorf("message is empty")
-	}
-	if r := s.run(id); r != nil {
-		r.mu.Lock()
-		if !r.done {
-			r.chat.Queue = append(r.chat.Queue, assistant.QueuedMessage{ID: newID(), Text: text, Author: AuthorClaude})
-			s.publish(r, -1)
-			r.mu.Unlock()
-			return "The conversation is running: your message is queued and sent at its next step.", nil
-		}
-		r.mu.Unlock()
-	}
-	chat, err := s.openChat(lc.cc, id)
-	if err != nil {
-		return "", err
-	}
-	if chat.Server == "" || chat.Model == "" {
-		return "", fmt.Errorf("this conversation has no model yet: the user must send its first message")
-	}
-	from := minFrom(len(chat.Messages), skipQuestions(chat))
-	chat.Messages = append(chat.Messages, &assistant.Message{Role: "user", Content: assistant.String(text), Display: text, Author: AuthorClaude})
-	if !s.startRun(lc.cc.loc, lc.cc.root, lc.project, s.uiLanguage(), chat, from) {
-		return "", fmt.Errorf("the conversation started meanwhile: send your message again")
-	}
-	return "Message sent: the assistant answers now. Read its answer later with kanban_conversation.", nil
-}
-
-// mcpAnswer answers the questions of ask_user waiting in a linked conversation, then starts it.
-func (s *Server) mcpAnswer(lc linkedChat, id string, answers [][]string, notes []string) (string, error) {
-	if s.run(id) != nil {
-		return "", fmt.Errorf("the conversation is running: no question waits for an answer")
-	}
-	chat, err := s.openChat(lc.cc, id)
-	if err != nil {
-		return "", err
-	}
-	index := -1
-	for i, m := range chat.Messages {
-		if m.AskState == "pending" {
-			index = i
-		}
-	}
-	if index < 0 {
-		return "", fmt.Errorf("no question of this conversation waits for an answer")
-	}
-	m := chat.Messages[index]
-	if len(answers) != len(m.Questions) {
-		return "", fmt.Errorf("give one answer per question: %d questions, %d answers", len(m.Questions), len(answers))
-	}
-	// The questions of a graph are all answered: the path is the questions given an answer.
-	var path []int
-	if hasGraph(m.Questions) {
-		for i, a := range answers {
-			if len(a) > 0 {
-				path = append(path, i)
-			}
-		}
-	}
-	m.Answers, m.Notes, m.Path, m.OffPath, m.AskState, m.Author = answers, notes, path, nil, "answered", AuthorClaude
-	m.Content = assistant.String("Claude Code answered for the user.\n" + assistant.AnswersText(m.Questions, answers, notes, path, nil))
-	m.Summary = assistant.T("answers received", nil).Raw()
-	if !s.startRun(lc.cc.loc, lc.cc.root, lc.project, s.uiLanguage(), chat, index) {
-		return "", fmt.Errorf("the conversation started meanwhile: read it again")
-	}
-	return "Answers sent: the assistant goes on.", nil
-}
-
-func hasGraph(qs []assistant.Question) bool {
-	for _, q := range qs {
-		if q.ID != "" {
-			return true
-		}
-	}
-	return false
-}
-
 // pendingQuestions lists the questions waiting in a conversation, for kanban_conversation.
 func pendingQuestions(c *assistant.Chat) string {
 	for i := len(c.Messages) - 1; i >= 0; i-- {
@@ -185,4 +106,37 @@ func pendingQuestions(c *assistant.Chat) string {
 		return b.String()
 	}
 	return ""
+}
+
+// conversations is the AI plugin when it is on in the project of a linked conversation: it
+// holds the conversations of the assistant.
+func (s *Server) conversations(project string) (*ai.A, error) {
+	rt, err := s.openRuntime(project, sshx.Creds{})
+	if err != nil {
+		return nil, err
+	}
+	p, _ := s.Plugins.Get("ai")
+	a, _ := p.(*ai.A)
+	if a == nil || !s.pluginOn(rt, "ai") {
+		return nil, i18n.Errorf("the %s plugin is disabled on this project", "AI")
+	}
+	return a, nil
+}
+
+// mcpReply sends a message of Claude Code into a linked conversation (ai.Reply).
+func (s *Server) mcpReply(lc linkedChat, id, text string) (string, error) {
+	a, err := s.conversations(lc.project)
+	if err != nil {
+		return "", err
+	}
+	return a.Reply(lc.loc, lc.root, lc.project, s.uiLanguage(), id, text)
+}
+
+// mcpAnswer answers the questions of ask_user waiting in a linked conversation (ai.Answer).
+func (s *Server) mcpAnswer(lc linkedChat, id string, answers [][]string, notes []string) (string, error) {
+	a, err := s.conversations(lc.project)
+	if err != nil {
+		return "", err
+	}
+	return a.Answer(lc.loc, lc.root, lc.project, s.uiLanguage(), id, answers, notes)
 }

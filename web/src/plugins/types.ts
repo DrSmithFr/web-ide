@@ -4,6 +4,7 @@ import type { JSX } from 'solid-js'
 import type { TabState } from '../state/project'
 import type { Zone } from '../state/zones'
 import type { MenuItem, PluginApi } from './api'
+import type { UiTool } from '../ui/uiCalls'
 import type { SearchProvider } from '../popups/searchProviders'
 import type { DiffSource } from '../ui/diffSources'
 
@@ -61,6 +62,8 @@ export interface PluginContributions {
   viewStatus?: (tab: TabState) => StatusItem[]
   /** Items of the status bar while a tool of the plugin has the focus, by tool id. */
   toolStatus?: Record<string, () => StatusItem[]>
+  /** Tools of the interface the pod asks the window to run (ui.call), by name: the AI draws a page of its board. */
+  uiTools?: Record<string, UiTool>
   commands?: Record<string, () => void>
   /** Items of the context menu of an entry of the Explorer (Exec: a terminal here). */
   explorerItems?: (entry: ExplorerEntry) => MenuItem[]
