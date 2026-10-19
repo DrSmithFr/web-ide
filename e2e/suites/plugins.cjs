@@ -7,11 +7,12 @@
 // off, the Console goes and Docker with it (it needs terminal); on again, the terminals are back.
 // Search (#117) gives Search Everywhere its Text tab: off, the tab and the Search tool go. Git
 // (#118) gives the diff view its git sides: off, a diff tab says so, open_diff is refused.
-// Previews (#119) needs terminal: off (or Exec off), its tool and list_previews go.
+// Previews (#119) needs terminal: off (or Exec off), its tool and list_previews go. Languages
+// (#120): off, Problems, Structure, the Symbols tab and the code actions go, the editor still edits.
 const fs = require('fs')
 const path = require('path')
 const { execSync } = require('child_process')
-const { run, openProject, assert, mcp, WS } = require('../common.cjs')
+const { run, openProject, open, assert, mcp, WS } = require('../common.cjs')
 
 const text = (r) => r.result?.content?.[0]?.text ?? JSON.stringify(r)
 const tools = () =>
@@ -244,4 +245,29 @@ run(async ({ page }) => {
   await setPlugin('previews', true)
   await page.waitForSelector(forwards)
   assert(!(await mcp('list_previews', {})).result.isError, 'list_previews back')
+
+  // Languages: off, its tools, the Symbols tab and Find usages of the editor menu go; the editor
+  // still edits; on again, they are back.
+  const problems = '.rail-btn[data-id=problems]'
+  const structure = '.rail-btn[data-id=structure]'
+  await page.waitForSelector(problems)
+  await page.waitForSelector(structure)
+  assert((await seTabs()).includes('Symbols'), 'the Symbols tab')
+  await setPlugin('languages', false)
+  await page.waitForSelector(problems, { state: 'detached' })
+  assert(!(await page.$(structure)), 'no Structure')
+  assert(!(await seTabs()).includes('Symbols'), 'no Symbols tab with Languages off')
+  await open(page, 'notes.txt')
+  await page.click('.pane.active .ed-content', { button: 'right', position: { x: 40, y: 10 } })
+  await page.waitForSelector('.ctx-menu')
+  const menu = await page.$$eval('.ctx-menu .ctx-item', (l) => l.map((b) => b.textContent))
+  assert(!menu.some((x) => x.includes('Find usages')) && menu.some((x) => x.includes('Copy')), 'no code actions in the editor menu: ' + menu.join(', '))
+  await page.keyboard.press('Escape')
+  await page.click('.pane.active .ed-content')
+  await page.keyboard.press('Control+End')
+  await page.keyboard.type('typed without servers')
+  await page.waitForFunction(() => document.querySelector('.pane.active .ed-content')?.textContent.includes('typed without servers'))
+  await setPlugin('languages', true)
+  await page.waitForSelector(problems)
+  assert((await seTabs()).includes('Symbols'), 'the Symbols tab is back')
 })

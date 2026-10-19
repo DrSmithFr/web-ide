@@ -14,7 +14,6 @@ flowchart LR
   popups["popups<br/>Search Everywhere…"]
   settings["settings<br/>settings modal"]
   conflict["conflict<br/>merge dialog"]
-  lsp["lsp<br/>code navigation"]
   editor["editor<br/>buffer and view"]
   main --> app
   main --> conflict
@@ -28,14 +27,11 @@ flowchart LR
   pages -->|"zones"| tools
   tools --> conflict
   tools --> editor
-  tools --> lsp
   popups --> editor
-  popups --> lsp
   popups --> panels
   settings -->|"base path"| app
   settings --> editor
   conflict --> editor
-  lsp --> editor
 ```
 
 **Tools and AI**
@@ -50,7 +46,6 @@ flowchart LR
   questions["questions<br/>Questions tool"]
   plugins["plugins<br/>Exec, Docker, Database, the api"]
   editor["editor"]
-  lsp["lsp"]
   pages --> agents
   pages -->|"capabilities"| plugins
   pages --> plugins
@@ -60,7 +55,6 @@ flowchart LR
   tools --> agents
   tools -->|"capabilities"| plugins
   tools --> editor
-  tools --> lsp
   kanban -->|"ticket sessions"| agents
   kanban -->|"capabilities"| plugins
   kanban --> llm
@@ -73,7 +67,6 @@ flowchart LR
   agents -->|"MessageBox"| llm
   agents --> questions
   questions --> llm
-  lsp --> editor
   classDef other stroke-dasharray: 4 3
   class pages,tools other
 ```
@@ -88,20 +81,19 @@ Diagram edges are imports of the folders, checked with a script over the `import
 - [`state/`](state/): Open project and session (tabs, split tree, tool zones), settings, git state, folder marks, the phone layout (`mobile.ts`: the view shown, the keyboard, no zoom)
 - [`pages/`](pages/): `Home`, `ProjectPage` (menu bar, rails, side panels, editor area, bottom tools), `ProjectBar`, `DeskSwitcher`, `Detached` (one panel alone)
 - [`ui/`](ui/): Editor area, ANSI colors of an output (`ansi.ts`), rendered Markdown files (`MarkdownView.tsx`) and the embedded docs (`DocView.tsx`, see `help/`), status bar, diff view (its sides from the diff sources of `diffSources.ts`), overlays (modal, prompt, pick list, context menu), toasts, icons, empty states, keyboard navigation of the toolbars and tab bars (`roving.ts`)
-- [`editor/`](editor/): `Doc` (buffer, revisions, undo, file format, indentation), `EditorView` (block rendering, Custom Highlight API, indentation guides, whitespace overlay, multiple carets, folding, soft wrap with rows read from the layout), `carets.ts` (words, occurrences), `folding.ts` (fold ranges), `indent.ts` (indentation detection), tokenizer and grammars, three-way merge, line diff, sub-word moves, find bar
+- [`editor/`](editor/): `Doc` (buffer, revisions, undo, file format, indentation), the completion widget's helpers (`completion.ts`: the items of the `language` service or the words of the buffer) and LSP text edits (`textEdits.ts`), `EditorView` (block rendering, Custom Highlight API, indentation guides, whitespace overlay, multiple carets, folding, soft wrap with rows read from the layout), `carets.ts` (words, occurrences), `folding.ts` (fold ranges), `indent.ts` (indentation detection), tokenizer and grammars, three-way merge, line diff, sub-word moves, find bar
 - [`keys/`](keys/): Binding table and QWERTY / AZERTY presets
-- [`lsp/`](lsp/): Client, completion, edits, rename and formatting
 - [`help/`](help/): `topics.json`, the map from a place of the interface to a page of the docs (`path#heading`, checked by `make test`), and the `HelpLink` (**?**); the pages open in `doc` tabs (`ui/DocView.tsx`, `state/docs.ts`)
 - [`popups/`](popups/): Search Everywhere (a shell: a tab per search provider of `searchProviders.ts`, the files, symbols and actions given by the core), Recent Files and the switcher, paste from history (the history itself: `ui/clipboard.ts`)
 - [`panels/`](panels/): Explorer (with file type icons, `fileIcons.tsx`)
-- [`tools/`](tools/): Right-panel tools (conflicts, structure…), `InfoTool`, and `tools.tsx`, the registry of the tools of the window
+- [`tools/`](tools/): The Conflicts tool (`tools.tsx`) and `InfoTool`
 - [`conflict/`](conflict/): Three-pane conflict dialog
 - [`settings/`](settings/): Settings modal and its pages: `Members`, `Lan`, `Pods`, `Sync`, `Notifications`, `Plugins` (with a project open) (remote access and account), themes (`themes.ts`)
 - [`llm/`](llm/): Assistant: state, turn loop, tools, prompt, Markdown, the editor of the message box shared with the Agents tool (`MessageBox.tsx`), attachments, speech recognition, sub-agents (`SubAgents.tsx`), doodles (`llm/doodle/`: document model, SVG rendering, export, modal), the board of a conversation (`llm/board/`), app previews (`PreviewCard.tsx`, through the previews capability)
 - [`agents/`](agents/): Agents tool: sessions of the worktrees of the window and their threads (`state.ts`, events dropped when older than the thread loaded, by `seq`), tabs, launcher, thread, permission cards (`AgentsTool.tsx`), the follow mode (`state.ts`: an edit tool call completed opens its file when `follow` is set on the session, `agents.follow`), the message box of a session (`Composer.tsx`: `llm/MessageBox.tsx` with the agent's commands, attachments prepared by `llm/attachments.ts` sent as parts, drafts per session)
 - [`questions/`](questions/): Questions tool: the list (`state.ts`, asked again on `questions.changed`), the modal one question at a time and its auto-open (not for a question whose thread is on screen: `showsQuestions`), the forms of `elicitation/create` (`Form.tsx`, also in the Agents thread)
 - [`kanban/`](kanban/): Board, ticket view, workflow actions, linked conversations, milestones and objectives
-- [`plugins/`](plugins/): The plugins of the window ([plugins.md](../../docs/design/plugins.md)): `registry.ts` (the states sent by the pod in `project.open` and `plugins.changed`, the page modules of the built-ins activated once when first enabled, their tools, tab views `plugin:<id>/<view>` and commands), `api.ts` (the `api` a module gets: `rpc` to its backend, events, `openFile`, `openView`, port forwards and previews of the core, `ui`), `types.ts`, `capabilities.ts` (capabilities as services: the types of `terminal`, `commands` and `git`, `provide` by a plugin, `capability()` for the core, `undefined` while the provider is off); one folder per built-in: `previews/` (the Port forwards and previews tool, the previews service `previews.ts`, the open forwards of the home page `OpenForwards.tsx`), `git/` (the Git tool: tabs, tree of changes, graph lanes `graph.ts`, commit detail; the git state `state.ts`, which is the `git` service; the git diff source `diff.tsx`), `search/` (the Search tool `GlobalSearch.tsx`, the text provider `text.ts`), `exec/` (the Console tool: terminals and tasks `consoles.tsx`, one xterm per console; the saved commands `commands.ts`, `CommandsModal.tsx`; it provides the `terminal` and `commands` services), `docker/` (the Docker tool: lists and polling `state.ts`, detail pane, logs with ANSI colors, disk usage; `plugin.ts` holds its `api` and its desk state, nothing else of the core is imported) `database/` (the Database explorer: connections `connections.ts`, tree, the console and table views `views.ts` whose state, the text of a console included, goes with the tab) and `hello/` (the test plugin). The tools of the enabled plugins join `toolPanels` (`pages/ProjectPage.tsx`) and the tiles; their default zone comes from `state/zones.ts` (`setPluginZones`), which keeps the place of a disabled one
+- [`plugins/`](plugins/): The plugins of the window ([plugins.md](../../docs/design/plugins.md)): `registry.ts` (the states sent by the pod in `project.open` and `plugins.changed`, the page modules of the built-ins activated once when first enabled, their tools, tab views `plugin:<id>/<view>` and commands), `api.ts` (the `api` a module gets: `rpc` to its backend, events, `openFile`, `openView`, port forwards and previews of the core, `ui`), `types.ts`, `capabilities.ts` (capabilities as services: the types of `terminal`, `commands` and `git`, `provide` by a plugin, `capability()` for the core, `undefined` while the provider is off); one folder per built-in: `languages/` (the language servers: the client and the code actions `client.ts`, rename and formatting `refactor.ts`, the completion of the servers, the buffers announced to them `sync.ts`, the Problems and Structure tools, the Symbols provider; it provides the `language` service), `previews/` (the Port forwards and previews tool, the previews service `previews.ts`, the open forwards of the home page `OpenForwards.tsx`), `git/` (the Git tool: tabs, tree of changes, graph lanes `graph.ts`, commit detail; the git state `state.ts`, which is the `git` service; the git diff source `diff.tsx`), `search/` (the Search tool `GlobalSearch.tsx`, the text provider `text.ts`), `exec/` (the Console tool: terminals and tasks `consoles.tsx`, one xterm per console; the saved commands `commands.ts`, `CommandsModal.tsx`; it provides the `terminal` and `commands` services), `docker/` (the Docker tool: lists and polling `state.ts`, detail pane, logs with ANSI colors, disk usage; `plugin.ts` holds its `api` and its desk state, nothing else of the core is imported) `database/` (the Database explorer: connections `connections.ts`, tree, the console and table views `views.ts` whose state, the text of a console included, goes with the tab) and `hello/` (the test plugin). The tools of the enabled plugins join `toolPanels` (`pages/ProjectPage.tsx`) and the tiles; their default zone comes from `state/zones.ts` (`setPluginZones`), which keeps the place of a disabled one
 - [`i18n/`](i18n/): `t()` and the catalogs (English source strings, `languages.json`, one catalog per other language)
 
 ## Invariants and pitfalls

@@ -4,7 +4,7 @@ import { createEffect, createMemo, createResource, createSignal, For, Match, on,
 import { pluginView, pluginViewLabel } from '../plugins/registry'
 import {
   activateTab, basename, closeTab, docError, findLeaf, getDoc, loadDoc, moveTab, openFile, relPath, reveal, saveCursor,
-  saveDoc, session, setActivePane, setSplitSizes, splitPane, diagnostics, type LayoutNode, type TabState, docsVersion, mutate, moveTabToDesk,
+  saveDoc, session, setActivePane, setSplitSizes, splitPane, type LayoutNode, type TabState, docsVersion, mutate, moveTabToDesk,
 } from '../state/project'
 import { distinctDirs } from './tabNames'
 import { showTool } from '../state/zones'
@@ -16,11 +16,10 @@ import { Doc } from '../editor/doc'
 import { FindBar } from '../editor/FindBar'
 import { grammarGeneration, languageName } from '../editor/languages'
 import { fontFor, settings } from '../state/settings'
-import { actions, registerAction, runAction, shortcutOf } from '../keys/bindings'
+import { actionOf, registerAction, runAction, shortcutOf } from '../keys/bindings'
 import { contextMenu, pick, prompt, type MenuItem } from './overlay'
 import { openConflict } from '../conflict/ConflictDialog'
 import { request } from '../pod/rpc'
-import * as lspc from '../lsp/client'
 import { toast } from './toast'
 import { setCursorInfo } from './status'
 import { StatusBar } from './StatusBar'
@@ -32,7 +31,6 @@ import { MilestoneView } from '../kanban/MilestoneView'
 import { ObjectiveView } from '../kanban/ObjectiveView'
 import { board, summary } from '../kanban/state'
 import { lineMarks } from '../editor/linediff'
-import { formatDocument, renameSymbol } from '../lsp/refactor'
 import { t } from '../i18n'
 import { dropClasses, dropIndex, setDropAt } from './tabDrop'
 import { focusPart } from '../state/focus'
@@ -42,7 +40,7 @@ import { addDesk, desk, deskLabel, desks } from '../state/desks'
 import { route } from '../app/router'
 import { detachTab, hiddenTools, tileMode, nextSplit, resizing, scrollMode, tileTools } from '../state/tiles'
 import { ScrollArea } from './ScrollArea'
-import { capability } from '../plugins/capabilities'
+import { capability, type LspDiagnostic } from '../plugins/capabilities'
 import { Dynamic } from 'solid-js/web'
 import { DocView } from './DocView'
 import { isMarkdownPath, MarkdownView, showRaw, shownRaw, type MarkdownViewApi } from './MarkdownView'
@@ -483,7 +481,7 @@ export function useEditorView(doc: () => Doc | null, host: () => HTMLElement | u
   return view
 }
 
-function toDiagnostics(doc: Doc, list: lspc.Range[] | any[]): Diagnostic[] {
+function toDiagnostics(doc: Doc, list: LspDiagnostic[]): Diagnostic[] {
   return (list as any[]).map((d) => ({
     from: doc.offset(d.range.start.line, d.range.start.character),
     to: doc.offset(d.range.end.line, d.range.end.character),
@@ -491,6 +489,21 @@ function toDiagnostics(doc: Doc, list: lspc.Range[] | any[]): Diagnostic[] {
     message: d.message,
     source: d.source,
   }))
+}
+
+// The text editors shown, for the active one (plugins/api.ts api.editor.active).
+const editors = new Set<() => { view: EditorView; doc: Doc } | null>()
+
+/** The text editor of the active tab and its buffer; null when another editor has the focus. */
+export function activeTextEditor(): { view: EditorView; doc: Doc } | null {
+  for (const e of editors) {
+    const ed = e()
+    if (!ed) continue
+    // Another editor has the focus (the message box of the assistant): its own actions run.
+    const other = EditorView.of(document.activeElement)
+    return other && other !== ed.view ? null : ed
+  }
+  return null
 }
 
 function FileEditor(props: { tab: TabState; paneId: string }) {
@@ -546,7 +559,7 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
       setCursorInfo({ line: line + 1, col: col + 1, sel: Math.abs(sel.head - sel.anchor), lang: languageName(v.doc.lang) })
     },
     onFolds: (v) => save(v),
-    onCtrlClick: (v, off) => lspc.gotoDeclaration(v.doc, off),
+    onCtrlClick: (v, off) => capability('language')?.gotoDeclaration(v.doc, off),
     onFocus: () => setActivePane(props.paneId),
   })
   // Cursor, folds and chosen indentation of the file, kept in the session.
@@ -605,7 +618,7 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
     const d = doc()
     if (!v || !d) return
     d.changed()
-    v.setDiagnostics(toDiagnostics(d, diagnostics[path] ?? []))
+    v.setDiagnostics(toDiagnostics(d, capability('language')?.diagnostics(path) ?? []))
   })
 
   // Change markers against HEAD, recomputed a moment after the edits.
@@ -643,7 +656,11 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
     const d = doc()
     if (!v || !d || !(e.target as HTMLElement).closest('.ed')) return
     const content = host.querySelector<HTMLElement>('.ed-content')
-    const item = (id: string, disabled = false) => ({ label: t(actions.find((a) => a.id === id)!.label), hint: shortcutOf(id), disabled, action: () => void runAction(id) })
+    // An action of a plugin that is off (the language servers) is not offered.
+    const item = (id: string, disabled = false) => {
+      const a = actionOf(id)
+      return a ? [{ label: t(a.label), hint: shortcutOf(id), disabled, action: () => void runAction(id) }] : []
+    }
     const sep = { separator: true, label: '' }
     const paste = async () => {
       const data = new DataTransfer()
@@ -652,19 +669,19 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
       content?.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
     }
     contextMenu(e, [
-      item('lsp.definition'),
-      item('lsp.references'),
-      item('lsp.implementation'),
-      item('lsp.rename', d.readOnly),
-      item('lsp.format', d.readOnly),
+      ...item('lsp.definition'),
+      ...item('lsp.references'),
+      ...item('lsp.implementation'),
+      ...item('lsp.rename', d.readOnly),
+      ...item('lsp.format', d.readOnly),
       sep,
       { label: t('Cut'), hint: 'Ctrl+X', disabled: d.readOnly, action: () => document.execCommand('cut') },
       { label: t('Copy'), hint: 'Ctrl+C', action: () => document.execCommand('copy') },
       { label: t('Paste'), hint: 'Ctrl+V', disabled: d.readOnly, action: () => void paste() },
-      item('edit.pasteHistory', d.readOnly),
+      ...item('edit.pasteHistory', d.readOnly),
       sep,
-      item('edit.toggleComment', d.readOnly),
-      item('edit.duplicateLine', d.readOnly),
+      ...item('edit.toggleComment', d.readOnly),
+      ...item('edit.duplicateLine', d.readOnly),
       sep,
       {
         label: t('Show in the explorer'),
@@ -677,6 +694,9 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
       { label: t('Copy the relative path'), action: () => copyText(relPath(path)) },
     ])
   }
+  const mine = () => (view() && doc() && isActive() ? { view: view()!, doc: doc()! } : null)
+  editors.add(mine)
+  onCleanup(() => editors.delete(mine))
   const when = (f: (v: EditorView, d: Doc) => void, needFocus = false) => () => {
     const v = view()
     const d = doc()
@@ -721,25 +741,7 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
     registerAction('conflict.resolve', when((_, d) => {
       if (d.conflict()) openConflict(d)
     })),
-    registerAction('lsp.definition', when((v, d) => lspc.gotoDeclaration(d, v.getSelection().head))),
-    registerAction('lsp.implementation', when((v, d) => lspc.gotoImplementation(d, v.getSelection().head))),
-    registerAction('lsp.typeDefinition', when((v, d) => lspc.gotoTypeDefinition(d, v.getSelection().head))),
-    registerAction('lsp.superMethod', when((v, d) => lspc.gotoSuperMethod(d, v.getSelection().head))),
-    registerAction('lsp.references', when((v, d) => lspc.findReferences(d, v.getSelection().head))),
     registerAction('edit.complete', when(() => completion?.open(), true)),
-    registerAction('lsp.rename', when((v, d) => renameSymbol(v, d))),
-    registerAction('lsp.format', when((v, d) => formatDocument(v, d))),
-    registerAction('lsp.hover', when(async (v, d) => {
-      const off = v.getSelection().head
-      try {
-        const text = await lspc.hoverText(d, off)
-        const c = v.coordsAt(off)
-        if (text) v.showTooltip(c.left, c.bottom - 8, text, 'doc')
-        else toast(t('No documentation here'), 'info')
-      } catch (e) {
-        toast((e as Error).message, 'info')
-      }
-    })),
     registerAction('nav.gotoLine', when(async (v, d) => {
       const { line, col } = d.pos(v.getSelection().head)
       const s = await prompt({ title: t('Go to line'), label: t('Line[:column] (1 – {n})', { n: d.lineCount }), value: `${line + 1}:${col + 1}` })
@@ -749,27 +751,6 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
       const off = d.offset(l - 1, (c || 1) - 1)
       v.setSelection(off)
       v.scrollToOffset(off, true)
-    })),
-    registerAction('nav.fileStructure', when(async (v, d) => {
-      try {
-        const symbols = lspc.flatten(await lspc.documentSymbols(d.path))
-        const chosen = await pick({
-          placeholder: t('Structure of {name}', { name: basename(d.path) }),
-          items: symbols.map(({ s, depth }) => ({
-            label: '  '.repeat(depth) + s.name,
-            detail: s.detail,
-            icon: lspc.symbolKinds[s.kind]?.[1],
-            value: s,
-          })),
-        })
-        if (chosen) {
-          const off = d.offset(chosen.selectionRange.start.line, chosen.selectionRange.start.character)
-          v.setSelection(off)
-          v.scrollToOffset(off, true)
-        }
-      } catch (e) {
-        toast((e as Error).message, 'info')
-      }
     })),
     registerAction('nav.test', when(async (_, d) => {
       const r = await request('fs.related', { path: d.path })

@@ -107,6 +107,14 @@ Exec (#116) is the first plugin the rest of the IDE *uses*: a dozen parts of the
 - The **previews** capability (list, open, close, public, URL), used by the assistant's card, `share_preview` of the agents and the ▶ menu of the Console; `share_preview` and `list_previews` stay the assistant's, offered with `previews` on. `api.transport.inTunnel`.
 - `api.forwards` and `api.previews` (#114) are gone: the previews are `api.use('previews')`. A removal is a change of version, but no plugin outside the IDE existed yet: v1 keeps its number, this exception is the only one.
 
+## What Languages added to the API
+
+- **Buffer events** (`api.buffers`): the buffers of the window (`list`, `get`, `version`), and `onOpen`, `onSave`, `onClose`; the plugin announces them to the servers (`didOpen`, `didChange`, `didSave`, `didClose`), the core no longer does.
+- **The active editor** (`api.editor.active()`): the text view of the active tab and its buffer, null when another editor has the focus. The code actions (`lsp.definition`, `references`, `rename`, `format`, `hover`, `nav.fileStructure`…) are commands of the plugin with the same ids (shortcuts kept), run on it; the menus offer only the actions that are there.
+- The **language** capability, asked by the editor of the core: the diagnostics of a file, the completion (null when a file has no server: the editor offers the words of the buffer), Ctrl+click, the Problems tool. The completion widget and its helpers (`editor/completion.ts`) and the LSP text edits (`editor/textEdits.ts`) stay the editor's.
+- `api.editor.serverLanguage` / `serverLanguageId`, `wordStart`, `isWordChar`, `toOffsets`, `applyToString`, `settings`; `api.project.fileUri` / `pathFromUri`; `api.files.write`; `api.notify`; `api.activeFile`.
+- The tab of the Problems tool moved to the desk state of the plugin (migrated). The assistant tools `lsp_*` stay the assistant's, offered with `language` on.
+
 ## API v1
 
 Frozen with #118: `apiVersion: 1` in every manifest. An addition keeps v1; a removal or a change of what follows is a new version.
@@ -115,9 +123,9 @@ Frozen with #118: `apiVersion: 1` in every manifest. An addition keeps v1; a rem
 
 **Pod** (`pod/internal/plugins`): `Plugin{Manifest(), Register(Host)}`; `Host.Handle(method, handler)`, `Host.HandleGlobal`, `Host.AssistantTool(tool)`, `Host.Pod()`, `Host.OnProjectOpen`, `Host.OnWindows`; a `Call` carries the `Runtime` of the project, `Params`, `Lang`, the `Window` (push, held streams), `Emit` / `EmitOthers` / `EmitFamily`, the `Options` of a conversation; `Result`, `UsageError`, `CodedError`.
 
-**Page** (`web/src/plugins/api.ts`): `rpc` / `rpcIn` / `notifyIn` / `channel`, `on`, `t` / `tn` / `fmtDate` / `fmtAgo`, `project`, `files`, `ssh`, `desk` (its state in the desk), `provide` / `use` (capabilities), `showTool`, `tiles`, `theme`, `openFile` / `openView` / `setViewState` / `openDiff` / `openText`, `panes`, `editor`, `keys`, `transport`, `ui`. The module's `activate(api)` returns its contributions: `tools`, `views`, `commands`, `hosts`, `searchProviders`, `diffSources`, `assistantOptions`, `opened`; its `home(api)` a part of the home page.
+**Page** (`web/src/plugins/api.ts`): `rpc` / `rpcIn` / `notify` / `notifyIn` / `channel`, `on`, `t` / `tn` / `fmtDate` / `fmtAgo`, `project`, `files`, `buffers`, `activeFile`, `ssh`, `desk` (its state in the desk), `provide` / `use` (capabilities), `showTool`, `tiles`, `theme`, `openFile` / `openView` / `setViewState` / `openDiff` / `openText`, `panes`, `editor`, `keys`, `transport`, `ui`. The module's `activate(api)` returns its contributions: `tools`, `views`, `commands`, `hosts`, `searchProviders`, `diffSources`, `assistantOptions`, `opened`; its `home(api)` a part of the home page.
 
-**Capabilities**: `terminal` and `commands` (Exec), `git` and `worktrees` (Git), `previews` (Previews), their types in `web/src/plugins/capabilities.ts`.
+**Capabilities**: `terminal` and `commands` (Exec), `git` and `worktrees` (Git), `previews` (Previews), `language` (Languages), their types in `web/src/plugins/capabilities.ts`.
 
 ## Decisions
 
@@ -145,7 +153,7 @@ The plugins, grouped by domain (one plugin, several tools and views), in their o
 | Search | Search tool (text, regex), the text provider of Search Everywhere (#117, done) | |
 | Git | Git tool, git content of the diff view (#118, done) | provides `worktrees`, `git` |
 | Previews | Port forwards and previews tool (#119, done) | requires `terminal`, provides `previews` |
-| Languages | language servers, Problems, Structure, `lsp_*` tools, symbol provider | provides `symbols` |
+| Languages | language servers, Problems, Structure, the Symbols provider (#120, done) | provides `language` |
 | Files | Explorer, file provider (locked) | |
 | Code | file editor, the default view of a text buffer (locked) | |
 | Kanban | Kanban tool and views, its MCP and assistant tools | requires `terminal`, `worktrees` |

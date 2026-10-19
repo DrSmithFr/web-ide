@@ -5,11 +5,9 @@
 import { batch, createEffect, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js'
 import { Portal } from 'solid-js/web'
 import { request } from '../pod/rpc'
-import { activeTab, basename, openFile, relPath } from '../state/project'
+import { basename, openFile, relPath } from '../state/project'
 import { desks } from '../state/desks'
 import { actionLabel, allActions, isCapturingKeys, runAction, shortcutOf } from '../keys/bindings'
-import { lspLanguage } from '../editor/languages'
-import * as lspc from '../lsp/client'
 import { fuzzy } from '../ui/overlay'
 import { FileIcon } from '../panels/fileIcons'
 import { Icon } from '../ui/icons'
@@ -65,36 +63,6 @@ async function findFiles(q: string, max: number) {
     .map(({ f }) => fileHit(f))
 }
 
-/** A path of a language with a running server: the active file, else the detected language. */
-async function symbolPath() {
-  const path = activeTab()?.path ?? ''
-  if (lspLanguage(path)) return path
-  const st = await request<any[]>('lsp.status').catch(() => [])
-  const lang = st.find((s) => s.detected && s.command)?.lang
-  const ext: Record<string, string> = { go: '/x.go', php: '/x.php', python: '/x.py', typescript: '/x.ts' }
-  return lang ? ext[lang] : ''
-}
-
-async function findSymbols(q: string, max: number, signal: AbortSignal) {
-  if (q.length < 2) return []
-  const path = await symbolPath()
-  if (!path) return []
-  const list = await lspc.workspaceSymbols(path, q, signal).catch(() => [])
-  return list
-    .filter((s) => s.loc)
-    .slice(0, max)
-    .map(
-      (s): Hit => ({
-        label: s.name,
-        code: true,
-        path: true,
-        icon: () => <span class="se-glyph">{lspc.symbolKinds[s.kind]?.[1] ?? '·'}</span>,
-        detail: `${s.container ? s.container + ' · ' : ''}${relPath(s.loc!.path)}`,
-        run: () => lspc.jump(s.loc!),
-      }),
-    )
-}
-
 /** The actions, the saved commands of the project first (dynamic actions with an icon). */
 function findActions(q: string, max: number) {
   const list = allActions()
@@ -111,10 +79,9 @@ function findActions(q: string, max: number) {
   )
 }
 
-// The providers of the core; the text of the project is the Search plugin's.
+// The providers of the core; the symbols are the Language servers plugin's, the text the Search plugin's.
 setCoreProviders([
   { id: 'files', label: 'Files', placeholder: 'Go to file (name or path, fuzzy search)', order: 10, inAll: 8, delay: 0, max: 100, find: (q, _s, max) => findFiles(q, max) },
-  { id: 'symbols', label: 'Symbols', placeholder: 'Go to symbol (class, function, method…)', order: 20, inAll: 8, delay: 150, minChars: 2, find: (q, s, max) => findSymbols(q, max, s) },
   { id: 'actions', label: 'Actions', placeholder: 'Command…', order: 30, inAll: 8, delay: 0, find: async (q, _s, max) => findActions(q, max) },
 ])
 

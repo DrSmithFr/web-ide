@@ -213,6 +213,8 @@ var toolNeeds = map[string]string{
 	"run_command": "terminal", "list_consoles": "terminal", "read_console": "terminal", "console_input": "terminal",
 	"list_commands": "terminal", "run_saved_command": "terminal",
 	"share_preview": "previews", "list_previews": "previews",
+	"lsp_symbols": "language", "lsp_workspace_symbols": "language", "lsp_definition": "language", "lsp_references": "language",
+	"lsp_hover": "language", "lsp_diagnostics": "language",
 }
 
 // missingFor is the error of a core tool whose capability the project of rt lacks (nil: it runs).

@@ -1,21 +1,28 @@
-// Problems tool: the diagnostics of the language servers and their output. In the core until
-// the language servers become a plugin (Languages).
+// Problems tool: the diagnostics of the language servers and their output.
 import { createEffect, createSignal, For, Show } from 'solid-js'
-import { on as onPod } from '../pod/rpc'
-import { diagnostics, mutate, openFile, relPath, session } from '../state/project'
-import { EmptyState } from '../ui/EmptyState'
-import { Icon } from '../ui/icons'
-import { t } from '../i18n'
+import type { LspDiagnostic } from '../capabilities'
+import { createStore } from 'solid-js/store'
+import { api, desk, EmptyState, Icon, t } from './plugin'
 
 const [logs, setLogs] = createSignal<string[]>([])
 
-onPod('lsp.log', (e: { lang: string; method: string; params: { type: number; message: string } }) => {
-  const kind = t(['', 'error', 'warn.', 'info', 'log'][e.params?.type] ?? '')
-  setLogs((l) => [...l.slice(-999), `[${e.lang}] ${kind} ${e.params?.message ?? ''}`])
-})
-onPod('lsp.status', (e: { lang: string; running: boolean }) => {
-  setLogs((l) => [...l.slice(-999), `[${e.lang}] ${e.running ? t('server started') : t('server stopped')}`])
-})
+// The diagnostics of each file, as the servers publish them.
+const [diagnostics, setDiagnostics] = createStore<Record<string, LspDiagnostic[]>>({})
+export { diagnostics }
+
+/** Starts following the servers: their diagnostics, their logs and their state. */
+export function watchServers() {
+  api.on('lsp.diagnostics', (e: { params: { uri: string; diagnostics: LspDiagnostic[] } }) => {
+    setDiagnostics(api.project.pathFromUri(e.params.uri), e.params.diagnostics ?? [])
+  })
+  api.on('lsp.log', (e: { lang: string; method: string; params: { type: number; message: string } }) => {
+    const kind = t(['', 'error', 'warn.', 'info', 'log'][e.params?.type] ?? '')
+    setLogs((l) => [...l.slice(-999), `[${e.lang}] ${kind} ${e.params?.message ?? ''}`])
+  })
+  api.on('lsp.status', (e: { lang: string; running: boolean }) => {
+    setLogs((l) => [...l.slice(-999), `[${e.lang}] ${e.running ? t('server started') : t('server stopped')}`])
+  })
+}
 
 function Problems() {
   const list = () =>
@@ -26,11 +33,11 @@ function Problems() {
     <div class="problems">
       <For each={list()} fallback={<EmptyState icon="check" text={t('No problem reported by the language servers.')} />}>
         {({ path, d }) => (
-          <div class="problem" onClick={() => openFile({ path, line: d.range.start.line, col: d.range.start.character })}>
+          <div class="problem" onClick={() => api.openFile({ path, line: d.range.start.line, col: d.range.start.character })}>
             <span class={`sev sev-${d.severity ?? 3}`}>{d.severity === 1 ? t('error') : d.severity === 2 ? t('warn.') : t('info')}</span>
             <span class="problem-msg">{d.message}</span>
             <span class="muted small mono">
-              {relPath(path)}:{d.range.start.line + 1}
+              {api.project.relPath(path)}:{d.range.start.line + 1}
             </span>
           </div>
         )}
@@ -56,8 +63,8 @@ function Output() {
 export const problemCount = () => Object.values(diagnostics).reduce((n, l) => n + (l?.filter((d) => d.severity === 1).length ?? 0), 0)
 
 export function ProblemsTool() {
-  const tab = () => session.bottom.problemsTab
-  const setTab = (id: 'problems' | 'output') => mutate((s) => (s.bottom.problemsTab = id))
+  const tab = () => desk.get().tab
+  const setTab = (id: 'problems' | 'output') => desk.set((s) => (s.tab = id))
   return (
     <div class="panel">
       <div class="tabbar tool-tabbar" role="tablist">

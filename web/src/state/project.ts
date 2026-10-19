@@ -6,7 +6,7 @@ import { batch, createEffect, createRoot, createSignal, on as track } from 'soli
 import { createStore, produce, reconcile, unwrap } from 'solid-js/store'
 import { notify, on, request, setScope } from '../pod/rpc'
 import { Doc } from '../editor/doc'
-import { detectLanguage, lspLanguage, lspLanguageId } from '../editor/languages'
+import { detectLanguage } from '../editor/languages'
 import { merge3 } from '../editor/merge'
 import { toast } from '../ui/toast'
 import { t, tn } from '../i18n'
@@ -77,7 +77,7 @@ export interface SessionData {
   /** Tools of each zone of the icon rails (state/zones). */
   placement: Record<Zone, string[]>
   /** Strip under the editor: tools of the two bottom zones, split at `split` (fraction); shown console and order of the console tabs. */
-  bottom: { left: string | null; right: string | null; height: number; split: number; problemsTab: 'problems' | 'output' }
+  bottom: { left: string | null; right: string | null; height: number; split: number }
   expanded: string[]
   /** Options of the explorer. */
   explorer: { hidden: boolean; excluded: boolean; singleClick: boolean; follow: boolean }
@@ -128,7 +128,7 @@ function emptySession(): SessionData {
     cursors: {},
     left: { panel: 'explorer', width: 260 },
     right: { panel: null, width: 300 },
-    bottom: { left: null, right: null, height: 240, split: 0.5, problemsTab: 'problems' },
+    bottom: { left: null, right: null, height: 240, split: 0.5 },
     placement: normalizePlacement(null),
     expanded: [],
     explorer: { hidden: true, excluded: true, singleClick: false, follow: false },
@@ -159,17 +159,8 @@ const [root, setRoot] = createSignal('')
 const [isLocal, setIsLocal] = createSignal(true)
 export { home, attached }
 const [session, setSession] = createStore<SessionData>(emptySession())
-const [diagnostics, setDiagnostics] = createStore<Record<string, LspDiagnostic[]>>({})
 const [docsVersion, setDocsVersion] = createSignal(0)
-export { project, root, isLocal, session, diagnostics, docsVersion }
-
-export interface LspDiagnostic {
-  range: { start: { line: number; character: number }; end: { line: number; character: number } }
-  severity?: number
-  message: string
-  source?: string
-  code?: string | number
-}
+export { project, root, isLocal, session, docsVersion }
 
 // ---------- session sync ----------
 
@@ -235,6 +226,9 @@ function normalize(raw: any): SessionData {
     delete t.table
   }
   delete (s as any).sqlText
+  // The language servers became a plugin (#120): the tab of the Problems tool.
+  if (raw.bottom?.problemsTab && !s.plugins.languages) s.plugins.languages = { tab: raw.bottom.problemsTab }
+  delete (s.bottom as any).problemsTab
   // The Git tool became a plugin (#118): its tab and the heights of its parts.
   if (raw.git && !s.plugins.git) s.plugins.git = raw.git
   delete (s as any).git
@@ -253,7 +247,7 @@ function normalize(raw: any): SessionData {
     const { open, ...rest } = s.bottom as any
     s.bottom = rest
     if (rest.active === 'problems' || rest.active === 'output') {
-      s.bottom.problemsTab = rest.active
+      s.plugins.languages = { ...s.plugins.languages, tab: rest.active }
       if (open) s.bottom.right = 'problems'
     } else if (open) s.bottom.left = 'console'
   }
@@ -794,35 +788,33 @@ export function loadDoc(path: string): Promise<Doc | null> {
   return entry.loading
 }
 
-/** Wires a document to the pod: shared buffer between windows, language server. */
-const lspFlush = new Map<string, () => void>()
-
-/** Sends the pending document change to the language server now (before a request). */
-export function flushLsp(path: string) {
-  lspFlush.get(path)?.()
+// Buffer events (plugins/api.ts api.buffers): a buffer loaded, saved, forgotten. The language
+// servers follow them (the Languages plugin).
+const openedHandlers = new Set<(doc: Doc) => void>()
+const closedHandlers = new Set<(doc: Doc) => void>()
+const savedHandlers = new Set<(doc: Doc) => void>()
+export function onBufferSave(f: (doc: Doc) => void) {
+  savedHandlers.add(f)
+  return () => savedHandlers.delete(f)
+}
+export function onBufferOpen(f: (doc: Doc) => void) {
+  openedHandlers.add(f)
+  return () => openedHandlers.delete(f)
+}
+export function onBufferClose(f: (doc: Doc) => void) {
+  closedHandlers.add(f)
+  return () => closedHandlers.delete(f)
+}
+/** The buffers loaded in the window. */
+export function openBuffers(): Doc[] {
+  return [...docs.values()].flatMap((e) => (e.doc ? [e.doc] : []))
 }
 
+/** Wires a document to the pod: the buffer shared between windows. */
 function attachDoc(doc: Doc): () => void {
-  const lang = lspLanguage(doc.path)
   let syncTimer: number | undefined
-  let lspTimer: number | undefined
-  let lspPending = false
-  const sendChange = () => {
-    clearTimeout(lspTimer)
-    if (!lspPending) return
-    lspPending = false
-    notify('lsp.notify', { lang, method: 'textDocument/didChange', params: { textDocument: { uri: uri(doc.path), version: 0 }, contentChanges: [{ text: doc.text }] } })
-  }
-  lspFlush.set(doc.path, sendChange)
-  if (lang && !doc.readOnly) {
-    notify('lsp.notify', { lang, method: 'textDocument/didOpen', params: { textDocument: { uri: uri(doc.path), languageId: lspLanguageId(doc.path), version: 1, text: doc.text } } })
-  }
+  for (const f of openedHandlers) f(doc)
   const off = doc.onChange((c) => {
-    if (lang && !doc.readOnly) {
-      lspPending = true
-      clearTimeout(lspTimer)
-      lspTimer = window.setTimeout(sendChange, 250)
-    }
     if (c.origin === 'remote' || c.origin === 'sync') return
     clearTimeout(syncTimer)
     syncTimer = window.setTimeout(() => {
@@ -831,10 +823,8 @@ function attachDoc(doc: Doc): () => void {
   })
   return () => {
     off()
-    lspFlush.delete(doc.path)
     clearTimeout(syncTimer)
-    clearTimeout(lspTimer)
-    if (lang && !doc.readOnly) notify('lsp.notify', { lang, method: 'textDocument/didClose', params: { textDocument: { uri: uri(doc.path) } } })
+    for (const f of closedHandlers) f(doc)
   }
 }
 
@@ -866,8 +856,7 @@ export async function saveDoc(doc: Doc): Promise<boolean> {
     const r = await request('fs.write', { path: doc.path, content: text, ...doc.format() })
     doc.setBase(text, r.rev)
     doc.setDeleted(false)
-    const lang = lspLanguage(doc.path)
-    if (lang) notify('lsp.notify', { lang, method: 'textDocument/didSave', params: { textDocument: { uri: uri(doc.path) } } })
+    for (const f of savedHandlers) f(doc)
     return true
   } catch (e) {
     toast(t('Cannot save {file}: {message}', { file: basename(doc.path), message: (e as Error).message }), 'error')
@@ -956,10 +945,6 @@ on('fs.deleted', (e: { path: string }) => {
 on('buffer.synced', (e: { path: string; content: string | null }) => {
   const d = getDoc(e.path)
   if (d) d.setText(e.content ?? d.base, 'sync')
-})
-on('lsp.diagnostics', (e: { params: { uri: string; diagnostics: LspDiagnostic[] } }) => {
-  const p = pathFromUri(e.params.uri)
-  setDiagnostics(p, e.params.diagnostics ?? [])
 })
 
 // ---------- recent files ----------

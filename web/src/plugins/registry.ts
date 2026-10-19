@@ -14,10 +14,11 @@ import { exec } from './exec'
 import { search } from './search'
 import { git } from './git'
 import { previews } from './previews'
+import { languages } from './languages'
 import { docker } from './docker'
 import { database } from './database'
 
-const builtins: Record<string, PluginModule> = { database, docker, exec, git, hello, previews, search }
+const builtins: Record<string, PluginModule> = { database, docker, exec, git, hello, languages, previews, search }
 
 const [states, setStates] = createSignal<PluginState[]>([])
 export const pluginStates = states

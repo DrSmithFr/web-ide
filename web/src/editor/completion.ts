@@ -1,11 +1,10 @@
-// Code completion: LSP textDocument/completion, client-side fuzzy filtering while typing,
+// Code completion of the editor: the items of a language server (capability language, the
+// Languages plugin) or the words of the buffer, client-side fuzzy filtering while typing,
 // snippets turned into plain text, additional edits (automatic imports) applied with the item.
-import { request } from '../pod/rpc'
-import type { Doc } from '../editor/doc'
-import { lspLanguage } from '../editor/languages'
-import { fileUri, flushLsp } from '../state/project'
+import type { Doc } from './doc'
 import { fuzzy } from '../ui/overlay'
-import { capabilities, toOffsets, type TextEdit } from './edits'
+import { capability } from '../plugins/capabilities'
+import { toOffsets, type TextEdit } from './textEdits'
 
 export interface CompletionItem {
   label: string
@@ -51,40 +50,16 @@ export interface CompletionList {
 
 /** Asks the language server (or falls back to the words of the buffer). */
 export async function complete(doc: Doc, offset: number, trigger: string | null, signal: AbortSignal): Promise<CompletionList> {
-  const lang = lspLanguage(doc.path)
-  const caps = lang ? await capabilities(doc.path) : null
-  if (!caps?.completionProvider) return { items: bufferWords(doc, offset), incomplete: false, resolve: false }
-  flushLsp(doc.path)
-  const { line, col } = doc.pos(offset)
-  const res = await request(
-    'lsp.request',
-    {
-      lang,
-      method: 'textDocument/completion',
-      params: {
-        textDocument: { uri: fileUri(doc.path) },
-        position: { line, character: col },
-        context: trigger ? { triggerKind: 2, triggerCharacter: trigger } : { triggerKind: 1 },
-      },
-    },
-    signal,
-  )
-  const items: CompletionItem[] = Array.isArray(res) ? res : res?.items ?? []
-  return { items, incomplete: !Array.isArray(res) && !!res?.isIncomplete, resolve: !!caps.completionProvider.resolveProvider }
+  const res = await capability('language')?.complete(doc, offset, trigger, signal)
+  return res ?? { items: bufferWords(doc, offset), incomplete: false, resolve: false }
 }
 
 export async function triggerCharacters(doc: Doc): Promise<string[]> {
-  const caps = await capabilities(doc.path)
-  return caps?.completionProvider?.triggerCharacters ?? []
+  return (await capability('language')?.triggerCharacters(doc)) ?? []
 }
 
 export async function resolveItem(doc: Doc, item: CompletionItem): Promise<CompletionItem> {
-  const lang = lspLanguage(doc.path)
-  try {
-    return { ...item, ...(await request('lsp.request', { lang, method: 'completionItem/resolve', params: item })) }
-  } catch {
-    return item
-  }
+  return (await capability('language')?.resolve(doc, item)) ?? item
 }
 
 /** Identifiers of the buffer, as a completion of last resort. */

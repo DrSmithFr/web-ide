@@ -19,14 +19,13 @@ import { focusEditorQuietly, isTyping, lockEditor, mobileView, phone, revealCare
 import { settings, updateSettings } from '../state/settings'
 import { goHome } from '../app/home'
 import { EditorArea } from '../ui/EditorArea'
-import { ProblemsTool, problemCount } from '../tools/problems'
 import { capability } from '../plugins/capabilities'
 import { createIn, Explorer } from '../panels/Explorer'
 import { KanbanPanel } from '../kanban/Panel'
 import { NewTicketHost } from '../kanban/Board'
 import { openBoard, openMilestone, openObjective, openTicket } from '../kanban/state'
 import { AssistantTool } from '../llm/AssistantTool'
-import { ConflictsTool, StructureTool } from '../tools/tools'
+import { ConflictsTool } from '../tools/tools'
 import { InfoTool } from '../tools/InfoTool'
 import { AgentsTool } from '../agents/AgentsTool'
 import { QuestionModal, QuestionsTool } from '../questions/QuestionsTool'
@@ -54,11 +53,9 @@ import { DoodleHost } from '../llm/doodle/DoodleModal'
 export const toolPanels: Record<string, { label: string; icon: string; component: () => JSX.Element; badge?: () => number }> = createMutable({
   explorer: { label: 'Explorer', icon: 'files', component: Explorer },
   kanban: { label: 'Kanban', icon: 'kanban', component: KanbanPanel },
-  problems: { label: 'Problems', icon: 'problems', component: ProblemsTool, badge: problemCount },
   assistant: { label: 'Assistant', icon: 'sparkle', component: AssistantTool },
   agents: { label: 'Agents', icon: 'comment', component: AgentsTool },
   questions: { label: 'Questions', icon: 'question', component: QuestionsTool, badge: () => questions().length },
-  structure: { label: 'Structure', icon: 'outline', component: StructureTool },
   conflicts: { label: 'Conflicts', icon: 'conflict', component: ConflictsTool },
   info: { label: 'Infos', icon: 'info', component: InfoTool },
 })
@@ -250,7 +247,7 @@ const menus: [string, string[]][] = [
   ['menu|Navigate', ['search.everywhere', 'nav.recentFiles', '-', 'nav.back', 'nav.forward', '-', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', '-', 'nav.related', 'nav.test']],
   ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover', '-', 'lsp.rename', 'lsp.format', '-', 'edit.fold', 'edit.unfold', 'edit.foldAll', 'edit.unfoldAll']],
   ['menu|View', ['view.splitRight', 'view.splitDown', '-', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', '-', 'view.visualFocus', 'view.focusOutline', 'view.focusDim', '-', 'view.whitespace', 'view.wordWrap', 'view.markdown', '-', 'console.new', 'palette.open']],
-  ['menu|Tools', ['tool.explorer', 'tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.questions', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.problems', '@tools']],
+  ['menu|Tools', ['tool.explorer', 'tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.questions', 'tool.conflicts', 'tool.info', '-', '@tools']],
   ['menu|Help', ['help.docs', 'help.guide', 'help.glossary', '-', 'help.shortcuts']],
 ]
 
@@ -268,7 +265,7 @@ function openMenu(e: MouseEvent, ids: string[]) {
   // The action runs where the focus was (the menu buttons do not take it), the editor otherwise.
   const prev = focusBeforeMenus()
   // @tools: the tools of the enabled plugins.
-  ids = ids.flatMap((id) => (id === '@tools' ? pluginTools().map((p) => `tool.${p.id}`) : [id]))
+  ids = ids.flatMap((id) => (id === '@tools' ? pluginTools().map((p) => `tool.${p.id}`) : [id])).filter((id) => id === '-' || actionOf(id))
   const items: MenuItem[] = ids.map((id) =>
     id === '-'
       ? { separator: true, label: '' }

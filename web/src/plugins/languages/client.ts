@@ -1,11 +1,6 @@
 // Code navigation through the language servers run by the pod.
-import { request } from '../pod/rpc'
-import type { Doc } from '../editor/doc'
-import { lspLanguage, lspLanguageId } from '../editor/languages'
-import { fileUri, openFile, pathFromUri, relPath, basename } from '../state/project'
-import { pick, type PickItem } from '../ui/overlay'
-import { toast } from '../ui/toast'
-import { t } from '../i18n'
+import type { Doc, PickItem } from '../api'
+import { api, pick, t, toast } from './plugin'
 
 export interface Position {
   line: number
@@ -40,14 +35,14 @@ export const symbolKinds: Record<number, [string, string]> = {
 export class NoServer extends Error {}
 
 export async function lsp<T = any>(path: string, method: string, params: any): Promise<T> {
-  const lang = lspLanguage(path)
+  const lang = api.editor.serverLanguage(path)
   if (!lang) throw new NoServer(t('No language server for this file type'))
-  return request('lsp.request', { lang, method, params })
+  return api.rpc('lsp.request', { lang, method, params })
 }
 
 function at(doc: Doc, offset: number) {
   const { line, col } = doc.pos(offset)
-  return { textDocument: { uri: fileUri(doc.path) }, position: { line, character: col } }
+  return { textDocument: { uri: api.project.fileUri(doc.path) }, position: { line, character: col } }
 }
 
 export function toLocations(res: any): Location[] {
@@ -55,15 +50,15 @@ export function toLocations(res: any): Location[] {
   const list = Array.isArray(res) ? res : [res]
   return list
     .map((l: any) => {
-      if (l.targetUri) return { path: pathFromUri(l.targetUri), range: l.targetSelectionRange ?? l.targetRange }
-      if (l.uri) return { path: pathFromUri(l.uri), range: l.range }
+      if (l.targetUri) return { path: api.project.pathFromUri(l.targetUri), range: l.targetSelectionRange ?? l.targetRange }
+      if (l.uri) return { path: api.project.pathFromUri(l.uri), range: l.range }
       return null
     })
     .filter((l): l is Location => !!l)
 }
 
 export function jump(loc: Location) {
-  return openFile({ path: loc.path, line: loc.range.start.line, col: loc.range.start.character })
+  return api.openFile({ path: loc.path, line: loc.range.start.line, col: loc.range.start.character })
 }
 
 /** One location: jump. Several: a list with the line of each one. */
@@ -80,7 +75,7 @@ export async function showLocations(locs: Location[], title: string) {
   for (const l of locs.slice(0, 200)) {
     if (!lines.has(l.path)) {
       try {
-        const f = await request('fs.read', { path: l.path })
+        const f = await api.files.read(l.path)
         lines.set(l.path, (f.content as string).split('\n'))
       } catch {
         lines.set(l.path, [])
@@ -88,8 +83,8 @@ export async function showLocations(locs: Location[], title: string) {
     }
   }
   const items: PickItem<Location>[] = locs.map((l) => ({
-    label: (lines.get(l.path)?.[l.range.start.line] ?? '').trim() || basename(l.path),
-    detail: `${relPath(l.path)}:${l.range.start.line + 1}`,
+    label: (lines.get(l.path)?.[l.range.start.line] ?? '').trim() || api.project.basename(l.path),
+    detail: `${api.project.relPath(l.path)}:${l.range.start.line + 1}`,
     value: l,
   }))
   const chosen = await pick({ placeholder: `${title} (${locs.length})`, items, codeLabel: true, pathDetail: true })
@@ -147,7 +142,7 @@ export async function gotoTypeDefinition(doc: Doc, offset: number) {
 }
 
 export async function documentSymbols(path: string): Promise<DocumentSymbol[]> {
-  const res = await lsp<any[]>(path, 'textDocument/documentSymbol', { textDocument: { uri: fileUri(path) } })
+  const res = await lsp<any[]>(path, 'textDocument/documentSymbol', { textDocument: { uri: api.project.fileUri(path) } })
   if (!res) return []
   // SymbolInformation[] (flat) is converted to the hierarchical form.
   return res.map((s: any) => (s.selectionRange ? s : { name: s.name, kind: s.kind, detail: s.containerName, range: s.location.range, selectionRange: s.location.range }))
@@ -184,7 +179,7 @@ export async function gotoSuperMethod(doc: Doc, offset: number) {
       return
     }
     const items = await lsp<any[]>(doc.path, 'textDocument/prepareTypeHierarchy', {
-      textDocument: { uri: fileUri(doc.path) },
+      textDocument: { uri: api.project.fileUri(doc.path) },
       position: cls.selectionRange.start,
     }).catch(() => null)
     if (!items?.length) {
@@ -194,7 +189,7 @@ export async function gotoSuperMethod(doc: Doc, offset: number) {
     const supers = await lsp<any[]>(doc.path, 'typeHierarchy/supertypes', { item: items[0] })
     const found: Location[] = []
     for (const sup of supers ?? []) {
-      const path = pathFromUri(sup.uri)
+      const path = api.project.pathFromUri(sup.uri)
       const syms = await symbolsOf(path)
       const target = flatten(syms).find(({ s }) => s.name === method.name && methodKinds.has(s.kind) && contains(sup.range, s.range.start.line, s.range.start.character))
       if (target) found.push({ path, range: target.s.selectionRange })
@@ -214,14 +209,14 @@ async function symbolsOf(path: string): Promise<DocumentSymbol[]> {
   } catch {
     /* fall through */
   }
-  const lang = lspLanguage(path)
-  const f = await request('fs.read', { path })
-  const uri = fileUri(path)
-  await request('lsp.notify', { lang, method: 'textDocument/didOpen', params: { textDocument: { uri, languageId: lspLanguageId(path), version: 1, text: f.content } } })
+  const lang = api.editor.serverLanguage(path)
+  const f = await api.files.read(path)
+  const uri = api.project.fileUri(path)
+  await api.rpc('lsp.notify', { lang, method: 'textDocument/didOpen', params: { textDocument: { uri, languageId: api.editor.serverLanguageId(path), version: 1, text: f.content } } })
   try {
     return await documentSymbols(path)
   } finally {
-    await request('lsp.notify', { lang, method: 'textDocument/didClose', params: { textDocument: { uri } } })
+    await api.rpc('lsp.notify', { lang, method: 'textDocument/didClose', params: { textDocument: { uri } } })
   }
 }
 
@@ -234,13 +229,13 @@ export async function hoverText(doc: Doc, offset: number): Promise<string> {
 }
 
 export async function workspaceSymbols(path: string, query: string, signal?: AbortSignal) {
-  const lang = lspLanguage(path)
+  const lang = api.editor.serverLanguage(path)
   if (!lang) return []
-  const res = await request<any[]>('lsp.request', { lang, method: 'workspace/symbol', params: { query } }, signal)
+  const res = await api.rpc<any[]>('lsp.request', { lang, method: 'workspace/symbol', params: { query } }, signal)
   return (res ?? []).map((s: any) => ({
     name: s.name as string,
     kind: s.kind as number,
     container: (s.containerName as string) ?? '',
-    loc: s.location?.range ? { path: pathFromUri(s.location.uri), range: s.location.range } : null,
+    loc: s.location?.range ? { path: api.project.pathFromUri(s.location.uri), range: s.location.range } : null,
   }))
 }

@@ -7,7 +7,7 @@ import type { Doc } from '../editor/doc'
 import type { EditorView } from '../editor/view'
 import {
   applyItem, complete, completionKinds, docText, filterItems, isWordChar, resolveItem, triggerCharacters, wordStart, type CompletionItem,
-} from '../lsp/completion'
+} from '../editor/completion'
 import { toast } from './toast'
 import { t } from '../i18n'
 

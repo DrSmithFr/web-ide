@@ -1,0 +1,26 @@
+{
+  "id": "languages",
+  "name": "Language servers",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "permissions": ["exec"],
+  "provides": ["language"],
+  "namespaces": ["lsp", "nav"],
+  "contributes": {
+    "tools": [
+      { "id": "problems", "label": "Problems", "icon": "problems", "zone": "bottomRight", "before": "forwards" },
+      { "id": "structure", "label": "Structure", "icon": "outline", "zone": "right", "before": "conflicts" }
+    ],
+    "commands": [
+      { "id": "lsp.definition", "label": "Go to declaration or usages", "category": "Code" },
+      { "id": "lsp.implementation", "label": "Go to implementations", "category": "Code" },
+      { "id": "lsp.typeDefinition", "label": "Go to type declaration", "category": "Code" },
+      { "id": "lsp.superMethod", "label": "Go to super method", "category": "Code" },
+      { "id": "lsp.references", "label": "Find usages", "category": "Code" },
+      { "id": "lsp.hover", "label": "Quick documentation", "category": "Code" },
+      { "id": "lsp.rename", "label": "Rename the symbol…", "category": "Code" },
+      { "id": "lsp.format", "label": "Reformat the code", "category": "Code" },
+      { "id": "nav.fileStructure", "label": "File structure", "category": "Navigation" }
+    ]
+  }
+}
