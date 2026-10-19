@@ -2,7 +2,7 @@
   "id": "hello",
   "name": "Hello",
   "version": "1.0.0",
-  "apiVersion": 0,
+  "apiVersion": 1,
   "requires": ["terminal"],
   "contributes": {
     "tools": [{ "id": "hello", "label": "Hello", "icon": "info", "zone": "right" }],

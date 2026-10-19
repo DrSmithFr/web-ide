@@ -368,5 +368,6 @@
   "invalid .ide/plugins.json: %v": ".ide/plugins.json invalide : %v",
   "the %s plugin is disabled on this project": "le plugin %s est désactivé sur ce projet",
   "unknown plugin: %s": "plugin inconnu : %s",
-  "%s needs the %s capability, off on this project (Settings > Plugins)": "%s a besoin de la capacité %s, désactivée sur ce projet (Réglages > Plugins)"
+  "%s needs the %s capability, off on this project (Settings > Plugins)": "%s a besoin de la capacité %s, désactivée sur ce projet (Réglages > Plugins)",
+  "starting a development needs the Git plugin, off on this project (Settings > Plugins)": "démarrer un développement demande le plugin Git, désactivé sur ce projet (Réglages > Plugins)"
 }

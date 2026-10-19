@@ -5,6 +5,7 @@ import type { TabState } from '../state/project'
 import type { Zone } from '../state/zones'
 import type { PluginApi } from './api'
 import type { SearchProvider } from '../popups/searchProviders'
+import type { DiffSource } from '../ui/diffSources'
 
 export interface PluginTool {
   id: string
@@ -47,6 +48,8 @@ export interface PluginContributions {
   /** Tab views, opened as tabs of kind plugin:<plugin>/<view>. */
   views?: Record<string, (props: { tab: TabState; paneId: string }) => JSX.Element>
   commands?: Record<string, () => void>
+  /** Sources of the diff view (the sides of a diff tab whose source is its id). */
+  diffSources?: DiffSource[]
   /** Kinds of results of Search Everywhere, each with its tab. */
   searchProviders?: SearchProvider[]
   /** Components mounted once in the project window (a modal the plugin opens). */

@@ -4,17 +4,19 @@
 import { createMemo, createRoot, createSignal } from 'solid-js'
 import { on, request } from '../pod/rpc'
 import { setPluginActions } from '../keys/bindings'
-import { makeApi } from './api'
+import { API_VERSION, makeApi } from './api'
 import type { PluginContributions, PluginModule, PluginState } from './types'
 import { setCapabilityGate } from './capabilities'
 import { setPluginProviders } from '../popups/searchProviders'
+import { setDiffSources } from '../ui/diffSources'
 import { hello } from './hello'
 import { exec } from './exec'
 import { search } from './search'
+import { git } from './git'
 import { docker } from './docker'
 import { database } from './database'
 
-const builtins: Record<string, PluginModule> = { database, docker, exec, hello, search }
+const builtins: Record<string, PluginModule> = { database, docker, exec, git, hello, search }
 
 const [states, setStates] = createSignal<PluginState[]>([])
 export const pluginStates = states
@@ -31,7 +33,7 @@ export function setPluginStates(list: PluginState[] | undefined, opened = false)
   list ??= []
   for (const s of list) {
     const mod = builtins[s.manifest.id]
-    if (s.enabled && mod && !active[s.manifest.id]) active[s.manifest.id] = mod.activate(makeApi(s.manifest.id))
+    if (s.enabled && mod && !active[s.manifest.id] && s.manifest.apiVersion === API_VERSION) active[s.manifest.id] = mod.activate(makeApi(s.manifest.id))
   }
   setStates(list)
   setPluginActions(
@@ -41,6 +43,7 @@ export function setPluginStates(list: PluginState[] | undefined, opened = false)
     ]),
   )
   setPluginProviders(enabled().flatMap((s) => active[s.manifest.id].searchProviders ?? []))
+  setDiffSources(enabled().flatMap((s) => active[s.manifest.id].diffSources ?? []))
   const now = new Set(enabled().map((s) => s.manifest.id))
   for (const id of now) if (opened || !running.has(id)) active[id].opened?.()
   running = now

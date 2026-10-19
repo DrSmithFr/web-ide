@@ -30,6 +30,8 @@ export interface TabState {
   head?: boolean
   rev?: string
   from?: string
+  /** Diff tabs: the source of their sides (ui/diffSources.ts), git when unset. */
+  source?: string
   /** Number of the kanban ticket shown (kind ticket), of the milestone (kind milestone), or of the objective (kind objective). */
   ticket?: number
   milestone?: number
@@ -79,8 +81,6 @@ export interface SessionData {
   expanded: string[]
   /** Options of the explorer. */
   explorer: { hidden: boolean; excluded: boolean; singleClick: boolean; follow: boolean }
-  /** Git tool: shown tab, heights of the commit form and of the commit detail. */
-  git: { tab: 'commit' | 'history'; form: number; detail: number }
   /** The state of each plugin in the desk (plugins/api.ts desk()), by plugin id. */
   plugins: Record<string, Record<string, unknown>>
   /** Other worktrees of the repository open in the window, and the one shown (none: the project of the window). */
@@ -132,7 +132,6 @@ function emptySession(): SessionData {
     placement: normalizePlacement(null),
     expanded: [],
     explorer: { hidden: true, excluded: true, singleClick: false, follow: false },
-    git: { tab: 'commit', form: 150, detail: 260 },
     plugins: {},
     attached: [],
     sizes: {},
@@ -217,7 +216,7 @@ on('session.changed', (e: { session: SessionData; desk: number }, from?: string)
 function normalize(raw: any): SessionData {
   const d = emptySession()
   if (!raw || typeof raw !== 'object' || !raw.layout) return d
-  const s: SessionData = { ...d, ...raw, left: { ...d.left, ...raw.left }, right: { ...d.right, ...raw.right }, bottom: { ...d.bottom, ...raw.bottom }, explorer: { ...d.explorer, ...raw.explorer }, git: { ...d.git, ...raw.git }, plugins: { ...raw.plugins }, sizes: { ...raw.sizes } }
+  const s: SessionData = { ...d, ...raw, left: { ...d.left, ...raw.left }, right: { ...d.right, ...raw.right }, bottom: { ...d.bottom, ...raw.bottom }, explorer: { ...d.explorer, ...raw.explorer }, plugins: { ...raw.plugins }, sizes: { ...raw.sizes } }
   if (s.left.panel && panelAliases[s.left.panel]) {
     s.right.panel = panelAliases[s.left.panel]
     s.left.panel = null
@@ -236,6 +235,9 @@ function normalize(raw: any): SessionData {
     delete t.table
   }
   delete (s as any).sqlText
+  // The Git tool became a plugin (#118): its tab and the heights of its parts.
+  if (raw.git && !s.plugins.git) s.plugins.git = raw.git
+  delete (s as any).git
   // The Console tool became the Exec plugin (#116): the console shown and the order of the tabs.
   if (!s.plugins.exec && (raw.bottom?.active || raw.bottom?.order?.length)) s.plugins.exec = { active: raw.bottom.active ?? null, order: raw.bottom.order ?? [] }
   delete (s.bottom as any).active

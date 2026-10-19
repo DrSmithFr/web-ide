@@ -11,8 +11,9 @@ import (
 	"strings"
 )
 
-// APIVersion is the version of the plugin API; 0 until it is frozen (after Git moves).
-const APIVersion = 0
+// APIVersion is the version of the plugin API, frozen as 1 once Git moved (#118): a change of
+// the API is a new version (docs/design/plugins.md, *API v1*).
+const APIVersion = 1
 
 // Manifest is the plugin.json of a plugin.
 type Manifest struct {

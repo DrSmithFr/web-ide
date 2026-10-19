@@ -196,7 +196,8 @@ export function runUiTool(tool: string, args: Record<string, any>, base?: string
 async function showDiff(p: string, base?: string): Promise<UiResult> {
   if (!p) throw new Error('path is missing')
   const abs = absPath(p, base)
-  openTab({ kind: 'diff', path: abs, head: true, title: `${basename(abs)} (${t('changes')})` })
+  if (!capability('git')) throw new Error('the Git plugin is off on this project: no diff to show')
+  openTab({ kind: 'diff', source: 'git', path: abs, head: true, title: `${basename(abs)} (${t('changes')})` })
   return ok(`Changes of ${relPath(abs)} shown in the diff view.`, relPath(abs))
 }
 

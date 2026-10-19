@@ -1,19 +1,12 @@
 // Commit tab: the changed files as a tree with a check box per row (checked: staged),
 // and the commit form at the bottom.
 import { createEffect, createMemo, createSignal, on, Show } from 'solid-js'
-import { request } from '../../pod/rpc'
-import { mutate, openFile, relPath, session } from '../../state/project'
-import { fileState, gitStatus, refreshGit, type GitFile } from '../../state/git'
-import { contextMenu } from '../../ui/overlay'
-import { errorToast, toast } from '../../ui/toast'
-import { Icon } from '../../ui/icons'
-import { EmptyState } from '../../ui/EmptyState'
-import { t, tn } from '../../i18n'
+import { fileState, gitStatus, refreshGit, type GitFile } from './state'
 import { discard, openChange, push, pushMenu, stage, unstage, type PushMode } from './actions'
 import { FileTree } from './FileTree'
 import { Resizer } from './Resizer'
 import { buildTree, type TreeNode } from './tree'
-import { copyText } from '../../ui/clipboard'
+import { api, contextMenu, copyText, desk, EmptyState, errorToast, Icon, t, tn, toast } from './plugin'
 
 // Kept while the tool is hidden.
 const [message, setMessage] = createSignal('')
@@ -52,7 +45,7 @@ export function ChangesTab() {
       ...(f
         ? [
             { label: t('Show the differences'), action: () => openChange(f) },
-            { label: t('Open the file'), action: () => openFile(f.path), disabled: f.work === 'D' || f.index === 'D' },
+            { label: t('Open the file'), action: () => api.openFile(f.path), disabled: f.work === 'D' || f.index === 'D' },
             { separator: true, label: '' },
           ]
         : []),
@@ -71,7 +64,7 @@ export function ChangesTab() {
     }
     setBusy(true)
     try {
-      const out: string = await request('git.commit', { message: message(), amend: amend() })
+      const out: string = await api.rpc('git.commit', { message: message(), amend: amend() })
       setMessage('')
       setAmend(false)
       toast(out.split('\n')[0] || t('Commit created'), 'ok')
@@ -98,7 +91,7 @@ export function ChangesTab() {
     }
     if (message().trim()) return
     try {
-      const head = await request<{ message: string }>('git.commitInfo', { rev: 'HEAD' })
+      const head = await api.rpc<{ message: string }>('git.commitInfo', { rev: 'HEAD' })
       amendText = head.message
       if (amend() && !message().trim()) setMessage(head.message)
     } catch {
@@ -143,17 +136,17 @@ export function ChangesTab() {
             closed={closed}
             setClosed={setClosed}
             stateOf={(f) => fileState(f.path) ?? 'modified'}
-            fromOf={(f) => (f.origPath ? relPath(f.origPath) : undefined)}
+            fromOf={(f) => (f.origPath ? api.project.relPath(f.origPath) : undefined)}
             end={(n) => <Check node={n} />}
             toggle={toggle}
             open={openChange}
-            openFile={(f) => openFile(f.path)}
+            openFile={(f) => api.openFile(f.path)}
             menu={menu}
           />
         </Show>
       </div>
-      <Resizer height={session.git.form} set={(h) => mutate((s) => (s.git.form = h))} />
-      <div class="git-bottom git-commit" style={{ height: `${session.git.form}px` }}>
+      <Resizer height={desk.get().form} set={(h) => desk.set((s) => (s.form = h))} />
+      <div class="git-bottom git-commit" style={{ height: `${desk.get().form}px` }}>
         <textarea
           class="input"
           placeholder={t('Commit message (Ctrl+Enter)')}

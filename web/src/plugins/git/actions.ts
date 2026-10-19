@@ -1,16 +1,11 @@
 // Git actions shared by the tabs of the Git tool: requests, diffs, remote commands, commit actions.
-import { request } from '../../pod/rpc'
-import { basename, openFile, openTab, relPath } from '../../state/project'
-import { gitStatus, refreshGit, type GitFile } from '../../state/git'
-import { capability } from '../../plugins/capabilities'
-import { contextMenu, prompt, type MenuItem } from '../../ui/overlay'
-import { errorToast, toast } from '../../ui/toast'
-import { t, tn } from '../../i18n'
-import { copyText } from '../../ui/clipboard'
+import { gitStatus, refreshGit, type GitFile } from './state'
+import { api, contextMenu, copyText, errorToast, prompt, t, tn, toast } from './plugin'
+import type { MenuItem } from '../api'
 
 export async function act(method: string, params: object, ok?: string): Promise<boolean> {
   try {
-    await request(method, params)
+    await api.rpc(method, params)
     if (ok) toast(ok, 'ok', undefined, 2000)
     return true
   } catch (e) {
@@ -23,8 +18,8 @@ export async function act(method: string, params: object, ok?: string): Promise<
 
 /** Diff of a changed file against HEAD (a conflicted file opens in the editor). */
 export function openChange(f: GitFile) {
-  if (f.conflict) return openFile(f.path)
-  openTab({ kind: 'diff', path: f.path, head: true, from: f.origPath, title: `${basename(f.path)} (${t('changes')})` })
+  if (f.conflict) return api.openFile(f.path)
+  api.openDiff({ path: f.path, head: true, from: f.origPath, title: `${api.project.basename(f.path)} (${t('changes')})` })
 }
 
 export interface CommitFile {
@@ -35,11 +30,11 @@ export interface CommitFile {
 
 /** Diff of a file in a commit, against the first parent. */
 export function openCommitFile(hash: string, f: CommitFile) {
-  openTab({ kind: 'diff', path: f.path, rev: hash, from: f.origPath, title: `${basename(f.path)} (${hash.slice(0, 7)})` })
+  api.openDiff({ path: f.path, rev: hash, from: f.origPath, title: `${api.project.basename(f.path)} (${hash.slice(0, 7)})` })
 }
 
 export async function discard(list: GitFile[]) {
-  const names = list.map((f) => relPath(f.path))
+  const names = list.map((f) => api.project.relPath(f.path))
   const what = names.length > 3 ? tn(names.length, '{n} file', '{n} files') : names.join(', ')
   if (!confirm(`${t('Discard the changes of {files}?', { files: what })} ${list.some((f) => f.untracked) ? t('Untracked files will be deleted.') + ' ' : ''}${t('This cannot be undone.')}`)) return
   await act('git.discard', { paths: list.filter((f) => !f.untracked).map((f) => f.path), untracked: list.filter((f) => f.untracked).map((f) => f.path) })
@@ -49,8 +44,8 @@ export async function discard(list: GitFile[]) {
 export async function stage(list: GitFile[]) {
   const marked: string[] = []
   for (const f of list.filter((f) => f.conflict)) {
-    const content: string = await request<any>('fs.read', { path: f.path }).then((r) => r.content ?? '', () => '')
-    if (/^<{7}( |$)/m.test(content)) marked.push(relPath(f.path))
+    const content: string = await api.rpc<any>('fs.read', { path: f.path }).then((r) => r.content ?? '', () => '')
+    if (/^<{7}( |$)/m.test(content)) marked.push(api.project.relPath(f.path))
   }
   if (marked.length && !confirm(t('{files} still contain conflict markers. Mark them as resolved?', { files: marked.join(', ') }))) return
   await act('git.stage', { paths: list.map((f) => f.path) })
@@ -60,7 +55,7 @@ export const unstage = (list: GitFile[]) => act('git.unstage', { paths: list.map
 
 /** Runs pull, push or fetch in a terminal (credential prompts stay interactive). */
 export function remote(args: string[]) {
-  return (capability('terminal')?.open({ kind: 'task', command: ['git', ...args], title: `git ${args.join(' ')}` }) ?? Promise.resolve()).then(() => setTimeout(() => refreshGit(0), 3000))
+  return (api.use('terminal')?.open({ kind: 'task', command: ['git', ...args], title: `git ${args.join(' ')}` }) ?? Promise.resolve()).then(() => setTimeout(() => refreshGit(0), 3000))
 }
 
 export type PushMode = '' | 'lease' | 'force'

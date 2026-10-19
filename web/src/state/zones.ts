@@ -8,7 +8,7 @@ export type Zone = 'left' | 'bottomLeft' | 'bottomRight' | 'right'
 export const zones: Zone[] = ['left', 'bottomLeft', 'bottomRight', 'right']
 
 const corePlacement: Record<Zone, string[]> = {
-  left: ['explorer', 'git', 'kanban'],
+  left: ['explorer', 'kanban'],
   bottomLeft: [],
   bottomRight: ['problems', 'forwards'],
   right: ['assistant', 'agents', 'questions', 'structure', 'conflicts', 'info'],
@@ -23,10 +23,20 @@ export function setPluginZones(plugins: { manifest: { contributes: { tools?: { i
 export function defaultPlacement(): Record<Zone, string[]> {
   const out = {} as Record<Zone, string[]>
   for (const z of zones) {
-    const list = [...corePlacement[z]]
-    for (const t of pluginZones.filter((x) => x.zone === z)) {
-      const i = t.before ? list.indexOf(t.before) : -1
-      list.splice(i < 0 ? list.length : i, 0, t.id)
+    const mine = pluginZones.filter((x) => x.zone === z)
+    const list = [...corePlacement[z], ...mine.map((t) => t.id)]
+    // Each tool goes before the one it names, which may be a plugin's too: moved until stable.
+    for (let pass = 0, moved = true; moved && pass <= mine.length; pass++) {
+      moved = false
+      for (const t of mine) {
+        const i = list.indexOf(t.id)
+        const j = t.before ? list.indexOf(t.before) : -1
+        if (j >= 0 && i > j) {
+          list.splice(i, 1)
+          list.splice(j, 0, t.id)
+          moved = true
+        }
+      }
     }
     out[z] = list
   }

@@ -4,7 +4,6 @@ import { podPath } from '../app/base'
 import { createEffect, createSignal, Show } from 'solid-js'
 import { RpcError, request } from '../pod/rpc'
 import { home, project, showWorktree } from '../state/project'
-import { gitStatus } from '../state/git'
 import { board, ensureBoard, openTicket, openWorktreeWindow, statusLabels, summary, worktreeProject } from '../kanban/state'
 import { pick, prompt, type PickItem } from '../ui/overlay'
 import { errorToast, toast } from '../ui/toast'
@@ -34,7 +33,7 @@ export function ProjectBar() {
     return s && project()?.parent ? withBadge(s) : s
   }
   const ticket = () => project()?.ticket
-  const branch = () => gitStatus()?.branch ?? ''
+  const branch = () => capability('git')?.status()?.branch ?? ''
   createEffect(() => {
     const name = owner()?.name ?? project()?.name
     const d = desks.desks.find((x) => x.n === desk())
@@ -111,7 +110,7 @@ export function ProjectBar() {
   // A branch is checked out in a new worktree: the main folder and its changes stay as they are.
   const openBranch = async (worktrees: Worktree[], r: DOMRect) => {
     const used = new Set(worktrees.map((w) => w.branch))
-    const branches = await request<{ name: string; remote?: boolean; upstream?: string }[]>('git.branches')
+    const branches = (await capability('git')?.branches()) ?? []
     const local = new Set(branches.filter((b) => !b.remote).map((b) => b.name))
     const choice = await pick<string>({
       placeholder: t('Open a branch…'),

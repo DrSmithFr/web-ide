@@ -2,7 +2,7 @@
   "id": "search",
   "name": "Search",
   "version": "1.0.0",
-  "apiVersion": 0,
+  "apiVersion": 1,
   "contributes": {
     "tools": [{ "id": "search", "label": "Search", "icon": "search", "zone": "left", "before": "git" }],
     "commands": [{ "id": "search.global", "label": "Search in the project", "category": "Search" }]

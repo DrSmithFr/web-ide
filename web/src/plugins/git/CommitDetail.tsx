@@ -1,15 +1,10 @@
 // Detail of a commit of the history: actions, author, message, parents and changed files.
 import { createMemo, createResource, createSignal, For, on, Show } from 'solid-js'
-import { request } from '../../pod/rpc'
-import { openFile, relPath } from '../../state/project'
-import { gitRevision, gitStatus } from '../../state/git'
-import { contextMenu } from '../../ui/overlay'
-import { Icon } from '../../ui/icons'
-import { fmtAgo, fmtDate, t, tn } from '../../i18n'
+import { gitRevision, gitStatus } from './state'
 import { branchAt, copyHash, openCommitFile, reset, revert, type CommitFile, type LogCommit } from './actions'
 import { FileTree } from './FileTree'
 import { buildTree } from './tree'
-import { copyText } from '../../ui/clipboard'
+import { api, contextMenu, copyText, fmtAgo, fmtDate, Icon, t, tn } from './plugin'
 
 interface Info extends LogCommit {
   message: string
@@ -23,7 +18,7 @@ const colorOf: Record<string, string> = { A: 'added', D: 'deleted', '?': 'untrac
 export function CommitDetail(props: { hash: string; select: (hash: string) => void; close: () => void }) {
   const [info] = createResource(
     () => ({ hash: props.hash, rev: gitRevision() }),
-    ({ hash }) => request<Info>('git.commitInfo', { rev: hash }),
+    ({ hash }) => api.rpc<Info>('git.commitInfo', { rev: hash }),
   )
   const [closed, setClosed] = createSignal(new Set<string>())
   // Rebuilt only when the files change (the commit is read again on every change of the repository).
@@ -98,14 +93,14 @@ export function CommitDetail(props: { hash: string; select: (hash: string) => vo
                   closed={closed}
                   setClosed={setClosed}
                   stateOf={(f) => colorOf[f.status] ?? 'modified'}
-                  fromOf={(f) => (f.origPath ? relPath(f.origPath) : undefined)}
+                  fromOf={(f) => (f.origPath ? api.project.relPath(f.origPath) : undefined)}
                   open={(f) => openCommitFile(c().hash, f)}
-                  openFile={(f) => f.status !== 'D' && openFile(f.path)}
+                  openFile={(f) => f.status !== 'D' && api.openFile(f.path)}
                   menu={(e, n) =>
                     n.item &&
                     contextMenu(e, [
                       { label: t('Show the differences'), action: () => openCommitFile(c().hash, n.item!) },
-                      { label: t('Open the file'), action: () => openFile(n.item!.path), disabled: n.item.status === 'D' },
+                      { label: t('Open the file'), action: () => api.openFile(n.item!.path), disabled: n.item.status === 'D' },
                       { label: t('Copy the path'), action: () => copyText(n.item!.path) },
                     ])
                   }

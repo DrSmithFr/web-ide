@@ -22,11 +22,9 @@ import { EditorArea } from '../ui/EditorArea'
 import { ProblemsTool, problemCount } from '../tools/problems'
 import { capability } from '../plugins/capabilities'
 import { createIn, Explorer } from '../panels/Explorer'
-import { GitPanel } from '../panels/git/GitPanel'
 import { KanbanPanel } from '../kanban/Panel'
 import { NewTicketHost } from '../kanban/Board'
 import { openBoard, openMilestone, openObjective, openTicket } from '../kanban/state'
-import { refreshGit } from '../state/git'
 import { AssistantTool } from '../llm/AssistantTool'
 import { ConflictsTool, StructureTool } from '../tools/tools'
 import { InfoTool } from '../tools/InfoTool'
@@ -56,7 +54,6 @@ import { DoodleHost } from '../llm/doodle/DoodleModal'
 /** Tools of the four zones, the core's then those of the enabled plugins; their placement comes from state/zones. */
 export const toolPanels: Record<string, { label: string; icon: string; component: () => JSX.Element; badge?: () => number }> = createMutable({
   explorer: { label: 'Explorer', icon: 'files', component: Explorer },
-  git: { label: 'Git', icon: 'branch', component: GitPanel },
   kanban: { label: 'Kanban', icon: 'kanban', component: KanbanPanel },
   problems: { label: 'Problems', icon: 'problems', component: ProblemsTool, badge: problemCount },
   forwards: { label: 'Port forwards and previews', icon: 'ports', component: ForwardsTool },
@@ -255,7 +252,7 @@ const menus: [string, string[]][] = [
   ['menu|Navigate', ['search.everywhere', 'nav.recentFiles', '-', 'nav.back', 'nav.forward', '-', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', '-', 'nav.related', 'nav.test']],
   ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover', '-', 'lsp.rename', 'lsp.format', '-', 'edit.fold', 'edit.unfold', 'edit.foldAll', 'edit.unfoldAll']],
   ['menu|View', ['view.splitRight', 'view.splitDown', '-', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', '-', 'view.visualFocus', 'view.focusOutline', 'view.focusDim', '-', 'view.whitespace', 'view.wordWrap', 'view.markdown', '-', 'console.new', 'palette.open']],
-  ['menu|Tools', ['tool.explorer', 'tool.git', 'tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.questions', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.problems', 'tool.forwards', '@tools']],
+  ['menu|Tools', ['tool.explorer', 'tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.questions', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.problems', 'tool.forwards', '@tools']],
   ['menu|Help', ['help.docs', 'help.guide', 'help.glossary', '-', 'help.shortcuts']],
 ]
 
@@ -659,7 +656,6 @@ export function ProjectPage(props: { id: string }) {
       // The URL names the desk shown (a removed desk of an old link opened desk 1).
       if (urlDesk() !== desk()) navigate(deskPath(props.id, desk()), true)
       setReady(true)
-      refreshGit(0)
       window.name = `project-${props.id}` // see openWorktreeWindow
     } catch (e) {
       setError((e as Error).message)

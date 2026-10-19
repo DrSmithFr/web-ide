@@ -1,9 +1,8 @@
 // Tree of changed files, drawn as the explorer: a click opens the file's diff, a double
 // click the file; arrows move, Space toggles the check box of the row.
 import { createEffect, createMemo, createSignal, For, type JSX, on, Show } from 'solid-js'
-import { Icon } from '../../ui/icons'
-import { FileIcon } from '../fileIcons'
 import type { TreeNode } from './tree'
+import { FileIcon, Icon } from './plugin'
 
 export function FileTree<T>(props: {
   root: TreeNode<T>

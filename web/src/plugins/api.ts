@@ -1,8 +1,9 @@
 // The API a plugin's page module receives (docs/design/plugins.md): the only door to the core,
 // so that a built-in plugin uses nothing an external one could not.
 import { notifyIn, notifyOn, on, openChannel, request, requestIn, type Channel } from '../pod/rpc'
-import { fmtDate, t, tn } from '../i18n'
-import { attached, findLeaf, home, isLocal, mutate, openFile, openTab, openTextTab, project, relPath, root, session, setActivePane, type TabState } from '../state/project'
+import { fmtAgo, fmtDate, t, tn } from '../i18n'
+import { FileIcon } from '../panels/fileIcons'
+import { attached, basename, findLeaf, home, isLocal, mutate, openFile, openTab, openTextTab, project, relPath, root, session, setActivePane, type TabState } from '../state/project'
 import { showTool } from '../state/zones'
 import { detachTab, openTile, tileMode } from '../state/tiles'
 import { phone } from '../state/mobile'
@@ -27,6 +28,9 @@ import { Doc } from '../editor/doc'
 import { registerAction, shortcutOf } from '../keys/bindings'
 import { parseAnsi, stripAnsi } from '../ui/ansi'
 
+/** The version of this API (the pod refuses a manifest of another one): 1, frozen in #118. */
+export const API_VERSION = 1
+
 export function makeApi(id: string) {
   const full = (method: string) => (method.includes('.') ? method : `${id}.${method}`)
   return {
@@ -46,6 +50,7 @@ export function makeApi(id: string) {
     t,
     tn,
     fmtDate,
+    fmtAgo,
     openFile,
     /** The project of the window: local, or on an SSH host; id: its main project (events carry it). */
     project: {
@@ -58,6 +63,7 @@ export function makeApi(id: string) {
       attached: () => Object.keys(attached),
       /** A path of the project as shown (relative to its root). */
       relPath,
+      basename,
     },
     /** Capabilities as services: the plugin's own (provide) and those of the others (use). */
     provide: <K extends keyof Capabilities>(name: K, impl: Capabilities[K]) => provide(id, name, impl),
@@ -76,6 +82,8 @@ export function makeApi(id: string) {
       },
       tabSize: () => settings.editor.tabSize,
     },
+    /** The files of the project, as the pod reads them (from the disk, not the buffers). */
+    files: { read: (path: string) => request<{ content?: string }>('fs.read', { path }) },
     /** The SSH settings of the pod (agent, keys), for a form offering an SSH tunnel. */
     ssh: { info: () => request('ssh.info') },
     /**
@@ -100,6 +108,8 @@ export function makeApi(id: string) {
         const tab = s.tabs[tabId]
         if (tab?.kind.startsWith(`plugin:${id}/`)) f((tab.state ??= {}) as T)
       }),
+    /** A diff tab of the core's diff view, whose sides come from the plugin's diff source. */
+    openDiff: (tab: Omit<TabState, 'id' | 'kind' | 'source'>) => openTab({ ...tab, kind: 'diff', source: id }),
     /** A read-only text in a tab (a DDL, a definition). */
     openText: openTextTab,
     /** The panes of the editor area: whether a tab is the one shown in the focused pane. */
@@ -114,7 +124,7 @@ export function makeApi(id: string) {
     /** Port forwards and app previews are the core's, shown wherever a plugin needs them. */
     forwards: { Tab: ForwardsTab },
     previews: { list: previews, open: openPreview, close: closePreview, url: previewUrl, Tab: PreviewsTab },
-    ui: { EmptyState, Icon, Modal, toast, errorToast, contextMenu, prompt, pick, copyText, parseAnsi, stripAnsi, WorktreeChip, tabDrop: { dropClasses, dropIndex, moveItem, setDropAt } },
+    ui: { EmptyState, Icon, FileIcon, Modal, toast, errorToast, contextMenu, prompt, pick, copyText, parseAnsi, stripAnsi, WorktreeChip, tabDrop: { dropClasses, dropIndex, moveItem, setDropAt } },
   }
 }
 
@@ -122,3 +132,4 @@ export type PluginApi = ReturnType<typeof makeApi>
 export type { MenuItem } from '../ui/overlay'
 export type { TabState }
 export type { SearchHit, SearchProvider } from '../popups/searchProviders'
+export type { DiffSource } from '../ui/diffSources'
