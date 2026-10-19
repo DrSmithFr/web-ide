@@ -20,10 +20,12 @@ import { code } from './code'
 import { docker } from './docker'
 import { database } from './database'
 import { kanban } from './kanban'
+import { ai } from './ai'
+import { setPluginUiTools } from '../ui/uiCalls'
 import { setAloneView } from '../state/tiles'
 import type { TabState } from '../state/project'
 
-const builtins: Record<string, PluginModule> = { code, database, docker, exec, files, git, hello, kanban, languages, previews, search }
+const builtins: Record<string, PluginModule> = { ai, code, database, docker, exec, files, git, hello, kanban, languages, previews, search }
 
 const [states, setStates] = createSignal<PluginState[]>([])
 export const pluginStates = states
@@ -51,6 +53,7 @@ export function setPluginStates(list: PluginState[] | undefined, opened = false)
   )
   setPluginProviders(enabled().flatMap((s) => active[s.manifest.id].searchProviders ?? []))
   setDiffSources(enabled().flatMap((s) => active[s.manifest.id].diffSources ?? []))
+  setPluginUiTools(Object.assign({}, ...enabled().map((s) => active[s.manifest.id].uiTools ?? {})))
   const now = new Set(enabled().map((s) => s.manifest.id))
   for (const id of now) if (opened || !running.has(id)) active[id].opened?.()
   running = now

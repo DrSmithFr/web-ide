@@ -21,20 +21,17 @@ import { goHome } from '../app/home'
 import { EditorArea } from '../ui/EditorArea'
 import { StatusBar } from '../ui/StatusBar'
 import { capability } from '../plugins/capabilities'
-import '../plugins/coreServices'
-import { AssistantTool } from '../llm/AssistantTool'
+import '../ui/uiCalls'
+import { DiagramViewer } from '../ui/DiagramViewer'
 import { ConflictsTool } from '../tools/tools'
 import { InfoTool } from '../tools/InfoTool'
-import { AgentsTool } from '../agents/AgentsTool'
 import { QuestionModal, QuestionsTool } from '../questions/QuestionsTool'
 import { questions, refreshQuestions, resetQuestions, showQuestion } from '../questions/state'
-import { refreshAgents } from '../agents/state'
 import { openConflict } from '../conflict/ConflictDialog'
 import { docsIndex, openDoc } from '../state/docs'
 import { openSettings } from '../settings/SettingsModal'
 import { actionOf, registerAction, runAction, shortcutOf } from '../keys/bindings'
 import { onMouseNav } from '../keys/mouse'
-import { navigateChats, openChat } from '../llm/assistant'
 import { contextMenu, focusBeforeMenus, prompt, type MenuItem } from '../ui/overlay'
 import { Icon } from '../ui/icons'
 import { offerIdeUntrack } from '../state/ideTracked'
@@ -45,13 +42,9 @@ import { DeskSwitcher } from '../ui/DeskSwitcher'
 import { SearchEverywhereHost, searchEverywhere } from '../popups/SearchEverywhere'
 import { RecentFilesHost, recentFiles } from '../popups/RecentFiles'
 import { ClipboardHistoryHost, pasteFromHistory } from '../popups/ClipboardHistory'
-import { newDoodle } from '../llm/Composer'
-import { DoodleHost } from '../llm/doodle/DoodleModal'
 
 /** Tools of the four zones, the core's then those of the enabled plugins; their placement comes from state/zones. */
 export const toolPanels: Record<string, { label: string; icon: string; component: () => JSX.Element; badge?: () => number }> = createMutable({
-  assistant: { label: 'Assistant', icon: 'sparkle', component: AssistantTool },
-  agents: { label: 'Agents', icon: 'comment', component: AgentsTool },
   questions: { label: 'Questions', icon: 'question', component: QuestionsTool, badge: () => questions().length },
   conflicts: { label: 'Conflicts', icon: 'conflict', component: ConflictsTool },
   info: { label: 'Infos', icon: 'info', component: InfoTool },
@@ -129,8 +122,8 @@ export function useProjectActions() {
     registerAction('view.prevTab', () => cycleTab(-1)),
     registerAction('nav.back', () => navHistory(-1)),
     registerAction('nav.forward', () => navHistory(1)),
-    registerAction('nav.previousConversation', () => void navigateChats(-1)),
-    registerAction('nav.nextConversation', () => void navigateChats(1)),
+    registerAction('nav.previousConversation', () => capability('assistant')?.navigate(-1)),
+    registerAction('nav.nextConversation', () => capability('assistant')?.navigate(1)),
     registerAction('nav.previousConsole', () => capability('terminal')?.navigate(-1)),
     registerAction('nav.nextConsole', () => capability('terminal')?.navigate(1)),
     // The side buttons of the mouse move in the history of the focused part.
@@ -138,7 +131,7 @@ export function useProjectActions() {
       const part = focusPart()
       const tool = part === 'editor' ? 'editor' : shownIn(session, part)
       if (tool === 'editor') navHistory(dir)
-      else if (tool === 'assistant') void navigateChats(dir)
+      else if (tool === 'assistant') capability('assistant')?.navigate(dir)
       else if (tool === 'console') capability('terminal')?.navigate(dir)
     }),
     registerAction('settings.open', () => openSettings()),
@@ -153,10 +146,6 @@ export function useProjectActions() {
     registerAction('nav.recentFiles', () => recentFiles('recent')),
     registerAction('nav.switcher', () => recentFiles('switcher')),
     registerAction('edit.pasteHistory', () => pasteFromHistory()),
-    registerAction('assistant.doodle', () => {
-      mutate((s) => showTool(s, 'assistant'))
-      newDoodle()
-    }),
     registerAction('conflict.resolve', () => {
       const list = conflictedDocs()
       if (!list.length) return false
@@ -237,7 +226,7 @@ const menus: [string, string[]][] = [
   ['menu|Navigate', ['search.everywhere', 'nav.recentFiles', '-', 'nav.back', 'nav.forward', '-', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', '-', 'nav.related', 'nav.test']],
   ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover', '-', 'lsp.rename', 'lsp.format', '-', 'edit.fold', 'edit.unfold', 'edit.foldAll', 'edit.unfoldAll']],
   ['menu|View', ['view.splitRight', 'view.splitDown', '-', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', '-', 'view.visualFocus', 'view.focusOutline', 'view.focusDim', '-', 'view.whitespace', 'view.wordWrap', 'view.markdown', '-', 'console.new', 'palette.open']],
-  ['menu|Tools', ['tool.assistant', 'tool.agents', 'tool.questions', 'tool.conflicts', 'tool.info', '-', '@tools']],
+  ['menu|Tools', ['tool.questions', 'tool.conflicts', 'tool.info', '-', '@tools']],
   ['menu|Help', ['help.docs', 'help.guide', 'help.glossary', '-', 'help.shortcuts']],
 ]
 
@@ -618,7 +607,7 @@ export function ProjectPage(props: { id: string }) {
       if (chatId) {
         history.replaceState(null, '', location.pathname)
         mutate((s) => (s.right.panel = 'assistant'))
-        void openChat(chatId).catch(() => {})
+        void capability('assistant')?.openChat(chatId).catch(() => {})
       }
       // A push notification of a question of an agent: /project/<id>?questions shows the first one.
       await resetQuestions()
@@ -698,7 +687,6 @@ export function ProjectPage(props: { id: string }) {
     ...Object.keys(toolPanels).map((id) => registerAction(`tool.${id}`, () => toggleToolFocus(id))),
     onPod('pod.reconnected', async () => {
       await reopenProject()
-      void refreshAgents()
       void refreshQuestions()
       void refreshPlugins()
     }),
@@ -738,7 +726,7 @@ export function ProjectPage(props: { id: string }) {
         <RecentFilesHost tools={switcherTools} onTool={toggleToolFocus} />
         <ClipboardHistoryHost />
         <QuestionModal />
-        <DoodleHost external onSettings={() => openSettings()} />
+        <DiagramViewer />
         <Show when={phone()}>
           {/* One view at a time, full screen: the editor stays mounted under the tools. */}
           <div class="workbench phone-body" onPointerDown={trackFocus} onFocusIn={trackFocus}>

@@ -339,3 +339,6 @@ func ContentText(raw json.RawMessage) string {
 
 // String is the JSON of a string content.
 func String(s string) json.RawMessage { return Plain(s) }
+
+// AuthorClaude marks the messages and answers written by Claude Code (through the MCP).
+const AuthorClaude = "claude"

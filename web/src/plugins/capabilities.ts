@@ -197,7 +197,7 @@ export interface TicketsService {
   worktreeProject(id: number): Promise<{ project: string }>
 }
 
-/** assistant: the conversation shown in the window and its start (the core's until AI is a plugin, #123). */
+/** assistant (the AI plugin): the conversation shown in the window and its start. */
 export interface AssistantService {
   chat: () => { id: string; ticket?: { id: number; role: TicketRole } }
   config: () => { server: string; model: string }
@@ -206,15 +206,18 @@ export interface AssistantService {
   newChat(o: Record<string, unknown>): void
   send(text: string): Promise<void>
   openChat(id: string): Promise<void>
+  /** The previous or next conversation (the side buttons of the mouse, the navigation shortcuts). */
+  navigate(dir: -1 | 1): void
 }
 
-/** agents: the Agents tool (the core's until AI is a plugin, #123). */
+/** agents (the AI plugin): the Agents tool. */
 export interface AgentsService {
   catalog(project?: string): Promise<{ agents: { id: string; name: string; installed: boolean }[]; local: boolean }>
   /** Shows a session in the Agents tool. */
   show(session: string): void
-  /** The work time and cost of the agents on a ticket. */
+  /** The work time and cost of the agents on a ticket, and on the project (the Info tool). */
   TicketStats: (props: { ticket: number }) => JSX.Element
+  ProjectStats: () => JSX.Element
 }
 
 export interface Capabilities {

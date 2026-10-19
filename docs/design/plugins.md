@@ -126,11 +126,19 @@ Exec (#116) is the first plugin the rest of the IDE *uses*: a dozen parts of the
 ## What Kanban added to the API
 
 - **The tickets service** (`tickets`): the tickets of the project, a summary, a whole ticket with its blockers, open a ticket, the board, a milestone, an objective, start a conversation or the development of a ticket, the labels of a status and of a role, the worktree of a ticket. The assistant (the ticket bar), the Orchestrator and the project bar (the worktrees of the tickets, the ticket banner) use it, and hide their ticket parts without it.
-- **Services of the core** until AI is a plugin (#123): `assistant` (the conversation shown, a new one, send, open one) and `agents` (the catalog, show a session, the stats of a ticket), provided by `'core'` (`plugins/coreServices.ts`), always on.
+- **The assistant and agents services**: `assistant` (the conversation shown, a new one, send, open one) and `agents` (the catalog, show a session, the stats of a ticket), which the Kanban starts its conversations and sessions through; the AI plugin provides them (#123).
 - **View contributions**: `viewTitle(tab)`, the title of a tab from its state (`#126 Status bar…`), and `aloneViews`, the views alone in their tile on a desk of tiles, like a tool (the board).
 - The board, ticket, milestone and objective tabs are views `plugin:kanban/<view>`, the number in the tab state; a desk saved before is migrated. The links `?ticket=`, `?milestone=`, `?objective=` open them through the service. The hosts of the plugins are mounted in a detached tool window too.
 - `api.panes.closeTab`, `api.project.info` / `showWorktree`, `api.ui.Markdown` / `HelpLink`, `api.fmtSize`, `api.podPath`.
-- On the pod: the methods moved to `plugins/kanban`; the core services reach it through `Pod().Services()` (store, projects, config, keeper, the assistant's model, desks, the kanban, the token and the MCP address). The `kanban_*` tools of the assistant and the MCP stay theirs until #123, offered with `tickets` on.
+- On the pod: the methods moved to `plugins/kanban`; the core services reach it through `Pod().Services()` (store, projects, config, keeper, the assistant's model, desks, the kanban, the token and the MCP address). The `kanban_*` tools of the assistant (AI) and the MCP call its exports, offered with `tickets` on.
+
+## What AI added to the API
+
+- **The AI plugin** (`ai`): the Assistant and Agents tools, the turn loop and its tools, sub-agents, the Orchestrator, compaction, doodles and the board of a conversation, speech recognition. It provides `assistant` (with `navigate`, the previous or next conversation: the side buttons of the mouse and the shortcuts, which stay the core's like those of the consoles) and `agents` (with the stats of the project, shown by the Info tool). Off: no Assistant nor Agents, `assistant.*` refused; the MCP for Claude Code stays the core's, but `request_doodle` (the doodle editor is the AI's).
+- **Interface calls** (`ui.call`, answered with `ui.result`): the pod asks a window to run a tool of the interface (open a file or a diff, focus a panel, show a message, offer a preview), for the MCP and the assistant alike (`ui/uiCalls.ts`, `server/ui_calls.go`). A plugin adds its own: the **`uiTools`** contribution (AI: a page of its board, a doodle asked by an agent).
+- What stays core: rendered Markdown and its diagrams in full screen (`ui/markdown.ts`, `ui/Markdown.tsx`, `ui/DiagramViewer.tsx`, now mounted by every project window), the question card of `ask_user` (`questions/AskCard.tsx`, `ask.ts`), the Questions tool.
+- `api.window.detached`, `api.settings.open`, `api.plugins.assistantOptions`, `api.questions` (`AskCard`, `Form`, `formAnswerText`, `answerStrings`, `showsQuestions`), `api.editor.lineHunks`, `api.ui.openDiagram` / `Switch`, `api.project.rootOf` / `resolve`.
+- On the pod: `Host.OnStart` / `OnStop` (the conversations that ran are taken back, saved when the pod stops); `Pod.Stopping`, `Plugin(id)` (a plugin uses another's exports: the AI the Kanban's), `UICall`, `AssistantTools` / `RunAssistantTool` (the tools of the other plugins), `Notify` / `NotifyFeedback`, `NoteAsks`, `CommandsText` / `StartSaved`, `SharePreview`; `Window.Watch` (the conversation a window shows); `Services.Models`. The kit of the tools (arguments, results, console tools, a conversation read) moved to `internal/assistant`, the shell commands without a terminal to `runtime` (`RunShell`, `FollowShell`), both shared with the MCP.
 
 ## What the status bar added to the API
 
@@ -144,11 +152,11 @@ Frozen with #118: `apiVersion: 1` in every manifest. An addition keeps v1; a rem
 
 **Manifest** (`plugin.json`): `id`, `name`, `version`, `apiVersion`, `required`, `permissions`, `provides` / `requires` (capabilities), `namespaces` (prefixes of its methods and actions besides its id), `contributes`: `tools` (`id`, `label`, `icon`, `zone`, `before`), `tabViews`, `assistantTools`, `commands` (`id`, `label`, `category`, `keys`, `replaces`, `inTerminal`).
 
-**Pod** (`pod/internal/plugins`): `Plugin{Manifest(), Register(Host)}`; `Host.Handle(method, handler)`, `Host.HandleGlobal`, `Host.AssistantTool(tool)`, `Host.Pod()`, `Host.OnProjectOpen`, `Host.OnWindows`; a `Call` carries the `Runtime` of the project, `Params`, `Lang`, the `Window` (push, held streams), `Emit` / `EmitOthers` / `EmitFamily`, the `Options` of a conversation; `Result`, `UsageError`, `CodedError`.
+**Pod** (`pod/internal/plugins`): `Plugin{Manifest(), Register(Host)}`; `Host.Handle(method, handler)`, `Host.HandleGlobal`, `Host.AssistantTool(tool)`, `Host.Pod()`, `Host.OnProjectOpen`, `Host.OnWindows`, `Host.OnStart`, `Host.OnStop`; a `Call` carries the `Runtime` of the project, `Params`, `Lang`, the `Window` (push, held streams), `Emit` / `EmitOthers` / `EmitFamily`, the `Options` of a conversation; `Result`, `UsageError`, `CodedError`.
 
-**Page** (`web/src/plugins/api.ts`): `rpc` / `rpcIn` / `notify` / `notifyIn` / `channel`, `on`, `t` / `tn` / `fmtDate` / `fmtAgo`, `project`, `files`, `buffers`, `activeFile`, `ssh`, `desk` (its state in the desk), `provide` / `use` (capabilities), `showTool`, `tiles`, `theme`, `openFile` / `openView` / `setViewState` / `openDiff` / `openText`, `panes`, `editor`, `keys`, `transport`, `ui`. The module's `activate(api)` returns its contributions: `tools`, `views`, `fileView`, `commands`, `hosts`, `searchProviders`, `diffSources`, `explorerItems`, `fileDecorations`, `assistantOptions`, `viewTitle`, `aloneViews`, `fileStatus`, `viewStatus`, `toolStatus`, `opened`; its `home(api)` a part of the home page.
+**Page** (`web/src/plugins/api.ts`): `rpc` / `rpcIn` / `notify` / `notifyIn` / `channel`, `on`, `t` / `tn` / `fmtDate` / `fmtAgo`, `project`, `files`, `buffers`, `activeFile`, `ssh`, `desk` (its state in the desk), `provide` / `use` (capabilities), `showTool`, `tiles`, `theme`, `openFile` / `openView` / `setViewState` / `openDiff` / `openText`, `panes`, `editor`, `keys`, `transport`, `ui`. The module's `activate(api)` returns its contributions: `tools`, `views`, `fileView`, `commands`, `hosts`, `searchProviders`, `diffSources`, `explorerItems`, `fileDecorations`, `assistantOptions`, `viewTitle`, `aloneViews`, `fileStatus`, `viewStatus`, `toolStatus`, `uiTools`, `opened`; its `home(api)` a part of the home page.
 
-**Capabilities**: `terminal` and `commands` (Exec), `git` and `worktrees` (Git), `previews` (Previews), `language` (Languages), `files` (Files), `tickets` (Kanban), `assistant` and `agents` (the core's until #123), their types in `web/src/plugins/capabilities.ts`.
+**Capabilities**: `terminal` and `commands` (Exec), `git` and `worktrees` (Git), `previews` (Previews), `language` (Languages), `files` (Files), `tickets` (Kanban), `assistant` and `agents` (AI), their types in `web/src/plugins/capabilities.ts`.
 
 ## Decisions
 
@@ -180,7 +188,7 @@ The plugins, grouped by domain (one plugin, several tools and views), in their o
 | Files | Explorer, file provider (locked, #121, done) | provides `files` |
 | Code | file editor, the default view of a text buffer (locked, #121, done) | |
 | Kanban | Kanban tool, board, ticket, milestone and objective views (#122, done; its MCP and assistant tools move with AI) | provides `tickets`, requires `terminal`, `worktrees` |
-| AI | Assistant, Agents, doodles, whiteboard | |
+| AI | Assistant, Agents, doodles, whiteboard (#123, done) | provides `assistant`, `agents` |
 
 - **Locked plugins** (`required` in the manifest): Files and Code cannot be disabled; Settings → Plugins shows them checked and greyed.
 - **Languages apart from Code**: the editor without language servers (a slow SSH project).

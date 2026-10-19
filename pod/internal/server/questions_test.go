@@ -113,9 +113,10 @@ func TestQuestions(t *testing.T) {
 		{Role: "assistant", Content: assistant.String("Two ways to do it.")},
 		{Role: "tool", ToolCallID: "x", Name: "ask_user", AskState: "pending", At: 5, Questions: []assistant.Question{{Question: "Which one?", Options: []assistant.Option{{Label: "A"}, {Label: "B"}}}}},
 	}}
-	if err := s.publishIdle(loc, root, chat, 0); err != nil {
+	if err := saveTestChat(s, loc, chat); err != nil {
 		t.Fatal(err)
 	}
+	s.noteAsks(root, chat, 0) // as the AI plugin does when a turn ends
 	a.waitEvent("questions.changed", nil)
 	l = list()
 	if len(l) != 1 || l[0].Source != "assistant" || l[0].ID != "chat:c1:2" || l[0].Last != "Two ways to do it." || l[0].Title != "Plan the cache" {

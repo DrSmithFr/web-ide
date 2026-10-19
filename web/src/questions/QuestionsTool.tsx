@@ -5,9 +5,9 @@ import { Modal } from '../ui/overlay'
 import { EmptyState } from '../ui/EmptyState'
 import { errorToast } from '../ui/toast'
 import { Icon } from '../ui/icons'
-import { Markdown, Switch as Toggle } from '../llm/parts'
-import { AskCard } from '../llm/AskCard'
-import type { ChatMessage } from '../llm/state'
+import { Markdown } from '../ui/Markdown'
+import { Switch as Toggle } from '../ui/Switch'
+import { AskCard, type AskMessage } from './AskCard'
 import { settings, updateSettings } from '../state/settings'
 import { t, tn } from '../i18n'
 import { QuestionForm } from './Form'
@@ -92,7 +92,7 @@ function QuestionDialog(props: { q: Question }) {
   }
   const longLast = () => (q().last?.length ?? 0) > 600
   // ask_user: the card of the assistant, on a message made for it.
-  const msg = (): ChatMessage => ({ role: 'tool', content: '', questions: q().questions, askState: 'pending' }) as ChatMessage
+  const msg = (): AskMessage => ({ questions: q().questions, askState: 'pending' })
   return (
     <Modal
       title={t('{name} asks', { name: q().name })}

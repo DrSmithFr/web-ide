@@ -1,0 +1,18 @@
+{
+  "id": "ai",
+  "name": "AI",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "namespaces": ["assistant", "llm", "agents", "models"],
+  "provides": ["assistant", "agents"],
+  "contributes": {
+    "tools": [
+      { "id": "assistant", "label": "Assistant", "icon": "sparkle", "zone": "right", "before": "agents" },
+      { "id": "agents", "label": "Agents", "icon": "comment", "zone": "right", "before": "questions" }
+    ],
+    "commands": [
+      { "id": "assistant.doodle", "label": "New doodle", "category": "Tools", "inTerminal": true },
+      { "id": "assistant.fullComposer", "label": "Message box in full screen", "category": "Tools" }
+    ]
+  }
+}

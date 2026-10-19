@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/DrSmithFr/web-ide/pod/internal/acp"
+	"github.com/DrSmithFr/web-ide/pod/internal/commands"
+	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
 	kbp "github.com/DrSmithFr/web-ide/pod/internal/plugins/kanban"
 	"net"
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/assistant"
 	"github.com/DrSmithFr/web-ide/pod/internal/forwards"
@@ -37,7 +40,9 @@ type pluginSet struct {
 	// The lifecycle hooks of the plugins: a project opened (by plugin), the windows counted.
 	onOpen    []pluginHook
 	onWindows []func(n int)
-	mu        sync.Mutex
+	// The pod ready, the pod stopping.
+	onStart, onStop []func()
+	mu              sync.Mutex
 	// disabled caches .ide/plugins.json per main project; written by plugins.set.
 	disabled map[string][]string
 }
@@ -169,19 +174,19 @@ func (s *Server) findPluginTool(name string) *pluginTool {
 }
 
 // runPluginTool runs an assistant tool of a plugin on rt's project (the assistant and the MCP).
-func (s *Server) runPluginTool(ctx context.Context, rt *runtime.Runtime, t *pluginTool, args json.RawMessage, lang string, options json.RawMessage) (toolResult, error) {
+func (s *Server) runPluginTool(ctx context.Context, rt *runtime.Runtime, t *pluginTool, args json.RawMessage, lang string, options json.RawMessage) (assistant.ToolResult, error) {
 	if !s.pluginOn(rt, t.plugin) {
 		m, _ := s.Plugins.Get(t.plugin)
-		return toolResult{}, i18n.Errorf("the %s plugin is disabled on this project", m.Manifest().Name)
+		return assistant.ToolResult{}, i18n.Errorf("the %s plugin is disabled on this project", m.Manifest().Name)
 	}
 	res, err := t.tool.Run(ctx, plugins.Call{Runtime: rt, Params: args, Lang: lang, Options: options})
 	if err != nil {
-		return toolResult{}, err
+		return assistant.ToolResult{}, err
 	}
 	if res.Error {
-		return toolResult{Content: "Error: " + res.Content, Summary: res.Summary, Status: "error"}, nil
+		return assistant.ToolResult{Content: "Error: " + res.Content, Summary: res.Summary, Status: "error"}, nil
 	}
-	return toolResult{Content: res.Content, Summary: res.Summary, Status: "ok"}, nil
+	return assistant.ToolResult{Content: res.Content, Summary: res.Summary, Status: "ok"}, nil
 }
 
 // clientWindow is the window of an RPC call of a plugin.
@@ -192,6 +197,7 @@ func (w clientWindow) Done() <-chan struct{}       { return w.c.ctx.Done() }
 func (w clientWindow) Hold(id string, stop func()) { w.c.streams.Store(id, stop) }
 func (w clientWindow) Project() string             { return w.c.project }
 func (w clientWindow) ID() string                  { return w.c.id }
+func (w clientWindow) Watch(chat string)           { w.c.watch(chat) }
 func (w clientWindow) Release(id string) {
 	if stop, ok := w.c.streams.LoadAndDelete(id); ok {
 		stop.(func())()
@@ -215,18 +221,18 @@ func (s *Server) capabilityOn(rt *runtime.Runtime, capability string) bool {
 	return plugins.Provided(s.pluginStates(rt))[capability]
 }
 
-// toolNeeds are the tools of the core (assistant and MCP) that need a capability: the consoles
-// and saved commands need terminal (the Exec plugin). They move to their plugin with AI (#123).
+// toolNeeds are the tools of the MCP endpoint that need a capability: the consoles and saved
+// commands need terminal (the Exec plugin), the previews previews, a doodle the AI. The AI plugin checks its own
+// tools the same way (plugins/ai/needs.go).
 var toolNeeds = map[string]string{
-	"run_command": "terminal", "list_consoles": "terminal", "read_console": "terminal", "console_input": "terminal",
+	"list_consoles": "terminal", "read_console": "terminal", "console_input": "terminal",
 	"list_commands": "terminal", "run_saved_command": "terminal",
 	"share_preview": "previews", "list_previews": "previews",
-	"lsp_symbols": "language", "lsp_workspace_symbols": "language", "lsp_definition": "language", "lsp_references": "language",
-	"lsp_hover": "language", "lsp_diagnostics": "language",
+	// The doodle the user draws is the AI's (its modal).
+	"request_doodle": "assistant",
 }
 
-// needsOf is the capability a core tool needs: toolNeeds, and tickets for the kanban tools
-// (kanban_*, of the assistant, the Orchestrator and the MCP).
+// needsOf is the capability a tool of the MCP needs: toolNeeds, and tickets for the kanban tools.
 func needsOf(tool string) string {
 	if strings.HasPrefix(tool, "kanban_") {
 		return "tickets"
@@ -317,6 +323,17 @@ func (h pluginHost) OnWindows(f func(n int)) {
 	h.s.plugins.onWindows = append(h.s.plugins.onWindows, f)
 }
 
+func (h pluginHost) OnStart(f func()) { h.s.plugins.onStart = append(h.s.plugins.onStart, f) }
+func (h pluginHost) OnStop(f func())  { h.s.plugins.onStop = append(h.s.plugins.onStop, f) }
+
+// Started tells the plugins the pod is ready (the AI takes back the conversations that ran
+// when the pod stopped). Called once by main, before the pod listens.
+func (s *Server) Started() {
+	for _, f := range s.plugins.onStart {
+		f()
+	}
+}
+
 // projectOpened calls the hooks of the plugins enabled on the project of rt.
 func (s *Server) projectOpened(rt *runtime.Runtime) {
 	for _, hk := range s.plugins.onOpen {
@@ -357,10 +374,46 @@ func (p podLend) CloseRuntime(project string) { p.s.closeRuntime(project) }
 
 func (p podLend) CapabilityOn(rt *runtime.Runtime, c string) bool { return p.s.capabilityOn(rt, c) }
 
+func (p podLend) Stopping() bool { return p.s.stopped.Load() }
+
+func (p podLend) Plugin(id string) (plugins.Plugin, bool) { return p.s.Plugins.Get(id) }
+
+func (p podLend) UICall(ctx context.Context, project, chat, tool string, args any, wait bool, timeout time.Duration) (plugins.UIResult, bool, bool) {
+	return p.s.uiCallIn(ctx, p.s.uiClientFor(project, chat), project, chat, tool, args, wait, timeout)
+}
+
+func (p podLend) AssistantTools(rt *runtime.Runtime) []json.RawMessage { return p.s.pluginDefs(rt) }
+
+func (p podLend) RunAssistantTool(ctx context.Context, rt *runtime.Runtime, name string, args json.RawMessage, lang string, opts assistant.Options) (assistant.ToolResult, bool, error) {
+	t := p.s.findPluginTool(name)
+	if t == nil {
+		return assistant.ToolResult{}, false, nil
+	}
+	res, err := p.s.runPluginTool(ctx, rt, t, args, lang, pluginOptions(opts, t.plugin))
+	return res, true, err
+}
+
+func (p podLend) Notify(asks bool, root, chatID, title string) {
+	p.s.notifyAssistant(asks, root, chatID, title)
+}
+func (p podLend) NotifyFeedback(loc kanban.Location, id int64, text string) {
+	p.s.notifyFeedback(loc, id, text)
+}
+func (p podLend) NoteAsks(root string, c *assistant.Chat, from int) { p.s.noteAsks(root, c, from) }
+func (p podLend) CommandsText(rt *runtime.Runtime) (string, int, error) {
+	return p.s.commandsText(rt)
+}
+func (p podLend) StartSaved(rt *runtime.Runtime, id string, restart bool) (commands.Command, string, string, error) {
+	return p.s.startSaved(rt, id, restart)
+}
+func (p podLend) SharePreview(project string, rt *runtime.Runtime, a assistant.Args) (assistant.ToolResult, error) {
+	return p.s.sharePreviewIn(project, rt, a)
+}
+
 func (p podLend) Services() *plugins.Services {
 	s := p.s
 	return &plugins.Services{Store: s.Store, Projects: s.Projects, Cfg: s.Cfg, Keeper: s.Keeper, LLM: s.LLM, Desks: s.Desks, Kanban: s.Kanban,
-		Token: s.Token, MCPBase: s.MCPBase, Commands: s.projectCommands, ChatLoc: s.chatLoc, AgentsMCP: s.agentsMCP}
+		Token: s.Token, MCPBase: s.MCPBase, Commands: s.projectCommands, ChatLoc: s.chatLoc, AgentsMCP: s.agentsMCP, Models: s.Models}
 }
 
 // agentsMCP is the MCP server of the IDE as the sessions of the Agents tool reach it: the

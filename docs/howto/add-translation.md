@@ -17,7 +17,7 @@ English is the key and the default: a text with no translation shows in English.
 2. **Add the catalogs.** Copy `web/src/i18n/fr.json` to `web/src/i18n/de.json` and `pod/internal/i18n/fr.json` to `pod/internal/i18n/de.json`, then translate the values. The keys are the English texts and stay as they are; `{name}` and `%s` parameters are kept; a key may carry a context before a bar (`menu|Edit`) that is not shown in English.
 3. **Relay page.** The page of the relay (`pod/internal/relay/web/bootstrap.js`) and the window after a GitHub link (`doneCatalog` in `pod/internal/relay/github.go`) have their own few words: add the code to `langs` and a third text to each `L(…)`, and a row to `doneCatalog`.
 
-The speech list of the dictation (`web/src/llm/transcribe.ts`) is the list of the models, not ours: add the language there only if the model supports it and it is missing.
+The speech list of the dictation (`web/src/plugins/ai/llm/transcribe.ts`) is the list of the models, not ours: add the language there only if the model supports it and it is missing.
 
 ## Check
 

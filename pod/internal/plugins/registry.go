@@ -10,7 +10,7 @@ var CoreCapabilities = []string{}
 
 // CoreTools are the ids of the tools of the core, which no plugin may take.
 var CoreTools = []string{
-	"assistant", "agents", "questions", "conflicts", "info"}
+	"questions", "conflicts", "info"}
 
 // Registry holds the built-in plugins, in their order of registration.
 type Registry struct {

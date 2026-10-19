@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"github.com/DrSmithFr/web-ide/pod/internal/assistant"
 	"strings"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/acp"
@@ -37,7 +38,7 @@ func acpThreadText(info acp.Info, entries []acp.Entry, last int, tools bool) str
 			}
 		case "tool":
 			if tools {
-				fmt.Fprintf(&b, "- %s %s (%s)\n", e.ToolKind, cut(e.Title, 300), e.Status)
+				fmt.Fprintf(&b, "- %s %s (%s)\n", e.ToolKind, assistant.Cut(e.Title, 300), e.Status)
 			}
 		case "notice", "error":
 			if tools {

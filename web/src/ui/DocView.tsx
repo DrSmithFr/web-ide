@@ -2,13 +2,13 @@
 // with Mermaid, pictures read through docs.image, links that stay inside the docs (a page opens
 // in the same tab, Back returns, #heading scrolls). Paths are those of the repo.
 import { createEffect, createSignal, on, Show } from 'solid-js'
-import { onMarkdownClick, renderMarkdownFile, renderMermaid } from '../llm/markdown'
+import { onMarkdownClick, renderMarkdownFile, renderMermaid } from './markdown'
 import { request } from '../pod/rpc'
 import { t } from '../i18n'
 import { mutate, setActivePane, type TabState } from '../state/project'
 import { backDoc, canGoBack, docsIndex, goDoc } from '../state/docs'
 import { toast } from './toast'
-import '../llm/assistant.css'
+import './markdown.css'
 
 /** A path resolved from a folder, from the root of the docs ("docs/howto", "../guide.md"). */
 function resolve(dir: string, rel: string) {

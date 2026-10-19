@@ -108,7 +108,7 @@ func (s *Server) assistantQuestions(root string) []Question {
 		if !info.Waiting {
 			continue
 		}
-		c, err := s.loadChat(loc, info.ID)
+		c, err := assistant.LoadChat(s.LLM, loc, info.ID)
 		if err != nil {
 			continue
 		}
@@ -139,7 +139,7 @@ func textOf(raw json.RawMessage) string {
 // asked names who just asked one (a push notification).
 func (s *Server) questionsChanged(projectID, asked string) {
 	root := s.questionRoot(projectID)
-	s.emitAssistant(root, "questions.changed", map[string]string{"project": root})
+	s.emitFamily(root, "questions.changed", map[string]string{"project": root})
 	if asked != "" {
 		s.notifyQuestion(root, asked)
 	}
@@ -173,7 +173,7 @@ func (s *Server) noteAsks(root string, c *assistant.Chat, from int) {
 	}
 	s.asks.mu.Unlock()
 	if prev != pending || touched {
-		s.emitAssistant(root, "questions.changed", map[string]string{"project": root})
+		s.emitFamily(root, "questions.changed", map[string]string{"project": root})
 	}
 }
 

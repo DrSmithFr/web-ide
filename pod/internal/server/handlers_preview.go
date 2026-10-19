@@ -9,27 +9,20 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
 )
 
-// sharePreview is the tool share_preview: a card in the conversation, nothing runs yet.
-// The app is a saved serve command when there is one: command_id, else the only one with a
-// port when no command is given, else the one whose text is the command.
-func (s *Server) sharePreview(r *assistantRun, rt *runtime.Runtime, a toolArgs) (toolResult, error) {
-	return s.sharePreviewIn(r.project, rt, a)
-}
-
 // sharePreviewIn resolves the app of share_preview in project (the assistant and the MCP).
-func (s *Server) sharePreviewIn(project string, rt *runtime.Runtime, a toolArgs) (toolResult, error) {
-	pv := &assistant.Preview{Project: project, Title: strings.TrimSpace(a.str("title")), Command: strings.TrimSpace(a.str("command")),
-		Cwd: a.str("cwd"), Port: a.num("port"), CommandID: strings.TrimSpace(a.str("command_id"))}
+func (s *Server) sharePreviewIn(project string, rt *runtime.Runtime, a assistant.Args) (assistant.ToolResult, error) {
+	pv := &assistant.Preview{Project: project, Title: strings.TrimSpace(a.Str("title")), Command: strings.TrimSpace(a.Str("command")),
+		Cwd: a.Str("cwd"), Port: a.Num("port"), CommandID: strings.TrimSpace(a.Str("command_id"))}
 	list, err := s.projectCommands(rt)
 	if err != nil && (pv.CommandID != "" || pv.Command == "") {
-		return toolResult{}, err
+		return assistant.ToolResult{}, err
 	}
 	var saved *commands.Command
 	switch {
 	case pv.CommandID != "":
 		cmd, ok := commands.Find(list, pv.CommandID)
 		if !ok {
-			return toolResult{}, usagef("no saved command %q (see list_commands)", pv.CommandID)
+			return assistant.ToolResult{}, assistant.Usagef("no saved command %q (see list_commands)", pv.CommandID)
 		}
 		saved = &cmd
 	case pv.Command == "":
@@ -43,10 +36,10 @@ func (s *Server) sharePreviewIn(project string, rt *runtime.Runtime, a toolArgs)
 			}
 		}
 		if len(serve) == 0 {
-			return toolResult{}, usagef("command is missing (the project has no saved serve command with a port)")
+			return assistant.ToolResult{}, assistant.Usagef("command is missing (the project has no saved serve command with a port)")
 		}
 		if len(serve) > 1 {
-			return toolResult{}, usagef("several saved serve commands: pass command_id, one of %s", strings.Join(serve, ", "))
+			return assistant.ToolResult{}, assistant.Usagef("several saved serve commands: pass command_id, one of %s", strings.Join(serve, ", "))
 		}
 	default:
 		for _, c := range commands.OfFlag(list, "serve") {
@@ -65,13 +58,13 @@ func (s *Server) sharePreviewIn(project string, rt *runtime.Runtime, a toolArgs)
 		}
 	}
 	if pv.Command == "" {
-		return toolResult{}, usagef("command is missing")
+		return assistant.ToolResult{}, assistant.Usagef("command is missing")
 	}
 	if pv.Port < 1 || pv.Port > 65535 {
-		return toolResult{}, usagef("port must go from 1 to 65535")
+		return assistant.ToolResult{}, assistant.Usagef("port must go from 1 to 65535")
 	}
 	if pv.Cwd != "" {
-		if pv.Cwd = relPath(rt.Root, absPath(rt.Root, pv.Cwd)); pv.Cwd == "." {
+		if pv.Cwd = assistant.RelPath(rt.Root, assistant.AbsPath(rt.Root, pv.Cwd)); pv.Cwd == "." {
 			pv.Cwd = ""
 		}
 	}
@@ -84,7 +77,7 @@ func (s *Server) sharePreviewIn(project string, rt *runtime.Runtime, a toolArgs)
 		what = fmt.Sprintf("the saved command %q (%s)", saved.Name, saved.ID)
 		sum = saved.Name
 	}
-	res := ok(fmt.Sprintf("A card is shown to the user: %s starts when they click it (port %d), and the app opens on a temporary URL. Do not run the command yourself.", what, pv.Port),
+	res := assistant.OK(fmt.Sprintf("A card is shown to the user: %s starts when they click it (port %d), and the app opens on a temporary URL. Do not run the command yourself.", what, pv.Port),
 		assistant.T("{command} → port {port}", map[string]any{"command": sum, "port": pv.Port}))
 	res.Preview = pv
 	return res, nil

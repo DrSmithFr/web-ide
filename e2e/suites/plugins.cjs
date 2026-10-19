@@ -12,7 +12,8 @@
 // Files and Code (#121) are locked; the Explorer takes the colors of Git and the terminal of Exec.
 // Status bar items (#127): hello's while its tool has the focus, a ticket's status, priority and
 // size changed from the bar. Kanban (#122): off, its tool and the kanban_* tools go, a ticket tab says its plugin is off;
-// a ticket tab of a desk saved before is migrated.
+// a ticket tab of a desk saved before is migrated. AI (#123): off, no Assistant nor Agents, the
+// MCP still answers (a doodle apart).
 const fs = require('fs')
 const path = require('path')
 const { execSync } = require('child_process')
@@ -341,6 +342,28 @@ run(async ({ page }) => {
   await setPlugin('kanban', true)
   await page.waitForSelector(`[data-testid=ticket-view] .tk-num:has-text("#${id}")`)
   assert(!(await mcp('kanban_list', {})).result.isError, 'kanban_list back')
+
+  // AI: off, no Assistant nor Agents, the MCP still answers but a doodle (the AI's); on, back.
+  if (!(await page.isVisible('.ai-panel'))) await page.click('.rail-btn[data-id=assistant]')
+  await page.waitForSelector('.ai-panel')
+  await setPlugin('ai', false)
+  await page.waitForSelector('.rail-btn[data-id=assistant]', { state: 'detached' })
+  assert(!(await page.$('.rail-btn[data-id=agents]')) && !(await page.$('.ai-panel')), 'no Assistant nor Agents with AI off')
+  assert(!(await mcp('kanban_list', {})).result.isError, 'the MCP answers with AI off')
+  r = await mcp('request_doodle', { title: 'x' })
+  assert(r.result.isError && text(r).includes('needs the assistant capability'), 'request_doodle refused: ' + text(r))
+  // A briefing asked from a ticket says AI is off, nothing breaks.
+  const nid = Number(/#(\d+)/.exec(text(await mcp('kanban_create', { title: 'Without AI' })))[1])
+  if (!(await page.isVisible('[data-testid=kanban-panel]'))) await page.click('.rail-btn[data-id=kanban]')
+  await page.click(`[data-testid=kanban-panel] [data-testid=ticket-card-${nid}]`)
+  await page.click('[data-testid=ticket-view] [data-testid=ticket-briefing]')
+  await page.waitForSelector('.toast:has-text("The AI plugin is disabled")')
+  await page.click(`.tab:has-text("#${id} Plugin ticket")`)
+  await setPlugin('ai', true)
+  await page.waitForSelector('.rail-btn[data-id=assistant]')
+  if (!(await page.isVisible('.ai-panel'))) await page.click('.rail-btn[data-id=assistant]')
+  await page.waitForSelector('.ai-panel')
+  assert(await page.isVisible('.rail-btn[data-id=agents]'), 'Agents back')
 
   // A desk saved before #122 (a tab of kind ticket) opens the ticket view of the plugin.
   await page.waitForTimeout(800)

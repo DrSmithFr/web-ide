@@ -4,7 +4,7 @@ import { createResource, For, onCleanup, Show } from 'solid-js'
 import { request, on as onPod, podState } from '../pod/rpc'
 import { activeTab, basename, docsVersion, getDoc, project, relPath, root, isLocal } from '../state/project'
 import { capability } from '../plugins/capabilities'
-import { ProjectAgentStats } from '../agents/stats'
+import { Dynamic } from 'solid-js/web'
 import { Icon } from '../ui/icons'
 import { languageName } from '../editor/languages'
 import { fmtDate, fmtNumber, t } from '../i18n'
@@ -33,7 +33,7 @@ export function InfoTool() {
           <Show when={isLocal()}>
             <section class="card">
               <h3>{t('Agents')}</h3>
-              <ProjectAgentStats />
+              <Show when={capability('agents')}>{(a) => <Dynamic component={a().ProjectStats} />}</Show>
             </section>
           </Show>
           <ActiveTabCard />
