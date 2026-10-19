@@ -146,8 +146,12 @@ export const actions: ActionDef[] = [
 const [dynamicActions, setDynamicActions] = createSignal<ActionDef[]>([])
 export { setDynamicActions }
 
-/** The static actions, then the dynamic ones. */
-export const allActions = createRoot(() => createMemo(() => [...actions, ...dynamicActions()]))
+// Actions of the enabled plugins: their tools and commands (plugins/registry.ts).
+const [pluginActions, setPluginActions] = createSignal<ActionDef[]>([])
+export { setPluginActions }
+
+/** The static actions, then those of the plugins, then the dynamic ones. */
+export const allActions = createRoot(() => createMemo(() => [...actions, ...pluginActions(), ...dynamicActions()]))
 const actionIndex = createRoot(() => createMemo(() => new Map(allActions().map((a) => [a.id, a]))))
 
 export function actionOf(id: string): ActionDef | undefined {

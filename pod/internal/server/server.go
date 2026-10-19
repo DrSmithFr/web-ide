@@ -33,6 +33,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
 	"github.com/DrSmithFr/web-ide/pod/internal/keeper"
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
+	"github.com/DrSmithFr/web-ide/pod/internal/plugins"
 	"github.com/DrSmithFr/web-ide/pod/internal/preview"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 	"github.com/DrSmithFr/web-ide/pod/internal/push"
@@ -104,6 +105,8 @@ type Server struct {
 	// notification to the relay (both nil: no push, push.go).
 	Push     *push.Store
 	PushSend func(sub string, body []byte, ttl int, urgency, topic string) error
+	// Plugins are the built-in plugins (nil: none).
+	Plugins *plugins.Registry
 
 	// stopped: the pod stops (Shutdown); the runs are left as they are, to be taken back.
 	stopped atomic.Bool
@@ -122,6 +125,8 @@ type Server struct {
 	asks askRegistry
 	// previewMu serializes preview.open (one command per app).
 	previewMu sync.Mutex
+	// plugins: the assistant tools of the plugins and their enabling per project.
+	plugins pluginSet
 	// forwardIdle closes the port forwards once no window is left (windowsChanged).
 	forwardIdle *time.Timer
 }
@@ -180,6 +185,7 @@ func (s *Server) Init() {
 	s.registerSync()
 	s.registerPods()
 	s.registerPush()
+	s.registerPlugins()
 }
 
 func (s *Server) handle(name string, h handler) { s.handlers[name] = h }

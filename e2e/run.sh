@@ -17,7 +17,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 # The longest first: the workers end together.
-[ ${#SUITES[@]} -eq 0 ] && SUITES=(kanban milestones chat agents kanbanagents questions features restore+ docker lan identity multipod sync push keeper doodle speech relay quota renew preview git editor agent llm subagents orchestrator kanbanai editing lsp mousenav kanbangit commands mcptools projects popups desks keyboard mobile forwards explorer plan i18n help perf)
+[ ${#SUITES[@]} -eq 0 ] && SUITES=(kanban milestones chat agents kanbanagents questions features restore+ docker lan identity multipod sync push keeper doodle speech relay quota renew preview git editor agent llm subagents orchestrator kanbanai editing lsp mousenav kanbangit commands mcptools plugins projects popups desks keyboard mobile forwards explorer plan i18n help perf)
 [ -d node_modules/playwright-core ] || npm install --no-audit --no-fund >/dev/null
 if [ -z "$JOBS" ]; then JOBS=$(($(nproc) / 4)); [ "$JOBS" -gt 8 ] && JOBS=8; [ "$JOBS" -lt 1 ] && JOBS=1; fi
 # wait -n -p needs bash 5.1.
@@ -168,7 +168,7 @@ PY
   # /tmp: another scratch folder keeps the approvals of the changes out of the projects.
   cat >"$TMP/launch-pod.sh" <<EOF
 GIT_AUTHOR_NAME=e2e GIT_AUTHOR_EMAIL=e2e@x GIT_COMMITTER_NAME=e2e GIT_COMMITTER_EMAIL=e2e@x \\
-WEBIDE_INSTRUCTIONS_HOME="$TMP/home" WEBIDE_SCRATCH="$TMP/scratch" WEBIDE_CLAUDE="$ROOT/e2e/bin/claude" PATH="$ROOT/e2e/bin:$HOME/go/bin:$HOME/sdk/go/bin:$PATH" "$ROOT/bin/web-ide-pod" -addr "127.0.0.1:$PORT" -data "$TMP/data" -projects "$TMP/ws" \\
+WEBIDE_TEST_PLUGINS=1 WEBIDE_INSTRUCTIONS_HOME="$TMP/home" WEBIDE_SCRATCH="$TMP/scratch" WEBIDE_CLAUDE="$ROOT/e2e/bin/claude" PATH="$ROOT/e2e/bin:$HOME/go/bin:$HOME/sdk/go/bin:$PATH" "$ROOT/bin/web-ide-pod" -addr "127.0.0.1:$PORT" -data "$TMP/data" -projects "$TMP/ws" \\
   -static "$ROOT/pod/webdist/dist" ${EXTRA[@]+"${EXTRA[@]}"} >>"$TMP/pod.log" 2>&1 </dev/null &
 echo \$! >"$TMP/pod.pid"
 for _ in \$(seq 50); do [ -s "$TMP/data/token" ] && curl -s -o /dev/null "http://127.0.0.1:$PORT/" && break; sleep 0.1; done

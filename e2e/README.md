@@ -49,6 +49,7 @@ flowchart LR
 - `llm`: Assistant: server setup, model list, streamed answer with tool calls (read, language server, confirmed edit)
 - `lsp`: Code navigation with gopls (skipped when gopls is not installed)
 - `mcptools`: Tools of the IDE in its MCP (#68), called as a CLI agent does: a file and a diff opened in the window, a message
+- `plugins`: Plugins (#113): the test plugin hello (`WEBIDE_TEST_PLUGINS`, set by run.sh) shows its tool last in its zone, answers through its backend and the MCP, and goes when disabled in Settings > Plugins (also after a reload)
 - `mobile`: Phone layout (375×812, touch): one bar of three rows (project and status, the menus, the icons of the views)
 - `mousenav`: Side buttons of the mouse (back, forward): they move in the history of the focused part, wherever the pointer is
 - `multipod`: Multi-pod (milestone 3): three pods of one account, alpha and bravo on one cluster (they are linked by the LAN)

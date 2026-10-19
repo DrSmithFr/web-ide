@@ -10,12 +10,13 @@ import { detectLanguage, lspLanguage, lspLanguageId } from '../editor/languages'
 import { merge3 } from '../editor/merge'
 import { toast } from '../ui/toast'
 import { t, tn } from '../i18n'
-import { normalizePlacement, type Zone } from './zones'
+import { normalizePlacement, setPluginZones, type Zone } from './zones'
 import { deviceId, layoutFor } from './device'
 import { settings } from './settings'
 import { closeDesks, desk, loadDesks, showDesk, touchRecent, type DeskList } from './desks'
 
-export type TabKind = 'file' | 'sql' | 'table' | 'text' | 'diff' | 'kanban' | 'ticket' | 'milestone' | 'objective' | 'tool' | 'console' | 'doc'
+/** plugin:<plugin>/<view>: a tab view of a plugin (plugins/registry.ts). */
+export type TabKind = 'file' | 'sql' | 'table' | 'text' | 'diff' | 'kanban' | 'ticket' | 'milestone' | 'objective' | 'tool' | 'console' | 'doc' | `plugin:${string}`
 
 export interface TabState {
   id: string
@@ -42,6 +43,9 @@ export interface TabState {
   /** Doc tabs: the page of the embedded documentation (path of the repo) and the heading shown. */
   doc?: string
   anchor?: string
+  /** Plugin tabs: what tells two tabs of a view apart, and the state the view saves in the desk. */
+  key?: string
+  state?: unknown
 }
 
 /** width: a column of the Scroll mode, its width as a fraction of the view (unset: one column in sight). */
@@ -326,6 +330,7 @@ export function openTab(tab: Omit<TabState, 'id'>, paneId = session.activePane):
     if (tab.kind === 'tool') return t.tool === tab.tool
     if (tab.kind === 'console') return t.console === tab.console
     if (tab.kind === 'doc') return true
+    if (tab.kind.startsWith('plugin:')) return t.key === tab.key
     return false
   })
   if (same) {
@@ -1076,6 +1081,7 @@ export function navigate(dir: -1 | 1) {
 export async function openProject(id: string, creds?: { password?: string; passphrase?: string }, desk = 1) {
   const r = await request('project.open', { id, creds, desk })
   loadDesks(id, r.desks as DeskList, r.desk ?? 1)
+  setPluginZones(r.plugins)
   batch(() => {
     setHome(r.project)
     setAttached(reconcile({ [id]: { project: r.project, root: r.root, local: r.local } }))

@@ -30,6 +30,11 @@ type Def struct {
 	JSON json.RawMessage
 }
 
+// Func is the definition of a tool declared outside this package (a plugin's).
+func Func(name, description string, props map[string]any, required ...string) Def {
+	return fn(name, description, props, required...)
+}
+
 func fn(name, description string, props obj, required ...string) Def {
 	if required == nil {
 		required = []string{}

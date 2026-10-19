@@ -147,6 +147,13 @@ func (s *Server) assistantTool(r *assistantRun, ref *runtimeRef, call assistant.
 	if assistant.DockerTools[name] {
 		return s.dockerTool(r, ref, name, a)
 	}
+	if t := s.findPluginTool(name); t != nil {
+		res, err := s.runPluginTool(r.ctx, ref.rt, t, []byte(orEmpty(call.Function.Arguments)), r.lang)
+		if err != nil {
+			return fail(r, err)
+		}
+		return res
+	}
 	root := ref.rt.Root
 	which := map[string]string{assistant.Plan: "Plan", assistant.Briefing: "Briefing", assistant.Orchestrator: "Orchestrator"}[mode]
 	// Out of Build mode, files change only in the scratch folder.

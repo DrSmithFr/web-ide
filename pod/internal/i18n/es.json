@@ -364,5 +364,8 @@
   "only an open objective can be abandoned": "solo se puede abandonar un objetivo abierto",
   "objective %d not found": "objetivo %d no encontrado",
   "objective %d is closed": "el objetivo %d está cerrado",
-  "a step takes the objective of its root (#%d)": "un paso toma el objetivo de su raíz (#%d)"
+  "a step takes the objective of its root (#%d)": "un paso toma el objetivo de su raíz (#%d)",
+  "invalid .ide/plugins.json: %v": ".ide/plugins.json no válido: %v",
+  "the %s plugin is disabled on this project": "el plugin %s está desactivado en este proyecto",
+  "unknown plugin: %s": "plugin desconocido: %s"
 }

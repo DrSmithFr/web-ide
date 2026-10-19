@@ -32,6 +32,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
 	"github.com/DrSmithFr/web-ide/pod/internal/multipod"
 	"github.com/DrSmithFr/web-ide/pod/internal/pair"
+	"github.com/DrSmithFr/web-ide/pod/internal/plugins/builtin"
 	"github.com/DrSmithFr/web-ide/pod/internal/power"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 	"github.com/DrSmithFr/web-ide/pod/internal/push"
@@ -188,6 +189,8 @@ func main() {
 		Name:        hostname(),
 		RelayURL:    cfg.RelayURL,
 		ForceTurn:   *forceTurn,
+		// WEBIDE_TEST_PLUGINS adds the plugins of the browser tests.
+		Plugins: builtin.Registry(os.Getenv("WEBIDE_TEST_PLUGINS") != ""),
 	}
 
 	if *static != "" {

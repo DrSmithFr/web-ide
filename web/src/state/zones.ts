@@ -1,19 +1,32 @@
 // Tool zones of the project window. Each icon rail has two groups: the top one opens a side
 // panel, the bottom one a tool of the strip under the editor. Each zone shows at most one tool.
-// Icons are dragged between groups; the placement is saved in the session.
+// Icons are dragged between groups; the placement is saved in the session. The tools of the
+// plugins come after those of the core in their default zone; a disabled plugin keeps its place.
 import type { SessionData } from './project'
 
 export type Zone = 'left' | 'bottomLeft' | 'bottomRight' | 'right'
 export const zones: Zone[] = ['left', 'bottomLeft', 'bottomRight', 'right']
 
-export const defaultPlacement: Record<Zone, string[]> = {
+const corePlacement: Record<Zone, string[]> = {
   left: ['explorer', 'search', 'git', 'kanban'],
   bottomLeft: ['console'],
   bottomRight: ['problems', 'docker'],
   right: ['database', 'assistant', 'agents', 'questions', 'structure', 'conflicts', 'info'],
 }
 
-export const toolIds = zones.flatMap((z) => defaultPlacement[z])
+// The tools of every plugin the pod knows, enabled or not (project.open).
+let pluginZones: { id: string; zone: Zone }[] = []
+export function setPluginZones(plugins: { manifest: { contributes: { tools?: { id: string; zone: Zone }[] } } }[] | undefined) {
+  pluginZones = (plugins ?? []).flatMap((p) => p.manifest.contributes.tools ?? []).filter((t) => zones.includes(t.zone))
+}
+
+export function defaultPlacement(): Record<Zone, string[]> {
+  const out = {} as Record<Zone, string[]>
+  for (const z of zones) out[z] = [...corePlacement[z], ...pluginZones.filter((t) => t.zone === z).map((t) => t.id)]
+  return out
+}
+
+export const toolIds = () => zones.flatMap((z) => defaultPlacement()[z])
 
 export function toolsIn(s: SessionData, zone: Zone): string[] {
   return s.placement[zone]
@@ -23,11 +36,13 @@ export function toolsIn(s: SessionData, zone: Zone): string[] {
 export function normalizePlacement(raw: any): Record<Zone, string[]> {
   const seen = new Set<string>()
   const out = {} as Record<Zone, string[]>
+  const defaults = defaultPlacement()
+  const known = zones.flatMap((z) => defaults[z])
   for (const z of zones) {
-    const list: unknown[] = Array.isArray(raw?.[z]) ? raw[z] : defaultPlacement[z]
-    out[z] = list.filter((id): id is string => typeof id === 'string' && toolIds.includes(id) && !seen.has(id) && !!seen.add(id))
+    const list: unknown[] = Array.isArray(raw?.[z]) ? raw[z] : defaults[z]
+    out[z] = list.filter((id): id is string => typeof id === 'string' && known.includes(id) && !seen.has(id) && !!seen.add(id))
   }
-  for (const z of zones) for (const id of defaultPlacement[z]) if (!seen.has(id)) out[z].push(id)
+  for (const z of zones) for (const id of defaults[z]) if (!seen.has(id)) out[z].push(id)
   return out
 }
 

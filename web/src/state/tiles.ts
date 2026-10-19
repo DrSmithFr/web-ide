@@ -4,6 +4,7 @@
 // the Scroll mode, like niri, the columns of the tree go side by side in a strip wider than
 // the window: a new tile opens a column (or stacks in the focused one), 1 to 3 are in sight.
 import { createEffect, createRoot, createSignal, type JSX } from 'solid-js'
+import { createMutable } from 'solid-js/store'
 import { activateTab, activeLeaf, addColumn, closeEmptyPane, columnOf, columnsOf, findLeaf, leaves, moveColumn, moveTab, mutate, openTab, project, resizePane, session, setActivePane, setColumnWidth, setTabPlacer, splitEmpty, stackLeft, swapPanes, unstack, type LayoutNode, type TabState } from './project'
 import { showTool, zoneOf } from './zones'
 import { desk, desks, setDeskMode, type Desk } from './desks'
@@ -18,7 +19,7 @@ export interface TileTool {
 }
 
 /** The tools that can be tiles (those of the zones, given by the project page). */
-export const tileTools: Record<string, TileTool> = {}
+export const tileTools: Record<string, TileTool> = createMutable({})
 export function registerTileTools(list: Record<string, TileTool>) {
   Object.assign(tileTools, list)
 }

@@ -68,7 +68,7 @@ async function focus(a: Record<string, any>, base?: string): Promise<UiResult> {
     }
     case 'panel': {
       const id = String(a.panel ?? '')
-      if (!toolIds.includes(id)) throw new Error(`unknown panel: ${id} (${toolIds.join(', ')})`)
+      if (!toolIds().includes(id)) throw new Error(`unknown panel: ${id} (${toolIds().join(', ')})`)
       mutate((s) => showTool(s, id))
       return ok(`Panel ${id} shown.`, t('panel {id}', { id }))
     }

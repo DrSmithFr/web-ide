@@ -1,6 +1,7 @@
 // Main window of a project: menu bar, icon rails, side panels, editor area, bottom tools.
 import { podPath } from '../app/base'
-import { createEffect, createSignal, For, type JSX, on as track, onCleanup, onMount, Show } from 'solid-js'
+import { createEffect, createRoot, createSignal, For, type JSX, on as track, onCleanup, onMount, Show, untrack } from 'solid-js'
+import { createMutable } from 'solid-js/store'
 import { Dynamic } from 'solid-js/web'
 import { RpcError, formatRate, on as onPod, podRates, podState } from '../pod/rpc'
 import {
@@ -8,7 +9,8 @@ import {
   openFile, closeEmptyPane, saveAll, session, setConflictOpener, setSize, sizesFor, splitPane, closeProject, moveTabToDesk, switchDesk,
 } from '../state/project'
 import { desk, desks, onDeskGone } from '../state/desks'
-import { cycleWidth, focusDirection, moveColumnBy, scrollMode, stackTile, tileMode, unstackTile, openTile, registerTileTools, resizeTile, showToolTile, startResize, swapDirection, toggleSplit } from '../state/tiles'
+import { cycleWidth, focusDirection, moveColumnBy, scrollMode, stackTile, tileMode, unstackTile, openTile, registerTileTools, resizeTile, showToolTile, startResize, swapDirection, tileTools, toggleSplit } from '../state/tiles'
+import { pluginTools, setPluginStates } from '../plugins/registry'
 import { tileLauncher } from '../ui/tileLauncher'
 import { deskPath, navigate, route } from '../app/router'
 import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, toggleTool, toolsIn, zoneOf, zones, type Zone } from '../state/zones'
@@ -55,8 +57,8 @@ import { ClipboardHistoryHost, pasteFromHistory } from '../popups/ClipboardHisto
 import { newDoodle } from '../llm/Composer'
 import { DoodleHost } from '../llm/doodle/DoodleModal'
 
-/** Tools of the four zones; their placement comes from state/zones. */
-export const toolPanels: Record<string, { label: string; icon: string; component: () => JSX.Element; badge?: () => number }> = {
+/** Tools of the four zones, the core's then those of the enabled plugins; their placement comes from state/zones. */
+export const toolPanels: Record<string, { label: string; icon: string; component: () => JSX.Element; badge?: () => number }> = createMutable({
   explorer: { label: 'Explorer', icon: 'files', component: Explorer },
   search: { label: 'Search', icon: 'search', component: GlobalSearch },
   git: { label: 'Git', icon: 'branch', component: GitPanel },
@@ -71,9 +73,31 @@ export const toolPanels: Record<string, { label: string; icon: string; component
   structure: { label: 'Structure', icon: 'outline', component: StructureTool },
   conflicts: { label: 'Conflicts', icon: 'conflict', component: ConflictsTool },
   info: { label: 'Infos', icon: 'info', component: InfoTool },
-}
+})
 
 registerTileTools(toolPanels)
+
+// The tools of the enabled plugins join the zones, the tiles and the keymap; a plugin disabled
+// leaves them, its place in the zones kept.
+createRoot(() =>
+  createEffect(() => {
+    const list = pluginTools()
+    untrack(() => {
+      for (const p of list) {
+        toolPanels[p.id] = { label: p.label, icon: p.icon, component: p.component, badge: p.badge }
+        tileTools[p.id] = { label: p.label, icon: p.icon, component: p.component }
+      }
+    })
+    const offs = list.map((p) => registerAction(`tool.${p.id}`, () => toggleToolFocus(p.id)))
+    onCleanup(() => {
+      offs.forEach((off) => off())
+      for (const p of list) {
+        delete toolPanels[p.id]
+        delete tileTools[p.id]
+      }
+    })
+  }),
+)
 
 /** Opens a project, asking for the SSH password / passphrase when the pod needs one. */
 export async function openWithAuth(id: string, desk = 1) {
@@ -81,6 +105,7 @@ export async function openWithAuth(id: string, desk = 1) {
   for (;;) {
     try {
       const r = await openProject(id, creds, desk)
+      setPluginStates(r.plugins)
       setConsoleList(r.consoles)
       refreshConnections()
       offerIdeUntrack(r.ideTracked)
@@ -678,7 +703,7 @@ export function ProjectPage(props: { id: string }) {
   const offs = [
     registerAction('view.toggleLeft', () => mutate((s) => (s.left.panel = s.left.panel ? null : (toolsIn(s, 'left')[0] ?? null)))),
     registerAction('view.toggleRight', () => mutate((s) => (s.right.panel = s.right.panel ? null : (toolsIn(s, 'right')[0] ?? null)))),
-    registerAction('view.resetTools', () => mutate((s) => (s.placement = normalizePlacement(defaultPlacement)))),
+    registerAction('view.resetTools', () => mutate((s) => (s.placement = normalizePlacement(defaultPlacement())))),
     registerAction('view.visualFocus', () => updateSettings((s) => (s.visualFocus = !s.visualFocus), 'Visual focus')),
     registerAction('view.focusOutline', () => updateSettings((s) => (s.focusOutline = !s.focusOutline), 'Focus outline')),
     registerAction('view.focusDim', () => updateSettings((s) => (s.focusDim = !s.focusDim), 'Dim out of focus')),

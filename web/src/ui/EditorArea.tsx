@@ -1,6 +1,7 @@
 // Editor area: recursive split tree (split/right, split/down), tab bar per pane, and the
 // content of each tab (file editor, SQL console, table view, read-only text).
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from 'solid-js'
+import { pluginView, pluginViewLabel } from '../plugins/registry'
 import {
   activateTab, basename, closeTab, docError, findLeaf, getDoc, loadDoc, moveTab, openFile, relPath, reveal, saveCursor,
   saveDoc, session, setActivePane, setSplitSizes, splitPane, diagnostics, type LayoutNode, type TabState, docsVersion, mutate, moveTabToDesk,
@@ -146,6 +147,7 @@ function tabTitle(tab: TabState) {
   if (tab.kind === 'tool') return tileTools[tab.tool!] ? t(tileTools[tab.tool!].label) : tab.tool!
   if (tab.kind === 'console') return consoles().find((c) => c.id === tab.console)?.title ?? t('Console')
   if (tab.kind === 'doc') return tab.title ?? t('Documentation')
+  if (tab.kind.startsWith('plugin:')) return tab.title ?? t(pluginViewLabel(tab.kind) ?? tab.kind)
   return tab.title ?? tab.kind
 }
 
@@ -361,6 +363,11 @@ function Pane(props: { id: string }) {
                     {(p) => <Dynamic component={p.component} />}
                   </Show>
                 </div>
+              </Match>
+              <Match when={tab.kind.startsWith('plugin:')}>
+                <Show when={pluginView(tab.kind)} keyed fallback={gone(tab, t('The plugin of this tab is disabled'))}>
+                  {(View) => <View tab={tab} paneId={props.id} />}
+                </Show>
               </Match>
               <Match when={tab.kind === 'console'}>
                 <Show when={consoles().some((c) => c.id === tab.console)} fallback={gone(tab, t('This console is closed'))}>

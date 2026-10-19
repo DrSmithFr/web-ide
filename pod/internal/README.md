@@ -4,7 +4,7 @@ The packages of the pod, in five blocks. Each section has the map of its package
 
 | Block | Packages |
 |---|---|
-| [Server and protocol](#server-and-protocol) | `server`, `runtime`, `store`, `settings`, `projects`, `desks`, `idedir`, `config`, `stats`, `update`, `i18n` |
+| [Server and protocol](#server-and-protocol) | `server`, `runtime`, `store`, `settings`, `projects`, `desks`, `idedir`, `config`, `stats`, `update`, `i18n`, `plugins` |
 | [Files and processes](#files-and-processes) | `fsx`, `execx`, `sshx`, `sshtest`, `console`, `keeper`, `search`, `lsp`, `db`, `docker`, `forwards`, `preview`, `clipboard`, `commands` |
 | [AI](#ai) | `llm`, `assistant`, `acp`, `hfcache` |
 | [Kanban and git](#kanban-and-git) | `kanban`, `git` |
@@ -34,6 +34,7 @@ flowchart LR
   idedir["idedir<br/>.ide out of git"]
   stats["stats<br/>assistant measures"]
   update["update<br/>signed update request"]
+  plugins["plugins<br/>manifests, registry, enabling"]
   server --> assistant
   server --> config
   server --> fsx
@@ -46,6 +47,11 @@ flowchart LR
   server --> settings
   server --> stats
   server --> store
+  server -->|"registers, runs"| plugins
+  plugins --> runtime
+  plugins --> assistant
+  plugins --> fsx
+  plugins --> idedir
   runtime --> fsx
   runtime --> idedir
   runtime -->|"child projects"| projects
@@ -77,8 +83,9 @@ flowchart LR
 - `stats`: Measures how the assistant worked in a conversation: speeds, time generating, thinking and in each tool, failures of tools, context and compactions (token counts by part are estimates)
 - `update`: *Update this pod*: what a pod does with a signed update request that reached it (`relay.md`, *Versions and updates*) — `identity.CheckUpdate`, then the installer run detached (`systemd-run --user` as the service, `setsid` otherwise)
 - `i18n`: Translation of the messages sent to the page
+- `plugins`: The plugin system ([plugins.md](../../docs/design/plugins.md)): the manifest (`plugin.json`, checked by `Parse`), the `Plugin` interface a built-in implements (`Register` adds its RPC methods `<id>.<method>` and its assistant tools through a `Host`), the `Registry` (`Resolve`: the plugins a project runs, given those disabled and the capabilities provided), `.ide/plugins.json`; `plugins/builtin` lists the built-ins, `plugins/hello` is the plugin of the browser tests (`WEBIDE_TEST_PLUGINS`). The server side (`server/handlers_plugins.go`) caches the disabled list per main project and offers the tools of the enabled plugins to the assistant
 
-**Tests**: `cd pod && go test ./internal/server ./internal/runtime ./internal/projects ./internal/desks ./internal/settings ./internal/store ./internal/config ./internal/idedir ./internal/stats ./internal/update ./internal/i18n`; e2e: `features`, `restore+`, `projects`, `desks`, `i18n`.
+**Tests**: `cd pod && go test ./internal/server ./internal/runtime ./internal/projects ./internal/desks ./internal/settings ./internal/store ./internal/config ./internal/idedir ./internal/stats ./internal/update ./internal/i18n ./internal/plugins/...`; e2e: `features`, `restore+`, `projects`, `desks`, `i18n`, `plugins`.
 
 
 ## Files and processes

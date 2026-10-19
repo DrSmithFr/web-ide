@@ -25,6 +25,8 @@ import { PodsSection } from './Pods'
 import { HelpLink } from '../help/HelpLink'
 import type { HelpTopic } from '../state/docs'
 import { Notifications } from './Notifications'
+import { PluginsSection } from './Plugins'
+import { project } from '../state/project'
 import { relayDevice } from '../pod/push'
 import { browserLang, fmtDate, languages, t, tn, type LangSetting } from '../i18n'
 
@@ -36,6 +38,7 @@ const sections = [
   ['keys', 'Keyboard shortcuts'],
   ['syntax', 'Syntax highlighting'],
   ['projects', 'Projects folder and pod'],
+  ['plugins', 'Plugins'],
   ['remote', 'Remote access'],
   ['notifications', 'Notifications'],
   ['history', 'Settings history'],
@@ -65,7 +68,7 @@ export function SettingsHost() {
       <Modal title={t('Settings')} onClose={() => setOpen(null)} class="modal-settings">
         <div class="settings">
           <nav class="settings-nav" role="tablist" aria-orientation="vertical">
-            <For each={sections.filter(([id]) => id !== 'notifications' || relayDevice())}>
+            <For each={sections.filter(([id]) => (id !== 'notifications' || relayDevice()) && (id !== 'plugins' || !!project()))}>
               {([id, label]) => (
                 <button classList={{ active: open() === id }} onClick={() => setOpen(id)}>
                   {t(label)}
@@ -103,6 +106,9 @@ export function SettingsHost() {
             </Show>
             <Show when={open() === 'notifications'}>
               <Notifications />
+            </Show>
+            <Show when={open() === 'plugins'}>
+              <PluginsSection />
             </Show>
             <Show when={open() === 'history'}>
               <History />

@@ -381,6 +381,7 @@ func (s *Server) registerProject() {
 			"desk":     desk,
 			"desks":    s.Desks.List(a.ID),
 			"consoles": rt.Consoles.List(),
+			"plugins":  s.pluginStates(rt),
 			// Files of .ide still tracked by git: the page offers to untrack them once.
 			"ideTracked": s.ideTracked(ctx, v, rt),
 		}, nil
