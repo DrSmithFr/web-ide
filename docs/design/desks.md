@@ -42,7 +42,7 @@ Full and Grid are done in #82, Scroll in #83 (see [spec.md](spec.md#9-desk-state
 
 Done in #81 (see [spec.md](spec.md#9-desk-state-and-persistence)):
 
-- Numbered `1 2 3 +` in the project bar; a desk may get a name.
+- Numbered `1 2 3 +` on the left of the status bar; a desk may get a name.
 - The URL carries the desk: `/project/:id/desk/2`, `/project/:id` being desk 1. A click switches the window; a middle click opens it in a new tab (a plain `<a href>`). Two windows on the same desk mirror each other, as today. The home page opens the last desk of the device.
 - `Ctrl+Alt+1…9` goes to desk N, `Ctrl+Alt+Shift+N` sends the active tab or tile there (Super is not caught by a browser). A tab dragged on a desk number moves there; the tab menu has *Move to desk N*.
 - Maybe: *Open on screen 2* through the Window Management API (`getScreenDetails`, Chromium), full screen on the chosen screen.

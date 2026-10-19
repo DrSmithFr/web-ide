@@ -43,6 +43,7 @@ import { offerIdeUntrack } from '../state/ideTracked'
 import { toast } from '../ui/toast'
 import { t, tn } from '../i18n'
 import { ProjectBar } from './ProjectBar'
+import { DeskSwitcher } from '../ui/DeskSwitcher'
 import { SearchEverywhereHost, searchEverywhere } from '../popups/SearchEverywhere'
 import { RecentFilesHost, recentFiles } from '../popups/RecentFiles'
 import { ClipboardHistoryHost, pasteFromHistory } from '../popups/ClipboardHistory'
@@ -331,6 +332,8 @@ function MenuBar() {
         <header class="menubar phone" data-testid="phone-bar">
           <div class="menubar-row">
             {head()}
+            {/* The phone keeps the desks in its bar: its status bar belongs to the editor pane. */}
+            <DeskSwitcher />
             <span class="grow" />
             {tail()}
           </div>
@@ -789,9 +792,10 @@ export function ProjectPage(props: { id: string }) {
         </div>
         </Show>
         {/* The status bar is the last row of the window: full width, under the bottom strip and
-            the icon rails. The phone keeps it inside the editor pane, hidden with it. */}
+            the icon rails, the desks on its left. The phone keeps it inside the editor pane,
+            hidden with it, and its desks in the bar of the window. */}
         <Show when={!phone()}>
-          <StatusBar />
+          <StatusBar desks />
         </Show>
       </div>
     </Show>

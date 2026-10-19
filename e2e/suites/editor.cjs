@@ -265,6 +265,10 @@ run(async ({ page }) => {
     const { w, h } = await win()
     assert(await barIsLast(), 'the status bar is the last child of .app')
     assert(Math.abs(bar.width - w) < 2 && Math.abs(bar.bottom - h) < 2, 'the bar spans the whole window at its bottom')
+    // The desks of the project sit on the left of the bar, not in the menu bar.
+    const desks = await box('[data-testid=desks]')
+    assert(!!(await page.$('[data-testid=status-bar] [data-testid=desks]')) && !(await page.$('.menubar [data-testid=desks]')), 'the desks are in the status bar, not in the menu bar')
+    assert(desks.left >= bar.left && desks.left - bar.left < 10 && desks.bottom <= bar.bottom + 1, 'the desks sit at the left of the bar')
     for (const rail of ['.rail-left', '.rail-right'])
       assert((await box(rail)).bottom <= bar.top + 1, `the ${rail} stops above the bar`)
     await page.click('.rail-left .rail-btn[title="Console"]')

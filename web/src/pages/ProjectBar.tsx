@@ -12,7 +12,6 @@ import { iconOf, iconURL, useProjectIcon, withBadge } from '../ui/projectIcon'
 import { IconEditor } from '../ui/IconEditor'
 import { capability } from '../plugins/capabilities'
 import { t } from '../i18n'
-import { DeskSwitcher } from './DeskSwitcher'
 import { desk, desks, deskLabel } from '../state/desks'
 
 interface Worktree {
@@ -193,7 +192,6 @@ export function ProjectBar() {
         </Show>
         <Icon name="chevron" size={10} />
       </button>
-      <DeskSwitcher />
       <Show when={editing() && owner()}>
         <IconEditor id={owner()!.owner} name={owner()!.name} spec={owner()!.spec} onClose={() => setEditing(false)} />
       </Show>
