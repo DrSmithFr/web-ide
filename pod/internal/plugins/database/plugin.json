@@ -2,7 +2,7 @@
   "id": "database",
   "name": "Database explorer",
   "version": "1.0.0",
-  "apiVersion": 0,
+  "apiVersion": 1,
   "permissions": ["net"],
   "contributes": {
     "tools": [{ "id": "database", "label": "Database explorer", "icon": "database", "zone": "right", "before": "assistant" }],

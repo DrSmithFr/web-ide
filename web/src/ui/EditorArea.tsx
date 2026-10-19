@@ -31,7 +31,6 @@ import { TicketView } from '../kanban/TicketView'
 import { MilestoneView } from '../kanban/MilestoneView'
 import { ObjectiveView } from '../kanban/ObjectiveView'
 import { board, summary } from '../kanban/state'
-import { gitRevision, gitStatus } from '../state/git'
 import { lineMarks } from '../editor/linediff'
 import { formatDocument, renameSymbol } from '../lsp/refactor'
 import { t } from '../i18n'
@@ -611,11 +610,11 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
 
   // Change markers against HEAD, recomputed a moment after the edits.
   const [head] = createResource(
-    () => (gitStatus()?.repo ? { rev: gitRevision(), d: doc() } : null),
+    () => (capability('git')?.status()?.repo ? { rev: capability('git')!.revision(), d: doc() } : null),
     async ({ d }) => {
       if (!d || d.readOnly) return null
       try {
-        return await request<{ content: string; exists: boolean }>('git.show', { path, rev: 'HEAD' })
+        return (await capability('git')?.show(path, 'HEAD')) ?? null
       } catch {
         return null
       }
@@ -630,7 +629,7 @@ function FileEditor(props: { tab: TabState; paneId: string }) {
     d.changed()
     clearTimeout(markTimer)
     if (!h) return v.setLineMarks(new Map())
-    const untracked = gitStatus()?.files.some((f) => f.path === path && f.untracked)
+    const untracked = capability('git')?.status()?.files.some((f) => f.path === path && f.untracked)
     markTimer = window.setTimeout(() => {
       if (!h.exists) v.setLineMarks(untracked ? new Map(Array.from({ length: d.lineCount }, (_, i) => [i, 'add' as const])) : new Map())
       else v.setLineMarks(lineMarks(h.content.replace(/\r\n/g, '\n'), d.text))

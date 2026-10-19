@@ -6,7 +6,9 @@ import { batch, createEffect, createSignal, For, on, onCleanup, onMount, Show } 
 import { Portal } from 'solid-js/web'
 import { activeTab, basename, getDoc, openFile, relPath } from '../state/project'
 import { desks, forgetRecent } from '../state/desks'
-import { fileState } from '../state/git'
+import { capability } from '../plugins/capabilities'
+
+const fileState = (p: string) => capability('git')?.fileState(p) ?? null
 import { fuzzy } from '../ui/overlay'
 import { Icon } from '../ui/icons'
 import { FileIcon } from '../panels/fileIcons'

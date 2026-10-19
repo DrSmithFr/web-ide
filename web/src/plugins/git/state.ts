@@ -1,27 +1,10 @@
-// Git state of the open project, refreshed after file changes and Git actions.
+// Git state of the worktree shown, refreshed after file changes and Git actions: the git service
+// of the plugin (explorer colors, project bar, editor markers).
 import { createEffect, createMemo, createRoot, createSignal, on as track } from 'solid-js'
-import { on, request } from '../pod/rpc'
-import { project } from './project'
+import type { FileGitState, GitFile, GitStatus } from '../capabilities'
+import { api } from './plugin'
 
-export interface GitFile {
-  path: string
-  origPath?: string
-  index: string
-  work: string
-  untracked?: boolean
-  conflict?: boolean
-}
-
-export interface GitStatus {
-  repo: boolean
-  top?: string
-  branch?: string
-  head?: string
-  upstream?: string
-  ahead: number
-  behind: number
-  files: GitFile[]
-}
+export type { GitFile, GitStatus, FileGitState }
 
 const [status, setStatus] = createSignal<GitStatus | null>(null)
 const [revision, setRevision] = createSignal(0)
@@ -39,14 +22,14 @@ export function refreshGit(delay = 400) {
 }
 
 async function load() {
-  if (!project()) return
+  if (!api.project.current()) return
   if (running) {
     again = true
     return
   }
   running = true
   try {
-    const st = await request<GitStatus>('git.status')
+    const st = await api.rpc<GitStatus>('status')
     // A commit made in a terminal moves HEAD without any event of the pod.
     if (status() && st.head !== status()!.head) setRevision((r) => r + 1)
     setStatus(st)
@@ -61,25 +44,27 @@ async function load() {
   }
 }
 
+/** Starts following the repository: the events of the pod, the worktree shown, the focus. */
+export function watchGit() {
 // Events of another worktree attached to the window do not change the one shown.
-const shown = (from?: string) => !from || from === project()?.id
-on('git.changed', (_, from) => {
+const shown = (from?: string) => !from || from === api.project.current()
+api.on('git.changed', (_, from) => {
   if (!shown(from)) return
   setRevision((r) => r + 1)
   refreshGit(50)
 })
 // A file written, created or removed anywhere in the project.
-on('fs.dir', (e: { path: string }, from) => {
+api.on('fs.dir', (e: { path: string }, from) => {
   if (!shown(from)) return
   if (e.path.includes('/.git')) setRevision((r) => r + 1)
   refreshGit()
 })
-on('fs.changed', (_, from) => shown(from) && refreshGit())
+api.on('fs.changed', (_, from) => shown(from) && refreshGit())
 // Another worktree shown in the window.
 createRoot(() =>
   createEffect(
     track(
-      () => project()?.id,
+      () => api.project.current(),
       (id, prev) => {
         if (!id || !prev) return
         setRevision((r) => r + 1)
@@ -92,8 +77,7 @@ window.addEventListener('focus', () => {
   setRevision((r) => r + 1)
   refreshGit(100)
 })
-
-export type FileGitState = 'modified' | 'added' | 'untracked' | 'conflict' | 'deleted'
+}
 
 function stateOf(f: GitFile): FileGitState {
   if (f.conflict) return 'conflict'

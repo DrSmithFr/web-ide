@@ -90,6 +90,26 @@ Exec (#116) is the first plugin the rest of the IDE *uses*: a dozen parts of the
 - `api.rpc` takes an `AbortSignal`; `api.project.relPath`.
 - On the pod, the plugin holds `search.grep`; `search.files` stays core (the explorer, Search Everywhere, the assistant's `find_files`), and so does the assistant's `search_text`, which moves with AI.
 
+## What Git added to the API
+
+- **Diff sources** (`diffSources` contribution, `web/src/ui/diffSources.ts`): the diff view is the core's, the sides of a `diff` tab come from its `source` (git when unset, as the desks saved before): `load(tab, work)`, `live`, `revision`, `label`, `Actions` (Stage / Unstage). `api.openDiff` opens a diff tab of the plugin's source.
+- The **git service** (`capability('git')`): the status, its revision, the state of a file or a folder (explorer colors, Recent Files), the ignored files, the branches (project bar, kanban base), a file at a revision (the change markers of the editor).
+- `worktrees` is the Git plugin's: the core provides no capability any more; *Start development* of the kanban needs it.
+- The tab and the heights of the Git tool moved to its desk state (`plugins.git`, migrated).
+- `fmtAgo`, `ui.FileIcon`, `project.basename`, `files.read`.
+
+## API v1
+
+Frozen with #118: `apiVersion: 1` in every manifest; a change of what follows is a new version.
+
+**Manifest** (`plugin.json`): `id`, `name`, `version`, `apiVersion`, `permissions`, `provides` / `requires` (capabilities), `namespaces` (prefixes of its methods and actions besides its id), `contributes`: `tools` (`id`, `label`, `icon`, `zone`, `before`), `tabViews`, `assistantTools`, `commands` (`id`, `label`, `category`, `keys`, `replaces`, `inTerminal`).
+
+**Pod** (`pod/internal/plugins`): `Plugin{Manifest(), Register(Host)}`; `Host.Handle(method, handler)` and `Host.AssistantTool(tool)`; a `Call` carries the `Runtime` of the project, `Params`, `Lang`, the `Window` (push, held streams), `Emit` / `EmitOthers` / `EmitFamily`, the `Options` of a conversation; `Result`, `UsageError`, `CodedError`.
+
+**Page** (`web/src/plugins/api.ts`): `rpc` / `rpcIn` / `notifyIn` / `channel`, `on`, `t` / `tn` / `fmtDate` / `fmtAgo`, `project`, `files`, `ssh`, `desk` (its state in the desk), `provide` / `use` (capabilities), `showTool`, `tiles`, `theme`, `openFile` / `openView` / `setViewState` / `openDiff` / `openText`, `panes`, `editor`, `keys`, `forwards`, `previews`, `ui`. The module's `activate(api)` returns its contributions: `tools`, `views`, `commands`, `hosts`, `searchProviders`, `diffSources`, `assistantOptions`, `opened`.
+
+**Capabilities**: `terminal` and `commands` (Exec), `git` and `worktrees` (Git), their types in `web/src/plugins/capabilities.ts`.
+
 ## Decisions
 
 Taken on 2026-10-19:
@@ -105,7 +125,7 @@ Taken on 2026-10-19:
 Decided on 2026-10-19, once Docker and the database had proved the API (decision 5 answered: yes). The core keeps the window manager: connection, layout, desks, tabs, settings, keymap, buffers and their sync, conflict resolution, help, the plugin registry; plus **shells** that plugins feed:
 
 - **Search Everywhere** is a shell; each plugin contributes a **search provider** (files, symbols, actions, text, tickets…), a new contribution point (#117).
-- **The diff view** is generic (two texts, or a change); Git, the kanban and the assistant give it their content.
+- **The diff view** is generic (two texts, or a change); Git, the kanban and the assistant give it their content (diff sources, #118).
 - **Questions** stays in the core: the assistant, the agents and `ask_user` of the MCP all use it.
 
 The plugins, grouped by domain (one plugin, several tools and views), in their order (milestone *Plugins, phase 2*: #116 Exec, #117 Search, #118 Git, #119 Previews, #120 Languages, #121 Files and Code, #122 Kanban, #123 AI, #124 loading on demand, #125 semantic search):
@@ -114,7 +134,7 @@ The plugins, grouped by domain (one plugin, several tools and views), in their o
 |---|---|---|
 | Exec | Console tool (terminals, tasks), project commands (#116, done) | provides `terminal`, `commands` |
 | Search | Search tool (text, regex), the text provider of Search Everywhere (#117, done) | |
-| Git | Git tool, git content of the diff view | provides `worktrees` |
+| Git | Git tool, git content of the diff view (#118, done) | provides `worktrees`, `git` |
 | Previews | Port forwards and previews tool | requires `terminal` |
 | Languages | language servers, Problems, Structure, `lsp_*` tools, symbol provider | provides `symbols` |
 | Files | Explorer, file provider (locked) | |
@@ -124,7 +144,7 @@ The plugins, grouped by domain (one plugin, several tools and views), in their o
 
 - **Locked plugins** (`required` in the manifest): Files and Code cannot be disabled; Settings → Plugins shows them checked and greyed.
 - **Languages apart from Code**: the editor without language servers (a slow SSH project).
-- `apiVersion: 1` is frozen after Git.
+- `apiVersion: 1` is frozen after Git ([API v1](#api-v1)).
 - Then the **page modules load on demand** (`import()`): a disabled plugin is not downloaded.
 - A **semantic search** (embeddings by a local model) is a new provider of Search, after the move.
 
@@ -138,7 +158,7 @@ One ticket per step, the e2e suites of the moved tool passing before each merge:
 4. Git (the `worktrees` capability), then the editor and rendered Markdown as views of a buffer.
 5. Kanban, then the assistant last.
 
-`apiVersion: 1` is frozen only after Git: until then every plugin is internal and the API may change with each step.
+`apiVersion: 1` is frozen after Git (#118, [API v1](#api-v1)).
 
 ## Open questions
 

@@ -1,13 +1,11 @@
-// Side-by-side diff of a file (tab of the editor): working tree against the index
-// ("changes"), the index against HEAD ("staged"), the working tree against HEAD ("head"),
-// or a commit against its first parent ("rev", read only). The working side follows the
-// open buffer while it is edited.
+// Side-by-side diff of a file (tab of the editor). Its two sides come from the source of the
+// tab (diffSources.ts): the Git plugin compares the working tree, the index, HEAD and commits.
+// A working side follows the open buffer while it is edited.
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, Show, Switch } from 'solid-js'
-import { request } from '../pod/rpc'
+import { Dynamic } from 'solid-js/web'
 import { docsVersion, getDoc, openFile, relPath, setActivePane, type TabState } from '../state/project'
-import { gitRevision, gitStatus, refreshGit } from '../state/git'
 import { lineHunks } from '../editor/linediff'
-import { errorToast } from './toast'
+import { diffSource, type DiffSource } from './diffSources'
 import { t, tn } from '../i18n'
 
 const CONTEXT = 3
@@ -18,13 +16,18 @@ type Row =
   | { kind: 'fold'; id: number; count: number }
 
 export function DiffView(props: { tab: TabState; paneId: string }) {
+  return (
+    <Show when={diffSource(props.tab)} keyed fallback={<p class="muted pad">{t('The plugin of this tab is disabled')}</p>}>
+      {(src) => <Diff tab={props.tab} paneId={props.paneId} src={src} />}
+    </Show>
+  )
+}
+
+function Diff(props: { tab: TabState; paneId: string; src: DiffSource }) {
   const path = props.tab.path!
-  const staged = !!props.tab.staged
-  const head = !!props.tab.head
-  const rev = props.tab.rev
-  const from = props.tab.from ?? path
+  const src = props.src
   // The working tree is one side of the diff.
-  const live = !staged && !rev
+  const live = src.live(props.tab)
   const [expanded, setExpanded] = createSignal<Set<number>>(new Set())
   const [current, setCurrent] = createSignal(0)
   let body!: HTMLDivElement
@@ -38,22 +41,8 @@ export function DiffView(props: { tab: TabState; paneId: string }) {
     return d.text
   })
   const [texts] = createResource(
-    () => ({ rev: gitRevision(), work: live ? workText() : null }),
-    async ({ work }) => {
-      const old = rev ? await request('git.show', { path: from, rev: rev + '^' }) : await request('git.show', { path: staged || head ? from : path, rev: staged || head ? 'HEAD' : '' })
-      let neu: string
-      if (rev) neu = (await request('git.show', { path, rev })).content
-      else if (staged) neu = (await request('git.show', { path, rev: '' })).content
-      else if (work !== null) neu = work
-      else {
-        try {
-          neu = (await request('fs.read', { path })).content ?? ''
-        } catch {
-          neu = ''
-        }
-      }
-      return { old: old.content as string, neu }
-    },
+    () => ({ rev: src.revision?.() ?? 0, work: live ? workText() : null }),
+    ({ work }) => src.load(props.tab, work),
   )
 
   const diff = createMemo(() => {
@@ -108,25 +97,11 @@ export function DiffView(props: { tab: TabState; paneId: string }) {
   }
   createEffect(on(() => diff()?.hunks, () => setCurrent(0), { defer: true }))
 
-  const file = () => gitStatus()?.files.find((f) => f.path === path)
-  const isStagedNow = () => !!file() && file()!.index !== '.' && !file()!.untracked
-  // HEAD ↔ working tree: stage what is left, or unstage when everything is staged.
-  const unstages = () => staged || (head && !!file() && file()!.work === '.')
-
-  const toggleStage = async () => {
-    try {
-      await request(unstages() ? 'git.unstage' : 'git.stage', { paths: [path] })
-    } catch (e) {
-      errorToast(e)
-    }
-    refreshGit(0)
-  }
-
   return (
     <div class="diff-view" onMouseDown={() => setActivePane(props.paneId)}>
       <div class="toolbar">
         <span class="small">
-          {relPath(path)} · {rev ? t('commit {hash} ↔ its parent', { hash: rev.slice(0, 7) }) : staged ? t('index ↔ HEAD') : head ? t('working tree ↔ HEAD') : t('working tree ↔ index')}
+          {relPath(path)} · {src.label(props.tab)}
         </span>
         <Show when={diff() && !diff()!.tooBig}>
           <span class="diff-stats">
@@ -143,11 +118,7 @@ export function DiffView(props: { tab: TabState; paneId: string }) {
         <button class="btn small" onClick={() => openFile(path)}>
           {t('Open the file')}
         </button>
-        <Show when={!rev}>
-          <button class="btn small" onClick={toggleStage}>
-            {unstages() ? t('Unstage') : isStagedNow() && !head ? t('Stage again') : t('Stage')}
-          </button>
-        </Show>
+        <Show when={src.Actions}>{(A) => <Dynamic component={A()} tab={props.tab} />}</Show>
       </div>
       <div class="diff-body" ref={body}>
         <Switch>

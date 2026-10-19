@@ -1,18 +1,13 @@
 // History tab: commits of the current branch with their graph, as
 // `git log --graph --pretty='%h -%d %s (%an %ar - %ad)'`, and the selected commit at the bottom.
 import { createEffect, createMemo, createSignal, For, on, Show } from 'solid-js'
-import { request } from '../../pod/rpc'
-import { mutate, session } from '../../state/project'
-import { gitRevision } from '../../state/git'
-import { contextMenu } from '../../ui/overlay'
-import { errorToast } from '../../ui/toast'
-import { EmptyState } from '../../ui/EmptyState'
-import { fmtAgo, fmtDate, t } from '../../i18n'
+import { gitRevision } from './state'
 import { commitMenuItems, type LogCommit } from './actions'
 import { layoutGraph } from './graph'
 import { GraphCell } from './GraphCell'
 import { CommitDetail } from './CommitDetail'
 import { Resizer } from './Resizer'
+import { api, contextMenu, desk, EmptyState, errorToast, fmtAgo, fmtDate, t } from './plugin'
 
 const PAGE = 100
 const MAX_LANES = 16
@@ -42,7 +37,7 @@ export function HistoryTab() {
     const n = more ? PAGE : Math.min(500, Math.max(PAGE, commits().length))
     setLoading(true)
     try {
-      const page = await request<LogCommit[]>('git.log', { skip, n, query: query() })
+      const page = await api.rpc<LogCommit[]>('git.log', { skip, n, query: query() })
       if (gen !== generation) return
       setCommits(more ? [...commits(), ...page] : page)
       setDone(page.length < n)
@@ -133,8 +128,8 @@ export function HistoryTab() {
       <Show when={selected()}>
         {(hash) => (
           <>
-            <Resizer height={session.git.detail} set={(h) => mutate((s) => (s.git.detail = h))} />
-            <div class="git-bottom" style={{ height: `${session.git.detail}px` }}>
+            <Resizer height={desk.get().detail} set={(h) => desk.set((s) => (s.detail = h))} />
+            <div class="git-bottom" style={{ height: `${desk.get().detail}px` }}>
               <CommitDetail hash={hash()} select={setSelected} close={() => setSelected(null)} />
             </div>
           </>

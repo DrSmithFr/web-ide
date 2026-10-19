@@ -9,7 +9,6 @@ import { errorToast, toast } from '../ui/toast'
 import { Icon } from '../ui/icons'
 import { FileIcon } from './fileIcons'
 import { capability } from '../plugins/capabilities'
-import { dirState, fileState } from '../state/git'
 import { folderMark, inExcluded, loadFolderMarks, markFolder, type FolderMark } from '../state/folders'
 import { t } from '../i18n'
 import { copyText } from '../ui/clipboard'
@@ -45,7 +44,7 @@ async function load(dir: string) {
     return
   }
   try {
-    const ign = new Set(await request<string[]>('git.ignored', { paths: list.map((e) => e.path) }))
+    const ign = new Set((await capability('git')?.ignored(list.map((e) => e.path))) ?? [])
     for (const e of list) setIgnored(e.path, ign.has(e.path) || undefined)
   } catch {
     // Not a repository, or git missing: nothing is ignored.
@@ -245,7 +244,7 @@ function Row(props: { entry: Entry; depth: number; inherited: Inherited }) {
   const mark = () => (e.dir ? folderMark(e.path) : null)
   const isIgnored = () => props.inherited.ignored || !!ignored[e.path]
   const isExcluded = () => props.inherited.excluded || mark() === 'excluded'
-  const git = () => (e.dir ? dirState(e.path) : fileState(e.path)) ?? (isIgnored() ? 'ignored' : 'clean')
+  const git = () => (e.dir ? capability('git')?.dirState(e.path) : capability('git')?.fileState(e.path)) ?? (isIgnored() ? 'ignored' : 'clean')
   const toggle = () => setExpanded(e.path, !open())
   const activate = () => (e.dir ? toggle() : openAndFocus(e.path))
   return (

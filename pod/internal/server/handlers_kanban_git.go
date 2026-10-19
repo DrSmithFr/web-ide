@@ -466,6 +466,10 @@ func (s *Server) startTicket(ctx context.Context, k gctx, id int64, base0, by st
 	if t.Status == kanban.Done || t.Status == kanban.Abandoned || t.Status == kanban.New {
 		return nil, "", i18n.New("the ticket must be “To do”, “In progress” or “To test”")
 	}
+	// The worktree of a development is the Git plugin's capability.
+	if k.rt != nil && !s.capabilityOn(k.rt, "worktrees") {
+		return nil, "", i18n.New("starting a development needs the Git plugin, off on this project (Settings > Plugins)")
+	}
 	// Only the user may go past the order of the lineages, and it stays in the history.
 	var forced []kanban.Blocker
 	if t.Status == kanban.Todo {

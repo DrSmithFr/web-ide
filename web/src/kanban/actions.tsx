@@ -1,10 +1,10 @@
 // Workflow of a ticket: the buttons of each status, its linked conversations and its git
 // state (branch, worktree, changes against the base).
+import { capability } from '../plugins/capabilities'
 import { createResource, createSignal, For, Show } from 'solid-js'
 import { Icon } from '../ui/icons'
 import { pick, prompt } from '../ui/overlay'
 import { errorToast } from '../ui/toast'
-import { request } from '../pod/rpc'
 import { openFile, project, root, showWorktree } from '../state/project'
 import {
   abortGit, continueGit, filePatch, finishTicket, gitInfo, inWorktreeOf, mergeTicket, moveTicket, openPR, rebaseTicket, roleLabels, ticketDiff, ticketVersion, unlinkChat, updateTicket,
@@ -314,7 +314,7 @@ export function TicketGit(props: { tk: Ticket; apply: Apply; folded?: boolean })
     },
   )
   const changeBase = async () => {
-    const branches = await request<{ name: string; current: boolean }[]>('git.branches').catch(() => [])
+    const branches = (await capability('git')?.branches().catch(() => [])) ?? []
     const v = await prompt({ title: t('Comparison base'), label: `Branches : ${branches.map((b) => b.name).slice(0, 12).join(', ')}`, value: tk().base || 'origin/main' })
     if (v?.trim()) await props.apply(updateTicket(tk().id, { base: v.trim() }))
   }

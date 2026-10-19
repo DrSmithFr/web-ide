@@ -157,7 +157,6 @@ func (s *Server) Init() {
 	s.Previews = preview.New(s.PreviewTS, s.authorized, func() { s.broadcast("preview.changed", s.Previews.List(), nil) })
 	s.registerGlobal()
 	s.registerProject()
-	s.registerGit()
 	s.registerIcons()
 	s.registerWorktrees()
 	s.registerLLM()

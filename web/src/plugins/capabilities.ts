@@ -52,9 +52,55 @@ export interface CommandsService {
   edit(o?: { select?: string; draft?: Partial<SavedCommand> }): void
 }
 
+export interface GitFile {
+  path: string
+  origPath?: string
+  index: string
+  work: string
+  untracked?: boolean
+  conflict?: boolean
+}
+
+export interface GitStatus {
+  repo: boolean
+  top?: string
+  branch?: string
+  head?: string
+  upstream?: string
+  ahead: number
+  behind: number
+  files: GitFile[]
+}
+
+export type FileGitState = 'modified' | 'added' | 'untracked' | 'conflict' | 'deleted'
+
+export interface GitBranch {
+  name: string
+  current: boolean
+  remote?: boolean
+  upstream?: string
+}
+
+/** git (the Git plugin): the state of the repository of the worktree shown, and what reads it. */
+export interface GitService {
+  status: () => GitStatus | null
+  /** Bumped when HEAD or the index may have changed (diffs and markers are recomputed). */
+  revision: () => number
+  refresh(delay?: number): void
+  /** Git state of a file, of a folder from its content, whether a folder holds changes. */
+  fileState(path: string): FileGitState | null
+  dirState(dir: string): FileGitState | null
+  dirChanged(dir: string): boolean
+  ignored(paths: string[]): Promise<string[]>
+  branches(): Promise<GitBranch[]>
+  /** A file at a revision (HEAD, a commit; '' the index). */
+  show(path: string, rev: string): Promise<{ content: string; exists: boolean }>
+}
+
 export interface Capabilities {
   terminal: TerminalService
   commands: CommandsService
+  git: GitService
 }
 
 // The implementations, by capability, and the plugin providing each.

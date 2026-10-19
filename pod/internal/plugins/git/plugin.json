@@ -1,0 +1,10 @@
+{
+  "id": "git",
+  "name": "Git",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "provides": ["worktrees", "git"],
+  "contributes": {
+    "tools": [{ "id": "git", "label": "Git", "icon": "branch", "zone": "left", "before": "kanban" }]
+  }
+}

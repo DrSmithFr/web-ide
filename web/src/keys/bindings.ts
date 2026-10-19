@@ -98,7 +98,6 @@ export const actions: ActionDef[] = [
   { id: 'view.wordWrap', label: 'Wrap the long lines', category: 'View' },
   { id: 'view.markdown', label: 'Markdown: rendered / raw', category: 'View' },
   { id: 'tool.explorer', label: 'Explorer', category: 'Tools', inTerminal: true },
-  { id: 'tool.git', label: 'Git', category: 'Tools', inTerminal: true },
   { id: 'tool.kanban', label: 'Kanban', category: 'Tools', inTerminal: true },
   { id: 'tool.assistant', label: 'Assistant', category: 'Tools', inTerminal: true },
   { id: 'tool.agents', label: 'Agents', category: 'Tools', inTerminal: true },

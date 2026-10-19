@@ -5,7 +5,8 @@
 // Database explorer (#115) too: its tabs are views of it, a console keeps its text in its tab,
 // and a desk saved before (sql tabs and sqlText) is migrated. Exec (#116) provides terminal:
 // off, the Console goes and Docker with it (it needs terminal); on again, the terminals are back.
-// Search (#117) gives Search Everywhere its Text tab: off, the tab and the Search tool go.
+// Search (#117) gives Search Everywhere its Text tab: off, the tab and the Search tool go. Git
+// (#118) gives the diff view its git sides: off, a diff tab says so, open_diff is refused.
 const fs = require('fs')
 const path = require('path')
 const { execSync } = require('child_process')
@@ -216,4 +217,19 @@ run(async ({ page }) => {
   await setPlugin('search', true)
   await page.waitForSelector('.rail-btn[data-id=search]')
   assert((await seTabs()).includes('Text'), 'the Text tab is back')
+
+  // Git: a diff tab of a change, then Git off: no Git tool, the tab falls back, open_diff refused.
+  fs.appendFileSync(WS + '/demo/notes.txt', 'a line for the diff\n')
+  r = await mcp('open_diff', { path: 'notes.txt' })
+  assert(!r.result.isError, 'open_diff: ' + text(r))
+  await page.waitForSelector('.diff-view .diff-line.add:has-text("a line for the diff")')
+  assert((await page.textContent('.diff-view .toolbar')).includes('working tree'), 'the label of the git source')
+  await setPlugin('git', false)
+  await page.waitForSelector('.rail-btn[data-id=git]', { state: 'detached' })
+  await page.waitForSelector('.pane:has-text("The plugin of this tab is disabled")')
+  r = await mcp('open_diff', { path: 'notes.txt' })
+  assert(r.result.isError && text(r).includes('Git plugin is off'), 'open_diff refused: ' + text(r))
+  await setPlugin('git', true)
+  await page.waitForSelector('.diff-view .diff-line.add:has-text("a line for the diff")')
+  await page.waitForSelector('.rail-btn[data-id=git]')
 })

@@ -2,16 +2,11 @@
 // files, commit form) and a History tab (graph of the current branch, commit detail).
 // Pull, push and fetch run in a terminal (credentials prompts stay interactive).
 import { onCleanup, onMount, Show } from 'solid-js'
-import { request } from '../../pod/rpc'
-import { mutate, session } from '../../state/project'
-import { gitStatus, refreshGit } from '../../state/git'
-import { pick, prompt } from '../../ui/overlay'
-import { errorToast } from '../../ui/toast'
-import { Icon } from '../../ui/icons'
-import { t } from '../../i18n'
+import { gitStatus, refreshGit } from './state'
 import { act, push, pushMenu, remote } from './actions'
 import { ChangesTab } from './ChangesTab'
 import { HistoryTab } from './HistoryTab'
+import { api, desk, errorToast, Icon, pick, prompt, t } from './plugin'
 
 export function GitPanel() {
   onMount(() => refreshGit(0))
@@ -20,12 +15,12 @@ export function GitPanel() {
   onCleanup(() => clearInterval(poll))
 
   const st = () => gitStatus()
-  const tab = () => session.git.tab
-  const setTab = (id: 'commit' | 'history') => mutate((s) => (s.git.tab = id))
+  const tab = () => desk.get().tab
+  const setTab = (id: 'commit' | 'history') => desk.set((s) => (s.tab = id))
 
   const branches = async () => {
     try {
-      const list: any[] = await request('git.branches')
+      const list: any[] = await api.rpc('git.branches')
       const choice = await pick<string>({
         placeholder: t('Switch branch'),
         items: [

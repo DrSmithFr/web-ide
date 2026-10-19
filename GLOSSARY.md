@@ -154,6 +154,9 @@ A plugin that ships compiled into the IDE, with the same manifest and API as an 
 **Contribution**
 What a plugin adds at one contribution point of the IDE: a tool, a tab view, an assistant tool, a command, a settings section…
 
+**Diff source**
+What gives the diff view the two sides of a diff tab (Git: the working tree, the index, HEAD, a commit).
+
 **Search provider**
 What gives Search Everywhere one kind of results (files, symbols, actions, text…) and its tab: the core or a plugin.
 

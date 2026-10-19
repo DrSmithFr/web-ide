@@ -11,17 +11,17 @@ import (
 
 type fake struct{ m Manifest }
 
-func (f fake) Manifest() Manifest { return f.m }
+func (f fake) Manifest() Manifest { m := f.m; m.APIVersion = APIVersion; return m }
 func (f fake) Register(Host)      {}
 
 func TestCheck(t *testing.T) {
-	ok := Manifest{ID: "docker", Contributes: Contributions{Tools: []Tool{{ID: "dock", Zone: "right"}}, AssistantTools: []string{"docker_ps"}}}
+	ok := Manifest{APIVersion: APIVersion, ID: "docker", Contributes: Contributions{Tools: []Tool{{ID: "dock", Zone: "right"}}, AssistantTools: []string{"docker_ps"}}}
 	if err := ok.Check(); err != nil {
 		t.Fatal(err)
 	}
 	for name, m := range map[string]Manifest{
 		"id":      {ID: "Docker"},
-		"api":     {ID: "x", APIVersion: 1},
+		"api":     {ID: "x", APIVersion: 2},
 		"zone":    {ID: "x", Contributes: Contributions{Tools: []Tool{{ID: "x", Zone: "top"}}}},
 		"repeat":  {ID: "x", Contributes: Contributions{Tools: []Tool{{ID: "x", Zone: "left"}, {ID: "x", Zone: "left"}}}},
 		"tool":    {ID: "x", Contributes: Contributions{AssistantTools: []string{"Bad name"}}},
@@ -35,13 +35,13 @@ func TestCheck(t *testing.T) {
 
 func TestAdd(t *testing.T) {
 	r := NewRegistry()
-	if err := r.Add(fake{Manifest{ID: "a", Contributes: Contributions{Tools: []Tool{{ID: "a", Zone: "left"}}, AssistantTools: []string{"a_x"}}}}); err != nil {
+	if err := r.Add(fake{Manifest{APIVersion: APIVersion, ID: "a", Contributes: Contributions{Tools: []Tool{{ID: "a", Zone: "left"}}, AssistantTools: []string{"a_x"}}}}); err != nil {
 		t.Fatal(err)
 	}
 	for name, m := range map[string]Manifest{
 		"twice":     {ID: "a"},
 		"tool":      {ID: "b", Contributes: Contributions{Tools: []Tool{{ID: "a", Zone: "left"}}}},
-		"core tool": {ID: "c", Contributes: Contributions{Tools: []Tool{{ID: "git", Zone: "left"}}}},
+		"core tool": {ID: "c", Contributes: Contributions{Tools: []Tool{{ID: "kanban", Zone: "left"}}}},
 		"assistant": {ID: "d", Contributes: Contributions{AssistantTools: []string{"a_x"}}},
 	} {
 		if r.Add(fake{m}) == nil {
@@ -57,7 +57,7 @@ func TestResolve(t *testing.T) {
 	r := NewRegistry()
 	for _, m := range []Manifest{
 		{ID: "db", Provides: []string{"sql"}},
-		{ID: "orm", Requires: []string{"sql", "worktrees"}},
+		{ID: "orm", Requires: []string{"sql"}},
 		{ID: "admin", Requires: []string{"sql"}},
 		{ID: "lost", Requires: []string{"nothing"}},
 	} {
@@ -111,7 +111,7 @@ func TestEnabledFile(t *testing.T) {
 }
 
 func TestBuiltinManifests(t *testing.T) {
-	for _, f := range []string{"hello/plugin.json", "docker/plugin.json", "database/plugin.json", "exec/plugin.json", "search/plugin.json"} {
+	for _, f := range []string{"hello/plugin.json", "docker/plugin.json", "database/plugin.json", "exec/plugin.json", "search/plugin.json", "git/plugin.json"} {
 		data, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)
