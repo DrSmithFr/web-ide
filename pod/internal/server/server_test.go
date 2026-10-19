@@ -19,6 +19,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/desks"
 	"github.com/DrSmithFr/web-ide/pod/internal/hfcache"
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
+	"github.com/DrSmithFr/web-ide/pod/internal/plugins/builtin"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 	"github.com/DrSmithFr/web-ide/pod/internal/settings"
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
@@ -33,7 +34,10 @@ type wsClient struct {
 	resps  map[int64]chan map[string]any
 }
 
-func newServer(t *testing.T) (*Server, *httptest.Server) {
+func newServer(t *testing.T) (*Server, *httptest.Server) { return newServerWith(t, nil) }
+
+// newServerWith lets a test set fields of the server before Init.
+func newServerWith(t *testing.T, set func(*Server)) (*Server, *httptest.Server) {
 	st, _ := store.Open(t.TempDir())
 	cfg, _ := config.Load(st)
 	reg, _ := projects.Load(st)
@@ -41,6 +45,10 @@ func newServer(t *testing.T) (*Server, *httptest.Server) {
 	s := &Server{Cfg: cfg, Store: st, Token: "secret-token-0123456789abcdef0123", Projects: reg, Settings: sets,
 		Desks: desks.New(st), LLM: llm.New(st), Models: hfcache.New(st.Path("models", "hf")), Pool: sshx.NewPool(sshx.NewHostKeys(st.Path("known_hosts"))),
 		Static: fstest.MapFS{"index.html": {Data: []byte(`<html><link rel="manifest" href="./manifest.webmanifest"><script src="./assets/app.js"></script>app</html>`)}, "manifest.webmanifest": {Data: []byte(`{"name":"Web IDE"}`)}}}
+	s.Plugins = builtin.Registry(false)
+	if set != nil {
+		set(s)
+	}
 	s.Init()
 	ts := httptest.NewServer(s)
 	t.Cleanup(func() {

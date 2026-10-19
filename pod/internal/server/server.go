@@ -25,7 +25,6 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/config"
-	"github.com/DrSmithFr/web-ide/pod/internal/db"
 	"github.com/DrSmithFr/web-ide/pod/internal/desks"
 	"github.com/DrSmithFr/web-ide/pod/internal/forwards"
 	"github.com/DrSmithFr/web-ide/pod/internal/hfcache"
@@ -33,6 +32,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/kanban"
 	"github.com/DrSmithFr/web-ide/pod/internal/keeper"
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
+	"github.com/DrSmithFr/web-ide/pod/internal/plugins"
 	"github.com/DrSmithFr/web-ide/pod/internal/preview"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 	"github.com/DrSmithFr/web-ide/pod/internal/push"
@@ -104,6 +104,8 @@ type Server struct {
 	// notification to the relay (both nil: no push, push.go).
 	Push     *push.Store
 	PushSend func(sub string, body []byte, ttl int, urgency, topic string) error
+	// Plugins are the built-in plugins (nil: none).
+	Plugins *plugins.Registry
 
 	// stopped: the pod stops (Shutdown); the runs are left as they are, to be taken back.
 	stopped atomic.Bool
@@ -122,6 +124,8 @@ type Server struct {
 	asks askRegistry
 	// previewMu serializes preview.open (one command per app).
 	previewMu sync.Mutex
+	// plugins: the assistant tools of the plugins and their enabling per project.
+	plugins pluginSet
 	// forwardIdle closes the port forwards once no window is left (windowsChanged).
 	forwardIdle *time.Timer
 }
@@ -153,16 +157,12 @@ func (s *Server) Init() {
 	s.Previews = preview.New(s.PreviewTS, s.authorized, func() { s.broadcast("preview.changed", s.Previews.List(), nil) })
 	s.registerGlobal()
 	s.registerProject()
-	s.registerDB()
 	s.registerGit()
 	s.registerIcons()
 	s.registerWorktrees()
 	s.registerLLM()
 	s.registerAssistant()
 	s.registerExec()
-	s.registerDocker()
-	s.registerDockerLogs()
-	s.registerDockerDisk()
 	s.registerForwards()
 	s.registerIdeDir()
 	s.registerCommands()
@@ -180,6 +180,7 @@ func (s *Server) Init() {
 	s.registerSync()
 	s.registerPods()
 	s.registerPush()
+	s.registerPlugins()
 }
 
 func (s *Server) handle(name string, h handler) { s.handlers[name] = h }
@@ -1026,14 +1027,17 @@ func toRPCError(err error, lang string) *rpcError {
 		return &rpcError{Code: ce.code, Message: i18n.Translate(lang, ce.error)}
 	}
 	var ar *sshx.AuthRequired
-	var np *db.NeedPassword
+	var pe *plugins.CodedError
 	switch {
 	case errors.As(err, &ar):
 		msg := i18n.Translate(lang, ar.Msg)
 		return &rpcError{Code: "auth_required", Message: msg, Data: map[string]string{"kind": ar.Kind, "prompt": msg}}
-	case errors.As(err, &np):
-		msg := i18n.Translate(lang, np.Msg)
-		return &rpcError{Code: "db_password", Message: msg, Data: map[string]string{"kind": "dbpassword", "prompt": msg}}
+	case errors.As(err, &pe):
+		e := &rpcError{Code: pe.Code, Message: i18n.Translate(lang, pe.Err)}
+		if pe.Data != nil {
+			e.Data = pe.Data
+		}
+		return e
 	case errors.Is(err, context.Canceled):
 		return &rpcError{Code: "canceled", Message: i18n.T(lang, "canceled")}
 	}

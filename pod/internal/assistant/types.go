@@ -109,8 +109,11 @@ type Options struct {
 	PlanModel   string `json:"planModel,omitempty"`
 	// ActiveFile: the file shown in the editor of the window that sent the message.
 	ActiveFile string `json:"activeFile,omitempty"`
-	// DockerProfiles: the Compose profiles active in the Docker tool of the window.
+	// DockerProfiles: the Compose profiles active in the Docker tool of the window, as pages
+	// sent them before the Docker plugin; read as the plugin's options when Plugins has none.
 	DockerProfiles []string `json:"dockerProfiles,omitempty"`
+	// Plugins: the options of each plugin for the conversation, given by its page module.
+	Plugins map[string]json.RawMessage `json:"plugins,omitempty"`
 }
 
 // QueuedMessage is a message written during an answer, sent at the next step.

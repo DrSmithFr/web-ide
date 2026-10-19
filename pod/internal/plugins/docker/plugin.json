@@ -1,0 +1,12 @@
+{
+  "id": "docker",
+  "name": "Docker",
+  "version": "1.0.0",
+  "apiVersion": 0,
+  "permissions": ["exec:docker"],
+  "requires": ["terminal"],
+  "contributes": {
+    "tools": [{ "id": "docker", "label": "Docker", "icon": "docker", "zone": "bottomRight" }],
+    "assistantTools": ["docker_ps", "docker_logs"]
+  }
+}

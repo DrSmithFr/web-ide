@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
 )
 
 // MCP endpoint: Claude Code (or any MCP client) reads and changes the tickets of the
@@ -141,6 +143,12 @@ func (s *Server) mcpCall(ctx context.Context, m mcpMessage) mcpReply {
 		for _, t := range mcpTools {
 			tools = append(tools, map[string]any{"name": t.name, "description": t.description, "inputSchema": t.schema()})
 		}
+		// The tools of every plugin: the endpoint serves every project (cwd comes with each call),
+		// a call on a project where its plugin is disabled is refused.
+		for _, p := range s.plugins.tools {
+			t := mcpTool{props: p.tool.Props, required: p.tool.Required}
+			tools = append(tools, map[string]any{"name": p.tool.Name, "description": p.tool.Description, "inputSchema": t.schema()})
+		}
 		reply.Result = map[string]any{"tools": tools}
 	case "tools/call":
 		a, err := bind[struct {
@@ -151,6 +159,11 @@ func (s *Server) mcpCall(ctx context.Context, m mcpMessage) mcpReply {
 			return fail(-32602, err.Error())
 		}
 		t := findMCPTool(a.Name)
+		if p := s.findPluginTool(a.Name); t == nil && p != nil {
+			t = &mcpTool{run: ideTool(func(ctx context.Context, s *Server, _ toolArgs, _ mcpScope, rt *runtime.Runtime) (toolResult, error) {
+				return s.runPluginTool(ctx, rt, p, a.Arguments, "en", nil)
+			})}
+		}
 		if t == nil {
 			return fail(-32602, "unknown tool: "+a.Name)
 		}

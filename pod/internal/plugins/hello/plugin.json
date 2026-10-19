@@ -1,0 +1,11 @@
+{
+  "id": "hello",
+  "name": "Hello",
+  "version": "1.0.0",
+  "apiVersion": 0,
+  "requires": ["terminal"],
+  "contributes": {
+    "tools": [{ "id": "hello", "label": "Hello", "icon": "info", "zone": "right" }],
+    "assistantTools": ["hello_greet"]
+  }
+}

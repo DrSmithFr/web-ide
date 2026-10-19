@@ -16,6 +16,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/internal/fsx"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/llm"
+	"github.com/DrSmithFr/web-ide/pod/internal/plugins"
 	"github.com/DrSmithFr/web-ide/pod/internal/projects"
 	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
 	"github.com/DrSmithFr/web-ide/pod/internal/search"
@@ -55,7 +56,7 @@ func okPlain(content, summary string) toolResult {
 
 func fail(r *assistantRun, err error) toolResult {
 	failure := "error"
-	if errors.As(err, new(usageError)) {
+	if errors.As(err, new(usageError)) || errors.As(err, new(plugins.UsageError)) {
 		failure = "usage"
 	}
 	return toolResult{Content: "Error: " + i18n.Translate("en", err), Summary: assistant.Plain(i18n.Translate(r.lang, err)), Status: "error", Failure: failure}
@@ -144,8 +145,15 @@ func (s *Server) assistantTool(r *assistantRun, ref *runtimeRef, call assistant.
 	if assistant.KanbanTools[name] {
 		return s.kanbanTool(r, name, a, mode)
 	}
-	if assistant.DockerTools[name] {
-		return s.dockerTool(r, ref, name, a)
+	if t := s.findPluginTool(name); t != nil {
+		r.mu.Lock()
+		options := pluginOptions(opt(r.chat), t.plugin)
+		r.mu.Unlock()
+		res, err := s.runPluginTool(r.ctx, ref.rt, t, []byte(orEmpty(call.Function.Arguments)), r.lang, options)
+		if err != nil {
+			return fail(r, err)
+		}
+		return res
 	}
 	root := ref.rt.Root
 	which := map[string]string{assistant.Plan: "Plan", assistant.Briefing: "Briefing", assistant.Orchestrator: "Orchestrator"}[mode]

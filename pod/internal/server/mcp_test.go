@@ -69,7 +69,7 @@ func TestMCPKanban(t *testing.T) {
 	for k, v := range map[string]string{"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@x", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@x", "GIT_CONFIG_GLOBAL": os.DevNull} {
 		t.Setenv(k, v)
 	}
-	_, ts := newServer(t)
+	s, ts := newServer(t)
 	a, _ := dial(t, ts, "secret-token-0123456789abcdef0123")
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("un\n"), 0o644)
@@ -92,7 +92,7 @@ func TestMCPKanban(t *testing.T) {
 	if res, _ := m.post(map[string]any{"jsonrpc": "2.0", "method": "notifications/initialized"}); res.StatusCode != http.StatusAccepted {
 		t.Fatalf("notification: %d", res.StatusCode)
 	}
-	if tools := m.rpc("tools/list", nil)["tools"].([]any); len(tools) != len(mcpTools) {
+	if tools := m.rpc("tools/list", nil)["tools"].([]any); len(tools) != len(mcpTools)+len(s.plugins.tools) {
 		t.Fatalf("tools: %d", len(tools))
 	}
 

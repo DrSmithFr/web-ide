@@ -5,6 +5,7 @@ const paths: Record<string, string> = {
   files: 'M4 4h6l2 2h8v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM4 9h16',
   search: 'M11 4a7 7 0 1 1 0 14 7 7 0 0 1 0-14zM16.5 16.5 21 21',
   plug: 'M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4',
+  ports: 'M4 8h14M14 4l4 4-4 4M20 16H6M10 12l-4 4 4 4',
   database: 'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',
   conflict: 'M12 3 2 20h20zM12 10v4M12 17v.5',
   outline: 'M4 6h3M10 6h10M6 12h3M12 12h8M6 18h3M12 18h8',

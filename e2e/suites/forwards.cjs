@@ -48,11 +48,11 @@ const get = (port) =>
       })
   })
 
-// Shows the Port forwards tab of the Docker tool (the bottom zone may be closed after a navigation).
+// Shows the Port forwards tab of its tool (the bottom zone may be closed after a navigation).
 const showForwards = async (page) => {
   await page.waitForSelector('.menubar', { timeout: 15000 })
-  if (!(await page.isVisible('[data-testid=docker-tab-forwards]'))) await page.click('.rail-right .rail-btn[title="Docker"]')
-  await page.click('[data-testid=docker-tab-forwards]')
+  if (!(await page.isVisible('[data-testid=forwards-tab-forwards]'))) await page.click('.rail-btn[data-id=forwards]')
+  await page.click('[data-testid=forwards-tab-forwards]')
   await page.waitForSelector('[data-testid=forward-form]')
 }
 

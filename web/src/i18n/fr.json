@@ -2215,5 +2215,16 @@
   "Default objective: “{objective}”": "Objectif par défaut : « {objective} »",
   "No default objective": "Plus d'objectif par défaut",
   "objective": "objectif",
-  "waiting for the device": "en attente de l’appareil"
+  "waiting for the device": "en attente de l’appareil",
+  "Plugins": "Plugins",
+  "Plugins add tools to the IDE. They are enabled per project, for every window of the project and its worktrees.": "Les plugins ajoutent des outils à l'IDE. Ils sont activés par projet, pour toutes les fenêtres du projet et de ses worktrees.",
+  "No plugin in this pod.": "Aucun plugin dans ce pod.",
+  "These plugins need {name} and will stop: {list}": "Ces plugins ont besoin de {name} et vont s'arrêter : {list}",
+  "Off: needs {list}": "Désactivé : nécessite {list}",
+  "Permissions: {list}": "Permissions : {list}",
+  "The plugin of this tab is disabled": "Le plugin de cet onglet est désactivé",
+  "greeted": "salué",
+  "Port forwards and previews": "Redirections de port et aperçus",
+  "SSH passphrase": "Phrase de passe SSH",
+  "Table": "Table"
 }

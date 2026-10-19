@@ -10,21 +10,19 @@ import { detectLanguage, lspLanguage, lspLanguageId } from '../editor/languages'
 import { merge3 } from '../editor/merge'
 import { toast } from '../ui/toast'
 import { t, tn } from '../i18n'
-import { normalizePlacement, type Zone } from './zones'
+import { normalizePlacement, setPluginZones, type Zone } from './zones'
 import { deviceId, layoutFor } from './device'
 import { settings } from './settings'
 import { closeDesks, desk, loadDesks, showDesk, touchRecent, type DeskList } from './desks'
 
-export type TabKind = 'file' | 'sql' | 'table' | 'text' | 'diff' | 'kanban' | 'ticket' | 'milestone' | 'objective' | 'tool' | 'console' | 'doc'
+/** plugin:<plugin>/<view>: a tab view of a plugin (plugins/registry.ts). */
+export type TabKind = 'file' | 'text' | 'diff' | 'kanban' | 'ticket' | 'milestone' | 'objective' | 'tool' | 'console' | 'doc' | `plugin:${string}`
 
 export interface TabState {
   id: string
   kind: TabKind
   path?: string
   title?: string
-  connId?: string
-  db?: string
-  table?: string
   text?: string
   lang?: string
   /** Diff tabs: index ↔ HEAD (staged), HEAD ↔ working tree (head), or a commit against its first parent (rev); from: former path of a renamed file. */
@@ -42,6 +40,9 @@ export interface TabState {
   /** Doc tabs: the page of the embedded documentation (path of the repo) and the heading shown. */
   doc?: string
   anchor?: string
+  /** Plugin tabs: what tells two tabs of a view apart, and the state the view saves in the desk. */
+  key?: string
+  state?: unknown
 }
 
 /** width: a column of the Scroll mode, its width as a fraction of the view (unset: one column in sight). */
@@ -75,14 +76,13 @@ export interface SessionData {
   placement: Record<Zone, string[]>
   /** Strip under the editor: tools of the two bottom zones, split at `split` (fraction); shown console and order of the console tabs. */
   bottom: { left: string | null; right: string | null; height: number; split: number; active: string | null; order: string[]; problemsTab: 'problems' | 'output' }
-  sqlText: Record<string, string>
   expanded: string[]
   /** Options of the explorer. */
   explorer: { hidden: boolean; excluded: boolean; singleClick: boolean; follow: boolean }
   /** Git tool: shown tab, heights of the commit form and of the commit detail. */
   git: { tab: 'commit' | 'history'; form: number; detail: number }
-  /** Docker tool: shown tab, chosen Compose profiles, tab of the detail pane. */
-  docker: { tab: 'project' | 'host' | 'disk' | 'forwards' | 'tunnels' | 'previews'; profiles: string[]; detail: 'infos' | 'logs' }
+  /** The state of each plugin in the desk (plugins/api.ts desk()), by plugin id. */
+  plugins: Record<string, Record<string, unknown>>
   /** Other worktrees of the repository open in the window, and the one shown (none: the project of the window). */
   attached: string[]
   worktree?: string
@@ -130,11 +130,10 @@ function emptySession(): SessionData {
     right: { panel: null, width: 300 },
     bottom: { left: null, right: null, height: 240, split: 0.5, active: null, order: [], problemsTab: 'problems' },
     placement: normalizePlacement(null),
-    sqlText: {},
     expanded: [],
     explorer: { hidden: true, excluded: true, singleClick: false, follow: false },
     git: { tab: 'commit', form: 150, detail: 260 },
-    docker: { tab: 'project', profiles: [], detail: 'infos' },
+    plugins: {},
     attached: [],
     sizes: {},
   }
@@ -218,13 +217,28 @@ on('session.changed', (e: { session: SessionData; desk: number }, from?: string)
 function normalize(raw: any): SessionData {
   const d = emptySession()
   if (!raw || typeof raw !== 'object' || !raw.layout) return d
-  const s: SessionData = { ...d, ...raw, left: { ...d.left, ...raw.left }, right: { ...d.right, ...raw.right }, bottom: { ...d.bottom, ...raw.bottom }, explorer: { ...d.explorer, ...raw.explorer }, git: { ...d.git, ...raw.git }, docker: { ...d.docker, ...raw.docker }, sizes: { ...raw.sizes } }
+  const s: SessionData = { ...d, ...raw, left: { ...d.left, ...raw.left }, right: { ...d.right, ...raw.right }, bottom: { ...d.bottom, ...raw.bottom }, explorer: { ...d.explorer, ...raw.explorer }, git: { ...d.git, ...raw.git }, plugins: { ...raw.plugins }, sizes: { ...raw.sizes } }
   if (s.left.panel && panelAliases[s.left.panel]) {
     s.right.panel = panelAliases[s.left.panel]
     s.left.panel = null
   }
   if (s.right.panel && panelAliases[s.right.panel]) s.right.panel = panelAliases[s.right.panel]
   s.placement = normalizePlacement(raw.placement)
+  // The Database explorer became a plugin (#115): its tabs are views of it, a console keeps its text.
+  for (const t of Object.values(s.tabs ?? {}) as any[]) {
+    if (t.kind === 'sql') {
+      Object.assign(t, { kind: 'plugin:database/sql', key: t.id, state: { connId: t.connId, db: t.db ?? '', text: raw.sqlText?.[t.id] ?? '' } })
+    } else if (t.kind === 'table') {
+      Object.assign(t, { kind: 'plugin:database/table', key: `${t.connId}/${t.db ?? ''}/${t.table}`, state: { connId: t.connId, db: t.db ?? '', table: t.table } })
+    } else continue
+    delete t.connId
+    delete t.db
+    delete t.table
+  }
+  delete (s as any).sqlText
+  // The Docker tool became a plugin (#114): its state moved under plugins.
+  if (raw.docker && !s.plugins.docker) s.plugins.docker = raw.docker
+  delete (s as any).docker
   // The Recent Files moved to the desk list (state/desks.ts), shared by the desks.
   delete (s as any).recent
   if (!Array.isArray(s.attached)) s.attached = []
@@ -317,7 +331,6 @@ export function openTab(tab: Omit<TabState, 'id'>, paneId = session.activePane):
     const t = session.tabs[id]
     if (!t || t.kind !== tab.kind) return false
     if (tab.kind === 'file') return t.path === tab.path
-    if (tab.kind === 'table') return t.connId === tab.connId && t.db === tab.db && t.table === tab.table
     if (tab.kind === 'diff') return t.path === tab.path && !!t.staged === !!tab.staged && !!t.head === !!tab.head && t.rev === tab.rev
     if (tab.kind === 'kanban') return true
     if (tab.kind === 'ticket') return t.ticket === tab.ticket
@@ -326,6 +339,7 @@ export function openTab(tab: Omit<TabState, 'id'>, paneId = session.activePane):
     if (tab.kind === 'tool') return t.tool === tab.tool
     if (tab.kind === 'console') return t.console === tab.console
     if (tab.kind === 'doc') return true
+    if (tab.kind.startsWith('plugin:')) return t.key === tab.key
     return false
   })
   if (same) {
@@ -362,7 +376,6 @@ export function closeTab(paneId: string, tabId: string, force = false): boolean 
     if (l.active === tabId) l.active = l.tabs[Math.min(i, l.tabs.length - 1)] ?? null
     if (!leaves(s.layout).some((x) => x.tabs.includes(tabId))) {
       delete s.tabs[tabId]
-      delete s.sqlText[tabId]
     }
     if (l.tabs.length === 0) removeLeaf(s, l.id)
   })
@@ -401,7 +414,6 @@ export function splitPane(paneId: string, dir: 'row' | 'col') {
       const src = s.tabs[l.active]
       const id = uid()
       s.tabs[id] = { ...structuredClone(unwrap(src)), id }
-      if (src.kind === 'sql') s.sqlText[id] = s.sqlText[src.id] ?? ''
       tabs = [id]
       active = id
     }
@@ -1076,6 +1088,7 @@ export function navigate(dir: -1 | 1) {
 export async function openProject(id: string, creds?: { password?: string; passphrase?: string }, desk = 1) {
   const r = await request('project.open', { id, creds, desk })
   loadDesks(id, r.desks as DeskList, r.desk ?? 1)
+  setPluginZones(r.plugins)
   batch(() => {
     setHome(r.project)
     setAttached(reconcile({ [id]: { project: r.project, root: r.root, local: r.local } }))
@@ -1140,7 +1153,6 @@ export async function moveTabToDesk(paneId: string, tabId: string, n: number) {
     target.activePane = l.id
   } else {
     target.tabs[tabId] = structuredClone(unwrap(tab))
-    if (session.sqlText[tabId] !== undefined) target.sqlText[tabId] = session.sqlText[tabId]
     if (tab.path && session.cursors[tab.path]) target.cursors[tab.path] = structuredClone(unwrap(session.cursors[tab.path]))
     pane.tabs.push(tabId)
     pane.active = tabId

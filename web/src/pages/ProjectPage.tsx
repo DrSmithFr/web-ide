@@ -1,6 +1,7 @@
 // Main window of a project: menu bar, icon rails, side panels, editor area, bottom tools.
 import { podPath } from '../app/base'
-import { createEffect, createSignal, For, type JSX, on as track, onCleanup, onMount, Show } from 'solid-js'
+import { createEffect, createRoot, createSignal, For, type JSX, on as track, onCleanup, onMount, Show, untrack } from 'solid-js'
+import { createMutable } from 'solid-js/store'
 import { Dynamic } from 'solid-js/web'
 import { RpcError, formatRate, on as onPod, podRates, podState } from '../pod/rpc'
 import {
@@ -8,7 +9,8 @@ import {
   openFile, closeEmptyPane, saveAll, session, setConflictOpener, setSize, sizesFor, splitPane, closeProject, moveTabToDesk, switchDesk,
 } from '../state/project'
 import { desk, desks, onDeskGone } from '../state/desks'
-import { cycleWidth, focusDirection, moveColumnBy, scrollMode, stackTile, tileMode, unstackTile, openTile, registerTileTools, resizeTile, showToolTile, startResize, swapDirection, toggleSplit } from '../state/tiles'
+import { cycleWidth, focusDirection, moveColumnBy, scrollMode, stackTile, tileMode, unstackTile, openTile, registerTileTools, resizeTile, showToolTile, startResize, swapDirection, tileTools, toggleSplit } from '../state/tiles'
+import { pluginsOpened, pluginTools, refreshPlugins } from '../plugins/registry'
 import { tileLauncher } from '../ui/tileLauncher'
 import { deskPath, navigate, route } from '../app/router'
 import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, toggleTool, toolsIn, zoneOf, zones, type Zone } from '../state/zones'
@@ -27,11 +29,10 @@ import { NewTicketHost } from '../kanban/Board'
 import { CommandsHost } from '../console/CommandsModal'
 import { openBoard, openMilestone, openObjective, openTicket } from '../kanban/state'
 import { refreshGit } from '../state/git'
-import { DatabaseTool } from '../db/DatabaseTool'
 import { AssistantTool } from '../llm/AssistantTool'
 import { ConflictsTool, StructureTool } from '../tools/tools'
 import { InfoTool } from '../tools/InfoTool'
-import { DockerTool } from '../docker/DockerTool'
+import { ForwardsTool } from '../forwards/ForwardsTool'
 import { AgentsTool } from '../agents/AgentsTool'
 import { QuestionModal, QuestionsTool } from '../questions/QuestionsTool'
 import { questions, refreshQuestions, resetQuestions, showQuestion } from '../questions/state'
@@ -39,12 +40,11 @@ import { refreshAgents } from '../agents/state'
 import { openConflict } from '../conflict/ConflictDialog'
 import { docsIndex, openDoc } from '../state/docs'
 import { openSettings } from '../settings/SettingsModal'
-import { actions, registerAction, runAction, shortcutOf } from '../keys/bindings'
+import { actionOf, registerAction, runAction, shortcutOf } from '../keys/bindings'
 import { onMouseNav } from '../keys/mouse'
 import { navigateChats, openChat } from '../llm/assistant'
 import { contextMenu, focusBeforeMenus, prompt, type MenuItem } from '../ui/overlay'
 import { Icon } from '../ui/icons'
-import { refreshConnections } from '../db/api'
 import { offerIdeUntrack } from '../state/ideTracked'
 import { toast } from '../ui/toast'
 import { t, tn } from '../i18n'
@@ -55,25 +55,47 @@ import { ClipboardHistoryHost, pasteFromHistory } from '../popups/ClipboardHisto
 import { newDoodle } from '../llm/Composer'
 import { DoodleHost } from '../llm/doodle/DoodleModal'
 
-/** Tools of the four zones; their placement comes from state/zones. */
-export const toolPanels: Record<string, { label: string; icon: string; component: () => JSX.Element; badge?: () => number }> = {
+/** Tools of the four zones, the core's then those of the enabled plugins; their placement comes from state/zones. */
+export const toolPanels: Record<string, { label: string; icon: string; component: () => JSX.Element; badge?: () => number }> = createMutable({
   explorer: { label: 'Explorer', icon: 'files', component: Explorer },
   search: { label: 'Search', icon: 'search', component: GlobalSearch },
   git: { label: 'Git', icon: 'branch', component: GitPanel },
   kanban: { label: 'Kanban', icon: 'kanban', component: KanbanPanel },
   console: { label: 'Console', icon: 'terminal', component: ConsoleTool },
   problems: { label: 'Problems', icon: 'problems', component: ProblemsTool, badge: problemCount },
-  docker: { label: 'Docker', icon: 'docker', component: DockerTool },
-  database: { label: 'Database explorer', icon: 'database', component: DatabaseTool },
+  forwards: { label: 'Port forwards and previews', icon: 'ports', component: ForwardsTool },
   assistant: { label: 'Assistant', icon: 'sparkle', component: AssistantTool },
   agents: { label: 'Agents', icon: 'comment', component: AgentsTool },
   questions: { label: 'Questions', icon: 'question', component: QuestionsTool, badge: () => questions().length },
   structure: { label: 'Structure', icon: 'outline', component: StructureTool },
   conflicts: { label: 'Conflicts', icon: 'conflict', component: ConflictsTool },
   info: { label: 'Infos', icon: 'info', component: InfoTool },
-}
+})
 
 registerTileTools(toolPanels)
+
+// The tools of the enabled plugins join the zones, the tiles and the keymap; a plugin disabled
+// leaves them, its place in the zones kept.
+createRoot(() =>
+  createEffect(() => {
+    const list = pluginTools()
+    untrack(() => {
+      for (const p of list) {
+        toolPanels[p.id] = { label: p.label, icon: p.icon, component: p.component, badge: p.badge }
+        tileTools[p.id] = { label: p.label, icon: p.icon, component: p.component }
+      }
+    })
+    const offs = list.map((p) => registerAction(`tool.${p.id}`, () => toggleToolFocus(p.id)))
+    onCleanup(() => {
+      offs.forEach((off) => off())
+      for (const p of list) {
+        delete toolPanels[p.id]
+        delete tileTools[p.id]
+      }
+    })
+  }),
+)
+
 
 /** Opens a project, asking for the SSH password / passphrase when the pod needs one. */
 export async function openWithAuth(id: string, desk = 1) {
@@ -81,8 +103,8 @@ export async function openWithAuth(id: string, desk = 1) {
   for (;;) {
     try {
       const r = await openProject(id, creds, desk)
+      pluginsOpened(r.plugins)
       setConsoleList(r.consoles)
-      refreshConnections()
       offerIdeUntrack(r.ideTracked)
       return r
     } catch (e) {
@@ -199,6 +221,7 @@ function keepZoneFocus(zone: Zone, frames: number) {
 
 /** Shortcut of a tool: shows it and gives it the focus; hides it when it has the focus already. */
 function toggleToolFocus(id: string) {
+  if (!toolPanels[id]) return false
   // A Grid desk has no zones: the tool is a tile.
   if (tileMode() && !phone()) return showToolTile(id)
   const z = zoneOf(session, id)
@@ -237,7 +260,7 @@ const menus: [string, string[]][] = [
   ['menu|Navigate', ['search.everywhere', 'nav.recentFiles', '-', 'nav.back', 'nav.forward', '-', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', '-', 'nav.related', 'nav.test']],
   ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover', '-', 'lsp.rename', 'lsp.format', '-', 'edit.fold', 'edit.unfold', 'edit.foldAll', 'edit.unfoldAll']],
   ['menu|View', ['view.splitRight', 'view.splitDown', '-', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', '-', 'view.visualFocus', 'view.focusOutline', 'view.focusDim', '-', 'view.whitespace', 'view.wordWrap', 'view.markdown', '-', 'console.new', 'palette.open']],
-  ['menu|Tools', ['tool.explorer', 'tool.search', 'tool.git', 'tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.questions', 'tool.database', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.console', 'tool.problems', 'tool.docker']],
+  ['menu|Tools', ['tool.explorer', 'tool.search', 'tool.git', 'tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.questions', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.console', 'tool.problems', 'tool.forwards', '@tools']],
   ['menu|Help', ['help.docs', 'help.guide', 'help.glossary', '-', 'help.shortcuts']],
 ]
 
@@ -254,11 +277,13 @@ function openMenu(e: MouseEvent, ids: string[]) {
   const r = btn.getBoundingClientRect()
   // The action runs where the focus was (the menu buttons do not take it), the editor otherwise.
   const prev = focusBeforeMenus()
+  // @tools: the tools of the enabled plugins.
+  ids = ids.flatMap((id) => (id === '@tools' ? pluginTools().map((p) => `tool.${p.id}`) : [id]))
   const items: MenuItem[] = ids.map((id) =>
     id === '-'
       ? { separator: true, label: '' }
       : {
-          label: t(actions.find((a) => a.id === id)?.label ?? id),
+          label: t(actionOf(id)?.label ?? id),
           hint: shortcutOf(id),
           checked: menuChecks[id]?.(),
           action: () => {
@@ -678,7 +703,7 @@ export function ProjectPage(props: { id: string }) {
   const offs = [
     registerAction('view.toggleLeft', () => mutate((s) => (s.left.panel = s.left.panel ? null : (toolsIn(s, 'left')[0] ?? null)))),
     registerAction('view.toggleRight', () => mutate((s) => (s.right.panel = s.right.panel ? null : (toolsIn(s, 'right')[0] ?? null)))),
-    registerAction('view.resetTools', () => mutate((s) => (s.placement = normalizePlacement(defaultPlacement)))),
+    registerAction('view.resetTools', () => mutate((s) => (s.placement = normalizePlacement(defaultPlacement())))),
     registerAction('view.visualFocus', () => updateSettings((s) => (s.visualFocus = !s.visualFocus), 'Visual focus')),
     registerAction('view.focusOutline', () => updateSettings((s) => (s.focusOutline = !s.focusOutline), 'Focus outline')),
     registerAction('view.focusDim', () => updateSettings((s) => (s.focusDim = !s.focusDim), 'Dim out of focus')),
@@ -713,7 +738,7 @@ export function ProjectPage(props: { id: string }) {
       void refreshConsoles()
       void refreshAgents()
       void refreshQuestions()
-      refreshConnections()
+      void refreshPlugins()
     }),
     // A worktree shown besides goes by itself (state/project).
     onPod('project.closed', (e: { id: string }) => {

@@ -1,0 +1,14 @@
+/* Port forwards and app previews (their tool and the home page). */
+.dk-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--fg-faint); justify-self: center; }
+.dk-dot.up { background: var(--ok); }
+.dk-dot.starting { background: var(--warn); }
+.dk-dot.bad { background: var(--danger); }
+.dk-dot.none { background: transparent; border: 1px dashed var(--fg-faint); }
+.dk-disk { position: absolute; inset: 0; overflow: auto; }
+.dk-forward { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px; font-size: 12.5px; }
+.dk-forward:hover { background: var(--bg-hover); }
+.dk-forward a { text-decoration: none; }
+.dk-forward-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 10px; margin: 8px 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.dk-forward-form label { display: flex; flex-direction: column; gap: 2px; }
+.dk-forward-form input.input { width: 120px; }
+.dk-forward-form label.dk-check { flex-direction: row; align-items: center; gap: 6px; height: 26px; }

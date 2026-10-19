@@ -555,7 +555,7 @@ func (s *Server) loop(r *assistantRun) {
 			req = llm.ChatRequest{Server: server, Model: model, Messages: apiMessages(system, r.chat.Messages, !info.found || info.caps.Vision)}
 			if tools {
 				adopted := r.chat.Agent != nil && r.chat.Agent.Adopted
-				req.Tools = assistant.ToolsFor(mode, r.chat.Ticket, r.chat.Parent != "" && !adopted, assistant.CanSpawn(r.chat), adopted)
+				req.Tools = append(assistant.ToolsFor(mode, r.chat.Ticket, r.chat.Parent != "" && !adopted, assistant.CanSpawn(r.chat), adopted), s.pluginDefs(ref.rt)...)
 			}
 			if info.caps.Thinking {
 				think := boolOr(o.Think, true)

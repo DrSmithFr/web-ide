@@ -4,7 +4,7 @@ The packages of the pod, in five blocks. Each section has the map of its package
 
 | Block | Packages |
 |---|---|
-| [Server and protocol](#server-and-protocol) | `server`, `runtime`, `store`, `settings`, `projects`, `desks`, `idedir`, `config`, `stats`, `update`, `i18n` |
+| [Server and protocol](#server-and-protocol) | `server`, `runtime`, `store`, `settings`, `projects`, `desks`, `idedir`, `config`, `stats`, `update`, `i18n`, `plugins` |
 | [Files and processes](#files-and-processes) | `fsx`, `execx`, `sshx`, `sshtest`, `console`, `keeper`, `search`, `lsp`, `db`, `docker`, `forwards`, `preview`, `clipboard`, `commands` |
 | [AI](#ai) | `llm`, `assistant`, `acp`, `hfcache` |
 | [Kanban and git](#kanban-and-git) | `kanban`, `git` |
@@ -34,6 +34,7 @@ flowchart LR
   idedir["idedir<br/>.ide out of git"]
   stats["stats<br/>assistant measures"]
   update["update<br/>signed update request"]
+  plugins["plugins<br/>manifests, registry, enabling"]
   server --> assistant
   server --> config
   server --> fsx
@@ -46,6 +47,11 @@ flowchart LR
   server --> settings
   server --> stats
   server --> store
+  server -->|"registers, runs"| plugins
+  plugins --> runtime
+  plugins --> assistant
+  plugins --> fsx
+  plugins --> idedir
   runtime --> fsx
   runtime --> idedir
   runtime -->|"child projects"| projects
@@ -77,8 +83,9 @@ flowchart LR
 - `stats`: Measures how the assistant worked in a conversation: speeds, time generating, thinking and in each tool, failures of tools, context and compactions (token counts by part are estimates)
 - `update`: *Update this pod*: what a pod does with a signed update request that reached it (`relay.md`, *Versions and updates*) — `identity.CheckUpdate`, then the installer run detached (`systemd-run --user` as the service, `setsid` otherwise)
 - `i18n`: Translation of the messages sent to the page
+- `plugins`: The plugin system ([plugins.md](../../docs/design/plugins.md)): the manifest (`plugin.json`, checked by `Parse`), the `Plugin` interface a built-in implements (`Register` adds its RPC methods `<id>.<method>` and its assistant tools through a `Host`), the `Registry` (`Resolve`: the plugins a project runs, given those disabled and the capabilities provided), `.ide/plugins.json`; `plugins/builtin` lists the built-ins: `plugins/database` (the `db.*` methods; a connection needing its password answers the coded error `db_password`), `plugins/docker` (the `docker.*` methods, the log streams held by the window, `docker_ps` and `docker_logs` with the Compose profiles of the conversation as its options) and `plugins/hello`, the plugin of the browser tests (`WEBIDE_TEST_PLUGINS`). The server side (`server/handlers_plugins.go`) caches the disabled list per main project and offers the tools of the enabled plugins to the assistant
 
-**Tests**: `cd pod && go test ./internal/server ./internal/runtime ./internal/projects ./internal/desks ./internal/settings ./internal/store ./internal/config ./internal/idedir ./internal/stats ./internal/update ./internal/i18n`; e2e: `features`, `restore+`, `projects`, `desks`, `i18n`.
+**Tests**: `cd pod && go test ./internal/server ./internal/runtime ./internal/projects ./internal/desks ./internal/settings ./internal/store ./internal/config ./internal/idedir ./internal/stats ./internal/update ./internal/i18n ./internal/plugins/...`; e2e: `features`, `restore+`, `projects`, `desks`, `i18n`, `plugins`.
 
 
 ## Files and processes
@@ -136,8 +143,8 @@ flowchart LR
 - `keeper`: The keeper: protocol (frames of a length, a JSON header and raw bytes), server (processes known by pid and descriptors, output rings, attachments from an offset, GC of ended processes; HTTP relay of the completions; SSH connections; update by re-exec) and the client of the pod (reconnection, attachments resumed from their offset)
 - `search`: Project-wide search (RE2) and file list
 - `lsp`: Language servers per project and language
-- `db`: SQLite (modernc), PostgreSQL (pgx), Redis (go-redis), SSH port forwards
-- `docker`: Docker tool: status, Compose stack, containers, inspect, stats, log streams (the `docker` command, JSON formats only)
+- `db`: What the Database explorer plugin (`plugins/database`) runs: SQLite (modernc), PostgreSQL (pgx), Redis (go-redis), SSH port forwards; the connections live in the runtime of the project, which closes them
+- `docker`: What the Docker plugin (`plugins/docker`) runs: status, Compose stack, containers, inspect, stats, log streams (the `docker` command, JSON formats only)
 - `forwards`: Port forwards: local ports that reach an address seen from the SSH host of a project (open while a window of the pod is connected, closed `ForwardIdle` after the last one)
 - `preview`: App previews: a reverse proxy per preview (cookie of the IDE, or the token of a public one), exposed by `tailscale serve` / `funnel` (`Tailscale` interface, faked in tests), stopped with the command of the app
 - `clipboard`: History of the texts copied in the IDE, shared by every window

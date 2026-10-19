@@ -129,10 +129,12 @@ Everything the model does, you can do yourself, in the same windows:
 - **Language servers** (gopls, typescript-language-server, pyright, intelephense…, from the pod's `PATH`): go to definition, references, completion, rename, formatting, diagnostics.
 - **Terminals** in the bottom panel (Ctrl+Shift+`), detachable in their own window.
 - **Git**: changes, staging, commits, branches, history graph, side-by-side diffs, other worktrees.
-- **Databases** (SQLite, PostgreSQL, Redis), **Docker** (Compose stack, containers, logs) and SSH port forwards.
+- **Databases** (SQLite, PostgreSQL, Redis), **Docker** (Compose stack, containers, logs), and the *Port forwards and previews* tool (SSH port forwards, app previews).
 - When a program (the model, a formatter, another editor) changes an open file, the change is merged into your buffer; a real conflict opens a three-pane dialog.
 
 All shortcuts are in *Settings → Keyboard*, with QWERTY and AZERTY presets.
+
+*Settings → Plugins*, with a project open, turns the plugins of the IDE on or off for that project and its worktrees: a plugin turned off takes away its tool, its commands and the tools it gives the assistant, and gets its place back when turned on again. Docker is one of them.
 
 ## Help
 
@@ -141,7 +143,7 @@ This documentation is inside the IDE, read only, and always the one of the versi
 ## Where the data lives
 
 - `~/.web-ide/`: settings (with their history), projects, the state of the desks, model servers, secrets (mode 0600), the access token.
-- `<project>/.ide/`: conversations (`chats.db`), kanban (`kanban.db`), worktrees of the tickets, database connections, folder marks, icon. The whole folder is ignored by git (its `.gitignore` is `*`); the worktrees use the `.ide` of the main project.
+- `<project>/.ide/`: conversations (`chats.db`), kanban (`kanban.db`), worktrees of the tickets, database connections, folder marks, the plugins turned off (`plugins.json`), icon. The whole folder is ignored by git (its `.gitignore` is `*`); the worktrees use the `.ide` of the main project.
 - Audio and private keys never leave your machine.
 
 To work on Web IDE itself, `make dev` runs a separate pod (port 4434, data in `~/.web-ide-dev`) next to the installed one: see [CONTRIBUTING.md](../CONTRIBUTING.md).

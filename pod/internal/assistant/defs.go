@@ -30,6 +30,11 @@ type Def struct {
 	JSON json.RawMessage
 }
 
+// Func is the definition of a tool declared outside this package (a plugin's).
+func Func(name, description string, props map[string]any, required ...string) Def {
+	return fn(name, description, props, required...)
+}
+
 func fn(name, description string, props obj, required ...string) Def {
 	if required == nil {
 		required = []string{}
@@ -85,12 +90,6 @@ var projectDefs = []Def{
 	fn("read_console", "Reads the end of the output of a console.", obj{"console_id": str("Console id"), "lines": integer("Number of lines (200 by default)")}, "console_id"),
 	fn("console_input", "Types text in a console (interactive terminal, program waiting for an answer). A newline is added unless enter=false.",
 		obj{"console_id": str("Console id"), "text": str("Text to type"), "enter": boolean("Press Enter after the text (true by default)")}, "console_id", "text"),
-}
-
-var dockerDefs = []Def{
-	fn("docker_ps", "State of the Docker Compose services of the project (Compose file at the project root): container, state, health, image, published ports. Without Compose file, lists every container of the host.", obj{}),
-	fn("docker_logs", "Last lines of the logs of a Compose service of the project, or of any container (name or id), stdout and stderr together, with timestamps.",
-		obj{"service": str("Compose service of the project"), "container": str("Container name or id (instead of service)"), "lines": integer("Number of lines (200 by default, 2000 max)"), "filter": str("Keep only the lines containing this text (case-insensitive)")}),
 }
 
 // MaxQuestions asked by one ask_user call; MaxDescription and MaxNote are the limits of the
@@ -342,7 +341,6 @@ var (
 var (
 	KanbanTools = names(kanbanReadDefs, kanbanWriteDefs)
 	KanbanWrite = names(kanbanWriteDefs)
-	DockerTools = names(dockerDefs)
 )
 
 func names(lists ...[]Def) map[string]bool {
@@ -368,7 +366,7 @@ func ToolsFor(mode string, ticket *TicketLink, sub, spawn, adopted bool) []json.
 		for _, d := range projectDefs {
 			out = append(out, d.JSON)
 		}
-		for _, d := range append(append(append([]Def{}, dockerDefs...), kanbanReadDefs...), orchestratorDefs...) {
+		for _, d := range append(append([]Def{}, kanbanReadDefs...), orchestratorDefs...) {
 			if d.Name != "kanban_create" && d.Name != "kanban_milestone" { // ideas go to a Briefing conversation
 				out = append(out, d.JSON)
 			}
@@ -380,9 +378,6 @@ func ToolsFor(mode string, ticket *TicketLink, sub, spawn, adopted bool) []json.
 		return append(out, compactDef.JSON)
 	}
 	for _, d := range projectDefs {
-		out = append(out, d.JSON)
-	}
-	for _, d := range dockerDefs {
 		out = append(out, d.JSON)
 	}
 	for _, d := range kanbanReadDefs {
