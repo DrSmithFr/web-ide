@@ -1,0 +1,12 @@
+{
+  "id": "previews",
+  "name": "Port forwards and previews",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "provides": ["previews"],
+  "requires": ["terminal"],
+  "namespaces": ["tunnels", "preview"],
+  "contributes": {
+    "tools": [{ "id": "forwards", "label": "Port forwards and previews", "icon": "ports", "zone": "bottomRight", "before": "docker" }]
+  }
+}

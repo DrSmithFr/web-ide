@@ -98,17 +98,26 @@ Exec (#116) is the first plugin the rest of the IDE *uses*: a dozen parts of the
 - The tab and the heights of the Git tool moved to its desk state (`plugins.git`, migrated).
 - `fmtAgo`, `ui.FileIcon`, `project.basename`, `files.read`.
 
+## What Previews added to the API
+
+- **Global methods** (`Host.HandleGlobal`): a method without a project (`Call.Runtime` nil), always answered, for the home page and the pod-wide state: `tunnels.all`, `tunnels.close`, `tunnels.closeAll`, `preview.*` (a preview names its project).
+- **The pod lent to built-ins** (`Host.Pod()`): the runtime of another project, the name and host of a project, events to every window or to a project, and the pod-wide managers of the port forwards and of the previews (the HTTP server serves the previews, so they stay the pod's). `Window.Project()`.
+- The opening of the forwards of an SSH project and their closing after the last window stay the server's (it checks that Previews is on), so no lifecycle hooks were needed.
+- **Home contribution** (`PluginModule.home(api)`): a component of the home page, whatever the projects (the open port forwards).
+- The **previews** capability (list, open, close, public, URL), used by the assistant's card, `share_preview` of the agents and the ▶ menu of the Console; `share_preview` and `list_previews` stay the assistant's, offered with `previews` on. `api.transport.inTunnel`.
+- `api.forwards` and `api.previews` (#114) are gone: the previews are `api.use('previews')`. A removal is a change of version, but no plugin outside the IDE existed yet: v1 keeps its number, this exception is the only one.
+
 ## API v1
 
-Frozen with #118: `apiVersion: 1` in every manifest; a change of what follows is a new version.
+Frozen with #118: `apiVersion: 1` in every manifest. An addition keeps v1; a removal or a change of what follows is a new version.
 
 **Manifest** (`plugin.json`): `id`, `name`, `version`, `apiVersion`, `permissions`, `provides` / `requires` (capabilities), `namespaces` (prefixes of its methods and actions besides its id), `contributes`: `tools` (`id`, `label`, `icon`, `zone`, `before`), `tabViews`, `assistantTools`, `commands` (`id`, `label`, `category`, `keys`, `replaces`, `inTerminal`).
 
-**Pod** (`pod/internal/plugins`): `Plugin{Manifest(), Register(Host)}`; `Host.Handle(method, handler)` and `Host.AssistantTool(tool)`; a `Call` carries the `Runtime` of the project, `Params`, `Lang`, the `Window` (push, held streams), `Emit` / `EmitOthers` / `EmitFamily`, the `Options` of a conversation; `Result`, `UsageError`, `CodedError`.
+**Pod** (`pod/internal/plugins`): `Plugin{Manifest(), Register(Host)}`; `Host.Handle(method, handler)`, `Host.HandleGlobal`, `Host.AssistantTool(tool)`, `Host.Pod()`; a `Call` carries the `Runtime` of the project, `Params`, `Lang`, the `Window` (push, held streams), `Emit` / `EmitOthers` / `EmitFamily`, the `Options` of a conversation; `Result`, `UsageError`, `CodedError`.
 
-**Page** (`web/src/plugins/api.ts`): `rpc` / `rpcIn` / `notifyIn` / `channel`, `on`, `t` / `tn` / `fmtDate` / `fmtAgo`, `project`, `files`, `ssh`, `desk` (its state in the desk), `provide` / `use` (capabilities), `showTool`, `tiles`, `theme`, `openFile` / `openView` / `setViewState` / `openDiff` / `openText`, `panes`, `editor`, `keys`, `forwards`, `previews`, `ui`. The module's `activate(api)` returns its contributions: `tools`, `views`, `commands`, `hosts`, `searchProviders`, `diffSources`, `assistantOptions`, `opened`.
+**Page** (`web/src/plugins/api.ts`): `rpc` / `rpcIn` / `notifyIn` / `channel`, `on`, `t` / `tn` / `fmtDate` / `fmtAgo`, `project`, `files`, `ssh`, `desk` (its state in the desk), `provide` / `use` (capabilities), `showTool`, `tiles`, `theme`, `openFile` / `openView` / `setViewState` / `openDiff` / `openText`, `panes`, `editor`, `keys`, `transport`, `ui`. The module's `activate(api)` returns its contributions: `tools`, `views`, `commands`, `hosts`, `searchProviders`, `diffSources`, `assistantOptions`, `opened`; its `home(api)` a part of the home page.
 
-**Capabilities**: `terminal` and `commands` (Exec), `git` and `worktrees` (Git), their types in `web/src/plugins/capabilities.ts`.
+**Capabilities**: `terminal` and `commands` (Exec), `git` and `worktrees` (Git), `previews` (Previews), their types in `web/src/plugins/capabilities.ts`.
 
 ## Decisions
 
@@ -135,7 +144,7 @@ The plugins, grouped by domain (one plugin, several tools and views), in their o
 | Exec | Console tool (terminals, tasks), project commands (#116, done) | provides `terminal`, `commands` |
 | Search | Search tool (text, regex), the text provider of Search Everywhere (#117, done) | |
 | Git | Git tool, git content of the diff view (#118, done) | provides `worktrees`, `git` |
-| Previews | Port forwards and previews tool | requires `terminal` |
+| Previews | Port forwards and previews tool (#119, done) | requires `terminal`, provides `previews` |
 | Languages | language servers, Problems, Structure, `lsp_*` tools, symbol provider | provides `symbols` |
 | Files | Explorer, file provider (locked) | |
 | Code | file editor, the default view of a text buffer (locked) | |

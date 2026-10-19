@@ -2,19 +2,16 @@
 // and close 5 minutes after the last window of the pod. The RPC methods keep the name tunnels.*
 // (GLOSSARY.md: port forward; a tunnel is the WebRTC connection).
 import { createResource, For, onCleanup, Show } from 'solid-js'
-import { on as onPod, request } from '../pod/rpc'
-import { errorToast } from '../ui/toast'
-import { Icon } from '../ui/icons'
-import { t } from '../i18n'
+import { api, errorToast, Icon, t } from './plugin'
 import './forwards.css'
 import type { Forward } from './ForwardsTab'
 
 type Open = Forward & { project: string; name: string; host: string }
 
 export function OpenForwards() {
-  const [list, { refetch }] = createResource(() => request<Open[]>('tunnels.all'))
-  onCleanup(onPod('tunnels.changed', () => refetch()))
-  const close = (o?: Open) => request(o ? 'tunnels.close' : 'tunnels.closeAll', o ? { project: o.project, id: o.id } : {}).catch(errorToast)
+  const [list, { refetch }] = createResource(() => api.rpc<Open[]>('tunnels.all'))
+  onCleanup(api.on('tunnels.changed', () => refetch()))
+  const close = (o?: Open) => api.rpc(o ? 'tunnels.close' : 'tunnels.closeAll', o ? { project: o.project, id: o.id } : {}).catch(errorToast)
   return (
     <Show when={list.latest?.length}>
       <div class="home-forwards" data-testid="home-forwards">

@@ -97,10 +97,42 @@ export interface GitService {
   show(path: string, rev: string): Promise<{ content: string; exists: boolean }>
 }
 
+export interface PreviewSpec {
+  project: string
+  title: string
+  command: string
+  cwd?: string
+  port: number
+  /** Saved command of the project it starts (its console, one per command). */
+  commandId?: string
+}
+
+export interface Preview extends PreviewSpec {
+  id: string
+  console: string
+  url: string
+  publicUrl?: string
+  public: boolean
+  tailscale: boolean
+  started: number
+}
+
+/** previews (the Previews plugin): the app previews of the pod, shared by every window. */
+export interface PreviewsService {
+  list: () => Preview[]
+  /** Starts (or finds) the preview of a spec and opens it in a new tab. */
+  open(spec: PreviewSpec): Promise<Preview>
+  close(id: string): Promise<unknown>
+  setPublic(id: string, pub: boolean): Promise<Preview>
+  url(p: Preview): string
+  same(p: PreviewSpec, s: PreviewSpec): boolean
+}
+
 export interface Capabilities {
   terminal: TerminalService
   commands: CommandsService
   git: GitService
+  previews: PreviewsService
 }
 
 // The implementations, by capability, and the plugin providing each.

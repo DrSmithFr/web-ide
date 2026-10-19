@@ -4,7 +4,7 @@ import { createSignal } from 'solid-js'
 import { createStore, reconcile } from 'solid-js/store'
 import { on, request } from '../pod/rpc'
 import type { DoodleDoc } from './doodle/model'
-import type { PreviewSpec } from './previews'
+import type { PreviewSpec } from '../plugins/capabilities'
 
 export interface ServerView {
   id: string

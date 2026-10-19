@@ -122,8 +122,6 @@ type Server struct {
 	assistants assistants
 	// asks: the questions of the MCP tool ask_user, and the conversations asking (Questions tool).
 	asks askRegistry
-	// previewMu serializes preview.open (one command per app).
-	previewMu sync.Mutex
 	// plugins: the assistant tools of the plugins and their enabling per project.
 	plugins pluginSet
 	// forwardIdle closes the port forwards once no window is left (windowsChanged).
@@ -162,12 +160,10 @@ func (s *Server) Init() {
 	s.registerLLM()
 	s.registerAssistant()
 	s.registerExec()
-	s.registerForwards()
 	s.registerIdeDir()
 	s.registerAgents()
 	s.registerQuestions()
 	s.registerKanbanAgent()
-	s.registerPreviews()
 	s.registerKanban()
 	s.registerMilestones()
 	s.registerObjectives()

@@ -7,6 +7,7 @@
 // off, the Console goes and Docker with it (it needs terminal); on again, the terminals are back.
 // Search (#117) gives Search Everywhere its Text tab: off, the tab and the Search tool go. Git
 // (#118) gives the diff view its git sides: off, a diff tab says so, open_diff is refused.
+// Previews (#119) needs terminal: off (or Exec off), its tool and list_previews go.
 const fs = require('fs')
 const path = require('path')
 const { execSync } = require('child_process')
@@ -179,6 +180,7 @@ run(async ({ page }) => {
   await setPlugin('exec', false)
   await page.waitForSelector(consoleIcon, { state: 'detached' })
   assert(!(await page.$(docker)), 'Docker off with Exec')
+  assert(!(await page.$(forwards)), 'Previews off with Exec')
   await palette('settings')
   await page.waitForSelector('.pick-item.selected:has-text("Settings")')
   await page.keyboard.press('Enter')
@@ -232,4 +234,14 @@ run(async ({ page }) => {
   await setPlugin('git', true)
   await page.waitForSelector('.diff-view .diff-line.add:has-text("a line for the diff")')
   await page.waitForSelector('.rail-btn[data-id=git]')
+
+  // Previews: off, its tool goes and list_previews is refused; on again, both are back.
+  assert(!text(await mcp('list_previews', {})).includes('terminal'), 'list_previews answers')
+  await setPlugin('previews', false)
+  await page.waitForSelector(forwards, { state: 'detached' })
+  r = await mcp('list_previews', {})
+  assert(r.result.isError && text(r).includes('previews'), 'list_previews refused: ' + text(r))
+  await setPlugin('previews', true)
+  await page.waitForSelector(forwards)
+  assert(!(await mcp('list_previews', {})).result.isError, 'list_previews back')
 })

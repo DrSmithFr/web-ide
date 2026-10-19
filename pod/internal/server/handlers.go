@@ -344,7 +344,9 @@ func (s *Server) registerProject() {
 		if err := s.gitSetup(ctx, rt); err != nil {
 			log.Printf("git setup of %s: %v", a.ID, err) // the Git panel still offers the init
 		}
-		s.openForwards(rt)
+		if s.capabilityOn(rt, "previews") {
+			s.openForwards(rt)
+		}
 		// The setup command of the kanban settings moves to the saved commands, once.
 		_, _ = s.projectCommands(rt)
 		s.mu.Lock()

@@ -106,7 +106,6 @@ export const actions: ActionDef[] = [
   { id: 'assistant.fullComposer', label: 'Message box in full screen', category: 'Tools' },
   { id: 'tool.structure', label: 'Structure', category: 'Tools', inTerminal: true },
   { id: 'tool.problems', label: 'Problems', category: 'Tools', inTerminal: true },
-  { id: 'tool.forwards', label: 'Port forwards and previews', category: 'Tools', inTerminal: true },
   { id: 'tool.info', label: 'Infos', category: 'Tools', inTerminal: true },
   { id: 'tool.conflicts', label: 'Conflicts', category: 'Tools', inTerminal: true },
   { id: 'settings.open', label: 'Settings', category: 'General', inTerminal: true },

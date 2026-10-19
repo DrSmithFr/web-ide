@@ -63,4 +63,6 @@ export interface PluginContributions {
 /** The page module of a plugin: activated once, when the plugin is first enabled in the window. */
 export interface PluginModule {
   activate(api: PluginApi): PluginContributions
+  /** What it shows on the home page (no project open): the api offers its global methods there. */
+  home?(api: PluginApi): () => JSX.Element
 }

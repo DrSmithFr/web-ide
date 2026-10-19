@@ -2,10 +2,7 @@
 // available on the machine of the pod, like ssh -L. Kept in .ide/forwards.json by the pod; its
 // RPC methods and event keep the name tunnels.* (GLOSSARY.md: port forward; a tunnel is WebRTC).
 import { createResource, createSignal, For, onCleanup, Show } from 'solid-js'
-import { on as onPod, request } from '../pod/rpc'
-import { errorToast } from '../ui/toast'
-import { Icon } from '../ui/icons'
-import { t } from '../i18n'
+import { api, errorToast, Icon, t } from './plugin'
 import './forwards.css'
 
 export interface Forward {
@@ -21,8 +18,8 @@ export interface Forward {
 }
 
 export function ForwardsTab() {
-  const [list, { refetch, mutate }] = createResource(() => request<Forward[]>('tunnels.get'))
-  onCleanup(onPod('tunnels.changed', () => refetch()))
+  const [list, { refetch, mutate }] = createResource(() => api.rpc<Forward[]>('tunnels.get'))
+  onCleanup(api.on('tunnels.changed', () => refetch()))
   const [host, setHost] = createSignal('127.0.0.1')
   const [remote, setRemote] = createSignal('')
   const [local, setLocal] = createSignal('')
@@ -30,7 +27,7 @@ export function ForwardsTab() {
 
   const save = async (spec: Partial<Forward>) => {
     try {
-      mutate(await request<Forward[]>('tunnels.save', spec))
+      mutate(await api.rpc<Forward[]>('tunnels.save', spec))
       return true
     } catch (e) {
       errorToast(e)
@@ -50,7 +47,7 @@ export function ForwardsTab() {
   const remove = async (tn: Forward) => {
     if (!confirm(t('Delete the port forward to {remote}?', { remote: `${tn.remoteHost}:${tn.remotePort}` }))) return
     try {
-      mutate(await request<Forward[]>('tunnels.delete', { id: tn.id }))
+      mutate(await api.rpc<Forward[]>('tunnels.delete', { id: tn.id }))
     } catch (e) {
       errorToast(e)
     }

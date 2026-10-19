@@ -93,7 +93,9 @@ export async function openApp(cmd: Command) {
   const p = api.project.current()
   if (!p) return
   try {
-    const pv = await api.previews.open({ project: p, title: cmd.name, command: cmd.command, cwd: cmd.cwd, port: cmd.port ?? 0, commandId: cmd.id })
+    const previews = api.use('previews')
+    if (!previews) return
+    const pv = await previews.open({ project: p, title: cmd.name, command: cmd.command, cwd: cmd.cwd, port: cmd.port ?? 0, commandId: cmd.id })
     // The console the pod just created may not be listed here yet.
     for (let i = 0; i < 20 && pv.console && !consoles().some((c) => c.id === pv.console); i++) await new Promise((r) => setTimeout(r, 100))
     if (consoles().some((c) => c.id === pv.console)) show(pv.console)
