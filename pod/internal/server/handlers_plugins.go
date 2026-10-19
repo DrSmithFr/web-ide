@@ -9,10 +9,13 @@ import (
 	"sync"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/assistant"
+	"github.com/DrSmithFr/web-ide/pod/internal/forwards"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/plugins"
 	"github.com/DrSmithFr/web-ide/pod/internal/plugins/builtin"
+	"github.com/DrSmithFr/web-ide/pod/internal/preview"
 	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
+	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
 )
 
 // The plugins of the pod (docs/design/plugins.md): their RPC methods and assistant tools,
@@ -28,7 +31,10 @@ type pluginTool struct {
 // pluginSet is the state the server keeps of the plugins.
 type pluginSet struct {
 	tools []pluginTool // in the order of the registry
-	mu    sync.Mutex
+	// The lifecycle hooks of the plugins: a project opened (by plugin), the windows counted.
+	onOpen    []pluginHook
+	onWindows []func(n int)
+	mu        sync.Mutex
 	// disabled caches .ide/plugins.json per main project; written by plugins.set.
 	disabled map[string][]string
 }
@@ -177,6 +183,7 @@ type clientWindow struct{ c *Client }
 func (w clientWindow) Push(event string, data any) { w.c.push(event, data) }
 func (w clientWindow) Done() <-chan struct{}       { return w.c.ctx.Done() }
 func (w clientWindow) Hold(id string, stop func()) { w.c.streams.Store(id, stop) }
+func (w clientWindow) Project() string             { return w.c.project }
 func (w clientWindow) Release(id string) {
 	if stop, ok := w.c.streams.LoadAndDelete(id); ok {
 		stop.(func())()
@@ -205,6 +212,7 @@ func (s *Server) capabilityOn(rt *runtime.Runtime, capability string) bool {
 var toolNeeds = map[string]string{
 	"run_command": "terminal", "list_consoles": "terminal", "read_console": "terminal", "console_input": "terminal",
 	"list_commands": "terminal", "run_saved_command": "terminal",
+	"share_preview": "previews", "list_previews": "previews",
 }
 
 // missingFor is the error of a core tool whose capability the project of rt lacks (nil: it runs).
@@ -228,4 +236,81 @@ func (s *Server) offered(rt *runtime.Runtime, defs []json.RawMessage) []json.Raw
 		}
 	}
 	return out
+}
+
+func (h pluginHost) HandleGlobal(method string, f plugins.Handler) {
+	name := method
+	if !h.m.Owns(method) {
+		panic(fmt.Sprintf("plugin %s: method %s is out of its namespaces", h.id, method))
+	}
+	if _, taken := h.s.handlers[name]; taken {
+		panic(fmt.Sprintf("plugin %s: method %s is taken", h.id, name))
+	}
+	h.s.handle(name, func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		return f(ctx, plugins.Call{Params: p, Lang: c.language(), Window: clientWindow{c},
+			Emit:       func(event string, data any) { h.s.broadcast(event, data, nil) },
+			EmitOthers: func(event string, data any) { h.s.broadcast(event, data, nil) },
+			EmitFamily: func(event string, data any) { h.s.broadcast(event, data, nil) }})
+	})
+}
+
+func (h pluginHost) Pod() plugins.Pod { return podLend{h.s} }
+
+// podLend is the pod lent to the built-in plugins.
+type podLend struct{ s *Server }
+
+func (p podLend) Runtime(project string) (*runtime.Runtime, error) {
+	return p.s.openRuntime(project, sshx.Creds{})
+}
+
+func (p podLend) OpenRuntime(project string) *runtime.Runtime {
+	p.s.mu.Lock()
+	defer p.s.mu.Unlock()
+	return p.s.runtimes[project]
+}
+
+func (p podLend) Project(id string) (name, host string, ok bool) {
+	pr, ok := p.s.Projects.Get(id)
+	if !ok {
+		return "", "", false
+	}
+	if pr.SSH != nil {
+		host = pr.SSH.Host
+	}
+	return pr.Name(), host, true
+}
+
+func (p podLend) Broadcast(event string, data any)     { p.s.broadcast(event, data, nil) }
+func (p podLend) Emit(project, event string, data any) { p.s.emitter(project)(event, data, "") }
+func (p podLend) Forwards() *forwards.Manager          { return p.s.Forwards }
+func (p podLend) Previews() *preview.Manager           { return p.s.Previews }
+
+type pluginHook struct {
+	plugin string
+	f      func(rt *runtime.Runtime)
+}
+
+func (h pluginHost) OnProjectOpen(f func(rt *runtime.Runtime)) {
+	h.s.plugins.onOpen = append(h.s.plugins.onOpen, pluginHook{h.id, f})
+}
+
+func (h pluginHost) OnWindows(f func(n int)) {
+	h.s.plugins.onWindows = append(h.s.plugins.onWindows, f)
+}
+
+// projectOpened calls the hooks of the plugins enabled on the project of rt.
+func (s *Server) projectOpened(rt *runtime.Runtime) {
+	for _, hk := range s.plugins.onOpen {
+		if s.pluginOn(rt, hk.plugin) {
+			hk.f(rt)
+		}
+	}
+}
+
+// windowsChanged tells the plugins how many windows the pod has. Called with s.mu held, so
+// that the counts arrive in order.
+func (s *Server) windowsChanged() {
+	for _, f := range s.plugins.onWindows {
+		f(len(s.clients))
+	}
 }

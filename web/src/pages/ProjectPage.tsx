@@ -28,7 +28,6 @@ import { openBoard, openMilestone, openObjective, openTicket } from '../kanban/s
 import { AssistantTool } from '../llm/AssistantTool'
 import { ConflictsTool, StructureTool } from '../tools/tools'
 import { InfoTool } from '../tools/InfoTool'
-import { ForwardsTool } from '../forwards/ForwardsTool'
 import { AgentsTool } from '../agents/AgentsTool'
 import { QuestionModal, QuestionsTool } from '../questions/QuestionsTool'
 import { questions, refreshQuestions, resetQuestions, showQuestion } from '../questions/state'
@@ -56,7 +55,6 @@ export const toolPanels: Record<string, { label: string; icon: string; component
   explorer: { label: 'Explorer', icon: 'files', component: Explorer },
   kanban: { label: 'Kanban', icon: 'kanban', component: KanbanPanel },
   problems: { label: 'Problems', icon: 'problems', component: ProblemsTool, badge: problemCount },
-  forwards: { label: 'Port forwards and previews', icon: 'ports', component: ForwardsTool },
   assistant: { label: 'Assistant', icon: 'sparkle', component: AssistantTool },
   agents: { label: 'Agents', icon: 'comment', component: AgentsTool },
   questions: { label: 'Questions', icon: 'question', component: QuestionsTool, badge: () => questions().length },
@@ -252,7 +250,7 @@ const menus: [string, string[]][] = [
   ['menu|Navigate', ['search.everywhere', 'nav.recentFiles', '-', 'nav.back', 'nav.forward', '-', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', '-', 'nav.related', 'nav.test']],
   ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover', '-', 'lsp.rename', 'lsp.format', '-', 'edit.fold', 'edit.unfold', 'edit.foldAll', 'edit.unfoldAll']],
   ['menu|View', ['view.splitRight', 'view.splitDown', '-', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', '-', 'view.visualFocus', 'view.focusOutline', 'view.focusDim', '-', 'view.whitespace', 'view.wordWrap', 'view.markdown', '-', 'console.new', 'palette.open']],
-  ['menu|Tools', ['tool.explorer', 'tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.questions', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.problems', 'tool.forwards', '@tools']],
+  ['menu|Tools', ['tool.explorer', 'tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.questions', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.problems', '@tools']],
   ['menu|Help', ['help.docs', 'help.guide', 'help.glossary', '-', 'help.shortcuts']],
 ]
 

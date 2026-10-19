@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"github.com/DrSmithFr/web-ide/pod/internal/plugins/previews"
 	"net"
 	"os"
 	"path/filepath"
@@ -63,9 +64,9 @@ func roundTrip(addr string) (string, error) {
 }
 
 func TestForwards(t *testing.T) {
-	old := ForwardIdle
-	ForwardIdle = 200 * time.Millisecond
-	t.Cleanup(func() { ForwardIdle = old })
+	old := previews.ForwardIdle
+	previews.ForwardIdle = 200 * time.Millisecond
+	t.Cleanup(func() { previews.ForwardIdle = old })
 	sshPort := sshtest.Start(t)
 	remote := echoServer(t)
 	local := freePort(t)
@@ -105,7 +106,7 @@ func TestForwards(t *testing.T) {
 	}
 	a.call("tunnels.delete", map[string]any{"id": st[1].(map[string]any)["id"]})
 
-	// The last window leaves: the port forward closes after ForwardIdle.
+	// The last window leaves: the port forward closes after previews.ForwardIdle.
 	a.c.CloseNow()
 	time.Sleep(600 * time.Millisecond)
 	if _, err := roundTrip(addr); err == nil {

@@ -3,7 +3,7 @@
 // of the board (it needs the doodle code of the page: text measures, description, PNG).
 import { attached, basename, loadDoc, mutate, openFile, openTab, relPath, root } from '../state/project'
 import { errorToast, toast } from '../ui/toast'
-import { openPreview, previewUrl, type PreviewSpec } from './previews'
+import type { PreviewSpec } from '../plugins/capabilities'
 import { doodleSession, openDoodle } from './doodle/session'
 import { chat } from './state'
 import { capability } from '../plugins/capabilities'
@@ -210,9 +210,12 @@ async function showMessage(text: string, kind?: string): Promise<UiResult> {
 
 /** share_preview of an agent: a notification whose button starts the app (nothing before). */
 async function offerPreview(spec: PreviewSpec): Promise<UiResult> {
+  const pv = capability('previews')
+  if (!pv) throw new Error('the previews are off on this project (the Previews plugin)')
   const open = () =>
-    void openPreview(spec)
-      .then((p) => window.open(previewUrl(p), '_blank', 'noopener'))
+    void pv
+      .open(spec)
+      .then((p) => window.open(pv.url(p), '_blank', 'noopener'))
       .catch(errorToast)
   toast(t('An agent offers to try “{title}”', { title: spec.title }), 'info', { label: t('Open'), run: open }, 120_000)
   return ok('Offered to the user.', spec.title)

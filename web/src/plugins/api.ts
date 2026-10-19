@@ -14,9 +14,7 @@ import { dropClasses, dropIndex, moveItem, setDropAt } from '../ui/tabDrop'
 import { EditorView } from '../editor/view'
 import { capability, provide, type Capabilities } from './capabilities'
 import { setDynamicActions } from '../keys/bindings'
-import { closePreview, openPreview, previews, previewUrl } from '../llm/previews'
-import { ForwardsTab } from '../forwards/ForwardsTab'
-import { PreviewsTab } from '../forwards/PreviewsTab'
+import { inTunnel } from '../pod/transport'
 import { EmptyState } from '../ui/EmptyState'
 import { Icon } from '../ui/icons'
 import { errorToast, toast } from '../ui/toast'
@@ -121,9 +119,8 @@ export function makeApi(id: string) {
     editor: { Doc, View: EditorView, useView: useEditorView, setCursor: setCursorInfo },
     /** The keymap: a handler of an action while the view is shown, and the shortcut of an action. */
     keys: { register: registerAction, shortcut: shortcutOf, setDynamic: setDynamicActions },
-    /** Port forwards and app previews are the core's, shown wherever a plugin needs them. */
-    forwards: { Tab: ForwardsTab },
-    previews: { list: previews, open: openPreview, close: closePreview, url: previewUrl, Tab: PreviewsTab },
+    /** The transport of the page: in the tunnel of the relay, or a WebSocket to the pod. */
+    transport: { inTunnel },
     ui: { EmptyState, Icon, FileIcon, Modal, toast, errorToast, contextMenu, prompt, pick, copyText, parseAnsi, stripAnsi, WorktreeChip, tabDrop: { dropClasses, dropIndex, moveItem, setDropAt } },
   }
 }

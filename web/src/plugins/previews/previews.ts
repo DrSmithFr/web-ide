@@ -2,36 +2,22 @@
 // temporary URL (Tailscale) and stops it with the command. The list is the pod's, shared by
 // every window.
 import { createRoot, createSignal } from 'solid-js'
-import { on as onPod, request } from '../pod/rpc'
-import { inTunnel } from '../pod/transport'
+import type { Preview, PreviewSpec } from '../capabilities'
+import { api } from './plugin'
 
-export interface PreviewSpec {
-  project: string
-  title: string
-  command: string
-  cwd?: string
-  port: number
-  /** Saved command of the project it starts (its console, one per command). */
-  commandId?: string
-}
-
-export interface Preview extends PreviewSpec {
-  id: string
-  console: string
-  url: string
-  publicUrl?: string
-  public: boolean
-  tailscale: boolean
-  started: number
-}
+export type { Preview, PreviewSpec }
 
 const store = createRoot(() => {
   const [list, setList] = createSignal<Preview[]>([])
-  const refresh = () => request<Preview[]>('preview.list').then(setList, () => {})
-  onPod('preview.changed', (l: Preview[]) => setList(l ?? []))
-  onPod('pod.reconnected', refresh)
-  return { list, refresh, loaded: false }
+  const refresh = () => api.rpc<Preview[]>('preview.list').then(setList, () => {})
+  return { list, setList, refresh, loaded: false }
 })
+
+/** Starts following the previews: the pod's list changes, and after a reconnection. */
+export function watchPreviews() {
+  api.on('preview.changed', (l: Preview[]) => store.setList(l ?? []))
+  api.on('pod.reconnected', () => void store.refresh())
+}
 
 /** The running previews (loaded on first use). */
 export function previews(): Preview[] {
@@ -50,7 +36,7 @@ export const sameSpec = (p: PreviewSpec, s: PreviewSpec) => p.project === s.proj
  * through the DataChannel.
  */
 export function previewUrl(p: Preview): string {
-  if (!inTunnel()) return p.url
+  if (!api.transport.inTunnel()) return p.url
   return `${location.origin}/__preview/${p.id}/`
 }
 
@@ -62,7 +48,7 @@ export async function openPreview(spec: PreviewSpec): Promise<Preview> {
   const tab = window.open('about:blank', '_blank')
   if (tab) tab.opener = null
   try {
-    const p = await request<Preview>('preview.open', spec)
+    const p = await api.rpc<Preview>('preview.open', spec)
     const url = previewUrl(p)
     if (tab) tab.location.href = url
     else window.open(url, '_blank')
@@ -73,5 +59,5 @@ export async function openPreview(spec: PreviewSpec): Promise<Preview> {
   }
 }
 
-export const closePreview = (id: string) => request('preview.close', { id })
-export const setPublic = (id: string, pub: boolean) => request<Preview>('preview.public', { id, public: pub })
+export const closePreview = (id: string) => api.rpc('preview.close', { id })
+export const setPublic = (id: string, pub: boolean) => api.rpc<Preview>('preview.public', { id, public: pub })

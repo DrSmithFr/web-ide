@@ -7,7 +7,18 @@ import { copyText } from '../ui/clipboard'
 import { t } from '../i18n'
 import { project } from '../state/project'
 import { capability } from '../plugins/capabilities'
-import { closePreview, openPreview, previewUrl, previews, sameSpec, setPublic, type PreviewSpec } from './previews'
+import type { Preview, PreviewSpec } from '../plugins/capabilities'
+
+
+// The previews are the Previews plugin's (capability previews): off, the card says so.
+const pv = () => capability('previews')
+const off = () => Promise.reject(new Error(t('The previews are off on this project (Settings > Plugins)')))
+const previews = () => pv()?.list() ?? []
+const sameSpec = (a: PreviewSpec, b: PreviewSpec) => pv()?.same(a, b) ?? false
+const previewUrl = (p: Preview) => pv()?.url(p) ?? p.url
+const openPreview = (s: PreviewSpec) => pv()?.open(s) ?? off()
+const setPublic = (id: string, pub: boolean) => pv()?.setPublic(id, pub) ?? off()
+const closePreview = (id: string) => pv()?.close(id) ?? off()
 
 /** Brings the console of the command to the front, in a window of its project. */
 async function showConsole(projectId: string, id: string) {

@@ -17,7 +17,7 @@ import { openSettings } from '../settings/SettingsModal'
 import { t } from '../i18n'
 import { defaultSpec, iconOf, iconURL, type IconSpec, loadIcon, loadIcons, renderIcon, setFavicon } from '../ui/projectIcon'
 import { IconEditor } from '../ui/IconEditor'
-import { OpenForwards } from '../forwards/OpenForwards'
+import { homeParts } from '../plugins/registry'
 import { useLan } from '../state/lan'
 import { podOpenable, podURL, usePods, type PodInfo, type PodProject } from '../state/pods'
 import { askUpdate, updateOffer, type UpdateAnswer } from '../pod/update'
@@ -195,7 +195,7 @@ export function Home() {
         <Show when={(pods() ?? []).length}>
           <Pods pods={pods()!} name={ws()?.name ?? ''} version={ws()?.version ?? ''} />
         </Show>
-        <OpenForwards />
+        <For each={homeParts()}>{(Part) => <Part />}</For>
         <Show when={available().length}>
           <h3 class="home-sub">{t('In the projects folder')}</h3>
           <div class="ws-dirs">

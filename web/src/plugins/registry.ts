@@ -13,10 +13,11 @@ import { hello } from './hello'
 import { exec } from './exec'
 import { search } from './search'
 import { git } from './git'
+import { previews } from './previews'
 import { docker } from './docker'
 import { database } from './database'
 
-const builtins: Record<string, PluginModule> = { database, docker, exec, git, hello, search }
+const builtins: Record<string, PluginModule> = { database, docker, exec, git, hello, previews, search }
 
 const [states, setStates] = createSignal<PluginState[]>([])
 export const pluginStates = states
@@ -78,6 +79,11 @@ export const pluginTools = createRoot(() =>
     ),
   ),
 )
+
+/** The parts of the home page the built-ins give (no project: whether it is enabled is moot). */
+export function homeParts() {
+  return Object.entries(builtins).flatMap(([id, m]) => (m.home ? [m.home(makeApi(id))] : []))
+}
 
 /** The hosts of the enabled plugins (modals), mounted by the project window. */
 export const pluginHosts = createRoot(() => createMemo(() => enabled().flatMap((s) => active[s.manifest.id].hosts ?? [])))

@@ -1,10 +1,8 @@
 // Previews tab of the Port forwards and previews tool: the apps served on temporary URLs (share_preview), for
 // every project of the pod. A preview stops with its command.
 import { For, Show } from 'solid-js'
-import { errorToast } from '../ui/toast'
-import { Icon } from '../ui/icons'
-import { t } from '../i18n'
-import { closePreview, previews, setPublic } from '../llm/previews'
+import { errorToast, Icon, t } from './plugin'
+import { closePreview, previews, setPublic } from './previews'
 
 export function PreviewsTab() {
   return (

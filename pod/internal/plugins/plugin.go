@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/DrSmithFr/web-ide/pod/internal/forwards"
+	"github.com/DrSmithFr/web-ide/pod/internal/preview"
 	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
 )
 
@@ -21,6 +23,32 @@ type Host interface {
 	// AssistantTool adds a tool offered to the assistant and the MCP; its name must be listed
 	// in the manifest.
 	AssistantTool(t AssistantTool)
+	// HandleGlobal adds a method without a project (Call.Runtime nil: the home page), always
+	// answered: the switch of a project hides the plugin there, not the state of the pod.
+	HandleGlobal(method string, h Handler)
+	// Pod is what the pod lends its built-in plugins beyond one project.
+	Pod() Pod
+	// OnProjectOpen is called when a window opens a project where the plugin is enabled.
+	OnProjectOpen(f func(rt *runtime.Runtime))
+	// OnWindows is called with the number of windows of the pod each time it changes, in order;
+	// the pod is locked meanwhile: f must not call it back (it arms a timer, say).
+	OnWindows(f func(n int))
+}
+
+// Pod is the pod as a built-in plugin sees it: the projects, the events to every window, and
+// its pod-wide services (the port forwards and the previews, which the HTTP server serves).
+type Pod interface {
+	// Runtime opens the runtime of a project (a preview of another project of the pod).
+	Runtime(project string) (*runtime.Runtime, error)
+	// OpenRuntime is the runtime of a project if a window has it open.
+	OpenRuntime(project string) *runtime.Runtime
+	// Project is the name of a project and its SSH host.
+	Project(id string) (name, host string, ok bool)
+	// Broadcast sends an event to every window of the pod; Emit to the windows of a project.
+	Broadcast(event string, data any)
+	Emit(project, event string, data any)
+	Forwards() *forwards.Manager
+	Previews() *preview.Manager
 }
 
 // Call is one call of a plugin: the project it runs in (local or SSH, through its runtime),
@@ -51,6 +79,8 @@ type Window interface {
 	// Hold keeps a stream of the window under an id; Release stops and forgets it.
 	Hold(id string, stop func())
 	Release(id string)
+	// Project is the project the window shows ("" on the home page).
+	Project() string
 }
 
 // Handler answers an RPC method of a plugin.
