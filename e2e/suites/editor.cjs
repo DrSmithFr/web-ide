@@ -270,6 +270,16 @@ run(async ({ page }) => {
     await page.click('.rail-left .rail-btn[title="Console"]')
     await page.waitForSelector('.bottom [data-tool=console]')
     assert((await box('.bottom')).bottom <= (await box('[data-testid=status-bar]')).top + 1, 'the bottom strip sits above the bar')
+
+    // The bar is about the file in focus: with the focus in the bottom strip, its items hide.
+    await page.click('.bottom [data-tool=console]')
+    await page.waitForFunction(() => !document.querySelector('[data-testid=status-cursor]'))
+    assert(!(await page.$('[data-testid=status-eol]')) && !(await page.$('[data-testid=status-encoding]')), 'no item of the file while the console has the focus')
+    assert(Math.abs((await box('[data-testid=status-bar]')).height - 24) < 2, 'the bar keeps its row while empty')
+    await page.click('.pane.active .ed-content')
+    await page.waitForSelector('[data-testid=status-cursor]')
+    assert(!!(await page.$('[data-testid=status-eol]')), 'the items of the file come back with the focus')
+
     await page.click('.rail-left .rail-btn[title="Console"]')
     await page.waitForFunction(() => !document.querySelector('.bottom'))
   }
