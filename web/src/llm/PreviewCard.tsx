@@ -5,21 +5,18 @@ import { Icon } from '../ui/icons'
 import { errorToast } from '../ui/toast'
 import { copyText } from '../ui/clipboard'
 import { t } from '../i18n'
-import { mutate, project } from '../state/project'
-import { consoles } from '../console/consoles'
-import { showTool } from '../state/zones'
+import { project } from '../state/project'
+import { capability } from '../plugins/capabilities'
 import { closePreview, openPreview, previewUrl, previews, sameSpec, setPublic, type PreviewSpec } from './previews'
 
 /** Brings the console of the command to the front, in a window of its project. */
 async function showConsole(projectId: string, id: string) {
   if (!id || project()?.id !== projectId) return
+  const term = capability('terminal')
+  if (!term) return
   // The console the pod just created may not be listed here yet.
-  for (let i = 0; i < 20 && !consoles().some((c) => c.id === id); i++) await new Promise((r) => setTimeout(r, 100))
-  if (!consoles().some((c) => c.id === id)) return
-  mutate((s) => {
-    showTool(s, 'console')
-    s.bottom.active = id
-  })
+  for (let i = 0; i < 20 && !term.consoles().some((c) => c.id === id); i++) await new Promise((r) => setTimeout(r, 100))
+  if (term.consoles().some((c) => c.id === id)) term.show(id)
 }
 
 export function PreviewCard(props: { spec: PreviewSpec }) {

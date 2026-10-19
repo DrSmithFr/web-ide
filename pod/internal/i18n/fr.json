@@ -367,5 +367,6 @@
   "a step takes the objective of its root (#%d)": "une étape prend l'objectif de sa racine (#%d)",
   "invalid .ide/plugins.json: %v": ".ide/plugins.json invalide : %v",
   "the %s plugin is disabled on this project": "le plugin %s est désactivé sur ce projet",
-  "unknown plugin: %s": "plugin inconnu : %s"
+  "unknown plugin: %s": "plugin inconnu : %s",
+  "%s needs the %s capability, off on this project (Settings > Plugins)": "%s a besoin de la capacité %s, désactivée sur ce projet (Réglages > Plugins)"
 }

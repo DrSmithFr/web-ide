@@ -104,7 +104,7 @@ type Server struct {
 	// notification to the relay (both nil: no push, push.go).
 	Push     *push.Store
 	PushSend func(sub string, body []byte, ttl int, urgency, topic string) error
-	// Plugins are the built-in plugins (nil: none).
+	// Plugins are the built-in plugins (nil: those of builtin, without the test plugins).
 	Plugins *plugins.Registry
 
 	// stopped: the pod stops (Shutdown); the runs are left as they are, to be taken back.
@@ -165,7 +165,6 @@ func (s *Server) Init() {
 	s.registerExec()
 	s.registerForwards()
 	s.registerIdeDir()
-	s.registerCommands()
 	s.registerAgents()
 	s.registerQuestions()
 	s.registerKanbanAgent()

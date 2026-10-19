@@ -2,7 +2,7 @@
 import { request } from '../../pod/rpc'
 import { basename, openFile, openTab, relPath } from '../../state/project'
 import { gitStatus, refreshGit, type GitFile } from '../../state/git'
-import { newConsole } from '../../console/consoles'
+import { capability } from '../../plugins/capabilities'
 import { contextMenu, prompt, type MenuItem } from '../../ui/overlay'
 import { errorToast, toast } from '../../ui/toast'
 import { t, tn } from '../../i18n'
@@ -60,7 +60,7 @@ export const unstage = (list: GitFile[]) => act('git.unstage', { paths: list.map
 
 /** Runs pull, push or fetch in a terminal (credential prompts stay interactive). */
 export function remote(args: string[]) {
-  return newConsole({ kind: 'task', command: ['git', ...args], title: `git ${args.join(' ')}` }).then(() => setTimeout(() => refreshGit(0), 3000))
+  return (capability('terminal')?.open({ kind: 'task', command: ['git', ...args], title: `git ${args.join(' ')}` }) ?? Promise.resolve()).then(() => setTimeout(() => refreshGit(0), 3000))
 }
 
 export type PushMode = '' | 'lease' | 'force'

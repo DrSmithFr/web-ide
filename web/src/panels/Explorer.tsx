@@ -8,7 +8,7 @@ import { contextMenu, prompt, type MenuItem } from '../ui/overlay'
 import { errorToast, toast } from '../ui/toast'
 import { Icon } from '../ui/icons'
 import { FileIcon } from './fileIcons'
-import { newConsole } from '../console/consoles'
+import { capability } from '../plugins/capabilities'
 import { dirState, fileState } from '../state/git'
 import { folderMark, inExcluded, loadFolderMarks, markFolder, type FolderMark } from '../state/folders'
 import { t } from '../i18n'
@@ -186,7 +186,7 @@ function menuFor(ev: MouseEvent, e: Entry) {
     { separator: true, label: '' },
     { label: t('Copy the path'), action: () => copyText(e.path) },
     { label: t('Copy the relative path'), action: () => copyText(relPath(e.path)) },
-    { label: t('Open a terminal here'), action: () => newConsole({ cwd: dir }) },
+    { label: t('Open a terminal here'), action: () => capability('terminal')?.open({ cwd: dir }) },
     { label: t('Refresh'), action: () => load(dir) },
   ]
   if (e.dir && e.path !== root()) {

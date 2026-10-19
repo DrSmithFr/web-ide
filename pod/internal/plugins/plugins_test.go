@@ -57,7 +57,7 @@ func TestResolve(t *testing.T) {
 	r := NewRegistry()
 	for _, m := range []Manifest{
 		{ID: "db", Provides: []string{"sql"}},
-		{ID: "orm", Requires: []string{"sql", "terminal"}},
+		{ID: "orm", Requires: []string{"sql", "worktrees"}},
 		{ID: "admin", Requires: []string{"sql"}},
 		{ID: "lost", Requires: []string{"nothing"}},
 	} {

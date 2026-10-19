@@ -2226,5 +2226,6 @@
   "greeted": "salué",
   "Port forwards and previews": "Redirections de port et aperçus",
   "SSH passphrase": "Phrase de passe SSH",
-  "Table": "Table"
+  "Table": "Table",
+  "In {folder}": "Dans {folder}"
 }

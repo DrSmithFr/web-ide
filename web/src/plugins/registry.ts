@@ -6,11 +6,13 @@ import { on, request } from '../pod/rpc'
 import { setPluginActions } from '../keys/bindings'
 import { makeApi } from './api'
 import type { PluginContributions, PluginModule, PluginState } from './types'
+import { setCapabilityGate } from './capabilities'
 import { hello } from './hello'
+import { exec } from './exec'
 import { docker } from './docker'
 import { database } from './database'
 
-const builtins: Record<string, PluginModule> = { database, docker, hello }
+const builtins: Record<string, PluginModule> = { database, docker, exec, hello }
 
 const [states, setStates] = createSignal<PluginState[]>([])
 export const pluginStates = states
@@ -33,7 +35,7 @@ export function setPluginStates(list: PluginState[] | undefined, opened = false)
   setPluginActions(
     enabled().flatMap((s) => [
       ...(s.manifest.contributes.tools ?? []).map((x) => ({ id: `tool.${x.id}`, label: x.label, category: 'Tools', inTerminal: true })),
-      ...(s.manifest.contributes.commands ?? []).map((c) => ({ id: `${s.manifest.id}.${c.id}`, label: c.label, category: c.category ?? s.manifest.name, keys: c.keys, replaces: c.replaces, run: active[s.manifest.id]?.commands?.[c.id] })),
+      ...(s.manifest.contributes.commands ?? []).map((c) => ({ id: c.id.includes('.') ? c.id : `${s.manifest.id}.${c.id}`, label: c.label, category: c.category ?? s.manifest.name, keys: c.keys, replaces: c.replaces, inTerminal: c.inTerminal, run: active[s.manifest.id]?.commands?.[c.id] })),
     ]),
   )
   const now = new Set(enabled().map((s) => s.manifest.id))
@@ -57,6 +59,7 @@ export async function refreshPlugins() {
 const enabled = () => states().filter((s) => s.enabled && active[s.manifest.id])
 
 export const pluginEnabled = (id: string) => states().some((s) => s.manifest.id === id && s.enabled)
+setCapabilityGate(pluginEnabled)
 
 /** The tools of the enabled plugins that have a page module. */
 export const pluginTools = createRoot(() =>
@@ -69,6 +72,9 @@ export const pluginTools = createRoot(() =>
     ),
   ),
 )
+
+/** The hosts of the enabled plugins (modals), mounted by the project window. */
+export const pluginHosts = createRoot(() => createMemo(() => enabled().flatMap((s) => active[s.manifest.id].hosts ?? [])))
 
 /** The tab view of a kind plugin:<plugin>/<view>, when its plugin is enabled. */
 export function pluginView(kind: string) {

@@ -3,7 +3,7 @@
 import { createResource, For, onCleanup, Show } from 'solid-js'
 import { request, on as onPod, podState } from '../pod/rpc'
 import { activeTab, basename, docsVersion, getDoc, project, relPath, root, isLocal, diagnostics } from '../state/project'
-import { newConsole } from '../console/consoles'
+import { capability } from '../plugins/capabilities'
 import { ProjectAgentStats } from '../agents/stats'
 import { Icon } from '../ui/icons'
 import { languageName } from '../editor/languages'
@@ -158,7 +158,7 @@ function SshCards(props: { info: any }) {
                   </div>
                 </div>
                 <Show when={isLocal()}>
-                  <button class="btn small" title={t('Open a terminal: ssh {host}', { host: h.alias })} onClick={() => newConsole({ command: ['ssh', h.alias], title: `ssh ${h.alias}` })}>
+                  <button class="btn small" title={t('Open a terminal: ssh {host}', { host: h.alias })} onClick={() => capability('terminal')?.open({ command: ['ssh', h.alias], title: `ssh ${h.alias}` })}>
                     {t('Terminal')}
                   </button>
                 </Show>

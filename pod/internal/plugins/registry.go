@@ -5,11 +5,11 @@ import (
 	"slices"
 )
 
-// CoreCapabilities are provided by the core itself, as long as Console and Git are not plugins.
-var CoreCapabilities = []string{"terminal", "worktrees"}
+// CoreCapabilities are provided by the core itself, as long as Git is not a plugin.
+var CoreCapabilities = []string{"worktrees"}
 
 // CoreTools are the ids of the tools of the core, which no plugin may take.
-var CoreTools = []string{"explorer", "search", "git", "kanban", "console", "problems", "forwards",
+var CoreTools = []string{"explorer", "search", "git", "kanban", "problems", "forwards",
 	"assistant", "agents", "questions", "structure", "conflicts", "info"}
 
 // Registry holds the built-in plugins, in their order of registration.
@@ -154,3 +154,22 @@ func Dependents(states []State, id string) []string {
 	}
 	return out
 }
+
+// Provided are the capabilities a project has: the core's and those of its enabled plugins.
+func Provided(states []State) map[string]bool {
+	out := map[string]bool{}
+	for _, c := range CoreCapabilities {
+		out[c] = true
+	}
+	for _, s := range states {
+		if s.Enabled {
+			for _, c := range s.Provides() {
+				out[c] = true
+			}
+		}
+	}
+	return out
+}
+
+// Provides are the capabilities of the plugin.
+func (s State) Provides() []string { return s.Manifest.Provides }

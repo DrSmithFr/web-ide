@@ -48,26 +48,25 @@ flowchart LR
   llm["llm<br/>assistant"]
   agents["agents<br/>Agents tool"]
   questions["questions<br/>Questions tool"]
-  plugins["plugins<br/>Docker, the api"]
+  plugins["plugins<br/>Exec, Docker, Database, the api"]
   forwards["forwards<br/>port forwards, previews"]
-  console["console<br/>terminals, tasks"]
   editor["editor"]
   lsp["lsp"]
   pages --> agents
-  pages --> console
+  pages -->|"capabilities"| plugins
   pages --> forwards
   pages --> plugins
   pages --> kanban
   pages --> llm
   pages --> questions
   tools --> agents
-  tools --> console
+  tools -->|"capabilities"| plugins
   tools --> editor
   tools --> lsp
   kanban -->|"ticket sessions"| agents
-  kanban --> console
+  kanban -->|"capabilities"| plugins
   kanban --> llm
-  llm --> console
+  llm -->|"capabilities"| plugins
   llm -->|"assistant options"| plugins
   llm --> editor
   llm -->|"tickets"| kanban
@@ -76,11 +75,8 @@ flowchart LR
   agents -->|"MessageBox"| llm
   agents --> questions
   questions --> llm
-  plugins -->|"terminal"| console
   plugins -->|"previews"| llm
   forwards --> llm
-  console --> editor
-  console --> llm
   lsp --> editor
   classDef other stroke-dasharray: 4 3
   class pages,tools other
@@ -103,7 +99,6 @@ Diagram edges are imports of the folders, checked with a script over the `import
 - [`popups/`](popups/): Search Everywhere, Recent Files and the switcher, paste from history (the history itself: `ui/clipboard.ts`)
 - [`panels/`](panels/): Explorer (with file type icons, `fileIcons.tsx`), global search, Git tool (`panels/git/`: tabs, tree of changes, graph lanes `graph.ts`, commit detail)
 - [`tools/`](tools/): Right-panel tools (conflicts, structure…), `InfoTool`, and `tools.tsx`, the registry of the tools of the window
-- [`console/`](console/): Console tool: terminals and tasks (`consoles.tsx`, one xterm per tab), project commands (`commands.ts`, `CommandsModal.tsx`)
 - [`conflict/`](conflict/): Three-pane conflict dialog
 - [`settings/`](settings/): Settings modal and its pages: `Members`, `Lan`, `Pods`, `Sync`, `Notifications`, `Plugins` (with a project open) (remote access and account), themes (`themes.ts`)
 - [`llm/`](llm/): Assistant: state, turn loop, tools, prompt, Markdown, the editor of the message box shared with the Agents tool (`MessageBox.tsx`), attachments, speech recognition, sub-agents (`SubAgents.tsx`), doodles (`llm/doodle/`: document model, SVG rendering, export, modal), the board of a conversation (`llm/board/`), app previews (`previews.ts`, `PreviewCard.tsx`)
@@ -111,7 +106,7 @@ Diagram edges are imports of the folders, checked with a script over the `import
 - [`questions/`](questions/): Questions tool: the list (`state.ts`, asked again on `questions.changed`), the modal one question at a time and its auto-open (not for a question whose thread is on screen: `showsQuestions`), the forms of `elicitation/create` (`Form.tsx`, also in the Agents thread)
 - [`kanban/`](kanban/): Board, ticket view, workflow actions, linked conversations, milestones and objectives
 - [`forwards/`](forwards/): The *Port forwards and previews* tool (`ForwardsTool.tsx`; its tabs are also in the plugin `api`) and the list of the open forwards on the home page
-- [`plugins/`](plugins/): The plugins of the window ([plugins.md](../../docs/design/plugins.md)): `registry.ts` (the states sent by the pod in `project.open` and `plugins.changed`, the page modules of the built-ins activated once when first enabled, their tools, tab views `plugin:<id>/<view>` and commands), `api.ts` (the `api` a module gets: `rpc` to its backend, events, `openFile`, `openView`, port forwards and previews of the core, `ui`), `types.ts`; one folder per built-in: `docker/` (the Docker tool: lists and polling `state.ts`, detail pane, logs with ANSI colors, disk usage; `plugin.ts` holds its `api` and its desk state, nothing else of the core is imported) `database/` (the Database explorer: connections `connections.ts`, tree, the console and table views `views.ts` whose state, the text of a console included, goes with the tab) and `hello/` (the test plugin). The tools of the enabled plugins join `toolPanels` (`pages/ProjectPage.tsx`) and the tiles; their default zone comes from `state/zones.ts` (`setPluginZones`), which keeps the place of a disabled one
+- [`plugins/`](plugins/): The plugins of the window ([plugins.md](../../docs/design/plugins.md)): `registry.ts` (the states sent by the pod in `project.open` and `plugins.changed`, the page modules of the built-ins activated once when first enabled, their tools, tab views `plugin:<id>/<view>` and commands), `api.ts` (the `api` a module gets: `rpc` to its backend, events, `openFile`, `openView`, port forwards and previews of the core, `ui`), `types.ts`, `capabilities.ts` (capabilities as services: the types of `terminal` and `commands`, `provide` by a plugin, `capability()` for the core, `undefined` while the provider is off); one folder per built-in: `exec/` (the Console tool: terminals and tasks `consoles.tsx`, one xterm per console; the saved commands `commands.ts`, `CommandsModal.tsx`; it provides the `terminal` and `commands` services), `docker/` (the Docker tool: lists and polling `state.ts`, detail pane, logs with ANSI colors, disk usage; `plugin.ts` holds its `api` and its desk state, nothing else of the core is imported) `database/` (the Database explorer: connections `connections.ts`, tree, the console and table views `views.ts` whose state, the text of a console included, goes with the tab) and `hello/` (the test plugin). The tools of the enabled plugins join `toolPanels` (`pages/ProjectPage.tsx`) and the tiles; their default zone comes from `state/zones.ts` (`setPluginZones`), which keeps the place of a disabled one
 - [`i18n/`](i18n/): `t()` and the catalogs (English source strings, `languages.json`, one catalog per other language)
 
 ## Invariants and pitfalls

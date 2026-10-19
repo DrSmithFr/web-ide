@@ -1,48 +1,23 @@
 // Console tool: terminals and tasks run by the pod (they survive reloads), one xterm instance
-// per console, kept while the page lives. Problems tool: diagnostics and language server output.
+// per console, kept while the page lives. It is the terminal capability of the Exec plugin.
 import { createEffect, createRoot, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
-import { notifyIn, notifyOn, on as onPod, openChannel, request, requestIn } from '../pod/rpc'
-import type { Channel } from '../pod/rpc'
-import { attached, diagnostics, home, mutate, openFile, project, relPath, root, session } from '../state/project'
-import { detachTab, openTile, tileMode } from '../state/tiles'
-import { WorktreeChip } from '../ui/WorktreeChip'
-import { showTool } from '../state/zones'
-import { dropClasses, dropIndex, moveItem, setDropAt } from '../ui/tabDrop'
-import { fontFor, settings } from '../state/settings'
-import { accentOf, themeById } from '../settings/themes'
-import { contextMenu, prompt, type MenuItem } from '../ui/overlay'
-import { errorToast } from '../ui/toast'
-import { copyText } from '../ui/clipboard'
-import { Icon } from '../ui/icons'
-import { EmptyState } from '../ui/EmptyState'
-import { shortcutOf } from '../keys/bindings'
-import { t } from '../i18n'
+import type { MenuItem } from '../api'
+import type { ConsoleInfo } from '../capabilities'
+import { api, contextMenu, copyText, desk, EmptyState, errorToast, Icon, prompt, t, WorktreeChip } from './plugin'
 import { adHocCommand, commands, flagIcon, loadCommands, openApp, runCommand, runningConsole, servesApp } from './commands'
 import { openCommands } from './CommandsModal'
 
-export interface ConsoleInfo {
-  id: string
-  title: string
-  kind: 'terminal' | 'task'
-  command?: string[]
-  exited: boolean
-  code: number
-  /** Worktree the console runs in (set by the page). */
-  project?: string
-  /** Saved command the task runs (see commands.ts). */
-  commandId?: string
-}
+export type { ConsoleInfo }
 
 const [consoles, setConsoles] = createSignal<ConsoleInfo[]>([])
-const [logs, setLogs] = createSignal<string[]>([])
 export { consoles, setConsoles }
 
 /** Consoles of a worktree of the window (its project by default). */
-export function setConsoleList(list: ConsoleInfo[], pid = home()?.id) {
+export function setConsoleList(list: ConsoleInfo[], pid = api.project.id()) {
   const mine = list.map((c) => ({ ...c, project: pid }))
   setConsoles((l) => [...l.filter((c) => c.project !== pid), ...mine])
   // Forget the terminals that do not exist in the pod anymore.
@@ -52,49 +27,66 @@ export function setConsoleList(list: ConsoleInfo[], pid = home()?.id) {
 /** Lists the consoles of every worktree attached to the window again (after a reconnection),
  *  and gets the output the open terminals missed: a pod restarted with a keeper still runs them. */
 export async function refreshConsoles() {
-  for (const pid of Object.keys(attached)) await requestIn<ConsoleInfo[]>(pid, 'console.list').then((l) => setConsoleList(l, pid), () => {})
+  for (const pid of api.project.attached()) await api.rpcIn<ConsoleInfo[]>(pid, 'console.list').then((l) => setConsoleList(l, pid), () => {})
   for (const [id, entry] of terms) attachTerm(id, entry, entry.next)
 }
 
-// The consoles of a worktree come with it and go with it.
-createRoot(() =>
-  createEffect(
-    on(
-      () => Object.keys(attached),
-      (ids, prev) => {
-        if (!prev) return
-        for (const pid of ids) if (!prev.includes(pid) && pid !== home()?.id) requestIn<ConsoleInfo[]>(pid, 'console.list').then((l) => setConsoleList(l, pid), () => {})
-        for (const pid of prev) if (!ids.includes(pid)) setConsoleList([], pid)
-      },
+/** Starts following the consoles: the events of the pod, the worktrees attached, the look. */
+export function watchConsoles() {
+  // The consoles of a worktree come with it and go with it.
+  createRoot(() =>
+    createEffect(
+      on(
+        () => api.project.attached(),
+        (ids, prev) => {
+          if (!prev) return
+          for (const pid of ids) if (!prev.includes(pid) && pid !== api.project.id()) api.rpcIn<ConsoleInfo[]>(pid, 'console.list').then((l) => setConsoleList(l, pid), () => {})
+          for (const pid of prev) if (!ids.includes(pid)) setConsoleList([], pid)
+        },
+      ),
     ),
-  ),
-)
+  )
+  api.on('console.created', (c: ConsoleInfo, from) => setConsoles((l) => (l.some((x) => x.id === c.id) ? l : [...l, { ...c, project: from ?? api.project.id() }])))
+  api.on('console.closed', (e: { id: string }) => {
+    setConsoles((l) => l.filter((c) => c.id !== e.id))
+    disposeTerm(e.id)
+  })
+  api.on('console.renamed', (e: { id: string; title: string }) => setConsoles((l) => l.map((c) => (c.id === e.id ? { ...c, title: e.title } : c))))
+  api.on('console.exit', (e: { id: string; code: number }) => {
+    setConsoles((l) => l.map((c) => (c.id === e.id ? { ...c, exited: true, code: e.code } : c)))
+    const entry = terms.get(e.id)
+    if (entry) termExited(entry, e.code)
+  })
+  api.on('console.output', (e: { id: string; data: string; offset: number }) => {
+    const t = terms.get(e.id)
+    if (t?.ready) writeAt(t, e.offset, b64(e.data))
+    else t?.queue.push(e)
+  })
+  createRoot(() =>
+    createEffect(
+      on(
+        () => [api.theme.terminal(), api.theme.font()] as const,
+        ([theme, font]) => {
+          for (const t of terms.values()) {
+            t.term.options.theme = theme
+            t.term.options.fontFamily = font.family
+            t.term.options.fontSize = font.size
+            try {
+              t.fit.fit()
+            } catch {
+              /* hidden */
+            }
+          }
+        },
+        { defer: true },
+      ),
+    ),
+  )
+  watchTrail()
+}
 
 const projectOf = (id: string) => consoles().find((c) => c.id === id)?.project
 
-onPod('console.created', (c: ConsoleInfo, from) => setConsoles((l) => (l.some((x) => x.id === c.id) ? l : [...l, { ...c, project: from ?? home()?.id }])))
-onPod('console.closed', (e: { id: string }) => {
-  setConsoles((l) => l.filter((c) => c.id !== e.id))
-  disposeTerm(e.id)
-})
-onPod('console.renamed', (e: { id: string; title: string }) => setConsoles((l) => l.map((c) => (c.id === e.id ? { ...c, title: e.title } : c))))
-onPod('console.exit', (e: { id: string; code: number }) => {
-  setConsoles((l) => l.map((c) => (c.id === e.id ? { ...c, exited: true, code: e.code } : c)))
-  const entry = terms.get(e.id)
-  if (entry) termExited(entry, e.code)
-})
-onPod('console.output', (e: { id: string; data: string; offset: number }) => {
-  const t = terms.get(e.id)
-  if (t?.ready) writeAt(t, e.offset, b64(e.data))
-  else t?.queue.push(e)
-})
-onPod('lsp.log', (e: { lang: string; method: string; params: { type: number; message: string } }) => {
-  const kind = t(['', 'error', 'warn.', 'info', 'log'][e.params?.type] ?? '')
-  setLogs((l) => [...l.slice(-999), `[${e.lang}] ${kind} ${e.params?.message ?? ''}`])
-})
-onPod('lsp.status', (e: { lang: string; running: boolean }) => {
-  setLogs((l) => [...l.slice(-999), `[${e.lang}] ${e.running ? t('server started') : t('server stopped')}`])
-})
 
 function b64(s: string) {
   return Uint8Array.from(atob(s), (c) => c.charCodeAt(0))
@@ -115,7 +107,7 @@ interface TermEntry {
   exited?: boolean
   // Channel of the tunnel for this terminal (its own input and output), null on a
   // WebSocket.
-  ch: Channel | null
+  ch: Awaited<ReturnType<typeof api.channel.open>>
 }
 const terms = new Map<string, TermEntry>()
 
@@ -129,7 +121,7 @@ function writeAt(entry: TermEntry, offset: number, data: Uint8Array) {
 /** Gets the scrollback of a console (from the offset the terminal has, on a reconnection). */
 function attachTerm(id: string, entry: TermEntry, from?: number) {
   entry.ready = false
-  requestIn(projectOf(id), 'console.attach', from === undefined ? { id } : { id, from })
+  api.rpcIn(projectOf(id), 'console.attach', from === undefined ? { id } : { id, from })
     .then((r) => {
       if (r.data) writeAt(entry, r.start ?? entry.next, b64(r.data))
       entry.next = Math.max(entry.next, r.offset ?? entry.next)
@@ -146,21 +138,15 @@ function termExited(entry: TermEntry, code: number) {
   entry.term.write(`\r\n\x1b[2m[${t('process exited, code {code}', { code })}]\x1b[0m\r\n`)
 }
 
-function xtermTheme() {
-  const th = themeById(settings.theme)
-  const t = th.ui
-  return { background: t['bg-2'], foreground: t.fg, cursor: accentOf(th, settings.accent)[0], selectionBackground: t['sel-bg'], black: t['bg-3'] }
-}
-
 function getTerm(id: string): TermEntry {
   let te = terms.get(id)
   if (te) return te
   const el = document.createElement('div')
   el.className = 'term-host'
   const term = new Terminal({
-    fontFamily: settings.font.family,
-    fontSize: fontFor().size,
-    theme: xtermTheme(),
+    fontFamily: api.theme.font().family,
+    fontSize: api.theme.font().size,
+    theme: api.theme.terminal(),
     scrollback: 10000,
     allowProposedApi: true,
     cursorBlink: true,
@@ -185,9 +171,9 @@ function getTerm(id: string): TermEntry {
   terms.set(id, entry)
   // In the tunnel, each terminal has its own channel: its input and its output go on it,
   // so a long scrollback never delays the rpc channel. On a WebSocket, ch stays null.
-  void openChannel('term:' + id).then((ch) => (entry.ch = ch), () => {})
-  term.onData((data) => notifyOn(entry.ch, 'console.input', { id, data }, projectOf(id)))
-  term.onResize(({ cols, rows }) => notifyIn(projectOf(id), 'console.resize', { id, cols, rows }))
+  void api.channel.open('term:' + id).then((ch) => (entry.ch = ch), () => {})
+  term.onData((data) => api.channel.notify(entry.ch, 'console.input', { id, data }, projectOf(id)))
+  term.onResize(({ cols, rows }) => api.notifyIn(projectOf(id), 'console.resize', { id, cols, rows }))
   attachTerm(id, entry)
   return entry
 }
@@ -199,26 +185,6 @@ function disposeTerm(id: string) {
   t.el.remove()
   terms.delete(id)
 }
-
-createEffect(
-  on(
-    () => [settings.theme, settings.accent, settings.font.family, fontFor().size],
-    () => {
-      const size = fontFor().size
-      for (const t of terms.values()) {
-        t.term.options.theme = xtermTheme()
-        t.term.options.fontFamily = settings.font.family
-        t.term.options.fontSize = size
-        try {
-          t.fit.fit()
-        } catch {
-          /* hidden */
-        }
-      }
-    },
-    { defer: true },
-  ),
-)
 
 /**
  * Shows a console in a container element and keeps it fitted. A console has one terminal per
@@ -265,12 +231,10 @@ export function TermView(props: { id: string; focus?: boolean }) {
 /** Starts a console; it shows in the Console tool unless show is false (a tile takes it). */
 export async function newConsole(o: { cwd?: string; command?: string[]; title?: string; kind?: 'terminal' | 'task'; show?: boolean } = {}) {
   try {
-    const info: ConsoleInfo = { ...(await request('console.create', { kind: o.kind ?? 'terminal', title: o.title, command: o.command, cwd: o.cwd, cols: 120, rows: 30 })), project: project()?.id }
+    const info: ConsoleInfo = { ...(await api.rpc('console.create', { kind: o.kind ?? 'terminal', title: o.title, command: o.command, cwd: o.cwd, cols: 120, rows: 30 })), project: api.project.current() }
     setConsoles((l) => (l.some((x) => x.id === info.id) ? l : [...l, info]))
-    mutate((s) => {
-      if (o.show !== false) showTool(s, 'console')
-      s.bottom.active = info.id
-    })
+    if (o.show !== false) api.showTool('console')
+    desk.set((s) => (s.active = info.id))
     return info
   } catch (e) {
     errorToast(e)
@@ -278,7 +242,7 @@ export async function newConsole(o: { cwd?: string; command?: string[]; title?: 
 }
 
 export async function runTask() {
-  const cmd = await prompt({ title: t('Run a command'), label: `Dans ${root()}`, placeholder: 'npm run build, go test ./…, make…' })
+  const cmd = await prompt({ title: t('Run a command'), label: t('In {folder}', { folder: api.project.root() }), placeholder: 'npm run build, go test ./…, make…' })
   if (!cmd?.trim()) return
   await newConsole({ kind: 'task', command: ['sh', '-c', cmd], title: cmd })
 }
@@ -342,61 +306,26 @@ function QuickCommands() {
 
 async function closeConsole(id: string) {
   try {
-    await requestIn(projectOf(id), 'console.close', { id })
+    await api.rpcIn(projectOf(id), 'console.close', { id })
   } catch {
     /* already gone */
   }
   setConsoles((l) => l.filter((c) => c.id !== id))
   disposeTerm(id)
-  if (session.bottom.active === id) mutate((s) => (s.bottom.active = consoles()[0]?.id ?? null))
+  if (desk.get().active === id) desk.set((s) => (s.active = consoles()[0]?.id ?? null))
 }
 
 async function renameConsole(c: ConsoleInfo) {
   const title = await prompt({ title: t('Rename the console'), value: c.title })
-  if (title) requestIn(c.project, 'console.rename', { id: c.id, title }).catch(errorToast)
+  if (title) api.rpcIn(c.project, 'console.rename', { id: c.id, title }).catch(errorToast)
 }
 
 // ---------- tools ----------
 
-function Problems() {
-  const list = () =>
-    Object.entries(diagnostics)
-      .flatMap(([path, ds]) => (ds ?? []).map((d) => ({ path, d })))
-      .sort((a, b) => (a.d.severity ?? 4) - (b.d.severity ?? 4))
-  return (
-    <div class="problems">
-      <For each={list()} fallback={<EmptyState icon="check" text={t('No problem reported by the language servers.')} />}>
-        {({ path, d }) => (
-          <div class="problem" onClick={() => openFile({ path, line: d.range.start.line, col: d.range.start.character })}>
-            <span class={`sev sev-${d.severity ?? 3}`}>{d.severity === 1 ? t('error') : d.severity === 2 ? t('warn.') : t('info')}</span>
-            <span class="problem-msg">{d.message}</span>
-            <span class="muted small mono">
-              {relPath(path)}:{d.range.start.line + 1}
-            </span>
-          </div>
-        )}
-      </For>
-    </div>
-  )
-}
-
-function Output() {
-  let el!: HTMLPreElement
-  createEffect(() => {
-    logs()
-    queueMicrotask(() => el && (el.scrollTop = el.scrollHeight))
-  })
-  return (
-    <pre class="output-log" ref={el}>
-      {logs().join('\n') || t('Output of the language servers.')}
-    </pre>
-  )
-}
-
 /** Consoles in the order of their tabs (session), the new ones last. */
 export function ordered() {
   const rank = (id: string) => {
-    const i = session.bottom.order.indexOf(id)
+    const i = desk.get().order.indexOf(id)
     return i < 0 ? Infinity : i
   }
   return [...consoles()].sort((a, b) => rank(a.id) - rank(b.id))
@@ -406,10 +335,11 @@ export function ordered() {
 // every change of the active console is recorded, but the moves of navigateConsoles.
 const consoleTrail = { back: [] as string[], forward: [] as string[] }
 let replayed: string | null = null
+function watchTrail() {
 createRoot(() =>
   createEffect(
     on(
-      () => session.bottom.active,
+      () => desk.get().active,
       (cur, prev) => {
         if (cur === replayed) return void (replayed = null)
         if (!prev || prev === cur) return
@@ -422,24 +352,25 @@ createRoot(() =>
     ),
   ),
 )
+}
 
 /** Shows the console tab shown before (-1) or after (1); one closed since is skipped. */
 export function navigateConsoles(dir: -1 | 1) {
   const from = consoleTrail[dir < 0 ? 'back' : 'forward']
   const to = consoleTrail[dir < 0 ? 'forward' : 'back']
-  const cur = session.bottom.active
+  const cur = desk.get().active
   for (let id = from.pop(); id; id = from.pop()) {
     if (id === cur || !consoles().some((c) => c.id === id)) continue
     if (cur) to.push(cur)
     replayed = id
-    mutate((s) => (s.bottom.active = id))
+    desk.set((s) => (s.active = id))
     return
   }
 }
 
 function moveConsole(id: string, index: number) {
   const ids = ordered().map((c) => c.id)
-  mutate((s) => (s.bottom.order = moveItem(ids, ids.indexOf(id), index)))
+  desk.set((s) => (s.order = api.ui.tabDrop.moveItem(ids, ids.indexOf(id), index)))
 }
 
 let dragged: string | null = null
@@ -447,43 +378,43 @@ let dragged: string | null = null
 export function ConsoleTool() {
   // A console that no longer exists (pod restarted) falls back to the first one.
   const active = () => {
-    const a = session.bottom.active
+    const a = desk.get().active
     return consoles().some((c) => c.id === a) ? a : (ordered()[0]?.id ?? null)
   }
-  const setActive = (id: string) => mutate((s) => (s.bottom.active = id))
+  const setActive = (id: string) => desk.set((s) => (s.active = id))
 
   return (
     <div class="panel">
-      <div class="tabbar tool-tabbar console-tabs" role="tablist" onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setDropAt(null)}>
+      <div class="tabbar tool-tabbar console-tabs" role="tablist" onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && api.ui.tabDrop.setDropAt(null)}>
         <For each={ordered()}>
           {(c, i) => (
             <div
               class="tab"
               role="tab"
               aria-selected={active() === c.id}
-              classList={{ active: active() === c.id, exited: c.exited, ...dropClasses('consoles', i(), consoles().length) }}
+              classList={{ active: active() === c.id, exited: c.exited, ...api.ui.tabDrop.dropClasses('consoles', i(), consoles().length) }}
               draggable="true"
               onDragStart={() => (dragged = c.id)}
-              onDragEnd={() => ((dragged = null), setDropAt(null))}
+              onDragEnd={() => ((dragged = null), api.ui.tabDrop.setDropAt(null))}
               onDragOver={(e) => {
                 if (!dragged) return
                 e.preventDefault()
-                setDropAt({ bar: 'consoles', index: dropIndex(e, i()) })
+                api.ui.tabDrop.setDropAt({ bar: 'consoles', index: api.ui.tabDrop.dropIndex(e, i()) })
               }}
               onDrop={(e) => {
                 if (!dragged) return
                 e.preventDefault()
-                moveConsole(dragged, dropIndex(e, i()))
+                moveConsole(dragged, api.ui.tabDrop.dropIndex(e, i()))
                 dragged = null
-                setDropAt(null)
+                api.ui.tabDrop.setDropAt(null)
               }}
               title={c.command?.join(' ') ?? c.title}
               onClick={() => setActive(c.id)}
               onDblClick={() => renameConsole(c)}
               onContextMenu={(e) =>
                 contextMenu(e, [
-                  ...(tileMode() ? [{ label: t('Open in a new tile'), action: () => openTile({ kind: 'console', console: c.id }) }] : []),
-                  { label: t('Open in a window'), action: () => detachTab({ id: '', kind: 'console', console: c.id }) },
+                  ...(api.tiles.active() ? [{ label: t('Open in a new tile'), action: () => api.tiles.open({ kind: 'console', console: c.id }) }] : []),
+                  { label: t('Open in a window'), action: () => api.tiles.detach({ id: '', kind: 'console', console: c.id }) },
                   { label: t('Rename…'), action: () => void renameConsole(c) },
                   { label: t('Close'), action: () => void closeConsole(c.id) },
                 ])
@@ -502,7 +433,7 @@ export function ConsoleTool() {
             </div>
           )}
         </For>
-        <button class="icon-btn small" title={`${t('New terminal')} (${shortcutOf('console.new')})`} onClick={() => newConsole()}>
+        <button class="icon-btn small" title={`${t('New terminal')} (${api.keys.shortcut('console.new')})`} onClick={() => newConsole()}>
           <Icon name="plus" />
         </button>
         <button class="icon-btn small" title={t('Commands of the project')} onClick={(e) => void commandsMenu(e.currentTarget)} data-testid="console-commands">
@@ -520,36 +451,6 @@ export function ConsoleTool() {
             </div>
           )}
         </For>
-      </div>
-    </div>
-  )
-}
-
-/** Number of errors reported by the language servers. */
-export const problemCount = () => Object.values(diagnostics).reduce((n, l) => n + (l?.filter((d) => d.severity === 1).length ?? 0), 0)
-
-export function ProblemsTool() {
-  const tab = () => session.bottom.problemsTab
-  const setTab = (id: 'problems' | 'output') => mutate((s) => (s.bottom.problemsTab = id))
-  return (
-    <div class="panel">
-      <div class="tabbar tool-tabbar" role="tablist">
-        <div class="tab" role="tab" aria-selected={tab() === 'problems'} classList={{ active: tab() === 'problems' }} onClick={() => setTab('problems')}>
-          <Icon name="problems" size={13} />
-          <span class="tab-title">{t('Problems')}</span>
-          <Show when={problemCount()}>
-            <span class="badge danger">{problemCount()}</span>
-          </Show>
-        </div>
-        <div class="tab" role="tab" aria-selected={tab() === 'output'} classList={{ active: tab() === 'output' }} onClick={() => setTab('output')}>
-          <Icon name="outline" size={13} />
-          <span class="tab-title">{t('Output')}</span>
-        </div>
-      </div>
-      <div class="tool-body">
-        <Show when={tab() === 'output'} fallback={<Problems />}>
-          <Output />
-        </Show>
       </div>
     </div>
   )

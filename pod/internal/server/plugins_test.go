@@ -21,7 +21,7 @@ func TestPlugins(t *testing.T) {
 	dir := t.TempDir()
 	id := a.call("projects.create", map[string]any{"type": "local", "path": dir})["result"].(map[string]any)["id"].(string)
 	opened := a.call("project.open", map[string]any{"id": id})["result"].(map[string]any)
-	if list := opened["plugins"].([]any); len(list) != 3 || list[2].(map[string]any)["enabled"] != true {
+	if list := opened["plugins"].([]any); len(list) != 4 || list[3].(map[string]any)["enabled"] != true {
 		t.Fatalf("plugins of project.open: %v", opened["plugins"])
 	}
 	name := filepath.Base(dir)
@@ -59,6 +59,27 @@ func TestPlugins(t *testing.T) {
 	}
 	if e := a.callRawIn("", "plugins.set", map[string]any{"id": "nope", "enabled": false})["error"]; e == nil {
 		t.Fatal("unknown plugin accepted")
+	}
+
+	// Exec off: no terminal, so Docker is off too; the consoles and their tools are refused.
+	if r := a.call("console.list", nil); r["error"] != nil {
+		t.Fatalf("console.list: %v", r)
+	}
+	states := a.call("plugins.set", map[string]any{"id": "exec", "enabled": false})["result"].(map[string]any)["plugins"].([]any)
+	for _, st := range states {
+		m := st.(map[string]any)
+		if id := m["manifest"].(map[string]any)["id"]; id == "docker" && (m["enabled"] != false || m["missing"].([]any)[0] != "terminal") {
+			t.Fatalf("docker without terminal: %v", m)
+		}
+	}
+	if e := a.callRawIn("", "console.list", nil)["error"]; e == nil || !strings.Contains(e.(map[string]any)["message"].(string), "disabled") {
+		t.Fatalf("console.list with Exec off: %v", e)
+	}
+	if text, failed := m.tool("list_consoles", map[string]any{"cwd": dir}); !failed || !strings.Contains(text, "terminal") {
+		t.Fatalf("list_consoles with Exec off: %s", text)
+	}
+	if defs := s.offered(rt, []json.RawMessage{json.RawMessage(`{"type":"function","function":{"name":"read_console"}}`), json.RawMessage(`{"type":"function","function":{"name":"bash"}}`)}); len(defs) != 1 {
+		t.Fatalf("offered with Exec off: %s", defs)
 	}
 }
 

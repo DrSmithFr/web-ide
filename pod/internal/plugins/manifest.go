@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
+	"strings"
 )
 
 // APIVersion is the version of the plugin API; 0 until it is frozen (after Git moves).
@@ -19,10 +21,19 @@ type Manifest struct {
 	Version    string `json:"version"`
 	APIVersion int    `json:"apiVersion"`
 	// Permissions are shown to the user (exec:docker, net…); not enforced for trusted plugins.
-	Permissions []string      `json:"permissions,omitempty"`
-	Provides    []string      `json:"provides,omitempty"`
-	Requires    []string      `json:"requires,omitempty"`
+	Permissions []string `json:"permissions,omitempty"`
+	Provides    []string `json:"provides,omitempty"`
+	Requires    []string `json:"requires,omitempty"`
+	// Namespaces are the prefixes of the RPC methods and the actions it owns besides its id
+	// (console and commands for exec: their names were kept when the tool became a plugin).
+	Namespaces  []string      `json:"namespaces,omitempty"`
 	Contributes Contributions `json:"contributes"`
+}
+
+// Owns tells whether a method or action name (prefix.name) belongs to the plugin.
+func (m Manifest) Owns(name string) bool {
+	prefix, _, ok := strings.Cut(name, ".")
+	return ok && (prefix == m.ID || slices.Contains(m.Namespaces, prefix))
 }
 
 // Contributions are what a plugin adds to the IDE at each contribution point.
@@ -60,6 +71,8 @@ type Command struct {
 	// Replaces is the id the action had before (a tool of the core moved to a plugin): the
 	// shortcuts set by the user for it are kept.
 	Replaces string `json:"replaces,omitempty"`
+	// InTerminal: it also runs while a terminal has the focus.
+	InTerminal bool `json:"inTerminal,omitempty"`
 }
 
 // Parse reads and checks a plugin.json.
@@ -98,6 +111,16 @@ func (m Manifest) Check() error {
 	for _, v := range m.Contributes.TabViews {
 		if !idRe.MatchString(v.ID) {
 			return fmt.Errorf("plugin %s: invalid tab view id %q", m.ID, v.ID)
+		}
+	}
+	for _, n := range m.Namespaces {
+		if !idRe.MatchString(n) {
+			return fmt.Errorf("plugin %s: invalid namespace %q", m.ID, n)
+		}
+	}
+	for _, c := range m.Contributes.Commands {
+		if strings.Contains(c.ID, ".") && !m.Owns(c.ID) {
+			return fmt.Errorf("plugin %s: command %s is out of its namespaces", m.ID, c.ID)
 		}
 	}
 	for _, name := range m.Contributes.AssistantTools {

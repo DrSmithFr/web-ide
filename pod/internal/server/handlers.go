@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"log"
 	"os"
@@ -346,6 +345,8 @@ func (s *Server) registerProject() {
 			log.Printf("git setup of %s: %v", a.ID, err) // the Git panel still offers the init
 		}
 		s.openForwards(rt)
+		// The setup command of the kanban settings moves to the saved commands, once.
+		_, _ = s.projectCommands(rt)
 		s.mu.Lock()
 		prev := s.runtimes[c.project]
 		same := c.project == a.ID
@@ -518,84 +519,6 @@ func (s *Server) registerProject() {
 			s.emitter(c.project)("folders.changed", m, "")
 		}
 		return m, err
-	}))
-
-	s.handle("console.list", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
-		return rt.Consoles.List(), nil
-	}))
-	s.handle("console.create", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
-		a, err := bind[struct {
-			Kind, Title, Cwd string
-			Command          []string
-			Cols, Rows       int
-		}](p)
-		if err != nil {
-			return nil, err
-		}
-		info, err := rt.Consoles.Create(a.Kind, a.Title, a.Command, a.Cwd, a.Cols, a.Rows)
-		if err == nil {
-			s.emitter(c.project)("console.created", info, c.id)
-		}
-		return info, err
-	}))
-	s.handle("console.attach", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
-		a, err := bind[struct {
-			ID string
-			// From: the offset the page already has (a reconnection): only what follows.
-			From *int64
-		}](p)
-		if err != nil {
-			return nil, err
-		}
-		info, buf, end, err := rt.Consoles.Snapshot(a.ID)
-		if err != nil {
-			return nil, err
-		}
-		start := end - int64(len(buf))
-		if a.From != nil && *a.From >= start && *a.From <= end {
-			buf, start = buf[*a.From-start:], *a.From
-		}
-		// The output events that follow start at offset; the data starts at start.
-		return map[string]any{"info": info, "data": base64.StdEncoding.EncodeToString(buf), "start": start, "offset": end}, nil
-	}))
-	s.handle("console.input", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
-		a, err := bind[struct{ ID, Data string }](p)
-		if err != nil {
-			return nil, err
-		}
-		return nil, rt.Consoles.Input(a.ID, []byte(a.Data))
-	}))
-	s.handle("console.resize", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
-		a, err := bind[struct {
-			ID         string
-			Cols, Rows int
-		}](p)
-		if err != nil {
-			return nil, err
-		}
-		return nil, rt.Consoles.Resize(a.ID, a.Cols, a.Rows)
-	}))
-	s.handle("console.rename", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
-		a, err := bind[struct{ ID, Title string }](p)
-		if err != nil {
-			return nil, err
-		}
-		err = rt.Consoles.Rename(a.ID, a.Title)
-		if err == nil {
-			s.emitter(c.project)("console.renamed", map[string]string{"id": a.ID, "title": a.Title}, "")
-		}
-		return nil, err
-	}))
-	s.handle("console.close", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
-		a, err := bind[struct{ ID string }](p)
-		if err != nil {
-			return nil, err
-		}
-		err = rt.Consoles.Close(a.ID)
-		if err == nil {
-			s.emitter(c.project)("console.closed", map[string]string{"id": a.ID}, "")
-		}
-		return nil, err
 	}))
 
 	s.handle("lsp.status", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {

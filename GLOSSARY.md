@@ -155,7 +155,7 @@ A plugin that ships compiled into the IDE, with the same manifest and API as an 
 What a plugin adds at one contribution point of the IDE: a tool, a tab view, an assistant tool, a command, a settings section…
 
 **Capability**
-A named feature a plugin or the core provides and other plugins require (`terminal`, `worktrees`).
+A named feature a plugin or the core provides and others require (`terminal`, `worktrees`), with the service that does it: the consoles of `terminal`.
 _Avoid_: service (an HTTP service shared between pods), dependency (a ticket waiting for another)
 
 ## AI

@@ -1,12 +1,7 @@
 // Modal of the saved commands: the list on the left (filter, new, duplicate, order), the
 // command chosen on the right, its bash in an editor. Edits stay in the modal until Save.
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js'
-import { Modal } from '../ui/overlay'
-import { Icon } from '../ui/icons'
-import { Doc } from '../editor/doc'
-import { EditorView } from '../editor/view'
-import { settings } from '../state/settings'
-import { t } from '../i18n'
+import { api, Icon, Modal, t } from './plugin'
 import { commands, fileError, flagIcon, flags, loadCommands, openApp, runCommand, runningConsole, saveCommands, servesApp, type Command } from './commands'
 
 const [request, setRequest] = createSignal<{ select?: string; draft?: Partial<Command> } | null>(null)
@@ -258,10 +253,10 @@ function CommandsModal(props: { select?: string; draft?: Partial<Command>; onClo
 /** Multiline bash in the editor of the IDE (shell highlighting). */
 function BashEditor(props: { value: string; onInput: (v: string) => void }) {
   let host!: HTMLDivElement
-  const doc = new Doc('', props.value, { lang: 'shell' })
+  const doc = new api.editor.Doc('', props.value, { lang: 'shell' })
   onCleanup(doc.onChange(() => props.onInput(doc.text)))
   onMount(() => {
-    const v = new EditorView(doc, { tabSize: settings.editor.tabSize, insertSpaces: true, highlightLine: false, free: true, placeholder: 'npm ci\nnpm run dev' })
+    const v = new api.editor.View(doc, { tabSize: api.theme.tabSize(), insertSpaces: true, highlightLine: false, free: true, placeholder: 'npm ci\nnpm run dev' })
     v.mount(host)
     onCleanup(() => v.destroy())
   })

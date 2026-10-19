@@ -143,12 +143,12 @@ export function composeTask(kind: 'recreate' | 'rebuild' | 'pull' | 'down' | 'do
     downVolumes: [[...base, 'down', '-v']],
   }[kind]
   const line = cmds.map((c) => c.map(quote).join(' ')).join(' && ')
-  return api.terminal.open({ kind: 'task', command: ['sh', '-c', line], title: line.replace(/^docker compose /, 'compose ') })
+  return api.use('terminal')?.open({ kind: 'task', command: ['sh', '-c', line], title: line.replace(/^docker compose /, 'compose ') })
 }
 
 /** A terminal in a container: bash when it has one, else sh. */
 export function shell(c: Container, root = false) {
-  return api.terminal.open({
+  return api.use('terminal')?.open({
     command: ['docker', 'exec', '-it', ...(root ? ['-u', 'root'] : []), c.id, 'sh', '-c', 'command -v bash >/dev/null && exec bash || exec sh'],
     title: `${c.service || c.name}${root ? ' (root)' : ''}`,
   })

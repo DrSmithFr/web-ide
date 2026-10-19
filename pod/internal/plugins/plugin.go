@@ -15,7 +15,8 @@ type Plugin interface {
 
 // Host is what the pod gives a plugin at registration.
 type Host interface {
-	// Handle adds the RPC method <plugin id>.<method>.
+	// Handle adds the RPC method <plugin id>.<method>, or the method as named when it has a
+	// prefix of the plugin's namespaces (console.create).
 	Handle(method string, h Handler)
 	// AssistantTool adds a tool offered to the assistant and the MCP; its name must be listed
 	// in the manifest.
@@ -30,8 +31,12 @@ type Call struct {
 	Lang    string
 	// Window is the window of an RPC call (nil for an assistant tool).
 	Window Window
-	// Emit sends an event to every window of the project (nil for an assistant tool).
-	Emit func(event string, data any)
+	// Emit sends an event to every window of the project (nil for an assistant tool);
+	// EmitOthers to every one but the window that called; EmitFamily to the windows of the
+	// main project and of its worktrees.
+	Emit       func(event string, data any)
+	EmitOthers func(event string, data any)
+	EmitFamily func(event string, data any)
 	// Options are the plugin's options of the assistant's conversation (nil from the MCP): what
 	// the page module gave for it (assistantOptions), e.g. the Compose profiles active.
 	Options json.RawMessage

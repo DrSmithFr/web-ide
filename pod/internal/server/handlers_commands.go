@@ -1,15 +1,11 @@
 package server
 
 import (
-	"context"
-	"encoding/json"
 	"log"
-	"path"
 	"strings"
 	"sync"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/commands"
-	"github.com/DrSmithFr/web-ide/pod/internal/console"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
 )
@@ -93,86 +89,7 @@ func (s *Server) findCommand(rt *runtime.Runtime, id string) (commands.Command, 
 	return cmd, nil
 }
 
-// savedRun is what running a saved command did: Running, the console of the command
-// still running (nothing started); else Console, the new one, which replaced Replaced.
-type savedRun struct {
-	Running  *console.Info `json:"running,omitempty"`
-	Console  *console.Info `json:"console,omitempty"`
-	Replaced string        `json:"replaced,omitempty"`
-}
-
-// runSaved runs a saved command in rt. A console of the command still running is
-// answered as running unless restart; it is closed (ended or restarted) and replaced.
-// except: the window that asked, which adds the console itself.
-func (s *Server) runSaved(rt *runtime.Runtime, cmd commands.Command, restart bool, except string) (savedRun, error) {
-	olds := rt.Consoles.OfCommand(cmd.ID)
-	for _, o := range olds {
-		if !o.Exited && !restart {
-			return savedRun{Running: &o}, nil
-		}
-	}
-	var out savedRun
-	for _, o := range olds {
-		if rt.Consoles.Close(o.ID) == nil {
-			s.emitter(rt.P.ID)("console.closed", map[string]string{"id": o.ID}, "")
-			out.Replaced = o.ID
-		}
-	}
-	cwd := rt.Root
-	if cmd.Cwd != "" {
-		cwd = path.Join(rt.Root, cmd.Cwd)
-	}
-	info, err := rt.Consoles.RunCommand(cmd.ID, cmd.Name, commands.Argv(cmd), cwd)
-	if err != nil {
-		return savedRun{}, err
-	}
-	s.emitter(rt.P.ID)("console.created", info, except)
-	out.Console = &info
-	return out, nil
-}
-
-func (s *Server) registerCommands() {
-	withRT := func(f func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error)) handler {
-		return func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
-			rt, err := c.runtime()
-			if err != nil {
-				return nil, err
-			}
-			return f(ctx, c, rt, p)
-		}
-	}
-	// The commands, and the error of an invalid file (shown, the file left as it is).
-	s.handle("commands.list", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
-		list, err := s.projectCommands(rt)
-		if err != nil {
-			return map[string]any{"commands": []commands.Command{}, "error": i18n.Translate(c.language(), err)}, nil
-		}
-		return map[string]any{"commands": list}, nil
-	}))
-	s.handle("commands.save", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
-		a, err := bind[struct{ Commands []commands.Command }](p)
-		if err != nil {
-			return nil, err
-		}
-		list, err := commands.Save(rt.FS, rt.IdeDir, a.Commands)
-		if err != nil {
-			return nil, err
-		}
-		s.emitFamily(mainID(rt), "commands.changed", map[string]any{"commands": list})
-		return list, nil
-	}))
-	s.handle("commands.run", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
-		a, err := bind[struct {
-			ID      string
-			Restart bool
-		}](p)
-		if err != nil {
-			return nil, err
-		}
-		cmd, err := s.findCommand(rt, a.ID)
-		if err != nil {
-			return nil, err
-		}
-		return s.runSaved(rt, cmd, a.Restart, c.id)
-	}))
+// runSaved runs a saved command in rt (commands.RunSaved), its events to the windows of rt.
+func (s *Server) runSaved(rt *runtime.Runtime, cmd commands.Command, restart bool, except string) (commands.Run, error) {
+	return commands.RunSaved(rt.Consoles, rt.Root, cmd, restart, commands.Emit(s.emitter(rt.P.ID)), except)
 }

@@ -22,8 +22,10 @@ func TestSavedCommandsForModels(t *testing.T) {
 	id := a.call("projects.create", map[string]any{"type": "local", "path": dir})["result"].(map[string]any)["id"].(string)
 	a.call("project.open", map[string]any{"id": id})
 
-	// The setup command of the kanban settings becomes a setup command, once.
+	// The setup command of the kanban settings (an older project) becomes a setup command, once,
+	// when the project opens.
 	a.call("kanban.meta.set", map[string]any{"values": map[string]string{"setup": "npm ci"}})
+	a.call("project.open", map[string]any{"id": id})
 	l := a.call("commands.list", nil)["result"].(map[string]any)["commands"].([]any)
 	if len(l) != 1 || l[0].(map[string]any)["flag"] != "setup" || l[0].(map[string]any)["command"] != "npm ci" {
 		t.Fatalf("migrated: %+v", l)

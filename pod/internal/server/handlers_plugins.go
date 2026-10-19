@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/assistant"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
 	"github.com/DrSmithFr/web-ide/pod/internal/plugins"
+	"github.com/DrSmithFr/web-ide/pod/internal/plugins/builtin"
 	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
 )
 
@@ -40,16 +42,25 @@ type pluginHost struct {
 
 func (h pluginHost) Handle(method string, f plugins.Handler) {
 	id := h.id
-	if _, taken := h.s.handlers[id+"."+method]; taken {
-		panic(fmt.Sprintf("plugin %s: method %s.%s is taken", id, id, method))
+	name := id + "." + method
+	if strings.Contains(method, ".") {
+		if !h.m.Owns(method) {
+			panic(fmt.Sprintf("plugin %s: method %s is out of its namespaces", id, method))
+		}
+		name = method
 	}
-	h.s.handle(id+"."+method, withRuntime(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
+	if _, taken := h.s.handlers[name]; taken {
+		panic(fmt.Sprintf("plugin %s: method %s is taken", id, name))
+	}
+	h.s.handle(name, withRuntime(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
 		if !h.s.pluginOn(rt, id) {
 			return nil, i18n.Errorf("the %s plugin is disabled on this project", h.m.Name)
 		}
 		emit := h.s.emitter(c.project)
 		return f(ctx, plugins.Call{Runtime: rt, Params: p, Lang: c.language(), Window: clientWindow{c},
-			Emit: func(event string, data any) { emit(event, data, "") }})
+			Emit:       func(event string, data any) { emit(event, data, "") },
+			EmitOthers: func(event string, data any) { emit(event, data, c.id) },
+			EmitFamily: func(event string, data any) { h.s.emitFamily(mainID(rt), event, data) }})
 	}))
 }
 
@@ -62,7 +73,7 @@ func (h pluginHost) AssistantTool(t plugins.AssistantTool) {
 
 func (s *Server) registerPlugins() {
 	if s.Plugins == nil {
-		s.Plugins = plugins.NewRegistry()
+		s.Plugins = builtin.Registry(false)
 	}
 	s.plugins.disabled = map[string][]string{}
 	for _, p := range s.Plugins.All() {
@@ -182,4 +193,39 @@ func pluginOptions(o assistant.Options, plugin string) json.RawMessage {
 		return data
 	}
 	return nil
+}
+
+// capabilityOn tells whether the project of rt has a capability (terminal: its consoles).
+func (s *Server) capabilityOn(rt *runtime.Runtime, capability string) bool {
+	return plugins.Provided(s.pluginStates(rt))[capability]
+}
+
+// toolNeeds are the tools of the core (assistant and MCP) that need a capability: the consoles
+// and saved commands need terminal (the Exec plugin). They move to their plugin with AI (#123).
+var toolNeeds = map[string]string{
+	"run_command": "terminal", "list_consoles": "terminal", "read_console": "terminal", "console_input": "terminal",
+	"list_commands": "terminal", "run_saved_command": "terminal",
+}
+
+// missingFor is the error of a core tool whose capability the project of rt lacks (nil: it runs).
+func (s *Server) missingFor(rt *runtime.Runtime, tool string) error {
+	if c := toolNeeds[tool]; c != "" && !s.capabilityOn(rt, c) {
+		return i18n.Errorf("%s needs the %s capability, off on this project (Settings > Plugins)", tool, c)
+	}
+	return nil
+}
+
+// offered drops the definitions of the core tools whose capability the project of rt lacks.
+func (s *Server) offered(rt *runtime.Runtime, defs []json.RawMessage) []json.RawMessage {
+	out := defs[:0:0]
+	for _, d := range defs {
+		var f struct {
+			Function struct{ Name string } `json:"function"`
+		}
+		_ = json.Unmarshal(d, &f)
+		if s.missingFor(rt, f.Function.Name) == nil {
+			out = append(out, d)
+		}
+	}
+	return out
 }

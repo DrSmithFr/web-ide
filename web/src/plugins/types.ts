@@ -20,12 +20,13 @@ export interface PluginManifest {
   permissions?: string[]
   provides?: string[]
   requires?: string[]
+  namespaces?: string[]
   contributes: {
     tools?: PluginTool[]
     tabViews?: { id: string; label: string }[]
     assistantTools?: string[]
-    /** Actions <plugin>.<id>; keys: default shortcuts; replaces: the id of the action before it moved to a plugin. */
-    commands?: { id: string; label: string; category?: string; keys?: string[]; replaces?: string }[]
+    /** Actions <plugin>.<id> (or the id as written when it has a prefix of the plugin's namespaces); keys: default shortcuts; replaces: the id of the action before it moved to a plugin. */
+    commands?: { id: string; label: string; category?: string; keys?: string[]; replaces?: string; inTerminal?: boolean }[]
   }
 }
 
@@ -43,6 +44,8 @@ export interface PluginContributions {
   /** Tab views, opened as tabs of kind plugin:<plugin>/<view>. */
   views?: Record<string, (props: { tab: TabState; paneId: string }) => JSX.Element>
   commands?: Record<string, () => void>
+  /** Components mounted once in the project window (a modal the plugin opens). */
+  hosts?: (() => JSX.Element)[]
   /** Called when the window opens a project, and again after a reconnection (lists to fetch again). */
   opened?: () => void
   /** The plugin's options of a conversation of the assistant, given to its assistant tools. */

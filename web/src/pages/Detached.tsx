@@ -4,10 +4,11 @@ import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js'
 import { Dynamic } from 'solid-js/web'
 import { project, closeProject, reopenProject, panelAliases } from '../state/project'
 import { EditorArea } from '../ui/EditorArea'
-import { consoles, setConsoleList, TermView } from '../console/consoles'
+import { capability } from '../plugins/capabilities'
+import { refreshPlugins } from '../plugins/registry'
 import { NewTicketHost } from '../kanban/Board'
 import { openWithAuth, toolPanels, useProjectActions, PodStatus } from './ProjectPage'
-import { on as onPod, request } from '../pod/rpc'
+import { on as onPod } from '../pod/rpc'
 import { t } from '../i18n'
 import { useProjectIcon } from '../ui/projectIcon'
 
@@ -25,7 +26,7 @@ function useProject(id: string, title: (name: string) => string) {
   })
   const off = onPod('pod.reconnected', async () => {
     await reopenProject()
-    request('console.list').then(setConsoleList).catch(() => {})
+    void refreshPlugins()
   })
   onCleanup(() => {
     off()
@@ -82,7 +83,8 @@ export function DetachedTool(props: { id: string; toolId: string }) {
 /** One console alone (a console tile opened in a window). */
 export function DetachedConsole(props: { id: string; consoleId: string }) {
   const s = useProject(props.id, () => t('Console'))
-  const info = () => consoles().find((c) => c.id === props.consoleId)
+  const term = () => capability('terminal')
+  const info = () => term()?.consoles().find((c) => c.id === props.consoleId)
   createEffect(() => {
     if (info()) document.title = `${info()!.title} · ${project()?.name ?? ''}`
   })
@@ -90,7 +92,7 @@ export function DetachedConsole(props: { id: string; consoleId: string }) {
     <Frame title={`${info()?.title ?? t('Console')} · ${project()?.name ?? ''}`} ready={s.ready()} error={s.error()}>
       <Show when={info()} fallback={<p class="muted pad">{t('This console is closed')}</p>}>
         <div class="tile-console detached-console">
-          <TermView id={props.consoleId} focus />
+          <Dynamic component={term()!.TermView} id={props.consoleId} focus />
         </div>
       </Show>
     </Frame>

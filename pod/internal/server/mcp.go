@@ -167,6 +167,13 @@ func (s *Server) mcpCall(ctx context.Context, m mcpMessage) mcpReply {
 		if t == nil {
 			return fail(-32602, "unknown tool: "+a.Name)
 		}
+		if toolNeeds[a.Name] != "" {
+			if _, _, rt, err := s.mcpIDE(a.Arguments); err == nil {
+				if err := s.missingFor(rt, a.Name); err != nil {
+					return mcpReply{JSONRPC: "2.0", ID: m.ID, Result: map[string]any{"content": []any{textContent("Error: " + err.Error())}, "isError": true}}
+				}
+			}
+		}
 		var content []any
 		if t.rich != nil {
 			content, err = t.rich(ctx, s, a.Arguments)

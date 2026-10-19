@@ -9,8 +9,8 @@ import {
   openFile, closeEmptyPane, saveAll, session, setConflictOpener, setSize, sizesFor, splitPane, closeProject, moveTabToDesk, switchDesk,
 } from '../state/project'
 import { desk, desks, onDeskGone } from '../state/desks'
-import { cycleWidth, focusDirection, moveColumnBy, scrollMode, stackTile, tileMode, unstackTile, openTile, registerTileTools, resizeTile, showToolTile, startResize, swapDirection, tileTools, toggleSplit } from '../state/tiles'
-import { pluginsOpened, pluginTools, refreshPlugins } from '../plugins/registry'
+import { cycleWidth, focusDirection, moveColumnBy, scrollMode, stackTile, tileMode, unstackTile, registerTileTools, resizeTile, showToolTile, startResize, swapDirection, tileTools, toggleSplit } from '../state/tiles'
+import { pluginHosts, pluginsOpened, pluginTools, refreshPlugins } from '../plugins/registry'
 import { tileLauncher } from '../ui/tileLauncher'
 import { deskPath, navigate, route } from '../app/router'
 import { defaultPlacement, moveTool, normalizePlacement, showTool, shownIn, toggleTool, toolsIn, zoneOf, zones, type Zone } from '../state/zones'
@@ -19,14 +19,13 @@ import { focusEditorQuietly, isTyping, lockEditor, mobileView, phone, revealCare
 import { settings, updateSettings } from '../state/settings'
 import { goHome } from '../app/home'
 import { EditorArea } from '../ui/EditorArea'
-import { ConsoleTool, ProblemsTool, navigateConsoles, newConsole, problemCount, refreshConsoles, setConsoleList } from '../console/consoles'
-import { loadCommands } from '../console/commands'
+import { ProblemsTool, problemCount } from '../tools/problems'
+import { capability } from '../plugins/capabilities'
 import { createIn, Explorer } from '../panels/Explorer'
 import { GlobalSearch, focusGlobalSearch } from '../panels/GlobalSearch'
 import { GitPanel } from '../panels/git/GitPanel'
 import { KanbanPanel } from '../kanban/Panel'
 import { NewTicketHost } from '../kanban/Board'
-import { CommandsHost } from '../console/CommandsModal'
 import { openBoard, openMilestone, openObjective, openTicket } from '../kanban/state'
 import { refreshGit } from '../state/git'
 import { AssistantTool } from '../llm/AssistantTool'
@@ -61,7 +60,6 @@ export const toolPanels: Record<string, { label: string; icon: string; component
   search: { label: 'Search', icon: 'search', component: GlobalSearch },
   git: { label: 'Git', icon: 'branch', component: GitPanel },
   kanban: { label: 'Kanban', icon: 'kanban', component: KanbanPanel },
-  console: { label: 'Console', icon: 'terminal', component: ConsoleTool },
   problems: { label: 'Problems', icon: 'problems', component: ProblemsTool, badge: problemCount },
   forwards: { label: 'Port forwards and previews', icon: 'ports', component: ForwardsTool },
   assistant: { label: 'Assistant', icon: 'sparkle', component: AssistantTool },
@@ -104,7 +102,6 @@ export async function openWithAuth(id: string, desk = 1) {
     try {
       const r = await openProject(id, creds, desk)
       pluginsOpened(r.plugins)
-      setConsoleList(r.consoles)
       offerIdeUntrack(r.ideTracked)
       return r
     } catch (e) {
@@ -149,15 +146,15 @@ export function useProjectActions() {
     registerAction('nav.forward', () => navHistory(1)),
     registerAction('nav.previousConversation', () => void navigateChats(-1)),
     registerAction('nav.nextConversation', () => void navigateChats(1)),
-    registerAction('nav.previousConsole', () => navigateConsoles(-1)),
-    registerAction('nav.nextConsole', () => navigateConsoles(1)),
+    registerAction('nav.previousConsole', () => capability('terminal')?.navigate(-1)),
+    registerAction('nav.nextConsole', () => capability('terminal')?.navigate(1)),
     // The side buttons of the mouse move in the history of the focused part.
     onMouseNav((dir) => {
       const part = focusPart()
       const tool = part === 'editor' ? 'editor' : shownIn(session, part)
       if (tool === 'editor') navHistory(dir)
       else if (tool === 'assistant') void navigateChats(dir)
-      else if (tool === 'console') navigateConsoles(dir)
+      else if (tool === 'console') capability('terminal')?.navigate(dir)
     }),
     registerAction('settings.open', () => openSettings()),
     registerAction('kanban.open', () => openBoard()),
@@ -260,7 +257,7 @@ const menus: [string, string[]][] = [
   ['menu|Navigate', ['search.everywhere', 'nav.recentFiles', '-', 'nav.back', 'nav.forward', '-', 'nav.gotoLine', 'nav.gotoSymbol', 'nav.fileStructure', '-', 'nav.related', 'nav.test']],
   ['menu|Code', ['lsp.definition', 'lsp.implementation', 'lsp.typeDefinition', 'lsp.superMethod', 'lsp.references', 'lsp.hover', '-', 'lsp.rename', 'lsp.format', '-', 'edit.fold', 'edit.unfold', 'edit.foldAll', 'edit.unfoldAll']],
   ['menu|View', ['view.splitRight', 'view.splitDown', '-', 'view.toggleLeft', 'view.toggleRight', 'view.toggleBottom', 'view.resetTools', '-', 'view.visualFocus', 'view.focusOutline', 'view.focusDim', '-', 'view.whitespace', 'view.wordWrap', 'view.markdown', '-', 'console.new', 'palette.open']],
-  ['menu|Tools', ['tool.explorer', 'tool.search', 'tool.git', 'tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.questions', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.console', 'tool.problems', 'tool.forwards', '@tools']],
+  ['menu|Tools', ['tool.explorer', 'tool.search', 'tool.git', 'tool.kanban', '-', 'tool.assistant', 'tool.agents', 'tool.questions', 'tool.structure', 'tool.conflicts', 'tool.info', '-', 'tool.problems', 'tool.forwards', '@tools']],
   ['menu|Help', ['help.docs', 'help.guide', 'help.glossary', '-', 'help.shortcuts']],
 ]
 
@@ -665,7 +662,6 @@ export function ProjectPage(props: { id: string }) {
       if (urlDesk() !== desk()) navigate(deskPath(props.id, desk()), true)
       setReady(true)
       refreshGit(0)
-      void loadCommands() // their shortcuts and Search Everywhere entries
       window.name = `project-${props.id}` // see openWorktreeWindow
     } catch (e) {
       setError((e as Error).message)
@@ -708,10 +704,6 @@ export function ProjectPage(props: { id: string }) {
     registerAction('view.focusOutline', () => updateSettings((s) => (s.focusOutline = !s.focusOutline), 'Focus outline')),
     registerAction('view.focusDim', () => updateSettings((s) => (s.focusDim = !s.focusDim), 'Dim out of focus')),
     registerAction('view.whitespace', () => updateSettings((s) => (s.editor.showWhitespace = !s.editor.showWhitespace), 'Whitespace')),
-    registerAction('console.new', () => {
-      if (tileMode() && !phone()) void newConsole({ show: false }).then((c) => c && openTile({ kind: 'console', console: c.id }))
-      else void newConsole()
-    }),
     registerAction('tile.launcher', () => void tileLauncher()),
     registerAction('tile.toggleSplit', () => toggleSplit()),
     registerAction('tile.resize', () => startResize()),
@@ -735,7 +727,6 @@ export function ProjectPage(props: { id: string }) {
     }),
     onPod('pod.reconnected', async () => {
       await reopenProject()
-      void refreshConsoles()
       void refreshAgents()
       void refreshQuestions()
       void refreshPlugins()
@@ -772,7 +763,7 @@ export function ProjectPage(props: { id: string }) {
         <MenuBar />
         <MobileSync />
         <NewTicketHost />
-        <CommandsHost />
+        <For each={pluginHosts()}>{(Host) => <Host />}</For>
         <SearchEverywhereHost />
         <RecentFilesHost tools={switcherTools} onTool={toggleToolFocus} />
         <ClipboardHistoryHost />

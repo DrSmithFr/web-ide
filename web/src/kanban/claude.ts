@@ -3,7 +3,7 @@
 // for Opus; development and fixes keep the default model of Claude Code.
 import { request } from '../pod/rpc'
 import { root } from '../state/project'
-import { newConsole } from '../console/consoles'
+import { capability } from '../plugins/capabilities'
 import type { Ticket } from './state'
 import type { ClaudeModel } from './route'
 
@@ -19,7 +19,7 @@ export function runClaude(tk: Ticket, role: Role, feedback?: number, model?: Cla
   const args = [...(m ? ['--model', m] : []), `/mcp__web-ide__${role} ${tk.id}${feedback ? ` ${feedback}` : ''}`]
   // WEBIDE_CLAUDE (environment of the pod) names another command: the fake one of the tests.
   const script = 'c="${WEBIDE_CLAUDE:-claude}"; command -v "$c" >/dev/null || { echo "$c: not found in the PATH of the pod"; exit 127; }; exec "$c" "$@"'
-  void newConsole({ kind: 'terminal', cwd, command: ['sh', '-c', script, 'sh', ...args], title: `Claude #${tk.id} ${role}` })
+  void capability('terminal')?.open({ kind: 'terminal', cwd, command: ['sh', '-c', script, 'sh', ...args], title: `Claude #${tk.id} ${role}` })
 }
 
 /** The command adding the MCP endpoint of this pod to Claude Code (the token stays on disk). */
@@ -33,5 +33,5 @@ export async function mcpAddCommand(): Promise<string> {
 export function runClaudeMilestone(id: number, model?: ClaudeModel) {
   const args = ['--model', model ?? 'opus', `/mcp__web-ide__coverage ${id}`]
   const script = 'c="${WEBIDE_CLAUDE:-claude}"; command -v "$c" >/dev/null || { echo "$c: not found in the PATH of the pod"; exit 127; }; exec "$c" "$@"'
-  void newConsole({ kind: 'terminal', cwd: root(), command: ['sh', '-c', script, 'sh', ...args], title: `Claude milestone ${id} coverage` })
+  void capability('terminal')?.open({ kind: 'terminal', cwd: root(), command: ['sh', '-c', script, 'sh', ...args], title: `Claude milestone ${id} coverage` })
 }
