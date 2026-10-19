@@ -286,6 +286,12 @@ A desk bound to an agent's session or a development conversation and its worktre
 **Activity** ([desks](docs/design/desks.md))
 The list of the desks of every project with what runs in them, and the way to end them.
 
+**Search provider** ([plugins](docs/design/plugins.md))
+What a plugin gives Search Everywhere: one kind of results (files, symbols, text, tickets…) and their tab.
+
+**Locked plugin** ([plugins](docs/design/plugins.md))
+A built-in plugin the IDE cannot run without (Files, Code): always enabled, shown greyed in Settings → Plugins.
+
 ## Conflicts
 
 None open: every conflict found while writing this glossary was fixed (#96-#100). A naming problem found later goes here, then to a ticket.

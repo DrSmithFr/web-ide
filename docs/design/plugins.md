@@ -1,6 +1,6 @@
 # Plugins
 
-Status: **phase 1 decided** (2026-10-19), milestone *Plugins, phase 1*: the core of the plugin system (#113), then Docker (#114) and the database (#115) moved onto it, all built-in, one lineage. The core is in place (#113), and Docker (#114) and the Database explorer (#115) are plugins: phase 1 is done. Whether Git, the editor, the kanban and the assistant become plugins too is decided after Docker (see [Decisions](#decisions)). The direction was explored on 2026-10-16.
+Status: **phase 1 done, phase 2 decided** (2026-10-19, [Phase 2](#phase-2-everything-is-a-plugin)). Milestone *Plugins, phase 1*: the core of the plugin system (#113), then Docker (#114) and the database (#115) moved onto it, all built-in, one lineage. The core is in place (#113), and Docker (#114) and the Database explorer (#115) are plugins: phase 1 is done. Whether Git, the editor, the kanban and the assistant become plugins too is decided after Docker (see [Decisions](#decisions)). The direction was explored on 2026-10-16.
 
 ## Vision
 
@@ -79,7 +79,35 @@ Taken on 2026-10-19:
 2. **SSH projects**: the backend of a plugin runs on the pod and reaches the project through `runtime` (local or SSH), as the assistant tools do. A `runsOn: "target"` may come later.
 3. **Install**: not in phase 1. A plugin is enabled or disabled per project in *Settings → Plugins*, saved in `.ide/plugins.json` of the main project (`{"disabled": ["docker"]}`): every other plugin is enabled, so a new built-in shows on every project.
 4. **Developing a plugin**: not in phase 1. Loading from a folder with hot reload comes once the API is stable.
-5. **How far**: step by step. Phase 1 is the core, Docker, then the database. Moving Console, Git, the editor, the kanban and the assistant is decided after Docker has proved the API.
+5. **How far**: step by step. Phase 1 is the core, Docker, then the database. After it: everything becomes a plugin ([Phase 2](#phase-2-everything-is-a-plugin)).
+
+## Phase 2: everything is a plugin
+
+Decided on 2026-10-19, once Docker and the database had proved the API (decision 5 answered: yes). The core keeps the window manager: connection, layout, desks, tabs, settings, keymap, buffers and their sync, conflict resolution, help, the plugin registry; plus **shells** that plugins feed:
+
+- **Search Everywhere** is a shell; each plugin contributes a **search provider** (files, symbols, actions, text, tickets…), a new contribution point.
+- **The diff view** is generic (two texts, or a change); Git, the kanban and the assistant give it their content.
+- **Questions** stays in the core: the assistant, the agents and `ask_user` of the MCP all use it.
+
+The plugins, grouped by domain (one plugin, several tools and views), in their order (milestone *Plugins, phase 2*: #116 Exec, #117 Search, #118 Git, #119 Previews, #120 Languages, #121 Files and Code, #122 Kanban, #123 AI, #124 loading on demand, #125 semantic search):
+
+| Plugin | Tools and views | Provides / requires |
+|---|---|---|
+| Exec | Console tool (terminals, tasks), project commands, their assistant tools | provides `terminal` |
+| Search | Search tool (text, regex), the text provider of Search Everywhere | |
+| Git | Git tool, git content of the diff view | provides `worktrees` |
+| Previews | Port forwards and previews tool | requires `terminal` |
+| Languages | language servers, Problems, Structure, `lsp_*` tools, symbol provider | provides `symbols` |
+| Files | Explorer, file provider (locked) | |
+| Code | file editor, the default view of a text buffer (locked) | |
+| Kanban | Kanban tool and views, its MCP and assistant tools | requires `terminal`, `worktrees` |
+| AI | Assistant, Agents, doodles, whiteboard | |
+
+- **Locked plugins** (`required` in the manifest): Files and Code cannot be disabled; Settings → Plugins shows them checked and greyed.
+- **Languages apart from Code**: the editor without language servers (a slow SSH project).
+- `apiVersion: 1` is frozen after Git.
+- Then the **page modules load on demand** (`import()`): a disabled plugin is not downloaded.
+- A **semantic search** (embeddings by a local model) is a new provider of Search, after the move.
 
 ## Migration order
 
