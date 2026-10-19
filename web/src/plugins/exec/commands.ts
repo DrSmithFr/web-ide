@@ -1,24 +1,11 @@
 // Saved commands of the project (Console ▶ menu): kept by the pod in .ide/commands.json of
 // the main project, run as tasks in the worktree shown, one console per command.
 import { createEffect, createRoot, createSignal } from 'solid-js'
-import { on as onPod, request } from '../pod/rpc'
-import { mutate, project, session } from '../state/project'
-import { showTool } from '../state/zones'
-import { errorToast } from '../ui/toast'
-import { setDynamicActions } from '../keys/bindings'
-import { t } from '../i18n'
+import type { SavedCommand } from '../capabilities'
+import { api, desk, errorToast, t } from './plugin'
 import { consoles, ordered, setConsoles, type ConsoleInfo } from './consoles'
-import { openPreview } from '../llm/previews'
 
-export interface Command {
-  id: string
-  name: string
-  description?: string
-  command: string
-  flag: Flag
-  cwd?: string
-  port?: number
-}
+export type Command = SavedCommand
 
 export const flags = ['serve', 'build', 'test', 'lint', 'setup', 'other'] as const
 export type Flag = (typeof flags)[number]
@@ -29,11 +16,16 @@ const [commands, setCommands] = createSignal<Command[]>([])
 const [fileError, setFileError] = createSignal('')
 export { commands, fileError }
 
-// One action per command (Search Everywhere, shortcuts of the keymap settings), bound by the id
-// of the command: renaming it keeps its shortcut.
+/** Starts following the commands: one action per command (Search Everywhere, shortcuts of the
+ * keymap settings), bound by the id of the command so that renaming it keeps its shortcut. */
+export function watchCommands() {
+  api.on('commands.changed', (e: { commands: Command[] }) => {
+    setCommands(e.commands)
+    setFileError('')
+  })
 createRoot(() =>
   createEffect(() =>
-    setDynamicActions(
+    api.keys.setDynamic(
       commands().map((c) => ({
         id: `command.run.${c.id}`,
         label: 'Run: {name}',
@@ -47,10 +39,11 @@ createRoot(() =>
     ),
   ),
 )
+}
 
 export async function loadCommands() {
   try {
-    const r = await request<{ commands: Command[]; error?: string }>('commands.list')
+    const r = await api.rpc<{ commands: Command[]; error?: string }>('commands.list')
     setCommands(r.commands)
     setFileError(r.error ?? '')
   } catch {
@@ -58,13 +51,8 @@ export async function loadCommands() {
   }
 }
 
-onPod('commands.changed', (e: { commands: Command[] }) => {
-  setCommands(e.commands)
-  setFileError('')
-})
-
 export async function saveCommands(list: Command[]) {
-  const saved = await request<Command[]>('commands.save', { commands: list })
+  const saved = await api.rpc<Command[]>('commands.save', { commands: list })
   setCommands(saved)
   setFileError('')
   return saved
@@ -72,7 +60,7 @@ export async function saveCommands(list: Command[]) {
 
 /** The console of a command in the worktree shown, while it runs. */
 export function runningConsole(id: string) {
-  return consoles().find((c) => c.commandId === id && !c.exited && c.project === project()?.id)
+  return consoles().find((c) => c.commandId === id && !c.exited && c.project === api.project.current())
 }
 
 /** Runs a saved command; when it runs already, Restart is offered (same place in the tabs). */
@@ -80,17 +68,15 @@ export async function runCommand(cmd: Command, restart = false) {
   try {
     // The tabs as they are now: the console of a restart takes the place of the old one.
     const tabs = ordered().map((c) => c.id)
-    let r = await request<{ running?: ConsoleInfo; console?: ConsoleInfo; replaced?: string }>('commands.run', { id: cmd.id, restart })
+    let r = await api.rpc<{ running?: ConsoleInfo; console?: ConsoleInfo; replaced?: string }>('commands.run', { id: cmd.id, restart })
     if (r.running) {
       if (!confirm(t('“{name}” is running. Restart it?', { name: cmd.name }))) return show(r.running.id)
-      r = await request('commands.run', { id: cmd.id, restart: true })
+      r = await api.rpc('commands.run', { id: cmd.id, restart: true })
     }
-    const info: ConsoleInfo = { ...r.console!, project: project()?.id }
+    const info: ConsoleInfo = { ...r.console!, project: api.project.current() }
     setConsoles((l) => [...l.filter((c) => c.id !== r.replaced && c.id !== info.id), info])
-    mutate((s) => {
-      // The new console takes the tab of the one it replaces.
-      if (r.replaced && tabs.includes(r.replaced)) s.bottom.order = tabs.map((id) => (id === r.replaced ? info.id : id))
-    })
+    // The new console takes the tab of the one it replaces.
+    if (r.replaced && tabs.includes(r.replaced)) desk.set((s) => (s.order = tabs.map((id) => (id === r.replaced ? info.id : id))))
     show(info.id)
     return info
   } catch (e) {
@@ -104,10 +90,10 @@ export const servesApp = (c: Command) => c.flag === 'serve' && !!c.port
 /** Start and open the app: the pod runs the command in its console, waits for its port and
  * serves it on a temporary URL, opened in a new tab (see llm/previews.ts). */
 export async function openApp(cmd: Command) {
-  const p = project()
+  const p = api.project.current()
   if (!p) return
   try {
-    const pv = await openPreview({ project: p.id, title: cmd.name, command: cmd.command, cwd: cmd.cwd, port: cmd.port ?? 0, commandId: cmd.id })
+    const pv = await api.previews.open({ project: p, title: cmd.name, command: cmd.command, cwd: cmd.cwd, port: cmd.port ?? 0, commandId: cmd.id })
     // The console the pod just created may not be listed here yet.
     for (let i = 0; i < 20 && pv.console && !consoles().some((c) => c.id === pv.console); i++) await new Promise((r) => setTimeout(r, 100))
     if (consoles().some((c) => c.id === pv.console)) show(pv.console)
@@ -116,16 +102,14 @@ export async function openApp(cmd: Command) {
   }
 }
 
-function show(id: string) {
-  mutate((s) => {
-    showTool(s, 'console')
-    s.bottom.active = id
-  })
+export function show(id: string) {
+  api.showTool('console')
+  desk.set((s) => (s.active = id))
 }
 
 /** Command of the active console, for "Save as command" (an ad hoc task: sh -c <cmd>). */
 export function adHocCommand(): string | null {
-  const c = consoles().find((x) => x.id === session.bottom.active)
+  const c = consoles().find((x) => x.id === desk.get().active)
   if (!c || c.kind !== 'task' || c.commandId || c.command?.[0] !== 'sh' || c.command[1] !== '-c') return null
   return c.command[2] ?? null
 }

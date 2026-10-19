@@ -75,7 +75,7 @@ export interface SessionData {
   /** Tools of each zone of the icon rails (state/zones). */
   placement: Record<Zone, string[]>
   /** Strip under the editor: tools of the two bottom zones, split at `split` (fraction); shown console and order of the console tabs. */
-  bottom: { left: string | null; right: string | null; height: number; split: number; active: string | null; order: string[]; problemsTab: 'problems' | 'output' }
+  bottom: { left: string | null; right: string | null; height: number; split: number; problemsTab: 'problems' | 'output' }
   expanded: string[]
   /** Options of the explorer. */
   explorer: { hidden: boolean; excluded: boolean; singleClick: boolean; follow: boolean }
@@ -128,7 +128,7 @@ function emptySession(): SessionData {
     cursors: {},
     left: { panel: 'explorer', width: 260 },
     right: { panel: null, width: 300 },
-    bottom: { left: null, right: null, height: 240, split: 0.5, active: null, order: [], problemsTab: 'problems' },
+    bottom: { left: null, right: null, height: 240, split: 0.5, problemsTab: 'problems' },
     placement: normalizePlacement(null),
     expanded: [],
     explorer: { hidden: true, excluded: true, singleClick: false, follow: false },
@@ -236,6 +236,10 @@ function normalize(raw: any): SessionData {
     delete t.table
   }
   delete (s as any).sqlText
+  // The Console tool became the Exec plugin (#116): the console shown and the order of the tabs.
+  if (!s.plugins.exec && (raw.bottom?.active || raw.bottom?.order?.length)) s.plugins.exec = { active: raw.bottom.active ?? null, order: raw.bottom.order ?? [] }
+  delete (s.bottom as any).active
+  delete (s.bottom as any).order
   // The Docker tool became a plugin (#114): its state moved under plugins.
   if (raw.docker && !s.plugins.docker) s.plugins.docker = raw.docker
   delete (s as any).docker
@@ -248,7 +252,6 @@ function normalize(raw: any): SessionData {
     s.bottom = rest
     if (rest.active === 'problems' || rest.active === 'output') {
       s.bottom.problemsTab = rest.active
-      s.bottom.active = null
       if (open) s.bottom.right = 'problems'
     } else if (open) s.bottom.left = 'console'
   }

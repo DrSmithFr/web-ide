@@ -10,7 +10,7 @@ import { showTool, zoneOf } from './zones'
 import { desk, desks, setDeskMode, type Desk } from './desks'
 import { captureKeys } from '../keys/bindings'
 import { podPath } from '../app/base'
-import { consoles } from '../console/consoles'
+import { capability } from '../plugins/capabilities'
 
 export interface TileTool {
   label: string
@@ -139,6 +139,7 @@ export function changeMode(n: number, m: Desk['mode']) {
   const fromTiles = n === desk() && tileMode()
   setDeskMode(n, m)
   if (!fromTiles || m !== 'full') return
+  let console: string | undefined
   mutate((s) => {
     const zones = new Set<string>()
     for (const l of leaves(s.layout))
@@ -149,9 +150,10 @@ export function changeMode(n: number, m: Desk['mode']) {
         if (!id || !z || zones.has(z)) continue
         zones.add(z)
         showTool(s, id)
-        if (tab.kind === 'console') s.bottom.active = tab.console!
+        if (tab.kind === 'console') console = tab.console!
       }
   })
+  if (console) capability('terminal')?.show(console)
   // The editor keeps a pane in sight.
   const files = leaves().find((l) => !hiddenTools(l))
   setActivePane(files?.id ?? splitEmpty(session.activePane, 'row'))
@@ -276,7 +278,7 @@ export function detachTab(tab: TabState) {
     const id = tab.tool
     window.open(podPath(`/project/${project()!.id}/tool/${id}`), `tool-${id}`, id === 'assistant' ? 'popup,width=1100,height=820' : 'popup,width=420,height=760')
   } else if (tab.kind === 'console' && tab.console) {
-    const owner = consoles().find((c) => c.id === tab.console)?.project ?? project()!.id
+    const owner = capability('terminal')?.consoles().find((c) => c.id === tab.console)?.project ?? project()!.id
     window.open(podPath(`/project/${owner}/console/${tab.console}`), `console-${tab.console}`, 'popup,width=900,height=560')
   }
 }

@@ -6,7 +6,7 @@ import { errorToast, toast } from '../ui/toast'
 import { openPreview, previewUrl, type PreviewSpec } from './previews'
 import { doodleSession, openDoodle } from './doodle/session'
 import { chat } from './state'
-import { consoles } from '../console/consoles'
+import { capability } from '../plugins/capabilities'
 import { showTool, toolIds } from '../state/zones'
 import { tileTools } from '../state/tiles'
 import { t } from '../i18n'
@@ -75,14 +75,13 @@ async function focus(a: Record<string, any>, base?: string): Promise<UiResult> {
       return ok(`Panel ${id} shown.`, t('panel {id}', { id }))
     }
     case 'console': {
+      const term = capability('terminal')
+      if (!term) throw new Error('the consoles are off on this project (the Exec plugin)')
       // A console the pod just created may not be listed here yet.
-      for (let i = 0; i < 20 && !consoles().some((x) => x.id === a.console_id); i++) await new Promise((r) => setTimeout(r, 100))
-      const c = consoles().find((x) => x.id === a.console_id)
+      for (let i = 0; i < 20 && !term.consoles().some((x) => x.id === a.console_id); i++) await new Promise((r) => setTimeout(r, 100))
+      const c = term.consoles().find((x) => x.id === a.console_id)
       if (!c) throw new Error(`console not found: ${a.console_id} (see list_consoles)`)
-      mutate((s) => {
-        showTool(s, 'console')
-        s.bottom.active = c.id
-      })
+      term.show(c.id)
       return ok(`Console "${c.title}" shown.`, `console ${c.title}`)
     }
     case 'problems':

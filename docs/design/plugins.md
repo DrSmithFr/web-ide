@@ -71,6 +71,18 @@ Moving Docker (#114) found what the API of #113 lacked; each gap was added to th
 - **Tab views with their state**: `plugin:database/sql` and `plugin:database/table`, their connection, database, table and the text of a console in `tab.state` (`api.setViewState`), so the state goes with the tab when it splits or moves to another desk. A desk saved before (kinds `sql` / `table`, `sqlText`) is migrated when read.
 - On the page: the **editor** (`api.editor`: `Doc`, the view of a tab, the cursor of the status bar), the **keymap** (`api.keys`; a command of the manifest has default `keys` and `replaces`, the former id whose shortcuts still apply: `sql.execute` is now `database.execute`), the **panes** (`isActive`, `activate`), `openText`, `Modal`, `pick`, `copyText`, `tn`, `fmtDate`, `ssh.info`, and the `opened` contribution (called when the project opens, after a reconnection, or when the plugin is enabled again).
 
+## What Exec added to the API
+
+Exec (#116) is the first plugin the rest of the IDE *uses*: a dozen parts of the page open or show consoles.
+
+- **Capabilities are services.** The plugin providing one registers its implementation (`api.provide('terminal', …)`); the core asks `capability('terminal')` (`web/src/plugins/capabilities.ts`), another plugin `api.use('terminal')`. It is `undefined` while the provider is off, and the caller hides what needs it (*New terminal* in the tile launcher, a console tab falls back). The types of the services are the core's: `terminal` (consoles, open, show, the terminal view, navigate) and `commands` (the saved commands, their editor).
+- On the pod, `capabilityOn(rt, c)`: the core tools of the assistant and the MCP that need a capability (`toolNeeds`: the consoles and saved commands need `terminal`) are offered and run only with it. They stay the assistant's: its approvals and its resume after a restart hold them, and they move with AI.
+- **Namespaces** (`namespaces` in the manifest): the methods and actions of a plugin keep the names they had in the core (`console.create`, `commands.run`, `console.new`); a name with a prefix of the namespaces is taken as it is, by `Host.Handle` and by `api.rpc`.
+- Events: `EmitOthers` (all the windows of the project but the caller: `console.created`) and `EmitFamily` (the main project and its worktrees: `commands.changed`).
+- Page: `rpcIn` / `notifyIn` (a worktree attached to the window), a **channel** of the tunnel per terminal, `project.current` / `root` / `attached`, `showTool`, `tiles`, `theme` (font, terminal colors, tab size), `editor.View`, `keys.setDynamic` (the actions of the saved commands), `ui.WorktreeChip` and `ui.tabDrop`, the **hosts** contribution (a modal mounted by the window: the commands editor), commands with `inTerminal`.
+- The console shown and the order of the console tabs moved from `session.bottom` to the desk state of the plugin (`plugins.exec`), migrated when read. The Problems tool left the console module for the core (`tools/problems.tsx`) until Languages.
+- The setup command of the old kanban settings moves to the saved commands when the project opens.
+
 ## Decisions
 
 Taken on 2026-10-19:
@@ -93,7 +105,7 @@ The plugins, grouped by domain (one plugin, several tools and views), in their o
 
 | Plugin | Tools and views | Provides / requires |
 |---|---|---|
-| Exec | Console tool (terminals, tasks), project commands, their assistant tools | provides `terminal` |
+| Exec | Console tool (terminals, tasks), project commands (#116, done) | provides `terminal`, `commands` |
 | Search | Search tool (text, regex), the text provider of Search Everywhere | |
 | Git | Git tool, git content of the diff view | provides `worktrees` |
 | Previews | Port forwards and previews tool | requires `terminal` |

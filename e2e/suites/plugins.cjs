@@ -3,7 +3,8 @@
 // its icon, its command and its tool go, its place in the zone stays. Docker (#114) is a
 // built-in plugin: disabled, its tools go, the Port forwards and previews tool stays. The
 // Database explorer (#115) too: its tabs are views of it, a console keeps its text in its tab,
-// and a desk saved before (sql tabs and sqlText) is migrated.
+// and a desk saved before (sql tabs and sqlText) is migrated. Exec (#116) provides terminal:
+// off, the Console goes and Docker with it (it needs terminal); on again, the terminals are back.
 const fs = require('fs')
 const path = require('path')
 const { execSync } = require('child_process')
@@ -161,4 +162,33 @@ run(async ({ page }) => {
   await page.reload()
   await page.waitForSelector('.sql-console .ed-content', { timeout: 15000 })
   assert((await consoleText()).includes('SELECT 7; -- before #115'), 'a console of an old desk keeps its text: ' + (await consoleText()))
+
+  // Exec: a terminal, then Exec off (its dependents named in a confirmation): no Console, Docker
+  // off for want of terminal, the console tools of the MCP refused.
+  page.on('dialog', (d) => d.accept())
+  await page.click('.pane.active .ed-content').catch(() => {})
+  await page.keyboard.press('Control+Shift+Backquote')
+  await page.waitForSelector('.xterm-helper-textarea')
+  await page.waitForTimeout(500)
+  await page.keyboard.type('echo plugin-$((6*7))')
+  await page.keyboard.press('Enter')
+  await page.waitForFunction(() => document.querySelector('.xterm-rows')?.textContent.includes('plugin-42'))
+  const consoleIcon = '.rail-btn[data-id=console]'
+  await setPlugin('exec', false)
+  await page.waitForSelector(consoleIcon, { state: 'detached' })
+  assert(!(await page.$(docker)), 'Docker off with Exec')
+  await palette('settings')
+  await page.waitForSelector('.pick-item.selected:has-text("Settings")')
+  await page.keyboard.press('Enter')
+  await page.click('.settings-nav button:has-text("Plugins")')
+  assert((await page.textContent('[data-plugin=docker]')).includes('needs terminal'), 'Docker says what it lacks')
+  await closeSettings()
+  r = await mcp('list_consoles', {})
+  assert(r.result.isError && text(r).includes('terminal'), 'list_consoles refused: ' + text(r))
+  await setPlugin('exec', true)
+  // The Console comes back shown, as it was.
+  await page.waitForSelector(consoleIcon)
+  if (!(await page.isVisible('.xterm-rows'))) await page.click(consoleIcon)
+  await page.waitForFunction(() => document.querySelector('.xterm-rows')?.textContent.includes('plugin-42'))
+  assert(await page.$(docker), 'Docker back with Exec')
 })

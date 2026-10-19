@@ -43,7 +43,7 @@ import { addDesk, desk, deskLabel, desks } from '../state/desks'
 import { route } from '../app/router'
 import { detachTab, hiddenTools, tileMode, nextSplit, resizing, scrollMode, tileTools } from '../state/tiles'
 import { ScrollArea } from './ScrollArea'
-import { consoles, TermView } from '../console/consoles'
+import { capability } from '../plugins/capabilities'
 import { Dynamic } from 'solid-js/web'
 import { DocView } from './DocView'
 import { isMarkdownPath, MarkdownView, showRaw, shownRaw, type MarkdownViewApi } from './MarkdownView'
@@ -143,7 +143,7 @@ function tabTitle(tab: TabState) {
     return o ? (o.title.length > 32 ? o.title.slice(0, 31) + '…' : o.title) : t('Objective')
   }
   if (tab.kind === 'tool') return tileTools[tab.tool!] ? t(tileTools[tab.tool!].label) : tab.tool!
-  if (tab.kind === 'console') return consoles().find((c) => c.id === tab.console)?.title ?? t('Console')
+  if (tab.kind === 'console') return capability('terminal')?.consoles().find((c) => c.id === tab.console)?.title ?? t('Console')
   if (tab.kind === 'doc') return tab.title ?? t('Documentation')
   if (tab.kind.startsWith('plugin:')) return tab.title ?? t(pluginViewLabel(tab.kind) ?? tab.kind)
   return tab.title ?? tab.kind
@@ -362,10 +362,10 @@ function Pane(props: { id: string }) {
                 </Show>
               </Match>
               <Match when={tab.kind === 'console'}>
-                <Show when={consoles().some((c) => c.id === tab.console)} fallback={gone(tab, t('This console is closed'))}>
+                <Show when={capability('terminal')?.consoles().some((c) => c.id === tab.console)} fallback={gone(tab, capability('terminal') ? t('This console is closed') : t('The plugin of this tab is disabled'))}>
                   <div class="tile-console">
                     <Show when={bare()}>{corner(tab)}</Show>
-                    <TermView id={tab.console!} focus={isActivePane()} />
+                    <Dynamic component={capability('terminal')!.TermView} id={tab.console!} focus={isActivePane()} />
                   </div>
                 </Show>
               </Match>

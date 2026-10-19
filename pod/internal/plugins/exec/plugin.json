@@ -1,0 +1,13 @@
+{
+  "id": "exec",
+  "name": "Exec",
+  "version": "1.0.0",
+  "apiVersion": 0,
+  "permissions": ["exec"],
+  "provides": ["terminal", "commands"],
+  "namespaces": ["console", "commands"],
+  "contributes": {
+    "tools": [{ "id": "console", "label": "Console", "icon": "terminal", "zone": "bottomLeft" }],
+    "commands": [{ "id": "console.new", "label": "New terminal", "category": "Consoles", "inTerminal": true }]
+  }
+}

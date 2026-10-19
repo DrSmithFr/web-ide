@@ -145,6 +145,9 @@ func (s *Server) assistantTool(r *assistantRun, ref *runtimeRef, call assistant.
 	if assistant.KanbanTools[name] {
 		return s.kanbanTool(r, name, a, mode)
 	}
+	if err := s.missingFor(ref.rt, name); err != nil {
+		return fail(r, err)
+	}
 	if t := s.findPluginTool(name); t != nil {
 		r.mu.Lock()
 		options := pluginOptions(opt(r.chat), t.plugin)

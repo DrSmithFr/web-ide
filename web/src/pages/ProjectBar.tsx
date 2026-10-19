@@ -11,7 +11,7 @@ import { errorToast, toast } from '../ui/toast'
 import { Icon } from '../ui/icons'
 import { iconOf, iconURL, useProjectIcon, withBadge } from '../ui/projectIcon'
 import { IconEditor } from '../ui/IconEditor'
-import { newConsole } from '../console/consoles'
+import { capability } from '../plugins/capabilities'
 import { t } from '../i18n'
 import { DeskSwitcher } from './DeskSwitcher'
 import { desk, desks, deskLabel } from '../state/desks'
@@ -135,7 +135,7 @@ export function ProjectBar() {
     const added = await request<{ project: string; setup: string }>('worktrees.add', { branch: name, create })
     await showWorktree(added.project)
     // The setup commands of the project (npm install…) run in a console of the new worktree.
-    if (added.setup) void newConsole({ kind: 'task', command: ['sh', '-c', added.setup], title: t('Worktree setup') })
+    if (added.setup) void capability('terminal')?.open({ kind: 'task', command: ['sh', '-c', added.setup], title: t('Worktree setup') })
   }
 
   const removeWorktree = async (root: string, worktrees: Worktree[], r: DOMRect) => {

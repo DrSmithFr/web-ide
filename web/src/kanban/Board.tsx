@@ -8,8 +8,7 @@ import { errorToast } from '../ui/toast'
 import { copyText } from '../ui/clipboard'
 import { mcpAddCommand } from './claude'
 import { catalog } from '../agents/state'
-import { openCommands } from '../console/CommandsModal'
-import { commands, loadCommands } from '../console/commands'
+import { capability } from '../plugins/capabilities'
 import {
   board, boardView, createTicket, setBoardView, ensureBoard, setMeta, newTicketOpen, openTicket, priorityLabels, setNewTicketOpen, statusLabels, workTime,
   MAX_DESCRIPTION, type Priority, type Status, type Summary,
@@ -259,9 +258,9 @@ function KanbanSettings(props: { onClose: () => void }) {
   const [agents] = createResource(() => catalog().then((c) => (c.local ? c.agents.filter((a) => a.installed || a.id === agent()) : []), () => []))
   const [mcp] = createResource(mcpAddCommand)
   // The setup of a new worktree: the project commands flagged setup.
-  onMount(() => void loadCommands())
+  onMount(() => void capability('commands')?.load())
   const setupNames = () =>
-    commands()
+    (capability('commands')?.list() ?? [])
       .filter((c) => c.flag === 'setup')
       .map((c) => c.name)
       .join(', ')
@@ -311,7 +310,7 @@ function KanbanSettings(props: { onClose: () => void }) {
               class="btn small"
               onClick={() => {
                 props.onClose()
-                openCommands()
+                capability('commands')?.edit()
               }}
               data-testid="kanban-setup-commands"
             >
