@@ -13,6 +13,17 @@ export default defineConfig({
     emptyOutDir: true,
     target: 'es2022',
     chunkSizeWarningLimit: 1500,
+    rolldownOptions: {
+      output: {
+        // The page module of a built-in plugin is a chunk of its own, loaded when the plugin is
+        // first enabled (plugins/registry.tsx): its name stays plugin-<id>. Only the files of
+        // its folder go there: what the core shares with it stays with the core.
+        advancedChunks: {
+          includeDependenciesRecursively: false,
+          groups: [{ name: (id: string) => /\/src\/plugins\/([a-z]+)\//.exec(id)?.[1].replace(/^/, 'plugin-') ?? null, test: /\/src\/plugins\/[a-z]+\// }],
+        },
+      },
+    },
   },
   // The speech recognition worker loads the ONNX runtime with dynamic imports.
   worker: { format: 'es' },

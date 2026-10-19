@@ -1,4 +1,5 @@
-// Quota (milestone 5): run.sh starts the relay with -quota 1MB and the pod with -force-turn, so
+// Quota (milestone 5): run.sh starts the relay with -quota 512KB (the home page alone is over
+// it) and the pod with -force-turn, so
 // every byte of the app crosses TURN. The first load passes the quota; the renewal of its
 // credentials (#86) and the next tunnel get no TURN credential, and the page says why, with what
 // lifts it. Settings > Remote access of the pod
@@ -24,8 +25,8 @@ run(
         return n
       })
     let bytes = await received()
-    for (let end = Date.now() + 30000; bytes <= 1024 * 1024 && Date.now() < end; bytes = await received()) await page.waitForTimeout(500)
-    assert(bytes > 1024 * 1024, 'the first load carried over the quota through TURN: ' + bytes)
+    for (let end = Date.now() + 30000; bytes <= 512 * 1024 && Date.now() < end; bytes = await received()) await page.waitForTimeout(500)
+    assert(bytes > 512 * 1024, 'the first load carried over the quota through TURN: ' + bytes)
 
     // The credentials live 10 s here (#86): the renewal of this tunnel comes over the quota, the
     // relay gives none, and the page says why over the app, without a reload — the restart keeps
@@ -33,7 +34,7 @@ run(
     await page.waitForFunction(() => window.bootJournal.includes('No TURN credential (quota reached)'), null, { timeout: 30000 })
     await page.waitForSelector('#quota-bar', { timeout: 10000 })
     const bar = (await page.textContent('#quota-bar')).trim()
-    assert(/quota/i.test(bar) && /\d+(\.\d)? (MB|Mo)/.test(bar), 'the bar over the app tells the quota: ' + bar)
+    assert(/quota/i.test(bar) && /\d+(\.\d)? (kB|MB|ko|Mo)/.test(bar), 'the bar over the app tells the quota: ' + bar)
     assert(await page.isVisible('#quota-bar a[href="https://github.com/sponsors/DrSmithFr"]'), 'the bar points at what lifts it')
     await page.screenshot({ path: OUT + '/quota-renewal.png' })
     await page.click('#quota-bar button')
@@ -45,7 +46,7 @@ run(
     assert(!(await page.isVisible('#frame')), 'no tunnel over the quota, TURN forced')
     const note = (await page.textContent('.quota')).trim()
     assert(/quota/i.test(note), 'the page says the quota is reached: ' + note)
-    assert(/\d+(\.\d)? (MB|Mo)/.test(note), 'the page shows what the month used: ' + note)
+    assert(/\d+(\.\d)? (kB|MB|ko|Mo)/.test(note), 'the page shows what the month used: ' + note)
     assert(await page.isVisible('.quota a[href="https://github.com/sponsors/DrSmithFr"]'), 'the quota note points at what lifts it')
 
     // The pod, on its own origin: Settings > Remote access carries the same state.

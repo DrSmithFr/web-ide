@@ -1,8 +1,8 @@
 // Plugins (#113): the test plugin hello (WEBIDE_TEST_PLUGINS) adds a tool in the right zone, an
 // RPC method and an assistant tool of the MCP; disabled on the project in Settings > Plugins,
 // its icon, its command and its tool go, its place in the zone stays. Docker (#114) is a
-// built-in plugin: disabled, its tools go, the Port forwards and previews tool stays. The
-// Database explorer (#115) too: its tabs are views of it, a console keeps its text in its tab,
+// built-in plugin: disabled, its tools go and its page module is not downloaded (#124), the
+// Port forwards and previews tool stays. The Database explorer (#115) too: its tabs are views of it, a console keeps its text in its tab,
 // and a desk saved before (sql tabs and sqlText) is migrated. Exec (#116) provides terminal:
 // off, the Console goes and Docker with it (it needs terminal); on again, the terminals are back.
 // Search (#117) gives Search Everywhere its Text tab: off, the tab and the Search tool go. Git
@@ -123,7 +123,18 @@ run(async ({ page }) => {
   await page.waitForTimeout(300)
   assert(!(await page.$('.pick-item:has-text("Docker")')), 'no Docker command in Search Everywhere')
   await page.keyboard.press('Escape')
+  // The page module of a disabled plugin is not downloaded (#124); enabled, it is.
+  const asked = []
+  const onRequest = (q) => asked.push(q.url())
+  page.on('request', onRequest)
+  await page.reload()
+  await page.waitForSelector('.rail-btn[data-id=explorer]')
+  await page.waitForSelector(forwards)
+  assert(asked.some((u) => /plugin-exec-/.test(u)) && !asked.some((u) => /plugin-docker-/.test(u)), 'no chunk of a disabled plugin: ' + asked.filter((u) => u.includes('plugin-')).map((u) => u.split('/').pop()))
   await setDocker(true)
+  await page.waitForSelector(docker)
+  assert(asked.some((u) => /plugin-docker-/.test(u)), 'its chunk once enabled')
+  page.off('request', onRequest)
   await page.click(docker)
   await page.waitForSelector('[data-testid=docker-tab-disk][aria-selected=true]')
   r = await mcp('docker_ps', {})
