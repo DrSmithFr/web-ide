@@ -77,6 +77,12 @@ func TestResolve(t *testing.T) {
 	if !states[0].Disabled || states[1].Disabled || !slices.Equal(states[1].Missing, []string{"sql"}) {
 		t.Fatal("states", states)
 	}
+	if err := r.Add(fake{Manifest{ID: "core", Required: true}}); err != nil {
+		t.Fatal(err)
+	}
+	if on := Enabled(r.Resolve([]string{"core"})); !on["core"] {
+		t.Fatal("a required plugin cannot be disabled")
+	}
 	if d := Dependents(r.Resolve(nil), "db"); !slices.Equal(d, []string{"orm", "admin"}) {
 		t.Fatal("dependents", d)
 	}
@@ -111,7 +117,7 @@ func TestEnabledFile(t *testing.T) {
 }
 
 func TestBuiltinManifests(t *testing.T) {
-	for _, f := range []string{"hello/plugin.json", "docker/plugin.json", "database/plugin.json", "exec/plugin.json", "search/plugin.json", "git/plugin.json", "previews/plugin.json", "languages/plugin.json"} {
+	for _, f := range []string{"hello/plugin.json", "docker/plugin.json", "database/plugin.json", "exec/plugin.json", "search/plugin.json", "git/plugin.json", "previews/plugin.json", "languages/plugin.json", "files/plugin.json", "code/plugin.json"} {
 		data, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)

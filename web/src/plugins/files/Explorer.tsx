@@ -2,17 +2,14 @@
 // A click selects, a double click (or Enter) opens the file and gives it the focus.
 import { createEffect, createSignal, For, onMount, Show, untrack } from 'solid-js'
 import { createStore } from 'solid-js/store'
-import { on as onPod, request } from '../pod/rpc'
-import { activeTab, basename, mutate, openFile, project, relPath, root, session } from '../state/project'
-import { contextMenu, prompt, type MenuItem } from '../ui/overlay'
-import { errorToast, toast } from '../ui/toast'
-import { Icon } from '../ui/icons'
-import { FileIcon } from './fileIcons'
-import { capability } from '../plugins/capabilities'
-import { folderMark, inExcluded, loadFolderMarks, markFolder, type FolderMark } from '../state/folders'
-import { t } from '../i18n'
-import { copyText } from '../ui/clipboard'
-import { phone } from '../state/mobile'
+import type { MenuItem } from '../api'
+import { api, contextMenu, copyText, desk, errorToast, FileIcon, Icon, prompt, t, toast } from './plugin'
+
+type FolderMark = 'source' | 'tests' | 'excluded'
+const folderMark = (p: string) => api.folders.mark(p)
+const inExcluded = (p: string) => api.folders.inExcluded(p)
+const root = () => api.project.root()
+const relPath = (p: string) => api.project.relPath(p)
 
 interface Entry {
   name: string
@@ -36,31 +33,37 @@ const markLabels: Record<FolderMark, string> = { source: 'Source folder', tests:
 async function load(dir: string) {
   let list: Entry[]
   try {
-    list = await request<Entry[]>('fs.list', { path: dir })
+    list = await api.rpc<Entry[]>('fs.list', { path: dir })
     setChildren(dir, list)
     setErrors(dir, undefined)
   } catch (e) {
     setErrors(dir, (e as Error).message)
     return
   }
-  try {
-    const ign = new Set((await capability('git')?.ignored(list.map((e) => e.path))) ?? [])
-    for (const e of list) setIgnored(e.path, ign.has(e.path) || undefined)
-  } catch {
-    // Not a repository, or git missing: nothing is ignored.
+  // The files the decorations (Git) leave out: dimmed, and so is their content.
+  for (const d of api.explorer.decorations()) {
+    try {
+      const ign = new Set((await d.ignored?.(list.map((e) => e.path))) ?? [])
+      for (const e of list) setIgnored(e.path, ign.has(e.path) || undefined)
+    } catch {
+      // Not a repository, or git missing: nothing is ignored.
+    }
   }
 }
 
-onPod('fs.dir', (e: { path: string }) => {
-  if (children[e.path]) load(e.path)
-})
+/** Starts following the folders: a folder listed again when its content changes. */
+export function watchFolders() {
+  api.on('fs.dir', (e: { path: string }) => {
+    if (children[e.path]) load(e.path)
+  })
+}
 
 function isExpanded(p: string) {
-  return session.expanded.includes(p)
+  return desk.get().expanded.includes(p)
 }
 
 function setExpanded(p: string, open: boolean) {
-  mutate((s) => {
+  desk.set((s) => {
     const i = s.expanded.indexOf(p)
     if (open && i < 0) s.expanded.push(p)
     if (!open && i >= 0) s.expanded.splice(i, 1)
@@ -95,11 +98,11 @@ export function revealInExplorer(path: string, focus = false) {
 
 /** Opens a file and moves the focus to its editor. */
 async function openAndFocus(path: string) {
-  await openFile(path)
+  await api.openFile(path)
   let n = 0
   const focus = () => {
     const ed = document.querySelector<HTMLElement>('.pane.active .ed-content')
-    if (ed && activeTab()?.path === path) ed.focus()
+    if (ed && api.activePath() === path) ed.focus()
     else if (n++ < 20) requestAnimationFrame(focus)
   }
   requestAnimationFrame(focus)
@@ -115,19 +118,19 @@ async function expandAll() {
     for (const d of level)
       for (const e of children[d] ?? []) {
         if (!e.dir || e.link || heavyDirs.has(e.name) || ignored[e.path] || inExcluded(e.path)) continue
-        if (!session.explorer.hidden && e.name.startsWith('.')) continue
+        if (!desk.get().hidden && e.name.startsWith('.')) continue
         next.push(e.path)
       }
     level = next.slice(0, 300 - opened.length)
     opened.push(...level)
   }
-  mutate((s) => {
+  desk.set((s) => {
     for (const p of opened) if (!s.expanded.includes(p)) s.expanded.push(p)
   })
 }
 
 function collapseAll() {
-  mutate((s) => {
+  desk.set((s) => {
     s.expanded = []
   })
 }
@@ -138,7 +141,7 @@ export async function createIn(dir: string, isDir: boolean) {
   if (!name) return
   const path = dir + '/' + name.replace(/^\/+/, '')
   try {
-    await request('fs.create', { path, dir: isDir })
+    await api.rpc('fs.create', { path, dir: isDir })
     setExpanded(dir, true)
     await load(dir)
     if (!isDir) openAndFocus(path)
@@ -152,7 +155,7 @@ async function rename(e: Entry) {
   if (!name || name === e.name) return
   const dir = e.path.slice(0, e.path.lastIndexOf('/'))
   try {
-    await request('fs.rename', { path: e.path, to: dir + '/' + name })
+    await api.rpc('fs.rename', { path: e.path, to: dir + '/' + name })
     load(dir)
   } catch (err) {
     errorToast(err)
@@ -162,7 +165,7 @@ async function rename(e: Entry) {
 async function remove(e: Entry) {
   if (!confirm(e.dir ? t('Delete the folder “{path}” and all its content?', { path: relPath(e.path) }) : t('Delete the file “{path}”?', { path: relPath(e.path) }))) return
   try {
-    await request('fs.delete', { path: e.path })
+    await api.rpc('fs.delete', { path: e.path })
     load(e.path.slice(0, e.path.lastIndexOf('/')))
   } catch (err) {
     errorToast(err)
@@ -185,14 +188,15 @@ function menuFor(ev: MouseEvent, e: Entry) {
     { separator: true, label: '' },
     { label: t('Copy the path'), action: () => copyText(e.path) },
     { label: t('Copy the relative path'), action: () => copyText(relPath(e.path)) },
-    { label: t('Open a terminal here'), action: () => capability('terminal')?.open({ cwd: dir }) },
+    // The items the other plugins give (Exec: a terminal here).
+    ...api.explorer.items({ path: e.path, dir: e.dir, folder: dir }),
     { label: t('Refresh'), action: () => load(dir) },
   ]
   if (e.dir && e.path !== root()) {
     const cur = folderMark(e.path)
     items.push(
       { separator: true, label: '' },
-      ...(Object.keys(markLabels) as FolderMark[]).map((m) => ({ label: t(markLabels[m]), checked: cur === m, action: () => markFolder(e.path, cur === m ? '' : m) })),
+      ...(Object.keys(markLabels) as FolderMark[]).map((m) => ({ label: t(markLabels[m]), checked: cur === m, action: () => api.folders.setMark(e.path, cur === m ? '' : m) })),
     )
   }
   contextMenu(ev, items)
@@ -200,18 +204,18 @@ function menuFor(ev: MouseEvent, e: Entry) {
 
 function optionsMenu(ev: MouseEvent) {
   const r = (ev.currentTarget as HTMLElement).getBoundingClientRect()
-  const toggle = (k: keyof typeof session.explorer) => () =>
-    mutate((s) => {
-      s.explorer[k] = !s.explorer[k]
+  const toggle = (k: 'hidden' | 'excluded' | 'singleClick' | 'follow') => () =>
+    desk.set((s) => {
+      s[k] = !s[k]
     })
   contextMenu(new MouseEvent('contextmenu', { clientX: r.left, clientY: r.bottom + 2 }), [
     { label: t('New file…'), action: () => createIn(root(), false) },
     { label: t('New folder…'), action: () => createIn(root(), true) },
     { separator: true, label: '' },
-    { label: t('Show the hidden files'), checked: session.explorer.hidden, action: toggle('hidden') },
-    { label: t('Show the excluded folders'), checked: session.explorer.excluded, action: toggle('excluded') },
-    { label: t('Open files with a single click'), checked: session.explorer.singleClick, action: toggle('singleClick') },
-    { label: t('Always select the opened file'), checked: session.explorer.follow, action: toggle('follow') },
+    { label: t('Show the hidden files'), checked: desk.get().hidden, action: toggle('hidden') },
+    { label: t('Show the excluded folders'), checked: desk.get().excluded, action: toggle('excluded') },
+    { label: t('Open files with a single click'), checked: desk.get().singleClick, action: toggle('singleClick') },
+    { label: t('Always select the opened file'), checked: desk.get().follow, action: toggle('follow') },
     { separator: true, label: '' },
     { label: t('Refresh all'), action: refreshAll },
   ])
@@ -225,7 +229,7 @@ interface Inherited {
 
 function Rows(props: { dir: string; depth: number; inherited: Inherited }) {
   const shown = () =>
-    (children[props.dir] ?? []).filter((e) => (session.explorer.hidden || !e.name.startsWith('.')) && (session.explorer.excluded || folderMark(e.path) !== 'excluded'))
+    (children[props.dir] ?? []).filter((e) => (desk.get().hidden || !e.name.startsWith('.')) && (desk.get().excluded || folderMark(e.path) !== 'excluded'))
   return (
     <>
       <Show when={errors[props.dir]}>
@@ -244,7 +248,8 @@ function Row(props: { entry: Entry; depth: number; inherited: Inherited }) {
   const mark = () => (e.dir ? folderMark(e.path) : null)
   const isIgnored = () => props.inherited.ignored || !!ignored[e.path]
   const isExcluded = () => props.inherited.excluded || mark() === 'excluded'
-  const git = () => (e.dir ? capability('git')?.dirState(e.path) : capability('git')?.fileState(e.path)) ?? (isIgnored() ? 'ignored' : 'clean')
+  // The state the decorations give (Git: modified, added…), else ignored or clean.
+  const git = () => api.explorer.decorations().map((d) => d.state(e.path, e.dir)).find((x) => x) ?? (isIgnored() ? 'ignored' : 'clean')
   const toggle = () => setExpanded(e.path, !open())
   const activate = () => (e.dir ? toggle() : openAndFocus(e.path))
   return (
@@ -258,17 +263,17 @@ function Row(props: { entry: Entry; depth: number; inherited: Inherited }) {
         data-path={e.path}
         data-mark={mark() ?? undefined}
         title={mark() ? t(markLabels[mark()!]) : undefined}
-        classList={{ selected: selected() === e.path, current: activeTab()?.path === e.path, excluded: isExcluded() }}
+        classList={{ selected: selected() === e.path, current: api.activePath() === e.path, excluded: isExcluded() }}
         style={{ 'padding-left': `${props.depth * 14 + 6}px` }}
         onFocus={() => setSelected(e.path)}
         onClick={(ev) => {
           setSelected(e.path)
           ;(ev.currentTarget as HTMLElement).focus()
           if (e.dir && (ev.target as Element).closest('.tree-twist')) toggle()
-          else if (session.explorer.singleClick || phone()) e.dir ? toggle() : openFile(e.path) // a phone has no double click
+          else if (desk.get().singleClick || api.tiles.phone()) e.dir ? toggle() : api.openFile(e.path) // a phone has no double click
         }}
         onDblClick={(ev) => {
-          if (session.explorer.singleClick || (ev.target as Element).closest('.tree-twist')) return
+          if (desk.get().singleClick || (ev.target as Element).closest('.tree-twist')) return
           activate()
         }}
         onKeyDown={(ev) => {
@@ -315,25 +320,25 @@ export function Explorer() {
   onMount(() => {
     const r = root()
     if (r) load(r)
-    for (const p of session.expanded) if (!children[p]) load(p)
+    for (const p of desk.get().expanded) if (!children[p]) load(p)
   })
   createEffect(() => {
     const r = root()
     if (r && !children[r]) load(r)
-    if (r) loadFolderMarks()
+    if (r) void api.folders.load()
   })
   // "Always select the opened file".
   createEffect(() => {
-    const p = activeTab()?.path
-    if (session.explorer.follow && p) untrack(() => revealInExplorer(p))
+    const p = api.activePath()
+    if (desk.get().follow && p) untrack(() => revealInExplorer(p))
   })
-  const rootEntry = (): Entry => ({ name: project()?.name ?? basename(root()), path: root(), dir: true, size: 0 })
+  const rootEntry = (): Entry => ({ name: api.project.name() ?? api.project.basename(root()), path: root(), dir: true, size: 0 })
   return (
     <div class="panel explorer">
       <div class="panel-head">
         <span class="panel-title">{t('Explorer')}</span>
         <span class="grow" />
-        <button class="icon-btn" data-testid="explorer-locate" title={t('Locate the active file')} onClick={() => activeTab()?.path && revealInExplorer(activeTab()!.path!, true)}>
+        <button class="icon-btn" data-testid="explorer-locate" title={t('Locate the active file')} onClick={() => api.activePath() && revealInExplorer(api.activePath()!, true)}>
           <Icon name="locate" />
         </button>
         <button class="icon-btn" data-testid="explorer-expand" title={t('Expand all')} onClick={expandAll}>

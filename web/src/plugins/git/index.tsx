@@ -24,6 +24,10 @@ export const git: PluginModule = {
     return {
       tools: { git: { component: GitPanel } },
       diffSources: [gitDiff],
+      fileDecorations: {
+        ignored: (paths) => api.rpc<string[]>('git.ignored', { paths }),
+        state: (path, dir) => (dir ? dirState(path) : fileState(path)),
+      },
       opened: () => refreshGit(0),
     }
   },

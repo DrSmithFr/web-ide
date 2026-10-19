@@ -4,12 +4,8 @@
 // command palette open it on their own tab. Tab / Shift+Tab change the tab.
 import { batch, createEffect, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js'
 import { Portal } from 'solid-js/web'
-import { request } from '../pod/rpc'
-import { basename, openFile, relPath } from '../state/project'
-import { desks } from '../state/desks'
 import { actionLabel, allActions, isCapturingKeys, runAction, shortcutOf } from '../keys/bindings'
 import { fuzzy } from '../ui/overlay'
-import { FileIcon } from '../panels/fileIcons'
 import { Icon } from '../ui/icons'
 import { keepFocus } from '../state/focus'
 import { t } from '../i18n'
@@ -43,26 +39,6 @@ export function searchEverywhere(on: SearchTab = 'all', opts: { onClose?: () => 
 
 // ---------- sources ----------
 
-let fileCache: { at: number; files: string[] } | null = null
-async function projectFiles() {
-  if (!fileCache || Date.now() - fileCache.at > 15000) fileCache = { at: Date.now(), files: await request<string[]>('search.files') }
-  return fileCache.files
-}
-
-const fileHit = (f: string): Hit => ({ label: basename(f), detail: relPath(f), path: true, icon: () => <FileIcon name={basename(f)} />, run: () => void openFile(f) })
-
-async function findFiles(q: string, max: number) {
-  const list = await projectFiles()
-  // Without a query, the recent files come first.
-  if (!q) return [...new Set([...desks.recent, ...list])].slice(0, max).map(fileHit)
-  return list
-    .map((f) => ({ f, s: fuzzy(q, basename(f)) * 2 + fuzzy(q, relPath(f)) }))
-    .filter((x) => x.s > 0)
-    .sort((a, b) => b.s - a.s)
-    .slice(0, max)
-    .map(({ f }) => fileHit(f))
-}
-
 /** The actions, the saved commands of the project first (dynamic actions with an icon). */
 function findActions(q: string, max: number) {
   const list = allActions()
@@ -79,9 +55,9 @@ function findActions(q: string, max: number) {
   )
 }
 
-// The providers of the core; the symbols are the Language servers plugin's, the text the Search plugin's.
+// The provider of the core: the actions. The files are the Files plugin's, the symbols the
+// Language servers plugin's, the text the Search plugin's.
 setCoreProviders([
-  { id: 'files', label: 'Files', placeholder: 'Go to file (name or path, fuzzy search)', order: 10, inAll: 8, delay: 0, max: 100, find: (q, _s, max) => findFiles(q, max) },
   { id: 'actions', label: 'Actions', placeholder: 'Command…', order: 30, inAll: 8, delay: 0, find: async (q, _s, max) => findActions(q, max) },
 ])
 

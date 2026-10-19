@@ -11,7 +11,7 @@ import { capability } from '../plugins/capabilities'
 const fileState = (p: string) => capability('git')?.fileState(p) ?? null
 import { fuzzy } from '../ui/overlay'
 import { Icon } from '../ui/icons'
-import { FileIcon } from '../panels/fileIcons'
+import { FileIcon } from '../ui/fileIcons'
 import { keepFocus } from '../state/focus'
 import { WorktreeChip } from '../ui/WorktreeChip'
 import { t } from '../i18n'

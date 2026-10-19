@@ -3,7 +3,7 @@
 import type { JSX } from 'solid-js'
 import type { TabState } from '../state/project'
 import type { Zone } from '../state/zones'
-import type { PluginApi } from './api'
+import type { MenuItem, PluginApi } from './api'
 import type { SearchProvider } from '../popups/searchProviders'
 import type { DiffSource } from '../ui/diffSources'
 
@@ -21,6 +21,8 @@ export interface PluginManifest {
   name: string
   version: string
   apiVersion: number
+  /** Locked: always enabled, the IDE does not run without it (Files, Code). */
+  required?: boolean
   permissions?: string[]
   provides?: string[]
   requires?: string[]
@@ -45,9 +47,15 @@ export interface PluginState {
 /** What the module of a plugin gives for the contributions of its manifest, by id. */
 export interface PluginContributions {
   tools?: Record<string, { component: () => JSX.Element; badge?: () => number }>
+  /** The view of the file tabs (one plugin gives it: Code). */
+  fileView?: (props: { tab: TabState; paneId: string }) => JSX.Element
   /** Tab views, opened as tabs of kind plugin:<plugin>/<view>. */
   views?: Record<string, (props: { tab: TabState; paneId: string }) => JSX.Element>
   commands?: Record<string, () => void>
+  /** Items of the context menu of an entry of the Explorer (Exec: a terminal here). */
+  explorerItems?: (entry: ExplorerEntry) => MenuItem[]
+  /** Decorations of the Explorer: the files left out, the state of a file (Git: modified…). */
+  fileDecorations?: FileDecorations
   /** Sources of the diff view (the sides of a diff tab whose source is its id). */
   diffSources?: DiffSource[]
   /** Kinds of results of Search Everywhere, each with its tab. */
@@ -65,4 +73,18 @@ export interface PluginModule {
   activate(api: PluginApi): PluginContributions
   /** What it shows on the home page (no project open): the api offers its global methods there. */
   home?(api: PluginApi): () => JSX.Element
+}
+
+/** An entry of the Explorer, and the folder it is or is in. */
+export interface ExplorerEntry {
+  path: string
+  dir: boolean
+  folder: string
+}
+
+export interface FileDecorations {
+  /** The paths among these that are left out (dimmed, as their content). */
+  ignored?(paths: string[]): Promise<string[]>
+  /** A state of a file or a folder (a class of its name), null for none. */
+  state(path: string, dir: boolean): string | null
 }

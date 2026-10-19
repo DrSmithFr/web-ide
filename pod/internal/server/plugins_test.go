@@ -26,7 +26,7 @@ func TestPlugins(t *testing.T) {
 	dir := t.TempDir()
 	id := a.call("projects.create", map[string]any{"type": "local", "path": dir})["result"].(map[string]any)["id"].(string)
 	opened := a.call("project.open", map[string]any{"id": id})["result"].(map[string]any)
-	if list := opened["plugins"].([]any); len(list) != 8 || list[7].(map[string]any)["enabled"] != true {
+	if list := opened["plugins"].([]any); len(list) != 10 || list[9].(map[string]any)["enabled"] != true {
 		t.Fatalf("plugins of project.open: %v", opened["plugins"])
 	}
 	name := filepath.Base(dir)
@@ -64,6 +64,9 @@ func TestPlugins(t *testing.T) {
 	}
 	if e := a.callRawIn("", "plugins.set", map[string]any{"id": "nope", "enabled": false})["error"]; e == nil {
 		t.Fatal("unknown plugin accepted")
+	}
+	if e := a.callRawIn("", "plugins.set", map[string]any{"id": "files", "enabled": false})["error"]; e == nil || !strings.Contains(e.(map[string]any)["message"].(string), "always on") {
+		t.Fatalf("a locked plugin disabled: %v", e)
 	}
 
 	// Exec off: no terminal, so Docker is off too; the consoles and their tools are refused.

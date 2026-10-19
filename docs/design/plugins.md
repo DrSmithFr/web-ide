@@ -115,17 +115,25 @@ Exec (#116) is the first plugin the rest of the IDE *uses*: a dozen parts of the
 - `api.editor.serverLanguage` / `serverLanguageId`, `wordStart`, `isWordChar`, `toOffsets`, `applyToString`, `settings`; `api.project.fileUri` / `pathFromUri`; `api.files.write`; `api.notify`; `api.activeFile`.
 - The tab of the Problems tool moved to the desk state of the plugin (migrated). The assistant tools `lsp_*` stay the assistant's, offered with `language` on.
 
+## What Files and Code added to the API
+
+- **Locked plugins** (`required` in the manifest): always enabled; `plugins.set` refuses to turn them off, Settings → Plugins shows them checked, greyed, *Always on*. Files and Code have no method of their own: the files and the buffers are the core's (`fs.*`, `buffer.*`).
+- **`fileView`**: the view of the file tabs, given by Code (the editor of a file buffer, its find bar, rendered Markdown, the change markers, the editing actions while it is active). The editing kit stays the core's, shared with the SQL consoles and the docs: `Doc`, `EditorView`, the completion widget, the find bar, `MarkdownView` (`api.editor`); a view registers its editor (`api.editor.register`) for `api.editor.active()`.
+- **Explorer contributions**: `explorerItems(entry)` (Exec: *Open a terminal here*) and `fileDecorations` (`ignored(paths)`, `state(path, dir)`: Git's colors); the Explorer asks no other plugin. The **files** service: `reveal`, `createIn`.
+- `api.buffers` (`load`, `error`, `save`, `cursor`, `saveCursor`, `target`), `api.conflicts.open`, `api.keys.actionOf` / `run`, `api.folders` (the marks of the folders), `api.explorer`, `api.recentFiles`, `api.activePath`, `api.project.name`. The folders expanded and the options of the Explorer moved to the desk state of Files (migrated).
+- `api.desk().set` changes the state in place, created once from a copy of the defaults: an array pushed (the folders expanded) is seen, and the defaults are never shared.
+
 ## API v1
 
 Frozen with #118: `apiVersion: 1` in every manifest. An addition keeps v1; a removal or a change of what follows is a new version.
 
-**Manifest** (`plugin.json`): `id`, `name`, `version`, `apiVersion`, `permissions`, `provides` / `requires` (capabilities), `namespaces` (prefixes of its methods and actions besides its id), `contributes`: `tools` (`id`, `label`, `icon`, `zone`, `before`), `tabViews`, `assistantTools`, `commands` (`id`, `label`, `category`, `keys`, `replaces`, `inTerminal`).
+**Manifest** (`plugin.json`): `id`, `name`, `version`, `apiVersion`, `required`, `permissions`, `provides` / `requires` (capabilities), `namespaces` (prefixes of its methods and actions besides its id), `contributes`: `tools` (`id`, `label`, `icon`, `zone`, `before`), `tabViews`, `assistantTools`, `commands` (`id`, `label`, `category`, `keys`, `replaces`, `inTerminal`).
 
 **Pod** (`pod/internal/plugins`): `Plugin{Manifest(), Register(Host)}`; `Host.Handle(method, handler)`, `Host.HandleGlobal`, `Host.AssistantTool(tool)`, `Host.Pod()`, `Host.OnProjectOpen`, `Host.OnWindows`; a `Call` carries the `Runtime` of the project, `Params`, `Lang`, the `Window` (push, held streams), `Emit` / `EmitOthers` / `EmitFamily`, the `Options` of a conversation; `Result`, `UsageError`, `CodedError`.
 
-**Page** (`web/src/plugins/api.ts`): `rpc` / `rpcIn` / `notify` / `notifyIn` / `channel`, `on`, `t` / `tn` / `fmtDate` / `fmtAgo`, `project`, `files`, `buffers`, `activeFile`, `ssh`, `desk` (its state in the desk), `provide` / `use` (capabilities), `showTool`, `tiles`, `theme`, `openFile` / `openView` / `setViewState` / `openDiff` / `openText`, `panes`, `editor`, `keys`, `transport`, `ui`. The module's `activate(api)` returns its contributions: `tools`, `views`, `commands`, `hosts`, `searchProviders`, `diffSources`, `assistantOptions`, `opened`; its `home(api)` a part of the home page.
+**Page** (`web/src/plugins/api.ts`): `rpc` / `rpcIn` / `notify` / `notifyIn` / `channel`, `on`, `t` / `tn` / `fmtDate` / `fmtAgo`, `project`, `files`, `buffers`, `activeFile`, `ssh`, `desk` (its state in the desk), `provide` / `use` (capabilities), `showTool`, `tiles`, `theme`, `openFile` / `openView` / `setViewState` / `openDiff` / `openText`, `panes`, `editor`, `keys`, `transport`, `ui`. The module's `activate(api)` returns its contributions: `tools`, `views`, `fileView`, `commands`, `hosts`, `searchProviders`, `diffSources`, `explorerItems`, `fileDecorations`, `assistantOptions`, `opened`; its `home(api)` a part of the home page.
 
-**Capabilities**: `terminal` and `commands` (Exec), `git` and `worktrees` (Git), `previews` (Previews), `language` (Languages), their types in `web/src/plugins/capabilities.ts`.
+**Capabilities**: `terminal` and `commands` (Exec), `git` and `worktrees` (Git), `previews` (Previews), `language` (Languages), `files` (Files), their types in `web/src/plugins/capabilities.ts`.
 
 ## Decisions
 
@@ -154,8 +162,8 @@ The plugins, grouped by domain (one plugin, several tools and views), in their o
 | Git | Git tool, git content of the diff view (#118, done) | provides `worktrees`, `git` |
 | Previews | Port forwards and previews tool (#119, done) | requires `terminal`, provides `previews` |
 | Languages | language servers, Problems, Structure, the Symbols provider (#120, done) | provides `language` |
-| Files | Explorer, file provider (locked) | |
-| Code | file editor, the default view of a text buffer (locked) | |
+| Files | Explorer, file provider (locked, #121, done) | provides `files` |
+| Code | file editor, the default view of a text buffer (locked, #121, done) | |
 | Kanban | Kanban tool and views, its MCP and assistant tools | requires `terminal`, `worktrees` |
 | AI | Assistant, Agents, doodles, whiteboard | |
 

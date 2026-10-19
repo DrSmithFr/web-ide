@@ -2,8 +2,8 @@
 // so that a built-in plugin uses nothing an external one could not.
 import { notifyIn, notifyOn, on, openChannel, request, requestIn, type Channel } from '../pod/rpc'
 import { fmtAgo, fmtDate, t, tn } from '../i18n'
-import { FileIcon } from '../panels/fileIcons'
-import { activeTab, attached, basename, docsVersion, fileUri, findLeaf, getDoc, home, onBufferClose, onBufferOpen, onBufferSave, openBuffers, pathFromUri, isLocal, mutate, openFile, openTab, openTextTab, project, relPath, root, session, setActivePane, type TabState } from '../state/project'
+import { FileIcon } from '../ui/fileIcons'
+import { activeTab, attached, basename, docError, docsVersion, fileUri, loadDoc, reveal, saveCursor, saveDoc, findLeaf, getDoc, home, onBufferClose, onBufferOpen, onBufferSave, openBuffers, pathFromUri, isLocal, mutate, openFile, openTab, openTextTab, project, relPath, root, session, setActivePane, type TabState } from '../state/project'
 import { showTool } from '../state/zones'
 import { detachTab, openTile, tileMode } from '../state/tiles'
 import { phone } from '../state/mobile'
@@ -13,21 +13,30 @@ import { WorktreeChip } from '../ui/WorktreeChip'
 import { dropClasses, dropIndex, moveItem, setDropAt } from '../ui/tabDrop'
 import { EditorView } from '../editor/view'
 import { capability, provide, type Capabilities } from './capabilities'
+import { explorerItems, fileDecorations } from './registry'
+import { folderMark, inExcluded, loadFolderMarks, markFolder } from '../state/folders'
+import { desks } from '../state/desks'
 import { setDynamicActions } from '../keys/bindings'
 import { inTunnel } from '../pod/transport'
 import { EmptyState } from '../ui/EmptyState'
 import { Icon } from '../ui/icons'
 import { errorToast, toast } from '../ui/toast'
 import { contextMenu, fuzzy, Modal, pick, prompt } from '../ui/overlay'
-import { lspLanguage, lspLanguageId } from '../editor/languages'
+import { languageName, lspLanguage, lspLanguageId } from '../editor/languages'
 import { isWordChar, wordStart } from '../editor/completion'
 import { applyToString, toOffsets } from '../editor/textEdits'
-import { activeTextEditor } from '../ui/EditorArea'
+import { activeTextEditor, registerTextEditor } from '../ui/textEditors'
+import { toggleWrap } from '../ui/EditorArea'
+import { useCompletion } from '../ui/Completion'
+import { FindBar } from '../editor/FindBar'
+import { isMarkdownPath, MarkdownView, showRaw, shownRaw } from '../ui/MarkdownView'
+import { lineMarks } from '../editor/linediff'
+import { openConflict } from '../conflict/ConflictDialog'
 import { copyText } from '../ui/clipboard'
 import { setCursorInfo } from '../ui/status'
 import { useEditorView } from '../ui/EditorArea'
 import { Doc } from '../editor/doc'
-import { registerAction, shortcutOf } from '../keys/bindings'
+import { actionOf, registerAction, runAction, shortcutOf } from '../keys/bindings'
 import { parseAnsi, stripAnsi } from '../ui/ansi'
 
 /** The version of this API (the pod refuses a manifest of another one): 1, frozen in #118. */
@@ -59,6 +68,8 @@ export function makeApi(id: string) {
     project: {
       isLocal,
       id: () => home()?.id,
+      /** The name of the project shown. */
+      name: () => project()?.name,
       /** The worktree shown in the window (the project itself, or one of its worktrees), and its root. */
       current: () => project()?.id,
       root,
@@ -89,9 +100,33 @@ export function makeApi(id: string) {
       tabSize: () => settings.editor.tabSize,
     },
     /** The buffers of the window: loaded, saved, forgotten (a language server follows them). */
-    buffers: { list: openBuffers, get: getDoc, version: docsVersion, onOpen: onBufferOpen, onSave: onBufferSave, onClose: onBufferClose },
-    /** The file of the active tab, if it is a file. */
+    buffers: {
+      list: openBuffers,
+      get: getDoc,
+      version: docsVersion,
+      /** Loads the buffer of a file (once per window), its error, saves it. */
+      load: loadDoc,
+      error: docError,
+      save: saveDoc,
+      /** The cursor of a file in the desk, and its saving; the target asked by openFile (line, selection). */
+      cursor: (path: string) => session.cursors[path],
+      saveCursor,
+      target: reveal,
+      onOpen: onBufferOpen,
+      onSave: onBufferSave,
+      onClose: onBufferClose,
+    },
+    /** The resolution of a conflict of a buffer with the disk. */
+    conflicts: { open: openConflict },
+    /** The file of the active tab, if it is a file; the path of the active tab (a diff tab too). */
     activeFile: () => (activeTab()?.kind === 'file' ? activeTab()!.path : undefined),
+    activePath: () => activeTab()?.path,
+    /** The files opened lately on the desks of the project, the last first. */
+    recentFiles: () => desks.recent,
+    /** The marks of the folders of the project (source, tests, excluded), kept by the pod. */
+    folders: { mark: folderMark, inExcluded, setMark: markFolder, load: loadFolderMarks },
+    /** What the other plugins give the Explorer: menu items, decorations. */
+    explorer: { items: explorerItems, decorations: fileDecorations },
     /** The files of the project, as the pod reads them (from the disk, not the buffers). */
     files: {
       read: (path: string) => request<{ content: string; binary?: boolean; readOnly?: boolean }>('fs.read', { path }),
@@ -105,11 +140,15 @@ export function makeApi(id: string) {
      */
     desk: <T extends Record<string, unknown>>(defaults: T) => ({
       get: (): T => ({ ...defaults, ...(session.plugins?.[id] as Partial<T> | undefined) }),
+      // Changed in place in the desk (an array pushed is seen), created once from a copy of the
+      // defaults (they are never shared, nor changed).
       set: (f: (s: T) => void) =>
         mutate((s) => {
           s.plugins ??= {}
-          const cur = (s.plugins[id] = { ...defaults, ...s.plugins[id] }) as T
-          f(cur)
+          if (!s.plugins[id]) s.plugins[id] = structuredClone(defaults)
+          const cur = s.plugins[id]
+          for (const k of Object.keys(defaults)) if (!(k in cur)) cur[k] = structuredClone(defaults[k])
+          f(cur as T)
         }),
     }),
     /** Opens a tab view of the plugin, with its serializable state; key tells two tabs apart. Returns the tab id. */
@@ -138,6 +177,18 @@ export function makeApi(id: string) {
       setCursor: setCursorInfo,
       /** The text editor of the active tab, with its buffer (null: none, or another editor has the focus). */
       active: activeTextEditor,
+      /** A view of a file registers its editor, given while it is the active one. */
+      register: registerTextEditor,
+      /** The editing kit of the core: completion, find bar, rendered Markdown, wrap, change markers. */
+      useCompletion,
+      FindBar,
+      MarkdownView,
+      isMarkdownPath,
+      showRaw,
+      shownRaw,
+      toggleWrap,
+      lineMarks,
+      languageName,
       /** The language server language of a path (go, typescript…), and the languageId it is announced with. */
       serverLanguage: lspLanguage,
       serverLanguageId: lspLanguageId,
@@ -150,7 +201,7 @@ export function makeApi(id: string) {
       applyToString,
     },
     /** The keymap: a handler of an action while the view is shown, and the shortcut of an action. */
-    keys: { register: registerAction, shortcut: shortcutOf, setDynamic: setDynamicActions },
+    keys: { register: registerAction, shortcut: shortcutOf, actionOf, run: runAction, setDynamic: setDynamicActions },
     /** The transport of the page: in the tunnel of the relay, or a WebSocket to the pod. */
     transport: { inTunnel },
     ui: { fuzzy, EmptyState, Icon, FileIcon, Modal, toast, errorToast, contextMenu, prompt, pick, copyText, parseAnsi, stripAnsi, WorktreeChip, tabDrop: { dropClasses, dropIndex, moveItem, setDropAt } },
@@ -160,7 +211,11 @@ export function makeApi(id: string) {
 export type PluginApi = ReturnType<typeof makeApi>
 export type { MenuItem, PickItem } from '../ui/overlay'
 export type { TabState }
+export type { NavTarget } from '../state/project'
 export type { Doc } from '../editor/doc'
+export type { Diagnostic } from '../editor/view'
+export type { MarkdownViewApi } from '../ui/MarkdownView'
+export type { LspDiagnostic } from './capabilities'
 export type { EditorView } from '../editor/view'
 export type { CompletionItem, CompletionList } from '../editor/completion'
 export type { TextEdit } from '../editor/textEdits'

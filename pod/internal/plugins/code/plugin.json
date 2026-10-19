@@ -1,0 +1,8 @@
+{
+  "id": "code",
+  "name": "Code",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "required": true,
+  "contributes": {}
+}

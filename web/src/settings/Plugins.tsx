@@ -23,7 +23,7 @@ export function PluginsSection() {
         {(s) => (
           <div class="plugin-row" data-plugin={s().manifest.id}>
             <label class="check">
-              <input type="checkbox" checked={!s().disabled} data-testid={`plugin-${s().manifest.id}`}
+              <input type="checkbox" checked={!s().disabled || !!s().manifest.required} disabled={!!s().manifest.required} data-testid={`plugin-${s().manifest.id}`}
                 onChange={(e) => {
                   const on = e.currentTarget.checked
                   const deps = dependents(s())
@@ -34,6 +34,9 @@ export function PluginsSection() {
                   void setPluginEnabled(s().manifest.id, on).catch(errorToast)
                 }} />
               {t(s().manifest.name)} <span class="muted small">{s().manifest.version}</span>
+              <Show when={s().manifest.required}>
+                <span class="muted small">{t('Always on')}</span>
+              </Show>
             </label>
             <Show when={s().missing?.length}>
               <p class="err small">{t('Off: needs {list}', { list: s().missing!.join(', ') })}</p>

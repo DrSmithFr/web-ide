@@ -153,12 +153,21 @@ export interface LanguageService {
   showProblems(): void
 }
 
+/** files (the Files plugin): the Explorer. */
+export interface FilesService {
+  /** Expands the folders down to a file and selects it (focusing its row when asked). */
+  reveal(path: string, focus?: boolean): void
+  /** Asks the name of a new file or folder in a folder, creates it and opens the file. */
+  createIn(dir: string, isDir: boolean): Promise<void>
+}
+
 export interface Capabilities {
   terminal: TerminalService
   commands: CommandsService
   git: GitService
   previews: PreviewsService
   language: LanguageService
+  files: FilesService
 }
 
 // The implementations, by capability, and the plugin providing each.

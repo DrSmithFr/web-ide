@@ -369,5 +369,6 @@
   "the %s plugin is disabled on this project": "el plugin %s está desactivado en este proyecto",
   "unknown plugin: %s": "plugin desconocido: %s",
   "%s needs the %s capability, off on this project (Settings > Plugins)": "%s necesita la capacidad %s, desactivada en este proyecto (Ajustes > Plugins)",
-  "starting a development needs the Git plugin, off on this project (Settings > Plugins)": "iniciar un desarrollo necesita el plugin Git, desactivado en este proyecto (Ajustes > Plugins)"
+  "starting a development needs the Git plugin, off on this project (Settings > Plugins)": "iniciar un desarrollo necesita el plugin Git, desactivado en este proyecto (Ajustes > Plugins)",
+  "the %s plugin is always on: the IDE needs it": "el plugin %s está siempre activo: el IDE lo necesita"
 }

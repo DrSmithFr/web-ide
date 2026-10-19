@@ -9,7 +9,7 @@ import (
 var CoreCapabilities = []string{}
 
 // CoreTools are the ids of the tools of the core, which no plugin may take.
-var CoreTools = []string{"explorer", "kanban",
+var CoreTools = []string{"kanban",
 	"assistant", "agents", "questions", "conflicts", "info"}
 
 // Registry holds the built-in plugins, in their order of registration.
@@ -85,7 +85,7 @@ func (r *Registry) Resolve(disabled []string) []State {
 	out := make([]State, len(r.list))
 	for i, p := range r.list {
 		m := p.Manifest()
-		off := slices.Contains(disabled, m.ID)
+		off := slices.Contains(disabled, m.ID) && !m.Required
 		out[i] = State{Manifest: m, Enabled: !off, Disabled: off}
 	}
 	for changed := true; changed; {

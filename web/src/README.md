@@ -10,7 +10,6 @@ flowchart LR
   app["app<br/>base path, router, home"]
   pages["pages<br/>Home, ProjectPage"]
   tools["tools<br/>right-panel tools"]
-  panels["panels<br/>Explorer"]
   popups["popups<br/>Search Everywhere…"]
   settings["settings<br/>settings modal"]
   conflict["conflict<br/>merge dialog"]
@@ -21,14 +20,12 @@ flowchart LR
   main --> settings
   pages --> app
   pages --> conflict
-  pages -->|"zones"| panels
   pages --> popups
   pages --> settings
   pages -->|"zones"| tools
   tools --> conflict
   tools --> editor
   popups --> editor
-  popups --> panels
   settings -->|"base path"| app
   settings --> editor
   conflict --> editor
@@ -71,7 +68,7 @@ flowchart LR
   class pages,tools other
 ```
 
-Diagram edges are imports of the folders, checked with a script over the `import` lines. Nearly every folder also imports `state`, `pod`, `ui`, `keys` and `i18n`: those edges are not drawn. There is no strict layering: `ui` imports `llm`, `kanban`, `panels` and `popups` (the editor area hosts them), `state` imports `console` and `settings`, and `llm` and `kanban` import each other. Modules therefore keep their top level free of calls into another folder.
+Diagram edges are imports of the folders, checked with a script over the `import` lines. Nearly every folder also imports `state`, `pod`, `ui`, `keys` and `i18n`: those edges are not drawn. There is no strict layering: `ui` imports `llm`, `kanban`, `plugins` and `popups` (the editor area hosts them), `state` imports `console` and `settings`, and `llm` and `kanban` import each other. Modules therefore keep their top level free of calls into another folder.
 
 ## Components
 
@@ -80,12 +77,11 @@ Diagram edges are imports of the folders, checked with a script over the `import
 - [`pod/`](pod/): The pod as seen by the page: `rpc.ts` (requests, pushed events, reconnection), `transport.ts` (WebSocket, or a MessagePort to the bootstrap page through a tunnel), `remote.ts` (requests to another pod from the home page), `power.ts`, `update.ts` (signed requests), `push.ts`
 - [`state/`](state/): Open project and session (tabs, split tree, tool zones), settings, git state, folder marks, the phone layout (`mobile.ts`: the view shown, the keyboard, no zoom)
 - [`pages/`](pages/): `Home`, `ProjectPage` (menu bar, rails, side panels, editor area, bottom tools), `ProjectBar`, `DeskSwitcher`, `Detached` (one panel alone)
-- [`ui/`](ui/): Editor area, ANSI colors of an output (`ansi.ts`), rendered Markdown files (`MarkdownView.tsx`) and the embedded docs (`DocView.tsx`, see `help/`), status bar, diff view (its sides from the diff sources of `diffSources.ts`), overlays (modal, prompt, pick list, context menu), toasts, icons, empty states, keyboard navigation of the toolbars and tab bars (`roving.ts`)
+- [`ui/`](ui/): Editor area (it renders the file tabs with the `fileView` of Code), the text editors of the window (`textEditors.ts`), file type icons (`fileIcons.tsx`), ANSI colors of an output (`ansi.ts`), rendered Markdown files (`MarkdownView.tsx`) and the embedded docs (`DocView.tsx`, see `help/`), status bar, diff view (its sides from the diff sources of `diffSources.ts`), overlays (modal, prompt, pick list, context menu), toasts, icons, empty states, keyboard navigation of the toolbars and tab bars (`roving.ts`)
 - [`editor/`](editor/): `Doc` (buffer, revisions, undo, file format, indentation), the completion widget's helpers (`completion.ts`: the items of the `language` service or the words of the buffer) and LSP text edits (`textEdits.ts`), `EditorView` (block rendering, Custom Highlight API, indentation guides, whitespace overlay, multiple carets, folding, soft wrap with rows read from the layout), `carets.ts` (words, occurrences), `folding.ts` (fold ranges), `indent.ts` (indentation detection), tokenizer and grammars, three-way merge, line diff, sub-word moves, find bar
 - [`keys/`](keys/): Binding table and QWERTY / AZERTY presets
 - [`help/`](help/): `topics.json`, the map from a place of the interface to a page of the docs (`path#heading`, checked by `make test`), and the `HelpLink` (**?**); the pages open in `doc` tabs (`ui/DocView.tsx`, `state/docs.ts`)
 - [`popups/`](popups/): Search Everywhere (a shell: a tab per search provider of `searchProviders.ts`, the files, symbols and actions given by the core), Recent Files and the switcher, paste from history (the history itself: `ui/clipboard.ts`)
-- [`panels/`](panels/): Explorer (with file type icons, `fileIcons.tsx`)
 - [`tools/`](tools/): The Conflicts tool (`tools.tsx`) and `InfoTool`
 - [`conflict/`](conflict/): Three-pane conflict dialog
 - [`settings/`](settings/): Settings modal and its pages: `Members`, `Lan`, `Pods`, `Sync`, `Notifications`, `Plugins` (with a project open) (remote access and account), themes (`themes.ts`)
@@ -93,7 +89,7 @@ Diagram edges are imports of the folders, checked with a script over the `import
 - [`agents/`](agents/): Agents tool: sessions of the worktrees of the window and their threads (`state.ts`, events dropped when older than the thread loaded, by `seq`), tabs, launcher, thread, permission cards (`AgentsTool.tsx`), the follow mode (`state.ts`: an edit tool call completed opens its file when `follow` is set on the session, `agents.follow`), the message box of a session (`Composer.tsx`: `llm/MessageBox.tsx` with the agent's commands, attachments prepared by `llm/attachments.ts` sent as parts, drafts per session)
 - [`questions/`](questions/): Questions tool: the list (`state.ts`, asked again on `questions.changed`), the modal one question at a time and its auto-open (not for a question whose thread is on screen: `showsQuestions`), the forms of `elicitation/create` (`Form.tsx`, also in the Agents thread)
 - [`kanban/`](kanban/): Board, ticket view, workflow actions, linked conversations, milestones and objectives
-- [`plugins/`](plugins/): The plugins of the window ([plugins.md](../../docs/design/plugins.md)): `registry.ts` (the states sent by the pod in `project.open` and `plugins.changed`, the page modules of the built-ins activated once when first enabled, their tools, tab views `plugin:<id>/<view>` and commands), `api.ts` (the `api` a module gets: `rpc` to its backend, events, `openFile`, `openView`, port forwards and previews of the core, `ui`), `types.ts`, `capabilities.ts` (capabilities as services: the types of `terminal`, `commands` and `git`, `provide` by a plugin, `capability()` for the core, `undefined` while the provider is off); one folder per built-in: `languages/` (the language servers: the client and the code actions `client.ts`, rename and formatting `refactor.ts`, the completion of the servers, the buffers announced to them `sync.ts`, the Problems and Structure tools, the Symbols provider; it provides the `language` service), `previews/` (the Port forwards and previews tool, the previews service `previews.ts`, the open forwards of the home page `OpenForwards.tsx`), `git/` (the Git tool: tabs, tree of changes, graph lanes `graph.ts`, commit detail; the git state `state.ts`, which is the `git` service; the git diff source `diff.tsx`), `search/` (the Search tool `GlobalSearch.tsx`, the text provider `text.ts`), `exec/` (the Console tool: terminals and tasks `consoles.tsx`, one xterm per console; the saved commands `commands.ts`, `CommandsModal.tsx`; it provides the `terminal` and `commands` services), `docker/` (the Docker tool: lists and polling `state.ts`, detail pane, logs with ANSI colors, disk usage; `plugin.ts` holds its `api` and its desk state, nothing else of the core is imported) `database/` (the Database explorer: connections `connections.ts`, tree, the console and table views `views.ts` whose state, the text of a console included, goes with the tab) and `hello/` (the test plugin). The tools of the enabled plugins join `toolPanels` (`pages/ProjectPage.tsx`) and the tiles; their default zone comes from `state/zones.ts` (`setPluginZones`), which keeps the place of a disabled one
+- [`plugins/`](plugins/): The plugins of the window ([plugins.md](../../docs/design/plugins.md)): `registry.ts` (the states sent by the pod in `project.open` and `plugins.changed`, the page modules of the built-ins activated once when first enabled, their tools, tab views `plugin:<id>/<view>` and commands), `api.ts` (the `api` a module gets: `rpc` to its backend, events, `openFile`, `openView`, port forwards and previews of the core, `ui`), `types.ts`, `capabilities.ts` (capabilities as services: the types of `terminal`, `commands` and `git`, `provide` by a plugin, `capability()` for the core, `undefined` while the provider is off); one folder per built-in: `files/` (locked: the Explorer, the Files tab of Search Everywhere, the files service), `code/` (locked: `FileEditor.tsx`, the view of the file tabs), `languages/` (the language servers: the client and the code actions `client.ts`, rename and formatting `refactor.ts`, the completion of the servers, the buffers announced to them `sync.ts`, the Problems and Structure tools, the Symbols provider; it provides the `language` service), `previews/` (the Port forwards and previews tool, the previews service `previews.ts`, the open forwards of the home page `OpenForwards.tsx`), `git/` (the Git tool: tabs, tree of changes, graph lanes `graph.ts`, commit detail; the git state `state.ts`, which is the `git` service; the git diff source `diff.tsx`), `search/` (the Search tool `GlobalSearch.tsx`, the text provider `text.ts`), `exec/` (the Console tool: terminals and tasks `consoles.tsx`, one xterm per console; the saved commands `commands.ts`, `CommandsModal.tsx`; it provides the `terminal` and `commands` services), `docker/` (the Docker tool: lists and polling `state.ts`, detail pane, logs with ANSI colors, disk usage; `plugin.ts` holds its `api` and its desk state, nothing else of the core is imported) `database/` (the Database explorer: connections `connections.ts`, tree, the console and table views `views.ts` whose state, the text of a console included, goes with the tab) and `hello/` (the test plugin). The tools of the enabled plugins join `toolPanels` (`pages/ProjectPage.tsx`) and the tiles; their default zone comes from `state/zones.ts` (`setPluginZones`), which keeps the place of a disabled one
 - [`i18n/`](i18n/): `t()` and the catalogs (English source strings, `languages.json`, one catalog per other language)
 
 ## Invariants and pitfalls
