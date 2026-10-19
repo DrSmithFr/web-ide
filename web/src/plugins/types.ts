@@ -55,6 +55,12 @@ export interface PluginContributions {
   viewTitle?: (tab: TabState) => string | undefined
   /** Views alone in their tile on a desk of tiles, like a tool (the Kanban board). */
   aloneViews?: string[]
+  /** Items of the status bar while a file tab has the focus (the plugin giving fileView: Code). */
+  fileStatus?: (tab: TabState) => StatusItem[]
+  /** Items of the status bar while a tab of one of the plugin's views has the focus. */
+  viewStatus?: (tab: TabState) => StatusItem[]
+  /** Items of the status bar while a tool of the plugin has the focus, by tool id. */
+  toolStatus?: Record<string, () => StatusItem[]>
   commands?: Record<string, () => void>
   /** Items of the context menu of an entry of the Explorer (Exec: a terminal here). */
   explorerItems?: (entry: ExplorerEntry) => MenuItem[]
@@ -70,6 +76,20 @@ export interface PluginContributions {
   opened?: () => void
   /** The plugin's options of a conversation of the assistant, given to its assistant tools. */
   assistantOptions?: () => unknown
+}
+
+/**
+ * An item of the status bar, on its right. Read in a memo: its fields may change with what it
+ * shows. A click runs its action, or opens its menu (its options) above it.
+ */
+export interface StatusItem {
+  id: string
+  text: string
+  icon?: string
+  title?: string
+  testid?: string
+  action?: () => void
+  menu?: () => MenuItem[]
 }
 
 /** The page module of a plugin: activated once, when the plugin is first enabled in the window. */

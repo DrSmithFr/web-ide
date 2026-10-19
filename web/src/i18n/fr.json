@@ -2230,5 +2230,6 @@
   "In {folder}": "Dans {folder}",
   "The previews are off on this project (Settings > Plugins)": "Les aperçus sont désactivés sur ce projet (Réglages > Plugins)",
   "Always on": "Toujours actif",
-  "The Kanban plugin is disabled": "Le plugin Kanban est désactivé"
+  "The Kanban plugin is disabled": "Le plugin Kanban est désactivé",
+  "Status": "Statut"
 }

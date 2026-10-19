@@ -40,7 +40,7 @@ i18n/fr.json  its own catalog (the English text is the key, as in the IDE)
 | Commands | Search Everywhere, keymap shortcuts, menus (explorer, editor, tab context menus) |
 | Settings | a JSON schema rendered as a section of the settings, synced like the others |
 | Languages | grammars (already one module per language), language server command, test patterns |
-| Decorations | explorer badges, status bar items |
+| Decorations | explorer badges (#121), status bar items of the focused tab or tool (#127) |
 
 Phase 1 opens the points the moved tools need: tool, tab view, assistant tools, commands (#113). The others open when a plugin needs them.
 
@@ -132,6 +132,12 @@ Exec (#116) is the first plugin the rest of the IDE *uses*: a dozen parts of the
 - `api.panes.closeTab`, `api.project.info` / `showWorktree`, `api.ui.Markdown` / `HelpLink`, `api.fmtSize`, `api.podPath`.
 - On the pod: the methods moved to `plugins/kanban`; the core services reach it through `Pod().Services()` (store, projects, config, keeper, the assistant's model, desks, the kanban, the token and the MCP address). The `kanban_*` tools of the assistant and the MCP stay theirs until #123, offered with `tickets` on.
 
+## What the status bar added to the API
+
+- **`StatusItem`**: `id`, `text`, `icon`, `title`, `testid`, and an `action` (a click) or a `menu` (its options, opened above the item). Read in a memo: an item changes with what it shows.
+- **Contributions**: `fileStatus(tab)` (a file tab; the plugin giving `fileView`: Code), `viewStatus(tab)` (a tab of the plugin's views: Kanban, a ticket's status, priority and size) and `toolStatus[toolId]()` (a tool in focus, in a zone or as a tab).
+- The core keeps the bar (`ui/StatusBar.tsx`): the desks on its left, the choice of the focus (`focusPart`: the active tab of the focused pane, or the tool shown in the focused zone; a phone: the editor view) and the rendering. The file items (caret, line separator, encoding, indentation, language) moved to Code (`plugins/code/status.ts`); `api.editor.cursor()` reads the caret the view sets.
+
 ## API v1
 
 Frozen with #118: `apiVersion: 1` in every manifest. An addition keeps v1; a removal or a change of what follows is a new version.
@@ -140,7 +146,7 @@ Frozen with #118: `apiVersion: 1` in every manifest. An addition keeps v1; a rem
 
 **Pod** (`pod/internal/plugins`): `Plugin{Manifest(), Register(Host)}`; `Host.Handle(method, handler)`, `Host.HandleGlobal`, `Host.AssistantTool(tool)`, `Host.Pod()`, `Host.OnProjectOpen`, `Host.OnWindows`; a `Call` carries the `Runtime` of the project, `Params`, `Lang`, the `Window` (push, held streams), `Emit` / `EmitOthers` / `EmitFamily`, the `Options` of a conversation; `Result`, `UsageError`, `CodedError`.
 
-**Page** (`web/src/plugins/api.ts`): `rpc` / `rpcIn` / `notify` / `notifyIn` / `channel`, `on`, `t` / `tn` / `fmtDate` / `fmtAgo`, `project`, `files`, `buffers`, `activeFile`, `ssh`, `desk` (its state in the desk), `provide` / `use` (capabilities), `showTool`, `tiles`, `theme`, `openFile` / `openView` / `setViewState` / `openDiff` / `openText`, `panes`, `editor`, `keys`, `transport`, `ui`. The module's `activate(api)` returns its contributions: `tools`, `views`, `fileView`, `commands`, `hosts`, `searchProviders`, `diffSources`, `explorerItems`, `fileDecorations`, `assistantOptions`, `viewTitle`, `aloneViews`, `opened`; its `home(api)` a part of the home page.
+**Page** (`web/src/plugins/api.ts`): `rpc` / `rpcIn` / `notify` / `notifyIn` / `channel`, `on`, `t` / `tn` / `fmtDate` / `fmtAgo`, `project`, `files`, `buffers`, `activeFile`, `ssh`, `desk` (its state in the desk), `provide` / `use` (capabilities), `showTool`, `tiles`, `theme`, `openFile` / `openView` / `setViewState` / `openDiff` / `openText`, `panes`, `editor`, `keys`, `transport`, `ui`. The module's `activate(api)` returns its contributions: `tools`, `views`, `fileView`, `commands`, `hosts`, `searchProviders`, `diffSources`, `explorerItems`, `fileDecorations`, `assistantOptions`, `viewTitle`, `aloneViews`, `fileStatus`, `viewStatus`, `toolStatus`, `opened`; its `home(api)` a part of the home page.
 
 **Capabilities**: `terminal` and `commands` (Exec), `git` and `worktrees` (Git), `previews` (Previews), `language` (Languages), `files` (Files), `tickets` (Kanban), `assistant` and `agents` (the core's until #123), their types in `web/src/plugins/capabilities.ts`.
 

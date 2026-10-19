@@ -10,6 +10,7 @@ import { TicketView } from './TicketView'
 import { MilestoneView } from './MilestoneView'
 import { ObjectiveView } from './ObjectiveView'
 import { blockerText } from './Lineage'
+import { viewStatus } from './status'
 import { startTicketChat, startWorkSession } from './sessions'
 import { board, ensureBoard, getTicket, openBoard, openMilestone, openObjective, openTicket, reloadBoard, roleLabels, watchBoard, statusLabels, summary, worktreeProject, type Ticket } from './state'
 
@@ -61,6 +62,7 @@ export const kanban: PluginModule = {
       views: { board: Board, ticket: TicketView, milestone: MilestoneView, objective: ObjectiveView },
       viewTitle,
       aloneViews: ['board'],
+      viewStatus,
       hosts: [NewTicketHost],
       commands: { 'kanban.open': () => openBoard() },
       opened: reloadBoard,

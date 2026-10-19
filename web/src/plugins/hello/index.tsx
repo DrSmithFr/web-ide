@@ -1,4 +1,5 @@
-// The plugin of the browser tests (pod/internal/plugins/hello): a tool calling its backend.
+// The plugin of the browser tests (pod/internal/plugins/hello): a tool calling its backend, and
+// an item of the status bar while the tool has the focus.
 import { createResource } from 'solid-js'
 import type { PluginModule } from '../types'
 
@@ -17,6 +18,9 @@ export const hello: PluginModule = {
         </div>
       )
     }
-    return { tools: { hello: { component: HelloTool } } }
+    return {
+      tools: { hello: { component: HelloTool } },
+      toolStatus: { hello: () => [{ id: 'hello', testid: 'status-hello', text: 'Hello', menu: () => [{ label: 'Hi', action: () => {} }] }] },
+    }
   },
 }

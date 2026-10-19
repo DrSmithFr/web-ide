@@ -5,7 +5,7 @@ import { createMemo, createRoot, createSignal } from 'solid-js'
 import { on, request } from '../pod/rpc'
 import { setPluginActions } from '../keys/bindings'
 import { API_VERSION, makeApi } from './api'
-import type { ExplorerEntry, PluginContributions, PluginModule, PluginState } from './types'
+import type { ExplorerEntry, PluginContributions, PluginModule, PluginState, StatusItem } from './types'
 import { setCapabilityGate } from './capabilities'
 import { setPluginProviders } from '../popups/searchProviders'
 import { setDiffSources } from '../ui/diffSources'
@@ -136,6 +136,28 @@ setAloneView((kind) => {
   const m = /^plugin:([^/]+)\/(.+)$/.exec(kind)
   return !!m && pluginEnabled(m[1]) && !!active[m[1]]?.aloneViews?.includes(m[2])
 })
+
+/**
+ * The items of the status bar for a tab (a file: the plugin giving fileView; a plugin view: its
+ * plugin) or for a tool, given by the enabled plugins.
+ */
+export function pluginStatus(target: { tab: TabState } | { tool: string }): StatusItem[] {
+  if ('tool' in target) {
+    for (const s of enabled()) {
+      const f = active[s.manifest.id].toolStatus?.[target.tool]
+      if (f) return f()
+    }
+    return []
+  }
+  const tab = target.tab
+  if (tab.kind === 'file') {
+    for (const s of enabled()) if (active[s.manifest.id].fileView) return active[s.manifest.id].fileStatus?.(tab) ?? []
+    return []
+  }
+  if (tab.kind === 'tool' && tab.tool) return pluginStatus({ tool: tab.tool })
+  const m = /^plugin:([^/]+)\//.exec(tab.kind)
+  return m && pluginEnabled(m[1]) ? (active[m[1]]?.viewStatus?.(tab) ?? []) : []
+}
 
 /** The label of a tab view, as its manifest declares it. */
 export function pluginViewLabel(kind: string) {

@@ -1,59 +1,38 @@
 // Status bar at the bottom of the window: the desks on the left (where asked: the window-level bar
-// of a project window), then the caret position (a click opens "Go to line"), then the format of
-// the focused file (line separator, encoding, indentation) and its language. A click on a format
-// item opens a menu to convert the file (saved at once) or to choose its indentation. The bar is
-// about the focused view only: when the focus is elsewhere (a tool zone, the bottom strip, a
-// console or a tool tab), the items of the file are hidden and the bar keeps its row.
-import { createMemo, Show } from 'solid-js'
-import { activeTab, docsVersion, getDoc, saveDoc } from '../state/project'
+// of a project window), then on the right the items of what has the focus, given by the plugins
+// (plugins/types.ts StatusItem): a file tab (Code: caret, format, language), a tab of a plugin
+// view (Kanban: a ticket's status, priority and size) or a tool, in a zone or as a tab. When
+// nothing in focus gives items, the bar keeps its row.
+import { createMemo, Index, Show } from 'solid-js'
+import { activeTab, session } from '../state/project'
 import { focusPart } from '../state/focus'
+import { shownIn } from '../state/zones'
 import { mobileView, phone } from '../state/mobile'
-import { settings } from '../state/settings'
-import type { Doc, FileFormat } from '../editor/doc'
-import type { Indent } from '../editor/indent'
+import { pluginStatus } from '../plugins/registry'
+import type { StatusItem } from '../plugins/types'
+import { Icon } from './icons'
 import { contextMenu, type MenuItem } from './overlay'
-import { cursorInfo } from './status'
-import { runAction, shortcutOf } from '../keys/bindings'
 import { DeskSwitcher } from './DeskSwitcher'
-import { t, tn } from '../i18n'
-
-const encodings: [string, string][] = [
-  ['utf-8', 'UTF-8'],
-  ['utf-8-bom', 'UTF-8 BOM'],
-  ['utf-16le', 'UTF-16 LE'],
-  ['utf-16be', 'UTF-16 BE'],
-  ['windows-1252', 'Windows-1252'],
-]
-const encodingName = (e: string) => encodings.find(([id]) => id === e)?.[1] ?? e
-
-export function indentName(i: Indent | null) {
-  const tabs = i ? i.tabs : !settings.editor.insertSpaces
-  return tabs ? t('Tab') : tn(i ? i.size : settings.editor.tabSize, '{n} space', '{n} spaces')
-}
-
-/** Converts the file: the new format is written to the disk with the text. */
-async function convert(d: Doc, f: Partial<FileFormat>) {
-  const before = d.format()
-  d.setFormat({ ...before, ...f })
-  if (!(await saveDoc(d))) d.setFormat(before)
-}
 
 function menuAt(e: MouseEvent, items: MenuItem[]) {
   const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
   contextMenu(new MouseEvent('contextmenu', { clientX: r.left, clientY: r.top - 4 }), items)
 }
 
+/** The items of the focus: the active tab of the focused pane, or the tool shown in the focused zone. */
+function focusedItems(): StatusItem[] {
+  const part = focusPart()
+  // On a phone, one view shows at a time: the bar is the editor's.
+  if (phone() ? mobileView() !== 'editor' : part !== 'editor') {
+    const tool = phone() ? null : shownIn(session, part as Exclude<typeof part, 'editor'>)
+    return tool ? pluginStatus({ tool }) : []
+  }
+  const tab = activeTab()
+  return tab ? pluginStatus({ tab }) : []
+}
+
 export function StatusBar(props: { desks?: boolean }) {
-  // The file the bar talks about: the one shown in the pane in focus. On a phone, one view
-  // shows at a time, so the editor shown is the one in focus.
-  const doc = createMemo(() => {
-    docsVersion()
-    if (phone() ? mobileView() !== 'editor' : focusPart() !== 'editor') return null
-    const tab = activeTab()
-    return tab?.kind === 'file' && tab.path ? getDoc(tab.path) : null
-  })
-  // The caret of the focused editor only (the signal itself is kept when the focus goes away).
-  const caret = createMemo(() => (doc() ? cursorInfo() : null))
+  const items = createMemo(focusedItems)
   return (
     <div class="status-bar" data-testid="status-bar">
       {/* The desks of the project, on the left of the bar (ui/DeskSwitcher.tsx). */}
@@ -61,62 +40,25 @@ export function StatusBar(props: { desks?: boolean }) {
         <DeskSwitcher />
       </Show>
       <span class="grow" />
-      <Show when={caret()}>
-        {(c) => (
-          <button class="sb-item" data-testid="status-cursor" title={`${t('Go to line…')} (${shortcutOf('nav.gotoLine')})`} onClick={() => runAction('nav.gotoLine')}>
-            {c().line}:{c().col}
-            {c().sel ? ` (${tn(c().sel, '{n} char', '{n} chars')})` : ''}
-          </button>
+      <Index each={items()}>
+        {(it) => (
+          <Show
+            when={it().action || it().menu}
+            fallback={
+              <span class="sb-item" data-testid={it().testid} data-status={it().id} title={it().title}>
+                {it().text}
+              </span>
+            }
+          >
+            <button class="sb-item" data-testid={it().testid} data-status={it().id} title={it().title} onClick={(e) => (it().menu ? menuAt(e, it().menu!()) : it().action!())}>
+              <Show when={it().icon}>
+                <Icon name={it().icon!} size={12} />{' '}
+              </Show>
+              {it().text}
+            </button>
+          </Show>
         )}
-      </Show>
-      <Show when={doc()}>
-        {(d) => (
-          <>
-            <button
-              class="sb-item"
-              data-testid="status-eol"
-              title={t('Line separator')}
-              onClick={(e) =>
-                menuAt(e, [
-                  { label: 'LF (Unix, macOS)', checked: d().format().eol === 'lf', disabled: d().readOnly, action: () => convert(d(), { eol: 'lf' }) },
-                  { label: 'CRLF (Windows)', checked: d().format().eol === 'crlf', disabled: d().readOnly, action: () => convert(d(), { eol: 'crlf' }) },
-                ])
-              }
-            >
-              {d().format().eol.toUpperCase()}
-            </button>
-            <button
-              class="sb-item"
-              data-testid="status-encoding"
-              title={t('File encoding')}
-              onClick={(e) =>
-                menuAt(
-                  e,
-                  encodings.map(([id, name]) => ({ label: name, checked: d().format().encoding === id, disabled: d().readOnly, action: () => convert(d(), { encoding: id }) })),
-                )
-              }
-            >
-              {encodingName(d().format().encoding)}
-            </button>
-            <button
-              class="sb-item"
-              data-testid="status-indent"
-              title={t('Indentation')}
-              onClick={(e) => {
-                const cur = d().indent()
-                const is = (tabs: boolean, size = 0) => !!cur && cur.tabs === tabs && (tabs || cur.size === size)
-                menuAt(e, [
-                  { label: t('Tab'), checked: is(true), action: () => d().chooseIndent({ tabs: true, size: 4 }) },
-                  ...[2, 4, 8].map((n) => ({ label: tn(n, '{n} space', '{n} spaces'), checked: is(false, n), action: () => d().chooseIndent({ tabs: false, size: n }) })),
-                ])
-              }}
-            >
-              {indentName(d().indent())}
-            </button>
-          </>
-        )}
-      </Show>
-      <Show when={caret()}>{(c) => <span class="sb-item">{c().lang}</span>}</Show>
+      </Index>
     </div>
   )
 }
