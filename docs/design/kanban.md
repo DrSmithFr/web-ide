@@ -32,6 +32,8 @@ The priority and the size are fixed once the development started (*In progress*,
 - **In progress**: development conversations, git and changes, how to test (written by the model when it finishes).
 - **To test**: test feedback (info, bug or new feature; 1000 characters max; checked once handled, by the model or the user; with the conversation handling it), pull request.
 
+The status bar shows the status, the priority and the size of the ticket view in focus; a click on one opens its menu to change it (a status asks its reason; the priority and the size are fixed once the development started).
+
 The ticket view lists, in one column, the sections of the status of the ticket first, then, under a rule, those of the earlier statuses, folded (each status change folds and opens them again):
 
 - **New**: description, briefing conversations, notes.

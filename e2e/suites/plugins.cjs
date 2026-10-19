@@ -10,7 +10,8 @@
 // Previews (#119) needs terminal: off (or Exec off), its tool and list_previews go. Languages
 // (#120): off, Problems, Structure, the Symbols tab and the code actions go, the editor still edits.
 // Files and Code (#121) are locked; the Explorer takes the colors of Git and the terminal of Exec.
-// Kanban (#122): off, its tool and the kanban_* tools go, a ticket tab says its plugin is off;
+// Status bar items (#127): hello's while its tool has the focus, a ticket's status, priority and
+// size changed from the bar. Kanban (#122): off, its tool and the kanban_* tools go, a ticket tab says its plugin is off;
 // a ticket tab of a desk saved before is migrated.
 const fs = require('fs')
 const path = require('path')
@@ -37,6 +38,11 @@ run(async ({ page }) => {
   assert(ids.at(-1) === 'hello', 'the plugin tool comes last in its zone: ' + ids)
   await page.click(icon)
   await page.waitForFunction(() => document.querySelector('[data-testid=hello-text]')?.textContent === 'Hello plugin from demo')
+  // Its item of the status bar, only while the tool has the focus.
+  await page.click('[data-testid=hello-text]')
+  await page.waitForSelector('[data-testid=status-bar] [data-testid=status-hello]')
+  await page.click('.pane.active').catch(() => {})
+  await page.waitForSelector('[data-testid=status-hello]', { state: 'detached' })
 
   // Its assistant tool in the MCP, run on the project of the cwd.
   assert((await tools()).includes('hello_greet'), 'hello_greet listed by the MCP')
@@ -314,6 +320,19 @@ run(async ({ page }) => {
   await page.click(`[data-testid=kanban-panel] [data-testid=ticket-card-${id}]`)
   await page.waitForSelector(`[data-testid=ticket-view] .tk-num:has-text("#${id}")`)
   assert((await page.textContent('.tab.active .tab-title')).startsWith(`#${id} Plugin ticket`), 'ticket tab titled by the plugin')
+  // The ticket in the status bar: its status, priority and size, changed through their menus.
+  await page.click('[data-testid=ticket-view] .tk-num')
+  await page.waitForSelector('[data-testid=status-ticket-status]:has-text("New")')
+  assert((await page.textContent('[data-testid=status-ticket-size]')) === 'Size not estimated', 'size in the bar')
+  await page.click('[data-testid=status-ticket-priority]')
+  await page.click('.ctx-menu .ctx-item:has-text("High priority")')
+  await page.waitForSelector('[data-testid=status-ticket-priority]:has-text("High priority")')
+  await page.click('[data-testid=status-ticket-status]')
+  await page.click('.ctx-menu .ctx-item:has-text("To do")')
+  await page.waitForSelector('.modal-small input')
+  await page.keyboard.press('Enter')
+  await page.waitForSelector('[data-testid=status-ticket-status]:has-text("To do")')
+  assert((await page.getAttribute('[data-testid=ticket-view]', 'data-status')) === 'todo', 'the view follows the status changed in the bar')
   await setPlugin('kanban', false)
   await page.waitForSelector('.rail-btn[data-id=kanban]', { state: 'detached' })
   await page.waitForSelector('.pane:has-text("The plugin of this tab is disabled")')

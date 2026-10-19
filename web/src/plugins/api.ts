@@ -36,7 +36,7 @@ import { isMarkdownPath, MarkdownView, showRaw, shownRaw } from '../ui/MarkdownV
 import { lineMarks } from '../editor/linediff'
 import { openConflict } from '../conflict/ConflictDialog'
 import { copyText } from '../ui/clipboard'
-import { setCursorInfo } from '../ui/status'
+import { cursorInfo, setCursorInfo } from '../ui/status'
 import { useEditorView } from '../ui/EditorArea'
 import { Doc } from '../editor/doc'
 import { actionOf, registerAction, runAction, shortcutOf } from '../keys/bindings'
@@ -187,7 +187,9 @@ export function makeApi(id: string) {
       Doc,
       View: EditorView,
       useView: useEditorView,
+      /** The caret of the active editor, shown in the status bar by Code: set by the view, read by its items. */
       setCursor: setCursorInfo,
+      cursor: cursorInfo,
       /** The text editor of the active tab, with its buffer (null: none, or another editor has the focus). */
       active: activeTextEditor,
       /** A view of a file registers its editor, given while it is the active one. */

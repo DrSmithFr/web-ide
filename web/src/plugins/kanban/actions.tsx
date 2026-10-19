@@ -217,7 +217,11 @@ export async function changeStatus(tk: Ticket, apply: Apply) {
     placeholder: t('New status of ticket #{id}', { id: tk.id }),
     items: statusOrder.filter((s) => s !== tk.status).map((s) => ({ label: statusLabels[s], value: s })),
   })
-  if (!to) return
+  if (to) await moveTo(tk, to, apply)
+}
+
+/** Moves a ticket to a status chosen by the user: a reason asked, Done and Abandoned confirmed. */
+export async function moveTo(tk: Ticket, to: Status, apply: Apply) {
   if (to === 'abandoned') return abandonTicket(tk, apply)
   const why = await prompt({ title: t('Ticket #{id} → {status}', { id: tk.id, status: statusLabels[to] }), label: t('Reason (optional)') })
   if (why === null) return
