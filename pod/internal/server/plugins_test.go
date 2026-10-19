@@ -10,7 +10,12 @@ import (
 
 	"github.com/DrSmithFr/web-ide/pod/internal/plugins"
 	"github.com/DrSmithFr/web-ide/pod/internal/plugins/builtin"
+	"github.com/DrSmithFr/web-ide/pod/internal/runtime"
 	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
+	"github.com/coder/websocket"
+	"sync"
+	"sync/atomic"
+	"time"
 )
 
 // The test plugin hello: its RPC method, its assistant tool (assistant and MCP) and its
@@ -88,5 +93,62 @@ func TestPluginCodedError(t *testing.T) {
 	e := toRPCError(&plugins.CodedError{Code: "db_password", Data: map[string]string{"kind": "dbpassword"}, Err: errors.New("password needed")}, "en")
 	if e.Code != "db_password" || e.Message != "password needed" || e.Data.(map[string]string)["kind"] != "dbpassword" {
 		t.Fatalf("%+v", e)
+	}
+}
+
+// hooks is a test plugin counting its lifecycle hooks.
+type hooks struct {
+	opened  atomic.Int32
+	windows []int
+	mu      sync.Mutex
+}
+
+func (h *hooks) Manifest() plugins.Manifest {
+	return plugins.Manifest{ID: "hooks", Name: "Hooks", APIVersion: plugins.APIVersion}
+}
+
+func (h *hooks) Register(host plugins.Host) {
+	host.OnProjectOpen(func(rt *runtime.Runtime) { h.opened.Add(1) })
+	host.OnWindows(func(n int) {
+		h.mu.Lock()
+		h.windows = append(h.windows, n)
+		h.mu.Unlock()
+	})
+}
+
+// The lifecycle hooks: a project opened where the plugin is enabled, the windows counted.
+func TestPluginHooks(t *testing.T) {
+	h := &hooks{}
+	reg := plugins.NewRegistry()
+	if err := reg.Add(h); err != nil {
+		t.Fatal(err)
+	}
+	s, ts := newServerWith(t, func(s *Server) { s.Plugins = reg })
+	a, _ := dial(t, ts, s.Token)
+	dir := t.TempDir()
+	id := a.call("projects.create", map[string]any{"type": "local", "path": dir})["result"].(map[string]any)["id"].(string)
+	a.call("project.open", map[string]any{"id": id})
+	if h.opened.Load() != 1 {
+		t.Fatalf("opened %d times", h.opened.Load())
+	}
+	a.call("plugins.set", map[string]any{"id": "hooks", "enabled": false})
+	a.call("project.open", map[string]any{"id": id})
+	if h.opened.Load() != 1 {
+		t.Fatal("hook of a disabled plugin called")
+	}
+	b, _ := dial(t, ts, s.Token)
+	b.c.Close(websocket.StatusNormalClosure, "")
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		h.mu.Lock()
+		w := append([]int{}, h.windows...)
+		h.mu.Unlock()
+		if len(w) >= 3 && w[0] == 1 && w[1] == 2 && w[2] == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("windows counted: %v", w)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }

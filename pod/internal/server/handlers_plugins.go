@@ -31,7 +31,10 @@ type pluginTool struct {
 // pluginSet is the state the server keeps of the plugins.
 type pluginSet struct {
 	tools []pluginTool // in the order of the registry
-	mu    sync.Mutex
+	// The lifecycle hooks of the plugins: a project opened (by plugin), the windows counted.
+	onOpen    []pluginHook
+	onWindows []func(n int)
+	mu        sync.Mutex
 	// disabled caches .ide/plugins.json per main project; written by plugins.set.
 	disabled map[string][]string
 }
@@ -281,3 +284,33 @@ func (p podLend) Broadcast(event string, data any)     { p.s.broadcast(event, da
 func (p podLend) Emit(project, event string, data any) { p.s.emitter(project)(event, data, "") }
 func (p podLend) Forwards() *forwards.Manager          { return p.s.Forwards }
 func (p podLend) Previews() *preview.Manager           { return p.s.Previews }
+
+type pluginHook struct {
+	plugin string
+	f      func(rt *runtime.Runtime)
+}
+
+func (h pluginHost) OnProjectOpen(f func(rt *runtime.Runtime)) {
+	h.s.plugins.onOpen = append(h.s.plugins.onOpen, pluginHook{h.id, f})
+}
+
+func (h pluginHost) OnWindows(f func(n int)) {
+	h.s.plugins.onWindows = append(h.s.plugins.onWindows, f)
+}
+
+// projectOpened calls the hooks of the plugins enabled on the project of rt.
+func (s *Server) projectOpened(rt *runtime.Runtime) {
+	for _, hk := range s.plugins.onOpen {
+		if s.pluginOn(rt, hk.plugin) {
+			hk.f(rt)
+		}
+	}
+}
+
+// windowsChanged tells the plugins how many windows the pod has. Called with s.mu held, so
+// that the counts arrive in order.
+func (s *Server) windowsChanged() {
+	for _, f := range s.plugins.onWindows {
+		f(len(s.clients))
+	}
+}

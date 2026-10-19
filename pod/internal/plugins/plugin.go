@@ -28,6 +28,11 @@ type Host interface {
 	HandleGlobal(method string, h Handler)
 	// Pod is what the pod lends its built-in plugins beyond one project.
 	Pod() Pod
+	// OnProjectOpen is called when a window opens a project where the plugin is enabled.
+	OnProjectOpen(f func(rt *runtime.Runtime))
+	// OnWindows is called with the number of windows of the pod each time it changes, in order;
+	// the pod is locked meanwhile: f must not call it back (it arms a timer, say).
+	OnWindows(f func(n int))
 }
 
 // Pod is the pod as a built-in plugin sees it: the projects, the events to every window, and

@@ -10,6 +10,7 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"encoding/json"
+	"time"
 
 	"github.com/DrSmithFr/web-ide/pod/internal/forwards"
 	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
@@ -42,9 +43,34 @@ func bind[T any](raw json.RawMessage) (T, error) {
 	return v, err
 }
 
+// ForwardIdle is how long the port forwards stay open once the last window of the pod has left.
+var ForwardIdle = 5 * time.Minute
+
 func (p *Plugin) Register(h plugins.Host) {
 	pod := h.Pod()
 	fw := pod.Forwards()
+	// The enabled port forwards of an SSH project open with it.
+	h.OnProjectOpen(func(rt *runtime.Runtime) {
+		if rt.Local {
+			return
+		}
+		for _, sp := range rt.ForwardSpecs() {
+			if sp.Enabled && !fw.IsOpen(rt.P.ID, sp.ID) {
+				_ = fw.Open(rt.P.ID, sp, rt.Dial) // the error shows in the state of the port forward
+			}
+		}
+	})
+	// Every port forward closes a while after the last window of the pod has left.
+	var idle *time.Timer
+	h.OnWindows(func(n int) {
+		if idle != nil {
+			idle.Stop()
+			idle = nil
+		}
+		if n == 0 {
+			idle = time.AfterFunc(ForwardIdle, fw.CloseAll)
+		}
+	})
 	state := func(rt *runtime.Runtime) []forwards.State {
 		if rt.Local {
 			return []forwards.State{}

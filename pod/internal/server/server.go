@@ -124,8 +124,6 @@ type Server struct {
 	asks askRegistry
 	// plugins: the assistant tools of the plugins and their enabling per project.
 	plugins pluginSet
-	// forwardIdle closes the port forwards once no window is left (windowsChanged).
-	forwardIdle *time.Timer
 }
 
 type handler func(ctx context.Context, c *Client, p json.RawMessage) (any, error)
