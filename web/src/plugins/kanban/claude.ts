@@ -1,11 +1,9 @@
 // Claude Code on a ticket (or a milestone): a terminal of the IDE runs `claude` with one of the prompts of
 // the MCP endpoint of the pod (docs/design/kanban.md, Claude Code). Briefing, planning and review ask
 // for Opus; development and fixes keep the default model of Claude Code.
-import { request } from '../pod/rpc'
-import { root } from '../state/project'
-import { capability } from '../plugins/capabilities'
 import type { Ticket } from './state'
 import type { ClaudeModel } from './route'
+import { capability, request, root } from './plugin'
 
 type Role = 'brief' | 'plan' | 'dev' | 'fix' | 'review'
 

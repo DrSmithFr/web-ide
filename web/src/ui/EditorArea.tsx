@@ -1,7 +1,7 @@
 // Editor area: recursive split tree (split/right, split/down), tab bar per pane, and the
 // content of each tab (file editor, SQL console, table view, read-only text).
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from 'solid-js'
-import { pluginFileView, pluginView, pluginViewLabel } from '../plugins/registry'
+import { pluginFileView, pluginView, pluginViewLabel, pluginViewTitle } from '../plugins/registry'
 import { activateTab, basename, closeTab, findLeaf, getDoc, moveTab, relPath, session, setActivePane, setSplitSizes, splitPane, type LayoutNode, type TabState, docsVersion, moveTabToDesk } from '../state/project'
 import { distinctDirs } from './tabNames'
 import { EditorView } from '../editor/view'
@@ -15,11 +15,6 @@ import { contextMenu, type MenuItem } from './overlay'
 import { toast } from './toast'
 import { StatusBar } from './StatusBar'
 import { DiffView } from './DiffView'
-import { Board } from '../kanban/Board'
-import { TicketView } from '../kanban/TicketView'
-import { MilestoneView } from '../kanban/MilestoneView'
-import { ObjectiveView } from '../kanban/ObjectiveView'
-import { board, summary } from '../kanban/state'
 import { t } from '../i18n'
 import { dropClasses, dropIndex, setDropAt } from './tabDrop'
 import { focusPart } from '../state/focus'
@@ -118,22 +113,10 @@ function deskItems(pane: string, tab: string): MenuItem[] {
 
 function tabTitle(tab: TabState) {
   if (tab.kind === 'file') return basename(tab.path ?? '')
-  if (tab.kind === 'ticket') {
-    const s = summary(tab.ticket!)
-    return s ? `#${s.id} ${s.title.length > 28 ? s.title.slice(0, 27) + '…' : s.title}` : `#${tab.ticket}`
-  }
-  if (tab.kind === 'milestone') {
-    const m = board.milestones.find((x) => x.id === tab.milestone)
-    return m ? (m.title.length > 32 ? m.title.slice(0, 31) + '…' : m.title) : t('Milestone')
-  }
-  if (tab.kind === 'objective') {
-    const o = board.objectives.find((x) => x.id === tab.objective)
-    return o ? (o.title.length > 32 ? o.title.slice(0, 31) + '…' : o.title) : t('Objective')
-  }
   if (tab.kind === 'tool') return tileTools[tab.tool!] ? t(tileTools[tab.tool!].label) : tab.tool!
   if (tab.kind === 'console') return capability('terminal')?.consoles().find((c) => c.id === tab.console)?.title ?? t('Console')
   if (tab.kind === 'doc') return tab.title ?? t('Documentation')
-  if (tab.kind.startsWith('plugin:')) return tab.title ?? t(pluginViewLabel(tab.kind) ?? tab.kind)
+  if (tab.kind.startsWith('plugin:')) return pluginViewTitle(tab) ?? tab.title ?? t(pluginViewLabel(tab.kind) ?? tab.kind)
   return tab.title ?? tab.kind
 }
 
@@ -325,18 +308,6 @@ function Pane(props: { id: string }) {
               </Match>
               <Match when={tab.kind === 'diff'}>
                 <DiffView tab={tab} paneId={props.id} />
-              </Match>
-              <Match when={tab.kind === 'kanban'}>
-                <Board />
-              </Match>
-              <Match when={tab.kind === 'ticket'}>
-                <TicketView tab={tab} paneId={props.id} />
-              </Match>
-              <Match when={tab.kind === 'milestone'}>
-                <MilestoneView tab={tab} paneId={props.id} />
-              </Match>
-              <Match when={tab.kind === 'objective'}>
-                <ObjectiveView tab={tab} />
               </Match>
               <Match when={tab.kind === 'tool'}>
                 <div class="tile-tool panel-tile" data-tool={tab.tool}>

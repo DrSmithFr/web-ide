@@ -2,6 +2,8 @@
 
 Each project has a kanban, a tool of the IDE that is also where the user and the AIs work together: tickets are written, specified, planned, developed and tested through linked conversations of the assistant.
 
+The kanban is a built-in plugin ([plugins.md](plugins.md#what-kanban-added-to-the-api)), enabled by default and turned off per project in *Settings → Plugins*: its RPC methods are in `pod/internal/plugins/kanban` (the base and the git operations of a ticket in `pod/internal/kanban`), its page in `web/src/plugins/kanban`. It needs the `terminal` (Exec) and `worktrees` (Git) capabilities; off, the `kanban_*` tools are refused and the ticket parts of the assistant and the project bar go.
+
 ## Storage
 
 - A SQLite base that is not versioned: `<project>/.ide/kanban.db` for a local project, `~/.web-ide/kanban/<project>.db` for an SSH one (like the conversations). `.ide/.gitignore` ignores the whole folder (`*`), the base and the worktrees included.

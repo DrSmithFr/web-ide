@@ -1,11 +1,6 @@
 // Workflow of a ticket: the buttons of each status, its linked conversations and its git
 // state (branch, worktree, changes against the base).
-import { capability } from '../plugins/capabilities'
 import { createResource, createSignal, For, Show } from 'solid-js'
-import { Icon } from '../ui/icons'
-import { pick, prompt } from '../ui/overlay'
-import { errorToast } from '../ui/toast'
-import { openFile, project, root, showWorktree } from '../state/project'
 import {
   abortGit, continueGit, filePatch, finishTicket, gitInfo, inWorktreeOf, mergeTicket, moveTicket, openPR, rebaseTicket, roleLabels, ticketDiff, ticketVersion, unlinkChat, updateTicket,
   statusLabels, statusOrder, validateStep, workTime, worktreeProject, type ChatRole, type Complexity, type Diff, type GitInfo, type GitOpState, type Status, type Ticket,
@@ -16,7 +11,7 @@ import { blockerText } from './Lineage'
 import { runClaude } from './claude'
 import { hardest, tierOf, type Tier } from './route'
 import { Section, type Apply } from './TicketView'
-import { t, tn } from '../i18n'
+import { capability, errorToast, Icon, openFile, pick, project, prompt, root, showWorktree, t, tn } from './plugin'
 
 export interface ActionButton {
   label: string

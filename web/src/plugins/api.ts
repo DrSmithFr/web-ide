@@ -1,9 +1,12 @@
 // The API a plugin's page module receives (docs/design/plugins.md): the only door to the core,
 // so that a built-in plugin uses nothing an external one could not.
 import { notifyIn, notifyOn, on, openChannel, request, requestIn, type Channel } from '../pod/rpc'
-import { fmtAgo, fmtDate, t, tn } from '../i18n'
+import { fmtAgo, fmtDate, fmtSize, t, tn } from '../i18n'
+import { podPath } from '../app/base'
+import { Markdown } from '../llm/parts'
+import { HelpLink } from '../help/HelpLink'
 import { FileIcon } from '../ui/fileIcons'
-import { activeTab, attached, basename, docError, docsVersion, fileUri, loadDoc, reveal, saveCursor, saveDoc, findLeaf, getDoc, home, onBufferClose, onBufferOpen, onBufferSave, openBuffers, pathFromUri, isLocal, mutate, openFile, openTab, openTextTab, project, relPath, root, session, setActivePane, type TabState } from '../state/project'
+import { activeTab, attached, basename, closeTab, docError, leaves, showWorktree, docsVersion, fileUri, loadDoc, reveal, saveCursor, saveDoc, findLeaf, getDoc, home, onBufferClose, onBufferOpen, onBufferSave, openBuffers, pathFromUri, isLocal, mutate, openFile, openTab, openTextTab, project, relPath, root, session, setActivePane, type TabState } from '../state/project'
 import { showTool } from '../state/zones'
 import { detachTab, openTile, tileMode } from '../state/tiles'
 import { phone } from '../state/mobile'
@@ -63,13 +66,19 @@ export function makeApi(id: string) {
     tn,
     fmtDate,
     fmtAgo,
+    fmtSize,
+    /** The path of a page of the pod (the page may run under a gateway prefix). */
+    podPath,
     openFile,
     /** The project of the window: local, or on an SSH host; id: its main project (events carry it). */
     project: {
       isLocal,
       id: () => home()?.id,
-      /** The name of the project shown. */
+      /** The name of the project shown, and all it is (its parent, its ticket for a worktree). */
       name: () => project()?.name,
+      info: project,
+      /** Shows a worktree of the project in the window. */
+      showWorktree,
       /** The worktree shown in the window (the project itself, or one of its worktrees), and its root. */
       current: () => project()?.id,
       root,
@@ -168,6 +177,10 @@ export function makeApi(id: string) {
     panes: {
       isActive: (paneId: string, tabId: string) => session.activePane === paneId && findLeaf(session.layout, paneId)?.active === tabId,
       activate: setActivePane,
+      /** Closes a tab wherever it is. */
+      closeTab: (tabId: string) => {
+        for (const l of leaves()) if (l.tabs.includes(tabId)) closeTab(l.id, tabId, true)
+      },
     },
     /** The text editor of the IDE, for a view editing a text of its own (a SQL console). */
     editor: {
@@ -204,7 +217,7 @@ export function makeApi(id: string) {
     keys: { register: registerAction, shortcut: shortcutOf, actionOf, run: runAction, setDynamic: setDynamicActions },
     /** The transport of the page: in the tunnel of the relay, or a WebSocket to the pod. */
     transport: { inTunnel },
-    ui: { fuzzy, EmptyState, Icon, FileIcon, Modal, toast, errorToast, contextMenu, prompt, pick, copyText, parseAnsi, stripAnsi, WorktreeChip, tabDrop: { dropClasses, dropIndex, moveItem, setDropAt } },
+    ui: { Markdown, HelpLink, fuzzy, EmptyState, Icon, FileIcon, Modal, toast, errorToast, contextMenu, prompt, pick, copyText, parseAnsi, stripAnsi, WorktreeChip, tabDrop: { dropClasses, dropIndex, moveItem, setDropAt } },
   }
 }
 

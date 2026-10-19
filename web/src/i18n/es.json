@@ -2229,5 +2229,6 @@
   "Table": "Tabla",
   "In {folder}": "En {folder}",
   "The previews are off on this project (Settings > Plugins)": "Las vistas previas están desactivadas en este proyecto (Ajustes > Plugins)",
-  "Always on": "Siempre activo"
+  "Always on": "Siempre activo",
+  "The Kanban plugin is disabled": "El plugin Kanban está desactivado"
 }

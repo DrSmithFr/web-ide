@@ -2,11 +2,6 @@
 // here), feedback, briefing conversations, notes and history; only the user validates it
 // (docs/design/kanban.md). Also the milestone of a ticket in the ticket view.
 import { createResource, createSignal, For, Show } from 'solid-js'
-import { Icon } from '../ui/icons'
-import { contextMenu, prompt } from '../ui/overlay'
-import { errorToast } from '../ui/toast'
-import { Markdown } from '../llm/parts'
-import { closeTab, leaves, openFile, root, type TabState } from '../state/project'
 import { board, ensureBoard, eventText, feedbackLabels, getTicket, moveTicket, openMilestone, openTicket, statusLabels, statusOrder, ticketVersion, updateTicket, type Complexity, type FeedbackKind, type Summary, type Ticket } from './state'
 import {
   addMilestoneNote, createMilestone, deleteMilestone, deleteMilestoneNote, feedbackTicket, getMilestone, milestoneFeedbackOp, milestoneStateNames, milestoneVersion, setMilestoneState, storyOp, updateMilestone, validateMilestone,
@@ -18,13 +13,14 @@ import { MilestoneObjectiveSelect } from './ObjectiveView'
 import { openTicketChat, startMilestoneBriefing } from './sessions'
 import { ActionBtn, ComplexitySelect, Count, EditableMarkdown, EditableText, Section, tooLong } from './TicketView'
 import { MAX_DESCRIPTION, MAX_NOTE } from './state'
-import { fmtDate, t } from '../i18n'
 import './kanban.css'
+import { api, contextMenu, errorToast, fmtDate, Icon, Markdown, openFile, prompt, root, t } from './plugin'
+import type { TabState } from '../api'
 
 export type MApply = (p: Promise<Milestone>) => Promise<void>
 
 export function MilestoneView(props: { tab: TabState; paneId: string }) {
-  const id = props.tab.milestone!
+  const id = (props.tab.state as { milestone: number }).milestone
   ensureBoard()
   const [ms, { mutate }] = createResource(
     () => milestoneVersion(id) + 1,
@@ -69,7 +65,7 @@ function MilestoneBody(props: { ms: Milestone; apply: MApply; tabId: string }) {
     if (!confirm(t('Delete the milestone “{title}”? Its tickets stay.', { title: ms().title }))) return
     try {
       await deleteMilestone(ms().id)
-      for (const l of leaves()) if (l.tabs.includes(props.tabId)) closeTab(l.id, props.tabId, true)
+      api.panes.closeTab(props.tabId)
     } catch (e) {
       errorToast(e)
     }

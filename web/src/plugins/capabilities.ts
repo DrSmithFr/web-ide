@@ -161,6 +161,62 @@ export interface FilesService {
   createIn(dir: string, isDir: boolean): Promise<void>
 }
 
+/** A ticket as the rest of the IDE sees it. */
+export interface TicketSummary {
+  id: number
+  title: string
+  status: 'new' | 'todo' | 'in_progress' | 'to_test' | 'done' | 'abandoned'
+  branch?: string
+  worktree?: string
+}
+export type TicketRole = 'briefing' | 'plan' | 'dev' | 'correction' | 'resolve'
+export interface TicketBlocker {
+  id: number
+  kind: string
+}
+
+/** tickets (the Kanban plugin): what the assistant, the Orchestrator and the project bar show of the tickets. */
+export interface TicketsService {
+  /** The tickets of the kanban of the project (loaded by ensure, then kept up to date). */
+  tickets: () => TicketSummary[]
+  ensure(): void
+  summary(id: number): TicketSummary | undefined
+  /** A whole ticket with its blockers; the Orchestrator starts its work. */
+  get(id: number): Promise<TicketSummary & { blockers?: TicketBlocker[] }>
+  open(id: number): void
+  openBoard(): void
+  openMilestone(id: number): void
+  openObjective(id: number): void
+  /** A conversation of a role on a ticket (the plan); the development session of a ticket. */
+  startChat(ticket: TicketSummary, role: TicketRole): Promise<void>
+  startWork(ticket: TicketSummary, role: TicketRole, adoptedBy?: string): Promise<void>
+  blockerText(b: TicketBlocker): string
+  statusLabel(status: TicketSummary['status']): string
+  roleLabel(role: TicketRole): string
+  /** The worktree of a ticket (its project). */
+  worktreeProject(id: number): Promise<{ project: string }>
+}
+
+/** assistant: the conversation shown in the window and its start (the core's until AI is a plugin, #123). */
+export interface AssistantService {
+  chat: () => { id: string; ticket?: { id: number; role: TicketRole } }
+  config: () => { server: string; model: string }
+  loadConfig(): Promise<void>
+  /** Starts a new conversation shown in the window, set as given (its mode, its ticket…). */
+  newChat(o: Record<string, unknown>): void
+  send(text: string): Promise<void>
+  openChat(id: string): Promise<void>
+}
+
+/** agents: the Agents tool (the core's until AI is a plugin, #123). */
+export interface AgentsService {
+  catalog(project?: string): Promise<{ agents: { id: string; name: string; installed: boolean }[]; local: boolean }>
+  /** Shows a session in the Agents tool. */
+  show(session: string): void
+  /** The work time and cost of the agents on a ticket. */
+  TicketStats: (props: { ticket: number }) => JSX.Element
+}
+
 export interface Capabilities {
   terminal: TerminalService
   commands: CommandsService
@@ -168,6 +224,9 @@ export interface Capabilities {
   previews: PreviewsService
   language: LanguageService
   files: FilesService
+  tickets: TicketsService
+  assistant: AssistantService
+  agents: AgentsService
 }
 
 // The implementations, by capability, and the plugin providing each.
@@ -187,5 +246,5 @@ export function provide<K extends keyof Capabilities>(plugin: string, name: K, i
 /** A capability of the project, undefined while its provider is off (reactive). */
 export function capability<K extends keyof Capabilities>(name: K): Capabilities[K] | undefined {
   const by = services.by[name]
-  return by && enabledNow(by) ? (services.impl[name] as Capabilities[K]) : undefined
+  return by && (by === 'core' || enabledNow(by)) ? (services.impl[name] as Capabilities[K]) : undefined
 }

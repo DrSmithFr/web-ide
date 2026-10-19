@@ -51,6 +51,10 @@ export interface PluginContributions {
   fileView?: (props: { tab: TabState; paneId: string }) => JSX.Element
   /** Tab views, opened as tabs of kind plugin:<plugin>/<view>. */
   views?: Record<string, (props: { tab: TabState; paneId: string }) => JSX.Element>
+  /** The title of a tab of one of these views, from its state (the label of the manifest otherwise). */
+  viewTitle?: (tab: TabState) => string | undefined
+  /** Views alone in their tile on a desk of tiles, like a tool (the Kanban board). */
+  aloneViews?: string[]
   commands?: Record<string, () => void>
   /** Items of the context menu of an entry of the Explorer (Exec: a terminal here). */
   explorerItems?: (entry: ExplorerEntry) => MenuItem[]

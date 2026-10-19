@@ -1,9 +1,11 @@
 // Routing of the sessions of a ticket by its complexity (docs/design/kanban.md): each level has an
 // effort of the assistant and a model of Claude Code. The click of a session
 // button runs the level recommended by the complexity; its arrow offers all of them.
-import type { Effort } from '../llm/state'
 import type { Complexity } from './state'
-import { t } from '../i18n'
+import { t } from './plugin'
+
+/** The efforts of the assistant (the AI plugin's own type, #123). */
+export type Effort = 'xhigh' | 'medium' | 'low'
 
 export type ClaudeModel = 'opus' | 'sonnet' | 'haiku'
 

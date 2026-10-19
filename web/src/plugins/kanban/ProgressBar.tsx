@@ -1,5 +1,5 @@
 import { Show } from 'solid-js'
-import { t } from '../i18n'
+import { t } from './plugin'
 
 // The progress of a milestone or an objective: the finished tickets, then the ones to test, over
 // all its tickets.

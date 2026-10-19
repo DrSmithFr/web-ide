@@ -1,15 +1,9 @@
 // A ticket developed by an ACP agent (kanban setting devAgent): its session of the Agents tool
 // in the worktree, started or prompted by the pod (kanban.agent), opened from the ticket.
 import { createResource, Show } from 'solid-js'
-import { mutate, project, showWorktree } from '../state/project'
-import { showTool } from '../state/zones'
-import { request } from '../pod/rpc'
-import { setActive } from '../agents/state'
-import { errorToast } from '../ui/toast'
-import { Icon } from '../ui/icons'
-import { t } from '../i18n'
 import { board, ticketVersion, type Ticket } from './state'
 import { Section } from './TicketView'
+import { api, capability, errorToast, Icon, project, request, showWorktree, t } from './plugin'
 
 /** The ACP agent that develops the tickets ('' for the assistant). */
 export const devAgent = () => (board.meta.devAgent && board.meta.devAgent !== 'assistant' ? board.meta.devAgent : '')
@@ -24,8 +18,8 @@ interface Found {
 /** Shows a session of a worktree in this window: the worktree, the Agents tool, its tab. */
 async function showSession(projectId: string, session: string) {
   if (project()?.id !== projectId) await showWorktree(projectId)
-  mutate((s) => showTool(s, 'agents'))
-  setActive(session)
+  api.showTool('agents')
+  capability('agents')?.show(session)
 }
 
 /** Gives the ticket to the development agent (its session opened with the briefing of the role,

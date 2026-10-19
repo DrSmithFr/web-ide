@@ -1,8 +1,8 @@
 // Milestones of the kanban (docs/design/kanban.md): the tickets of one feature, across
 // lineages, with its spec, user stories and feedback; only the user validates one.
 import { createStore } from 'solid-js/store'
-import { request } from '../pod/rpc'
 import type { By, ChatRole, Complexity, Feedback, FeedbackKind, Note, Summary } from './state'
+import { request } from './plugin'
 
 export type MilestoneState = 'open' | 'validated' | 'abandoned'
 

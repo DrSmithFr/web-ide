@@ -5,9 +5,7 @@ import { Icon } from '../ui/icons'
 import { errorToast } from '../ui/toast'
 import { request } from '../pod/rpc'
 import { t } from '../i18n'
-import { getTicket, openTicket } from '../kanban/state'
-import { blockerText } from '../kanban/Lineage'
-import { startTicketChat, startWorkSession } from '../kanban/sessions'
+import { capability } from '../plugins/capabilities'
 import { openChat } from './assistant'
 import { chat, chatList, type ActionCard as Card, type ChatMessage } from './state'
 
@@ -26,15 +24,17 @@ export function ActionCard(props: { msg: ChatMessage; index: number }) {
         await openChat(c.chat!)
         return
       }
-      const tk = await getTicket(c.ticket!)
+      const k = capability('tickets')
+      if (!k) throw new Error(t('The Kanban plugin is disabled'))
+      const tk = await k.get(c.ticket!)
       switch (c.kind) {
         case 'open_ticket':
           await record('done', t('opened'))
-          openTicket(tk.id)
+          k.open(tk.id)
           return
         case 'generate_plan':
           await record('done', t('plan requested'))
-          await startTicketChat(tk, 'plan')
+          await k.startChat(tk, 'plan')
           return
         case 'start_dev':
           if (tk.status !== 'todo' && tk.status !== 'in_progress') {
@@ -42,12 +42,12 @@ export function ActionCard(props: { msg: ChatMessage; index: number }) {
             return
           }
           if (tk.blockers?.length) {
-            await record('failed', t('Cannot start yet: {blockers}', { blockers: tk.blockers.map(blockerText).join(', ') }))
+            await record('failed', t('Cannot start yet: {blockers}', { blockers: tk.blockers.map(k.blockerText).join(', ') }))
             return
           }
           await record('done', t('development started'))
           // The Orchestrator follows the development it started.
-          await startWorkSession(tk, 'dev', undefined, false, chat.id)
+          await k.startWork(tk, 'dev', chat.id)
       }
     } catch (e) {
       errorToast(e)

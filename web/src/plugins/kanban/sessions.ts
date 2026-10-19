@@ -1,14 +1,10 @@
 // Conversations of the assistant linked to a ticket: briefing and plan in the project,
 // development and corrections in the worktree of the ticket (docs/design/kanban.md).
-import { mutate, project, showWorktree } from '../state/project'
-import { RpcError } from '../pod/rpc'
-import { toast, errorToast } from '../ui/toast'
-import { chat, config, loadConfig, resetChat, setChat, type ChatRole, type Effort } from '../llm/state'
-import { openChat, send } from '../llm/assistant'
-import { feedbackOp, inWorktreeOf, moveTicket, roleLabels, startWork, worktreeProject, type Feedback, type Ticket } from './state'
-import { t } from '../i18n'
+import { feedbackOp, inWorktreeOf, moveTicket, roleLabels, startWork, worktreeProject, type ChatRole, type Feedback, type Ticket } from './state'
 import { devAgent, startAgentSession } from './agentSession'
+import type { Effort } from './route'
 import { linkMilestoneChat, type Milestone } from './milestones'
+import { api, capability, errorToast, project, showWorktree, t, toast } from './plugin'
 
 const firstMessage: Record<ChatRole, (tk: Ticket, f?: Feedback) => string> = {
   briefing: (k) => t("Let's do the briefing of ticket #{id} “{title}”: help me clarify it.", { id: k.id, title: k.title }),
@@ -25,23 +21,25 @@ const firstMessage: Record<ChatRole, (tk: Ticket, f?: Feedback) => string> = {
 const linkFeedback = (tk: Ticket, f: Feedback | undefined, chatId: string) => (f ? feedbackOp(tk.id, { op: 'chat', id: f.id, chatId }).catch(() => {}) : undefined)
 
 function showAssistant() {
-  mutate((s) => (s.right.panel = 'assistant'))
+  api.showTool('assistant')
 }
+
+/** The assistant of the window (a service of the core until AI is a plugin). */
+const assistant = () => capability('assistant')!
 
 /** Starts a conversation linked to a ticket in this window, with its first message (adoptedBy: the Orchestrator whose card started it, which follows it). */
 /** effort: the one of the complexity of the ticket for this session (else the options of the user). */
 export async function startTicketChat(tk: Ticket, role: ChatRole, text?: string, feedback?: Feedback, adoptedBy?: string, effort?: 'auto' | Effort) {
-  resetChat()
-  void linkFeedback(tk, feedback, chat.id)
-  setChat({ adoptedBy, ticket: { id: tk.id, role, ...(feedback ? { feedback: feedback.id } : {}), ...(effort ? { effort } : {}) }, mode: role === 'briefing' ? 'briefing' : role === 'plan' ? 'plan' : 'build', title: `#${tk.id} ${roleLabels[role]} · ${tk.title}`.slice(0, 80) })
+  assistant().newChat({ adoptedBy, ticket: { id: tk.id, role, ...(feedback ? { feedback: feedback.id } : {}), ...(effort ? { effort } : {}) }, mode: role === 'briefing' ? 'briefing' : role === 'plan' ? 'plan' : 'build', title: `#${tk.id} ${roleLabels[role]} · ${tk.title}`.slice(0, 80) })
+  void linkFeedback(tk, feedback, assistant().chat().id)
   showAssistant()
   try {
-    await loadConfig()
-    if (!config.server || !config.model) {
+    await assistant().loadConfig()
+    if (!assistant().config().server || !assistant().config().model) {
       toast(t('Choose a server and a model in the assistant, then try again.'), 'warn')
       return
     }
-    await send(text ?? firstMessage[role](tk, feedback), [], [])
+    await assistant().send(text ?? firstMessage[role](tk, feedback))
   } catch (e) {
     errorToast(e)
   }
@@ -50,18 +48,17 @@ export async function startTicketChat(tk: Ticket, role: ChatRole, text?: string,
 /** A Briefing conversation on a milestone: linked to it, it refines it with kanban_milestone
  *  (stories, description) and writes its tickets. */
 export async function startMilestoneBriefing(ms: Milestone) {
-  resetChat()
   const title = `${t('Milestone')} · ${ms.title}`.slice(0, 80)
-  setChat({ mode: 'briefing', title })
+  assistant().newChat({ mode: 'briefing', title })
   showAssistant()
   try {
-    await linkMilestoneChat(ms.id, chat.id, title)
-    await loadConfig()
-    if (!config.server || !config.model) {
+    await linkMilestoneChat(ms.id, assistant().chat().id, title)
+    await assistant().loadConfig()
+    if (!assistant().config().server || !assistant().config().model) {
       toast(t('Choose a server and a model in the assistant, then try again.'), 'warn')
       return
     }
-    await send(t('Let\'s do the briefing of milestone {id} “{title}” (kanban_milestone action get): help me clarify it, write its user stories, then its tickets.', { id: ms.id, title: ms.title }), [], [])
+    await assistant().send(t('Let\'s do the briefing of milestone {id} “{title}” (kanban_milestone action get): help me clarify it, write its user stories, then its tickets.', { id: ms.id, title: ms.title }))
   } catch (e) {
     errorToast(e)
   }
@@ -70,9 +67,9 @@ export async function startMilestoneBriefing(ms: Milestone) {
 /** Opens a conversation of a ticket in the assistant of this window. */
 export async function openTicketChat(chatId: string) {
   showAssistant()
-  if (chat.id === chatId) return
+  if (assistant().chat().id === chatId) return
   try {
-    await openChat(chatId)
+    await assistant().openChat(chatId)
   } catch (e) {
     errorToast(e)
   }
@@ -89,7 +86,7 @@ export async function startDevelopment(tk: Ticket, force = false): Promise<boole
     target = (await startWork(tk.id, '', force)).project
   } catch (e) {
     const msg = (e as Error).message
-    if (e instanceof RpcError && e.code === 'not_git' && confirm(t('{error}.\n\nDevelop in the project folder, without branch or worktree?', { error: msg }))) {
+    if ((e as { code?: string }).code === 'not_git' && confirm(t('{error}.\n\nDevelop in the project folder, without branch or worktree?', { error: msg }))) {
       if (tk.status === 'todo') await moveTicket(tk.id, 'in_progress', 'user', '', force).catch(() => {})
       return true
     }

@@ -2,9 +2,9 @@
 // order. A milestone says what, an objective says when: it takes tickets of several milestones
 // and lone ones. Only the user reaches, abandons or reorders one.
 import { createStore } from 'solid-js/store'
-import { request } from '../pod/rpc'
 import type { MilestoneSummary } from './milestones'
 import type { Note, Summary } from './state'
+import { request } from './plugin'
 
 export type ObjectiveState = 'open' | 'reached' | 'abandoned'
 

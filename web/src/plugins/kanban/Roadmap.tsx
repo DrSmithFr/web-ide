@@ -2,14 +2,12 @@
 // a video editor, to see at a glance what can start and how big the work ahead is. Read
 // only: a click opens the ticket.
 import { createMemo, For, Show } from 'solid-js'
-import { Icon } from '../ui/icons'
-import { EmptyState } from '../ui/EmptyState'
 import { layoutRoadmap, type Block, type BlockState } from './roadmap'
 import { board, openTicket, sizeNames, statusLabels, type Summary } from './state'
 import { milestoneMatch, type MilestoneFilter } from './milestones'
 import { objectiveMatch, type ObjectiveFilter } from './objectives'
 import { blockerText } from './Lineage'
-import { t } from '../i18n'
+import { EmptyState, Icon, t } from './plugin'
 
 /** Pixels of one size unit and of one row. */
 const UNIT = 56

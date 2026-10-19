@@ -1,11 +1,9 @@
 // Side panel of the kanban: the open tickets of the project, grouped by status.
 import { For, onMount, Show } from 'solid-js'
-import { Icon } from '../ui/icons'
-import { EmptyState } from '../ui/EmptyState'
 import { Card } from './Board'
 import { board, ensureBoard, openBoard, refreshBoard, setNewTicketOpen, statusLabels, type Status } from './state'
-import { t } from '../i18n'
 import './kanban.css'
+import { EmptyState, Icon, t } from './plugin'
 
 const shown: Status[] = ['in_progress', 'to_test', 'todo', 'new']
 

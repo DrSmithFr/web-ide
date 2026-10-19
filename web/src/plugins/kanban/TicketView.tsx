@@ -3,12 +3,7 @@
 // how to test, feedback and pull request); lineage, linked files, attachments and history
 // aside, and the buttons that move it on (docs/design/kanban.md).
 import { createEffect, createMemo, createResource, createSignal, For, type JSX, on, Show } from 'solid-js'
-import { Icon } from '../ui/icons'
-import { contextMenu, fuzzy, pick, type MenuItem } from '../ui/overlay'
-import { errorToast } from '../ui/toast'
-import { Markdown } from '../llm/parts'
-import { request } from '../pod/rpc'
-import { basename, closeTab, leaves, openFile, relPath, root, type TabState } from '../state/project'
+import { Dynamic } from 'solid-js/web'
 import {
   addAttachment, addNote, eventText, attachmentBlob, deleteAttachment, deleteNote, deleteTicket, ensureBoard, feedbackLabels, feedbackOp, getTicket, goalOp,
   moveTicket, priorityLabels, sizeNames, statusLabels, ticketVersion, updateTicket,
@@ -22,12 +17,12 @@ import { TicketAgentSession } from './agentSession'
 import { LineageSection } from './Lineage'
 import { MilestoneReminder, MilestoneSelect } from './MilestoneView'
 import { ObjectiveSelect } from './ObjectiveView'
-import { TicketAgentStats } from '../agents/stats'
-import { fmtDate, fmtSize, t } from '../i18n'
 import './kanban.css'
+import { api, basename, capability, contextMenu, errorToast, fmtDate, fmtSize, fuzzy, Icon, Markdown, openFile, pick, relPath, request, root, t } from './plugin'
+import type { MenuItem, TabState } from '../api'
 
 export function TicketView(props: { tab: TabState; paneId: string }) {
-  const id = props.tab.ticket!
+  const id = (props.tab.state as { ticket: number }).ticket
   ensureBoard()
   const [ticket, { mutate: setTicket }] = createResource(
     () => ticketVersion(id) + 1,
@@ -74,7 +69,7 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
     if (!confirm(t('Delete ticket #{id} for good?', { id: tk().id }))) return
     try {
       await deleteTicket(tk().id)
-      for (const l of leaves()) if (l.tabs.includes(props.tabId)) closeTab(l.id, props.tabId, true)
+      api.panes.closeTab(props.tabId)
     } catch (e) {
       errorToast(e)
     }
@@ -198,7 +193,7 @@ function TicketBody(props: { tk: Ticket; apply: Apply; paneId: string; tabId: st
           <MilestoneSelect tk={tk()} apply={props.apply} />
           <ObjectiveSelect tk={tk()} apply={props.apply} />
           <span class="muted small">{t('created on {date}', { date: fmtDate(tk().created) })}</span>
-          <TicketAgentStats ticket={tk().id} />
+          <Show when={capability('agents')}>{(a) => <Dynamic component={a().TicketStats} ticket={tk().id} />}</Show>
           <span class="grow" />
           <For each={buttons().filter((b) => !b.more)}>{(b) => <ActionBtn b={b} />}</For>
           <button

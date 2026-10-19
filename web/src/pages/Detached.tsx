@@ -1,13 +1,13 @@
 // Detached windows: one panel alone, without the rest of the chrome. Each window is one more
 // WebSocket client of the same pod session; the shared buffers keep them in sync.
-import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js'
+import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js'
 import { Dynamic } from 'solid-js/web'
 import { project, closeProject, reopenProject, panelAliases } from '../state/project'
 import { EditorArea } from '../ui/EditorArea'
 import { StatusBar } from '../ui/StatusBar'
 import { capability } from '../plugins/capabilities'
-import { refreshPlugins } from '../plugins/registry'
-import { NewTicketHost } from '../kanban/Board'
+import { pluginHosts, refreshPlugins } from '../plugins/registry'
+import '../plugins/coreServices'
 import { openWithAuth, toolPanels, useProjectActions, PodStatus } from './ProjectPage'
 import { on as onPod } from '../pod/rpc'
 import { t } from '../i18n'
@@ -79,7 +79,7 @@ export function DetachedTool(props: { id: string; toolId: string }) {
         <div class="tool-full">
           <Dynamic component={tool()!.component} />
         </div>
-        <NewTicketHost />
+        <For each={pluginHosts()}>{(Host) => <Host />}</For>
       </Show>
     </Frame>
   )
