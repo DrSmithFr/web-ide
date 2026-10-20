@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/DrSmithFr/web-ide/pod/caps"
+
 	"github.com/DrSmithFr/web-ide/plugins/languages/internal/lsp"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 )
 
@@ -24,7 +25,7 @@ func serversOf(rt *runtime.Runtime) *lsp.Manager {
 	}).(servers).Manager
 }
 
-// language is the language capability (plugins.Language) the plugin provides.
+// language is the language capability (caps.Language) the plugin provides.
 type language struct{}
 
 func (language) LangOf(p string) string     { return lsp.LangOf(p) }
@@ -39,10 +40,10 @@ func (language) Request(ctx context.Context, rt *runtime.Runtime, lang, method s
 	return serversOf(rt).Request(ctx, lang, method, params)
 }
 
-func (language) Diagnostics(rt *runtime.Runtime, uri string) ([]plugins.Diagnostic, int) {
+func (language) Diagnostics(rt *runtime.Runtime, uri string) ([]caps.Diagnostic, int) {
 	return serversOf(rt).Diagnostics(uri)
 }
 
-func (language) AllDiagnostics(rt *runtime.Runtime) map[string][]plugins.Diagnostic {
+func (language) AllDiagnostics(rt *runtime.Runtime) map[string][]caps.Diagnostic {
 	return serversOf(rt).AllDiagnostics()
 }

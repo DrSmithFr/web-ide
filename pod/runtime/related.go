@@ -7,8 +7,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/DrSmithFr/web-ide/pod/search"
 )
 
 // Files lists the project files, cached for a few seconds.
@@ -22,9 +20,9 @@ func (r *Runtime) Files(ctx context.Context) ([]string, error) {
 	var files []string
 	var err error
 	if r.Local {
-		files, err = search.FilesLocal(ctx, r.Root)
+		files, err = listLocal(ctx, r.Root)
 	} else {
-		files, err = search.FilesRemote(ctx, r.Runner, r.Root)
+		files, err = listRemote(ctx, r.Runner, r.Root)
 	}
 	if err != nil {
 		return nil, err

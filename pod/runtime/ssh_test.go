@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/DrSmithFr/web-ide/pod/projects"
-	"github.com/DrSmithFr/web-ide/pod/search"
 	"github.com/DrSmithFr/web-ide/pod/sshtest"
 	"github.com/DrSmithFr/web-ide/pod/sshx"
 	"github.com/DrSmithFr/web-ide/pod/store"
@@ -68,10 +67,6 @@ func TestSSHProject(t *testing.T) {
 	out, err := rt.Runner.Output(ctx, []string{"echo", "it's", "ok"}, dir)
 	if err != nil || strings.TrimSpace(string(out)) != "it's ok" {
 		t.Fatalf("exec = %q %v", out, err)
-	}
-	r, err := search.Remote(ctx, rt.Runner, dir, search.Options{Query: "sftp"})
-	if err != nil || len(r.Matches) != 1 || r.Matches[0].Line != 1 {
-		t.Fatalf("remote search = %+v %v", r, err)
 	}
 	files, err := rt.Files(ctx)
 	if err != nil || len(files) != 2 {

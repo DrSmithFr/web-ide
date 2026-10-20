@@ -15,7 +15,6 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/fsx"
 	"github.com/DrSmithFr/web-ide/pod/projects"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
-	"github.com/DrSmithFr/web-ide/pod/search"
 	"github.com/DrSmithFr/web-ide/pod/sshx"
 )
 
@@ -489,7 +488,7 @@ func (s *Server) registerProject() {
 
 	s.handle("search.files", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
 		files, err := rt.Files(ctx)
-		return search.WithoutExcluded(files, rt.Excluded()), err
+		return runtime.WithoutExcluded(files, rt.Excluded()), err
 	}))
 	s.handle("folders.get", withRT(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
 		return rt.Folders(), nil

@@ -1,4 +1,6 @@
-// Package search implements the global search of a project (contents and file names).
+// Package search is the text search of the Search plugin (search.grep, and the search_text tool
+// of the assistant through the search capability). The list of the files of a project is the
+// runtime's (runtime.Files).
 package search
 
 import (
@@ -15,61 +17,19 @@ import (
 	"unicode/utf16"
 	"unicode/utf8"
 
+	"github.com/DrSmithFr/web-ide/pod/caps"
+	"github.com/DrSmithFr/web-ide/pod/runtime"
+
 	"github.com/DrSmithFr/web-ide/pod/execx"
 )
 
-var skipDirs = map[string]bool{".git": true, "node_modules": true, ".ide": true, ".idea": true, "__pycache__": true, ".venv": true, ".cache": true}
-
 const maxFileSize = 2 << 20
 
-type Options struct {
-	Query   string `json:"query"`
-	Regex   bool   `json:"regex"`
-	Case    bool   `json:"caseSensitive"`
-	Word    bool   `json:"wholeWord"`
-	Include string `json:"include"` // comma separated globs on the file name, e.g. "*.go,*.ts"
-	Max     int    `json:"max"`
-	// Exclude lists absolute folders left out (folders marked as excluded).
-	Exclude []string `json:"-"`
-}
+type Options = caps.SearchOptions
 
-// InExcluded tells whether a path is one of the folders, or inside one.
-func InExcluded(p string, folders []string) bool {
-	for _, f := range folders {
-		if p == f || strings.HasPrefix(p, f+"/") {
-			return true
-		}
-	}
-	return false
-}
+type Match = caps.SearchMatch
 
-// WithoutExcluded drops the paths inside the folders.
-func WithoutExcluded(paths, folders []string) []string {
-	if len(folders) == 0 {
-		return paths
-	}
-	out := make([]string, 0, len(paths))
-	for _, p := range paths {
-		if !InExcluded(p, folders) {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
-type Match struct {
-	Path   string   `json:"path"`
-	Line   int      `json:"line"`
-	Col    int      `json:"col"` // UTF-16 column of the first match in the whole line
-	Text   string   `json:"text"`
-	Ranges [][2]int `json:"ranges"` // UTF-16 offsets in Text, as JavaScript indexes strings
-}
-
-type Result struct {
-	Matches   []Match `json:"matches"`
-	Truncated bool    `json:"truncated"`
-	Files     int     `json:"files"`
-}
+type Result = caps.SearchResult
 
 func Compile(o Options) (*regexp.Regexp, error) {
 	q := o.Query
@@ -158,7 +118,7 @@ func Local(ctx context.Context, root string, o Options) (*Result, error) {
 			return nil
 		}
 		if d.IsDir() {
-			if p != root && (skipDirs[d.Name()] || InExcluded(filepath.ToSlash(p), o.Exclude)) {
+			if p != root && (runtime.SkipDirs[d.Name()] || runtime.InExcluded(filepath.ToSlash(p), o.Exclude)) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -194,7 +154,7 @@ func Local(ctx context.Context, root string, o Options) (*Result, error) {
 
 func excludes() []string {
 	var out []string
-	for d := range skipDirs {
+	for d := range runtime.SkipDirs {
 		out = append(out, "--exclude-dir="+d)
 	}
 	return out
@@ -247,7 +207,7 @@ func Remote(ctx context.Context, r execx.Runner, root string, o Options) (*Resul
 		}
 		n, _ := strconv.Atoi(ln)
 		full := path.Join(root, p)
-		if InExcluded(full, o.Exclude) {
+		if runtime.InExcluded(full, o.Exclude) {
 			continue
 		}
 		files[full] = true
@@ -261,54 +221,4 @@ func Remote(ctx context.Context, r execx.Runner, root string, o Options) (*Resul
 	}
 	res.Files = len(files)
 	return res, nil
-}
-
-const maxFiles = 50000
-
-// FilesLocal lists the project files (for "go to file").
-func FilesLocal(ctx context.Context, root string) ([]string, error) {
-	var out []string
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if err != nil {
-			return nil
-		}
-		if d.IsDir() {
-			if skipDirs[d.Name()] && p != root {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		out = append(out, p)
-		if len(out) >= maxFiles {
-			return filepath.SkipAll
-		}
-		return nil
-	})
-	return out, err
-}
-
-func FilesRemote(ctx context.Context, r execx.Runner, root string) ([]string, error) {
-	var prune []string
-	for d := range skipDirs {
-		if len(prune) > 0 {
-			prune = append(prune, "-o")
-		}
-		prune = append(prune, "-name", d)
-	}
-	args := append([]string{"find", ".", "-type", "d", "("}, prune...)
-	args = append(args, ")", "-prune", "-o", "-type", "f", "-print")
-	out, err := r.Output(ctx, []string{"sh", "-c", execx.Join(args) + " | head -n " + strconv.Itoa(maxFiles)}, root)
-	if err != nil && len(out) == 0 {
-		return nil, err
-	}
-	var files []string
-	for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if l != "" {
-			files = append(files, path.Join(root, l))
-		}
-	}
-	return files, nil
 }

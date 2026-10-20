@@ -3,6 +3,7 @@ package ai
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/DrSmithFr/web-ide/pod/caps"
 	"net/url"
 	"sort"
 	"strings"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 )
 
@@ -31,7 +31,7 @@ func kindName(k int) string {
 	return "?"
 }
 
-func langOf(lg plugins.Language, rt *runtime.Runtime, abs string) (string, error) {
+func langOf(lg caps.Language, rt *runtime.Runtime, abs string) (string, error) {
 	lang := lg.LangOf(abs)
 	if lang == "" {
 		return "", failf("no language server for %s", assistant.RelPath(rt.Root, abs))
@@ -40,7 +40,7 @@ func langOf(lg plugins.Language, rt *runtime.Runtime, abs string) (string, error
 }
 
 // withDoc runs f with the file open in its language server and its current text.
-func withDoc[T any](lg plugins.Language, rt *runtime.Runtime, abs string, f func(lang, text string) (T, error)) (T, error) {
+func withDoc[T any](lg caps.Language, rt *runtime.Runtime, abs string, f func(lang, text string) (T, error)) (T, error) {
 	var zero T
 	lang, err := langOf(lg, rt, abs)
 	if err != nil {
@@ -66,7 +66,7 @@ func withDoc[T any](lg plugins.Language, rt *runtime.Runtime, abs string, f func
 	return f(lang, text)
 }
 
-func lspRequest(lg plugins.Language, r *assistantRun, rt *runtime.Runtime, lang, method string, params any) (json.RawMessage, error) {
+func lspRequest(lg caps.Language, r *assistantRun, rt *runtime.Runtime, lang, method string, params any) (json.RawMessage, error) {
 	data, _ := json.Marshal(params)
 	return lg.Request(r.ctx, rt, lang, method, data)
 }
@@ -199,7 +199,7 @@ func locationLines(rt *runtime.Runtime, locs []location) []string {
 
 var severities = []string{"", "error", "warning", "info", "hint"}
 
-func formatDiagnostics(rt *runtime.Runtime, abs string, items []plugins.Diagnostic) []string {
+func formatDiagnostics(rt *runtime.Runtime, abs string, items []caps.Diagnostic) []string {
 	var out []string
 	for _, d := range items {
 		sev := "error"
@@ -218,7 +218,7 @@ func formatDiagnostics(rt *runtime.Runtime, abs string, items []plugins.Diagnost
 func (s *A) lspTool(r *assistantRun, rt *runtime.Runtime, name string, a assistant.Args) (assistant.ToolResult, error) {
 	// The servers are the Languages plugin's (its language capability); needs.go offers these
 	// tools only where it is on.
-	lg, ok := s.pod.Capability(rt, "language").(plugins.Language)
+	lg, ok := s.pod.Capability(rt, "language").(caps.Language)
 	if !ok {
 		return assistant.ToolResult{}, i18n.Errorf("the %s plugin is disabled on this project", "Language servers")
 	}
@@ -368,7 +368,7 @@ func hoverText(raw json.RawMessage) string {
 	return part(h.Contents)
 }
 
-func lspWorkspaceSymbols(lg plugins.Language, r *assistantRun, rt *runtime.Runtime, query, p string) (assistant.ToolResult, error) {
+func lspWorkspaceSymbols(lg caps.Language, r *assistantRun, rt *runtime.Runtime, query, p string) (assistant.ToolResult, error) {
 	ref := ""
 	if p != "" {
 		ref = assistant.AbsPath(rt.Root, p)
@@ -411,7 +411,7 @@ func lspWorkspaceSymbols(lg plugins.Language, r *assistantRun, rt *runtime.Runti
 	return assistant.OK(text, assistant.Tn(len(list), "{n} symbol", "{n} symbols", nil).With("“"+query+"”: ", "")), nil
 }
 
-func lspDiagnostics(lg plugins.Language, r *assistantRun, rt *runtime.Runtime, p string) (assistant.ToolResult, error) {
+func lspDiagnostics(lg caps.Language, r *assistantRun, rt *runtime.Runtime, p string) (assistant.ToolResult, error) {
 	if p == "" {
 		all := lg.AllDiagnostics(rt)
 		uris := make([]string, 0, len(all))

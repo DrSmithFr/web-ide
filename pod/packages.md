@@ -5,7 +5,7 @@ The packages of the pod, in five blocks. Each section has the map of its package
 | Block | Packages |
 |---|---|
 | [Server and protocol](#server-and-protocol) | `server`, `runtime`, `store`, `settings`, `projects`, `desks`, `idedir`, `config`, `stats`, `update`, `i18n`, `plugins` |
-| [Files and processes](#files-and-processes) | `fsx`, `execx`, `sshx`, `sshtest`, `console`, `keeper`, `search`, `forwards`, `preview`, `clipboard`, `commands` |
+| [Files and processes](#files-and-processes) | `fsx`, `execx`, `sshx`, `sshtest`, `console`, `keeper`, `forwards`, `preview`, `clipboard`, `commands` |
 | [AI](#ai) | `llm`, `assistant`, `acp`, `hfcache` |
 | [Kanban and git](#kanban-and-git) | `kanban`, `git` |
 | [Network and identity](#network-and-identity) | `relay`, `relayclient`, `relayload`, `tunnel`, `multipod`, `lan`, `identity`, `pair`, `settingsync`, `push`, `power` |
@@ -103,7 +103,6 @@ flowchart LR
   execx["execx<br/>local or SSH processes"]
   sshx["sshx<br/>SSH connections"]
   fsx["fsx<br/>local and SFTP files"]
-  search["search"]
   commands["commands<br/>project commands"]
   clipboard["clipboard"]
   preview["preview"]
@@ -113,7 +112,6 @@ flowchart LR
   console -->|"adopts its processes"| keeper
   keeper -->|"SSH targets"| sshx
   execx -->|"runs through it"| keeper
-  search --> execx
   commands --> execx
   commands --> fsx
   commands --> idedir
@@ -131,14 +129,13 @@ flowchart LR
 - `sshtest`: SSH server for tests (in memory; `sshtestd` runs it for the browser tests)
 - `console`: Terminals and commands with scrollback and output offsets; run by the keeper when there is one, adopted again after a restart of the pod; its methods are the Exec plugin's (`plugins/exec`)
 - `keeper`: The keeper: protocol (frames of a length, a JSON header and raw bytes), server (processes known by pid and descriptors, output rings, attachments from an offset, GC of ended processes; HTTP relay of the completions; SSH connections; update by re-exec) and the client of the pod (reconnection, attachments resumed from their offset)
-- `search`: Project-wide search (RE2) and file list
 - The language servers, the database connections and the `docker` command are no longer packages of the pod: each is the `internal/` of its plugin (`plugins/languages`, `plugins/database`, `plugins/docker`), its per-project state a *part* of the runtime (`runtime/parts.go`).
 - `forwards`: Port forwards: local ports that reach an address seen from the SSH host of a project (open while a window of the pod is connected, closed `ForwardIdle` after the last one)
 - `preview`: App previews: a reverse proxy per preview (cookie of the IDE, or the token of a public one), exposed by `tailscale serve` / `funnel` (`Tailscale` interface, faked in tests), stopped with the command of the app
 - `clipboard`: History of the texts copied in the IDE, shared by every window
 - `commands`: Saved commands of a project (`.ide/commands.json` of the main project): validation, load and save, `RunSaved` (one console per command, shared by the Exec plugin, the assistant and the previews); run by the server (`commands.run`, `run_saved_command` of the assistant and the MCP, previews of `serve` commands) as tasks tagged with their id (`console.Info.CommandID`), one console per command; the `setup` ones make the setup script of a new worktree (`SetupScript`)
 
-`sshtest` is the in-memory SSH server of the tests; `sshtest/sshtestd` runs it for the `forwards` suite. `search` and `commands` run their commands through `execx`.
+`sshtest` is the in-memory SSH server of the tests; `sshtest/sshtestd` runs it for the `forwards` suite. `commands` runs its commands through `execx`; the text search is the Search plugin's (`plugins/search`), the list of the files of a project the runtime's (`runtime/files.go`).
 
 **Tests**: `go test ./pod/fsx ./pod/execx ./pod/sshx ./pod/console ./pod/keeper ./pod/search ./pod/forwards ./pod/preview ./pod/clipboard ./pod/commands`; e2e: `keeper`, `features`, `commands`, `docker`, `forwards`, `lsp`, `preview`, `popups`.
 

@@ -163,7 +163,7 @@ The page module of each built-in is a chunk of its own, `plugin-<id>` (`web/vite
 Moving the business code into the plugins (#134, milestone *Repository layout*) found two gaps on the pod side:
 
 - **Parts of the runtime** (`runtime.Part(key, make)`, `pod/runtime/parts.go`): the per-project state of a plugin (its manager, its connections), made on first use; a part that is a `Stopper` stops with the project (`Stop(false)`) or the pod (`Stop(true)`: what the keeper holds survives), an `Idler` is told a while after the last window left. The runtime exposes what makers need: `Emit`, `Pool`, `Store`, `SettingsID`. The language servers, the database connections and docker are parts; their packages are the `internal/` of their plugin, so nothing else can import them.
-- **Capabilities on the pod side** (`pod/plugins/capabilities.go`): `Host.Provide(name, impl)` for a capability of the manifest's `provides`, `Pod.Capability(rt, name)` (nil when no plugin enabled on the project provides it); each one an interface of that file. `Language` (Languages): the `lsp_*` tools of the AI reach the servers through it.
+- **Capabilities on the pod side** (`pod/caps`): `Host.Provide(name, impl)` for a capability of the manifest's `provides`, `Pod.Capability(rt, name)` (nil when no plugin enabled on the project provides it); each one an interface of that file. `Language` (Languages): the `lsp_*` tools of the AI reach the servers through it; `Search` (Search, #137): the search_text tool of the AI.
 
 ## API v1
 
@@ -175,7 +175,7 @@ Frozen with #118: `apiVersion: 1` in every manifest. An addition keeps v1; a rem
 
 **Page** (`web/src/plugins/api.ts`): `rpc` / `rpcIn` / `notify` / `notifyIn` / `channel`, `on`, `t` / `tn` / `fmtDate` / `fmtAgo`, `project`, `files`, `buffers`, `activeFile`, `ssh`, `desk` (its state in the desk), `provide` / `use` (capabilities), `showTool`, `tiles`, `theme`, `openFile` / `openView` / `setViewState` / `openDiff` / `openText`, `panes`, `editor`, `keys`, `transport`, `ui`. The module's `activate(api)` returns its contributions: `tools`, `views`, `fileView`, `commands`, `hosts`, `searchProviders`, `diffSources`, `explorerItems`, `fileDecorations`, `assistantOptions`, `viewTitle`, `aloneViews`, `fileStatus`, `viewStatus`, `toolStatus`, `uiTools`, `opened`; its `home(api)` a part of the home page.
 
-**Capabilities**: on the pod, the interfaces of `pod/plugins/capabilities.go` (`Language`); on the page, `terminal` and `commands` (Exec), `git` and `worktrees` (Git), `previews` (Previews), `language` (Languages), `files` (Files), `tickets` (Kanban), `assistant` and `agents` (AI), their types in `web/src/plugins/capabilities.ts`.
+**Capabilities**: on the pod, the interfaces of `pod/caps` (`Language`); on the page, `terminal` and `commands` (Exec), `git` and `worktrees` (Git), `previews` (Previews), `language` (Languages), `files` (Files), `tickets` (Kanban), `assistant` and `agents` (AI), their types in `web/src/plugins/capabilities.ts`.
 
 ## Decisions
 
@@ -200,7 +200,7 @@ The plugins, grouped by domain (one plugin, several tools and views), in their o
 | Plugin | Tools and views | Provides / requires |
 |---|---|---|
 | Exec | Console tool (terminals, tasks), project commands (#116, done) | provides `terminal`, `commands` |
-| Search | Search tool (text, regex), the text provider of Search Everywhere (#117, done) | |
+| Search | Search tool (text, regex), the text provider of Search Everywhere (#117, done) | provides `search` (the search_text tool of the AI, #137) |
 | Git | Git tool, git content of the diff view (#118, done) | provides `worktrees`, `git` |
 | Previews | Port forwards and previews tool (#119, done) | requires `terminal`, provides `previews` |
 | Languages | language servers, Problems, Structure, the Symbols provider (#120, done) | provides `language` |
