@@ -154,6 +154,19 @@ A plugin that ships compiled into the IDE, with the same manifest and API as an 
 **Contribution**
 What a plugin adds at one contribution point of the IDE: a tool, a tab view, an assistant tool, a command, a settings section…
 
+**External plugin** ([plugins](docs/design/plugins.md#phase-3-external-plugins))
+A plugin installed from its own git repository, at a version of the plugin lock; confined: its views in a sandboxed iframe, its backend under Landlock.
+
+**Plugin lock**
+`~/.web-ide/plugins.lock`: the external plugins installed on a pod, each with its version, the hash of its asset and its grants. Per pod, not synced.
+
+**Grant**
+A permission of an external plugin accepted by the user (the project's files, network, a core method…); without it the boundary refuses the call.
+_Avoid_: permission (what the manifest asks)
+
+**Sandboxed view**
+A view of an external plugin, run in an iframe of opaque origin that speaks to the IDE only through the sandbox API.
+
 **Locked plugin**
 A built-in plugin the IDE cannot run without (Files, Code): always enabled, shown greyed in Settings → Plugins.
 

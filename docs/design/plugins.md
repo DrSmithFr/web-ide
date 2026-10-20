@@ -1,6 +1,6 @@
 # Plugins
 
-Status: **phase 1 done, phase 2 decided** (2026-10-19, [Phase 2](#phase-2-everything-is-a-plugin)). Milestone *Plugins, phase 1*: the core of the plugin system (#113), then Docker (#114) and the database (#115) moved onto it, all built-in, one lineage. The core is in place (#113), and Docker (#114) and the Database explorer (#115) are plugins: phase 1 is done. Whether Git, the editor, the kanban and the assistant become plugins too is decided after Docker (see [Decisions](#decisions)). The direction was explored on 2026-10-16.
+Status: **phases 1 and 2 done, phase 3 decided** (2026-10-20, [Phase 3](#phase-3-external-plugins): external plugins, confined). Milestone *Plugins, phase 1*: the core of the plugin system (#113), then Docker (#114) and the database (#115) moved onto it, all built-in, one lineage. The core is in place (#113), and Docker (#114) and the Database explorer (#115) are plugins: phase 1 is done. Whether Git, the editor, the kanban and the assistant become plugins too is decided after Docker (see [Decisions](#decisions)). The direction was explored on 2026-10-16.
 
 ## Vision
 
@@ -14,7 +14,7 @@ The buffer of a file, its sync with the disk (`buffer.synced`, `fs.changed`) and
 
 ## Shape of a plugin
 
-A folder (`~/.web-ide/plugins/<id>/` for an external one, later):
+A folder (`~/.web-ide/plugins/<id>/<version>/` for an external one, installed from its repository: [Phase 3](#phase-3-external-plugins)):
 
 ```
 plugin.json   id, name, version, apiVersion, permissions, provides / requires, contributes
@@ -172,7 +172,7 @@ Frozen with #118: `apiVersion: 1` in every manifest. An addition keeps v1; a rem
 
 Taken on 2026-10-19:
 
-1. **Trust**: plugins are trusted code, with their permissions declared in the manifest and shown at install (the VS Code model). Phase 1 has only built-in plugins, so nothing is installed yet. A sandboxed iframe for third-party views stays possible later, behind the same `api`.
+1. **Trust**: built-in plugins are trusted code, with their permissions declared in the manifest. Phase 1 has only built-in plugins, so nothing is installed yet. *Superseded for external plugins on 2026-10-20*: they are confined, views and backend ([Phase 3](#phase-3-external-plugins)).
 2. **SSH projects**: the backend of a plugin runs on the pod and reaches the project through `runtime` (local or SSH), as the assistant tools do. A `runsOn: "target"` may come later.
 3. **Install**: not in phase 1. A plugin is enabled or disabled per project in *Settings → Plugins*, saved in `.ide/plugins.json` of the main project (`{"disabled": ["docker"]}`): every other plugin is enabled, so a new built-in shows on every project.
 4. **Developing a plugin**: not in phase 1. Loading from a folder with hot reload comes once the API is stable.
@@ -218,7 +218,54 @@ One ticket per step, the e2e suites of the moved tool passing before each merge:
 
 `apiVersion: 1` is frozen after Git (#118, [API v1](#api-v1)).
 
+## Phase 3: external plugins
+
+Decided on 2026-10-20 (milestone *Plugins, phase 3*, #128-#131). Built-in plugins stay trusted code in the bundle and the pod; an **external plugin** is installed from its own repository and **confined from the start**, views and backend, a model stricter than Zed's.
+
+### Why confined
+
+A plugin of this IDE reaches more than the machine it runs on. The pod's device key (`~/.web-ide/device.key`) lets its holder pass for the pod with the relay and the pods of the LAN, which open their terminals to it; `secrets.json` holds the API keys of the vault. In the browser, the device key is non-extractable but **usable** by any script of the origin while the session is unlocked (an hour after its last use, [relay](relay.md)), and a window on `127.0.0.1` holds the terminals of every LAN pod without a passkey. VS Code, PhpStorm (unconfined) or Zed (WebAssembly, but native language servers unconfined) risk one machine; here, one plugin risks every machine of the account.
+
+| Part of a plugin | What a hostile one gets, unconfined | Severity |
+|---|---|---|
+| Backend `bin/` | the machine as the user, the pod's key (so the other pods), the vault, `~/.ssh`; lasts after the IDE closes | critical |
+| View on the origin, `127.0.0.1` | every LAN pod: terminals, files, power, no passkey | critical |
+| View on the origin, relay | every pod of the account while the session is unlocked, plus a fake passkey prompt | high to critical |
+| View in a sandboxed iframe | what its grants allow, through the proxy | low |
+| Manifest, catalogs | data only | very low |
+
+### Source, versions, lock
+
+- **One git repository per plugin**, one semver tag per version. Its `plugin.json` adds to [API v1](#api-v1): `ide` (a semver constraint on the IDE, `^1.24`), versioned requirements of other plugins (`"plugins": {"git": "^1"}`), besides the capabilities, and `assets`.
+- **Release assets**: the tag carries one archive per architecture (`linux-amd64`, `linux-arm64`): `plugin.json`, `web/index.js` built as one file (its own Solid and CSS), `bin/` when it has a backend, `i18n/`. No compiled code in the repository, no toolchain on the pod.
+- **Resolution like Composer**: the pod lists the tags (`git ls-remote --tags`), takes the highest matching the constraint and compatible with the IDE, the API and the installed plugins, downloads the asset of its architecture and checks it.
+- **The lock** (`~/.web-ide/plugins.lock`): per plugin its URL, constraint, version, asset sha256 and grants. **Per pod, not synced**: a project opened on a pod lacking one of its plugins says so. A locked version is never downloaded again under the same tag: an asset whose hash changed is refused.
+
+### Grants
+
+The manifest's `permissions` become **grants**, accepted one by one by the user at install, asked again when an update adds one, revocable in *Settings → Plugins*: the project's files (read, or read-write), network, core methods it may call (`fs.read`, `openFile`…), running programs. Without a grant, the backend and the view are refused at the boundary, not by the plugin's goodwill.
+
+### Sandboxed views
+
+- An `<iframe sandbox="allow-scripts">` without `allow-same-origin`: an **opaque origin**, so no access to the page, IndexedDB, `localStorage`, cookies, the Service Worker or the top navigation.
+- The page fetches the bundle itself (through the tunnel on the relay origin: the Service Worker does not serve an opaque origin) and injects it as `srcdoc` with a CSP `default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'`: no network, so nothing it is given can leave. A plugin needing the network asks its backend.
+- One `MessageChannel` carries a **sandbox API**, a serializable part of the page API: `rpc` (its own `<id>.*` methods and the granted core ones), `on`, `openFile`, `openView`, `setViewState`, `t`, `toast`, the theme tokens, the shortcuts and the focus relayed. No shared `ui/` components; nothing drawn outside its frame.
+- Contribution points open to external plugins: tools, tab views, commands, settings, assistant tools; the others open when one needs them.
+
+### Confined backend
+
+- `bin/` is started by a re-exec of the pod (`web-ide-pod plugin-exec`) that applies **Landlock** (files: its folder read-only, the project as granted, nothing else; so neither `~/.web-ide/` nor the home) and **seccomp**, then execs it; TCP connect and bind only with the network grant (Landlock network rules). Its children inherit the confinement.
+- JSON-RPC over stdio, the same contract as `plugins.Plugin`; started on demand, stopped a while after the last window leaves, like a language server.
+- A kernel without Landlock refuses to start it: no unconfined fallback.
+
+### Steps
+
+1. Install from a git repository (#128): resolution, assets, lock, *Settings → Plugins* (install by URL, update, remove, grants); listed, not runnable yet.
+2. Sandboxed views (#129): the first usable external plugin, UI only.
+3. Confined backend (#130), alongside #129.
+4. Grants enforced end to end (#131), an example plugin in its own repository (`hello` moved out), the how-to *Write a plugin*.
+
 ## Open questions
 
-- External plugins: the install source (a git URL and a tag, `web/` shipped built), whether the list of installed plugins syncs between pods.
-- Views of an external plugin: same origin with the device key in reach, or a sandboxed iframe (the single origin of the relay complicates it).
+- Answered on 2026-10-20 ([Phase 3](#phase-3-external-plugins)): the install source (a git repository, semver tags, release assets, a lock per pod, not synced) and the views of an external plugin (a sandboxed iframe).
+- A catalog of plugins (like Packagist), signed releases: after phase 3.
