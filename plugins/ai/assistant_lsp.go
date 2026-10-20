@@ -9,8 +9,9 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/DrSmithFr/web-ide/lib/i18n"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/lsp"
+	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 )
 
@@ -30,8 +31,8 @@ func kindName(k int) string {
 	return "?"
 }
 
-func langOf(rt *runtime.Runtime, abs string) (string, error) {
-	lang := lsp.LangOf(abs)
+func langOf(lg plugins.Language, rt *runtime.Runtime, abs string) (string, error) {
+	lang := lg.LangOf(abs)
 	if lang == "" {
 		return "", failf("no language server for %s", assistant.RelPath(rt.Root, abs))
 	}
@@ -39,9 +40,9 @@ func langOf(rt *runtime.Runtime, abs string) (string, error) {
 }
 
 // withDoc runs f with the file open in its language server and its current text.
-func withDoc[T any](rt *runtime.Runtime, abs string, f func(lang, text string) (T, error)) (T, error) {
+func withDoc[T any](lg plugins.Language, rt *runtime.Runtime, abs string, f func(lang, text string) (T, error)) (T, error) {
 	var zero T
-	lang, err := langOf(rt, abs)
+	lang, err := langOf(lg, rt, abs)
 	if err != nil {
 		return zero, err
 	}
@@ -53,21 +54,21 @@ func withDoc[T any](rt *runtime.Runtime, abs string, f func(lang, text string) (
 	if fc.Buffer != nil {
 		text = *fc.Buffer
 	}
-	uri := lsp.URI(abs)
-	open, _ := json.Marshal(map[string]any{"textDocument": map[string]any{"uri": uri, "languageId": lsp.LanguageID(abs), "version": 1, "text": text}})
-	if err := rt.LSP.Notify(lang, "textDocument/didOpen", open); err != nil {
+	uri := lg.URI(abs)
+	open, _ := json.Marshal(map[string]any{"textDocument": map[string]any{"uri": uri, "languageId": lg.LanguageID(abs), "version": 1, "text": text}})
+	if err := lg.Notify(rt, lang, "textDocument/didOpen", open); err != nil {
 		return zero, err
 	}
 	defer func() {
 		closing, _ := json.Marshal(map[string]any{"textDocument": map[string]any{"uri": uri}})
-		_ = rt.LSP.Notify(lang, "textDocument/didClose", closing)
+		_ = lg.Notify(rt, lang, "textDocument/didClose", closing)
 	}()
 	return f(lang, text)
 }
 
-func lspRequest(r *assistantRun, rt *runtime.Runtime, lang, method string, params any) (json.RawMessage, error) {
+func lspRequest(lg plugins.Language, r *assistantRun, rt *runtime.Runtime, lang, method string, params any) (json.RawMessage, error) {
 	data, _ := json.Marshal(params)
-	return rt.LSP.Request(r.ctx, lang, method, data)
+	return lg.Request(r.ctx, rt, lang, method, data)
 }
 
 type lspRange struct {
@@ -198,7 +199,7 @@ func locationLines(rt *runtime.Runtime, locs []location) []string {
 
 var severities = []string{"", "error", "warning", "info", "hint"}
 
-func formatDiagnostics(rt *runtime.Runtime, abs string, items []lsp.Diagnostic) []string {
+func formatDiagnostics(rt *runtime.Runtime, abs string, items []plugins.Diagnostic) []string {
 	var out []string
 	for _, d := range items {
 		sev := "error"
@@ -215,11 +216,17 @@ func formatDiagnostics(rt *runtime.Runtime, abs string, items []lsp.Diagnostic) 
 }
 
 func (s *A) lspTool(r *assistantRun, rt *runtime.Runtime, name string, a assistant.Args) (assistant.ToolResult, error) {
+	// The servers are the Languages plugin's (its language capability); needs.go offers these
+	// tools only where it is on.
+	lg, ok := s.pod.Capability(rt, "language").(plugins.Language)
+	if !ok {
+		return assistant.ToolResult{}, i18n.Errorf("the %s plugin is disabled on this project", "Language servers")
+	}
 	if name == "lsp_diagnostics" {
-		return lspDiagnostics(r, rt, a.Str("path"))
+		return lspDiagnostics(lg, r, rt, a.Str("path"))
 	}
 	if name == "lsp_workspace_symbols" {
-		return lspWorkspaceSymbols(r, rt, a.Str("query"), a.Str("path"))
+		return lspWorkspaceSymbols(lg, r, rt, a.Str("query"), a.Str("path"))
 	}
 	p := a.Str("path")
 	if p == "" {
@@ -228,8 +235,8 @@ func (s *A) lspTool(r *assistantRun, rt *runtime.Runtime, name string, a assista
 	abs := assistant.AbsPath(rt.Root, p)
 	rel := assistant.RelPath(rt.Root, abs)
 	if name == "lsp_symbols" {
-		return withDoc(rt, abs, func(lang, _ string) (assistant.ToolResult, error) {
-			raw, err := lspRequest(r, rt, lang, "textDocument/documentSymbol", map[string]any{"textDocument": map[string]any{"uri": lsp.URI(abs)}})
+		return withDoc(lg, rt, abs, func(lang, _ string) (assistant.ToolResult, error) {
+			raw, err := lspRequest(lg, r, rt, lang, "textDocument/documentSymbol", map[string]any{"textDocument": map[string]any{"uri": lg.URI(abs)}})
 			if err != nil {
 				return assistant.ToolResult{}, err
 			}
@@ -259,7 +266,7 @@ func (s *A) lspTool(r *assistantRun, rt *runtime.Runtime, name string, a assista
 	if line < 1 {
 		return assistant.ToolResult{}, assistant.Usagef("line is missing (starting at 1)")
 	}
-	return withDoc(rt, abs, func(lang, text string) (assistant.ToolResult, error) {
+	return withDoc(lg, rt, abs, func(lang, text string) (assistant.ToolResult, error) {
 		lines := strings.Split(text, "\n")
 		if line > len(lines) {
 			return assistant.ToolResult{}, failf("%s has no line %d", rel, line)
@@ -275,9 +282,9 @@ func (s *A) lspTool(r *assistantRun, rt *runtime.Runtime, name string, a assista
 		}
 		// LSP positions count UTF-16 units: convert the byte column.
 		units := len(utf16Of(lineText[:col]))
-		pos := map[string]any{"textDocument": map[string]any{"uri": lsp.URI(abs)}, "position": map[string]any{"line": line - 1, "character": units}}
+		pos := map[string]any{"textDocument": map[string]any{"uri": lg.URI(abs)}, "position": map[string]any{"line": line - 1, "character": units}}
 		if name == "lsp_hover" {
-			raw, err := lspRequest(r, rt, lang, "textDocument/hover", pos)
+			raw, err := lspRequest(lg, r, rt, lang, "textDocument/hover", pos)
 			if err != nil {
 				return assistant.ToolResult{}, err
 			}
@@ -293,7 +300,7 @@ func (s *A) lspTool(r *assistantRun, rt *runtime.Runtime, name string, a assista
 			method = "textDocument/definition"
 			params = pos
 		}
-		raw, err := lspRequest(r, rt, lang, method, params)
+		raw, err := lspRequest(lg, r, rt, lang, method, params)
 		if err != nil {
 			return assistant.ToolResult{}, err
 		}
@@ -361,7 +368,7 @@ func hoverText(raw json.RawMessage) string {
 	return part(h.Contents)
 }
 
-func lspWorkspaceSymbols(r *assistantRun, rt *runtime.Runtime, query, p string) (assistant.ToolResult, error) {
+func lspWorkspaceSymbols(lg plugins.Language, r *assistantRun, rt *runtime.Runtime, query, p string) (assistant.ToolResult, error) {
 	ref := ""
 	if p != "" {
 		ref = assistant.AbsPath(rt.Root, p)
@@ -371,11 +378,11 @@ func lspWorkspaceSymbols(r *assistantRun, rt *runtime.Runtime, query, p string) 
 	if ref == "" {
 		return assistant.ToolResult{}, failf("give path: a file of the language")
 	}
-	lang, err := langOf(rt, ref)
+	lang, err := langOf(lg, rt, ref)
 	if err != nil {
 		return assistant.ToolResult{}, err
 	}
-	raw, err := lspRequest(r, rt, lang, "workspace/symbol", map[string]any{"query": query})
+	raw, err := lspRequest(lg, r, rt, lang, "workspace/symbol", map[string]any{"query": query})
 	if err != nil {
 		return assistant.ToolResult{}, err
 	}
@@ -404,9 +411,9 @@ func lspWorkspaceSymbols(r *assistantRun, rt *runtime.Runtime, query, p string) 
 	return assistant.OK(text, assistant.Tn(len(list), "{n} symbol", "{n} symbols", nil).With("“"+query+"”: ", "")), nil
 }
 
-func lspDiagnostics(r *assistantRun, rt *runtime.Runtime, p string) (assistant.ToolResult, error) {
+func lspDiagnostics(lg plugins.Language, r *assistantRun, rt *runtime.Runtime, p string) (assistant.ToolResult, error) {
 	if p == "" {
-		all := rt.LSP.AllDiagnostics()
+		all := lg.AllDiagnostics(rt)
 		uris := make([]string, 0, len(all))
 		for u := range all {
 			uris = append(uris, u)
@@ -428,18 +435,18 @@ func lspDiagnostics(r *assistantRun, rt *runtime.Runtime, p string) (assistant.T
 	}
 	abs := assistant.AbsPath(rt.Root, p)
 	rel := assistant.RelPath(rt.Root, abs)
-	uri := lsp.URI(abs)
-	_, before := rt.LSP.Diagnostics(uri)
+	uri := lg.URI(abs)
+	_, before := lg.Diagnostics(rt, uri)
 	// Open it in its server and wait a little for the diagnostics it publishes.
-	rows, err := withDoc(rt, abs, func(lang, _ string) ([]string, error) {
+	rows, err := withDoc(lg, rt, abs, func(lang, _ string) ([]string, error) {
 		until := time.Now().Add(4 * time.Second)
 		for time.Now().Before(until) && r.ctx.Err() == nil {
-			if _, seq := rt.LSP.Diagnostics(uri); seq != before {
+			if _, seq := lg.Diagnostics(rt, uri); seq != before {
 				break
 			}
 			time.Sleep(150 * time.Millisecond)
 		}
-		items, _ := rt.LSP.Diagnostics(uri)
+		items, _ := lg.Diagnostics(rt, uri)
 		return formatDiagnostics(rt, abs, items), nil
 	})
 	if err != nil {

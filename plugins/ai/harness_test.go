@@ -43,6 +43,7 @@ func (p *fakePod) EmitFamily(string, string, any, string)            {}
 func (p *fakePod) CloseRuntime(string)                               {}
 func (p *fakePod) Services() *plugins.Services                       { return p.svc }
 func (p *fakePod) CapabilityOn(*runtime.Runtime, string) bool        { return true }
+func (p *fakePod) Capability(*runtime.Runtime, string) any           { return nil }
 func (p *fakePod) Stopping() bool                                    { return false }
 func (p *fakePod) AssistantTools(*runtime.Runtime) []json.RawMessage { return nil }
 func (p *fakePod) Notify(bool, string, string, string)               {}
@@ -78,6 +79,7 @@ func (h fakeHost) OnProjectOpen(func(rt *runtime.Runtime)) {}
 func (h fakeHost) OnWindows(func(n int))                   {}
 func (h fakeHost) OnStart(func())                          {}
 func (h fakeHost) OnStop(func())                           {}
+func (h fakeHost) Provide(string, any)                     {}
 
 // newTestA is the plugin on a pod of its own, with a local project at dir.
 func newTestA(t *testing.T, dir string) (*A, string) {

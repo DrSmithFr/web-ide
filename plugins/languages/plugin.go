@@ -1,7 +1,8 @@
 // Package languages is the plugin of the language servers (gopls, typescript-language-server,
 // pyright…): code navigation, completion, diagnostics, the Problems and Structure tools. The
-// servers are started on demand by the runtime of the project (pod/lsp), which stops
-// them when the project is idle.
+// servers of a project (internal/lsp) are a part of its runtime, started on demand, stopped when
+// the project is idle; the lsp_* tools of the assistant reach them through the language
+// capability (language.go).
 package languages
 
 import (
@@ -9,7 +10,7 @@ import (
 	_ "embed"
 	"encoding/json"
 
-	"github.com/DrSmithFr/web-ide/pod/lsp"
+	"github.com/DrSmithFr/web-ide/plugins/languages/internal/lsp"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
 )
 
@@ -43,8 +44,9 @@ type call struct {
 }
 
 func (p *Plugin) Register(h plugins.Host) {
+	h.Provide("language", language{})
 	h.Handle("lsp.status", func(ctx context.Context, c plugins.Call) (any, error) {
-		return c.Runtime.LSP.Status(), nil
+		return serversOf(c.Runtime).Status(), nil
 	})
 	// The language of a path: no project needed.
 	h.HandleGlobal("lsp.langOf", func(ctx context.Context, c plugins.Call) (any, error) {
@@ -56,20 +58,20 @@ func (p *Plugin) Register(h plugins.Host) {
 		if err != nil {
 			return nil, err
 		}
-		return c.Runtime.LSP.Capabilities(a.Lang)
+		return serversOf(c.Runtime).Capabilities(a.Lang)
 	})
 	h.Handle("lsp.request", func(ctx context.Context, c plugins.Call) (any, error) {
 		a, err := bind[call](c.Params)
 		if err != nil {
 			return nil, err
 		}
-		return c.Runtime.LSP.Request(ctx, a.Lang, a.Method, a.Params)
+		return serversOf(c.Runtime).Request(ctx, a.Lang, a.Method, a.Params)
 	})
 	h.Handle("lsp.notify", func(ctx context.Context, c plugins.Call) (any, error) {
 		a, err := bind[call](c.Params)
 		if err != nil {
 			return nil, err
 		}
-		return nil, c.Runtime.LSP.Notify(a.Lang, a.Method, a.Params)
+		return nil, serversOf(c.Runtime).Notify(a.Lang, a.Method, a.Params)
 	})
 }

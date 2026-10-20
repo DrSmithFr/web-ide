@@ -15,14 +15,11 @@ import (
 	"github.com/DrSmithFr/web-ide/lib/i18n"
 	"github.com/DrSmithFr/web-ide/pod/acp"
 	"github.com/DrSmithFr/web-ide/pod/console"
-	"github.com/DrSmithFr/web-ide/pod/db"
-	"github.com/DrSmithFr/web-ide/pod/docker"
 	"github.com/DrSmithFr/web-ide/pod/execx"
 	"github.com/DrSmithFr/web-ide/pod/fsx"
 	"github.com/DrSmithFr/web-ide/pod/git"
 	"github.com/DrSmithFr/web-ide/pod/idedir"
 	"github.com/DrSmithFr/web-ide/pod/keeper"
-	"github.com/DrSmithFr/web-ide/pod/lsp"
 	"github.com/DrSmithFr/web-ide/pod/projects"
 	"github.com/DrSmithFr/web-ide/pod/sshx"
 	"github.com/DrSmithFr/web-ide/pod/store"
@@ -77,16 +74,19 @@ type Runtime struct {
 	// (local) or "ssh:<key>" (its own connection to the host of an SSH project).
 	Keeper       *keeper.Client
 	KeeperTarget string
-	LSP          *lsp.Manager
-	DB           *db.Manager
 	Git          *git.Repo
-	Docker       *docker.Docker
 
 	emit    Emit
 	watcher fsx.Watcher
 	// pool and target reach the SSH host again (tunnels).
 	pool   *sshx.Pool
 	target sshx.Target
+	store  *store.Store
+
+	// The parts of the plugins (parts.go), in the order they were made.
+	partsMu sync.Mutex
+	parts   map[string]any
+	order   []string
 
 	mu      sync.Mutex
 	watched map[string]bool
@@ -99,7 +99,8 @@ type Runtime struct {
 
 func Open(p projects.Project, creds sshx.Creds, d Deps, emit Emit) (*Runtime, error) {
 	r := &Runtime{P: p, emit: emit, watched: map[string]bool{}, files: map[string]*fileState{},
-		buffers: map[string]string{}, timers: map[string]*time.Timer{}, pool: d.Pool}
+		buffers: map[string]string{}, timers: map[string]*time.Timer{}, pool: d.Pool, store: d.Store,
+		parts: map[string]any{}}
 	if p.Type == "ssh" {
 		t := sshx.Target{Host: p.SSH.Host, Port: p.SSH.Port, User: p.SSH.User, Auth: p.SSH.Auth, KeyPath: p.SSH.KeyPath}
 		r.target = t
@@ -175,21 +176,12 @@ func Open(p projects.Project, creds sshx.Creds, d Deps, emit Emit) (*Runtime, er
 		r.Agents = acp.NewManager(acp.Deps{Keeper: d.Keeper, Owner: p.ID, Dir: d.Store.Path("agents", p.ID), Root: root,
 			Catalog: acp.Catalog{Dir: d.Store.Path("acp")}, Version: d.Version, MCP: d.AgentsMCP, Emit: func(ev string, data any) { r.emit(ev, data, "") }})
 	}
-	exists := func(p string) bool { _, err := r.FS.Stat(p); return err == nil }
-	r.LSP = lsp.NewManager(r.Runner, root, r.Local, r.Config.LSP, exists, func(ev string, data any) { r.emit(ev, data, "") })
 	r.Git = git.New(r.Runner, root)
-	r.Docker = docker.New(r.Runner, root, exists)
-	// A worktree shares the connections of its main project, their secrets included.
-	settingsID := p.ID
-	if p.Parent != "" {
-		settingsID = p.Parent
-	}
-	r.DB = db.NewManager(db.Deps{FS: r.FS, Root: root, IdeDir: r.IdeDir, ProjectID: settingsID, Local: r.Local, Runner: r.Runner, Pool: d.Pool, Store: d.Store})
 	return r, nil
 }
 
-// Attach and Detach count the connected windows. Language servers stop a while after
-// the last window leaves (some use several hundred MB); consoles keep running.
+// Attach and Detach count the connected windows. The parts are told a while after the last
+// window leaves (Idler: the language servers stop); consoles keep running.
 func (r *Runtime) Attach() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -206,7 +198,7 @@ func (r *Runtime) Detach() {
 	r.clients--
 	if r.clients <= 0 {
 		r.clients = 0
-		r.idle = time.AfterFunc(2*time.Minute, r.LSP.StopAll)
+		r.idle = time.AfterFunc(2*time.Minute, r.idleParts)
 	}
 }
 
@@ -216,6 +208,7 @@ func (r *Runtime) Close() {
 	if r.Agents != nil {
 		r.Agents.CloseAll()
 	}
+	r.stopParts(false)
 	r.release()
 }
 
@@ -226,12 +219,11 @@ func (r *Runtime) Release() {
 	if r.Agents != nil {
 		r.Agents.Release()
 	}
+	r.stopParts(true)
 	r.release()
 }
 
 func (r *Runtime) release() {
-	r.LSP.StopAll()
-	r.DB.CloseAll()
 	_ = r.watcher.Close()
 	_ = r.FS.Close()
 }

@@ -158,17 +158,24 @@ The page module of each built-in is a chunk of its own, `plugin-<id>` (`web/vite
 - **Contributions**: `fileStatus(tab)` (a file tab; the plugin giving `fileView`: Code), `viewStatus(tab)` (a tab of the plugin's views: Kanban, a ticket's status, priority and size) and `toolStatus[toolId]()` (a tool in focus, in a zone or as a tab).
 - The core keeps the bar (`ui/StatusBar.tsx`): the desks on its left, the choice of the focus (`focusPart`: the active tab of the focused pane, or the tool shown in the focused zone; a phone: the editor view) and the rendering. The file items (caret, line separator, encoding, indentation, language) moved to Code (`plugins/code/status.ts`); `api.editor.cursor()` reads the caret the view sets.
 
+## What the layout added to the API
+
+Moving the business code into the plugins (#134, milestone *Repository layout*) found two gaps on the pod side:
+
+- **Parts of the runtime** (`runtime.Part(key, make)`, `pod/runtime/parts.go`): the per-project state of a plugin (its manager, its connections), made on first use; a part that is a `Stopper` stops with the project (`Stop(false)`) or the pod (`Stop(true)`: what the keeper holds survives), an `Idler` is told a while after the last window left. The runtime exposes what makers need: `Emit`, `Pool`, `Store`, `SettingsID`. The language servers, the database connections and docker are parts; their packages are the `internal/` of their plugin, so nothing else can import them.
+- **Capabilities on the pod side** (`pod/plugins/capabilities.go`): `Host.Provide(name, impl)` for a capability of the manifest's `provides`, `Pod.Capability(rt, name)` (nil when no plugin enabled on the project provides it); each one an interface of that file. `Language` (Languages): the `lsp_*` tools of the AI reach the servers through it.
+
 ## API v1
 
 Frozen with #118: `apiVersion: 1` in every manifest. An addition keeps v1; a removal or a change of what follows is a new version.
 
 **Manifest** (`plugin.json`): `id`, `name`, `version`, `apiVersion`, `required`, `permissions`, `provides` / `requires` (capabilities), `namespaces` (prefixes of its methods and actions besides its id), `contributes`: `tools` (`id`, `label`, `icon`, `zone`, `before`), `tabViews`, `assistantTools`, `commands` (`id`, `label`, `category`, `keys`, `replaces`, `inTerminal`).
 
-**Pod** (`pod/plugins`): `Plugin{Manifest(), Register(Host)}`; `Host.Handle(method, handler)`, `Host.HandleGlobal`, `Host.AssistantTool(tool)`, `Host.Pod()`, `Host.OnProjectOpen`, `Host.OnWindows`, `Host.OnStart`, `Host.OnStop`; a `Call` carries the `Runtime` of the project, `Params`, `Lang`, the `Window` (push, held streams), `Emit` / `EmitOthers` / `EmitFamily`, the `Options` of a conversation; `Result`, `UsageError`, `CodedError`.
+**Pod** (`pod/plugins`): `Plugin{Manifest(), Register(Host)}`; `Host.Handle(method, handler)`, `Host.HandleGlobal`, `Host.AssistantTool(tool)`, `Host.Pod()`, `Host.OnProjectOpen`, `Host.OnWindows`, `Host.OnStart`, `Host.OnStop`, `Host.Provide` (#134); `Pod.Capability` (#134); a `Call` carries the `Runtime` of the project, `Params`, `Lang`, the `Window` (push, held streams), `Emit` / `EmitOthers` / `EmitFamily`, the `Options` of a conversation; `Result`, `UsageError`, `CodedError`.
 
 **Page** (`web/src/plugins/api.ts`): `rpc` / `rpcIn` / `notify` / `notifyIn` / `channel`, `on`, `t` / `tn` / `fmtDate` / `fmtAgo`, `project`, `files`, `buffers`, `activeFile`, `ssh`, `desk` (its state in the desk), `provide` / `use` (capabilities), `showTool`, `tiles`, `theme`, `openFile` / `openView` / `setViewState` / `openDiff` / `openText`, `panes`, `editor`, `keys`, `transport`, `ui`. The module's `activate(api)` returns its contributions: `tools`, `views`, `fileView`, `commands`, `hosts`, `searchProviders`, `diffSources`, `explorerItems`, `fileDecorations`, `assistantOptions`, `viewTitle`, `aloneViews`, `fileStatus`, `viewStatus`, `toolStatus`, `uiTools`, `opened`; its `home(api)` a part of the home page.
 
-**Capabilities**: `terminal` and `commands` (Exec), `git` and `worktrees` (Git), `previews` (Previews), `language` (Languages), `files` (Files), `tickets` (Kanban), `assistant` and `agents` (AI), their types in `web/src/plugins/capabilities.ts`.
+**Capabilities**: on the pod, the interfaces of `pod/plugins/capabilities.go` (`Language`); on the page, `terminal` and `commands` (Exec), `git` and `worktrees` (Git), `previews` (Previews), `language` (Languages), `files` (Files), `tickets` (Kanban), `assistant` and `agents` (AI), their types in `web/src/plugins/capabilities.ts`.
 
 ## Decisions
 

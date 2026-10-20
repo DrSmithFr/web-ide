@@ -62,38 +62,38 @@ func (p *Plugin) Register(h plugins.Host) {
 		ID string `json:"id"`
 	}
 	handle(h, "status", func(ctx context.Context, c plugins.Call, _ none) (any, error) {
-		st := c.Runtime.Docker.Status(ctx)
+		st := dockerOf(c.Runtime).Status(ctx)
 		if st.Err != nil {
 			st.Error = i18n.Translate(c.Lang, st.Err)
 		}
 		return st, nil
 	})
 	handle(h, "stack", func(ctx context.Context, c plugins.Call, a profilesArg) (any, error) {
-		return c.Runtime.Docker.Stack(ctx, a.Profiles)
+		return dockerOf(c.Runtime).Stack(ctx, a.Profiles)
 	})
 	handle(h, "containers", func(ctx context.Context, c plugins.Call, _ none) (any, error) {
-		return c.Runtime.Docker.Containers(ctx)
+		return dockerOf(c.Runtime).Containers(ctx)
 	})
 	handle(h, "inspect", func(ctx context.Context, c plugins.Call, a idArg) (any, error) {
-		return c.Runtime.Docker.Inspect(ctx, a.ID)
+		return dockerOf(c.Runtime).Inspect(ctx, a.ID)
 	})
 	handle(h, "stats", func(ctx context.Context, c plugins.Call, a struct {
 		IDs []string `json:"ids"`
 	}) (any, error) {
-		return c.Runtime.Docker.Stats(ctx, a.IDs)
+		return dockerOf(c.Runtime).Stats(ctx, a.IDs)
 	})
 	handle(h, "compose", func(ctx context.Context, c plugins.Call, a struct {
 		Profiles []string `json:"profiles"`
 		Action   string   `json:"action"`
 		Service  string   `json:"service"`
 	}) (any, error) {
-		return nil, c.Runtime.Docker.Compose(ctx, a.Profiles, a.Action, a.Service)
+		return nil, dockerOf(c.Runtime).Compose(ctx, a.Profiles, a.Action, a.Service)
 	})
 	handle(h, "container", func(ctx context.Context, c plugins.Call, a struct {
 		Action string `json:"action"`
 		ID     string `json:"id"`
 	}) (any, error) {
-		return nil, c.Runtime.Docker.Container(ctx, a.Action, a.ID)
+		return nil, dockerOf(c.Runtime).Container(ctx, a.Action, a.ID)
 	})
 
 	// logs follows the logs of a container (id) or of the stack (no id) and pushes docker.log
@@ -106,7 +106,7 @@ func (p *Plugin) Register(h plugins.Host) {
 		if a.Tail <= 0 {
 			a.Tail = 500
 		}
-		proc, err := c.Runtime.Docker.Logs(a.ID, a.Profiles, a.Tail)
+		proc, err := dockerOf(c.Runtime).Logs(a.ID, a.Profiles, a.Tail)
 		if err != nil {
 			return nil, err
 		}
@@ -133,23 +133,23 @@ func (p *Plugin) Register(h plugins.Host) {
 		if a.ID == "" && a.Service == "" {
 			return nil, i18n.New("a container or a service is needed")
 		}
-		out, err := c.Runtime.Docker.LogsTail(ctx, a.ID, a.Service, a.Profiles, min(max(a.Lines, 1), 2000))
+		out, err := dockerOf(c.Runtime).LogsTail(ctx, a.ID, a.Service, a.Profiles, min(max(a.Lines, 1), 2000))
 		return map[string]string{"output": out}, err
 	})
 	handle(h, "disk", func(ctx context.Context, c plugins.Call, _ none) (any, error) {
-		return c.Runtime.Docker.Disk(ctx)
+		return dockerOf(c.Runtime).Disk(ctx)
 	})
 	handle(h, "prune", func(ctx context.Context, c plugins.Call, a struct {
 		What string `json:"what"`
 	}) (any, error) {
-		freed, err := c.Runtime.Docker.Prune(ctx, a.What)
+		freed, err := dockerOf(c.Runtime).Prune(ctx, a.What)
 		return map[string]string{"reclaimed": freed}, err
 	})
 	handle(h, "remove", func(ctx context.Context, c plugins.Call, a struct {
 		Kind string `json:"kind"`
 		ID   string `json:"id"`
 	}) (any, error) {
-		return nil, c.Runtime.Docker.RemoveObject(ctx, a.Kind, a.ID)
+		return nil, dockerOf(c.Runtime).RemoveObject(ctx, a.Kind, a.ID)
 	})
 	registerTools(h)
 }

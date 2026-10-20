@@ -2,7 +2,7 @@
 
 The language servers, Problems, Structure and the Symbols provider, apart from the editor. It provides the `language` capability. A built-in plugin: [plugins.md](../../docs/design/plugins.md); `plugin.json` is its manifest.
 
-- **Pod** (`*.go`, package `languages`): The `lsp.*` methods; the servers are the runtime's (`pod/lsp`), started on demand, stopped when idle; the `lsp_*` tools stay the assistant's.
+- **Pod** (`*.go`, package `languages`): The `lsp.*` methods; the servers are `internal/lsp`, a part of the runtime of the project (`language.go`), started on demand, stopped when idle. It provides the `language` capability (`plugins.Language`), through which the `lsp_*` tools of the assistant reach them.
 - **Page** (`web/`, the chunk `plugin-languages`): The client and the code actions `client.ts`, rename and formatting `refactor.ts`, the completion of the servers, the buffers announced to them `sync.ts`, the Problems and Structure tools.
 - **E2e** (`e2e/`, run by `e2e/run.sh`): lsp.
 

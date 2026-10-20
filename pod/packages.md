@@ -5,7 +5,7 @@ The packages of the pod, in five blocks. Each section has the map of its package
 | Block | Packages |
 |---|---|
 | [Server and protocol](#server-and-protocol) | `server`, `runtime`, `store`, `settings`, `projects`, `desks`, `idedir`, `config`, `stats`, `update`, `i18n`, `plugins` |
-| [Files and processes](#files-and-processes) | `fsx`, `execx`, `sshx`, `sshtest`, `console`, `keeper`, `search`, `lsp`, `db`, `docker`, `forwards`, `preview`, `clipboard`, `commands` |
+| [Files and processes](#files-and-processes) | `fsx`, `execx`, `sshx`, `sshtest`, `console`, `keeper`, `search`, `forwards`, `preview`, `clipboard`, `commands` |
 | [AI](#ai) | `llm`, `assistant`, `acp`, `hfcache` |
 | [Kanban and git](#kanban-and-git) | `kanban`, `git` |
 | [Network and identity](#network-and-identity) | `relay`, `relayclient`, `relayload`, `tunnel`, `multipod`, `lan`, `identity`, `pair`, `settingsync`, `push`, `power` |
@@ -73,7 +73,7 @@ flowchart LR
 **Packages**
 
 - `server`: HTTP, pairing, WebSocket RPC; handlers per domain (`handlers*.go`); the Questions tool (`handlers_questions.go`: the questions of the ACP sessions of a root and its worktrees, of the assistant's conversations, of the MCP `ask_user` of `mcp_ask.go`, built when asked; `questions.changed` goes to the windows of the root, a new one is a push)
-- `runtime`: One per open project: file system, watches, revisions, buffers shared between windows, consoles, LSP, databases, git, folder marks, the shell commands run without a terminal (`shell.go`: the assistant, the MCP, `exec.run`); text files decoded to UTF-8 with LF and encoded back in their format (`textfmt.go`)
+- `runtime`: One per open project: file system, watches, revisions, buffers shared between windows, consoles, git, folder marks, the *parts* of the plugins (`parts.go`: the per-project state a plugin keeps there, made on first use, stopped with the project, told when it is idle: the language servers, the database connections, docker), the shell commands run without a terminal (`shell.go`: the assistant, the MCP, `exec.run`); text files decoded to UTF-8 with LF and encoded back in their format (`textfmt.go`)
 - `store`: JSON files under `~/.web-ide` (the shared persistence of the pod)
 - `settings`: IDE settings as an append-only history of full snapshots (`~/.web-ide/settings.json`); a rollback appends a copy of an older entry
 - `projects`: Registry of the projects (`~/.web-ide/projects.json`), kept in memory; hidden child projects for the worktrees (`PutChild`, `PutWorktree`)
@@ -103,9 +103,6 @@ flowchart LR
   execx["execx<br/>local or SSH processes"]
   sshx["sshx<br/>SSH connections"]
   fsx["fsx<br/>local and SFTP files"]
-  db["db<br/>SQL, Redis"]
-  docker["docker"]
-  lsp["lsp"]
   search["search"]
   commands["commands<br/>project commands"]
   clipboard["clipboard"]
@@ -116,13 +113,6 @@ flowchart LR
   console -->|"adopts its processes"| keeper
   keeper -->|"SSH targets"| sshx
   execx -->|"runs through it"| keeper
-  db --> execx
-  db --> fsx
-  db --> idedir
-  db --> sshx
-  db --> store
-  docker --> execx
-  lsp --> execx
   search --> execx
   commands --> execx
   commands --> fsx
@@ -142,17 +132,15 @@ flowchart LR
 - `console`: Terminals and commands with scrollback and output offsets; run by the keeper when there is one, adopted again after a restart of the pod; its methods are the Exec plugin's (`plugins/exec`)
 - `keeper`: The keeper: protocol (frames of a length, a JSON header and raw bytes), server (processes known by pid and descriptors, output rings, attachments from an offset, GC of ended processes; HTTP relay of the completions; SSH connections; update by re-exec) and the client of the pod (reconnection, attachments resumed from their offset)
 - `search`: Project-wide search (RE2) and file list
-- `lsp`: Language servers per project and language, run for the Languages plugin (`plugins/languages`)
-- `db`: What the Database explorer plugin (`plugins/database`) runs: SQLite (modernc), PostgreSQL (pgx), Redis (go-redis), SSH port forwards; the connections live in the runtime of the project, which closes them
-- `docker`: What the Docker plugin (`plugins/docker`) runs: status, Compose stack, containers, inspect, stats, log streams (the `docker` command, JSON formats only)
+- The language servers, the database connections and the `docker` command are no longer packages of the pod: each is the `internal/` of its plugin (`plugins/languages`, `plugins/database`, `plugins/docker`), its per-project state a *part* of the runtime (`runtime/parts.go`).
 - `forwards`: Port forwards: local ports that reach an address seen from the SSH host of a project (open while a window of the pod is connected, closed `ForwardIdle` after the last one)
 - `preview`: App previews: a reverse proxy per preview (cookie of the IDE, or the token of a public one), exposed by `tailscale serve` / `funnel` (`Tailscale` interface, faked in tests), stopped with the command of the app
 - `clipboard`: History of the texts copied in the IDE, shared by every window
 - `commands`: Saved commands of a project (`.ide/commands.json` of the main project): validation, load and save, `RunSaved` (one console per command, shared by the Exec plugin, the assistant and the previews); run by the server (`commands.run`, `run_saved_command` of the assistant and the MCP, previews of `serve` commands) as tasks tagged with their id (`console.Info.CommandID`), one console per command; the `setup` ones make the setup script of a new worktree (`SetupScript`)
 
-`sshtest` is the in-memory SSH server of the tests; `sshtest/sshtestd` runs it for the `forwards` suite. `lsp`, `search`, `docker` and `commands` run their commands through `execx`.
+`sshtest` is the in-memory SSH server of the tests; `sshtest/sshtestd` runs it for the `forwards` suite. `search` and `commands` run their commands through `execx`.
 
-**Tests**: `go test ./pod/fsx ./pod/execx ./pod/sshx ./pod/console ./pod/keeper ./pod/search ./pod/lsp ./pod/db ./pod/docker ./pod/forwards ./pod/preview ./pod/clipboard ./pod/commands`; e2e: `keeper`, `features`, `commands`, `docker`, `forwards`, `lsp`, `preview`, `popups`.
+**Tests**: `go test ./pod/fsx ./pod/execx ./pod/sshx ./pod/console ./pod/keeper ./pod/search ./pod/forwards ./pod/preview ./pod/clipboard ./pod/commands`; e2e: `keeper`, `features`, `commands`, `docker`, `forwards`, `lsp`, `preview`, `popups`.
 
 
 ## AI
