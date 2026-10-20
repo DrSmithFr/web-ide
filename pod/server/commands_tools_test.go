@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"github.com/DrSmithFr/web-ide/pod/caps"
 	"github.com/DrSmithFr/web-ide/pod/sshx"
 )
 
@@ -91,21 +92,22 @@ func TestSavedCommandsForModels(t *testing.T) {
 		t.Fatalf("state: %s", list)
 	}
 
+	share := podLend{s}.Capability(rt, "previews").(caps.Previews).Share
 	// share_preview: the only serve command with a port when no command is given; the
 	// saved command of the same text; an unknown id refused.
-	res, err := s.sharePreviewIn(id, rt, args(`{"title":"Try it"}`))
+	res, err := share(id, rt, args(`{"title":"Try it"}`))
 	if err != nil || res.Preview.CommandID != dev || res.Preview.Port != port || res.Preview.Command != "echo serving\nsleep 30" {
 		t.Fatalf("share_preview: %v %+v", err, res.Preview)
 	}
-	res, _ = s.sharePreviewIn(id, rt, args(`{"title":"x","command":"echo serving\nsleep 30"}`))
+	res, _ = share(id, rt, args(`{"title":"x","command":"echo serving\nsleep 30"}`))
 	if res.Preview == nil || res.Preview.CommandID != dev {
 		t.Fatalf("same text: %+v", res.Preview)
 	}
-	res, _ = s.sharePreviewIn(id, rt, args(`{"title":"x","command":"npm run dev","port":3000}`))
+	res, _ = share(id, rt, args(`{"title":"x","command":"npm run dev","port":3000}`))
 	if res.Preview == nil || res.Preview.CommandID != "" {
 		t.Fatalf("other command: %+v", res.Preview)
 	}
-	if _, err := s.sharePreviewIn(id, rt, args(`{"title":"x","command_id":"nope"}`)); err == nil {
+	if _, err := share(id, rt, args(`{"title":"x","command_id":"nope"}`)); err == nil {
 		t.Fatal("unknown command_id")
 	}
 

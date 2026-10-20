@@ -94,7 +94,7 @@ Errors carry a code (`error`, `canceled`, `auth_required`, `db_password`) and a 
 The packages, their roles, their maps and their pitfalls are in the READMEs of the code: [pod/README.md](../../pod/README.md) (the pod, `main.go`, the blocks) and [pod/packages.md](../../pod/packages.md), one section per block:
 
 - [Server and protocol](../../pod/packages.md#server-and-protocol): `server`, `runtime`, `store`, `settings`, `projects`, `desks`, `idedir`, `config`, `stats`, `update`, `plugins`; `i18n` (`lib/`)
-- [Files and processes](../../pod/packages.md#files-and-processes): `fsx`, `execx`, `sshx`, `sshtest`, `console`, `keeper`, `search`, `forwards`, `preview`, `clipboard`, `commands`
+- [Files and processes](../../pod/packages.md#files-and-processes): `fsx`, `execx`, `sshx`, `sshtest`, `console`, `keeper`, `clipboard`, `commands`
 - [AI](../../pod/packages.md#ai): `llm`, `assistant`, `acp`, `hfcache`
 - [Kanban and git](../../pod/packages.md#kanban-and-git): `kanban`, `git`
 - [Network and identity](../../pod/packages.md#network-and-identity): `relayclient`, `multipod`, `lan`, `pair`, `settingsync`, `push`, `power`; and, outside `pod/`, `relay` and `relayload` (`relay/`), `tunnel` and `identity` (`lib/`)

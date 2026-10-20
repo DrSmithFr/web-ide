@@ -4,10 +4,11 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/DrSmithFr/web-ide/pod/assistant"
 
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 )

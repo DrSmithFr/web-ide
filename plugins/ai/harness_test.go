@@ -4,17 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"testing"
 	"time"
 
 	kbp "github.com/DrSmithFr/web-ide/plugins/kanban"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/commands"
-	"github.com/DrSmithFr/web-ide/pod/forwards"
 	"github.com/DrSmithFr/web-ide/pod/kanban"
 	"github.com/DrSmithFr/web-ide/pod/llm"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
-	"github.com/DrSmithFr/web-ide/pod/preview"
 	"github.com/DrSmithFr/web-ide/pod/projects"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 	"github.com/DrSmithFr/web-ide/pod/store"
@@ -37,8 +36,7 @@ func (p *fakePod) OpenRuntime(string) *runtime.Runtime               { return ni
 func (p *fakePod) Project(string) (string, string, bool)             { return "", "", false }
 func (p *fakePod) Broadcast(string, any)                             {}
 func (p *fakePod) Emit(string, string, any)                          {}
-func (p *fakePod) Forwards() *forwards.Manager                       { return nil }
-func (p *fakePod) Previews() *preview.Manager                        { return nil }
+func (p *fakePod) Authorized(*http.Request) bool                     { return false }
 func (p *fakePod) EmitFamily(string, string, any, string)            {}
 func (p *fakePod) CloseRuntime(string)                               {}
 func (p *fakePod) Services() *plugins.Services                       { return p.svc }
@@ -65,21 +63,19 @@ func (p *fakePod) CommandsText(*runtime.Runtime) (string, int, error) { return "
 func (p *fakePod) StartSaved(*runtime.Runtime, string, bool) (commands.Command, string, string, error) {
 	return commands.Command{}, "", "", errors.New("no command in the tests")
 }
-func (p *fakePod) SharePreview(string, *runtime.Runtime, assistant.Args) (assistant.ToolResult, error) {
-	return assistant.ToolResult{}, errors.New("no preview in the tests")
-}
 
 type fakeHost struct{ pod *fakePod }
 
-func (h fakeHost) Handle(string, plugins.Handler)          {}
-func (h fakeHost) HandleGlobal(string, plugins.Handler)    {}
-func (h fakeHost) AssistantTool(plugins.AssistantTool)     {}
-func (h fakeHost) Pod() plugins.Pod                        { return h.pod }
-func (h fakeHost) OnProjectOpen(func(rt *runtime.Runtime)) {}
-func (h fakeHost) OnWindows(func(n int))                   {}
-func (h fakeHost) OnStart(func())                          {}
-func (h fakeHost) OnStop(func())                           {}
-func (h fakeHost) Provide(string, any)                     {}
+func (h fakeHost) Handle(string, plugins.Handler)                  {}
+func (h fakeHost) HandleGlobal(string, plugins.Handler)            {}
+func (h fakeHost) AssistantTool(plugins.AssistantTool)             {}
+func (h fakeHost) Pod() plugins.Pod                                { return h.pod }
+func (h fakeHost) OnProjectOpen(func(rt *runtime.Runtime))         {}
+func (h fakeHost) OnWindows(func(n int))                           {}
+func (h fakeHost) OnStart(func())                                  {}
+func (h fakeHost) OnStop(func())                                   {}
+func (h fakeHost) HandlePreview(func(string) (http.Handler, bool)) {}
+func (h fakeHost) Provide(string, any)                             {}
 
 // newTestA is the plugin on a pod of its own, with a local project at dir.
 func newTestA(t *testing.T, dir string) (*A, string) {

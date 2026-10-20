@@ -3,9 +3,10 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"strings"
 	"time"
+
+	"github.com/DrSmithFr/web-ide/pod/plugins"
 
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 )

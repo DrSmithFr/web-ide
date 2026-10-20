@@ -2,13 +2,15 @@
 // core (Host.Provide of pod/plugins), reached through Pod.Capability on a project where the
 // provider is enabled. Each one is an interface of this package, so no plugin imports the code
 // of another, and the core reaches a plugin's work only through it (the page side is
-// web/src/plugins/capabilities.ts). A leaf package: pod/assistant uses it too.
+// web/src/plugins/capabilities.ts). It imports the tool kit of the assistant (pod/assistant), never
+// the other way: the console tools of the kit take their own interface (assistant.Terminal).
 package caps
 
 import (
 	"context"
 	"encoding/json"
 
+	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 )
 
@@ -70,4 +72,21 @@ type SearchResult struct {
 	Matches   []SearchMatch `json:"matches"`
 	Truncated bool          `json:"truncated"`
 	Files     int           `json:"files"`
+}
+
+// Previews is the previews capability (the Previews plugin): the app previews of the pod, as the
+// share_preview and list_previews tools of the assistant and the MCP use them.
+type Previews interface {
+	// Share resolves the app of share_preview in project: the card of the preview is the
+	// Preview of the result, shown to the user, who starts it.
+	Share(project string, rt *runtime.Runtime, a assistant.Args) (assistant.ToolResult, error)
+	// List are the previews running, of every project.
+	List() []PreviewInfo
+}
+
+// PreviewInfo is a preview running, as the tools list it.
+type PreviewInfo struct {
+	Project, Title, Command string
+	AppPort                 int
+	URL, PublicURL          string
 }

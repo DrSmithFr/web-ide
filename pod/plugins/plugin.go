@@ -3,6 +3,7 @@ package plugins
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"time"
 
 	"github.com/DrSmithFr/web-ide/pod/assistant"
@@ -12,11 +13,9 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/commands"
 	"github.com/DrSmithFr/web-ide/pod/config"
 	"github.com/DrSmithFr/web-ide/pod/desks"
-	"github.com/DrSmithFr/web-ide/pod/forwards"
 	"github.com/DrSmithFr/web-ide/pod/kanban"
 	"github.com/DrSmithFr/web-ide/pod/keeper"
 	"github.com/DrSmithFr/web-ide/pod/llm"
-	"github.com/DrSmithFr/web-ide/pod/preview"
 	"github.com/DrSmithFr/web-ide/pod/projects"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 	"github.com/DrSmithFr/web-ide/pod/store"
@@ -51,12 +50,15 @@ type Host interface {
 	OnStart(f func())
 	OnStop(f func())
 	// Provide gives a capability of the manifest's provides to the others and the core: an
-	// interface of capabilities.go.
+	// interface of pod/caps.
 	Provide(capability string, impl any)
+	// HandlePreview serves the previews the page asks through the tunnel of the relay (the
+	// Previews plugin): f is the handler of a preview id, false when there is none.
+	HandlePreview(f func(id string) (http.Handler, bool))
 }
 
 // Pod is the pod as a built-in plugin sees it: the projects, the events to every window, and
-// its pod-wide services (the port forwards and the previews, which the HTTP server serves).
+// its pod-wide services.
 type Pod interface {
 	// Runtime opens the runtime of a project (a preview of another project of the pod).
 	Runtime(project string) (*runtime.Runtime, error)
@@ -67,8 +69,6 @@ type Pod interface {
 	// Broadcast sends an event to every window of the pod; Emit to the windows of a project.
 	Broadcast(event string, data any)
 	Emit(project, event string, data any)
-	Forwards() *forwards.Manager
-	Previews() *preview.Manager
 	// EmitFamily sends an event to the windows of a main project and of its worktrees, but the
 	// window except ("" for none).
 	EmitFamily(root, event string, data any, except string)
@@ -79,7 +79,7 @@ type Pod interface {
 	// CapabilityOn tells whether a project has a capability (worktrees, terminal…).
 	CapabilityOn(rt *runtime.Runtime, capability string) bool
 	// Capability is what provides a capability on the project of rt (an interface of
-	// capabilities.go), nil when no enabled plugin provides it.
+	// pod/caps), nil when no enabled plugin provides it.
 	Capability(rt *runtime.Runtime, capability string) any
 	// Stopping tells that the pod is stopping (the work running is left to the next pod).
 	Stopping() bool
@@ -102,8 +102,8 @@ type Pod interface {
 	// The saved commands of a project, as the tools read them, and one started (a console).
 	CommandsText(rt *runtime.Runtime) (text string, n int, err error)
 	StartSaved(rt *runtime.Runtime, id string, restart bool) (cmd commands.Command, console, running string, err error)
-	// SharePreview shows the card of an app preview in the windows of project (share_preview).
-	SharePreview(project string, rt *runtime.Runtime, a assistant.Args) (assistant.ToolResult, error)
+	// Authorized tells whether an HTTP request carries the token of the pod (a private preview).
+	Authorized(r *http.Request) bool
 }
 
 // UIResult is the answer of a window to a tool of the interface.

@@ -3,9 +3,10 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"github.com/DrSmithFr/web-ide/pod/commands"
 	"path"
 	"strings"
+
+	"github.com/DrSmithFr/web-ide/pod/commands"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
 	"github.com/DrSmithFr/web-ide/pod/kanban"

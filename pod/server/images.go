@@ -2,9 +2,10 @@ package server
 
 import (
 	"encoding/base64"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"path"
 	"strings"
+
+	"github.com/DrSmithFr/web-ide/pod/assistant"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
 	"github.com/DrSmithFr/web-ide/pod/fsx"

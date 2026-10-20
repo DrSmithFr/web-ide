@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"strings"
 	"time"
+
+	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"github.com/DrSmithFr/web-ide/pod/caps"
+	"github.com/DrSmithFr/web-ide/pod/plugins"
 
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 	"github.com/DrSmithFr/web-ide/pod/sshx"
@@ -148,7 +151,11 @@ var mcpIDETools = []mcpTool{
 			}
 			// cwd is the folder of the client here: the folder of the app is folder.
 			a["cwd"] = a["folder"]
-			res, err := s.sharePreviewIn(sc.here.ID, rt, a)
+			pv, ok := podLend{s}.Capability(rt, "previews").(caps.Previews)
+			if !ok {
+				return "", i18n.Errorf("the %s plugin is disabled on this project", "Previews")
+			}
+			res, err := pv.Share(sc.here.ID, rt, a)
 			if err != nil {
 				return "", err
 			}
@@ -164,12 +171,16 @@ var mcpIDETools = []mcpTool{
 		name:        "list_previews",
 		description: "Lists the app previews running for the project (started from share_preview or by the user): title, command, port, URL, and the public URL when the user shared it.",
 		run: func(ctx context.Context, s *Server, raw json.RawMessage) (string, error) {
-			_, sc, _, err := s.mcpIDE(raw)
+			_, sc, rt, err := s.mcpIDE(raw)
 			if err != nil {
 				return "", err
 			}
+			pv, ok := podLend{s}.Capability(rt, "previews").(caps.Previews)
+			if !ok {
+				return "", i18n.Errorf("the %s plugin is disabled on this project", "Previews")
+			}
 			var rows []string
-			for _, p := range s.Previews.List() {
+			for _, p := range pv.List() {
 				if p.Project != sc.here.ID && p.Project != sc.root.ID {
 					continue
 				}

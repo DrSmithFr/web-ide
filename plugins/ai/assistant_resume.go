@@ -2,10 +2,11 @@ package ai
 
 import (
 	"encoding/json"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
 	"log"
 	"os"
 	"time"
+
+	"github.com/DrSmithFr/web-ide/pod/runtime"
 
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/llm"

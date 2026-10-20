@@ -1,7 +1,10 @@
 // Package previews is the plugin of the port forwards (local ports reaching an address seen from
 // the SSH host of a project) and of the app previews (a web app of a project served on a
-// temporary URL). Their managers are the pod's: they outlive the windows, and the HTTP server
-// serves the previews; the plugin holds their methods, named tunnels.* and preview.* as before.
+// temporary URL). Their managers (internal/forwards, internal/preview) are the plugin's, one per
+// pod: they outlive the windows, close when the pod stops, and the server hands the plugin the
+// previews asked through the tunnel (Host.HandlePreview). The methods keep their names,
+// tunnels.* and preview.*; the previews capability (caps.Previews) serves the share_preview and
+// list_previews tools of the assistant and the MCP.
 package previews
 
 import (
@@ -13,9 +16,9 @@ import (
 	"time"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/forwards"
+	"github.com/DrSmithFr/web-ide/plugins/previews/internal/forwards"
+	"github.com/DrSmithFr/web-ide/plugins/previews/internal/preview"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
-	"github.com/DrSmithFr/web-ide/pod/preview"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 )
 
@@ -48,13 +51,21 @@ var ForwardIdle = 5 * time.Minute
 
 func (p *Plugin) Register(h plugins.Host) {
 	pod := h.Pod()
-	fw := pod.Forwards()
+	fw := forwards.New(func() { pod.Broadcast("tunnels.changed", nil) })
+	var pv *preview.Manager
+	pv = preview.New(&preview.CLI{}, pod.Authorized, func() { pod.Broadcast("preview.changed", pv.List()) })
+	h.HandlePreview(pv.Handler)
+	h.OnStop(func() {
+		fw.CloseAll()
+		pv.Shutdown()
+	})
+	h.Provide("previews", previewsCap{pod: pod, pv: pv})
 	// The enabled port forwards of an SSH project open with it.
 	h.OnProjectOpen(func(rt *runtime.Runtime) {
 		if rt.Local {
 			return
 		}
-		for _, sp := range rt.ForwardSpecs() {
+		for _, sp := range specsOf(rt) {
 			if sp.Enabled && !fw.IsOpen(rt.P.ID, sp.ID) {
 				_ = fw.Open(rt.P.ID, sp, rt.Dial) // the error shows in the state of the port forward
 			}
@@ -75,7 +86,7 @@ func (p *Plugin) Register(h plugins.Host) {
 		if rt.Local {
 			return []forwards.State{}
 		}
-		return fw.State(rt.P.ID, rt.ForwardSpecs())
+		return fw.State(rt.P.ID, specsOf(rt))
 	}
 	h.Handle("tunnels.get", func(ctx context.Context, c plugins.Call) (any, error) {
 		return state(c.Runtime), nil
@@ -93,7 +104,7 @@ func (p *Plugin) Register(h plugins.Host) {
 		if err := sp.Check(); err != nil {
 			return nil, err
 		}
-		list := rt.ForwardSpecs()
+		list := specsOf(rt)
 		found := false
 		for i := range list {
 			if list[i].ID == sp.ID && sp.ID != "" {
@@ -109,7 +120,7 @@ func (p *Plugin) Register(h plugins.Host) {
 			sp.ID = hex.EncodeToString(b)
 			list = append(list, sp)
 		}
-		if err := rt.SaveForwardSpecs(list); err != nil {
+		if err := saveSpecs(rt, list); err != nil {
 			return nil, err
 		}
 		if sp.Enabled {
@@ -128,14 +139,14 @@ func (p *Plugin) Register(h plugins.Host) {
 		if err != nil {
 			return nil, err
 		}
-		list := rt.ForwardSpecs()
+		list := specsOf(rt)
 		kept := list[:0]
 		for _, sp := range list {
 			if sp.ID != a.ID {
 				kept = append(kept, sp)
 			}
 		}
-		if err := rt.SaveForwardSpecs(kept); err != nil {
+		if err := saveSpecs(rt, kept); err != nil {
 			return nil, err
 		}
 		fw.Close(rt.P.ID, a.ID)
@@ -177,7 +188,6 @@ func (p *Plugin) Register(h plugins.Host) {
 	})
 
 	// The previews: global methods, a preview names its project (the window's by default).
-	pv := pod.Previews()
 	h.HandleGlobal("preview.open", func(ctx context.Context, c plugins.Call) (any, error) {
 		sp, err := bind[preview.Spec](c.Params)
 		if err != nil {
@@ -186,7 +196,7 @@ func (p *Plugin) Register(h plugins.Host) {
 		if sp.Project == "" && c.Window != nil {
 			sp.Project = c.Window.Project()
 		}
-		return open(ctx, pod, sp)
+		return open(ctx, pod, pv, sp)
 	})
 	h.HandleGlobal("preview.list", func(ctx context.Context, c plugins.Call) (any, error) {
 		return pv.List(), nil

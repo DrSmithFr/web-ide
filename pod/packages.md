@@ -5,7 +5,7 @@ The packages of the pod, in five blocks. Each section has the map of its package
 | Block | Packages |
 |---|---|
 | [Server and protocol](#server-and-protocol) | `server`, `runtime`, `store`, `settings`, `projects`, `desks`, `idedir`, `config`, `stats`, `update`, `i18n`, `plugins` |
-| [Files and processes](#files-and-processes) | `fsx`, `execx`, `sshx`, `sshtest`, `console`, `keeper`, `forwards`, `preview`, `clipboard`, `commands` |
+| [Files and processes](#files-and-processes) | `fsx`, `execx`, `sshx`, `sshtest`, `console`, `keeper`, `clipboard`, `commands` |
 | [AI](#ai) | `llm`, `assistant`, `acp`, `hfcache` |
 | [Kanban and git](#kanban-and-git) | `kanban`, `git` |
 | [Network and identity](#network-and-identity) | `relay`, `relayclient`, `relayload`, `tunnel`, `multipod`, `lan`, `identity`, `pair`, `settingsync`, `push`, `power` |
@@ -90,7 +90,7 @@ flowchart LR
 
 ## Files and processes
 
-What the pod does on the machine of a project, local or over SSH: files, processes, terminals, language servers, databases, Docker, port forwards, previews. `execx` and `fsx` hide the target (`local` or `ssh:<key>`); `keeper` holds the processes outside the pod (see the [architecture](../docs/design/architecture.md#overview)).
+What the pod does on the machine of a project, local or over SSH: files, processes, terminals, language servers, databases, Docker (the port forwards and previews are the Previews plugin's). `execx` and `fsx` hide the target (`local` or `ssh:<key>`); `keeper` holds the processes outside the pod (see the [architecture](../docs/design/architecture.md#overview)).
 
 ```mermaid
 flowchart LR
@@ -105,8 +105,6 @@ flowchart LR
   fsx["fsx<br/>local and SFTP files"]
   commands["commands<br/>project commands"]
   clipboard["clipboard"]
-  preview["preview"]
-  forwards["forwards<br/>port forwards"]
   sshtest["sshtest<br/>test SSH server"]
   console --> execx
   console -->|"adopts its processes"| keeper
@@ -130,8 +128,6 @@ flowchart LR
 - `console`: Terminals and commands with scrollback and output offsets; run by the keeper when there is one, adopted again after a restart of the pod; its methods are the Exec plugin's (`plugins/exec`)
 - `keeper`: The keeper: protocol (frames of a length, a JSON header and raw bytes), server (processes known by pid and descriptors, output rings, attachments from an offset, GC of ended processes; HTTP relay of the completions; SSH connections; update by re-exec) and the client of the pod (reconnection, attachments resumed from their offset)
 - The language servers, the database connections and the `docker` command are no longer packages of the pod: each is the `internal/` of its plugin (`plugins/languages`, `plugins/database`, `plugins/docker`), its per-project state a *part* of the runtime (`runtime/parts.go`).
-- `forwards`: Port forwards: local ports that reach an address seen from the SSH host of a project (open while a window of the pod is connected, closed `ForwardIdle` after the last one)
-- `preview`: App previews: a reverse proxy per preview (cookie of the IDE, or the token of a public one), exposed by `tailscale serve` / `funnel` (`Tailscale` interface, faked in tests), stopped with the command of the app
 - `clipboard`: History of the texts copied in the IDE, shared by every window
 - `commands`: Saved commands of a project (`.ide/commands.json` of the main project): validation, load and save, `RunSaved` (one console per command, shared by the Exec plugin, the assistant and the previews); run by the server (`commands.run`, `run_saved_command` of the assistant and the MCP, previews of `serve` commands) as tasks tagged with their id (`console.Info.CommandID`), one console per command; the `setup` ones make the setup script of a new worktree (`SetupScript`)
 

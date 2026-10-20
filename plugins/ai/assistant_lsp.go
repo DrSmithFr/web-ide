@@ -3,12 +3,13 @@ package ai
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/DrSmithFr/web-ide/pod/caps"
 	"net/url"
 	"sort"
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/DrSmithFr/web-ide/pod/caps"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
 	"github.com/DrSmithFr/web-ide/pod/assistant"

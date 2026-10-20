@@ -8,14 +8,16 @@ import (
 	"strings"
 	"testing"
 
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/coder/websocket"
+
 	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"github.com/DrSmithFr/web-ide/pod/plugins/builtin"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 	"github.com/DrSmithFr/web-ide/pod/sshx"
-	"github.com/coder/websocket"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 // The test plugin hello: its RPC method, its assistant tool (assistant and MCP) and its

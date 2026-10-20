@@ -156,7 +156,11 @@ func (s *A) assistantTool(r *assistantRun, ref *runtimeRef, call assistant.ToolC
 	case "agent_note":
 		res, err = s.agentNote(r, a)
 	case "share_preview":
-		res, err = s.pod.SharePreview(r.project, ref.rt, a)
+		if pv, ok := s.pod.Capability(ref.rt, "previews").(caps.Previews); ok {
+			res, err = pv.Share(r.project, ref.rt, a)
+		} else {
+			err = i18n.Errorf("the %s plugin is disabled on this project", "Previews")
+		}
 	case "bash":
 		res, err = bashTool(r.ctx, ref.rt, a.Str("command"), a.Str("cwd"), a.Num("timeout"), s.toolProgress(r, call.ID), s.keptFor(r))
 	case "run_command":

@@ -3,11 +3,12 @@ package ai
 import (
 	"context"
 	"encoding/json"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/kanban"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"github.com/DrSmithFr/web-ide/pod/kanban"
 
 	"github.com/DrSmithFr/web-ide/pod/fsx"
 	"github.com/DrSmithFr/web-ide/pod/idedir"

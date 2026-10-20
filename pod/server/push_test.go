@@ -4,10 +4,11 @@ import (
 	"crypto/ecdh"
 	"crypto/rand"
 	"encoding/json"
-	"github.com/DrSmithFr/web-ide/pod/kanban"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DrSmithFr/web-ide/pod/kanban"
 
 	"github.com/DrSmithFr/web-ide/lib/identity"
 	"github.com/DrSmithFr/web-ide/pod/push"
