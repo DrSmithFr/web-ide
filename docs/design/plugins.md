@@ -14,7 +14,7 @@ The buffer of a file, its sync with the disk (`buffer.synced`, `fs.changed`) and
 
 ## Shape of a plugin
 
-A folder (`~/.web-ide/plugins/<id>/<version>/` for an external one, installed from its repository: [Phase 3](#phase-3-external-plugins)):
+A folder: `plugins/<id>/` of the repository for a built-in one (#133), `~/.web-ide/plugins/<id>/<version>/` for an external one, installed from its repository ([Phase 3](#phase-3-external-plugins)):
 
 ```
 plugin.json   id, name, version, apiVersion, permissions, provides / requires, contributes
@@ -23,9 +23,11 @@ bin/…         optional backend: a process speaking JSON-RPC over stdio, any la
 i18n/fr.json  its own catalog (the English text is the key, as in the IDE)
 ```
 
-- **Backend**: a built-in plugin implements the Go interface `plugins.Plugin` inside the pod (`pod/plugins/<id>/`, its `plugin.json` embedded): `Register(host)` adds its RPC methods, named `<id>.<method>`, and its assistant tools, each one a schema and a handler that gets the project's `runtime`; an external one is a process started by the pod on demand and stopped a while after the last window leaves, like a language server. Same contract on both transports. Go's `plugin` package is ruled out (same toolchain, same build, Linux only).
-- **Front end**: the module's `activate(api)` returns the components of its contributions, by id (`tools`, `views`, `commands`). The `api` (`web/src/plugins/api.ts`): `rpc()` to its backend, `on()` for the events (`fs.changed`, `git.changed`, `plugins.changed`…), `openFile`, `openView` (a tab of one of its views, with a serializable state), `t()`, the port forwards and the app previews of the core (`forwards`, `previews`: core features any plugin may show), and components of `ui/`. Solid is shared through an import map, so a plugin does not ship its own. A built-in plugin is a folder of `web/src/plugins/` imported by the bundle, given the same `api`.
-- **Example**: Docker. `pod/plugins/docker/` (manifest, the `docker.*` methods, the log streams, `docker_ps` / `docker_logs`) and `web/src/plugins/docker/` (the tool; `plugin.ts` keeps the `api` it was given, the only door to the core).
+A built-in plugin has the same shape, with its sources instead of built files: `plugin.json` and its Go package (`*.go`) at the top, `web/` (its page module, built into the chunk `plugin-<id>`), `e2e/` (its browser suites, found by `e2e/run.sh`), `README.md`.
+
+- **Backend**: a built-in plugin implements the Go interface `plugins.Plugin` inside the pod (`plugins/<id>/*.go`, its `plugin.json` embedded, listed by `pod/plugins/builtin`): `Register(host)` adds its RPC methods, named `<id>.<method>`, and its assistant tools, each one a schema and a handler that gets the project's `runtime`; an external one is a process started by the pod on demand and stopped a while after the last window leaves, like a language server. Same contract on both transports. Go's `plugin` package is ruled out (same toolchain, same build, Linux only).
+- **Front end**: the module's `activate(api)` returns the components of its contributions, by id (`tools`, `views`, `commands`). The `api` (`web/src/plugins/api.ts`): `rpc()` to its backend, `on()` for the events (`fs.changed`, `git.changed`, `plugins.changed`…), `openFile`, `openView` (a tab of one of its views, with a serializable state), `t()`, the port forwards and the app previews of the core (`forwards`, `previews`: core features any plugin may show), and components of `ui/`. Solid is shared through an import map, so a plugin does not ship its own. A built-in plugin's `web/` is imported by the bundle (`web/src/plugins/registry.tsx`), given the same `api`; it imports the API as `@ide/api`, `@ide/types`, `@ide/capabilities` (an alias of `web/src/plugins/`), and one `node_modules` at the root (npm workspaces) gives it the page's `solid-js`.
+- **Example**: Docker. `plugins/docker/` (manifest, the `docker.*` methods, the log streams, `docker_ps` / `docker_logs`) and `plugins/docker/web/` (the tool; `plugin.ts` keeps the `api` it was given, the only door to the core).
 - **The manifest is the pod's**: the page gets the manifests and their state on the project in `project.open`, then `plugins.changed`; the page module brings only the components.
 - **Lazy loading**: only the plugins enabled on the project are loaded, which also shortens the first load (the iPhone through the relay).
 
@@ -52,7 +54,7 @@ As long as Console and Git stay in the core, `terminal` and `worktrees` are prov
 
 The assistant becomes a **consumer**: today `assistant/defs.go`, `assistant_tools.go` and `mcp_ide.go` know Docker, the consoles, the previews; tomorrow each plugin declares its tools and the assistant offers those of the plugins enabled on the project (a shorter prompt where Docker is off).
 
-Coupling measured on the front end (imports, 2026-10-16): Docker, database, Git and Console depend on the core (`ui/`, `web/src/pod/rpc.ts`, `i18n`, `keys`, `state/project`) plus `console/consoles`, `llm/previews` or `editor/doc` only; the kanban and above all the assistant (`llm/`, which imports kanban, docker, doodle, console, editor, questions…) are the hubs. The Docker tool held the Port forwards and Previews tabs: since #114 they are a tool of the core of their own, *Port forwards and previews* (the Previews plugin since #119: `web/src/plugins/previews/`), also offered to plugins through the `api`.
+Coupling measured on the front end (imports, 2026-10-16): Docker, database, Git and Console depend on the core (`ui/`, `web/src/pod/rpc.ts`, `i18n`, `keys`, `state/project`) plus `console/consoles`, `llm/previews` or `editor/doc` only; the kanban and above all the assistant (`llm/`, which imports kanban, docker, doodle, console, editor, questions…) are the hubs. The Docker tool held the Port forwards and Previews tabs: since #114 they are a tool of the core of their own, *Port forwards and previews* (the Previews plugin since #119: `plugins/previews/web/`), also offered to plugins through the `api`.
 
 ## What Docker added to the API
 

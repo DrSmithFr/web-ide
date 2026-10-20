@@ -21,9 +21,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: package-lock.json
       - name: Check Go formatting
-        run: test -z "$(gofmt -l pod relay lib)" || (gofmt -l pod relay lib && exit 1)
+        run: test -z "$(gofmt -l pod relay lib plugins)" || (gofmt -l pod relay lib plugins && exit 1)
       - name: Build
         run: make build
       - name: Unit tests
@@ -43,7 +43,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: |
-            web/package-lock.json
+            package-lock.json
             e2e/package-lock.json
       - name: Install gopls and Chromium
         run: |

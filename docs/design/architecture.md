@@ -67,12 +67,14 @@ The keeper also relays HTTP requests (`keeper/http.go`): the completions of the 
 | [`relay/`](../../relay/README.md) | The relay, run by the same binary (`web-ide-pod relay`): its package, `relayload/`, the bootstrap page (`web/`) |
 | [`lib/`](../../lib/README.md) | The Go code the pod and the relay share: `identity`, `tunnel`, `i18n` |
 | `go.mod` | One Go module for `pod/`, `relay/` and `lib/` (`github.com/DrSmithFr/web-ide`) |
-| [`web/`](../../web/README.md) | The front end (SolidJS + TypeScript, Vite), [`src/`](../../web/src/README.md) |
+| [`web/`](../../web/README.md) | The front end (SolidJS + TypeScript, Vite), [`src/`](../../web/src/README.md): the shell of the page and the plugin API |
+| [`plugins/`](../../plugins/README.md) | The built-in plugins, one folder each: `plugin.json`, its Go package, `web/` (its page module), `e2e/` (its suites), `README.md` |
+| `package.json` | npm workspaces (`web`): one `node_modules` at the root, so the page and `plugins/*/web` share `solid-js` |
 | [`e2e/`](../../e2e/README.md) | Browser tests (Playwright core driving headless Chromium); `e2e/shots/` makes the pictures of the documentation |
 | `claude-mod/` | Claude Code mod: ticket and changed files above the prompt, opened in the IDE (`/open`) |
 | `docs/` | User guide, specification, architecture, kanban, doodle and relay designs, pictures (`docs/images`) |
 
-**Target layout** (decided 2026-10-20, milestone *Repository layout*, before the external plugins). Done (#132): one Go module at the root; `pod/` the pod program (no `internal/`: plugins import its packages), `relay/` the relay (still the `web-ide-pod relay` subcommand of one binary), `lib/` the code both share. Next: a root `package.json` (npm workspaces, one `solid-js` for the page and the plugins), `web/` the shell of the page, `plugins/<id>/` each built-in plugin in the shape of an external one (`plugin.json`, its Go, `web/`, `e2e/`, `README.md`), `e2e/` the harness and the suites of the core. Then the business code of each plugin (docker, kanban, llm…) moves into its folder, the dependencies of `runtime` and `server` inverted; later a catalog per plugin (`plugins/<id>/i18n/`).
+**Target layout** (decided 2026-10-20, milestone *Repository layout*, before the external plugins). Done: one Go module at the root; `pod/` the pod program (no `internal/`: plugins import its packages), `relay/` the relay (still the `web-ide-pod relay` subcommand of one binary), `lib/` the code both share (#132); a root `package.json` (npm workspaces), `web/` the shell of the page, `plugins/<id>/` each built-in plugin in the shape of an external one, `e2e/` the harness and the suites of the core (#133). Next: the business code of each plugin (docker, kanban, llm…) moves into its folder, the dependencies of `runtime` and `server` inverted; later a catalog per plugin (`plugins/<id>/i18n/`).
 
 ## Data on disk
 

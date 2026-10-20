@@ -1,0 +1,464 @@
+// Editor: text against the gutter, indentation guides, whitespace, multiple carets, folding,
+// soft wrap.
+const fs = require('fs')
+const { run, openProject, open, assert, text, WS, OUT } = require('../../../e2e/common.cjs')
+
+run(async ({ page }) => {
+  fs.writeFileSync(WS + '/demo/multi.txt', 'foo bar foo\nfoo baz\n    foo qux\n')
+  fs.writeFileSync(WS + '/demo/win.txt', 'one\r\ntwo\r\n')
+  fs.writeFileSync(WS + '/demo/latin.txt', Buffer.from('caf\xe9\n', 'latin1'))
+  fs.writeFileSync(WS + '/demo/long.md', '# Title\n\n' + Array.from({ length: 90 }, (_, i) => 'word' + i).join(' ') + '\nafter\n')
+  fs.writeFileSync(WS + '/demo/conf.yaml', 'server:\n  host: x\n  ports:\n    - 80\n    - 443\nname: demo\n')
+  fs.mkdirSync(WS + '/demo/img', { recursive: true })
+  for (const d of ['a/x', 'b/x']) {
+    fs.mkdirSync(WS + '/demo/' + d, { recursive: true })
+    fs.writeFileSync(WS + '/demo/' + d + '/util.go', 'package x\n')
+  }
+  fs.writeFileSync(WS + '/demo/src/notes.txt', 'other notes\n')
+  fs.writeFileSync(WS + '/demo/img/dot.png', Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==', 'base64'))
+  fs.writeFileSync(WS + '/demo/guide.md', '# Guide\n\nSee [the notes](notes.txt#L1) and [the web](https://example.com).\n\n![dot](img/dot.png)\n\n- [x] done\n- [ ] todo\n\n## Second part\n\n```go\nfunc main() {}\n```\n\n[Back up](#second-part)\n' +
+    Array.from({ length: 80 }, (_, i) => `\n## Section ${i}\n\nText ${i}.\n`).join(''))
+  await openProject(page)
+  await open(page, 'main.go')
+
+  // The first character of a line touches the gutter.
+  const gap = await page.evaluate(() => {
+    const t = document.querySelector('.pane.active .ed-block').firstChild
+    const r = document.createRange()
+    r.setStart(t, 0)
+    r.setEnd(t, 1)
+    return r.getBoundingClientRect().left - document.querySelector('.pane.active .ed-gutter').getBoundingClientRect().right
+  })
+  assert(Math.abs(gap) < 1, 'no space between the gutter and the text (' + gap + ')')
+
+  // Indentation guides: one per indented block, the one of the caret block stands out.
+  const caretAt = async (line, col = 0) => {
+    await page.click('.pane.active .ed-content')
+    await page.keyboard.press('Control+Home')
+    for (let i = 0; i < line; i++) await page.keyboard.press('ArrowDown')
+    for (let i = 0; i < col; i++) await page.keyboard.press('ArrowRight')
+  }
+  const lineTop = (line) => page.evaluate((l) => {
+    const t = document.querySelector('.pane.active .ed-block').firstChild
+    const off = t.data.split('\n').slice(0, l).join('\n').length + (l ? 1 : 0)
+    const r = document.createRange()
+    r.setStart(t, off)
+    r.setEnd(t, off + 1)
+    return r.getBoundingClientRect().top - document.querySelector('.pane.active .ed-guides').getBoundingClientRect().top
+  }, line)
+  await caretAt(12)
+  await page.waitForSelector('.pane.active .ed-guide.active')
+  const guides = await page.$$eval('.pane.active .ed-guide', (g) => g.map((e) => ({ top: e.offsetTop, h: e.offsetHeight, active: e.classList.contains('active') })))
+  assert(guides.length === 2, 'a guide per indented block (' + guides.length + ')')
+  const active = guides.find((g) => g.active)
+  assert(Math.abs(active.top - (await lineTop(12))) < 4 && guides.filter((g) => g.active).length === 1, 'the guide of the caret block is the active one')
+  await caretAt(7)
+  await page.waitForFunction((top) => Math.abs(document.querySelector('.pane.active .ed-guide.active')?.offsetTop - top) < 4, await lineTop(8))
+  assert(true, 'on the line opening a block, its guide is the active one')
+  await page.screenshot({ path: OUT + '/editor-guides.png' })
+
+  // Whitespace (View menu): dots for spaces, arrows for tabs, a mark at each line end.
+  const whitespace = async () => {
+    await page.click('.menu-btn:has-text("View")')
+    await page.click('.ctx-menu .ctx-item:has-text("Show whitespace")')
+  }
+  await whitespace()
+  await page.waitForSelector('.pane.active .ed-ws i.t', { state: 'attached', timeout: 3000 })
+  const ws = await page.evaluate(() => {
+    const q = (s) => document.querySelectorAll('.pane.active .ed-ws ' + s)
+    const tab = q('i.t')[0].getBoundingClientRect()
+    const main = document.querySelector('.pane.active .ed-main').getBoundingClientRect()
+    const cw = document.querySelector('.pane.active .ed-content').getBoundingClientRect().width
+    return { tabs: q('i.t').length, eol: q('i.n').length, spaces: q('i:not([class])').length, tabLeft: tab.left - main.left, tabWidth: tab.width }
+  })
+  assert(ws.tabs === 2 && ws.eol === 14 && ws.spaces > 10, 'tabs, spaces and line ends marked ' + JSON.stringify(ws))
+  const cw = await page.evaluate(() => {
+    const t = document.querySelector('.pane.active .ed-block').firstChild
+    const r = document.createRange()
+    r.setStart(t, 0)
+    r.setEnd(t, 7)
+    return r.getBoundingClientRect().width / 7
+  })
+  assert(Math.abs(ws.tabLeft) < 1 && Math.abs(ws.tabWidth - 4 * cw) < 1, 'the tab mark covers the tab')
+  await page.screenshot({ path: OUT + '/editor-whitespace.png' })
+  await whitespace()
+  await page.waitForFunction(() => !document.querySelector('.pane.active .ed-ws').firstChild)
+  assert(true, 'whitespace hidden again')
+
+  // Multiple carets.
+  await open(page, 'multi.txt')
+  const content = '.pane.active .ed-content'
+  const reset = async () => {
+    await page.click(content)
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Control+a')
+    await page.keyboard.insertText('foo bar foo\nfoo baz\n    foo qux\n')
+  }
+  // Screen position of a line and column of the text.
+  const at = (line, col) => page.evaluate(([l, c]) => {
+    const t = document.querySelector('.pane.active .ed-block').firstChild
+    const off = t.data.split('\n').slice(0, l).reduce((n, x) => n + x.length + 1, 0) + c
+    const r = document.createRange()
+    r.setStart(t, off)
+    r.setEnd(t, off + 1)
+    const b = r.getBoundingClientRect()
+    return { x: b.left + 1, y: b.top + b.height / 2 }
+  }, [line, col])
+  const carets = async () => {
+    await page.waitForTimeout(80)
+    return page.$$eval('.pane.active .ed-caret', (l) => l.length)
+  }
+
+  // Alt+J: the word at the caret, then its next occurrences; Shift+Alt+J removes the last one.
+  await page.click(content)
+  await page.keyboard.press('Control+Home')
+  await page.keyboard.press('ArrowRight')
+  await page.keyboard.press('Alt+j')
+  assert((await page.evaluate(() => getSelection().toString())) === 'foo', 'Alt+J selects the word at the caret')
+  await page.keyboard.press('Alt+j')
+  await page.keyboard.press('Alt+j')
+  await page.keyboard.press('Alt+j')
+  assert((await carets()) === 4, 'Alt+J adds the next occurrences, every caret drawn (' + (await carets()) + ')')
+  await page.keyboard.press('Alt+Shift+j')
+  await page.keyboard.type('X')
+  assert((await text(page)) === 'X bar X\nX baz\n    foo qux\n', 'typing replaces every selection')
+  await page.keyboard.press('Backspace')
+  await page.keyboard.type('ab')
+  assert((await text(page)) === 'ab bar ab\nab baz\n    foo qux\n', 'Backspace at every caret')
+  await page.keyboard.press('Escape')
+  assert((await carets()) === 0, 'Escape leaves a single caret')
+  await page.keyboard.press('Control+z')
+  assert((await text(page)) === 'a bar a\na baz\n    foo qux\n', 'one undo step per edit of all the carets')
+
+  // Ctrl+Alt+Shift+J: every occurrence.
+  await reset()
+  await page.keyboard.press('Control+Home')
+  await page.keyboard.press('Control+Alt+Shift+j')
+  await page.keyboard.type('zz')
+  assert((await text(page)) === 'zz bar zz\nzz baz\n    zz qux\n', 'every occurrence selected and replaced')
+
+  // Column selection with the middle button, then the arrows, End and Enter at every caret.
+  await reset()
+  const p0 = await at(0, 0)
+  const p2 = await at(2, 0)
+  await page.mouse.move(p0.x - 1, p0.y)
+  await page.mouse.down({ button: 'middle' })
+  await page.mouse.move(p2.x - 1, p2.y, { steps: 4 })
+  await page.mouse.up({ button: 'middle' })
+  assert((await carets()) === 3, 'middle button drag: a caret per line, the last one included')
+  await page.keyboard.type('> ')
+  await page.keyboard.press('End')
+  await page.keyboard.type(';')
+  assert((await text(page)) === '> foo bar foo;\n> foo baz;\n>     foo qux;\n', 'typing, End at every caret')
+  await page.screenshot({ path: OUT + '/editor-carets.png' })
+  await page.keyboard.press('Shift+Home')
+  assert((await carets()) === 3, 'Shift+Home extends every selection')
+  await page.keyboard.press('Delete')
+  assert((await text(page)) === '\n\n\n', 'Delete removes every selection')
+
+  // Lines too short for the column of the mouse are left out.
+  await reset()
+  const s0 = await at(0, 9)
+  const s2 = await at(2, 9)
+  await page.mouse.move(s0.x - 1, s0.y)
+  await page.mouse.down({ button: 'middle' })
+  await page.mouse.move(s2.x - 1, s2.y, { steps: 4 })
+  await page.mouse.up({ button: 'middle' })
+  await page.keyboard.type('X')
+  assert((await text(page)) === 'foo bar fXoo\nfoo baz\n    foo qXux\n', 'a short line is left out of the column')
+
+  // Alt+Shift+drag: a box from column 4 to 7.
+  await reset()
+  const a = await at(0, 4)
+  const b = await at(1, 7)
+  await page.keyboard.down('Alt')
+  await page.keyboard.down('Shift')
+  await page.mouse.move(a.x - 1, a.y)
+  await page.mouse.down()
+  await page.mouse.move(b.x - 1, b.y, { steps: 4 })
+  await page.mouse.up()
+  await page.keyboard.up('Shift')
+  await page.keyboard.up('Alt')
+  await page.keyboard.type('Z')
+  assert((await text(page)) === 'foo Z foo\nfoo Z\n    foo qux\n', 'Alt+Shift+drag selects a column')
+
+  // Alt+click adds a caret, a click goes back to one.
+  await reset()
+  await page.click(content)
+  await page.keyboard.press('Control+Home')
+  const c = await at(1, 0)
+  await page.keyboard.down('Alt')
+  await page.mouse.click(c.x - 1, c.y)
+  await page.keyboard.up('Alt')
+  await page.keyboard.type('#')
+  assert((await text(page)) === '#foo bar foo\n#foo baz\n    foo qux\n', 'Alt+click adds a caret')
+  await page.mouse.click(c.x + 30, c.y)
+  assert((await carets()) === 0, 'a click leaves a single caret')
+
+  // Folding: gutter markers, placeholders, shortcuts, fold all, session.
+  await open(page, 'main.go')
+  const nums = () => page.textContent('.pane.active .ed-gutter-nums')
+  const holders = async () => {
+    await page.waitForTimeout(80)
+    return page.$$eval('.pane.active .ed-placeholder', (l) => l.length)
+  }
+  await page.hover('.pane.active .ed-gutter')
+  await page.click('.pane.active .ed-fold[data-fold="7"]')
+  await page.waitForSelector('.pane.active .ed-placeholder')
+  const shown = (await nums()).split('\n')
+  assert(!shown.includes('9') && !shown.includes('10') && shown.includes('11'), 'gutter marker folds the function body and its closing line')
+  assert((await page.textContent('.pane.active .ed-placeholder')).endsWith('}'), 'the closing bracket follows the placeholder')
+  assert(await page.isVisible('.pane.active .ed-fold.folded[data-fold="7"]'), 'folded marker')
+  await page.screenshot({ path: OUT + '/editor-fold.png' })
+  await page.click('.pane.active .ed-placeholder')
+  await page.waitForFunction(() => document.querySelector('.pane.active .ed-gutter-nums').textContent.split('\n').includes('9'))
+  assert((await holders()) === 0, 'a click on the placeholder unfolds')
+
+  await caretAt(12, 2)
+  await page.keyboard.press('Control+Minus')
+  assert((await holders()) === 1 && !(await nums()).split('\n').includes('13'), 'Ctrl+- folds the block of the caret')
+  assert((await page.evaluate(() => getSelection().focusOffset)) > 0, 'the caret leaves the hidden lines')
+  await page.keyboard.press('Control+Equal')
+  assert((await holders()) === 0, 'Ctrl+= unfolds it')
+  await page.keyboard.press('Control+Shift+Minus')
+  assert((await holders()) === 2, 'Ctrl+Shift+- folds every block')
+  await page.keyboard.press('Control+Shift+Equal')
+  assert((await holders()) === 0, 'Ctrl+Shift+= unfolds every block')
+
+  // A search result in a folded block unfolds it; typing in the header keeps the fold.
+  await caretAt(12, 2)
+  await page.keyboard.press('Control+Minus')
+  await page.keyboard.type(' ')
+  assert((await holders()) === 1, 'typing on the header line keeps the fold')
+  await page.keyboard.press('Backspace')
+  await page.keyboard.press('Control+g')
+  await page.keyboard.type('13')
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(200)
+  assert((await holders()) === 0, 'going to a hidden line unfolds it')
+
+  // Kept in the session.
+  await caretAt(7)
+  await page.keyboard.press('Control+Minus')
+  await page.waitForTimeout(1500)
+  await page.reload()
+  await page.waitForSelector('.pane.active .ed-placeholder', { timeout: 15000 })
+  assert(!(await nums()).split('\n').includes('9'), 'folds restored after a reload')
+
+  // YAML: by indentation.
+  await open(page, 'conf.yaml')
+  await page.click('.pane.active .ed-content')
+  await page.keyboard.press('Control+Shift+Minus')
+  assert((await holders()) === 1 && (await nums()).trim().split('\n').join(',') === '1,6,7', 'YAML folded by indentation (' + (await nums()).trim().split('\n').join(',') + ')')
+
+  // Status bar: caret, line separator, encoding, indentation, language.
+  const item = (id) => page.textContent(`[data-testid=status-${id}]`)
+  assert(!(await page.$('.menubar [data-testid=status-cursor]')) && /^\d+:\d+$/.test(await item('cursor')), 'caret position in the status bar ' + (await item('cursor')))
+  assert((await page.textContent('[data-testid=status-bar]')).includes('YAML') && (await item('indent')) === '2 spaces', 'YAML indented by 2 spaces')
+
+  // The bar is the last row of the window: full width, below the icon rails and the bottom strip.
+  const box = (sel) => page.$eval(sel, (e) => e.getBoundingClientRect().toJSON())
+  const win = () => page.evaluate(() => ({ w: innerWidth, h: innerHeight }))
+  const barIsLast = () => page.$eval('[data-testid=status-bar]', (e) => e.parentElement?.classList.contains('app') && e.parentElement.lastElementChild === e)
+  {
+    const bar = await box('[data-testid=status-bar]')
+    const { w, h } = await win()
+    assert(await barIsLast(), 'the status bar is the last child of .app')
+    assert(Math.abs(bar.width - w) < 2 && Math.abs(bar.bottom - h) < 2, 'the bar spans the whole window at its bottom')
+    // The desks of the project sit on the left of the bar, not in the menu bar.
+    const desks = await box('[data-testid=desks]')
+    assert(!!(await page.$('[data-testid=status-bar] [data-testid=desks]')) && !(await page.$('.menubar [data-testid=desks]')), 'the desks are in the status bar, not in the menu bar')
+    assert(desks.left >= bar.left && desks.left - bar.left < 10 && desks.bottom <= bar.bottom + 1, 'the desks sit at the left of the bar')
+    for (const rail of ['.rail-left', '.rail-right'])
+      assert((await box(rail)).bottom <= bar.top + 1, `the ${rail} stops above the bar`)
+    await page.click('.rail-left .rail-btn[title="Console"]')
+    await page.waitForSelector('.bottom [data-tool=console]')
+    assert((await box('.bottom')).bottom <= (await box('[data-testid=status-bar]')).top + 1, 'the bottom strip sits above the bar')
+
+    // The bar is about the file in focus: with the focus in the bottom strip, its items hide.
+    await page.click('.bottom [data-tool=console]')
+    await page.waitForFunction(() => !document.querySelector('[data-testid=status-cursor]'))
+    assert(!(await page.$('[data-testid=status-eol]')) && !(await page.$('[data-testid=status-encoding]')), 'no item of the file while the console has the focus')
+    assert(Math.abs((await box('[data-testid=status-bar]')).height - 24) < 2, 'the bar keeps its row while empty')
+    await page.click('.pane.active .ed-content')
+    await page.waitForSelector('[data-testid=status-cursor]')
+    assert(!!(await page.$('[data-testid=status-eol]')), 'the items of the file come back with the focus')
+
+    await page.click('.rail-left .rail-btn[title="Console"]')
+    await page.waitForFunction(() => !document.querySelector('.bottom'))
+  }
+  await open(page, 'main.go')
+  await page.click('[data-testid=status-cursor]')
+  await page.keyboard.type('3')
+  await page.keyboard.press('Enter')
+  await page.waitForFunction(() => document.querySelector('[data-testid=status-cursor]').textContent.startsWith('3:'))
+  assert(true, 'a click on the caret position opens "Go to line"')
+  assert((await item('eol')) === 'LF' && (await item('encoding')) === 'UTF-8' && (await item('indent')) === 'Tab', 'Go file: LF, UTF-8, tabs')
+  const menuItem = async (id, label) => {
+    await page.click(`[data-testid=status-${id}]`)
+    await page.click(`.ctx-menu .ctx-item:has-text("${label}")`)
+  }
+  await menuItem('indent', '2 spaces')
+  await page.click('.pane.active .ed-content')
+  await page.keyboard.press('Control+End')
+  await page.keyboard.press('ArrowUp')
+  await page.keyboard.press('Home')
+  await page.keyboard.press('Tab')
+  assert((await text(page)).includes('\n  }\n'), 'Tab inserts the indentation chosen for the file')
+  await page.keyboard.press('Control+z')
+  await menuItem('indent', 'Tab')
+
+  // Markdown: rendered by default, the source with the floating button or Alt+M.
+  await open(page, 'guide.md')
+  const view = '.pane.active [data-testid=md-view]'
+  await page.waitForSelector(view + ' h1#guide')
+  assert(await page.$eval('.pane.active .editor-mount', (e) => e.inert), 'a Markdown file opens rendered, the source out of reach')
+  await page.waitForFunction((v) => document.querySelector(v + ' img')?.src.startsWith('data:image/png') && document.querySelector(v + ' img').naturalWidth === 1, view)
+  assert(true, 'an image of the project is shown')
+  assert((await page.$$(view + ' .md-codeblock .tok-keyword')).length > 0 && (await page.$$(view + ' input[type=checkbox]')).length === 2, 'code colored, task list checkboxes')
+  await page.click('.pane.active [data-testid=md-toggle]')
+  await page.waitForFunction(() => !document.querySelector('.pane.active [data-testid=md-view]') && document.activeElement?.closest('.pane.active .ed-content'))
+  assert(true, 'the button shows the source, with the keyboard')
+  await page.keyboard.press('Control+Home')
+  await page.keyboard.press('End')
+  await page.keyboard.type(' draft')
+  await page.keyboard.press('Alt+KeyM')
+  await page.waitForFunction((v) => document.querySelector(v + ' h1')?.textContent === 'Guide draft', view)
+  assert(await page.$('.pane.active .tab.active.dirty'), 'Alt+M shows the rendering of the unsaved text')
+  // Same place in the file both ways.
+  await page.$eval(view, (el) => (el.scrollTop = el.querySelector('#section-60').offsetTop))
+  await page.keyboard.press('Alt+KeyM')
+  await page.waitForSelector('.pane.active .editor-mount:not([inert])')
+  const sourceTop = await page.$eval('.pane.active .ed-scroll', (s) => Math.round(s.scrollTop / parseFloat(getComputedStyle(s.querySelector('.ed-content')).lineHeight)))
+  const line60 = fs.readFileSync(WS + '/demo/guide.md', 'utf8').split('\n').indexOf('## Section 60')
+  assert(Math.abs(sourceTop - line60) <= 2, 'the source opens where the rendering was ' + JSON.stringify([sourceTop, line60]))
+  await page.keyboard.press('Alt+KeyM')
+  await page.waitForSelector(view)
+  await page.waitForFunction((v) => {
+    const el = document.querySelector(v)
+    const h = el.querySelector('#section-60')
+    return h && Math.abs(h.getBoundingClientRect().top - el.getBoundingClientRect().top) < 80
+  }, view)
+  assert(true, 'and the rendering where the source was')
+  await page.screenshot({ path: OUT + '/editor-markdown.png' })
+  // A double-click goes to the source, the caret on the line of the block.
+  await page.$eval(view, (el) => (el.scrollTop = 0))
+  await page.dblclick(view + ' h2#second-part')
+  await page.waitForSelector('.pane.active .editor-mount:not([inert])')
+  assert((await item('cursor')).startsWith('10:'), 'a double-click shows the source at the line of the block: ' + (await item('cursor')))
+  // Ctrl+F searches the source.
+  await page.keyboard.press('Alt+KeyM')
+  await page.waitForSelector(view)
+  await page.keyboard.press('Control+f')
+  await page.waitForSelector('.pane.active .findbar')
+  assert(!(await page.$(view)), 'Ctrl+F shows the source with the find bar')
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Alt+KeyM')
+  // An anchor scrolls the rendering, a relative link opens the file of the project.
+  await page.$eval(view, (el) => (el.scrollTop = el.querySelector('a[href="#second-part"]').offsetTop))
+  await page.click(view + ' a:has-text("Back up")')
+  assert(await page.$eval(view, (el) => Math.abs(el.querySelector('#second-part').getBoundingClientRect().top - el.getBoundingClientRect().top) < 40), 'an anchor scrolls to its heading')
+  await page.$eval(view, (el) => (el.scrollTop = 0))
+  await page.click(view + ' a:has-text("the notes")')
+  await page.waitForFunction(() => document.querySelector('.pane.active .tab.active')?.textContent.includes('notes.txt') && document.activeElement?.closest('.pane.active .ed-content'))
+  assert(true, 'a relative link opens the file')
+  await page.waitForTimeout(300)
+
+  // Soft wrap: on for Markdown by default, rows read from the layout, Alt+Z toggles it.
+  await open(page, 'long.md')
+  await page.click('.pane.active [data-testid=md-toggle]')
+  await page.waitForSelector('.pane.active .editor-mount:not([inert])')
+  const geo = () => page.evaluate(() => {
+    const p = '.pane.active '
+    const scroll = document.querySelector(p + '.ed-scroll')
+    const content = document.querySelector(p + '.ed-content')
+    const cs = getComputedStyle(content)
+    const lh = parseFloat(cs.lineHeight)
+    const pad = parseFloat(cs.paddingTop)
+    const t = document.querySelector(p + '.ed-block').firstChild
+    const rowOf = (off) => {
+      const r = document.createRange()
+      r.setStart(t, off)
+      r.setEnd(t, off + 1)
+      const b = r.getClientRects()[0]
+      return Math.floor((b.top + b.height / 2 - content.getBoundingClientRect().top - pad) / lh)
+    }
+    const start = t.data.indexOf('word0')
+    const end = t.data.indexOf('\nafter')
+    const sel = document.getSelection()
+    return {
+      wrap: document.querySelector(p + '.ed').classList.contains('wrap'),
+      overflow: scroll.scrollWidth - scroll.clientWidth,
+      longRows: rowOf(end) - rowOf(start) + 1,
+      afterRow: rowOf(end + 1),
+      nums: document.querySelector(p + '.ed-gutter-nums').textContent.split('\n'),
+      caret: sel.focusNode === t ? sel.focusOffset : -1,
+      start,
+      end,
+      curRow: Math.round((new DOMMatrix(getComputedStyle(t.parentElement.closest('.ed').querySelector('.ed-curline')).transform).m42 - pad) / lh),
+      caretRow: sel.focusNode === t ? rowOf(sel.focusOffset) : -1,
+    }
+  })
+  let g = await geo()
+  assert(g.wrap && g.overflow <= 1 && g.longRows > 2, 'a long Markdown line wraps, no horizontal scroll ' + JSON.stringify({ overflow: g.overflow, rows: g.longRows }))
+  assert(g.nums.indexOf('4') === g.afterRow && g.nums.indexOf('3') === 2, 'one gutter number per line, on its first row')
+  await page.click('.pane.active .ed-content')
+  await page.keyboard.press('Control+Home')
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('ArrowDown')
+  await page.waitForTimeout(200)
+  g = await geo()
+  assert(g.caret > g.start && g.caret < g.end, 'ArrowDown moves to the next row of a wrapped line')
+  assert(g.curRow === g.caretRow && g.caretRow > 2, 'the current line follows the row of the caret ' + JSON.stringify([g.curRow, g.caretRow]))
+  await page.keyboard.press('Home')
+  g = await geo()
+  assert(g.caret > g.start && g.caretRow > 2, 'Home goes to the start of the wrapped row')
+  await page.keyboard.press('Alt+KeyZ')
+  await page.waitForFunction(() => !document.querySelector('.pane.active .ed').classList.contains('wrap'))
+  g = await geo()
+  assert(g.overflow > 100 && g.longRows === 1, 'Alt+Z unwraps the lines')
+  await page.click('.menu-btn:has-text("View")')
+  await page.click('.ctx-menu .ctx-item:has-text("Wrap the long lines")')
+  await page.waitForFunction(() => document.querySelector('.pane.active .ed').classList.contains('wrap'))
+  assert(true, 'the View menu wraps them again')
+  await page.screenshot({ path: OUT + '/editor-wrap.png' })
+
+  // CRLF: normalized in the editor, written back with CRLF; LF conversion.
+  await open(page, 'win.txt')
+  assert((await item('eol')) === 'CRLF' && (await text(page)) === 'one\ntwo\n', 'CRLF file shown with LF in the editor')
+  await page.keyboard.press('Control+End')
+  await page.keyboard.type('three')
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('Control+s')
+  await page.waitForTimeout(400)
+  assert(fs.readFileSync(WS + '/demo/win.txt', 'utf8') === 'one\r\ntwo\r\nthree\r\n', 'saved with CRLF')
+  await menuItem('eol', 'LF')
+  await page.waitForFunction(() => document.querySelector('[data-testid=status-eol]').textContent === 'LF')
+  await page.waitForTimeout(300)
+  assert(fs.readFileSync(WS + '/demo/win.txt', 'utf8') === 'one\ntwo\nthree\n', 'converted to LF')
+
+  // Latin-1: opened as text, converted to UTF-8.
+  await open(page, 'latin.txt')
+  assert((await item('encoding')) === 'Windows-1252' && (await text(page)) === 'café\n', 'Windows-1252 file opened as text')
+  await page.screenshot({ path: OUT + '/editor-status.png' })
+  await menuItem('encoding', 'UTF-8 BOM')
+  await page.waitForTimeout(400)
+  assert(fs.readFileSync(WS + '/demo/latin.txt').equals(Buffer.from('\ufeffcafé\n', 'utf8')), 'converted to UTF-8 with a BOM')
+
+  // Tabs of files sharing a name: the end of their folders tells them apart.
+  const openPath = async (p) => {
+    await page.keyboard.press('Control+Shift+n')
+    await page.waitForSelector('.pick-input')
+    await page.keyboard.type(p)
+    await page.waitForFunction((x) => document.querySelector('.pick-item.selected')?.textContent.includes(x), p)
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(400)
+  }
+  for (const p of ['notes.txt', 'src/notes.txt', 'a/x/util.go', 'b/x/util.go']) await openPath(p)
+  const titles = await page.$$eval('.pane.active .tab .tab-title', (l) => l.map((e) => e.textContent.trim()))
+  const dirs = await page.$$eval('.pane.active .tab .tab-dir', (l) => l.map((e) => e.textContent))
+  assert(['notes.txt', 'src/notes.txt', 'a/x/util.go', 'b/x/util.go'].every((x) => titles.includes(x)) && titles.includes('main.go'), 'same names: the folders that tell them apart ' + titles.join(', '))
+  assert(dirs.length === 3 && dirs.includes('src/'), 'the folders in their own style, a unique name alone ' + dirs.join(', '))
+  await page.screenshot({ path: OUT + '/editor-same-names.png' })
+})

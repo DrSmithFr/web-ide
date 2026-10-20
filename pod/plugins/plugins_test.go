@@ -117,7 +117,12 @@ func TestEnabledFile(t *testing.T) {
 }
 
 func TestBuiltinManifests(t *testing.T) {
-	for _, f := range []string{"hello/plugin.json", "docker/plugin.json", "database/plugin.json", "exec/plugin.json", "search/plugin.json", "git/plugin.json", "previews/plugin.json", "languages/plugin.json", "files/plugin.json", "code/plugin.json", "kanban/plugin.json"} {
+	// The built-in plugins live in plugins/<id>/ at the root of the repository.
+	files, _ := filepath.Glob("../../plugins/*/plugin.json")
+	if len(files) < 12 {
+		t.Fatal("built-in manifests not found:", files)
+	}
+	for _, f := range files {
 		data, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)

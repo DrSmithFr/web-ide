@@ -17,7 +17,22 @@ while [ $# -gt 0 ]; do
   esac
 done
 # The longest first: the workers end together.
-[ ${#SUITES[@]} -eq 0 ] && SUITES=(kanban milestones chat agents kanbanagents questions features restore+ docker lan identity multipod sync push keeper doodle speech relay quota renew preview git editor agent llm subagents orchestrator kanbanai editing lsp mousenav kanbangit commands mcptools plugins projects popups desks keyboard mobile forwards explorer plan i18n help perf)
+ALL=(kanban milestones chat agents kanbanagents questions features restore+ docker lan identity multipod sync push keeper doodle speech relay quota renew preview git editor agent llm subagents orchestrator kanbanai editing lsp mousenav kanbangit commands mcptools plugins projects popups desks keyboard mobile forwards explorer plan i18n help perf)
+# A suite is suites/<name>.cjs (the core) or plugins/<id>/e2e/<name>.cjs (a built-in plugin).
+suite_file() {
+  local f
+  for f in "suites/$1.cjs" "$ROOT"/plugins/*/e2e/"$1".cjs; do [ -f "$f" ] && { echo "$f"; return; }; done
+  return 1
+}
+# Every suite file is in ALL, and every name of ALL has its file.
+listed=" ${ALL[*]//+/} "
+for f in suites/*.cjs "$ROOT"/plugins/*/e2e/*.cjs; do
+  n=$(basename "$f" .cjs)
+  [[ $listed == *" $n "* ]] || { echo "e2e: $f is not in the list of run.sh"; exit 1; }
+done
+for s in "${ALL[@]}"; do suite_file "${s%+}" >/dev/null || { echo "e2e: no file for the suite ${s%+}"; exit 1; }; done
+for s in "${SUITES[@]}"; do suite_file "${s%+}" >/dev/null || { echo "e2e: unknown suite ${s%+}"; exit 1; }; done
+[ ${#SUITES[@]} -eq 0 ] && SUITES=("${ALL[@]}")
 [ -d node_modules/playwright-core ] || npm install --no-audit --no-fund >/dev/null
 if [ -z "$JOBS" ]; then JOBS=$(($(nproc) / 4)); [ "$JOBS" -gt 8 ] && JOBS=8; [ "$JOBS" -lt 1 ] && JOBS=1; fi
 # wait -n -p needs bash 5.1.
@@ -205,7 +220,7 @@ for s in "${SUITES[@]}"; do
   # Pod id of the relay client: the pod id + secret live in relay.json of its data folder.
   export E2E_POD_ID=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["podId"])' "$TMP/data/relay.json" 2>/dev/null)
   echo "== $s"
-  node "suites/$s.cjs" || status=1
+  node "$(suite_file "$s")" || status=1
 done
 POD_LOG=${E2E_POD_LOG:-/tmp/web-ide-e2e-pod.log}
 [ $status -eq 0 ] && echo "e2e: all passed" || { echo "e2e: failures (pod log: $POD_LOG)"; cp "$TMP/pod.log" "$POD_LOG" 2>/dev/null; }

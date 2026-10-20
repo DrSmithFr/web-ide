@@ -17,18 +17,18 @@ import type { TabState } from '../state/project'
 
 // The page module of each built-in, a chunk of its own (vite.config.ts: plugin-<id>).
 const builtins: Record<string, () => Promise<PluginModule>> = {
-  ai: () => import('./ai').then((m) => m.ai),
-  code: () => import('./code').then((m) => m.code),
-  database: () => import('./database').then((m) => m.database),
-  docker: () => import('./docker').then((m) => m.docker),
-  exec: () => import('./exec').then((m) => m.exec),
-  files: () => import('./files').then((m) => m.files),
-  git: () => import('./git').then((m) => m.git),
-  hello: () => import('./hello').then((m) => m.hello),
-  kanban: () => import('./kanban').then((m) => m.kanban),
-  languages: () => import('./languages').then((m) => m.languages),
-  previews: () => import('./previews').then((m) => m.previews),
-  search: () => import('./search').then((m) => m.search),
+  ai: () => import('../../../plugins/ai/web').then((m) => m.ai),
+  code: () => import('../../../plugins/code/web').then((m) => m.code),
+  database: () => import('../../../plugins/database/web').then((m) => m.database),
+  docker: () => import('../../../plugins/docker/web').then((m) => m.docker),
+  exec: () => import('../../../plugins/exec/web').then((m) => m.exec),
+  files: () => import('../../../plugins/files/web').then((m) => m.files),
+  git: () => import('../../../plugins/git/web').then((m) => m.git),
+  hello: () => import('../../../plugins/hello/web').then((m) => m.hello),
+  kanban: () => import('../../../plugins/kanban/web').then((m) => m.kanban),
+  languages: () => import('../../../plugins/languages/web').then((m) => m.languages),
+  previews: () => import('../../../plugins/previews/web').then((m) => m.previews),
+  search: () => import('../../../plugins/search/web').then((m) => m.search),
 }
 /** The built-ins with a part of the home page (no project there: no states to wait for). */
 const homeIds = ['previews']

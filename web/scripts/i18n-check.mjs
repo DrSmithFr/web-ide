@@ -19,6 +19,9 @@ const walk = (d) => {
   }
 }
 walk(src)
+// The page modules of the built-in plugins (plugins/<id>/web at the root of the repository).
+const plugins = new URL('../../plugins/', import.meta.url).pathname
+for (const id of readdirSync(plugins)) if (statSync(join(plugins, id)).isDirectory() && statSync(join(plugins, id, 'web'), { throwIfNoEntry: false })?.isDirectory()) walk(join(plugins, id, 'web'))
 
 const str = String.raw`'((?:\\.|[^'\\])*)'|"((?:\\.|[^"\\])*)"`
 const call = new RegExp(String.raw`(?<![\w.$])t\(\s*(?:${str})`, 'g')

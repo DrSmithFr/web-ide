@@ -7,8 +7,9 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 build: web pod
 
+# One node_modules at the root (npm workspaces): the page and the plugins (plugins/*/web) share it.
 web:
-	cd web && npm install --no-audit --no-fund && npm run build
+	npm install --no-audit --no-fund && cd web && npm run build
 
 # go:embed needs the folder, even before the first front build.
 pod/webdist/dist:
@@ -42,7 +43,7 @@ $(DEV_DATA):
 	  case $$f in */models) ln -s $$f $@/models ;; */config.json|*/keeper.sock) ;; *) cp -r $$f $@/ ;; esac; done
 
 # The Go packages: listed, not ./... from the root, which would take the .go files of node_modules.
-GO_DIRS := pod relay lib
+GO_DIRS := pod relay lib plugins
 GO_PKGS := $(addprefix ./,$(addsuffix /...,$(GO_DIRS)))
 
 test: pod/webdist/dist docs-content
