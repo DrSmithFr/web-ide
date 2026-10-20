@@ -53,7 +53,7 @@ The IDE stays free and works without the relay (`127.0.0.1`, LAN, Tailscale). Th
 
 ## Identity
 
-No e-mail, no password. An account is a key. **Done** (`pod/internal/identity`, `web-ide-pod pair`, Settings > Remote access > Members): see *Milestone 2* below.
+No e-mail, no password. An account is a key. **Done** (`lib/identity`, `web-ide-pod pair`, Settings > Remote access > Members): see *Milestone 2* below.
 
 - **Recovery phrase**: 24 BIP39 words, made on the first device and shown **once**, with a check that the user wrote it down (like a hardware wallet). It is never stored by the IDE, on disk or in the relay: storing it would turn the theft of one machine into the theft of the account. The user may keep it in a password manager.
 - From the phrase (HKDF): the **account key** (Ed25519, its public half is the account id) and the **sync key seed**.
@@ -82,7 +82,7 @@ The relay stores the list only when its signature verifies against the account i
 ### Formats
 
 - **Phrase**: 24 BIP39 words (256-bit entropy, embedded English wordlist, checksum). Seed = BIP39 PBKDF2 seed; HKDF-SHA256 (32-byte zero salt) gives the account Ed25519 seed (`info "web-ide account v1"`), the sync seed (`"web-ide sync v1"`) and the device seed (`"web-ide device v1"`). The account id is the base64url of the account public key.
-- **Certificate**: canonical JSON `{v:1, account, key, name, kind: browser|pod, created, scope: "all"}` + the Ed25519 signature of the account key, base64url. Fixed field order, no spaces: the browser and the pod build the same bytes, checked by the shared test vectors (`pod/internal/identity/vectors.json`, run by `make test` in Go and in JS).
+- **Certificate**: canonical JSON `{v:1, account, key, name, kind: browser|pod, created, scope: "all"}` + the Ed25519 signature of the account key, base64url. Fixed field order, no spaces: the browser and the pod build the same bytes, checked by the shared test vectors (`lib/identity/vectors.json`, run by `make test` in Go and in JS).
 - **Revocation list**: `{account, seq, epoch, revoked: [keys], created}` signed by the account key; the revoked keys are sorted so both sides build the same bytes; a higher `seq` wins.
 - **Fingerprint**: the 4-word reading of a key id (44 bits of its SHA-256, 11 bits per word), shown on both sides of a pairing.
 
@@ -103,7 +103,7 @@ The **token mode** of M1 (`#t=`) stays for unpaired pods, and `127.0.0.1` is unc
 
 ## Multi-pod
 
-**Done** (#58 `pod/internal/multipod`, `relay/clusters.go`: proof of possession, clusters, election, encrypted project lists, unified home page; #59: routing to every pod, see *Routing (one origin)* below; #60: protocol versions and *Update this pod*, see *Versions and updates* below).
+**Done** (#58 `pod/multipod`, `relay/clusters.go`: proof of possession, clusters, election, encrypted project lists, unified home page; #59: routing to every pod, see *Routing (one origin)* below; #60: protocol versions and *Update this pod*, see *Versions and updates* below).
 
 - **Proof of possession**: `register` on the pod link and on the identity link is answered by a `challenge {nonce}`; the device signs `relay|<relay origin>|<nonce>` with the key its certificate names, and the relay only accepts the proof of that key. A copied certificate therefore registers nothing, and a device that proves nothing gets no presence and no gateway role (it stays in the plain token mode of M1). The binding is `identity.RelayBinding`, so a proof made for one relay does not work at another.
 - **Clusters**: each pod reports the peers its LAN control links reach (`cluster {peers: [device keys]}`, at register and on every change of a link). The relay takes the connected components of the reported edges among the online devices of the account — an edge counts when one end reports it and both ends belong to the account — and calls each component a **cluster**, named by its smallest device key. A pod that sees nobody is a cluster of its own.
@@ -130,7 +130,7 @@ The **token mode** of M1 (`#t=`) stays for unpaired pods, and `127.0.0.1` is unc
 
 ### Versions and updates
 
-**Done** (#60, `multipod/version.go`, `identity/update.go`, `pod/internal/update`, `lan/update.go`).
+**Done** (#60, `multipod/version.go`, `identity/update.go`, `pod/update`, `lan/update.go`).
 
 - **Protocol version**: `multipod.Protocol` (an int) is the contract of everything the pods of an account exchange — the LAN control protocol, the signaling messages of the relay, the shape of the project lists and of the settings blobs. It is told in `$info` of a LAN link, in `register` of the pod link and in the `projects:` list, and carried in the `pods` presence; a pod that says nothing speaks protocol 0, the one of the pods older than #60. The home page of a pod compares each version with its own: *older version* / *newer version*.
 - **Never routed across a gap**: `lan.ServeGateway`, `lan.OpenTunnel` and the pod-to-pod `Dial` refuse a mismatched peer, and the relay elects the gateway of a cluster among the pods that speak the protocol of the cluster (the majority, the highest version on a tie). A cluster is never carried by a pod that would not understand it. The app lists the projects of a mismatched pod without a link: *{name} runs another multi-pod protocol: update it*.
@@ -141,7 +141,7 @@ The **token mode** of M1 (`#t=`) stays for unpaired pods, and `127.0.0.1` is unc
 
 ### Power
 
-**Done** (milestone 7, `identity/power.go`, `pod/internal/power`, `relay/power.go`). The home page wakes a pod that sleeps, and restarts, reboots or shuts down one that runs, from any device of the account — a phone on the relay origin included.
+**Done** (milestone 7, `identity/power.go`, `pod/power`, `relay/power.go`). The home page wakes a pod that sleeps, and restarts, reboots or shuts down one that runs, from any device of the account — a phone on the relay origin included.
 
 - **Signed like an update**: the browser signs `{v, pod, action, created}` with its device key (`identity.js` `canonicalPower`, a shared vector), `action` being `wake`, `shutdown`, `reboot` or `restart`. `identity.CheckPower` makes the checks of `CheckUpdate` (certificate of the pinned account, not revoked, signature, 5 min) and refuses an unknown action; a signature already run is refused.
 - **No passkey on the LAN**: a window on the WebSocket of the pod itself (its token, or `127.0.0.1`) already holds the terminals of the machine, and through its LAN links those of the other pods: it sends the action unsigned (`pods.self` says `local`), and the pod signs it with its own device key, which the pod that acts checks the same way. A window that came through the relay or a gateway (`ServeTunnel`) must sign: an unsigned request from it is refused.
@@ -155,7 +155,7 @@ The **token mode** of M1 (`#t=`) stays for unpaired pods, and `127.0.0.1` is unc
 
 ## Local network
 
-**Done** (#50, `pod/internal/lan`). The pods of one account reach each other on the LAN with no relay at all — no internet, no relay configured, or the relay down.
+**Done** (#50, `pod/lan`). The pods of one account reach each other on the LAN with no relay at all — no internet, no relay configured, or the relay down.
 
 - **LAN port**: a paired pod opens a TLS port of its own (`:4436`; `-lan`, `lan.addr` in `config.json`, `off`). An unpaired pod opens none. The certificate is self-signed (`lan.crt`, `lan.key`) and serves as both the server and the client certificate: TLS only encrypts, trust comes from the handshake.
 - **Handshake**: the handshake v2 of the tunnel on `/_lan/hello`, the dialing pod in the browser role, bound to the two TLS leaf fingerprints instead of the DTLS ones. A machine in the middle that shows its own certificate makes a signature fail. The peer must be a `pod` certificate of the pinned account, not revoked; the token mode is refused.
@@ -180,10 +180,10 @@ The **token mode** of M1 (`#t=`) stays for unpaired pods, and `127.0.0.1` is unc
 
 ## Settings sync
 
-**Done** (#28, `pod/internal/settingsync`, Settings > Remote access > Sync). The settings live in each pod (`settings.json`, shared by its browsers), so **the pods sync**, the browsers don't. The relay stores one encrypted blob per account and kind (`settings`, `vault`) and never sees a value; the pods do the merge.
+**Done** (#28, `pod/settingsync`, Settings > Remote access > Sync). The settings live in each pod (`settings.json`, shared by its browsers), so **the pods sync**, the browsers don't. The relay stores one encrypted blob per account and kind (`settings`, `vault`) and never sees a value; the pods do the merge.
 
 - **Sync key**: the key of an epoch is `HKDF(syncSeed, "web-ide sync epoch <e>")`, so a device that knows the phrase can always rebuild it, nothing random to lose; each kind takes a sub-key of it. Every blob is AES-256-GCM with a random nonce per write and the associated data `account|kind|epoch|seq`: a blob cannot be moved to another account, kind, epoch or seq.
-- **Wrap**: a pod paired by an admin does not know the phrase, so it cannot derive the key. Each pod makes an X25519 key from its device seed and publishes `{device, x25519, sig}` signed by its device key; the admin browser (Members panel) wraps the epoch key for it (X25519 + HKDF + AES-GCM) and posts the wrap. A pod with no wrap has no key and never writes. The wrap is made at approval and at each rotation. Go and JS read the same test vectors (`pod/internal/identity/vectors.json`, run by `make test` in both languages).
+- **Wrap**: a pod paired by an admin does not know the phrase, so it cannot derive the key. Each pod makes an X25519 key from its device seed and publishes `{device, x25519, sig}` signed by its device key; the admin browser (Members panel) wraps the epoch key for it (X25519 + HKDF + AES-GCM) and posts the wrap. A pod with no wrap has no key and never writes. The wrap is made at approval and at each rotation. Go and JS read the same test vectors (`lib/identity/vectors.json`, run by `make test` in both languages).
 - **Storage**: the `blobs`, `wraps` and `synckeys` tables (`PRAGMA user_version` migration), and on the pod link `syncKey`, `wrapGet`, `blobGet`, `blobPut` with compare-and-swap on `seq` (a write is refused when it is not `stored + 1`), a size cap per blob, and the stored write pushed to the online pods of the account. Every write is signed by the device key and checked against the account and the revocation list: a revoked device cannot write.
 - **Merge**: each entry carries its value, the hybrid logical clock of the change that wrote it and the device that made it; a pod keeps the last state it synced (its base, `sync/base-<kind>.json`). An entry changed on the other side and untouched here is taken, an entry changed here and untouched there stays, and only an entry changed on both sides to different values asks the user: the page shows both values and which device, and the choice is a normal write. Maps (`tokenColors`, `syntax`, `keyboard.overrides`, `devices`, the vault entries) merge per key, and paths unknown to the pod are kept. Every applied change goes through `Settings.Save` with a label (`sync from <device>`), so the history and the rollback keep working. A pod writes on each local save and catches up at reconnect.
 - **Per device**: the fonts and the panel sizes belong to a device (`devices[<id>]` in the settings, `sizes[<id>]` in the sessions), so a phone keeps its layout on any pod of the account. A device without its own entry uses the *fallback layout* the user saves in Settings.
@@ -191,7 +191,7 @@ The **token mode** of M1 (`#t=`) stays for unpaired pods, and `127.0.0.1` is unc
 
 ## Push notifications
 
-**Done** (milestone 6: `pod/internal/push`, `relay/push.go`, Settings > Notifications). The **pod** decides when to notify, since the page may be closed, and encrypts the payload for the subscription of the browser (RFC 8291, aes128gcm); the **relay** holds the VAPID key, signs (RFC 8292) and POSTs the ciphertext to the push service. The relay sees an endpoint and ciphertext, never a title or a project name.
+**Done** (milestone 6: `pod/push`, `relay/push.go`, Settings > Notifications). The **pod** decides when to notify, since the page may be closed, and encrypts the payload for the subscription of the browser (RFC 8291, aes128gcm); the **relay** holds the VAPID key, signs (RFC 8292) and POSTs the ciphertext to the push service. The relay sees an endpoint and ciphertext, never a title or a project name.
 
 - **Installable app**: the relay serves the manifest and the icons of the pod's front end (`web/public`, one copy), linked by the bootstrap page, whose footer offers **Install the app** when Chromium hands it its install prompt, and says *Share › Add to Home Screen* on iOS (#73); the Service Worker shows a notification from the decrypted JSON `{title, body, url, tag}` and, on a click, moves the app of that pod's bootstrap window to the path (`/#pod=<id>&open=/project/<id>?chat=<id>` or `?ticket=<n>`), or opens a new window. The bootstrap page remembers the last pod, so the installed app starts at `/`. iOS shows notifications only from the installed app: the settings say so when `Notification` or `PushManager` is missing.
 - **Relay**: the VAPID P-256 key is made once in its data folder (`vapid.json`, 0600), its public half at `/_relay/push/key`. A browser registers its endpoint (`POST /_relay/push/subscribe`) with its certificate and the Ed25519 signature of its device key over `web-ide push v1|subscribe|<endpoint>|<created ms>` (10 minutes at most): the certificate must verify against its account and not be on the relay's revocation list. It gets an opaque id (`push_subs (id, account, device, endpoint, created)`); `unsubscribe` is signed the same way. Only the endpoints of the push services of the browsers are taken (FCM, Mozilla, Apple, WNS, https on the default port; `-push-test-endpoint` adds a prefix for the tests), and the POST follows no redirect: no open proxy, no request into the relay's network.
@@ -223,7 +223,7 @@ Code and review together:
 
 The hosted relay runs on one EU VPS (`antennae.space`, OVH VPS-1): `web-ide-pod relay` with its own systemd service, its own user and its own data folder (`/var/lib/antennae`: the base, the VAPID key, the ACME cache). The domain is served by the binary itself — Let's Encrypt through `autocert` (TLS-ALPN-01 on 443, the cache in `<data>/acme`), `:80` redirecting to https — and everything listens on both stacks (IPv4 and IPv6). See [self-hosting](../howto/self-host-relay.md) for running your own.
 
-Every account has a **level** (#87, `pod/internal/relay/level.go`), which sets its TURN quota and the badge of Settings > Remote access (next to the GitHub login and to the TURN quota: `Backer`, `Supporter`, `VIP`, `Supporter · VIP` for a sponsor on the VIP list too, `· 12 d` when the level ends). Everything else — relay, pairing, multi-pod, settings sync, the vault, push — is **free at every level**.
+Every account has a **level** (#87, `relay/level.go`), which sets its TURN quota and the badge of Settings > Remote access (next to the GitHub login and to the TURN quota: `Backer`, `Supporter`, `VIP`, `Supporter · VIP` for a sponsor on the VIP list too, `· 12 d` when the level ends). Everything else — relay, pairing, multi-pod, settings sync, the vault, push — is **free at every level**.
 
 | Level | Monthly sponsorship | One-time payment | TURN |
 | --- | --- | --- | --- |
@@ -255,9 +255,9 @@ Every account has a **level** (#87, `pod/internal/relay/level.go`), which sets i
 ## Milestones
 
 1. **Done** (`web-ide-pod relay`, `-relay`): the relay (signaling, STUN, TURN) and the pod and the browser over WebRTC, the pod token as access control. See *Milestone 1* below.
-2. **Done** (`web-ide-pod pair`, `pod/internal/identity`, Settings > Remote access > Members): phrase, device certificates, pairing, QR, passkeys, revocation. See *Milestone 2* below.
+2. **Done** (`web-ide-pod pair`, `lib/identity`, Settings > Remote access > Members): phrase, device certificates, pairing, QR, passkeys, revocation. See *Milestone 2* below.
 3. Multi-pod: **done** (#58: proof of possession, clusters, gateway election, encrypted project lists, unified home page, entry through a gateway; #59: one origin, one tunnel per pod, routing through the gateway, pod-to-pod WebRTC, failover — see *Routing (one origin)*; #60: protocol versions and *Update this pod* — see *Versions and updates*).
-4. **Done** (`pod/internal/settingsync`, Settings > Remote access > Sync): encrypted blobs, field-by-field merge, per-device layout, vault. See *Settings sync* above.
+4. **Done** (`pod/settingsync`, Settings > Remote access > Sync): encrypted blobs, field-by-field merge, per-device layout, vault. See *Settings sync* above.
 5. Hosted relay at `antennae.space`, GitHub Sponsors, quotas, counters: **done** (#29 — see *Hosted service and pricing* above and [self-hosting](../howto/self-host-relay.md)): the domain served by the binary (autocert, both stacks), TURN counted per key and capped per month, the GitHub link that lifts the cap, `/_relay/status`, the deploy and backup scripts.
 6. **Done**: push notifications. See *Push notifications* above.
 7. **Done**: Wake-on-LAN, shutdown, reboot and restart of a pod. See *Power* above.
@@ -270,11 +270,11 @@ The full IDE on a phone goes on alongside, from the phone layout (#22).
 
 Three pieces, one binary:
 
-- **`web-ide-pod relay`** (`pod/internal/relay`): signaling over WebSocket, STUN and TURN (Pion TURN, UDP and TCP, and TURN over TLS on 443 shared with HTTPS through an ALPN demux, `stun.turn`; a client that names no protocol, as Pion does, is routed by its first bytes after the handshake), the bootstrap page and the Service Worker, a SQLite base (`pods`, `usage`, `PRAGMA user_version`). Short-lived HMAC-SHA1 TURN credentials (1 h, so a quota and a change of level are felt quickly; renewed by a longer tunnel), given only to a registered, online pod.
-- **The pod** (`pod/internal/relayclient`): one outbound WebSocket to its relay (`-relay` flag or `relay` in `config.json`), pod id and secret in `relay.json` (0600) of the data folder, backoff reconnect, one PeerConnection per offer, trickle ICE with the ICE servers announced by the relay. The remote link is printed at startup and shown in Settings > Remote access with its state.
+- **`web-ide-pod relay`** (`relay`): signaling over WebSocket, STUN and TURN (Pion TURN, UDP and TCP, and TURN over TLS on 443 shared with HTTPS through an ALPN demux, `stun.turn`; a client that names no protocol, as Pion does, is routed by its first bytes after the handshake), the bootstrap page and the Service Worker, a SQLite base (`pods`, `usage`, `PRAGMA user_version`). Short-lived HMAC-SHA1 TURN credentials (1 h, so a quota and a change of level are felt quickly; renewed by a longer tunnel), given only to a registered, online pod.
+- **The pod** (`pod/relayclient`): one outbound WebSocket to its relay (`-relay` flag or `relay` in `config.json`), pod id and secret in `relay.json` (0600) of the data folder, backoff reconnect, one PeerConnection per offer, trickle ICE with the ICE servers announced by the relay. The remote link is printed at startup and shown in Settings > Remote access with its state.
 - **The browser**: the bootstrap page and the Service Worker come from the relay; the app, its assets and the previews come from the pod through the tunnel. The front end talks to a `Transport` (`web/src/pod/transport.ts`): a WebSocket on `127.0.0.1`, or a MessagePort to the bootstrap page. Each project window gets its own connection.
 
-**Channels** (`pod/internal/tunnel`): the JSON protocol is unchanged on the `rpc` channel; `term:<id>` carries the input and output of one terminal, `xfer:<n>` one big message, `http:<n>` one HTTP request of the Service Worker. Every message is framed into 16 KB fragments (1-byte header: 1 = more, 0 = last) so a 2 MB transfer stays under the DataChannel cap, with back-pressure.
+**Channels** (`lib/tunnel`): the JSON protocol is unchanged on the `rpc` channel; `term:<id>` carries the input and output of one terminal, `xfer:<n>` one big message, `http:<n>` one HTTP request of the Service Worker. Every message is framed into 16 KB fragments (1-byte header: 1 = more, 0 = last) so a 2 MB transfer stays under the DataChannel cap, with back-pressure.
 
 **Access control in this step** is the pod token, and the relay never sees it. The token is proved inside the DataChannel and bound to both DTLS fingerprints (channel binding), so a relay that swaps the SDP cannot MITM:
 
@@ -293,8 +293,8 @@ What is not in this step: multi-pod and gateways, encrypted blob storage, push, 
 
 The identity of *Identity* above, in three places:
 
-- **`pod/internal/identity`**: BIP39 (generate, validate, checksum), the derivation, the certificates, the revocation lists, the verification of a peer certificate. The pod identity in the data folder: `device.key` (0600) and `identity.json` (its own certificate, the pinned account key, the last revocation list). The wordlist and the test vectors are embedded; `scripts/identity-vectors.mjs` runs the same vectors in JS, so a signature made in the browser verifies in the pod.
-- **`pod/internal/identity/web/identity.js`**: the same formats in JS, imported at runtime by the bootstrap page and by the app (served under `/_relay/identity.js` by the relay and by the pod — one copy, so the two sides cannot disagree on the bytes a signature covers). The device key is made with WebCrypto Ed25519 and stored wrapped by an AES-GCM key derived from the passkey (WebAuthn PRF), unwrapped as a non-extractable key for the session. That key is kept an hour after its last use (a separate IndexedDB, `webide-session`: `keepUnlocked`, `resume`, `touch`, `lock`), so a reload or the installed app opening again does not ask the passkey; never the seed, the PRF, the account key or the sync seed, so an admin action still asks it. *Lock* (the bootstrap page, Settings > Remote access > Members) ends it, and a revoked device drops it. Any script of the origin can use that key while it is unlocked, which is why external plugins are confined ([plugins](plugins.md#phase-3-external-plugins)).
+- **`lib/identity`**: BIP39 (generate, validate, checksum), the derivation, the certificates, the revocation lists, the verification of a peer certificate. The pod identity in the data folder: `device.key` (0600) and `identity.json` (its own certificate, the pinned account key, the last revocation list). The wordlist and the test vectors are embedded; `scripts/identity-vectors.mjs` runs the same vectors in JS, so a signature made in the browser verifies in the pod.
+- **`lib/identity/web/identity.js`**: the same formats in JS, imported at runtime by the bootstrap page and by the app (served under `/_relay/identity.js` by the relay and by the pod — one copy, so the two sides cannot disagree on the bytes a signature covers). The device key is made with WebCrypto Ed25519 and stored wrapped by an AES-GCM key derived from the passkey (WebAuthn PRF), unwrapped as a non-extractable key for the session. That key is kept an hour after its last use (a separate IndexedDB, `webide-session`: `keepUnlocked`, `resume`, `touch`, `lock`), so a reload or the installed app opening again does not ask the passkey; never the seed, the PRF, the account key or the sync seed, so an admin action still asks it. *Lock* (the bootstrap page, Settings > Remote access > Members) ends it, and a revoked device drops it. Any script of the origin can use that key while it is unlocked, which is why external plugins are confined ([plugins](plugins.md#phase-3-external-plugins)).
 - **`web-ide-pod pair`**: `create`, `restore`, `join`, `status` (see *Pairing*). The relay keeps the identity tables (`accounts`, `devices`, `pairings`) to list the devices and route pairing; it never holds a private key or the phrase, so it can check a signature against an account id but never make one — only a device holding the account key can approve a pairing or push a revocation list.
 - **Settings > Remote access > Members**: the admin panel, on the relay origin and on `localhost` (see *Identity*). The pod only carries the frames of the pairing link.
 

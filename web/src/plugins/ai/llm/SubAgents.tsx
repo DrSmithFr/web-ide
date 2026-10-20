@@ -1,4 +1,4 @@
-// Sub-agents in the thread (pod/internal/assistant/subagents.go): the card of each child in its
+// Sub-agents in the thread (pod/assistant/subagents.go): the card of each child in its
 // parent, the events of a child (note, question, report) or of the parent (message), the
 // task and the header of a child conversation.
 import { For, Show } from 'solid-js'

@@ -42,6 +42,6 @@ How the IDE is built and why, kept up to date with the code.
 A README with a Mermaid map in each area of the code, for humans and AIs.
 
 - [pod](../pod/README.md): the pod, `main.go`, and the map of its five blocks.
-- [pod/internal](../pod/internal/README.md): every Go package, by block (server and protocol, files and processes, AI, kanban and git, network and identity).
+- [pod](../pod/packages.md): every Go package, by block (server and protocol, files and processes, AI, kanban and git, network and identity).
 - [web](../web/README.md) and [web/src](../web/src/README.md): the front end, one folder per concern.
 - [e2e](../e2e/README.md): the browser tests and their suites.

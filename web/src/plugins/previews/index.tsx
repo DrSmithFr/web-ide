@@ -1,4 +1,4 @@
-// The Previews plugin (pod/internal/plugins/previews): the Port forwards and previews tool, the
+// The Previews plugin (pod/plugins/previews): the Port forwards and previews tool, the
 // previews service (the assistant's card, the ▶ menu of the Console) and, on the home page, the
 // open port forwards of every project.
 import type { PluginModule } from '../types'

@@ -13,9 +13,9 @@ English is the key and the default: a text with no translation shows in English.
 
 1. **Add the code to the lists.**
    - Page: an entry in `web/src/i18n/languages.json` (`id`, native `name`, `locale` for dates and numbers, `singularBelow2` for a language that uses the singular for 0 and 1, as French).
-   - Pod: the code in `Languages` of `pod/internal/i18n/i18n.go`.
-2. **Add the catalogs.** Copy `web/src/i18n/fr.json` to `web/src/i18n/de.json` and `pod/internal/i18n/fr.json` to `pod/internal/i18n/de.json`, then translate the values. The keys are the English texts and stay as they are; `{name}` and `%s` parameters are kept; a key may carry a context before a bar (`menu|Edit`) that is not shown in English.
-3. **Relay page.** The page of the relay (`pod/internal/relay/web/bootstrap.js`) and the window after a GitHub link (`doneCatalog` in `pod/internal/relay/github.go`) have their own few words: add the code to `langs` and a third text to each `L(…)`, and a row to `doneCatalog`.
+   - Pod: the code in `Languages` of `lib/i18n/i18n.go`.
+2. **Add the catalogs.** Copy `web/src/i18n/fr.json` to `web/src/i18n/de.json` and `lib/i18n/fr.json` to `lib/i18n/de.json`, then translate the values. The keys are the English texts and stay as they are; `{name}` and `%s` parameters are kept; a key may carry a context before a bar (`menu|Edit`) that is not shown in English.
+3. **Relay page.** The page of the relay (`relay/web/bootstrap.js`) and the window after a GitHub link (`doneCatalog` in `relay/github.go`) have their own few words: add the code to `langs` and a third text to each `L(…)`, and a row to `doneCatalog`.
 
 The speech list of the dictation (`web/src/plugins/ai/llm/transcribe.ts`) is the list of the models, not ours: add the language there only if the model supports it and it is missing.
 

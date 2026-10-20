@@ -1,7 +1,7 @@
 # How many users the hosted relay holds
 
 Measured on the relay host itself (#72): a second relay instance, the same machine, the same
-limits, driven over the network by `pod/internal/relayload` (see `make load-relay`).
+limits, driven over the network by `relay/relayload` (see `make load-relay`).
 
 ## What is measured
 

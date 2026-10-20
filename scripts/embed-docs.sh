@@ -8,7 +8,7 @@ out=$root/pod/docsdist/content
 rm -rf "$out"
 mkdir -p "$out"
 cd "$root"
-for f in README.md AGENTS.md GLOSSARY.md pod/README.md pod/internal/README.md web/README.md web/src/README.md e2e/README.md; do
+for f in README.md AGENTS.md GLOSSARY.md pod/README.md pod/packages.md relay/README.md lib/README.md web/README.md web/src/README.md e2e/README.md; do
   [ -f "$f" ] || continue
   mkdir -p "$out/$(dirname "$f")"
   cp "$f" "$out/$f"

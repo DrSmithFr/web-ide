@@ -1,0 +1,351 @@
+// Package projects is the project registry, persisted in ~/.web-ide/projects.json
+// and kept in memory by the pod.
+package projects
+
+import (
+	"crypto/rand"
+	"crypto/sha1"
+	"encoding/hex"
+	"path"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"github.com/DrSmithFr/web-ide/pod/store"
+)
+
+type SSHTarget struct {
+	Host    string `json:"host"`
+	Port    int    `json:"port"`
+	User    string `json:"user"`
+	Auth    string `json:"auth"` // agent | key | password
+	KeyPath string `json:"keyPath,omitempty"`
+}
+
+type Project struct {
+	ID          string     `json:"id"`
+	Title       string     `json:"title"`
+	Description string     `json:"description"`
+	Type        string     `json:"type"` // local | ssh
+	Path        string     `json:"path"`
+	SSH         *SSHTarget `json:"ssh,omitempty"`
+	// Parent and Ticket: worktree of a kanban ticket, opened as its own project (hidden
+	// from the project list, its kanban and conversations are those of the parent).
+	Parent string `json:"parent,omitempty"`
+	Ticket int64  `json:"ticket,omitempty"`
+	// GitSetup: repository still to prepare (init, remote), when the folder was not
+	// reachable at creation (SSH host needing a password…). Done at the first opening.
+	GitSetup  *GitSetup `json:"gitSetup,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
+	OpenedAt  time.Time `json:"openedAt"`
+}
+
+type GitSetup struct {
+	Remote string `json:"remote,omitempty"`
+}
+
+// Name is the title, or a name derived from the path or the host.
+func (p *Project) Name() string {
+	if strings.TrimSpace(p.Title) != "" {
+		return p.Title
+	}
+	base := path.Base(strings.TrimRight(p.Path, "/"))
+	if p.Type == "ssh" && p.SSH != nil {
+		if base == "/" || base == "." || base == "" {
+			return p.SSH.Host
+		}
+		return base + " @ " + p.SSH.Host
+	}
+	return base
+}
+
+type Registry struct {
+	mu    sync.Mutex
+	st    *store.Store
+	items []*Project
+}
+
+const file = "projects.json"
+
+func Load(st *store.Store) (*Registry, error) {
+	r := &Registry{st: st}
+	if err := st.ReadJSON(file, &r.items); err != nil && !store.IsNotExist(err) {
+		return nil, err
+	}
+	return r, nil
+}
+
+func (r *Registry) save() error { return r.st.WriteJSON(file, r.items) }
+
+type View struct {
+	*Project
+	DisplayName string `json:"name"`
+}
+
+func view(p *Project) View { return View{Project: p, DisplayName: p.Name()} }
+
+func (r *Registry) List() []View {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]View, 0, len(r.items))
+	for _, p := range r.items {
+		if p.Parent != "" {
+			continue
+		}
+		cp := *p
+		out = append(out, view(&cp))
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].OpenedAt.After(out[j].OpenedAt) })
+	return out
+}
+
+// Root is the main project of a project: itself, or its parent for the worktree of a ticket
+// (the kanban, the conversations and the saved commands are the main project's).
+func (r *Registry) Root(id string) (*Project, error) {
+	p, ok := r.Get(id)
+	if !ok {
+		return nil, i18n.New("no project open on this connection")
+	}
+	if p.Parent != "" {
+		if parent, ok := r.Get(p.Parent); ok {
+			return parent, nil
+		}
+		return nil, i18n.New("parent project not found")
+	}
+	return p, nil
+}
+
+func (r *Registry) Get(id string) (*Project, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, p := range r.items {
+		if p.ID == id {
+			cp := *p
+			return &cp, true
+		}
+	}
+	return nil, false
+}
+
+func validate(p *Project) error {
+	p.Path = strings.TrimSpace(p.Path)
+	switch p.Type {
+	case "local":
+		p.SSH = nil
+		if !path.IsAbs(p.Path) {
+			return i18n.New("the project path must be absolute")
+		}
+	case "ssh":
+		if p.SSH == nil || p.SSH.Host == "" {
+			return i18n.New("SSH host is missing")
+		}
+		if p.SSH.Port == 0 {
+			p.SSH.Port = 22
+		}
+		if p.SSH.Auth == "" {
+			p.SSH.Auth = "agent"
+		}
+		if p.Path == "" {
+			p.Path = "."
+		}
+	default:
+		return i18n.New("unknown project type")
+	}
+	p.Path = path.Clean(p.Path)
+	return nil
+}
+
+func (r *Registry) Create(p Project) (View, error) {
+	if err := validate(&p); err != nil {
+		return View{}, err
+	}
+	buf := make([]byte, 6)
+	_, _ = rand.Read(buf)
+	p.ID = hex.EncodeToString(buf)
+	p.CreatedAt = time.Now()
+	p.OpenedAt = p.CreatedAt
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.items = append(r.items, &p)
+	return view(&p), r.save()
+}
+
+func (r *Registry) Update(p Project) (View, error) {
+	if err := validate(&p); err != nil {
+		return View{}, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i, cur := range r.items {
+		if cur.ID == p.ID {
+			p.CreatedAt, p.OpenedAt, p.GitSetup = cur.CreatedAt, cur.OpenedAt, cur.GitSetup
+			r.items[i] = &p
+			return view(&p), r.save()
+		}
+	}
+	return View{}, i18n.New("project not found")
+}
+
+// SetPath records the resolved absolute path (an SSH project given relative to the remote home).
+func (r *Registry) SetPath(id, p string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, cur := range r.items {
+		if cur.ID == id && cur.Path != p {
+			cur.Path = p
+			_ = r.save()
+		}
+	}
+}
+
+// SetGitSetup records (nil: clears) the repository preparation still to do.
+func (r *Registry) SetGitSetup(id string, g *GitSetup) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, cur := range r.items {
+		if cur.ID == id {
+			cur.GitSetup = g
+			_ = r.save()
+		}
+	}
+}
+
+func (r *Registry) Touch(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, cur := range r.items {
+		if cur.ID == id {
+			cur.OpenedAt = time.Now()
+			_ = r.save()
+		}
+	}
+}
+
+func (r *Registry) Delete(id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i, cur := range r.items {
+		if cur.ID == id {
+			r.items = append(r.items[:i], r.items[i+1:]...)
+			return r.save()
+		}
+	}
+	return i18n.New("project not found")
+}
+
+// ChildID is the id of the project opened on the worktree of a ticket.
+func ChildID(parent string, ticket int64) string {
+	return parent + "-t" + strconv.FormatInt(ticket, 10)
+}
+
+// PutChild registers (or updates) the project of the worktree of a ticket.
+func (r *Registry) PutChild(parent *Project, ticket int64, title, dir string) (View, error) {
+	return r.put(Project{ID: ChildID(parent.ID, ticket), Title: title, Path: dir, Ticket: ticket}, parent)
+}
+
+// PutWorktree registers the project of another worktree of the repository of parent
+// (a branch opened from the menu bar), or returns the one already opened on dir.
+func (r *Registry) PutWorktree(parent *Project, title, dir string) (View, error) {
+	r.mu.Lock()
+	for _, cur := range r.items {
+		if cur.Parent == parent.ID && cur.Path == path.Clean(dir) {
+			cp := *cur
+			r.mu.Unlock()
+			return view(&cp), nil
+		}
+	}
+	r.mu.Unlock()
+	sum := sha1.Sum([]byte(dir))
+	return r.put(Project{ID: parent.ID + "-w" + hex.EncodeToString(sum[:4]), Title: title, Path: dir}, parent)
+}
+
+func (r *Registry) put(p Project, parent *Project) (View, error) {
+	p.Type, p.Parent = parent.Type, parent.ID
+	if parent.SSH != nil {
+		ssh := *parent.SSH
+		p.SSH = &ssh
+	}
+	if err := validate(&p); err != nil {
+		return View{}, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i, cur := range r.items {
+		if cur.ID == p.ID {
+			p.CreatedAt, p.OpenedAt = cur.CreatedAt, cur.OpenedAt
+			r.items[i] = &p
+			return view(&p), r.save()
+		}
+	}
+	p.CreatedAt = time.Now()
+	p.OpenedAt = p.CreatedAt
+	r.items = append(r.items, &p)
+	return view(&p), r.save()
+}
+
+// At is the local project whose folder holds dir, the deepest one: the worktree of a
+// ticket (inside .ide/worktrees of its parent) wins over its parent.
+// Symbolic links are resolved on both sides: a project opened as ~/Apps/x is found from
+// the folder the link leads to.
+func (r *Registry) At(dir string) (*Project, bool) {
+	dir = resolved(dir)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var best *Project
+	bestLen := 0
+	for _, p := range r.items {
+		if p.Type != "local" || p.Path == "" {
+			continue
+		}
+		root := resolved(p.Path)
+		if dir != root && !strings.HasPrefix(dir, strings.TrimSuffix(root, "/")+"/") {
+			continue
+		}
+		if best == nil || len(root) > bestLen {
+			best, bestLen = p, len(root)
+		}
+	}
+	if best == nil {
+		return nil, false
+	}
+	cp := *best
+	return &cp, true
+}
+
+// resolved is a local path with its symbolic links followed, as it is when it does not
+// exist (yet).
+func resolved(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return path.Clean(p)
+}
+
+// ChildAt is the worktree project of parent opened on dir, if any.
+func (r *Registry) ChildAt(parent, dir string) (string, int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, p := range r.items {
+		if p.Parent == parent && p.Path == path.Clean(dir) {
+			return p.ID, p.Ticket
+		}
+	}
+	return "", 0
+}
+
+// Children lists the worktree projects of a project.
+func (r *Registry) Children(parent string) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var ids []string
+	for _, p := range r.items {
+		if p.Parent == parent {
+			ids = append(ids, p.ID)
+		}
+	}
+	return ids
+}

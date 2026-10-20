@@ -1,4 +1,4 @@
-// The plugin of the browser tests (pod/internal/plugins/hello): a tool calling its backend, and
+// The plugin of the browser tests (pod/plugins/hello): a tool calling its backend, and
 // an item of the status bar while the tool has the focus.
 import { createResource } from 'solid-js'
 import type { PluginModule } from '../types'

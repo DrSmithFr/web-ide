@@ -1,4 +1,4 @@
-// The Files plugin, locked (pod/internal/plugins/files): the Explorer, the Files tab of Search
+// The Files plugin, locked (pod/plugins/files): the Explorer, the Files tab of Search
 // Everywhere, and the files service (reveal a file, create a file or a folder).
 import type { PluginModule } from '../types'
 import { api as theApi, bindApi } from './plugin'

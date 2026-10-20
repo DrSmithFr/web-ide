@@ -1,4 +1,4 @@
-// The Exec plugin (pod/internal/plugins/exec): the Console tool, the saved commands, and the
+// The Exec plugin (pod/plugins/exec): the Console tool, the saved commands, and the
 // terminal and commands capabilities other parts of the IDE use.
 import type { PluginModule } from '../types'
 import { api, bindApi } from './plugin'

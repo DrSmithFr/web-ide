@@ -40,9 +40,9 @@ run(async ({ page }) => {
   await shown('docs/README.md')
   await page.click('[data-testid=doc-view] a[href="../pod/README.md"]')
   await shown('pod/README.md')
-  await page.click('[data-testid=doc-view] a[href="internal/README.md"]')
-  await shown('pod/internal/README.md')
-  await page.click('[data-testid=doc-view] a[href="../../GLOSSARY.md"]')
+  await page.click('[data-testid=doc-view] a[href="packages.md"]')
+  await shown('pod/packages.md')
+  await page.click('[data-testid=doc-view] a[href="../GLOSSARY.md"]')
   await shown('GLOSSARY.md')
 
   // The palette has the action, which shows the page in the same tab.

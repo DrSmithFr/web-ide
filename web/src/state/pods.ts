@@ -1,4 +1,4 @@
-// The other pods of the account (pod/internal/multipod): the pods this pod sees on the LAN, the
+// The other pods of the account (pod/multipod): the pods this pod sees on the LAN, the
 // ones the relay reports online, and the ones whose encrypted list the relay cached. The home page
 // shows one Projects block per pod; Settings > Remote access says which pod of the cluster opens the
 // others.

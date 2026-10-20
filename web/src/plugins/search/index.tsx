@@ -1,4 +1,4 @@
-// The Search plugin (pod/internal/plugins/search): the Search tool and the Text tab of Search
+// The Search plugin (pod/plugins/search): the Search tool and the Text tab of Search
 // Everywhere.
 import type { PluginModule } from '../types'
 import { bindApi } from './plugin'

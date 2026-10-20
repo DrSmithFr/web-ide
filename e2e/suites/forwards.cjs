@@ -19,7 +19,7 @@ const goBin = ['go', path.join(os.homedir(), 'sdk/go/bin/go')].find((g) => {
   }
 })
 const bin = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sshtestd-')), 'sshtestd')
-execFileSync(goBin, ['build', '-o', bin, './internal/sshtest/sshtestd'], { cwd: pod })
+execFileSync(goBin, ['build', '-o', bin, './sshtest/sshtestd'], { cwd: pod })
 const sshd = spawn(bin, [], { stdio: ['ignore', 'pipe', 'inherit'] })
 process.on('exit', () => sshd.kill())
 const sshPort = new Promise((resolve) => sshd.stdout.once('data', (d) => resolve(parseInt(String(d), 10))))

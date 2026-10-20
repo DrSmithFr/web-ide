@@ -1,4 +1,4 @@
-// The Language servers plugin (pod/internal/plugins/languages): code navigation, completion,
+// The Language servers plugin (pod/plugins/languages): code navigation, completion,
 // diagnostics, the Problems and Structure tools, the Symbols tab of Search Everywhere. The
 // editor of the core asks it through the language capability.
 import type { PluginModule } from '../types'

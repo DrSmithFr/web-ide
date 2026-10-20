@@ -1,4 +1,4 @@
-// The Git plugin (pod/internal/plugins/git): the Git tool, the git source of the diff view, and
+// The Git plugin (pod/plugins/git): the Git tool, the git source of the diff view, and
 // the git service (the state of the repository) the explorer, the project bar and the editor use.
 import type { PluginModule } from '../types'
 import { bindApi } from './plugin'

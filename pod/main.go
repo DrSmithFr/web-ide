@@ -21,30 +21,30 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"github.com/DrSmithFr/web-ide/lib/identity"
+	"github.com/DrSmithFr/web-ide/pod/config"
+	"github.com/DrSmithFr/web-ide/pod/desks"
 	"github.com/DrSmithFr/web-ide/pod/docsdist"
-	"github.com/DrSmithFr/web-ide/pod/internal/config"
-	"github.com/DrSmithFr/web-ide/pod/internal/desks"
-	"github.com/DrSmithFr/web-ide/pod/internal/hfcache"
-	"github.com/DrSmithFr/web-ide/pod/internal/i18n"
-	"github.com/DrSmithFr/web-ide/pod/internal/identity"
-	"github.com/DrSmithFr/web-ide/pod/internal/keeper"
-	"github.com/DrSmithFr/web-ide/pod/internal/lan"
-	"github.com/DrSmithFr/web-ide/pod/internal/llm"
-	"github.com/DrSmithFr/web-ide/pod/internal/multipod"
-	"github.com/DrSmithFr/web-ide/pod/internal/pair"
-	"github.com/DrSmithFr/web-ide/pod/internal/plugins/builtin"
-	"github.com/DrSmithFr/web-ide/pod/internal/power"
-	"github.com/DrSmithFr/web-ide/pod/internal/projects"
-	"github.com/DrSmithFr/web-ide/pod/internal/push"
-	"github.com/DrSmithFr/web-ide/pod/internal/relay"
-	"github.com/DrSmithFr/web-ide/pod/internal/relayclient"
-	"github.com/DrSmithFr/web-ide/pod/internal/server"
-	"github.com/DrSmithFr/web-ide/pod/internal/settings"
-	"github.com/DrSmithFr/web-ide/pod/internal/settingsync"
-	"github.com/DrSmithFr/web-ide/pod/internal/sshx"
-	"github.com/DrSmithFr/web-ide/pod/internal/store"
-	"github.com/DrSmithFr/web-ide/pod/internal/update"
+	"github.com/DrSmithFr/web-ide/pod/hfcache"
+	"github.com/DrSmithFr/web-ide/pod/keeper"
+	"github.com/DrSmithFr/web-ide/pod/lan"
+	"github.com/DrSmithFr/web-ide/pod/llm"
+	"github.com/DrSmithFr/web-ide/pod/multipod"
+	"github.com/DrSmithFr/web-ide/pod/pair"
+	"github.com/DrSmithFr/web-ide/pod/plugins/builtin"
+	"github.com/DrSmithFr/web-ide/pod/power"
+	"github.com/DrSmithFr/web-ide/pod/projects"
+	"github.com/DrSmithFr/web-ide/pod/push"
+	"github.com/DrSmithFr/web-ide/pod/relayclient"
+	"github.com/DrSmithFr/web-ide/pod/server"
+	"github.com/DrSmithFr/web-ide/pod/settings"
+	"github.com/DrSmithFr/web-ide/pod/settingsync"
+	"github.com/DrSmithFr/web-ide/pod/sshx"
+	"github.com/DrSmithFr/web-ide/pod/store"
+	"github.com/DrSmithFr/web-ide/pod/update"
 	"github.com/DrSmithFr/web-ide/pod/webdist"
+	"github.com/DrSmithFr/web-ide/relay"
 )
 
 // version is set at build time (make build: git describe).
@@ -347,7 +347,7 @@ func main() {
 		}
 	}
 	// A pod with a link of its own dials the pods of another cluster pod to pod: their page runs
-	// under its own origin too (pod/internal/multipod.RemoteGateway).
+	// under its own origin too (pod/multipod.RemoteGateway).
 	dir.SetRemote(cfg.RelayURL != "")
 	dir.SetEmitter(srv.PodsChanged)
 	srv.Pods = &podsView{dir: dir, cfg: cfg, st: st, relayCli: &relayCli, id: podID, power: pwr}
