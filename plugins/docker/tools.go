@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
+	dk "github.com/DrSmithFr/web-ide/plugins/docker/internal/docker"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
-	dk "github.com/DrSmithFr/web-ide/pod/docker"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
 )
 
@@ -74,7 +74,7 @@ func registerTools(h plugins.Host) {
 
 func ps(ctx context.Context, c plugins.Call, a toolArgs) (plugins.Result, error) {
 	rt := c.Runtime
-	st := rt.Docker.Status(ctx)
+	st := dockerOf(rt).Status(ctx)
 	if !st.Available {
 		msg := st.Error
 		if st.Err != nil {
@@ -83,7 +83,7 @@ func ps(ctx context.Context, c plugins.Call, a toolArgs) (plugins.Result, error)
 		return plugins.Result{Content: "Docker is not reachable: " + msg, Summary: assistant.Plain(msg), Error: true}, nil
 	}
 	if st.ComposeFile == "" || !st.Compose {
-		list, err := rt.Docker.Containers(ctx)
+		list, err := dockerOf(rt).Containers(ctx)
 		if err != nil {
 			return plugins.Result{}, err
 		}
@@ -109,7 +109,7 @@ func ps(ctx context.Context, c plugins.Call, a toolArgs) (plugins.Result, error)
 			}
 		}
 	}
-	stack, err := rt.Docker.Stack(ctx, active)
+	stack, err := dockerOf(rt).Stack(ctx, active)
 	if err != nil {
 		return plugins.Result{}, err
 	}
@@ -155,7 +155,7 @@ func logs(ctx context.Context, c plugins.Call, a toolArgs) (plugins.Result, erro
 	if container != "" {
 		service = ""
 	}
-	out, err := c.Runtime.Docker.LogsTail(ctx, container, service, a.Profiles, lines)
+	out, err := dockerOf(c.Runtime).LogsTail(ctx, container, service, a.Profiles, lines)
 	if err != nil {
 		return plugins.Result{}, err
 	}

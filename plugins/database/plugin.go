@@ -10,7 +10,7 @@ import (
 	"errors"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/db"
+	"github.com/DrSmithFr/web-ide/plugins/database/internal/db"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
 )
 
@@ -39,7 +39,7 @@ func handle[A any](h plugins.Host, method string, f func(ctx context.Context, c 
 				return nil, err
 			}
 		}
-		res, err := f(ctx, c, c.Runtime.DB, a)
+		res, err := f(ctx, c, connsOf(c.Runtime), a)
 		var np *db.NeedPassword
 		if errors.As(err, &np) {
 			msg := i18n.Translate(c.Lang, np.Msg)
@@ -52,7 +52,7 @@ func handle[A any](h plugins.Host, method string, f func(ctx context.Context, c 
 type none struct{}
 
 func (p *Plugin) Register(h plugins.Host) {
-	notify := func(c plugins.Call) { c.Emit("db.changed", c.Runtime.DB.List()) }
+	notify := func(c plugins.Call) { c.Emit("db.changed", connsOf(c.Runtime).List()) }
 	type connArg struct {
 		ID     string    `json:"id"`
 		Secret db.Secret `json:"secret"`

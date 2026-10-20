@@ -45,6 +45,8 @@ type pluginSet struct {
 	mu              sync.Mutex
 	// disabled caches .ide/plugins.json per main project; written by plugins.set.
 	disabled map[string][]string
+	// provided are the capabilities the plugins gave (Host.Provide), by name; set at registration.
+	provided map[string]any
 }
 
 // pluginHost is what a plugin registers through.
@@ -323,6 +325,16 @@ func (h pluginHost) OnWindows(f func(n int)) {
 	h.s.plugins.onWindows = append(h.s.plugins.onWindows, f)
 }
 
+func (h pluginHost) Provide(c string, impl any) {
+	if !slices.Contains(h.m.Provides, c) {
+		panic(fmt.Sprintf("plugin %s: capability %s not in the provides of its manifest", h.id, c))
+	}
+	if h.s.plugins.provided == nil {
+		h.s.plugins.provided = map[string]any{}
+	}
+	h.s.plugins.provided[c] = impl
+}
+
 func (h pluginHost) OnStart(f func()) { h.s.plugins.onStart = append(h.s.plugins.onStart, f) }
 func (h pluginHost) OnStop(f func())  { h.s.plugins.onStop = append(h.s.plugins.onStop, f) }
 
@@ -373,6 +385,13 @@ func (p podLend) EmitFamily(root, event string, data any, except string) {
 func (p podLend) CloseRuntime(project string) { p.s.closeRuntime(project) }
 
 func (p podLend) CapabilityOn(rt *runtime.Runtime, c string) bool { return p.s.capabilityOn(rt, c) }
+
+func (p podLend) Capability(rt *runtime.Runtime, c string) any {
+	if !p.s.capabilityOn(rt, c) {
+		return nil
+	}
+	return p.s.plugins.provided[c]
+}
 
 func (p podLend) Stopping() bool { return p.s.stopped.Load() }
 

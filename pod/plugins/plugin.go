@@ -50,6 +50,9 @@ type Host interface {
 	// when it stops (they are saved for the next pod).
 	OnStart(f func())
 	OnStop(f func())
+	// Provide gives a capability of the manifest's provides to the others and the core: an
+	// interface of capabilities.go.
+	Provide(capability string, impl any)
 }
 
 // Pod is the pod as a built-in plugin sees it: the projects, the events to every window, and
@@ -75,6 +78,9 @@ type Pod interface {
 	Services() *Services
 	// CapabilityOn tells whether a project has a capability (worktrees, terminal…).
 	CapabilityOn(rt *runtime.Runtime, capability string) bool
+	// Capability is what provides a capability on the project of rt (an interface of
+	// capabilities.go), nil when no enabled plugin provides it.
+	Capability(rt *runtime.Runtime, capability string) any
 	// Stopping tells that the pod is stopping (the work running is left to the next pod).
 	Stopping() bool
 	// Plugin is a plugin of the pod by id, to use its exports (the AI uses the Kanban's).

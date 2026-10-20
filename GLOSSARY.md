@@ -180,6 +180,10 @@ What gives Search Everywhere one kind of results (files, symbols, actions, textâ
 A named feature a plugin or the core provides and others require (`terminal`, `worktrees`), with the service that does it: the consoles of `terminal`.
 _Avoid_: service (an HTTP service shared between pods), dependency (a ticket waiting for another)
 
+**Part** ([plugins](docs/design/plugins.md#what-the-layout-added-to-the-api))
+The per-project state a plugin keeps in the runtime of a project (its language servers, its database connections), made on first use and stopped with the project.
+_Avoid_: extension, module
+
 **Interface tool**
 A tool of the MCP or of the assistant that a window of the IDE runs for the pod (`ui.call`): open a file or a diff, focus a panel, show a message; a plugin adds its own (the AI: a page of its board).
 
