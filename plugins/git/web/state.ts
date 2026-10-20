@@ -1,0 +1,126 @@
+// Git state of the worktree shown, refreshed after file changes and Git actions: the git service
+// of the plugin (explorer colors, project bar, editor markers).
+import { createEffect, createMemo, createRoot, createSignal, on as track } from 'solid-js'
+import type { FileGitState, GitFile, GitStatus } from '@ide/capabilities'
+import { api } from './plugin'
+
+export type { GitFile, GitStatus, FileGitState }
+
+const [status, setStatus] = createSignal<GitStatus | null>(null)
+const [revision, setRevision] = createSignal(0)
+export { status as gitStatus }
+/** Bumped when HEAD or the index may have changed (diffs and markers are recomputed). */
+export const gitRevision = revision
+
+let timer: number | undefined
+let running = false
+let again = false
+
+export function refreshGit(delay = 400) {
+  clearTimeout(timer)
+  timer = window.setTimeout(load, delay)
+}
+
+async function load() {
+  if (!api.project.current()) return
+  if (running) {
+    again = true
+    return
+  }
+  running = true
+  try {
+    const st = await api.rpc<GitStatus>('status')
+    // A commit made in a terminal moves HEAD without any event of the pod.
+    if (status() && st.head !== status()!.head) setRevision((r) => r + 1)
+    setStatus(st)
+  } catch {
+    setStatus(null)
+  } finally {
+    running = false
+    if (again) {
+      again = false
+      refreshGit(100)
+    }
+  }
+}
+
+/** Starts following the repository: the events of the pod, the worktree shown, the focus. */
+export function watchGit() {
+// Events of another worktree attached to the window do not change the one shown.
+const shown = (from?: string) => !from || from === api.project.current()
+api.on('git.changed', (_, from) => {
+  if (!shown(from)) return
+  setRevision((r) => r + 1)
+  refreshGit(50)
+})
+// A file written, created or removed anywhere in the project.
+api.on('fs.dir', (e: { path: string }, from) => {
+  if (!shown(from)) return
+  if (e.path.includes('/.git')) setRevision((r) => r + 1)
+  refreshGit()
+})
+api.on('fs.changed', (_, from) => shown(from) && refreshGit())
+// Another worktree shown in the window.
+createRoot(() =>
+  createEffect(
+    track(
+      () => api.project.current(),
+      (id, prev) => {
+        if (!id || !prev) return
+        setRevision((r) => r + 1)
+        refreshGit(0)
+      },
+    ),
+  ),
+)
+window.addEventListener('focus', () => {
+  setRevision((r) => r + 1)
+  refreshGit(100)
+})
+}
+
+function stateOf(f: GitFile): FileGitState {
+  if (f.conflict) return 'conflict'
+  if (f.untracked) return 'untracked'
+  if (f.work === 'D' || f.index === 'D') return 'deleted'
+  if (f.index === 'A') return 'added'
+  return 'modified'
+}
+
+// States by file, and the states found under each folder, recomputed with the status.
+const states = createRoot(() =>
+  createMemo(() => {
+    const files = new Map<string, FileGitState>()
+    const dirs = new Map<string, Set<FileGitState>>()
+    for (const f of status()?.files ?? []) {
+      const st = stateOf(f)
+      files.set(f.path, st)
+      for (let i = f.path.lastIndexOf('/'); i > 0; i = f.path.lastIndexOf('/', i - 1)) {
+        const d = f.path.slice(0, i)
+        const set = dirs.get(d) ?? new Set()
+        set.add(st)
+        dirs.set(d, set)
+      }
+    }
+    return { files, dirs }
+  }),
+)
+
+/** Git state of a file in the working tree view (explorer colors). */
+export function fileState(path: string): FileGitState | null {
+  return states().files.get(path) ?? null
+}
+
+/** Git state of a folder from its content: untracked or added when all its changes are, modified otherwise. */
+export function dirState(dir: string): FileGitState | null {
+  const set = states().dirs.get(dir)
+  if (!set) return null
+  if (set.has('conflict')) return 'conflict'
+  if (set.size === 1 && (set.has('untracked') || set.has('added'))) return [...set][0]
+  return 'modified'
+}
+
+/** True when a folder contains changes (explorer). */
+export function dirChanged(dir: string): boolean {
+  return states().dirs.has(dir)
+}

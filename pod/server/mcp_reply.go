@@ -3,8 +3,8 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/DrSmithFr/web-ide/plugins/ai"
 	"github.com/DrSmithFr/web-ide/pod/llm"
-	"github.com/DrSmithFr/web-ide/pod/plugins/ai"
 	"github.com/DrSmithFr/web-ide/pod/sshx"
 	"strings"
 

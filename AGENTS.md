@@ -1,12 +1,12 @@
 # Notes for AI agents
 
-Web IDE: a Go program, the pod (`pod/`), serving a SolidJS front end (`web/`) over a WebSocket; the same binary runs the relay (`relay/`), and both share `lib/`. Read these first:
+Web IDE: a Go program, the pod (`pod/`), serving a SolidJS front end (`web/`) over a WebSocket, with its built-in plugins in `plugins/<id>/`; the same binary runs the relay (`relay/`), and both share `lib/`. Read these first:
 
 - [GLOSSARY.md](GLOSSARY.md): the words of the project, one meaning each. Use them in code, docs and UI texts; its *Conflicts* list the names still to fix.
 - [docs/README.md](docs/README.md): every page of the documentation (install, how-to, guide, design).
 - [docs/design/spec.md](docs/design/spec.md): what the IDE does and why.
 - [docs/design/architecture.md](docs/design/architecture.md): the system map, code layout, protocol, build and test commands, pitfalls.
-- The code: [pod/README.md](pod/README.md), [pod/packages.md](pod/packages.md), [relay/README.md](relay/README.md), [lib/README.md](lib/README.md), [web/src/README.md](web/src/README.md), [e2e/README.md](e2e/README.md): a Mermaid map, the components, the pitfalls and the tests of each area.
+- The code: [pod/README.md](pod/README.md), [pod/packages.md](pod/packages.md), [relay/README.md](relay/README.md), [lib/README.md](lib/README.md), [plugins/README.md](plugins/README.md) (and the README of each plugin), [web/src/README.md](web/src/README.md), [e2e/README.md](e2e/README.md): a Mermaid map, the components, the pitfalls and the tests of each area.
 - [docs/design/kanban.md](docs/design/kanban.md): the kanban and its git workflow.
 - [docs/design/relay.md](docs/design/relay.md): remote access through a relay, and the hosted one at `antennae.space`.
 - [docs/howto/self-host-relay.md](docs/howto/self-host-relay.md): running your own relay (domain, flags, firewall, backups).

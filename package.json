@@ -1,0 +1,5 @@
+{
+  "name": "web-ide-root",
+  "private": true,
+  "workspaces": ["web"]
+}

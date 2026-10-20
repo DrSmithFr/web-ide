@@ -2,7 +2,7 @@ package server
 
 import (
 	"bufio"
-	"github.com/DrSmithFr/web-ide/pod/plugins/previews"
+	"github.com/DrSmithFr/web-ide/plugins/previews"
 	"net"
 	"os"
 	"path/filepath"

@@ -2,19 +2,19 @@
 package builtin
 
 import (
+	"github.com/DrSmithFr/web-ide/plugins/ai"
+	"github.com/DrSmithFr/web-ide/plugins/code"
+	"github.com/DrSmithFr/web-ide/plugins/database"
+	"github.com/DrSmithFr/web-ide/plugins/docker"
+	"github.com/DrSmithFr/web-ide/plugins/exec"
+	"github.com/DrSmithFr/web-ide/plugins/files"
+	"github.com/DrSmithFr/web-ide/plugins/git"
+	"github.com/DrSmithFr/web-ide/plugins/hello"
+	"github.com/DrSmithFr/web-ide/plugins/kanban"
+	"github.com/DrSmithFr/web-ide/plugins/languages"
+	"github.com/DrSmithFr/web-ide/plugins/previews"
+	"github.com/DrSmithFr/web-ide/plugins/search"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
-	"github.com/DrSmithFr/web-ide/pod/plugins/ai"
-	"github.com/DrSmithFr/web-ide/pod/plugins/code"
-	"github.com/DrSmithFr/web-ide/pod/plugins/database"
-	"github.com/DrSmithFr/web-ide/pod/plugins/docker"
-	"github.com/DrSmithFr/web-ide/pod/plugins/exec"
-	"github.com/DrSmithFr/web-ide/pod/plugins/files"
-	"github.com/DrSmithFr/web-ide/pod/plugins/git"
-	"github.com/DrSmithFr/web-ide/pod/plugins/hello"
-	"github.com/DrSmithFr/web-ide/pod/plugins/kanban"
-	"github.com/DrSmithFr/web-ide/pod/plugins/languages"
-	"github.com/DrSmithFr/web-ide/pod/plugins/previews"
-	"github.com/DrSmithFr/web-ide/pod/plugins/search"
 )
 
 // Registry holds the built-in plugins; tests adds the plugins of the browser tests.

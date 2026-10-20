@@ -3,9 +3,9 @@ package server
 import (
 	"encoding/json"
 
+	"github.com/DrSmithFr/web-ide/plugins/ai"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/llm"
-	"github.com/DrSmithFr/web-ide/pod/plugins/ai"
 )
 
 // aiOf is the AI plugin of the pod of the tests.
