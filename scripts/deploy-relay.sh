@@ -306,7 +306,7 @@ fi
 
 # The Service Worker of the relay is what caches the assets of the pods: the page must serve the
 # one of this build, not an older one held by a proxy.
-SW=pod/internal/relay/web/sw.js
+SW=relay/web/sw.js
 if [ -f "$SW" ] && curl -fsSL --max-time 15 -o /tmp/relay-sw.js "$URL/sw.js" 2>/dev/null; then
   # The relay writes the hash of its shell into the Service Worker (#73): compare the rest.
   sed "s/^const SHELL = '[0-9a-f]*'/const SHELL = '__SHELL__'/" /tmp/relay-sw.js > /tmp/relay-sw.norm.js

@@ -30,7 +30,7 @@ Add or update e2e assertions for any visible change. The `lsp` suite needs `gopl
 
 - **Language**: code, comments, documentation and commit messages in English.
 - **Docs**: a change of behaviour updates the docs that describe it in the same commit (see *Docs* in [AGENTS.md](AGENTS.md)).
-- **Interface texts** go through `t()` (`web/src/i18n`): write the English text as the key and add its translation to every catalog of `web/src/i18n/` (`fr.json`, `es.json`; `npm run check` reports missing ones). Messages sent by the pod use `i18n.Errorf` / `i18n.T` with the catalogs of `pod/internal/i18n/` (checked by its tests).
+- **Interface texts** go through `t()` (`web/src/i18n`): write the English text as the key and add its translation to every catalog of `web/src/i18n/` (`fr.json`, `es.json`; `npm run check` reports missing ones). Messages sent by the pod use `i18n.Errorf` / `i18n.T` with the catalogs of `lib/i18n/` (checked by its tests).
 - **Style**: `gofmt` for Go; for TypeScript, follow the surrounding code (2 spaces, no semicolons, single quotes). Keep comments for the *why*, not the *what*.
 - **Commits**: one logical change per commit, with a short imperative subject line (`Kanban: freeze the change when merging`) and a body explaining why when it is not obvious.
 - **Dependencies**: keep them few. The pod is a single static binary and the front end has no runtime CDN.

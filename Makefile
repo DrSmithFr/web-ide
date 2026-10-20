@@ -41,13 +41,18 @@ $(DEV_DATA):
 	[ ! -d $(HOME)/.web-ide ] || for f in $(HOME)/.web-ide/*; do \
 	  case $$f in */models) ln -s $$f $@/models ;; */config.json|*/keeper.sock) ;; *) cp -r $$f $@/ ;; esac; done
 
+# The Go packages: listed, not ./... from the root, which would take the .go files of node_modules.
+GO_DIRS := pod relay lib
+GO_PKGS := $(addprefix ./,$(addsuffix /...,$(GO_DIRS)))
+
 test: pod/webdist/dist docs-content
-	@unformatted="$$($(dir $(GO))gofmt -l pod)"; test -z "$$unformatted" || (echo "gofmt needed:"; echo "$$unformatted"; exit 1)
-	cd pod && $(GO) vet ./... && $(GO) test ./...
+	@unformatted="$$($(dir $(GO))gofmt -l $(GO_DIRS))"; test -z "$$unformatted" || (echo "gofmt needed:"; echo "$$unformatted"; exit 1)
+	$(GO) vet $(GO_PKGS) && $(GO) test $(GO_PKGS)
 	cd web && npm run check
 	node scripts/identity-vectors.mjs
 	node --test scripts/routes-test.mjs
 	node scripts/check-links.mjs
+	node scripts/check-paths.mjs
 
 # Browser tests (headless Chromium from the Playwright cache, or CHROME=/path/to/chrome).
 e2e: build
@@ -112,7 +117,7 @@ relay-build: web pod/webdist/dist docs-content
 	cd pod && GOOS=linux GOARCH=amd64 $(GO) build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o ../bin/web-ide-pod-relay .
 
 # The load test of the relay (#72): a second relay on the same host, with its own unit, data
-# folder and a narrow TURN port range (500 relay ports), driven by pod/internal/relayload over the
+# folder and a narrow TURN port range (500 relay ports), driven by relay/relayload over the
 # network. LOAD_TIER is static, signal or turn; LOAD_PODS, LOAD_SESSIONS, LOAD_MB, LOAD_RAMP and
 # LOAD_HOLD size the run. `make load-relay-down` takes the test relay back off.
 LOAD_TIER ?= signal
@@ -126,7 +131,7 @@ LOAD_TLS_PORT ?= 4443
 RELAY_IP = $(lastword $(subst @, ,$(RELAY_HOST)))
 
 relayload: pod/webdist/dist docs-content
-	cd pod && $(GO) build -trimpath -o ../bin/relayload ./cmd/relayload
+	$(GO) build -trimpath -o bin/relayload ./relay/cmd/relayload
 
 load-relay: relayload relay-build
 	./scripts/relay-load.sh up --binary bin/web-ide-pod-relay

@@ -1,4 +1,4 @@
-// The Kanban plugin (pod/internal/plugins/kanban): its tool, the board, ticket, milestone and
+// The Kanban plugin (pod/plugins/kanban): its tool, the board, ticket, milestone and
 // objective views, the New ticket modal, and the tickets service the assistant, the Orchestrator
 // and the project bar use.
 import type { PluginModule } from '../types'

@@ -1,4 +1,4 @@
-// The Database explorer plugin (pod/internal/plugins/database): its tool, the console and table
+// The Database explorer plugin (pod/plugins/database): its tool, the console and table
 // views, and the connections of the project kept up to date.
 import type { PluginModule } from '../types'
 import { bindApi } from './plugin'

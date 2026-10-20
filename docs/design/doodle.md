@@ -80,7 +80,7 @@ The browser asks a click for a capture of the screen, so `"screen"` stops the tu
 
 The assistant runs in the pod but a page needs the browser (text measures, description, PNG), so a window of the project draws it (`board/build.ts`), and without any window the tool answers that the model should describe it in text. The model gets the description of the page (`Page N "title" drawn by you`), and, if it reads images, its PNG in a user message right after the tool results (servers often take only text in a tool result). A new page selects itself, opens the board in a wide assistant or shows a toast in a narrow one, and has a card in the thread.
 
-Pages are numbered from 1 in message order, then in attachment order within a message; the model refers to them by this number (the pod counts them the same way, `assistant.Pages`). The board is a view over the messages of the conversation (`web/src/llm/board/pages.ts`), stored nowhere else.
+Pages are numbered from 1 in message order, then in attachment order within a message; the model refers to them by this number (the pod counts them the same way, `assistant.Pages`). The board is a view over the messages of the conversation (`web/src/plugins/ai/llm/board/pages.ts`), stored nowhere else.
 
 ## Storage
 
@@ -88,4 +88,4 @@ The doodle lives in the conversation, in the message that sent it: the PNG, the 
 
 ## Code
 
-Hand-made, no drawing library: SVG for the elements, a canvas only for the export. `web/src/plugins/ai/llm/doodle/`: the document model and its undo stack, the tools, the layout tree, the export (PNG and description), the modal, the drawing of the elements shared with the board (`Elements.tsx`). `web/src/llm/board/`: the pages of the conversation, the read-only view and the board panel.
+Hand-made, no drawing library: SVG for the elements, a canvas only for the export. `web/src/plugins/ai/llm/doodle/`: the document model and its undo stack, the tools, the layout tree, the export (PNG and description), the modal, the drawing of the elements shared with the board (`Elements.tsx`). `web/src/plugins/ai/llm/board/`: the pages of the conversation, the read-only view and the board panel.

@@ -1,4 +1,4 @@
-// The other pods of the account on the local network (pod/internal/lan): their projects
+// The other pods of the account on the local network (pod/lan): their projects
 // for the home page, the addresses typed by hand for Settings. The local pod is the gateway:
 // the page of each peer runs through us, under /_lan/pod/<key>/ of our origin.
 import { createSignal, onCleanup } from 'solid-js'

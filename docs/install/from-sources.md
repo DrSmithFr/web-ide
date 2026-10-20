@@ -5,7 +5,7 @@ Build the pod yourself, to run it, to install it as a unit, or to change it.
 ## Prerequisites
 
 - `git`, `make`.
-- Go 1.27 or later (`pod/go.mod`); the Makefile also looks in `~/sdk/go/bin/go`.
+- Go 1.27 or later (`go.mod`); the Makefile also looks in `~/sdk/go/bin/go`.
 - Node.js 20.19 or later, with `npm`, for the front end.
 
 ## Steps

@@ -178,7 +178,7 @@ export interface ActionCard {
   result?: string
 }
 
-/** Status of a sub-agent (pod/internal/assistant/subagents.go). */
+/** Status of a sub-agent (pod/assistant/subagents.go). */
 export type AgentStatus = 'running' | 'waiting_parent' | 'done' | 'blocked' | 'stopped' | 'error'
 
 export interface SubAgent {

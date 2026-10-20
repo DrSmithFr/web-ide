@@ -315,7 +315,7 @@ function Thought(props: { text: string; live: boolean }) {
   )
 }
 
-// Notices written by the pod (internal/acp), translated here.
+// Notices written by the pod (pod/acp), translated here.
 export const notices = () => [
   t('Stopped.'),
   t('The agent stopped: limit reached.'),

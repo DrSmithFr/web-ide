@@ -1,4 +1,4 @@
-// The AI plugin (pod/internal/plugins/ai): the Assistant and Agents tools, the doodle editor
+// The AI plugin (pod/plugins/ai): the Assistant and Agents tools, the doodle editor
 // an agent asks through the MCP, the interface tools of the assistant (a page of its board, a
 // doodle), and the assistant and agents services the Kanban plugin and the core use.
 import type { PluginModule } from '../types'

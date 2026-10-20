@@ -50,7 +50,7 @@ WSL 2 runs with **NAT**, its default: the virtual machine has its own address, h
 - From Windows, the pod answers on `localhost`.
 - From other machines of the LAN, the pod is not reachable directly: use [Tailscale](linux.md) inside WSL, or [a relay](../howto/self-host-relay.md).
 - Other pods of your account on the LAN do not find a pod under NAT by mDNS, and cannot reach its LAN port (`:4436`): use the relay instead (an address typed in Settings cannot reach it either, unless the port is forwarded to WSL, which this page does not cover). A pod under NAT still sees the others.
-- **Wake-on-LAN** from this pod: the networks of the virtual machine are not the LAN, so the pod reads the IPv4 networks of Windows and sends the magic packet through `powershell.exe` (the WSL interop, `pod/internal/power/wsl.go`). The interop must be on.
+- **Wake-on-LAN** from this pod: the networks of the virtual machine are not the LAN, so the pod reads the IPv4 networks of Windows and sends the magic packet through `powershell.exe` (the WSL interop, `pod/power/wsl.go`). The interop must be on.
 - Mirrored networking (`networkingMode=mirrored` in `.wslconfig`) is an option the authors have not tried: the code does not rule it out, but does not count on a broadcast leaving the machine either.
 
 ## Check

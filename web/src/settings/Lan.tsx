@@ -6,7 +6,7 @@ import { useLan, type LanStatus } from '../state/lan'
 import { errorToast, toast } from '../ui/toast'
 import { t } from '../i18n'
 
-/** The text of a reason an address failed (codes of the handshake, pod/internal/lan). */
+/** The text of a reason an address failed (codes of the handshake, pod/lan). */
 function reason(code: string) {
   switch (code) {
     case 'unpaired':

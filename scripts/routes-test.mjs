@@ -1,8 +1,8 @@
-// The routing decisions of the bootstrap page (pod/internal/relay/web/routes.js), run outside a
+// The routing decisions of the bootstrap page (relay/web/routes.js), run outside a
 // browser: which pod opens the page of another one, and under which label. Run by make test.
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { keyOf, nextGateway, pickGateway, pickCluster, routeOf } from '../pod/internal/relay/web/routes.js'
+import { keyOf, nextGateway, pickGateway, pickCluster, routeOf } from '../relay/web/routes.js'
 
 // Cluster 1: A (preferred) and B, both registered at the relay. Cluster 2: C. D is a pod of the LAN of
 // A that the relay never sees (it has no link of its own).

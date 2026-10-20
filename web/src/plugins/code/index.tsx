@@ -1,4 +1,4 @@
-// The Code plugin, locked (pod/internal/plugins/code): the view of a file buffer, which every file
+// The Code plugin, locked (pod/plugins/code): the view of a file buffer, which every file
 // tab shows (fileView contribution), and its items of the status bar.
 import type { PluginModule } from '../types'
 import { bindApi } from './plugin'
