@@ -161,11 +161,21 @@ func TestExternals(t *testing.T) {
 		t.Fatal(err)
 	}
 	states := r.ResolveChoices(Choices{External: map[string]string{"greet": "u", "other": "v"}})
-	if len(states) != 3 || states[1].Manifest.ID != "greet" || states[1].Enabled || states[1].Disabled || !states[1].External.Installed {
+	if len(states) != 3 || states[1].Manifest.ID != "greet" || !states[1].Enabled || states[1].Disabled || !states[1].External.Installed {
 		t.Fatalf("states: %+v", states)
 	}
-	if states[2].Manifest.ID != "other" || states[2].External.Installed || states[2].External.URL != "v" {
+	if states[2].Manifest.ID != "other" || states[2].Enabled || states[2].External.Installed || states[2].External.URL != "v" {
 		t.Fatalf("not installed: %+v", states[2])
+	}
+	if r.ResolveChoices(Choices{})[1].Enabled {
+		t.Fatal("not used by the project: off")
+	}
+	// What an external plugin provides is not given to the others.
+	r.RemoveExternal("greet")
+	_ = r.SetExternal(External{Manifest: Manifest{ID: "greet", APIVersion: APIVersion, Provides: []string{"tickets"}, Requires: []string{"nope"}}, Version: "1.1.0"})
+	states = r.ResolveChoices(Choices{External: map[string]string{"greet": "u"}})
+	if Provided(states)["tickets"] || states[1].Enabled || states[1].Missing[0] != "nope" {
+		t.Fatalf("capabilities of an external: %+v", states[1])
 	}
 	if v := r.Versions(); v["greet"] != "1.1.0" || v["git"] != "1.0.0" {
 		t.Fatal(v)

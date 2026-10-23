@@ -6,6 +6,7 @@ import { createMemo, createRoot, createSignal, type JSX } from 'solid-js'
 import { on, request } from '../pod/rpc'
 import { setPluginActions } from '../keys/bindings'
 import { API_VERSION, makeApi } from './api'
+import { externalModule } from './external'
 import type { ExplorerEntry, PluginContributions, PluginModule, PluginState, StatusItem } from './types'
 import { setCapabilityGate } from './capabilities'
 import { setPluginProviders } from '../popups/searchProviders'
@@ -13,7 +14,7 @@ import { setDiffSources } from '../ui/diffSources'
 import { setPluginUiTools } from '../ui/uiCalls'
 import { setAloneView } from '../state/tiles'
 import { t } from '../i18n'
-import type { TabState } from '../state/project'
+import { placePluginTools, type TabState } from '../state/project'
 
 // The page module of each built-in, a chunk of its own (vite.config.ts: plugin-<id>).
 const builtins: Record<string, () => Promise<PluginModule>> = {
@@ -41,9 +42,14 @@ const modules: Record<string, PluginModule> = {}
 const [version, setVersion] = createSignal(0)
 const loading: Record<string, Promise<PluginModule | undefined>> = {}
 
-/** The page module of a built-in, loaded once (undefined when it cannot be). */
+/** A plugin with a page module: a built-in, or an external one installed (external.tsx). */
+const hasModule = (s: PluginState) => !!builtins[s.manifest.id] || !!s.external?.installed
+
+/** The page module of a plugin, loaded once (undefined when it cannot be). */
 function load(id: string): Promise<PluginModule | undefined> {
-  return (loading[id] ??= builtins[id]().then(
+  const external = states().find((s) => s.manifest.id === id && s.external?.installed)
+  const get = builtins[id] ?? (external ? () => externalModule(external) : () => Promise.reject(new Error('no page module')))
+  return (loading[id] ??= get().then(
     (m) => (modules[id] = m),
     (e) => {
       console.warn('plugin', id, e)
@@ -67,7 +73,7 @@ export function setPluginStates(list: PluginState[] | undefined, opened = false)
   list ??= []
   setStates(list)
   if (opened) for (const s of list) if (s.enabled) toRefresh.add(s.manifest.id)
-  const wanted = list.filter((s) => s.enabled && builtins[s.manifest.id] && !active[s.manifest.id] && s.manifest.apiVersion === API_VERSION)
+  const wanted = list.filter((s) => s.enabled && hasModule(s) && !active[s.manifest.id] && s.manifest.apiVersion === API_VERSION)
   wanted.sort((a, b) => Number(!!b.manifest.required) - Number(!!a.manifest.required))
   for (const s of wanted)
     void load(s.manifest.id).then((m) => {
@@ -98,7 +104,10 @@ function contribute() {
   running = now
 }
 
-on('plugins.changed', (e: { plugins: PluginState[] }) => setPluginStates(e?.plugins))
+on('plugins.changed', (e: { plugins: PluginState[] }) => {
+  placePluginTools(e?.plugins ?? [])
+  setPluginStates(e?.plugins)
+})
 /** The window opened a project (project.open gave the states): each enabled plugin refreshes. */
 export const pluginsOpened = (list: PluginState[] | undefined) => setPluginStates(list, true)
 
@@ -114,7 +123,7 @@ export async function refreshPlugins() {
 const enabled = () => (version(), states().filter((s) => s.enabled && active[s.manifest.id]))
 
 /** An enabled plugin whose module is still loading. */
-const pending = (id: string) => (version(), states().some((s) => s.manifest.id === id && s.enabled && !!builtins[id] && !active[id]))
+const pending = (id: string) => (version(), states().some((s) => s.manifest.id === id && s.enabled && hasModule(s) && !active[id]))
 
 /** What a tool or a view of a plugin shows while its module loads. */
 function Loading(): JSX.Element {
@@ -134,7 +143,7 @@ setCapabilityGate(pluginEnabled)
 export const pluginTools = createRoot(() =>
   createMemo(() =>
     states().flatMap((s) => {
-      if (!s.enabled || !builtins[s.manifest.id]) return []
+      if (!s.enabled || !hasModule(s)) return []
       if (pending(s.manifest.id)) return (s.manifest.contributes.tools ?? []).map((x) => ({ ...x, component: Loading, badge: undefined }))
       if (!active[s.manifest.id]) return []
       return (s.manifest.contributes.tools ?? []).flatMap((x) => {
@@ -232,4 +241,8 @@ export function pluginViewLabel(kind: string) {
   return m ? states().find((s) => s.manifest.id === m[1])?.manifest.contributes.tabViews?.find((v) => v.id === m[2])?.label : undefined
 }
 
-export const setPluginEnabled = (id: string, enabled: boolean) => request<{ plugins: PluginState[] }>('plugins.set', { id, enabled }).then((r) => setPluginStates(r.plugins))
+export const setPluginEnabled = (id: string, enabled: boolean) =>
+  request<{ plugins: PluginState[] }>('plugins.set', { id, enabled }).then((r) => {
+    placePluginTools(r.plugins)
+    setPluginStates(r.plugins)
+  })

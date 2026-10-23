@@ -219,5 +219,7 @@
   "%w: more than %d MB once extracted": "%w : plus de %d Mo une fois extraite",
   "%w: %s goes out of its folder": "%w : %s sort de son dossier",
   "%w: %s is not a file, a folder or a link": "%w : %s n’est ni un fichier, ni un dossier, ni un lien",
-  "%w: the link %s points out of its folder": "%w : le lien %s pointe hors de son dossier"
+  "%w: the link %s points out of its folder": "%w : le lien %s pointe hors de son dossier",
+  "the plugin %s has no web/index.js": "le plugin %s n’a pas de web/index.js",
+  "the page module of %s is larger than %d MB": "le module de page de %s dépasse %d Mo"
 }

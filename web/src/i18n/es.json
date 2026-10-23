@@ -938,7 +938,7 @@
   "Update": "Actualizar",
   "External": "Externo",
   "Not installed on this pod.": "No instalado en este pod.",
-  "Not runnable yet.": "Todavía no ejecutable.",
   "Granted: {list}": "Concedido: {list}",
-  "Remove {name} from this pod?": "¿Quitar {name} de este pod?"
+  "Remove {name} from this pod?": "¿Quitar {name} de este pod?",
+  "{method} is not granted to {name}": "{method} no está concedido a {name}"
 }

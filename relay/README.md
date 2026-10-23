@@ -10,6 +10,7 @@ The relay: signaling, STUN/TURN, the blob store, the identity and pairing link, 
 
 - The relay imports only [`lib/`](../lib/README.md) (`identity`, `i18n`), never `pod/`: what the pod and the relay share lives there.
 - The relay never holds a private key, a phrase or a project name: it checks signatures and caches ciphertext ([relay.md](../docs/design/relay.md)).
+- The bootstrap page (`web/bootstrap.js`) answers the window messages of the app's own frame only (same origin, `event.source` its frame): any frame of the page reaches `window.top`, the sandboxed view of an external plugin too, and a `port` message opens a channel of the pod's tunnel (checked by the `relay` e2e suite).
 
 ## Tests
 

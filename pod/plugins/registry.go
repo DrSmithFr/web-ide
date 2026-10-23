@@ -29,8 +29,8 @@ func NewRegistry() *Registry {
 }
 
 // External is an external plugin installed on the pod: its manifest, where it comes from, its
-// version and the grants the user accepted. Listed, not runnable yet (its views: #129, its
-// backend: #130).
+// version and the grants the user accepted. Its views run in a sandboxed frame of the page
+// (#129); its backend: #130.
 type External struct {
 	Manifest Manifest `json:"-"`
 	URL      string   `json:"url"`
@@ -178,8 +178,8 @@ type State struct {
 	Disabled bool `json:"disabled"`
 	// Missing are the capabilities it requires that nothing enabled provides.
 	Missing []string `json:"missing,omitempty"`
-	// External: an external plugin (never enabled in this step: not runnable yet); Disabled
-	// is then false when the project uses it.
+	// External: an external plugin, enabled when the project uses it (Disabled false) and the
+	// capabilities it requires are there.
 	External *External `json:"external,omitempty"`
 }
 
@@ -194,10 +194,21 @@ func (r *Registry) Resolve(disabled []string) []State {
 // uses that this pod lacks.
 func (r *Registry) ResolveChoices(ch Choices) []State {
 	out := r.resolveBuiltins(ch.Disabled)
+	// An external plugin used by the project runs its views (#129) when the capabilities it
+	// requires are there; what it provides is not given to the others (its views reach nothing
+	// but the sandbox API).
+	provided := Provided(out)
 	for _, e := range r.Externals() {
 		e := e
 		_, used := ch.External[e.Manifest.ID]
-		out = append(out, State{Manifest: e.Manifest, Disabled: !used, External: &e})
+		s := State{Manifest: e.Manifest, Disabled: !used, Enabled: used, External: &e}
+		for _, c := range e.Manifest.Requires {
+			if !provided[c] {
+				s.Missing = append(s.Missing, c)
+				s.Enabled = false
+			}
+		}
+		out = append(out, s)
 	}
 	ids := make([]string, 0, len(ch.External))
 	for id := range ch.External {
@@ -294,7 +305,7 @@ func Provided(states []State) map[string]bool {
 		out[c] = true
 	}
 	for _, s := range states {
-		if s.Enabled {
+		if s.Enabled && s.External == nil {
 			for _, c := range s.Provides() {
 				out[c] = true
 			}

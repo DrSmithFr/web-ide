@@ -1550,7 +1550,12 @@ async function onMessage(d) {
     httpFetch(r.t, d, r.prefix)
   }
 }
-window.addEventListener('message', (e) => onMessage(e.data))
+// Only the app's own frame (same origin) is heard: any other window, the sandboxed frame of an
+// external plugin in the app above all (window.top reaches here), would get the pod's tunnel.
+window.addEventListener('message', (e) => {
+  if (e.origin !== location.origin || e.source !== document.getElementById('frame')?.contentWindow) return
+  onMessage(e.data)
+})
 navigator.serviceWorker.addEventListener('message', (e) => onMessage(e.data))
 
 // One channel of a pod, wired to the MessagePort of the app. A routed channel (@<key>/label)
