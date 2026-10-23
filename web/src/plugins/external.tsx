@@ -11,7 +11,7 @@ import type { PluginContributions, PluginModule, PluginState } from './types'
 type Bundle = { version: string; js: string; catalogs: Record<string, Record<string, string>> }
 
 /** A frame of the plugin showing one of its views (a tool, a tab view). */
-function SandboxFrame(props: { state: PluginState; bundle: Bundle; view: string; tab?: TabState }) {
+function SandboxFrame(props: { state: PluginState; grants: () => string[]; bundle: Bundle; view: string; tab?: TabState }) {
   let frame!: HTMLIFrameElement
   let served: ReturnType<typeof serveFrame> | undefined
   // Served once: the frame keeps its port for its life (a new state is its own business).
@@ -19,7 +19,7 @@ function SandboxFrame(props: { state: PluginState; bundle: Bundle; view: string;
     served = serveFrame(frame, {
       plugin: props.state.manifest.id,
       name: props.state.manifest.name,
-      grants: props.state.external?.grants ?? [],
+      grants: props.grants,
       catalogs: props.bundle.catalogs,
       view: props.view,
       tab: props.tab,
@@ -43,7 +43,7 @@ function SandboxFrame(props: { state: PluginState; bundle: Bundle; view: string;
 }
 
 /** The hidden frame running the commands of a plugin, made on its first command. */
-function commandRunner(state: PluginState, bundle: Bundle) {
+function commandRunner(state: PluginState, grants: () => string[], bundle: Bundle) {
   let ready: Promise<(m: unknown) => void> | undefined
   return (command: string) => {
     ready ??= new Promise((resolve) => {
@@ -55,7 +55,7 @@ function commandRunner(state: PluginState, bundle: Bundle) {
       const served = serveFrame(frame, {
         plugin: state.manifest.id,
         name: state.manifest.name,
-        grants: state.external?.grants ?? [],
+        grants,
         catalogs: bundle.catalogs,
         view: '',
         onReady: () => resolve(served.send),
@@ -66,15 +66,16 @@ function commandRunner(state: PluginState, bundle: Bundle) {
   }
 }
 
-/** Loads the bundle of an external plugin and builds its module. */
-export async function externalModule(state: PluginState): Promise<PluginModule> {
+/** Loads the bundle of an external plugin and builds its module; current is its state now. */
+export async function externalModule(state: PluginState, current: () => PluginState | undefined): Promise<PluginModule> {
   const bundle = await request<Bundle>('plugins.bundle', { id: state.manifest.id })
   const c = state.manifest.contributes
-  const run = commandRunner(state, bundle)
+  const grants = () => current()?.external?.grants ?? []
+  const run = commandRunner(state, grants, bundle)
   return {
     activate: (): PluginContributions => ({
-      tools: Object.fromEntries((c.tools ?? []).map((x) => [x.id, { component: () => <SandboxFrame state={state} bundle={bundle} view={x.id} /> }])),
-      views: Object.fromEntries((c.tabViews ?? []).map((v) => [v.id, (props: { tab: TabState }) => <SandboxFrame state={state} bundle={bundle} view={v.id} tab={props.tab} />])),
+      tools: Object.fromEntries((c.tools ?? []).map((x) => [x.id, { component: () => <SandboxFrame state={state} grants={grants} bundle={bundle} view={x.id} /> }])),
+      views: Object.fromEntries((c.tabViews ?? []).map((v) => [v.id, (props: { tab: TabState }) => <SandboxFrame state={state} grants={grants} bundle={bundle} view={v.id} tab={props.tab} />])),
       commands: Object.fromEntries((c.commands ?? []).map((x) => [x.id, () => run(x.id)])),
     }),
   }

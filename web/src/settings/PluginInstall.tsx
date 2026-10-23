@@ -70,6 +70,15 @@ function GrantsDialog(props: { title: string; resolved: Resolved; action: string
   )
 }
 
+// The Landlock ABI of the pod (plugins.host): 0, the backends of the external plugins cannot run.
+const [landlock, setLandlock] = createSignal<number | undefined>()
+let hostAsked = false
+const askHost = () => {
+  if (hostAsked) return
+  hostAsked = true
+  void request<{ landlock: number }>('plugins.host').then((r) => setLandlock(r.landlock), () => (hostAsked = false))
+}
+
 const [dialog, setDialog] = createSignal<{ title: string; resolved: Resolved; action: string; accept: (grants: string[]) => Promise<void> } | null>(null)
 
 /** The dialog of an install or an update, when one is open. */
@@ -120,6 +129,7 @@ export function InstallForm() {
 
 /** The row of an external plugin: its source, version, Update and Remove, or Install. */
 export function ExternalRow(props: { s: PluginState }) {
+  askHost()
   const ext = () => props.s.external!
   const update = async () => {
     const id = props.s.manifest.id
@@ -153,9 +163,27 @@ export function ExternalRow(props: { s: PluginState }) {
             <button onClick={() => void askInstall(ext().url, '').catch(errorToast)}>{t('Install')}</button>
           </p>
         }>
-        <Show when={ext().grants.length}>
-          <p class="muted small">{t('Granted: {list}', { list: ext().grants.join(', ') })}</p>
+        <Show when={props.s.manifest.backend && landlock() === 0}>
+          <p class="err small">{t('Its backend cannot run on this pod: its kernel has no Landlock.')}</p>
         </Show>
+        {/* Each permission it asks, granted or not: revoked at once, for its views and its backend. */}
+        <For each={props.s.manifest.permissions ?? []}>
+          {(g) => (
+            <label class="check small">
+              <input
+                type="checkbox"
+                data-testid={`plugin-granted-${props.s.manifest.id}-${g}`}
+                checked={ext().grants.includes(g)}
+                onChange={(e) => {
+                  const on = e.currentTarget.checked
+                  const grants = on ? [...ext().grants, g] : ext().grants.filter((x) => x !== g)
+                  void request('plugins.grants', { id: props.s.manifest.id, grants }).catch(errorToast)
+                }}
+              />
+              {grantText(g)} <code class="muted small">{g}</code>
+            </label>
+          )}
+        </For>
         <div class="row">
           <button onClick={() => void update().catch(errorToast)} data-testid={`plugin-update-${props.s.manifest.id}`}>
             {t('Update')}

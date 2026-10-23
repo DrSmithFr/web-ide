@@ -31,12 +31,13 @@ ide.register({
       try { void parent.document.title; out.parent = 'open' } catch { out.parent = 'blocked' }
       try { await ide.rpc('fs.list', { path: '' }); out.rpc = 'answered' } catch (e) { out.rpc = 'refused: ' + e.message }
       el.innerHTML = '<p id="hello">' + ide.t('Hello from the frame') + '</p><pre id="checks">' + JSON.stringify(out) + '</pre><button id="open">open</button><button id="view">view</button>'
-      el.innerHTML += '<button id="backend">backend</button><button id="probe">probe</button><button id="core">core</button><pre id="answer"></pre><pre id="event"></pre>'
+      el.innerHTML += '<button id="backend">backend</button><button id="probe">probe</button><button id="core">core</button><button id="list">list</button><pre id="answer"></pre><pre id="event"></pre>'
       const show = (p) => p.then((r) => (el.querySelector('#answer').textContent = typeof r === 'string' ? r : JSON.stringify(r)), (e) => (el.querySelector('#answer').textContent = 'error: ' + e.message))
       ide.on('greet.said', (d) => (el.querySelector('#event').textContent = d))
       el.querySelector('#backend').onclick = () => show(ide.rpc('greet.hello'))
       el.querySelector('#probe').onclick = () => show(ide.rpc('greet.probe', { key: ${JSON.stringify(path.join(WS, '..', 'data', 'device.key'))} }))
       el.querySelector('#core').onclick = () => show(ide.rpc('greet.core'))
+      el.querySelector('#list').onclick = () => show(ide.rpc('fs.list', { path: '' }).then(() => 'answered'))
       el.querySelector('#open').onclick = () => ide.openFile('notes.txt')
       el.querySelector('#view').onclick = () => ide.openView('note', { text: 'kept' }, 'Note')
     },
@@ -225,6 +226,26 @@ run(async ({ page, errors }) => {
   await frame(page, 'greet').locator('#checks').waitFor()
   checks = JSON.parse(await frame(page, 'greet').locator('#checks').textContent())
   assert(checks.rpc === 'answered', 'a core method with its grant: ' + checks.rpc)
+  got = await answer('core')
+  assert(got === 'answered', 'the core call of the backend with its grant: ' + got)
+
+  // A grant revoked in Settings: refused at once, by the frame and the backend; given again.
+  await openSettings()
+  await page.uncheck('[data-testid="plugin-granted-greet-core:fs.list"]')
+  await page.waitForFunction(() => !document.querySelector('.plugin-row[data-plugin=greet] [data-testid="plugin-granted-greet-core:fs.list"]')?.checked)
+  await page.waitForTimeout(300)
+  assert(readLock().greet.grants.join() === 'files:read,net', 'revoked in the lock: ' + readLock().greet.grants)
+  await closeSettings()
+  got = await answer('list')
+  assert(got.includes('fs.list is not granted to Greet'), 'the frame, once revoked: ' + got)
+  got = await answer('core')
+  assert(got.includes('fs.list is not granted to Greet'), 'the backend, once revoked: ' + got)
+  await openSettings()
+  await page.check('[data-testid="plugin-granted-greet-core:fs.list"]')
+  await page.waitForTimeout(300)
+  await closeSettings()
+  got = await answer('list')
+  assert(got === 'answered', 'granted again: ' + got)
 
   server.close()
   fs.rmSync(tmp, { recursive: true, force: true })

@@ -938,7 +938,7 @@
   "Update": "Mettre à jour",
   "External": "Externe",
   "Not installed on this pod.": "Pas installé sur ce pod.",
-  "Granted: {list}": "Accordé : {list}",
   "Remove {name} from this pod?": "Retirer {name} de ce pod ?",
-  "{method} is not granted to {name}": "{method} n’est pas accordé à {name}"
+  "{method} is not granted to {name}": "{method} n’est pas accordé à {name}",
+  "Its backend cannot run on this pod: its kernel has no Landlock.": "Son backend ne peut pas tourner sur ce pod : son noyau n’a pas Landlock."
 }

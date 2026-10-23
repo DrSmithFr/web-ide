@@ -134,7 +134,7 @@ func (in *Installer) Remove(id string) error {
 		return err
 	}
 	if _, ok := lock.Plugins[id]; !ok {
-		return i18n.Errorf("the plugin %s is not installed", id)
+		return errNotInstalled(id)
 	}
 	delete(lock.Plugins, id)
 	if err := WriteLock(in.Store, lock); err != nil {
@@ -142,6 +142,8 @@ func (in *Installer) Remove(id string) error {
 	}
 	return os.RemoveAll(in.Dir(id))
 }
+
+func errNotInstalled(id string) error { return i18n.Errorf("the plugin %s is not installed", id) }
 
 // Manifest reads the plugin.json of an installed version.
 func (in *Installer) Manifest(id, version string) (plugins.Manifest, error) {

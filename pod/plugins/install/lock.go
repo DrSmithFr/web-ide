@@ -38,3 +38,21 @@ func ReadLock(st *store.Store) (Lock, error) {
 
 // WriteLock replaces the lock (an atomic write).
 func WriteLock(st *store.Store, l Lock) error { return st.WriteJSON(LockFile, l) }
+
+// SetGrants replaces the grants of an installed plugin in the lock.
+func SetGrants(st *store.Store, id string, grants []string) (Locked, error) {
+	l, err := ReadLock(st)
+	if err != nil {
+		return Locked{}, err
+	}
+	e, ok := l.Plugins[id]
+	if !ok {
+		return Locked{}, errNotInstalled(id)
+	}
+	if grants == nil {
+		grants = []string{}
+	}
+	e.Grants = grants
+	l.Plugins[id] = e
+	return e, WriteLock(st, l)
+}
