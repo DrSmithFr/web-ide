@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	kbp "github.com/DrSmithFr/web-ide/plugins/kanban"
 	"github.com/DrSmithFr/web-ide/pod/acp"
 	"github.com/DrSmithFr/web-ide/pod/commands"
 
@@ -36,6 +35,8 @@ type pluginTool struct {
 // pluginSet is the state the server keeps of the plugins.
 type pluginSet struct {
 	tools []pluginTool // in the order of the registry
+	// mcp are the tools of the plugins offered to the MCP only (Host.MCPTool).
+	mcp []pluginMCPTool
 	// The lifecycle hooks of the plugins: a project opened (by plugin), the windows counted.
 	onOpen    []pluginHook
 	onWindows []func(n int)
@@ -86,6 +87,55 @@ func (h pluginHost) AssistantTool(t plugins.AssistantTool) {
 		panic(fmt.Sprintf("plugin %s: assistant tool %s not in its manifest", h.id, t.Name))
 	}
 	h.s.plugins.tools = append(h.s.plugins.tools, pluginTool{plugin: h.id, tool: t, def: assistant.Func(t.Name, t.Description, t.Props, t.Required...)})
+}
+
+// pluginMCPTool is a tool of a plugin offered to the MCP only.
+type pluginMCPTool struct {
+	plugin string
+	tool   plugins.MCPTool
+}
+
+func (h pluginHost) MCPTool(t plugins.MCPTool) {
+	if !slices.Contains(h.m.Contributes.MCPTools, t.Name) {
+		panic(fmt.Sprintf("plugin %s: MCP tool %s not in its manifest", h.id, t.Name))
+	}
+	h.s.plugins.mcp = append(h.s.plugins.mcp, pluginMCPTool{plugin: h.id, tool: t})
+}
+
+func (s *Server) findPluginMCPTool(name string) *pluginMCPTool {
+	for i := range s.plugins.mcp {
+		if s.plugins.mcp[i].tool.Name == name {
+			return &s.plugins.mcp[i]
+		}
+	}
+	return nil
+}
+
+// runPluginMCPTool runs a tool of a plugin offered to the MCP in the project of the folder of
+// the client: refused where the plugin is disabled, or the capability it needs is off.
+func (s *Server) runPluginMCPTool(ctx context.Context, t *pluginMCPTool, args json.RawMessage) (string, error) {
+	a, err := bind[struct {
+		Cwd string `json:"cwd"`
+	}](args)
+	if err != nil {
+		return "", err
+	}
+	sc, err := s.mcpScope(a.Cwd)
+	if err != nil {
+		return "", err
+	}
+	rt, err := s.openRuntime(sc.here.ID, sshx.Creds{})
+	if err != nil {
+		return "", err
+	}
+	if !s.pluginOn(rt, t.plugin) {
+		m, _ := s.Plugins.Get(t.plugin)
+		return "", i18n.Errorf("the %s plugin is disabled on this project", m.Manifest().Name)
+	}
+	if c := t.tool.Needs; c != "" && !s.capabilityOn(rt, c) {
+		return "", i18n.Errorf("%s needs the %s capability, off on this project (Settings > Plugins)", t.tool.Name, c)
+	}
+	return t.tool.Run(ctx, plugins.MCPScope{Here: sc.here, Root: sc.root, Ticket: sc.ticket, URL: s.publicURL(), Lang: s.uiLanguage()}, args)
 }
 
 func (s *Server) registerPlugins() {
@@ -235,13 +285,8 @@ var toolNeeds = map[string]string{
 	"request_doodle": "assistant",
 }
 
-// needsOf is the capability a tool of the MCP needs: toolNeeds, and tickets for the kanban tools.
-func needsOf(tool string) string {
-	if strings.HasPrefix(tool, "kanban_") {
-		return "tickets"
-	}
-	return toolNeeds[tool]
-}
+// needsOf is the capability a core tool of the MCP needs.
+func needsOf(tool string) string { return toolNeeds[tool] }
 
 // missingFor is the error of a core tool whose capability the project of rt lacks (nil: it runs).
 func (s *Server) missingFor(rt *runtime.Runtime, tool string) error {
@@ -449,15 +494,4 @@ func (s *Server) agentsMCP() []acp.MCPServer {
 	}
 	return []acp.MCPServer{{Type: "http", Name: "web-ide", URL: strings.TrimSuffix(base, "/") + mcpPath,
 		Headers: []acp.Header{{Name: "Authorization", Value: "Bearer " + s.Token}}}}
-}
-
-// kb is the Kanban plugin: the kanban tools of the assistant and of the MCP, the Orchestrator ask
-// it (nil when the pod has no such plugin).
-func (s *Server) kb() *kbp.K {
-	for _, p := range s.Plugins.All() {
-		if k, ok := p.(*kbp.K); ok {
-			return k
-		}
-	}
-	return nil
 }

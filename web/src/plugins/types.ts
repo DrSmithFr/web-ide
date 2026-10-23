@@ -32,6 +32,7 @@ export interface PluginManifest {
     tools?: PluginTool[]
     tabViews?: { id: string; label: string }[]
     assistantTools?: string[]
+    mcpTools?: string[]
     /** Actions <plugin>.<id> (or the id as written when it has a prefix of the plugin's namespaces); keys: default shortcuts; replaces: the id of the action before it moved to a plugin. */
     commands?: { id: string; label: string; category?: string; keys?: string[]; replaces?: string; inTerminal?: boolean }[]
   }

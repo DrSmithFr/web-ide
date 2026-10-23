@@ -15,8 +15,8 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 )
 
-// What the rest of the pod still asks the kanban: the kanban tools of the assistant and of the
-// MCP (their declarations move with AI, #123), the Orchestrator, the worktrees of a window.
+// What the AI asks the kanban: the kanban tools of the assistant, the Orchestrator, the
+// conversation tools of the MCP (with TicketTool, mcp.go).
 
 // GitCtx is a kanban, its main project, its runtime and its git.
 type GitCtx = gctx
@@ -54,13 +54,6 @@ func (s *K) MilestoneTool(root string, loc kb.Location, a MilestoneArgs, by, cha
 func (s *K) ObjectiveTool(root string, loc kb.Location, a ObjectiveArgs, by, chatID string) (string, error) {
 	return s.objectiveTool(root, loc, a, by, chatID)
 }
-
-func (s *K) StartTicket(ctx context.Context, k GitCtx, id int64, base, by string, force bool) (*kb.Ticket, string, error) {
-	return s.startTicket(ctx, k, id, base, by, force)
-}
-
-// ActiveStep is the step of a lineage its worktree works on.
-func (s *K) ActiveStep(loc kb.Location, id int64) int64 { return s.activeStep(loc, id) }
 
 // NotifyFeedback sends the push notification of a test feedback the assistant or Claude Code
 // added to a ticket.

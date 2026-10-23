@@ -34,6 +34,8 @@ type Host interface {
 	// AssistantTool adds a tool offered to the assistant and the MCP; its name must be listed
 	// in the manifest.
 	AssistantTool(t AssistantTool)
+	// MCPTool adds a tool offered to the MCP only; its name must be listed in the manifest.
+	MCPTool(t MCPTool)
 	// HandleGlobal adds a method without a project (Call.Runtime nil: the home page), always
 	// answered: the switch of a project hides the plugin there, not the state of the pod.
 	HandleGlobal(method string, h Handler)

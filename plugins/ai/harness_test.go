@@ -67,6 +67,7 @@ type fakeHost struct{ pod *fakePod }
 func (h fakeHost) Handle(string, plugins.Handler)                  {}
 func (h fakeHost) HandleGlobal(string, plugins.Handler)            {}
 func (h fakeHost) AssistantTool(plugins.AssistantTool)             {}
+func (h fakeHost) MCPTool(plugins.MCPTool)                         {}
 func (h fakeHost) Pod() plugins.Pod                                { return h.pod }
 func (h fakeHost) OnProjectOpen(func(rt *runtime.Runtime))         {}
 func (h fakeHost) OnWindows(func(n int))                           {}

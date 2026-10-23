@@ -49,6 +49,7 @@ func (s *K) Register(h plugins.Host) {
 	s.registerKanbanAgent()
 	s.registerMilestones()
 	s.registerObjectives()
+	s.registerMCP()
 }
 
 // client is the window of a call: its project, its id, the events pushed to it.

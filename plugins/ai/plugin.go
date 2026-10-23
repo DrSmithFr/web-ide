@@ -50,6 +50,7 @@ func (s *A) Register(h plugins.Host) {
 	s.registerLLM()
 	s.registerAssistant()
 	s.registerAgents()
+	s.registerMCP()
 	// The conversations that ran when the pod stopped are taken back, and saved when it stops.
 	h.OnStart(s.ResumeRuns)
 	h.OnStop(s.saveRunning)

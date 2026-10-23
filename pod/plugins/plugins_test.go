@@ -43,6 +43,7 @@ func TestAdd(t *testing.T) {
 		"tool":      {ID: "b", Contributes: Contributions{Tools: []Tool{{ID: "a", Zone: "left"}}}},
 		"core tool": {ID: "c", Contributes: Contributions{Tools: []Tool{{ID: "questions", Zone: "left"}}}},
 		"assistant": {ID: "d", Contributes: Contributions{AssistantTools: []string{"a_x"}}},
+		"mcp":       {ID: "e", Contributes: Contributions{MCPTools: []string{"a_x"}}},
 	} {
 		if r.Add(fake{m}) == nil {
 			t.Errorf("%s: accepted", name)

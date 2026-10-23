@@ -13,6 +13,10 @@
       { "id": "milestone", "label": "Milestone" },
       { "id": "objective", "label": "Objective" }
     ],
-    "commands": [{ "id": "kanban.open", "label": "Open the kanban", "category": "General" }]
+    "commands": [{ "id": "kanban.open", "label": "Open the kanban", "category": "General" }],
+    "mcpTools": [
+      "kanban_list", "kanban_get", "kanban_create", "kanban_update", "kanban_milestone", "kanban_objective",
+      "kanban_add_note", "kanban_set_plan", "kanban_goal", "kanban_feedback", "kanban_move", "kanban_start"
+    ]
   }
 }
