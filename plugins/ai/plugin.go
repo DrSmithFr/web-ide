@@ -1,9 +1,10 @@
 // Package ai is the AI plugin: the assistant (local models, the turn loop and its tools,
 // sub-agents, the Orchestrator, compaction, doodles and the board of a conversation) and the
-// Agents tool (the sessions of the CLI agents, ACP). The conversations are kept by
-// pod/llm and the agents run in the runtime of a project (pod/acp): both are
-// the pod's, lent to the plugin, since the MCP and the Questions tool read them too. Off on a
-// project: no assistant nor agents; the MCP for Claude Code stays the core's.
+// Agents tool (the sessions of the CLI agents, ACP). The plugin keeps the model servers, their
+// keys and the conversations (pod/llm), and the sessions of the agents as a part of the runtime
+// of a project (pod/acp); the core reaches them through hooks only: the Questions tool
+// (Host.Questions), the synced vault (Host.Vault), the Kanban (caps.Agents). Off on a project:
+// no assistant nor agents; the MCP for Claude Code stays the core's.
 package ai
 
 import (
@@ -16,7 +17,9 @@ import (
 	kbp "github.com/DrSmithFr/web-ide/plugins/kanban"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/commands"
+	"github.com/DrSmithFr/web-ide/pod/llm"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"github.com/DrSmithFr/web-ide/pod/settingsync"
 
 	"github.com/DrSmithFr/web-ide/pod/plugins"
 )
@@ -30,8 +33,13 @@ type A struct {
 	m    plugins.Manifest
 	pod  plugins.Pod
 	host plugins.Host
-	// assistants are the conversations of the assistant running in the pod.
+	// LLM keeps the model servers and the conversations.
+	LLM *llm.Manager
+	// assistants are the conversations of the assistant running in the pod, asking those that
+	// ask the user, agentParts the sessions of the agents of the open projects.
 	assistants assistants
+	asking     asking
+	agentParts agentParts
 }
 
 func New() *A {
@@ -39,7 +47,8 @@ func New() *A {
 	if err != nil {
 		panic(err)
 	}
-	return &A{m: m, assistants: assistants{runs: map[string]*assistantRun{}, slots: map[string]chan struct{}{}, waiting: map[string]int{}}}
+	return &A{m: m, assistants: assistants{runs: map[string]*assistantRun{}, slots: map[string]chan struct{}{}, waiting: map[string]int{}},
+		asking: asking{chats: map[string]bool{}}, agentParts: agentParts{open: map[string]*agentsPart{}}}
 }
 
 func (s *A) Manifest() plugins.Manifest { return s.m }
@@ -47,6 +56,25 @@ func (s *A) Manifest() plugins.Manifest { return s.m }
 func (s *A) Register(h plugins.Host) {
 	s.host, s.pod = h, h.Pod()
 	s.Services = s.pod.Services()
+	s.LLM = llm.New(s.Store)
+	if s.Keeper != nil {
+		s.LLM.Relay = llm.KeeperRelay{C: s.Keeper} // the answers being written survive the pod too
+	}
+	// The bases close last, once the conversations running are saved (OnStop: the last
+	// registered first).
+	h.OnStop(s.LLM.Close)
+	h.Vault(settingsync.VaultMap{Name: "llm", Read: s.LLM.Keys, Apply: func(keys map[string]string) error {
+		if err := s.LLM.ApplyKeys(keys); err != nil {
+			return err
+		}
+		s.pod.Broadcast("llm.config", s.LLM.View())
+		return nil
+	}})
+	h.Questions(plugins.Questions{Prefix: "acp", List: s.agentQuestions, Answer: s.answerAgent})
+	h.Questions(plugins.Questions{Prefix: "chat", List: s.chatQuestions})
+	h.Provide("agents", agentsCap{s})
+	// The sessions the keeper kept are taken back when a window opens the project.
+	h.OnProjectOpen(func(rt *runtime.Runtime) { s.agentsOf(rt) })
 	s.registerLLM()
 	s.registerAssistant()
 	s.registerAgents()

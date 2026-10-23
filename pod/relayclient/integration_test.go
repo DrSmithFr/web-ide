@@ -34,7 +34,6 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/config"
 	"github.com/DrSmithFr/web-ide/pod/desks"
 	"github.com/DrSmithFr/web-ide/pod/hfcache"
-	"github.com/DrSmithFr/web-ide/pod/llm"
 	"github.com/DrSmithFr/web-ide/pod/projects"
 	"github.com/DrSmithFr/web-ide/pod/server"
 	"github.com/DrSmithFr/web-ide/pod/settings"
@@ -164,7 +163,7 @@ func buildPod(t *testing.T) (*server.Server, *tunnel.RateLimiter) {
 	sets, _ := settings.Load(st)
 	s := &server.Server{
 		Cfg: cfg, Store: st, Token: podToken, Projects: reg, Settings: sets,
-		Desks: desks.New(st), LLM: llm.New(st), Models: hfcache.New(st.Path("models", "hf")),
+		Desks: desks.New(st), Models: hfcache.New(st.Path("models", "hf")),
 		Pool:    sshx.NewPool(sshx.NewHostKeys(st.Path("known_hosts"))),
 		Static:  fstest.MapFS{"index.html": {Data: []byte(`<html><script src="./assets/app.js"></script>app</html>`)}},
 		Version: "1",

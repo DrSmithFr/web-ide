@@ -1,7 +1,9 @@
 package ai
 
 import (
+	"github.com/DrSmithFr/web-ide/pod/acp"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"github.com/DrSmithFr/web-ide/pod/runtime"
 )
 
 // What the tests of the pod ask of the conversations of the assistant: whether one runs, where
@@ -37,3 +39,9 @@ func hasGraph(qs []assistant.Question) bool {
 	}
 	return false
 }
+
+// AgentsOf is the manager of the sessions of the Agents tool of the project of rt.
+func (s *A) AgentsOf(rt *runtime.Runtime) *acp.Manager { return s.agentsOf(rt) }
+
+// NoteAsks records the questions of a conversation saved from message from (noteAsks).
+func (s *A) NoteAsks(root string, c *assistant.Chat, from int) { s.noteAsks(root, c, from) }

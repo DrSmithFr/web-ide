@@ -36,7 +36,7 @@ func TestSubAgents(t *testing.T) {
 	model := &fakeModel{}
 	mts := model.serve(t)
 	// Several conversations at once: a child blocked on the model does not hold its parent.
-	if err := s.LLM.SaveServer(llm.Server{ID: "s1", Kind: "llamacpp", URL: mts.URL, Parallel: 4}, false); err != nil {
+	if err := llmOf(s).SaveServer(llm.Server{ID: "s1", Kind: "llamacpp", URL: mts.URL, Parallel: 4}, false); err != nil {
 		t.Fatal(err)
 	}
 	a, _ := dial(t, ts, "secret-token-0123456789abcdef0123")
@@ -214,11 +214,11 @@ func TestSubAgentServers(t *testing.T) {
 	s, ts := newServer(t)
 	local, cloud := &fakeModel{}, &fakeModel{}
 	lts, cts := local.serve(t), cloud.serve(t)
-	if err := s.LLM.SaveServer(llm.Server{ID: "s1", Kind: "llamacpp", URL: lts.URL, Parallel: 4}, false); err != nil {
+	if err := llmOf(s).SaveServer(llm.Server{ID: "s1", Kind: "llamacpp", URL: lts.URL, Parallel: 4}, false); err != nil {
 		t.Fatal(err)
 	}
 	// The fake answers /v1/models with 404: the typed models are the list.
-	if err := s.LLM.SaveServer(llm.Server{ID: "c1", Name: "Cloud", Kind: "openai", URL: cts.URL, APIKey: "sk", Parallel: 4, Children: true, Note: "strong at code, paid",
+	if err := llmOf(s).SaveServer(llm.Server{ID: "c1", Name: "Cloud", Kind: "openai", URL: cts.URL, APIKey: "sk", Parallel: 4, Children: true, Note: "strong at code, paid",
 		Models: []llm.ModelConf{{ID: "big", Tools: true}, {ID: "broke", Tools: true}}}, false); err != nil {
 		t.Fatal(err)
 	}
@@ -292,7 +292,7 @@ func TestAssistantAdopt(t *testing.T) {
 	s, ts := newServer(t)
 	model := &fakeModel{}
 	mts := model.serve(t)
-	if err := s.LLM.SaveServer(llm.Server{ID: "s1", Kind: "llamacpp", URL: mts.URL, Parallel: 4}, false); err != nil {
+	if err := llmOf(s).SaveServer(llm.Server{ID: "s1", Kind: "llamacpp", URL: mts.URL, Parallel: 4}, false); err != nil {
 		t.Fatal(err)
 	}
 	a, _ := dial(t, ts, "secret-token-0123456789abcdef0123")
@@ -384,7 +384,7 @@ func TestAssistantAdopt(t *testing.T) {
 		t.Fatal("adopted by a conversation that is not an Orchestrator")
 	}
 	// A sub-agent that failed, abandoned by the user: stopped, no longer failed, its parent told.
-	loc, _, _ := s.chatLoc(id)
+	loc, _, _ := aiOf(s).ChatLoc(id)
 	if err := saveTestChat(s, loc, &assistant.Chat{ID: "kid", Title: "Kid", Parent: "orc", Agent: &assistant.SubAgent{Task: "t", Status: assistant.AgentError, Depth: 1},
 		Messages: []*assistant.Message{{Role: "user", Content: assistant.String("go")}, {Role: "assistant", Error: "boom"}}}); err != nil {
 		t.Fatal(err)

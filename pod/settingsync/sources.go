@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 
 	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/pod/llm"
 	"github.com/DrSmithFr/web-ide/pod/settings"
 	"github.com/DrSmithFr/web-ide/pod/store"
 )
@@ -61,29 +60,47 @@ func (s *SettingsSource) Clear(label string) error {
 	return err
 }
 
-// VaultSource syncs the vault: the API keys of the model servers (by server id) and the remembered
-// database secrets. It is opt-in; off, nothing is put and the blob is deleted. Its content is not a
-// whole document but a set of entries, so it merges per entry.
+// VaultSource syncs the vault: the maps the plugins keep in it (the API keys of the model
+// servers of the AI plugin, by server id) and the remembered database secrets. It is opt-in;
+// off, nothing is put and the blob is deleted. Its content is not a whole document but a set of
+// entries, so it merges per entry.
 type VaultSource struct {
 	st     *store.Store
-	llm    *llm.Manager
+	maps   []VaultMap
 	on     func() bool
 	notify func()
 }
 
-var vaultMaps = []string{"llm", "secrets"}
-
-func NewVaultSource(st *store.Store, m *llm.Manager, on func() bool, notify func()) *VaultSource {
-	return &VaultSource{st: st, llm: m, on: on, notify: notify}
+// VaultMap is a map of the vault kept by a plugin (Host.Vault of pod/plugins): Read gives its
+// entries, Apply takes the merged ones (an entry this pod cannot use is left out).
+type VaultMap struct {
+	Name  string
+	Read  func() map[string]string
+	Apply func(entries map[string]string) error
 }
 
-func (v *VaultSource) Kind() string        { return identity.KindVault }
-func (v *VaultSource) MapFields() []string { return vaultMaps }
-func (v *VaultSource) Enabled() bool       { return v.on() }
+func NewVaultSource(st *store.Store, maps []VaultMap, on func() bool, notify func()) *VaultSource {
+	return &VaultSource{st: st, maps: maps, on: on, notify: notify}
+}
 
-// Read is the vault as the merge engine sees it: one entry per server id and per stored secret.
+func (v *VaultSource) Kind() string { return identity.KindVault }
+func (v *VaultSource) MapFields() []string {
+	out := []string{}
+	for _, m := range v.maps {
+		out = append(out, m.Name)
+	}
+	return append(out, "secrets")
+}
+func (v *VaultSource) Enabled() bool { return v.on() }
+
+// Read is the vault as the merge engine sees it: one entry per key of each map and per stored
+// secret.
 func (v *VaultSource) Read() json.RawMessage {
-	b, err := json.Marshal(map[string]any{"llm": v.llm.Keys(), "secrets": v.secrets()})
+	all := map[string]any{"secrets": v.secrets()}
+	for _, m := range v.maps {
+		all[m.Name] = m.Read()
+	}
+	b, err := json.Marshal(all)
 	if err != nil {
 		return json.RawMessage(`{}`)
 	}
@@ -105,16 +122,18 @@ func (v *VaultSource) Write(content json.RawMessage, label string) error {
 	if err := json.Unmarshal(content, &vault); err != nil {
 		return err
 	}
-	keys := map[string]string{}
-	for id, raw := range vault["llm"] {
-		var key string
-		if err := json.Unmarshal(raw, &key); err == nil && key != "" {
-			keys[id] = key
+	for _, m := range v.maps {
+		entries := map[string]string{}
+		for id, raw := range vault[m.Name] {
+			var e string
+			if err := json.Unmarshal(raw, &e); err == nil && e != "" {
+				entries[id] = e
+			}
 		}
-	}
-	if len(keys) > 0 {
-		if err := v.llm.ApplyKeys(keys); err != nil {
-			return err
+		if len(entries) > 0 {
+			if err := m.Apply(entries); err != nil {
+				return err
+			}
 		}
 	}
 	if len(vault["secrets"]) > 0 {

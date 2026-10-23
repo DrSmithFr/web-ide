@@ -49,7 +49,7 @@ func (s *A) mcpTools() []plugins.MCPTool {
 				for _, c := range t.ChatList {
 					linked = linked || c.ChatID == a.Chat
 				}
-				if _, info, entries, ok := s.kb().TicketSession(sc.Root, t); !linked && ok && info.ID == a.Chat {
+				if info, entries, ok := s.ticketSession(sc.Root.ID, t); !linked && ok && info.ID == a.Chat {
 					return acpThreadText(info, entries, a.Last, a.Tools), nil
 				}
 				if !linked {

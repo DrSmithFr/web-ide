@@ -38,7 +38,7 @@ func (s *K) registerKanban() {
 			if err != nil {
 				return nil, err
 			}
-			return s.withTimes(root.ID)(f(ctx, c, kctx{loc: kanbanLoc(root), root: root}, p))
+			return s.withTimes(c.call.Runtime, root.ID)(f(ctx, c, kctx{loc: kanbanLoc(root), root: root}, p))
 		}
 	}
 	type idArg struct {
@@ -73,7 +73,7 @@ func (s *K) registerKanban() {
 			return nil, err
 		}
 		s.fillBlockers(ctx, s.clientGit(c, k.root), list)
-		if times := s.chatTimes(k.root.ID); times != nil {
+		if times := s.chatTimes(c.call.Runtime, k.root.ID); times != nil {
 			for i := range list {
 				list[i].GenerationMs = times.of(list[i].ChatIDs...)
 			}
@@ -188,7 +188,7 @@ func (s *K) registerKanban() {
 				if _, err := rt.FS.Stat(wt); err != nil {
 					wt = ""
 				}
-				if err := s.removeWorktree(ctx, k.loc, k.root, kb.Git{Run: rt.Runner, Root: k.root.Path}, t, wt); err != nil {
+				if err := s.removeWorktree(ctx, rt, k.loc, k.root, kb.Git{Run: rt.Runner, Root: k.root.Path}, t, wt); err != nil {
 					return nil, err
 				}
 			}

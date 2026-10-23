@@ -62,3 +62,6 @@ func StrList(description string) map[string]any {
 func Enum(description string, values ...string) map[string]any {
 	return map[string]any{"type": "string", "enum": values, "description": description}
 }
+
+// MCPPath is the path of the MCP endpoint of the pod.
+const MCPPath = "/mcp"

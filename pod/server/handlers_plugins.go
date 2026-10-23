@@ -4,14 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/pod/acp"
 	"github.com/DrSmithFr/web-ide/pod/commands"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
@@ -19,6 +17,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"github.com/DrSmithFr/web-ide/pod/plugins/builtin"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"github.com/DrSmithFr/web-ide/pod/settingsync"
 	"github.com/DrSmithFr/web-ide/pod/sshx"
 )
 
@@ -49,6 +48,16 @@ type pluginSet struct {
 	provided map[string]any
 	// preview serves a preview asked through the tunnel (Host.HandlePreview: the Previews plugin).
 	preview func(id string) (http.Handler, bool)
+	// questions are the sources of the Questions tool (Host.Questions), vault the maps of the
+	// synced vault (Host.Vault).
+	questions []pluginQuestions
+	vault     []settingsync.VaultMap
+}
+
+// pluginQuestions is a source of the Questions tool given by a plugin.
+type pluginQuestions struct {
+	plugin string
+	q      plugins.Questions
 }
 
 // pluginHost is what a plugin registers through.
@@ -329,6 +338,15 @@ func (h pluginHost) HandleGlobal(method string, f plugins.Handler) {
 
 func (h pluginHost) Pod() plugins.Pod { return podLend{h.s} }
 
+func (h pluginHost) Questions(q plugins.Questions) {
+	h.s.plugins.questions = append(h.s.plugins.questions, pluginQuestions{plugin: h.id, q: q})
+}
+
+func (h pluginHost) Vault(m settingsync.VaultMap) { h.s.plugins.vault = append(h.s.plugins.vault, m) }
+
+// VaultMaps are the maps the plugins keep in the synced vault (main.go makes its source).
+func (s *Server) VaultMaps() []settingsync.VaultMap { return s.plugins.vault }
+
 // podLend is the pod lent to the built-in plugins.
 type podLend struct{ s *Server }
 
@@ -459,8 +477,8 @@ func (p podLend) RunAssistantTool(ctx context.Context, rt *runtime.Runtime, name
 	return res, true, err
 }
 
-func (p podLend) Notify(n plugins.Note)                             { go p.s.notify(n) }
-func (p podLend) NoteAsks(root string, c *assistant.Chat, from int) { p.s.noteAsks(root, c, from) }
+func (p podLend) Notify(n plugins.Note)                  { go p.s.notify(n) }
+func (p podLend) QuestionsChanged(project, asked string) { p.s.questionsChanged(project, asked) }
 func (p podLend) CommandsText(rt *runtime.Runtime) (string, int, error) {
 	return p.s.commandsText(rt)
 }
@@ -470,28 +488,6 @@ func (p podLend) StartSaved(rt *runtime.Runtime, id string, restart bool) (comma
 
 func (p podLend) Services() *plugins.Services {
 	s := p.s
-	return &plugins.Services{Store: s.Store, Projects: s.Projects, Cfg: s.Cfg, Keeper: s.Keeper, LLM: s.LLM, Desks: s.Desks,
-		Token: s.Token, MCPBase: s.MCPBase, Commands: s.projectCommands, ChatLoc: s.chatLoc, AgentsMCP: s.agentsMCP, Models: s.Models}
-}
-
-// agentsMCP is the MCP server of the IDE as the sessions of the Agents tool reach it: the
-// listen address of the pod, the token as a bearer. Named like the server users add to Claude
-// Code (web-ide), so that the session's one replaces it instead of doubling its tools.
-func (s *Server) agentsMCP() []acp.MCPServer {
-	base := s.MCPBase
-	if base == "" && s.Cfg != nil && s.Cfg.Addr != "" {
-		host, port, err := net.SplitHostPort(s.Cfg.Addr)
-		if err != nil {
-			return nil
-		}
-		if host == "" || host == "0.0.0.0" || host == "::" {
-			host = "127.0.0.1"
-		}
-		base = "http://" + net.JoinHostPort(host, port)
-	}
-	if base == "" {
-		return nil
-	}
-	return []acp.MCPServer{{Type: "http", Name: "web-ide", URL: strings.TrimSuffix(base, "/") + mcpPath,
-		Headers: []acp.Header{{Name: "Authorization", Value: "Bearer " + s.Token}}}}
+	return &plugins.Services{Store: s.Store, Projects: s.Projects, Cfg: s.Cfg, Keeper: s.Keeper, Desks: s.Desks,
+		Token: s.Token, MCPBase: s.MCPBase, Version: s.Version, Commands: s.projectCommands, Models: s.Models}
 }

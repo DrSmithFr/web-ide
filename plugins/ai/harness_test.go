@@ -11,10 +11,10 @@ import (
 	kbp "github.com/DrSmithFr/web-ide/plugins/kanban"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/commands"
-	"github.com/DrSmithFr/web-ide/pod/llm"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"github.com/DrSmithFr/web-ide/pod/projects"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"github.com/DrSmithFr/web-ide/pod/settingsync"
 	"github.com/DrSmithFr/web-ide/pod/store"
 )
 
@@ -44,7 +44,7 @@ func (p *fakePod) Capability(*runtime.Runtime, string) any           { return ni
 func (p *fakePod) Stopping() bool                                    { return false }
 func (p *fakePod) AssistantTools(*runtime.Runtime) []json.RawMessage { return nil }
 func (p *fakePod) Notify(plugins.Note)                               {}
-func (p *fakePod) NoteAsks(string, *assistant.Chat, int)             {}
+func (p *fakePod) QuestionsChanged(string, string)                   {}
 func (p *fakePod) Plugin(id string) (plugins.Plugin, bool) {
 	if id == "kanban" {
 		return p.kb, true
@@ -75,6 +75,8 @@ func (h fakeHost) OnStart(func())                                  {}
 func (h fakeHost) OnStop(func())                                   {}
 func (h fakeHost) HandlePreview(func(string) (http.Handler, bool)) {}
 func (h fakeHost) Provide(string, any)                             {}
+func (h fakeHost) Questions(plugins.Questions)                     {}
+func (h fakeHost) Vault(settingsync.VaultMap)                      {}
 
 // newTestA is the plugin on a pod of its own, with a local project at dir.
 func newTestA(t *testing.T, dir string) (*A, string) {
@@ -88,7 +90,7 @@ func newTestA(t *testing.T, dir string) (*A, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pod := &fakePod{svc: &plugins.Services{Store: st, Projects: reg, LLM: llm.New(st)}}
+	pod := &fakePod{svc: &plugins.Services{Store: st, Projects: reg}}
 	pod.kb = kbp.New()
 	pod.kb.Register(fakeHost{pod})
 	s := New()

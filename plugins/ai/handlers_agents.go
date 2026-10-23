@@ -20,10 +20,11 @@ func (s *A) registerAgents() {
 			if err != nil {
 				return nil, err
 			}
-			if rt.Agents == nil {
+			m := s.agentsOf(rt)
+			if m == nil {
 				return nil, i18n.New("agents run on local projects only")
 			}
-			return f(ctx, c, rt, rt.Agents, p)
+			return f(ctx, c, rt, m, p)
 		}
 	}
 	withSession := func(f func(s *acp.Session, p json.RawMessage) (any, error)) handler {
@@ -44,7 +45,7 @@ func (s *A) registerAgents() {
 	s.handle("agents.catalog", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 		local := true
 		if rt, err := c.runtime(); err == nil {
-			local = rt.Agents != nil
+			local = s.agentsOf(rt) != nil
 		}
 		return map[string]any{"agents": catalog().List(), "local": local}, nil
 	})
@@ -134,6 +135,18 @@ func (s *A) registerAgents() {
 			return nil, err
 		}
 		sess.SetFollow(a.Value)
+		return nil, nil
+	}))
+	// agents.autoOpen sets, for one session, whether its questions open by themselves (null:
+	// the setting of the page).
+	s.handle("agents.autoOpen", withSession(func(sess *acp.Session, p json.RawMessage) (any, error) {
+		a, err := bind[struct {
+			Value *bool `json:"value"`
+		}](p)
+		if err != nil {
+			return nil, err
+		}
+		sess.SetAutoOpen(a.Value)
 		return nil, nil
 	}))
 	s.handle("agents.restart", withSession(func(sess *acp.Session, p json.RawMessage) (any, error) {

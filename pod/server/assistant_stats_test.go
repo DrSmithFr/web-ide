@@ -17,7 +17,7 @@ func TestAssistantStats(t *testing.T) {
 	s, ts := newServer(t)
 	model := &fakeModel{}
 	mts := model.serve(t)
-	if err := s.LLM.SaveServer(llm.Server{ID: "s1", Kind: "llamacpp", URL: mts.URL}, false); err != nil {
+	if err := llmOf(s).SaveServer(llm.Server{ID: "s1", Kind: "llamacpp", URL: mts.URL}, false); err != nil {
 		t.Fatal(err)
 	}
 	a, _ := dial(t, ts, "secret-token-0123456789abcdef0123")
@@ -53,7 +53,7 @@ func TestAssistantStats(t *testing.T) {
 	}
 
 	// A sub-agent of the conversation, and another conversation of the project.
-	loc, _, _ := s.chatLoc(id)
+	loc, _, _ := aiOf(s).ChatLoc(id)
 	kid := &assistant.Chat{ID: "kid", Title: "Kid", Parent: "st", Messages: []*assistant.Message{
 		{Role: "user", Content: assistant.String("task")},
 		{Role: "assistant", Model: "other", ToolCalls: []assistant.ToolCall{{ID: "k1"}}},
@@ -66,7 +66,7 @@ func TestAssistantStats(t *testing.T) {
 	if aiOf(s).Running("st") {
 		t.Fatal("still running")
 	}
-	st, _ := assistant.LoadChat(s.LLM, loc, "st")
+	st, _ := assistant.LoadChat(llmOf(s), loc, "st")
 	st.Children = []string{"kid"}
 	if err := saveTestChat(s, loc, st); err != nil {
 		t.Fatal(err)

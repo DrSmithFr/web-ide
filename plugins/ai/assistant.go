@@ -168,7 +168,7 @@ func (s *A) publish(r *assistantRun, from int) {
 		s.emitAssistant(r.root, "assistant.error", map[string]string{"id": r.id, "error": i18n.Translate(r.lang, err)})
 	}
 	s.emitAssistant(r.root, "assistant.update", updateOf(r.chat, r.state, r.ahead, from))
-	s.pod.NoteAsks(r.root, r.chat, from)
+	s.noteAsks(r.root, r.chat, from)
 }
 
 // publishIdle saves a conversation that does not run and announces it.
@@ -177,7 +177,7 @@ func (s *A) publishIdle(loc llm.ChatLocation, root string, c *assistant.Chat, fr
 		return err
 	}
 	s.emitAssistant(root, "assistant.update", updateOf(c, "idle", 0, from))
-	s.pod.NoteAsks(root, c, from)
+	s.noteAsks(root, c, from)
 	return nil
 }
 

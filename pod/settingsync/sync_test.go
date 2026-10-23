@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/pod/llm"
 	"github.com/DrSmithFr/web-ide/pod/settings"
 	"github.com/DrSmithFr/web-ide/pod/store"
 	"github.com/DrSmithFr/web-ide/relay"
@@ -412,16 +411,19 @@ func TestSyncVault(t *testing.T) {
 	}
 
 	// Both pods know the same model server: a key written on one side is applied on the other.
-	llmA, llmB := llm.New(podA.store), llm.New(podB.store)
-	if err := llmA.SaveServer(llm.Server{ID: "s1", Name: "Cloud", Kind: "openai", URL: "https://example.test", APIKey: "sk-a"}, false); err != nil {
-		t.Fatal(err)
-	}
-	if err := llmB.SaveServer(llm.Server{ID: "s1", Name: "Cloud", Kind: "openai", URL: "https://example.test"}, false); err != nil {
-		t.Fatal(err)
+	keysA, keysB := map[string]string{"s1": "sk-a"}, map[string]string{}
+	mapOf := func(keys map[string]string) []VaultMap {
+		return []VaultMap{{Name: "llm", Read: func() map[string]string { return keys },
+			Apply: func(e map[string]string) error {
+				for k, v := range e {
+					keys[k] = v
+				}
+				return nil
+			}}}
 	}
 
 	on := false
-	vaultA := NewVaultSource(podA.store, llmA, func() bool { return on }, nil)
+	vaultA := NewVaultSource(podA.store, mapOf(keysA), func() bool { return on }, nil)
 	if _, err := podA.hub.AddSource(vaultA); err != nil {
 		t.Fatal(err)
 	}
@@ -448,7 +450,7 @@ func TestSyncVault(t *testing.T) {
 	}
 
 	// The other pod reads it and applies the key to its own server.
-	vaultB := NewVaultSource(podB.store, llmB, func() bool { return true }, nil)
+	vaultB := NewVaultSource(podB.store, mapOf(keysB), func() bool { return true }, nil)
 	if _, err := podB.hub.AddSource(vaultB); err != nil {
 		t.Fatal(err)
 	}
@@ -459,7 +461,7 @@ func TestSyncVault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !contains(string(got), "sk-a") {
+	if !contains(string(got), "sk-a") || keysB["s1"] != "sk-a" {
 		t.Fatalf("the vault key must reach the other pod: %s", got)
 	}
 

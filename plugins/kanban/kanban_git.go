@@ -3,7 +3,6 @@ package kanban
 import (
 	"context"
 	"encoding/json"
-	"github.com/DrSmithFr/web-ide/pod/acp"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"strconv"
 	"strings"
@@ -47,7 +46,7 @@ func (s *K) registerKanbanGit() {
 			if err != nil {
 				return nil, err
 			}
-			return s.withTimes(root.ID)(f(ctx, c, gctx{loc: kanbanLoc(root), root: root, rt: rt, git: kb.Git{Run: rt.Runner, Root: root.Path}}, p))
+			return s.withTimes(rt, root.ID)(f(ctx, c, gctx{loc: kanbanLoc(root), root: root, rt: rt, git: kb.Git{Run: rt.Runner, Root: root.Path}}, p))
 		}
 	}
 	exists := func(k gctx, p string) bool { return k.exists(p) }
@@ -411,7 +410,7 @@ func (s *K) registerKanbanGit() {
 				_ = s.Kanban.SetGit(k.loc, t.ID, kb.GitState{Snapshot: snap})
 			}
 		}
-		if err := s.removeWorktree(ctx, k.loc, k.root, k.git, t, wt); err != nil {
+		if err := s.removeWorktree(ctx, k.rt, k.loc, k.root, k.git, t, wt); err != nil {
 			return nil, err
 		}
 		if a.DeleteBranch && t.Branch != "" {
@@ -432,7 +431,7 @@ func (s *K) registerKanbanGit() {
 }
 
 // removeWorktree removes the worktree of a ticket and the project opened on it.
-func (s *K) removeWorktree(ctx context.Context, loc kb.Location, root *projects.Project, g kb.Git, t *kb.Ticket, wt string) error {
+func (s *K) removeWorktree(ctx context.Context, rt *runtime.Runtime, loc kb.Location, root *projects.Project, g kb.Git, t *kb.Ticket, wt string) error {
 	child := projects.ChildID(root.ID, t.ID)
 	if _, ok := s.Projects.Get(child); ok {
 		s.pod.CloseRuntime(child)
@@ -440,7 +439,9 @@ func (s *K) removeWorktree(ctx context.Context, loc kb.Location, root *projects.
 		s.Desks.Delete(child)
 	}
 	// Its agent sessions end with it, even when no window had it open.
-	acp.Purge(s.Keeper, child, s.Store.Path("agents", child))
+	if ag := s.agents(rt); ag != nil {
+		ag.Purge(child)
+	}
 	if wt != "" {
 		if err := g.RemoveWorktree(ctx, wt); err != nil {
 			return err

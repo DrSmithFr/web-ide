@@ -173,8 +173,10 @@ func (s *K) mcpTools() []plugins.MCPTool {
 					}
 				}
 				md := kb.Markdown(t)
-				if _, info, _, ok := s.ticketSession(sc.Root, t); ok {
-					md += fmt.Sprintf("\n\n## Agent session\n- %s (%s, %s): read it with kanban_conversation chat=%s", info.Title, info.Name, info.State, info.ID)
+				if rt, err := s.pod.Runtime(sc.Root.ID); err == nil {
+					if _, sess, ok := s.ticketSession(rt, sc.Root, t); ok {
+						md += fmt.Sprintf("\n\n## Agent session\n- %s (%s, %s): read it with kanban_conversation chat=%s", sess.Title, sess.Name, sess.State, sess.ID)
+					}
 				}
 				return fmt.Sprintf("%s\n\nTicket in the IDE: %s\nProject in the IDE: %s", md, sc.ticketURL(id), sc.ProjectURL(sc.Here.ID)), nil
 			}),

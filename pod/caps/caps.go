@@ -91,3 +91,41 @@ type PreviewInfo struct {
 	AppPort                 int
 	URL, PublicURL          string
 }
+
+// Agents is the agents capability (the AI plugin), as the Kanban uses it: the sessions of the
+// CLI agents developing the tickets (kanban setting devAgent), and the time of the answers of
+// the conversations linked to a ticket.
+type Agents interface {
+	// Develop gives a ticket to agent in the project of its worktree: the prompt of its role in
+	// the session of the ticket, else in a new session (created).
+	Develop(project, agent string, t TicketBrief) (session AgentSession, created bool, err error)
+	// TicketSession finds the session of a ticket in the files of the Agents tool of a project,
+	// open or not.
+	TicketSession(project string, ticket int64) (AgentSession, bool)
+	// Purge ends the sessions of a project removed (a worktree), also when no window had it
+	// open: their processes in the keeper, their files.
+	Purge(project string)
+	// ChatTimes are the times of the answers of the conversations of a project, by id.
+	ChatTimes(project string) (map[string]ChatTime, error)
+}
+
+// TicketBrief is what the prompt of a development agent says of its ticket: its role
+// (developer, reviewer…), the feedback it answers (0 for none), the ticket as Markdown and the
+// words of the user (Text).
+type TicketBrief struct {
+	ID, Parent, Feedback int64
+	Role, Title, Branch  string
+	Markdown, Text       string
+}
+
+// AgentSession is a session of the Agents tool.
+type AgentSession struct {
+	ID, Name, Title, State string
+}
+
+// ChatTime is the time of the answers of a conversation, its thinking time, and the
+// conversation it is a sub-agent of ("" for none).
+type ChatTime struct {
+	Parent      string
+	Ms, ThinkMs int64
+}
