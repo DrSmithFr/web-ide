@@ -78,3 +78,23 @@ func (r *Runtime) SettingsID() string {
 	}
 	return r.P.ID
 }
+
+// DropPart stops the part under key, if it was made, and forgets it (a plugin updated or
+// removed: the next use makes it again).
+func (r *Runtime) DropPart(key string) {
+	r.partsMu.Lock()
+	p, ok := r.parts[key]
+	if ok {
+		delete(r.parts, key)
+		for i, k := range r.order {
+			if k == key {
+				r.order = append(r.order[:i], r.order[i+1:]...)
+				break
+			}
+		}
+	}
+	r.partsMu.Unlock()
+	if s, ok := p.(Stopper); ok {
+		s.Stop(false)
+	}
+}

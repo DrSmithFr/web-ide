@@ -96,6 +96,12 @@ func (in *Installer) Install(ctx context.Context, cand Candidate, constraint str
 	if err != nil || !reflect.DeepEqual(got, m) {
 		return Locked{}, i18n.Errorf("the plugin.json of the archive of %s differs from the one of its tag %s", m.ID, cand.Tag)
 	}
+	if m.Backend != "" {
+		st, err := os.Lstat(filepath.Join(work, filepath.FromSlash(m.Backend)))
+		if err != nil || !st.Mode().IsRegular() || st.Mode()&0o100 == 0 {
+			return Locked{}, i18n.Errorf("the archive of %s has no executable %s", m.ID, m.Backend)
+		}
+	}
 	final := filepath.Join(in.Dir(m.ID), m.Version)
 	if err := os.RemoveAll(final); err != nil {
 		return Locked{}, err

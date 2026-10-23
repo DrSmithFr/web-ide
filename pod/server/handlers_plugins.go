@@ -243,12 +243,13 @@ func (s *Server) pluginOn(rt *runtime.Runtime, id string) bool {
 
 // pluginDefs are the definitions of the assistant tools of the plugins enabled on rt's project.
 func (s *Server) pluginDefs(rt *runtime.Runtime) []json.RawMessage {
-	if len(s.plugins.tools) == 0 {
+	tools := s.allPluginTools()
+	if len(tools) == 0 {
 		return nil
 	}
 	on := plugins.Enabled(s.pluginStates(rt))
 	var out []json.RawMessage
-	for _, t := range s.plugins.tools {
+	for _, t := range tools {
 		if on[t.plugin] {
 			out = append(out, t.def.JSON)
 		}
@@ -257,9 +258,10 @@ func (s *Server) pluginDefs(rt *runtime.Runtime) []json.RawMessage {
 }
 
 func (s *Server) findPluginTool(name string) *pluginTool {
-	for i := range s.plugins.tools {
-		if s.plugins.tools[i].tool.Name == name {
-			return &s.plugins.tools[i]
+	tools := s.allPluginTools()
+	for i := range tools {
+		if tools[i].tool.Name == name {
+			return &tools[i]
 		}
 	}
 	return nil

@@ -221,5 +221,18 @@
   "%w: %s is not a file, a folder or a link": "%w : %s n’est ni un fichier, ni un dossier, ni un lien",
   "%w: the link %s points out of its folder": "%w : le lien %s pointe hors de son dossier",
   "the plugin %s has no web/index.js": "le plugin %s n’a pas de web/index.js",
-  "the page module of %s is larger than %d MB": "le module de page de %s dépasse %d Mo"
+  "the page module of %s is larger than %d MB": "le module de page de %s dépasse %d Mo",
+  "a message to the backend is larger than %d MB": "un message au backend dépasse %d Mo",
+  "plugin %s: an external plugin gives its tools to the assistant and the MCP alike (assistantTools)": "plugin %s : un plugin externe donne ses outils à l’assistant et au MCP à la fois (assistantTools)",
+  "plugin %s: its assistant tool %s needs a schema and a backend": "plugin %s : son outil d’assistant %s demande un schéma et un backend",
+  "plugin %s: its backend must be an executable of bin/, not %q": "plugin %s : son backend doit être un exécutable de bin/, pas %q",
+  "%s is not granted to %s": "%s n’est pas accordé à %s",
+  "the archive of %s has no executable %s": "l’archive de %s n’a pas d’exécutable %s",
+  "the backend of %s answered %s badly: %v": "le backend de %s a mal répondu à %s : %v",
+  "the backend of %s did not start: %v": "le backend de %s n’a pas démarré : %v",
+  "the backend of %s ended three times in a minute: it is off until the project opens again": "le backend de %s s’est arrêté trois fois en une minute : il reste éteint jusqu’à la prochaine ouverture du projet",
+  "the backend of the plugin did not answer %s in time": "le backend du plugin n’a pas répondu à %s à temps",
+  "the backend of the plugin ended: %v": "le backend du plugin s’est arrêté : %v",
+  "the plugin %s has no backend": "le plugin %s n’a pas de backend",
+  "this kernel has no Landlock: an external plugin's backend cannot run confined": "ce noyau n’a pas Landlock : le backend d’un plugin externe ne peut pas tourner confiné"
 }

@@ -131,6 +131,7 @@ func (s *Server) registerPluginInstall() {
 		}
 		s.plugins.installMu.Lock()
 		defer s.plugins.installMu.Unlock()
+		s.dropBackends(a.ID)
 		if err := s.installer().Remove(a.ID); err != nil {
 			return nil, err
 		}
@@ -188,6 +189,7 @@ func (s *Server) resolvePlugin(ctx context.Context, url, constraint string) (ins
 }
 
 func (s *Server) installPlugin(ctx context.Context, cand install.Candidate, constraint string, grants []string) (any, error) {
+	s.dropBackends(cand.Manifest.ID) // its old version may run
 	l, err := s.installer().Install(ctx, cand, constraint, grants)
 	if err != nil {
 		return nil, err

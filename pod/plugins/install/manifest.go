@@ -13,6 +13,8 @@ import (
 // running programs, and core:<method> for a method of the core it calls (core:fs.read).
 var Grants = []string{"files:read", "files:write", "net", "exec"}
 
+var backendRe = regexp.MustCompile(`^bin/[A-Za-z0-9._-]+$`)
+
 var coreMethod = regexp.MustCompile(`^core:[a-z][a-zA-Z0-9]*(\.[a-z][a-zA-Z0-9]*)+$`)
 
 // ValidGrant tells whether a permission is a grant name.
@@ -55,6 +57,19 @@ func CheckExternal(m plugins.Manifest, builtin func(id string) bool) error {
 		if !ValidGrant(p) {
 			return i18n.Errorf("plugin %s: unknown permission %q", m.ID, p)
 		}
+	}
+	if m.Backend != "" {
+		if !backendRe.MatchString(m.Backend) || strings.Contains(m.Backend, "..") {
+			return i18n.Errorf("plugin %s: its backend must be an executable of bin/, not %q", m.ID, m.Backend)
+		}
+	}
+	for _, name := range m.Contributes.AssistantTools {
+		if _, ok := m.Contributes.ToolSchemas[name]; !ok || m.Backend == "" {
+			return i18n.Errorf("plugin %s: its assistant tool %s needs a schema and a backend", m.ID, name)
+		}
+	}
+	if len(m.Contributes.MCPTools) > 0 {
+		return i18n.Errorf("plugin %s: an external plugin gives its tools to the assistant and the MCP alike (assistantTools)", m.ID)
 	}
 	if m.Required || len(m.Namespaces) > 0 {
 		return i18n.Errorf("plugin %s: an external plugin cannot be locked nor own namespaces", m.ID)
