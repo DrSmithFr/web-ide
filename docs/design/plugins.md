@@ -103,7 +103,7 @@ Exec (#116) is the first plugin the rest of the IDE *uses*: a dozen parts of the
 ## What Previews added to the API
 
 - **Global methods** (`Host.HandleGlobal`): a method without a project (`Call.Runtime` nil), always answered, for the home page and the pod-wide state: `tunnels.all`, `tunnels.close`, `tunnels.closeAll`, `preview.*` (a preview names its project).
-- **The pod lent to built-ins** (`Host.Pod()`): the runtime of another project, the name and host of a project, events to every window or to a project, and the pod-wide managers of the port forwards and of the previews (the HTTP server serves the previews, so they stay the pod's). `Window.Project()`.
+- **The pod lent to built-ins** (`Host.Pod()`): the runtime of another project, the name and host of a project, events to every window or to a project, and, until #137, the pod-wide managers of the port forwards and of the previews (now the Previews plugin's). `Window.Project()`.
 - **Lifecycle hooks**: `Host.OnProjectOpen(f)` (a window opens a project where the plugin is enabled: the enabled port forwards of an SSH project open) and `Host.OnWindows(f)` (the number of windows of the pod, in order: the forwards close `ForwardIdle` after the last one). The server knows nothing of the forwards any more.
 - **Home contribution** (`PluginModule.home(api)`): a component of the home page, whatever the projects (the open port forwards).
 - The **previews** capability (list, open, close, public, URL), used by the assistant's card, `share_preview` of the agents and the ▶ menu of the Console; `share_preview` and `list_previews` stay the assistant's, offered with `previews` on. `api.transport.inTunnel`.
@@ -163,7 +163,8 @@ The page module of each built-in is a chunk of its own, `plugin-<id>` (`web/vite
 Moving the business code into the plugins (#134, milestone *Repository layout*) found two gaps on the pod side:
 
 - **Parts of the runtime** (`runtime.Part(key, make)`, `pod/runtime/parts.go`): the per-project state of a plugin (its manager, its connections), made on first use; a part that is a `Stopper` stops with the project (`Stop(false)`) or the pod (`Stop(true)`: what the keeper holds survives), an `Idler` is told a while after the last window left. The runtime exposes what makers need: `Emit`, `Pool`, `Store`, `SettingsID`. The language servers, the database connections and docker are parts; their packages are the `internal/` of their plugin, so nothing else can import them.
-- **Capabilities on the pod side** (`pod/plugins/capabilities.go`): `Host.Provide(name, impl)` for a capability of the manifest's `provides`, `Pod.Capability(rt, name)` (nil when no plugin enabled on the project provides it); each one an interface of that file. `Language` (Languages): the `lsp_*` tools of the AI reach the servers through it.
+- **Capabilities on the pod side** (`pod/caps`): `Host.Provide(name, impl)` for a capability of the manifest's `provides`, `Pod.Capability(rt, name)` (nil when no plugin enabled on the project provides it); each one an interface of that file. `Language` (Languages): the `lsp_*` tools of the AI reach the servers through it; `Search` (Search, #137): the search_text tool of the AI; `Previews` (Previews, #137): share_preview and list_previews of the AI and the MCP.
+- **The pod-wide managers leave the pod** (#137): the port forwards and the previews are the Previews plugin's; `Pod.Forwards()`, `Pod.Previews()` and `Pod.SharePreview` are gone, `Pod.Authorized` (a request with the token, for a private preview) and `Host.HandlePreview` (the previews asked through the tunnel) take their place. A removal is a change of version, but no plugin outside the IDE exists yet: v1 keeps its number, as for `api.forwards` in #119. The consoles and the saved commands stay core (`pod/console`, `pod/commands`): the Exec plugin keeps its methods and its page side, and is locked (decision 6).
 
 ## API v1
 
@@ -171,11 +172,11 @@ Frozen with #118: `apiVersion: 1` in every manifest. An addition keeps v1; a rem
 
 **Manifest** (`plugin.json`): `id`, `name`, `version`, `apiVersion`, `required`, `permissions`, `provides` / `requires` (capabilities), `namespaces` (prefixes of its methods and actions besides its id), `contributes`: `tools` (`id`, `label`, `icon`, `zone`, `before`), `tabViews`, `assistantTools`, `commands` (`id`, `label`, `category`, `keys`, `replaces`, `inTerminal`).
 
-**Pod** (`pod/plugins`): `Plugin{Manifest(), Register(Host)}`; `Host.Handle(method, handler)`, `Host.HandleGlobal`, `Host.AssistantTool(tool)`, `Host.Pod()`, `Host.OnProjectOpen`, `Host.OnWindows`, `Host.OnStart`, `Host.OnStop`, `Host.Provide` (#134); `Pod.Capability` (#134); a `Call` carries the `Runtime` of the project, `Params`, `Lang`, the `Window` (push, held streams), `Emit` / `EmitOthers` / `EmitFamily`, the `Options` of a conversation; `Result`, `UsageError`, `CodedError`.
+**Pod** (`pod/plugins`): `Plugin{Manifest(), Register(Host)}`; `Host.Handle(method, handler)`, `Host.HandleGlobal`, `Host.AssistantTool(tool)`, `Host.Pod()`, `Host.OnProjectOpen`, `Host.OnWindows`, `Host.OnStart`, `Host.OnStop`, `Host.Provide` (#134), `Host.HandlePreview` (#137); `Pod.Capability` (#134); a `Call` carries the `Runtime` of the project, `Params`, `Lang`, the `Window` (push, held streams), `Emit` / `EmitOthers` / `EmitFamily`, the `Options` of a conversation; `Result`, `UsageError`, `CodedError`.
 
 **Page** (`web/src/plugins/api.ts`): `rpc` / `rpcIn` / `notify` / `notifyIn` / `channel`, `on`, `t` / `tn` / `fmtDate` / `fmtAgo`, `project`, `files`, `buffers`, `activeFile`, `ssh`, `desk` (its state in the desk), `provide` / `use` (capabilities), `showTool`, `tiles`, `theme`, `openFile` / `openView` / `setViewState` / `openDiff` / `openText`, `panes`, `editor`, `keys`, `transport`, `ui`. The module's `activate(api)` returns its contributions: `tools`, `views`, `fileView`, `commands`, `hosts`, `searchProviders`, `diffSources`, `explorerItems`, `fileDecorations`, `assistantOptions`, `viewTitle`, `aloneViews`, `fileStatus`, `viewStatus`, `toolStatus`, `uiTools`, `opened`; its `home(api)` a part of the home page.
 
-**Capabilities**: on the pod, the interfaces of `pod/plugins/capabilities.go` (`Language`); on the page, `terminal` and `commands` (Exec), `git` and `worktrees` (Git), `previews` (Previews), `language` (Languages), `files` (Files), `tickets` (Kanban), `assistant` and `agents` (AI), their types in `web/src/plugins/capabilities.ts`.
+**Capabilities**: on the pod, the interfaces of `pod/caps` (`Language`, `Search`, `Previews`); on the page, `terminal` and `commands` (Exec), `git` and `worktrees` (Git), `previews` (Previews), `language` (Languages), `files` (Files), `tickets` (Kanban), `assistant` and `agents` (AI), their types in `web/src/plugins/capabilities.ts`.
 
 ## Decisions
 
@@ -186,6 +187,10 @@ Taken on 2026-10-19:
 3. **Install**: not in phase 1. A plugin is enabled or disabled per project in *Settings → Plugins*, saved in `.ide/plugins.json` of the main project (`{"disabled": ["docker"]}`): every other plugin is enabled, so a new built-in shows on every project.
 4. **Developing a plugin**: not in phase 1. Loading from a folder with hot reload comes once the API is stable.
 5. **How far**: step by step. Phase 1 is the core, Docker, then the database. After it: everything becomes a plugin ([Phase 2](#phase-2-everything-is-a-plugin)).
+
+Added on 2026-10-23, at the end of the *Repository layout* milestone:
+
+6. **How far, answered**: not everything. **Explorer, Editor and the consoles stay core and locked** — `pod/console` and `pod/commands` stay packages of the pod, the Exec plugin keeps its page side, its `console.*` / `commands.*` methods and is `required` like Files and Code; the rest of the business code is in plugins (`plugins/search`, `plugins/previews`, languages, database, docker…). Security does not depend on this split: built-in plugins are trusted code and external ones are confined (phase 3), but keeping the terminal in the core means no external plugin can ever provide it.
 
 ## Phase 2: everything is a plugin
 
@@ -199,8 +204,8 @@ The plugins, grouped by domain (one plugin, several tools and views), in their o
 
 | Plugin | Tools and views | Provides / requires |
 |---|---|---|
-| Exec | Console tool (terminals, tasks), project commands (#116, done) | provides `terminal`, `commands` |
-| Search | Search tool (text, regex), the text provider of Search Everywhere (#117, done) | |
+| Exec | Console tool (terminals, tasks), project commands (#116, done; locked, #137) | provides `terminal`, `commands` |
+| Search | Search tool (text, regex), the text provider of Search Everywhere (#117, done) | provides `search` (the search_text tool of the AI, #137) |
 | Git | Git tool, git content of the diff view (#118, done) | provides `worktrees`, `git` |
 | Previews | Port forwards and previews tool (#119, done) | requires `terminal`, provides `previews` |
 | Languages | language servers, Problems, Structure, the Symbols provider (#120, done) | provides `language` |
@@ -209,7 +214,7 @@ The plugins, grouped by domain (one plugin, several tools and views), in their o
 | Kanban | Kanban tool, board, ticket, milestone and objective views (#122, done; its MCP and assistant tools move with AI) | provides `tickets`, requires `terminal`, `worktrees` |
 | AI | Assistant, Agents, doodles, whiteboard (#123, done) | provides `assistant`, `agents` |
 
-- **Locked plugins** (`required` in the manifest): Files and Code cannot be disabled; Settings → Plugins shows them checked and greyed.
+- **Locked plugins** (`required` in the manifest): Files and Code cannot be disabled, nor Exec since #137 (decision 6); Settings → Plugins shows them checked and greyed.
 - **Languages apart from Code**: the editor without language servers (a slow SSH project).
 - `apiVersion: 1` is frozen after Git ([API v1](#api-v1)).
 - Then the **page modules load on demand** (`import()`, #124, done): a disabled plugin is not downloaded ([Loading on demand](#loading-on-demand)).

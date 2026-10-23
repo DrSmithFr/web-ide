@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	kbp "github.com/DrSmithFr/web-ide/plugins/kanban"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"net/url"
 	"path/filepath"
 	"strings"
+
+	kbp "github.com/DrSmithFr/web-ide/plugins/kanban"
+	"github.com/DrSmithFr/web-ide/pod/plugins"
 
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/kanban"

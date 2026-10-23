@@ -10,12 +10,13 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"time"
+
 	"github.com/DrSmithFr/web-ide/lib/i18n"
 	kbp "github.com/DrSmithFr/web-ide/plugins/kanban"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/commands"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
-	"time"
 
 	"github.com/DrSmithFr/web-ide/pod/plugins"
 )

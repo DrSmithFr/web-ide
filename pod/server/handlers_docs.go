@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"io/fs"
 	"path"
 	"strings"
+
+	"github.com/DrSmithFr/web-ide/pod/assistant"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
 )

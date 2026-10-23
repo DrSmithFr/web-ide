@@ -2,9 +2,10 @@ package ai
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/llm"
-	"strings"
 )
 
 // What the core asks of the conversations of the assistant: the replies of Claude Code through

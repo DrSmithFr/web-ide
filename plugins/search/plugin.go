@@ -8,8 +8,10 @@ import (
 	_ "embed"
 	"encoding/json"
 
+	lib "github.com/DrSmithFr/web-ide/plugins/search/internal/search"
+	"github.com/DrSmithFr/web-ide/pod/caps"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
-	lib "github.com/DrSmithFr/web-ide/pod/search"
+	"github.com/DrSmithFr/web-ide/pod/runtime"
 )
 
 //go:embed plugin.json
@@ -28,6 +30,7 @@ func New() *Plugin {
 func (p *Plugin) Manifest() plugins.Manifest { return p.m }
 
 func (p *Plugin) Register(h plugins.Host) {
+	h.Provide("search", grep{})
 	h.Handle("grep", func(ctx context.Context, c plugins.Call) (any, error) {
 		var o lib.Options
 		if len(c.Params) > 0 {
@@ -38,11 +41,18 @@ func (p *Plugin) Register(h plugins.Host) {
 		if o.Query == "" {
 			return lib.Result{Matches: []lib.Match{}}, nil
 		}
-		rt := c.Runtime
-		o.Exclude = rt.Excluded()
-		if rt.Local {
-			return lib.Local(ctx, rt.Root, o)
-		}
-		return lib.Remote(ctx, rt.Runner, rt.Root, o)
+		return grep{}.Grep(ctx, c.Runtime, o)
 	})
+}
+
+// grep is the search capability (caps.Search) the plugin provides: the search_text tool of the
+// assistant uses it.
+type grep struct{}
+
+func (grep) Grep(ctx context.Context, rt *runtime.Runtime, o caps.SearchOptions) (*caps.SearchResult, error) {
+	o.Exclude = rt.Excluded()
+	if rt.Local {
+		return lib.Local(ctx, rt.Root, o)
+	}
+	return lib.Remote(ctx, rt.Runner, rt.Root, o)
 }

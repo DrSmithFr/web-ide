@@ -13,13 +13,13 @@ import (
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"github.com/DrSmithFr/web-ide/pod/caps"
 	"github.com/DrSmithFr/web-ide/pod/console"
 	"github.com/DrSmithFr/web-ide/pod/fsx"
 	"github.com/DrSmithFr/web-ide/pod/llm"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"github.com/DrSmithFr/web-ide/pod/projects"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
-	"github.com/DrSmithFr/web-ide/pod/search"
 )
 
 // Tools of the assistant that work on the project: files, search, shell commands, consoles,
@@ -120,7 +120,7 @@ func (s *A) assistantTool(r *assistantRun, ref *runtimeRef, call assistant.ToolC
 	case "read_file":
 		res, err = readFileTool(ref.rt, a.Str("path"), a.Num("start_line"), a.Num("end_line"))
 	case "search_text":
-		res, err = searchText(r.ctx, ref.rt, a.Str("query"), a.Bool("regex", false), a.Str("include"))
+		res, err = s.searchText(r.ctx, ref.rt, a.Str("query"), a.Bool("regex", false), a.Str("include"))
 	case "edit_file":
 		res, err = s.editFile(r, ref.rt, call, a)
 	case "write_file":
@@ -156,7 +156,11 @@ func (s *A) assistantTool(r *assistantRun, ref *runtimeRef, call assistant.ToolC
 	case "agent_note":
 		res, err = s.agentNote(r, a)
 	case "share_preview":
-		res, err = s.pod.SharePreview(r.project, ref.rt, a)
+		if pv, ok := s.pod.Capability(ref.rt, "previews").(caps.Previews); ok {
+			res, err = pv.Share(r.project, ref.rt, a)
+		} else {
+			err = i18n.Errorf("the %s plugin is disabled on this project", "Previews")
+		}
 	case "bash":
 		res, err = bashTool(r.ctx, ref.rt, a.Str("command"), a.Str("cwd"), a.Num("timeout"), s.toolProgress(r, call.ID), s.keptFor(r))
 	case "run_command":
@@ -308,7 +312,7 @@ func findFiles(ctx context.Context, rt *runtime.Runtime, pattern string) (assist
 	if err != nil {
 		return assistant.ToolResult{}, err
 	}
-	files = search.WithoutExcluded(files, rt.Excluded())
+	files = runtime.WithoutExcluded(files, rt.Excluded())
 	var list []string
 	if strings.ContainsAny(pattern, "*?") {
 		re := globRegexp(pattern)
@@ -387,18 +391,17 @@ func readFileTool(rt *runtime.Runtime, p string, start, end int) (assistant.Tool
 	return assistant.OK(out, assistant.T("{path}: lines {from}-{to} of {total}", map[string]any{"path": assistant.RelPath(rt.Root, abs), "from": from, "to": to, "total": len(lines)})), nil
 }
 
-func searchText(ctx context.Context, rt *runtime.Runtime, query string, regex bool, include string) (assistant.ToolResult, error) {
+func (s *A) searchText(ctx context.Context, rt *runtime.Runtime, query string, regex bool, include string) (assistant.ToolResult, error) {
 	if query == "" {
 		return assistant.ToolResult{}, assistant.Usagef("query is missing")
 	}
-	o := search.Options{Query: query, Regex: regex, Include: include, Max: 200, Exclude: rt.Excluded()}
-	var res *search.Result
-	var err error
-	if rt.Local {
-		res, err = search.Local(ctx, rt.Root, o)
-	} else {
-		res, err = search.Remote(ctx, rt.Runner, rt.Root, o)
+	// The search is the Search plugin's (its search capability); needs.go offers the tool only
+	// where it is on.
+	sr, ok := s.pod.Capability(rt, "search").(caps.Search)
+	if !ok {
+		return assistant.ToolResult{}, i18n.Errorf("the %s plugin is disabled on this project", "Search")
 	}
+	res, err := sr.Grep(ctx, rt, caps.SearchOptions{Query: query, Regex: regex, Include: include, Max: 200})
 	if err != nil {
 		return assistant.ToolResult{}, err
 	}

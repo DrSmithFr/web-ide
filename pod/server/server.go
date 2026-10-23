@@ -9,7 +9,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"github.com/DrSmithFr/web-ide/pod/clipboard"
 	"html/template"
 	"io/fs"
 	"log"
@@ -22,19 +21,19 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/DrSmithFr/web-ide/pod/clipboard"
+
 	"github.com/coder/websocket"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
 	"github.com/DrSmithFr/web-ide/lib/tunnel"
 	"github.com/DrSmithFr/web-ide/pod/config"
 	"github.com/DrSmithFr/web-ide/pod/desks"
-	"github.com/DrSmithFr/web-ide/pod/forwards"
 	"github.com/DrSmithFr/web-ide/pod/hfcache"
 	"github.com/DrSmithFr/web-ide/pod/kanban"
 	"github.com/DrSmithFr/web-ide/pod/keeper"
 	"github.com/DrSmithFr/web-ide/pod/llm"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
-	"github.com/DrSmithFr/web-ide/pod/preview"
 	"github.com/DrSmithFr/web-ide/pod/projects"
 	"github.com/DrSmithFr/web-ide/pod/push"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
@@ -64,13 +63,8 @@ type Server struct {
 	// Models caches the speech recognition models downloaded for the page.
 	Models *hfcache.Cache
 	// Sync is the settings sync loop of the pod (nil: the pod has no relay, so nothing is synced).
-	Sync *settingsync.Hub
-	// Forwards are the port forwards of the SSH projects.
-	Forwards *forwards.Manager
-	// Previews serve the apps of the projects on temporary URLs (Tailscale by default).
-	Previews  *preview.Manager
-	PreviewTS preview.Tailscale
-	Static    fs.FS
+	Sync   *settingsync.Hub
+	Static fs.FS
 	// Docs is the documentation embedded in the binary (pod/docsdist), served by docs.read.
 	Docs fs.FS
 	// AllowRemote accepts connections from other machines (the token is then the only protection).
@@ -147,11 +141,6 @@ func (s *Server) Init() {
 	if s.Clipboard == nil {
 		s.Clipboard = clipboard.Load(s.Store)
 	}
-	s.Forwards = forwards.New(func() { s.broadcast("tunnels.changed", nil, nil) })
-	if s.PreviewTS == nil {
-		s.PreviewTS = &preview.CLI{}
-	}
-	s.Previews = preview.New(s.PreviewTS, s.authorized, func() { s.broadcast("preview.changed", s.Previews.List(), nil) })
 	s.registerGlobal()
 	s.registerProject()
 	s.registerIcons()
@@ -522,7 +511,10 @@ func (c *Client) serveHTTPChannel(ctx context.Context, tr *transport) {
 // through this pod, or the static app.
 func (s *Server) httpHandler(req httpRequest) (http.Handler, bool) {
 	if req.Preview != "" {
-		return s.Previews.Handler(req.Preview)
+		if s.plugins.preview == nil {
+			return nil, false
+		}
+		return s.plugins.preview(req.Preview)
 	}
 	// A window of the tunnel can open a pod of this pod's LAN too: the same gateway as on the
 	// origin of this pod.
@@ -1094,8 +1086,6 @@ func (s *Server) Shutdown() {
 	rts := s.runtimes
 	s.runtimes = map[string]*runtime.Runtime{}
 	s.mu.Unlock()
-	s.Forwards.CloseAll()
-	s.Previews.Shutdown()
 	for _, rt := range rts {
 		rt.Release()
 	}

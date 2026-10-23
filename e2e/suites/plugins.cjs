@@ -3,13 +3,13 @@
 // its icon, its command and its tool go, its place in the zone stays. Docker (#114) is a
 // built-in plugin: disabled, its tools go and its page module is not downloaded (#124), the
 // Port forwards and previews tool stays. The Database explorer (#115) too: its tabs are views of it, a console keeps its text in its tab,
-// and a desk saved before (sql tabs and sqlText) is migrated. Exec (#116) provides terminal:
-// off, the Console goes and Docker with it (it needs terminal); on again, the terminals are back.
+// and a desk saved before (sql tabs and sqlText) is migrated. Exec (#116) is locked (#137): its
+// terminal and the Console tool stay, and the tools that need terminal always answer.
 // Search (#117) gives Search Everywhere its Text tab: off, the tab and the Search tool go. Git
 // (#118) gives the diff view its git sides: off, a diff tab says so, open_diff is refused.
-// Previews (#119) needs terminal: off (or Exec off), its tool and list_previews go. Languages
+// Previews (#119) needs terminal: off, its tool and list_previews go. Languages
 // (#120): off, Problems, Structure, the Symbols tab and the code actions go, the editor still edits.
-// Files and Code (#121) are locked; the Explorer takes the colors of Git and the terminal of Exec.
+// Files and Code (#121) are locked, like Exec; the Explorer takes the colors of Git and the terminal of Exec.
 // Status bar items (#127): hello's while its tool has the focus, a ticket's status, priority and
 // size changed from the bar. Kanban (#122): off, its tool and the kanban_* tools go, a ticket tab says its plugin is off;
 // a ticket tab of a desk saved before is migrated. AI (#123): off, no Assistant nor Agents, the
@@ -188,8 +188,8 @@ run(async ({ page }) => {
   await page.waitForSelector('.sql-console .ed-content', { timeout: 15000 })
   assert((await consoleText()).includes('SELECT 7; -- before #115'), 'a console of an old desk keeps its text: ' + (await consoleText()))
 
-  // Exec: a terminal, then Exec off (its dependents named in a confirmation): no Console, Docker
-  // off for want of terminal, the console tools of the MCP refused.
+  // Exec is locked (#137): a terminal opens, the Console tool stays with its dependents, and the
+  // console tools of the MCP answer.
   page.on('dialog', (d) => d.accept())
   await page.click('.pane.active .ed-content').catch(() => {})
   await page.keyboard.press('Control+Shift+Backquote')
@@ -199,24 +199,14 @@ run(async ({ page }) => {
   await page.keyboard.press('Enter')
   await page.waitForFunction(() => document.querySelector('.xterm-rows')?.textContent.includes('plugin-42'))
   const consoleIcon = '.rail-btn[data-id=console]'
-  await setPlugin('exec', false)
-  await page.waitForSelector(consoleIcon, { state: 'detached' })
-  assert(!(await page.$(docker)), 'Docker off with Exec')
-  assert(!(await page.$(forwards)), 'Previews off with Exec')
-  await palette('settings')
-  await page.waitForSelector('.pick-item.selected:has-text("Settings")')
-  await page.keyboard.press('Enter')
-  await page.click('.settings-nav button:has-text("Plugins")')
-  assert((await page.textContent('[data-plugin=docker]')).includes('needs terminal'), 'Docker says what it lacks')
-  await closeSettings()
+  assert(await page.$(consoleIcon), 'the Console tool of a locked plugin')
+  assert(await page.$(docker), 'Docker stays (terminal is always on)')
+  assert(await page.$(forwards), 'Previews stays (terminal is always on)')
   r = await mcp('list_consoles', {})
-  assert(r.result.isError && text(r).includes('terminal'), 'list_consoles refused: ' + text(r))
-  await setPlugin('exec', true)
-  // The Console comes back shown, as it was.
+  assert(!r.result.isError, 'list_consoles answers: ' + text(r))
   await page.waitForSelector(consoleIcon)
   if (!(await page.isVisible('.xterm-rows'))) await page.click(consoleIcon)
   await page.waitForFunction(() => document.querySelector('.xterm-rows')?.textContent.includes('plugin-42'))
-  assert(await page.$(docker), 'Docker back with Exec')
 
   // Search: its tool in the left zone, before Git; the Text tab of Search Everywhere is its.
   const seTabs = async () => {
@@ -242,7 +232,8 @@ run(async ({ page }) => {
   await page.waitForSelector('.rail-btn[data-id=search]')
   assert((await seTabs()).includes('Text'), 'the Text tab is back')
 
-  // Git: a diff tab of a change, then Git off: no Git tool, the tab falls back, open_diff refused.
+  // Git: a diff tab of a change, then Git off (its dependents named in a confirmation): no Git
+  // tool, the tab falls back, open_diff refused, Kanban off for want of worktrees.
   fs.appendFileSync(WS + '/demo/notes.txt', 'a line for the diff\n')
   r = await mcp('open_diff', { path: 'notes.txt' })
   assert(!r.result.isError, 'open_diff: ' + text(r))
@@ -251,11 +242,21 @@ run(async ({ page }) => {
   await setPlugin('git', false)
   await page.waitForSelector('.rail-btn[data-id=git]', { state: 'detached' })
   await page.waitForSelector('.pane:has-text("The plugin of this tab is disabled")')
+  assert(!(await page.$('.rail-btn[data-id=kanban]')), 'Kanban off with Git')
   r = await mcp('open_diff', { path: 'notes.txt' })
   assert(r.result.isError && text(r).includes('Git plugin is off'), 'open_diff refused: ' + text(r))
+  r = await mcp('kanban_list', {})
+  assert(r.result.isError && text(r).includes('tickets'), 'kanban_list refused: ' + text(r))
+  await palette('settings')
+  await page.waitForSelector('.pick-item.selected:has-text("Settings")')
+  await page.keyboard.press('Enter')
+  await page.click('.settings-nav button:has-text("Plugins")')
+  assert((await page.textContent('[data-plugin=kanban]')).includes('needs worktrees'), 'Kanban says what it lacks')
+  await closeSettings()
   await setPlugin('git', true)
   await page.waitForSelector('.diff-view .diff-line.add:has-text("a line for the diff")')
   await page.waitForSelector('.rail-btn[data-id=git]')
+  await page.waitForSelector('.rail-btn[data-id=kanban]')
 
   // Previews: off, its tool goes and list_previews is refused; on again, both are back.
   assert(!text(await mcp('list_previews', {})).includes('terminal'), 'list_previews answers')
@@ -292,12 +293,12 @@ run(async ({ page }) => {
   await page.waitForSelector(problems)
   assert((await seTabs()).includes('Symbols'), 'the Symbols tab is back')
 
-  // Files and Code are locked: checked and greyed.
+  // Files, Code and Exec are locked: checked and greyed.
   await palette('settings')
   await page.waitForSelector('.pick-item.selected:has-text("Settings")')
   await page.keyboard.press('Enter')
   await page.click('.settings-nav button:has-text("Plugins")')
-  for (const id of ['files', 'code']) {
+  for (const id of ['files', 'code', 'exec']) {
     const box = await page.$(`[data-testid=plugin-${id}]`)
     assert((await box.isChecked()) && (await box.isDisabled()), id + ' locked')
   }
@@ -320,10 +321,7 @@ run(async ({ page }) => {
     await page.keyboard.press('Escape')
     return has
   }
-  assert(await terminalItem(), 'a terminal here with Exec')
-  await setPlugin('exec', false)
-  assert(!(await terminalItem()), 'no terminal here without Exec')
-  await setPlugin('exec', true)
+  assert(await terminalItem(), 'a terminal here (Exec is locked)')
 
   // Kanban: a ticket opened from its tool; off, the tool, the view and kanban_list go; on, back.
   r = await mcp('kanban_create', { title: 'Plugin ticket' })

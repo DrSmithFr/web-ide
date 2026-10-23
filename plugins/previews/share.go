@@ -1,19 +1,36 @@
-package server
+package previews
 
 import (
 	"fmt"
 	"strings"
 
+	"github.com/DrSmithFr/web-ide/plugins/previews/internal/preview"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"github.com/DrSmithFr/web-ide/pod/caps"
 	"github.com/DrSmithFr/web-ide/pod/commands"
+	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 )
 
-// sharePreviewIn resolves the app of share_preview in project (the assistant and the MCP).
-func (s *Server) sharePreviewIn(project string, rt *runtime.Runtime, a assistant.Args) (assistant.ToolResult, error) {
+// previewsCap is the previews capability (caps.Previews) the plugin provides.
+type previewsCap struct {
+	pod plugins.Pod
+	pv  *preview.Manager
+}
+
+func (c previewsCap) List() []caps.PreviewInfo {
+	out := []caps.PreviewInfo{}
+	for _, p := range c.pv.List() {
+		out = append(out, caps.PreviewInfo{Project: p.Project, Title: p.Title, Command: p.Command, AppPort: p.AppPort, URL: p.URL, PublicURL: p.PublicURL})
+	}
+	return out
+}
+
+// Share resolves the app of share_preview in project (the assistant and the MCP).
+func (c previewsCap) Share(project string, rt *runtime.Runtime, a assistant.Args) (assistant.ToolResult, error) {
 	pv := &assistant.Preview{Project: project, Title: strings.TrimSpace(a.Str("title")), Command: strings.TrimSpace(a.Str("command")),
 		Cwd: a.Str("cwd"), Port: a.Num("port"), CommandID: strings.TrimSpace(a.Str("command_id"))}
-	list, err := s.projectCommands(rt)
+	list, err := c.pod.Services().Commands(rt)
 	if err != nil && (pv.CommandID != "" || pv.Command == "") {
 		return assistant.ToolResult{}, err
 	}

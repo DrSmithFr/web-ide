@@ -2,7 +2,6 @@ package server
 
 import (
 	"bufio"
-	"github.com/DrSmithFr/web-ide/plugins/previews"
 	"net"
 	"os"
 	"path/filepath"
@@ -10,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DrSmithFr/web-ide/plugins/previews"
 
 	"github.com/DrSmithFr/web-ide/pod/sshtest"
 )

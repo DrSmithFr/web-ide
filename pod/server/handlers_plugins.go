@@ -4,22 +4,22 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	kbp "github.com/DrSmithFr/web-ide/plugins/kanban"
-	"github.com/DrSmithFr/web-ide/pod/acp"
-	"github.com/DrSmithFr/web-ide/pod/commands"
-	"github.com/DrSmithFr/web-ide/pod/kanban"
 	"net"
+	"net/http"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
+	kbp "github.com/DrSmithFr/web-ide/plugins/kanban"
+	"github.com/DrSmithFr/web-ide/pod/acp"
+	"github.com/DrSmithFr/web-ide/pod/commands"
+	"github.com/DrSmithFr/web-ide/pod/kanban"
+
 	"github.com/DrSmithFr/web-ide/lib/i18n"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/forwards"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"github.com/DrSmithFr/web-ide/pod/plugins/builtin"
-	"github.com/DrSmithFr/web-ide/pod/preview"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 	"github.com/DrSmithFr/web-ide/pod/sshx"
 )
@@ -47,6 +47,8 @@ type pluginSet struct {
 	disabled map[string][]string
 	// provided are the capabilities the plugins gave (Host.Provide), by name; set at registration.
 	provided map[string]any
+	// preview serves a preview asked through the tunnel (Host.HandlePreview: the Previews plugin).
+	preview func(id string) (http.Handler, bool)
 }
 
 // pluginHost is what a plugin registers through.
@@ -309,8 +311,7 @@ func (p podLend) Project(id string) (name, host string, ok bool) {
 
 func (p podLend) Broadcast(event string, data any)     { p.s.broadcast(event, data, nil) }
 func (p podLend) Emit(project, event string, data any) { p.s.emitter(project)(event, data, "") }
-func (p podLend) Forwards() *forwards.Manager          { return p.s.Forwards }
-func (p podLend) Previews() *preview.Manager           { return p.s.Previews }
+func (p podLend) Authorized(r *http.Request) bool      { return p.s.authorized(r) }
 
 type pluginHook struct {
 	plugin string
@@ -324,6 +325,8 @@ func (h pluginHost) OnProjectOpen(f func(rt *runtime.Runtime)) {
 func (h pluginHost) OnWindows(f func(n int)) {
 	h.s.plugins.onWindows = append(h.s.plugins.onWindows, f)
 }
+
+func (h pluginHost) HandlePreview(f func(id string) (http.Handler, bool)) { h.s.plugins.preview = f }
 
 func (h pluginHost) Provide(c string, impl any) {
 	if !slices.Contains(h.m.Provides, c) {
@@ -424,9 +427,6 @@ func (p podLend) CommandsText(rt *runtime.Runtime) (string, int, error) {
 }
 func (p podLend) StartSaved(rt *runtime.Runtime, id string, restart bool) (commands.Command, string, string, error) {
 	return p.s.startSaved(rt, id, restart)
-}
-func (p podLend) SharePreview(project string, rt *runtime.Runtime, a assistant.Args) (assistant.ToolResult, error) {
-	return p.s.sharePreviewIn(project, rt, a)
 }
 
 func (p podLend) Services() *plugins.Services {

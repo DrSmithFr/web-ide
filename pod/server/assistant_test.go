@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/DrSmithFr/web-ide/pod/assistant"
 
 	"github.com/DrSmithFr/web-ide/pod/llm"
 )

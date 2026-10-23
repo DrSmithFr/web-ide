@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/DrSmithFr/web-ide/pod/execx"
 )
 
 func TestLocalSearch(t *testing.T) {
@@ -31,5 +33,17 @@ func TestLocalSearch(t *testing.T) {
 	}
 	if _, err := Compile(Options{Query: "(", Regex: true}); err == nil {
 		t.Fatal("invalid regex accepted")
+	}
+}
+
+// Remote runs grep through a runner: the local one here, the SSH one on a host.
+func TestRemoteSearch(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello over sftp\n"), 0o644)
+	os.MkdirAll(filepath.Join(dir, "node_modules"), 0o755)
+	os.WriteFile(filepath.Join(dir, "node_modules", "b.txt"), []byte("sftp"), 0o644)
+	r, err := Remote(context.Background(), execx.Local{}, dir, Options{Query: "sftp"})
+	if err != nil || len(r.Matches) != 1 || r.Matches[0].Line != 1 {
+		t.Fatalf("remote search = %+v %v", r, err)
 	}
 }

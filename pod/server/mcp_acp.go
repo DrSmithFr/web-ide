@@ -2,8 +2,9 @@ package server
 
 import (
 	"fmt"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"strings"
+
+	"github.com/DrSmithFr/web-ide/pod/assistant"
 
 	"github.com/DrSmithFr/web-ide/pod/acp"
 )

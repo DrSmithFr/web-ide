@@ -10,13 +10,14 @@ import (
 
 // toolNeeds are the tools of the assistant that need a capability of another plugin: the
 // consoles and saved commands need terminal (Exec), the previews previews, the lsp_* tools
-// language (Languages). The server keeps the same check for the tools of its MCP endpoint.
+// language (Languages), search_text search (Search). The server keeps the same check for the tools of its MCP endpoint.
 var toolNeeds = map[string]string{
 	"run_command": "terminal", "list_consoles": "terminal", "read_console": "terminal", "console_input": "terminal",
 	"list_commands": "terminal", "run_saved_command": "terminal",
 	"share_preview": "previews", "list_previews": "previews",
 	"lsp_symbols": "language", "lsp_workspace_symbols": "language", "lsp_definition": "language", "lsp_references": "language",
 	"lsp_hover": "language", "lsp_diagnostics": "language",
+	"search_text": "search",
 }
 
 // needsOf is the capability a tool needs: toolNeeds, and tickets for the kanban tools.

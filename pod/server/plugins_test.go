@@ -8,14 +8,16 @@ import (
 	"strings"
 	"testing"
 
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/coder/websocket"
+
 	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"github.com/DrSmithFr/web-ide/pod/plugins/builtin"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 	"github.com/DrSmithFr/web-ide/pod/sshx"
-	"github.com/coder/websocket"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 // The test plugin hello: its RPC method, its assistant tool (assistant and MCP) and its
@@ -65,29 +67,35 @@ func TestPlugins(t *testing.T) {
 	if e := a.callRawIn("", "plugins.set", map[string]any{"id": "nope", "enabled": false})["error"]; e == nil {
 		t.Fatal("unknown plugin accepted")
 	}
-	if e := a.callRawIn("", "plugins.set", map[string]any{"id": "files", "enabled": false})["error"]; e == nil || !strings.Contains(e.(map[string]any)["message"].(string), "always on") {
-		t.Fatalf("a locked plugin disabled: %v", e)
+	// Exec, Files and Code are locked: the consoles are core, their tools are always there.
+	for _, id := range []string{"exec", "files", "code"} {
+		if e := a.callRawIn("", "plugins.set", map[string]any{"id": id, "enabled": false})["error"]; e == nil || !strings.Contains(e.(map[string]any)["message"].(string), "always on") {
+			t.Fatalf("%s disabled: %v", id, e)
+		}
 	}
-
-	// Exec off: no terminal, so Docker is off too; the consoles and their tools are refused.
 	if r := a.call("console.list", nil); r["error"] != nil {
 		t.Fatalf("console.list: %v", r)
 	}
-	states := a.call("plugins.set", map[string]any{"id": "exec", "enabled": false})["result"].(map[string]any)["plugins"].([]any)
+	if text, failed := m.tool("list_consoles", map[string]any{"cwd": dir}); failed {
+		t.Fatalf("list_consoles with Exec locked: %s", text)
+	}
+
+	// Git off: Kanban requires its worktrees, so it is off too.
+	states := a.call("plugins.set", map[string]any{"id": "git", "enabled": false})["result"].(map[string]any)["plugins"].([]any)
 	for _, st := range states {
 		m := st.(map[string]any)
-		if id := m["manifest"].(map[string]any)["id"]; id == "docker" && (m["enabled"] != false || m["missing"].([]any)[0] != "terminal") {
-			t.Fatalf("docker without terminal: %v", m)
+		if id := m["manifest"].(map[string]any)["id"]; id == "kanban" && (m["enabled"] != false || m["missing"].([]any)[0] != "worktrees") {
+			t.Fatalf("kanban without worktrees: %v", m)
 		}
 	}
-	if e := a.callRawIn("", "console.list", nil)["error"]; e == nil || !strings.Contains(e.(map[string]any)["message"].(string), "disabled") {
-		t.Fatalf("console.list with Exec off: %v", e)
+
+	// Previews off: its tools go with it.
+	a.call("plugins.set", map[string]any{"id": "previews", "enabled": false})
+	if text, failed := m.tool("list_previews", map[string]any{"cwd": dir}); !failed || !strings.Contains(text, "previews") {
+		t.Fatalf("list_previews with Previews off: %s", text)
 	}
-	if text, failed := m.tool("list_consoles", map[string]any{"cwd": dir}); !failed || !strings.Contains(text, "terminal") {
-		t.Fatalf("list_consoles with Exec off: %s", text)
-	}
-	if defs := s.offered(rt, []json.RawMessage{json.RawMessage(`{"type":"function","function":{"name":"read_console"}}`), json.RawMessage(`{"type":"function","function":{"name":"bash"}}`)}); len(defs) != 1 {
-		t.Fatalf("offered with Exec off: %s", defs)
+	if defs := s.offered(rt, []json.RawMessage{json.RawMessage(`{"type":"function","function":{"name":"share_preview"}}`), json.RawMessage(`{"type":"function","function":{"name":"bash"}}`)}); len(defs) != 1 {
+		t.Fatalf("offered with Previews off: %s", defs)
 	}
 }
 

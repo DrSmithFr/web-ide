@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
+	"github.com/DrSmithFr/web-ide/pod/caps"
 	"io"
 	"net/url"
 	"os"
@@ -106,7 +106,7 @@ type docDiagnostics struct {
 }
 
 // Diagnostic is the type of the language capability, so its users need not import this package.
-type Diagnostic = plugins.Diagnostic
+type Diagnostic = caps.Diagnostic
 
 // NewManager: overrides come from .ide/lsp.json ({"php": ["phpactor", "language-server"]}).
 func NewManager(r execx.Runner, root string, local bool, overrides map[string][]string, exists func(string) bool, emit func(string, any)) *Manager {

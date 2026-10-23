@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"github.com/DrSmithFr/web-ide/plugins/previews/internal/preview"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/commands"
 	"github.com/DrSmithFr/web-ide/pod/console"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
-	"github.com/DrSmithFr/web-ide/pod/preview"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 )
 
@@ -57,7 +57,7 @@ func listens(ctx context.Context, dial preview.Dialer, port int) bool {
 // open starts the command of an app (unless its port answers already), waits for its port,
 // then serves it. A saved command (CommandID) runs in its own console, one per command: a
 // console of it still running is the one of the preview.
-func open(ctx context.Context, pod plugins.Pod, sp preview.Spec) (preview.State, error) {
+func open(ctx context.Context, pod plugins.Pod, pv *preview.Manager, sp preview.Spec) (preview.State, error) {
 	openMu.Lock()
 	defer openMu.Unlock()
 	rt, err := pod.Runtime(sp.Project)
@@ -86,7 +86,6 @@ func open(ctx context.Context, pod plugins.Pod, sp preview.Spec) (preview.State,
 			return preview.State{}, i18n.Errorf("the command “%s” has no port", cmd.Name)
 		}
 	}
-	pv := pod.Previews()
 	if st, ok := pv.Find(sp); ok {
 		return st, nil
 	}
