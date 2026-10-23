@@ -149,7 +149,7 @@ func (s *Server) mcpCall(ctx context.Context, m mcpMessage) mcpReply {
 		}
 		// The tools of every plugin: the endpoint serves every project (cwd comes with each call),
 		// a call on a project where its plugin is disabled is refused.
-		for _, p := range s.plugins.tools {
+		for _, p := range s.allPluginTools() {
 			t := mcpTool{props: p.tool.Props, required: p.tool.Required}
 			tools = append(tools, map[string]any{"name": p.tool.Name, "description": p.tool.Description, "inputSchema": t.schema()})
 		}

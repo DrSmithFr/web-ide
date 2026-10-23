@@ -32,6 +32,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/multipod"
 	"github.com/DrSmithFr/web-ide/pod/pair"
 	"github.com/DrSmithFr/web-ide/pod/plugins/builtin"
+	"github.com/DrSmithFr/web-ide/pod/plugins/confine"
 	"github.com/DrSmithFr/web-ide/pod/power"
 	"github.com/DrSmithFr/web-ide/pod/projects"
 	"github.com/DrSmithFr/web-ide/pod/push"
@@ -50,6 +51,12 @@ import (
 var version = "dev"
 
 func main() {
+	// The confined start of an external plugin's backend (pod/plugins/confine): before anything
+	// of the pod runs.
+	if len(os.Args) > 1 && os.Args[1] == "plugin-exec" {
+		confine.Main(os.Args[2:])
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "keeper" {
 		runKeeper(os.Args[2:])
 		return

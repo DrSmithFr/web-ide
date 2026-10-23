@@ -255,6 +255,12 @@ func TestUnsafeManifests(t *testing.T) {
 	if err := ok(func(map[string]any) {}); err != nil {
 		t.Fatal(err)
 	}
+	if err := ok(func(m map[string]any) {
+		m["backend"] = "bin/greet"
+		m["contributes"] = map[string]any{"assistantTools": []string{"greet_hello"}, "toolSchemas": map[string]any{"greet_hello": map[string]any{"description": "Says hello", "properties": map[string]any{}}}}
+	}); err != nil {
+		t.Fatal("a backend and its tool:", err)
+	}
 	for name, mut := range map[string]func(m map[string]any){
 		"unknown permission": func(m map[string]any) { m["permissions"] = []string{"root"} },
 		"built-in id":        func(m map[string]any) { m["id"] = "git" },
@@ -263,6 +269,16 @@ func TestUnsafeManifests(t *testing.T) {
 		"namespaces":         func(m map[string]any) { m["namespaces"] = []string{"fs"} },
 		"other version":      func(m map[string]any) { m["version"] = "1.0.1" },
 		"bad ide":            func(m map[string]any) { m["ide"] = "^x" },
+		"backend out":        func(m map[string]any) { m["backend"] = "../../bin/sh" },
+		"backend deep":       func(m map[string]any) { m["backend"] = "bin/a/b" },
+		"tool no schema": func(m map[string]any) {
+			m["backend"] = "bin/greet"
+			m["contributes"] = map[string]any{"assistantTools": []string{"greet_hello"}}
+		},
+		"tool no backend": func(m map[string]any) {
+			m["contributes"] = map[string]any{"assistantTools": []string{"greet_hello"}, "toolSchemas": map[string]any{"greet_hello": map[string]any{"description": "d"}}}
+		},
+		"mcp tools": func(m map[string]any) { m["contributes"] = map[string]any{"mcpTools": []string{"greet_x"}} },
 	} {
 		if ok(mut) == nil {
 			t.Errorf("%s: refused", name)

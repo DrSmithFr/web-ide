@@ -221,5 +221,18 @@
   "%w: %s is not a file, a folder or a link": "%w: %s no es un archivo, una carpeta ni un enlace",
   "%w: the link %s points out of its folder": "%w: el enlace %s apunta fuera de su carpeta",
   "the plugin %s has no web/index.js": "el plugin %s no tiene web/index.js",
-  "the page module of %s is larger than %d MB": "el módulo de página de %s supera %d MB"
+  "the page module of %s is larger than %d MB": "el módulo de página de %s supera %d MB",
+  "a message to the backend is larger than %d MB": "un mensaje al backend supera %d MB",
+  "plugin %s: an external plugin gives its tools to the assistant and the MCP alike (assistantTools)": "plugin %s: un plugin externo da sus herramientas al asistente y al MCP a la vez (assistantTools)",
+  "plugin %s: its assistant tool %s needs a schema and a backend": "plugin %s: su herramienta de asistente %s necesita un esquema y un backend",
+  "plugin %s: its backend must be an executable of bin/, not %q": "plugin %s: su backend debe ser un ejecutable de bin/, no %q",
+  "%s is not granted to %s": "%s no está concedido a %s",
+  "the archive of %s has no executable %s": "el archivo de %s no tiene el ejecutable %s",
+  "the backend of %s answered %s badly: %v": "el backend de %s respondió mal a %s: %v",
+  "the backend of %s did not start: %v": "el backend de %s no arrancó: %v",
+  "the backend of %s ended three times in a minute: it is off until the project opens again": "el backend de %s terminó tres veces en un minuto: queda apagado hasta que el proyecto se abra de nuevo",
+  "the backend of the plugin did not answer %s in time": "el backend del plugin no respondió a %s a tiempo",
+  "the backend of the plugin ended: %v": "el backend del plugin terminó: %v",
+  "the plugin %s has no backend": "el plugin %s no tiene backend",
+  "this kernel has no Landlock: an external plugin's backend cannot run confined": "este núcleo no tiene Landlock: el backend de un plugin externo no puede ejecutarse confinado"
 }

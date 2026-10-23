@@ -168,6 +168,10 @@ A plugin installed from its own git repository, at a version of the plugin lock;
 A permission of an external plugin accepted by the user (the project's files, network, a core method…); without it the boundary refuses the call.
 _Avoid_: permission (what the manifest asks)
 
+**Confined backend**
+The backend of an external plugin: a process of the pod started through `plugin-exec` under Landlock and seccomp, which reaches only its folder, the system, its data folder, the project and the network as granted, and speaks JSON-RPC over its stdio.
+_Avoid_: sandboxed process, plugin server
+
 **Sandboxed view**
 A view of an external plugin, run in an iframe of opaque origin that speaks to the IDE only through the sandbox API.
 

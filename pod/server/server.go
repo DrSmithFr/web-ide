@@ -949,6 +949,12 @@ func (c *Client) queueFor(group string) *queue {
 
 func (c *Client) dispatch(ctx context.Context, req request, tr *transport) {
 	h, ok := c.srv.handlers[req.Method]
+	if !ok {
+		// An <id>.* method of an external plugin: its backend answers.
+		if eh := c.srv.externalHandler(req.Method); eh != nil {
+			h, ok = eh, true
+		}
+	}
 	var res any
 	var err error
 	sc, scopeErr := c.in(req.Project)

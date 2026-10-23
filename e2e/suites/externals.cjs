@@ -1,15 +1,17 @@
-// External plugins (#128, #129): installed from a git repository (a local one made here, its
-// release archive served by the suite) in Settings > Plugins, with the permissions accepted one
-// by one; used by the project, its tool, tab view and command run in sandboxed frames: no
+// External plugins (#128, #129, #130): installed from a git repository (a local one made here,
+// its release archive served by the suite) in Settings > Plugins, with the permissions accepted
+// one by one; used by the project, its tool, tab view and command run in sandboxed frames: no
 // storage, no network, no page; a method of the core only with its grant; the shortcuts of the
-// IDE work from the frame. Updated to a version asking new permissions (asked again); a
+// IDE work from the frame. Its backend (a Go program built here) runs confined: it answers its
+// frame and emits to it, its assistant tool answers through the MCP, it cannot read the pod's
+// key nor reach the network, it reads the project (files:read), the core refuses it fs.list. Updated to a version asking new permissions (asked again); a
 // version for another IDE refused; removed, then installed again with the grant.
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const http = require('http')
 const { execFileSync } = require('child_process')
-const { run, openProject, assert, WS } = require('../common.cjs')
+const { run, openProject, assert, mcp, WS } = require('../common.cjs')
 
 const lockFile = path.join(WS, '..', 'data', 'plugins.lock')
 const readLock = () => (fs.existsSync(lockFile) ? JSON.parse(fs.readFileSync(lockFile, 'utf8')).plugins : {})
@@ -29,6 +31,12 @@ ide.register({
       try { void parent.document.title; out.parent = 'open' } catch { out.parent = 'blocked' }
       try { await ide.rpc('fs.list', { path: '' }); out.rpc = 'answered' } catch (e) { out.rpc = 'refused: ' + e.message }
       el.innerHTML = '<p id="hello">' + ide.t('Hello from the frame') + '</p><pre id="checks">' + JSON.stringify(out) + '</pre><button id="open">open</button><button id="view">view</button>'
+      el.innerHTML += '<button id="backend">backend</button><button id="probe">probe</button><button id="core">core</button><pre id="answer"></pre><pre id="event"></pre>'
+      const show = (p) => p.then((r) => (el.querySelector('#answer').textContent = typeof r === 'string' ? r : JSON.stringify(r)), (e) => (el.querySelector('#answer').textContent = 'error: ' + e.message))
+      ide.on('greet.said', (d) => (el.querySelector('#event').textContent = d))
+      el.querySelector('#backend').onclick = () => show(ide.rpc('greet.hello'))
+      el.querySelector('#probe').onclick = () => show(ide.rpc('greet.probe', { key: ${JSON.stringify(path.join(WS, '..', 'data', 'device.key'))} }))
+      el.querySelector('#core').onclick = () => show(ide.rpc('greet.core'))
       el.querySelector('#open').onclick = () => ide.openFile('notes.txt')
       el.querySelector('#view').onclick = () => ide.openView('note', { text: 'kept' }, 'Note')
     },
@@ -59,9 +67,15 @@ run(async ({ page, errors }) => {
     tools: [{ id: 'greet', label: 'Greet', icon: 'sparkle', zone: 'right' }],
     tabViews: [{ id: 'note', label: 'Note' }],
     commands: [{ id: 'hello', label: 'Say hello from Greet' }],
+    assistantTools: ['greet_hello'],
+    toolSchemas: { greet_hello: { description: 'Says hello from the backend of Greet', properties: {} } },
   }
+  // Its backend, a static Go program.
+  const goBin = [process.env.GO, path.join(os.homedir(), 'sdk/go/bin/go'), 'go'].find((g) => g && (g === 'go' || fs.existsSync(g)))
+  const backendBin = path.join(tmp, 'greet-backend')
+  execFileSync(goBin, ['build', '-o', backendBin, path.join(__dirname, '..', 'fixtures', 'greet-backend', 'main.go')], { env: { ...process.env, CGO_ENABLED: '0' } })
   const release = (version, extra) => {
-    const manifest = JSON.stringify({ id: 'greet', name: 'Greet', version, apiVersion: 1, assets: base + '/{version}/greet-{arch}.tar.gz', contributes, ...extra }, null, 2)
+    const manifest = JSON.stringify({ id: 'greet', name: 'Greet', version, apiVersion: 1, assets: base + '/{version}/greet-{arch}.tar.gz', backend: 'bin/greet', contributes, ...extra }, null, 2)
     fs.writeFileSync(path.join(repo, 'plugin.json'), manifest)
     git('add', '-A')
     git('commit', '-q', '-m', version)
@@ -71,6 +85,9 @@ run(async ({ page, errors }) => {
     fs.mkdirSync(path.join(dir, 'i18n'), { recursive: true })
     fs.writeFileSync(path.join(dir, 'plugin.json'), manifest)
     fs.writeFileSync(path.join(dir, 'web', 'index.js'), bundle(base))
+    fs.mkdirSync(path.join(dir, 'bin'), { recursive: true })
+    fs.copyFileSync(backendBin, path.join(dir, 'bin', 'greet'))
+    fs.chmodSync(path.join(dir, 'bin', 'greet'), 0o755)
     fs.writeFileSync(path.join(dir, 'i18n', 'fr.json'), JSON.stringify({ 'Hello from the frame': 'Bonjour depuis le cadre' }))
     execFileSync('tar', ['czf', path.join(tmp, version + '.tar.gz'), '-C', dir, '.'])
     assets[version] = fs.readFileSync(path.join(tmp, version + '.tar.gz'))
@@ -128,6 +145,25 @@ run(async ({ page, errors }) => {
   assert(checks.parent === 'blocked', 'no access to the page: ' + JSON.stringify(checks))
   assert(checks.rpc.startsWith('refused') && checks.rpc.includes('fs.list is not granted to Greet'), 'a core method without its grant: ' + checks.rpc)
   assert((await frame(page, 'greet').locator('#hello').textContent()) === 'Hello from the frame', 'its texts')
+
+  // Its backend, confined: it answers its frame and emits to it; it reads the project
+  // (files:read), not the pod's key nor the network; the core refuses it fs.list.
+  const answer = async (button, want) => {
+    await frame(page, 'greet').locator('#' + button).click()
+    await frame(page, 'greet').locator('#answer:not(:empty)').waitFor()
+    const got = await frame(page, 'greet').locator('#answer').textContent()
+    await frame(page, 'greet').locator('#answer').evaluate((e) => (e.textContent = ''))
+    return got
+  }
+  let got = await answer('backend')
+  assert(got === 'Hello from the backend', 'the backend answers its frame: ' + got)
+  await frame(page, 'greet').locator('#event:has-text("said by the backend")').waitFor()
+  got = JSON.parse(await answer('probe'))
+  assert(got.key === 'blocked' && got.net === 'blocked' && got.project === 'ok', 'the backend is confined: ' + JSON.stringify(got))
+  got = await answer('core')
+  assert(got.startsWith('refused') && got.includes('fs.list is not granted to Greet'), 'a core call of the backend without its grant: ' + got)
+  const tool = await mcp('greet_hello', {})
+  assert(!tool.result?.isError && tool.result?.content?.[0]?.text === 'Hello from the tool of the backend', 'its assistant tool through the MCP: ' + JSON.stringify(tool))
 
   // What the sandbox API does: a file opened, a tab view with its state (kept after a reload).
   await frame(page, 'greet').locator('#open').click()

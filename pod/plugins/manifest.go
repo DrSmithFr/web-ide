@@ -38,6 +38,9 @@ type Manifest struct {
 	IDE     string            `json:"ide,omitempty"`
 	Plugins map[string]string `json:"plugins,omitempty"`
 	Assets  string            `json:"assets,omitempty"`
+	// Backend is the executable of its confined backend in its archive (bin/<name>, #130), ""
+	// for none.
+	Backend string `json:"backend,omitempty"`
 }
 
 // Owns tells whether a method or action name (prefix.name) belongs to the plugin.
@@ -54,8 +57,19 @@ type Contributions struct {
 	// each one is registered with its handler (Host.AssistantTool).
 	AssistantTools []string `json:"assistantTools,omitempty"`
 	// MCPTools are the names of the tools it offers to the MCP only (Host.MCPTool).
-	MCPTools []string  `json:"mcpTools,omitempty"`
-	Commands []Command `json:"commands,omitempty"`
+	MCPTools []string `json:"mcpTools,omitempty"`
+	// ToolSchemas describe the assistant tools of an external plugin, by name (a built-in
+	// gives them in Go): run by its backend.
+	ToolSchemas map[string]ToolSchema `json:"toolSchemas,omitempty"`
+	Commands    []Command             `json:"commands,omitempty"`
+}
+
+// ToolSchema is an assistant tool as the model sees it: what it does, its arguments (JSON
+// Schema properties) and those required.
+type ToolSchema struct {
+	Description string         `json:"description"`
+	Properties  map[string]any `json:"properties"`
+	Required    []string       `json:"required,omitempty"`
 }
 
 // toolNames are its tools of the assistant and of the MCP: one namespace.
