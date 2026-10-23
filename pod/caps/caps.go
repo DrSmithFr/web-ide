@@ -2,8 +2,9 @@
 // core (Host.Provide of pod/plugins), reached through Pod.Capability on a project where the
 // provider is enabled. Each one is an interface of this package, so no plugin imports the code
 // of another, and the core reaches a plugin's work only through it (the page side is
-// web/src/plugins/capabilities.ts). It imports the tool kit of the assistant (pod/assistant), never
-// the other way: the console tools of the kit take their own interface (assistant.Terminal).
+// web/src/plugins/capabilities.ts). It imports the tool kit of the assistant (pod/assistant),
+// never the other way. The consoles and the saved commands are not here: they are core
+// (`pod/console`, `pod/commands`, decision 6 of plugins.md).
 package caps
 
 import (

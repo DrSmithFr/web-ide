@@ -42,7 +42,7 @@ flowchart LR
 
 Each part of the map has a README with the map of its own code:
 
-- Pod: [pod/README.md](../../pod/README.md) and [pod/packages.md](../../pod/packages.md): server and protocol, files and processes (keeper, consoles, language servers, databases, Docker), AI (assistant, agents), kanban and git, network and identity (relay, tunnel, cluster).
+- Pod: [pod/README.md](../../pod/README.md) and [pod/packages.md](../../pod/packages.md): server and protocol, files and processes (keeper, consoles, saved commands), AI (assistant, agents), kanban and git, network and identity (relay, tunnel, cluster); the language servers, the databases, Docker, the search, the port forwards and the previews are [built-in plugins](plugins.md).
 - Browser: [web/README.md](../../web/README.md) and [web/src/README.md](../../web/src/README.md).
 - Relay: the `relay` package, in [Network and identity](../../pod/packages.md#network-and-identity).
 - Browser tests: [e2e/README.md](../../e2e/README.md).
@@ -74,7 +74,7 @@ The keeper also relays HTTP requests (`keeper/http.go`): the completions of the 
 | `claude-mod/` | Claude Code mod: ticket and changed files above the prompt, opened in the IDE (`/open`) |
 | `docs/` | User guide, specification, architecture, kanban, doodle and relay designs, pictures (`docs/images`) |
 
-**Target layout** (decided 2026-10-20, milestone *Repository layout*, before the external plugins). Done: one Go module at the root; `pod/` the pod program (no `internal/`: plugins import its packages), `relay/` the relay (still the `web-ide-pod relay` subcommand of one binary), `lib/` the code both share (#132); a root `package.json` (npm workspaces), `web/` the shell of the page, `plugins/<id>/` each built-in plugin in the shape of an external one, `e2e/` the harness and the suites of the core (#133). Next: the business code of each plugin (docker, kanban, llm…) moves into its folder, the dependencies of `runtime` and `server` inverted; later a catalog per plugin (`plugins/<id>/i18n/`).
+**Target layout** (decided 2026-10-20, milestone *Repository layout*, before the external plugins). Done: one Go module at the root; `pod/` the pod program (no `internal/`: plugins import its packages), `relay/` the relay (still the `web-ide-pod relay` subcommand of one binary), `lib/` the code both share (#132); a root `package.json` (npm workspaces), `web/` the shell of the page, `plugins/<id>/` each built-in plugin in the shape of an external one, `e2e/` the harness and the suites of the core (#133); the business code of docker, the databases, the language servers, the search, the port forwards and the previews in their plugin, the core and the plugins reaching it through the capabilities of `pod/caps` (#134, #137). Decided on 2026-10-23: **Explorer, Editor and the consoles stay core and locked** (`pod/console`, `pod/commands`, decision 6 of [plugins.md](plugins.md)). Next: the rest of the business code (kanban, llm…), the dependencies of `runtime` and `server` inverted; later a catalog per plugin (`plugins/<id>/i18n/`).
 
 ## Data on disk
 

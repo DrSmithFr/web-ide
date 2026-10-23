@@ -90,7 +90,7 @@ flowchart LR
 
 ## Files and processes
 
-What the pod does on the machine of a project, local or over SSH: files, processes, terminals, language servers, databases, Docker (the port forwards and previews are the Previews plugin's). `execx` and `fsx` hide the target (`local` or `ssh:<key>`); `keeper` holds the processes outside the pod (see the [architecture](../docs/design/architecture.md#overview)).
+What the pod does on the machine of a project, local or over SSH: files, processes and terminals (`console`, `commands`). The language servers, the databases, Docker, the text search, the port forwards and the previews are their plugins'. `execx` and `fsx` hide the target (`local` or `ssh:<key>`); `keeper` holds the processes outside the pod (see the [architecture](../docs/design/architecture.md#overview)).
 
 ```mermaid
 flowchart LR
@@ -125,15 +125,15 @@ flowchart LR
 - `execx`: Local or SSH processes, PTYs
 - `sshx`: SSH agent, keys, passwords, host keys (TOFU), connection pool
 - `sshtest`: SSH server for tests (in memory; `sshtestd` runs it for the browser tests)
-- `console`: Terminals and commands with scrollback and output offsets; run by the keeper when there is one, adopted again after a restart of the pod; its methods are the Exec plugin's (`plugins/exec`)
+- `console`: Terminals and commands with scrollback and output offsets; run by the keeper when there is one, adopted again after a restart of the pod. The consoles are core (decision 6 of [plugins.md](../docs/design/plugins.md)): the Exec plugin (`plugins/exec`) carries the `console.*` methods and the Console tool, and is locked
 - `keeper`: The keeper: protocol (frames of a length, a JSON header and raw bytes), server (processes known by pid and descriptors, output rings, attachments from an offset, GC of ended processes; HTTP relay of the completions; SSH connections; update by re-exec) and the client of the pod (reconnection, attachments resumed from their offset)
-- The language servers, the database connections and the `docker` command are no longer packages of the pod: each is the `internal/` of its plugin (`plugins/languages`, `plugins/database`, `plugins/docker`), its per-project state a *part* of the runtime (`runtime/parts.go`).
+- The language servers, the database connections, the `docker` command, the text search, the port forwards and the previews are no longer packages of the pod: each is the `internal/` of its plugin (`plugins/languages`, `plugins/database`, `plugins/docker`, `plugins/search`, `plugins/previews`), its per-project state a *part* of the runtime (`runtime/parts.go`) or a manager of the plugin. The consoles and the saved commands stay (`console`, `commands`): the Exec plugin is locked.
 - `clipboard`: History of the texts copied in the IDE, shared by every window
 - `commands`: Saved commands of a project (`.ide/commands.json` of the main project): validation, load and save, `RunSaved` (one console per command, shared by the Exec plugin, the assistant and the previews); run by the server (`commands.run`, `run_saved_command` of the assistant and the MCP, previews of `serve` commands) as tasks tagged with their id (`console.Info.CommandID`), one console per command; the `setup` ones make the setup script of a new worktree (`SetupScript`)
 
 `sshtest` is the in-memory SSH server of the tests; `sshtest/sshtestd` runs it for the `forwards` suite. `commands` runs its commands through `execx`; the text search is the Search plugin's (`plugins/search`), the list of the files of a project the runtime's (`runtime/files.go`).
 
-**Tests**: `go test ./pod/fsx ./pod/execx ./pod/sshx ./pod/console ./pod/keeper ./pod/search ./pod/forwards ./pod/preview ./pod/clipboard ./pod/commands`; e2e: `keeper`, `features`, `commands`, `docker`, `forwards`, `lsp`, `preview`, `popups`.
+**Tests**: `go test ./pod/fsx ./pod/execx ./pod/sshx ./pod/console ./pod/keeper ./pod/clipboard ./pod/commands` and `./plugins/search ./plugins/previews`; e2e: `keeper`, `features`, `commands`, `docker`, `forwards`, `lsp`, `preview`, `popups`.
 
 
 ## AI
