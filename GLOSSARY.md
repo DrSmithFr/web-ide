@@ -154,6 +154,10 @@ A plugin that ships compiled into the IDE, with the same manifest and API as an 
 **Contribution**
 What a plugin adds at one contribution point of the IDE: a tool, a tab view, an assistant tool, a tool of the MCP only, a command, a settings section…
 
+**Catalog**
+The texts of one language, by English text: the core's (`web/src/i18n`, `lib/i18n`), or a plugin's (`plugins/<id>/i18n`, for its page and its pod side), looked in first by the plugin.
+_Avoid_: dictionary, translation file
+
 **External plugin** ([plugins](docs/design/plugins.md#phase-3-external-plugins))
 A plugin installed from its own git repository, at a version of the plugin lock; confined: its views in a sandboxed iframe, its backend under Landlock.
 

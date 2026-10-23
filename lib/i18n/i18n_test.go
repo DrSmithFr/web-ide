@@ -1,6 +1,7 @@
 package i18n
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -46,9 +47,45 @@ func TestTranslate(t *testing.T) {
 	}
 }
 
-// Every message written with New / Errorf / T in the Go code (pod/, relay/, lib/) has a
-// translation in every language.
+// pluginCatalogs are the catalogs of the built-in plugins (plugins/<id>/i18n), read from the
+// repository: by plugin id, then language.
+func pluginCatalogs(t *testing.T) map[string]map[string]map[string]string {
+	t.Helper()
+	out := map[string]map[string]map[string]string{}
+	dirs, _ := filepath.Glob("../../plugins/*/i18n")
+	for _, dir := range dirs {
+		id := filepath.Base(filepath.Dir(dir))
+		out[id] = map[string]map[string]string{}
+		for _, lang := range Languages[1:] {
+			data, err := os.ReadFile(filepath.Join(dir, lang+".json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			c := map[string]string{}
+			if err := json.Unmarshal(data, &c); err != nil {
+				t.Fatalf("%s/%s.json: %v", dir, lang, err)
+			}
+			out[id][lang] = c
+		}
+	}
+	return out
+}
+
+// pluginOf is the built-in plugin of a file of the repository ("" for the core).
+func pluginOf(path string) string {
+	rel, _ := filepath.Rel("../..", path)
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	if len(parts) > 2 && parts[0] == "plugins" {
+		return parts[1]
+	}
+	return ""
+}
+
+// Every message written with New / Errorf / T in the Go code (pod/, relay/, lib/, plugins/)
+// has a translation in every language: in the catalog of its plugin (plugins/<id>/i18n) or the
+// core's.
 func TestCatalogComplete(t *testing.T) {
+	plugins := pluginCatalogs(t)
 	call := regexp.MustCompile(`i18n\.(?:New|Errorf|T\([^,]+,)\s*\(?\s*("(?:[^"\\]|\\.)*")`)
 	missing := 0
 	err := filepath.Walk("../..", func(path string, info os.FileInfo, err error) error {
@@ -69,7 +106,9 @@ func TestCatalogComplete(t *testing.T) {
 				continue
 			}
 			for _, lang := range Languages[1:] {
-				if _, ok := catalogs[lang][key]; !ok {
+				_, core := catalogs[lang][key]
+				_, own := plugins[pluginOf(path)][lang][key]
+				if !core && !own {
 					t.Errorf("%s: missing %s translation of %q", path, lang, key)
 					missing++
 				}
@@ -85,28 +124,41 @@ func TestCatalogComplete(t *testing.T) {
 	}
 }
 
-var verb = regexp.MustCompile(`%[-+# 0-9.]*[a-zA-Z]`)
+var verb = regexp.MustCompile(`%[-+#0-9.]*[a-zA-Z]`) // no space flag: "{n} % du" is text
 
 // The catalogs of the languages have the same keys (no extra, none missing) and a translation
-// keeps the format verbs of its key, in the same number.
+// keeps the format verbs of its key, in the same number: the core's and each plugin's. A key
+// of a plugin is not in the core's (the pod would show the core's text, the page the plugin's).
 func TestCatalogsAgree(t *testing.T) {
 	if Languages[0] != "en" || len(Languages) < 2 {
 		t.Fatalf("Languages: %v", Languages)
 	}
+	agree(t, "lib/i18n", catalogs)
+	for id, c := range pluginCatalogs(t) {
+		agree(t, "plugins/"+id+"/i18n", c)
+		for key := range c[Languages[1]] {
+			if _, ok := catalogs[Languages[1]][key]; ok {
+				t.Errorf("plugins/%s/i18n: %q is in the core catalog too", id, key)
+			}
+		}
+	}
+}
+
+func agree(t *testing.T, where string, cats map[string]map[string]string) {
 	for _, lang := range Languages[1:] {
-		for key, text := range catalogs[lang] {
-			if _, ok := catalogs[Languages[1]][key]; !ok {
-				t.Errorf("%s: %q is not in the %s catalog", lang, key, Languages[1])
+		for key, text := range cats[lang] {
+			if _, ok := cats[Languages[1]][key]; !ok {
+				t.Errorf("%s: %s: %q is not in the %s catalog", where, lang, key, Languages[1])
 			}
 			want := strings.Join(verb.FindAllString(strings.ReplaceAll(key, "%%", ""), -1), " ")
 			got := strings.Join(verb.FindAllString(strings.ReplaceAll(text, "%%", ""), -1), " ")
 			if want != got && sorted(want) != sorted(got) {
-				t.Errorf("%s: verbs of %q: %q", lang, key, text)
+				t.Errorf("%s: %s: verbs of %q: %q", where, lang, key, text)
 			}
 		}
-		for key := range catalogs[Languages[1]] {
-			if _, ok := catalogs[lang][key]; !ok {
-				t.Errorf("%s: missing %q", lang, key)
+		for key := range cats[Languages[1]] {
+			if _, ok := cats[lang][key]; !ok {
+				t.Errorf("%s: %s: missing %q", where, lang, key)
 			}
 		}
 	}

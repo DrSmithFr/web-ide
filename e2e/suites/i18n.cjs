@@ -1,6 +1,6 @@
 // Languages: a French browser gets the French interface; the language setting switches it
 // at once (menus, panels) and is kept by the pod; English is the fallback; Spanish is
-// selectable.
+// selectable. A plugin's texts come from its own catalog.
 const { run, openProject, assert, OUT } = require('../common.cjs')
 
 run(
@@ -10,6 +10,9 @@ run(
     await openProject(page)
     assert((await page.textContent('.menubar .menus')).includes('Fichier'), 'French menus')
     assert(await page.isVisible('.rail-left .rail-btn[title="Explorateur"]'), 'French panel names')
+    // The texts of a plugin come from its own catalog (plugins/files/i18n).
+    await page.waitForSelector('[data-testid=explorer-collapse]')
+    assert((await page.getAttribute('[data-testid=explorer-collapse]', 'title')) === 'Tout replier', 'French texts of a plugin, from its catalog')
 
     // Settings → Language → English: the interface follows without a reload.
     await page.click('.menubar button[title^="Réglages"]')

@@ -17,6 +17,19 @@ const catalogs: Record<Lang, Record<string, string>> = Object.fromEntries(
   languages.map((l) => [l.id, files[`./${l.id}.json`] ?? {}]),
 )
 
+// Each built-in plugin has its own catalogs (plugins/<id>/i18n/<lang>.json, shared with its
+// messages in the pod), merged here at build: the core shows the labels of their manifests
+// before their modules load.
+const pluginFiles = import.meta.glob<Record<string, string>>('../../../plugins/*/i18n/*.json', { eager: true, import: 'default' })
+const pluginCatalogs: Record<string, Record<Lang, Record<string, string>>> = {}
+for (const [path, cat] of Object.entries(pluginFiles)) {
+  const [, id, l] = path.match(/plugins\/([^/]+)\/i18n\/([^/]+)\.json$/)!
+  ;(pluginCatalogs[id] ??= {})[l] = cat
+}
+const pluginsOf: Record<Lang, Record<string, string>> = Object.fromEntries(
+  languages.map((l) => [l.id, Object.assign({}, ...Object.values(pluginCatalogs).map((c) => c[l.id] ?? {}))]),
+)
+
 /** Language of the browser when it is one of ours, else English. */
 export function browserLang(): Lang {
   const l = (navigator.languages?.[0] ?? navigator.language ?? 'en').slice(0, 2).toLowerCase()
@@ -54,8 +67,23 @@ function fill(text: string, params?: Params) {
  */
 export function t(text: string, params?: Params): string {
   const l = lang()
-  const tr = l === 'en' ? undefined : catalogs[l][text]
+  const tr = l === 'en' ? undefined : (catalogs[l][text] ?? pluginsOf[l][text])
   return fill(tr ?? text.slice(text.indexOf('|') + 1), params)
+}
+
+/** t() and tn() of a plugin: its own catalog first, then the core's (the shared texts). */
+export function pluginT(id: string) {
+  const own = pluginCatalogs[id] ?? {}
+  const tp = (text: string, params?: Params): string => {
+    const l = lang()
+    const tr = l === 'en' ? undefined : own[l]?.[text]
+    return tr !== undefined ? fill(tr, params) : t(text, params)
+  }
+  const tnp = (n: number, one: string, other: string, params?: Params): string => {
+    const singular = current().singularBelow2 ? Math.abs(n) < 2 : Math.abs(n) === 1
+    return tp(singular ? one : other, { n, ...params })
+  }
+  return { t: tp, tn: tnp }
 }
 
 const current = () => languages.find((l) => l.id === lang()) ?? languages[0]

@@ -26,7 +26,7 @@ Go is in the `PATH` of the pod: the assistant of the IDE calls `go` directly (a 
 ## Conventions
 
 - Code, comments, docs and commit messages in English.
-- Every text shown to the user goes through `t()` (`web/src/i18n`): the English text is the key, each other language of `languages.json` has a catalog (`fr.json`, `es.json`). Messages sent by the pod use `i18n.Errorf` / `i18n.T` (`lib/i18n`) and its catalogs.
+- Every text shown to the user goes through `t()` (`web/src/i18n`): the English text is the key, each other language of `languages.json` has a catalog (`fr.json`, `es.json`). Messages sent by the pod use `i18n.Errorf` / `i18n.T` (`lib/i18n`) and its catalogs. A text of a built-in plugin only (its page, its manifest, its Go messages) goes to its own catalogs, `plugins/<id>/i18n/<lang>.json`; a text shared with the core stays in the core's.
 - One tested commit per feature: `make test` and the e2e suites touching the change must pass; add e2e assertions for visible features.
 - Match the surrounding code: comment density, naming, small focused files.
 
