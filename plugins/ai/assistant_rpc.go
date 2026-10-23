@@ -42,7 +42,7 @@ func (s *A) runProject(chat *assistant.Chat, root, project string) string {
 	if chat.Ticket.Project == "" && (chat.Ticket.Role == "dev" || chat.Ticket.Role == "correction") {
 		if p, ok := s.Projects.Get(root); ok {
 			owner := chat.Ticket.ID
-			if t, err := s.Kanban.Get(kanban.LocationOf(p), owner); err == nil && t.Parent != 0 {
+			if t, err := s.kb().Kanban.Get(kanban.LocationOf(p), owner); err == nil && t.Parent != 0 {
 				owner = t.Parent
 			}
 			if _, ok := s.Projects.Get(projects.ChildID(root, owner)); ok {

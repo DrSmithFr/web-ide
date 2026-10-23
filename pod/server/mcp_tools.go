@@ -183,7 +183,7 @@ var mcpTools = []mcpTool{
 				return "", err
 			}
 			a.Status = kanban.NormStatus(a.Status)
-			list, err := s.Kanban.List(sc.loc)
+			list, err := s.kb().Kanban.List(sc.loc)
 			if err != nil {
 				return "", err
 			}
@@ -230,7 +230,7 @@ var mcpTools = []mcpTool{
 		description: "Reads a whole ticket: description, notes, plan, goals and test feedback (with their ids), linked files, conversations, branch and worktree.",
 		props:       map[string]any{"id": ticketID},
 		run: ticketTool(func(ctx context.Context, s *Server, sc mcpScope, id int64, _ struct{}) (string, error) {
-			t, err := s.Kanban.Get(sc.loc, id)
+			t, err := s.kb().Kanban.Get(sc.loc, id)
 			if err != nil {
 				return "", err
 			}
@@ -258,7 +258,7 @@ var mcpTools = []mcpTool{
 			Last  int
 			Tools bool
 		}) (string, error) {
-			t, err := s.Kanban.Get(sc.loc, id)
+			t, err := s.kb().Kanban.Get(sc.loc, id)
 			if err != nil {
 				return "", err
 			}
@@ -352,7 +352,7 @@ var mcpTools = []mcpTool{
 			if err != nil {
 				return "", err
 			}
-			id, err := s.Kanban.Create(sc.loc, kanban.Patch{Title: &a.Title, Description: nonEmpty(a.Description), Priority: nonEmpty(a.Priority), AddFiles: a.Files, Parent: a.Parent, DependsOn: a.DependsOn, Milestone: a.Milestone, Objective: a.Objective}, kanban.ByClaude)
+			id, err := s.kb().Kanban.Create(sc.loc, kanban.Patch{Title: &a.Title, Description: nonEmpty(a.Description), Priority: nonEmpty(a.Priority), AddFiles: a.Files, Parent: a.Parent, DependsOn: a.DependsOn, Milestone: a.Milestone, Objective: a.Objective}, kanban.ByClaude)
 			if err != nil {
 				return "", err
 			}
@@ -391,7 +391,7 @@ var mcpTools = []mcpTool{
 				return "", err
 			}
 			p := kanban.Patch{Title: nonEmpty(a.Title), Description: nonEmpty(a.Description), Priority: nonEmpty(a.Priority), TestSummary: nonEmpty(a.TestSummary), AddFiles: a.AddFiles, RemoveFiles: a.RemoveFiles, Parent: a.Parent, DependsOn: a.DependsOn, Size: nonEmpty(a.Size), Complexity: nonEmpty(a.Complexity), Milestone: a.Milestone, Objective: a.Objective}
-			if err := s.Kanban.Update(sc.loc, id, p, kanban.ByClaude); err != nil {
+			if err := s.kb().Kanban.Update(sc.loc, id, p, kanban.ByClaude); err != nil {
 				return "", err
 			}
 			return fmt.Sprintf("Ticket #%d updated.", id), nil
@@ -447,7 +447,7 @@ var mcpTools = []mcpTool{
 			if err := tooLong(a.Text, kanban.MaxNote, "Keep only what is worth remembering, in a few lines; details belong in the description (kanban_update) or the plan."); err != nil {
 				return "", err
 			}
-			if err := s.Kanban.AddNote(sc.loc, id, strings.TrimSpace(a.Text), kanban.ByClaude, ""); err != nil {
+			if err := s.kb().Kanban.AddNote(sc.loc, id, strings.TrimSpace(a.Text), kanban.ByClaude, ""); err != nil {
 				return "", err
 			}
 			return "Note added.", nil
@@ -484,13 +484,13 @@ var mcpTools = []mcpTool{
 			if a.Complexity == "" {
 				return "", fmt.Errorf("complexity is required: low, medium or high")
 			}
-			if err := s.Kanban.Update(sc.loc, id, kanban.Patch{Size: &a.Size, Complexity: &a.Complexity, PlanSize: true}, kanban.ByClaude); err != nil {
+			if err := s.kb().Kanban.Update(sc.loc, id, kanban.Patch{Size: &a.Size, Complexity: &a.Complexity, PlanSize: true}, kanban.ByClaude); err != nil {
 				return "", err
 			}
-			if err := s.Kanban.SetPlan(sc.loc, id, a.Plan, a.Goals, kanban.ByClaude); err != nil {
+			if err := s.kb().Kanban.SetPlan(sc.loc, id, a.Plan, a.Goals, kanban.ByClaude); err != nil {
 				return "", err
 			}
-			t, err := s.Kanban.Get(sc.loc, id)
+			t, err := s.kb().Kanban.Get(sc.loc, id)
 			if err != nil {
 				return "", err
 			}
@@ -523,7 +523,7 @@ var mcpTools = []mcpTool{
 				op = kanban.GoalOp{Op: "add", Text: a.Title, Description: a.Description, Source: "plan"}
 			case "check", "uncheck":
 			case "edit":
-				if err := s.Kanban.GoalEdit(sc.loc, id, a.Goal, a.Title, a.Description); err != nil {
+				if err := s.kb().Kanban.GoalEdit(sc.loc, id, a.Goal, a.Title, a.Description); err != nil {
 					return "", err
 				}
 				return fmt.Sprintf("Goal %d edited.", a.Goal), nil
@@ -532,10 +532,10 @@ var mcpTools = []mcpTool{
 			default:
 				return "", fmt.Errorf("unknown action: %s", a.Action)
 			}
-			if err := s.Kanban.Goal(sc.loc, id, op); err != nil {
+			if err := s.kb().Kanban.Goal(sc.loc, id, op); err != nil {
 				return "", err
 			}
-			t, err := s.Kanban.Get(sc.loc, id)
+			t, err := s.kb().Kanban.Get(sc.loc, id)
 			if err != nil {
 				return "", err
 			}
@@ -568,17 +568,17 @@ var mcpTools = []mcpTool{
 				if a.Complexity == "" {
 					return "", fmt.Errorf("complexity is required: low, medium or high")
 				}
-				fid, err := s.Kanban.Feedback(sc.loc, id, kanban.FeedbackOp{Op: "add", Kind: a.Kind, Text: a.Text, Complexity: a.Complexity}, kanban.ByClaude)
+				fid, err := s.kb().Kanban.Feedback(sc.loc, id, kanban.FeedbackOp{Op: "add", Kind: a.Kind, Text: a.Text, Complexity: a.Complexity}, kanban.ByClaude)
 				if err != nil {
 					return "", err
 				}
-				s.notifyFeedback(sc.loc, id, a.Text)
+				s.kb().NotifyFeedback(sc.loc, id, a.Text)
 				return fmt.Sprintf("Feedback %d added to ticket #%d.", fid, id), nil
 			}
 			if a.Action != "done" && a.Action != "reopen" {
 				return "", fmt.Errorf("unknown action: %s", a.Action)
 			}
-			if _, err := s.Kanban.Feedback(sc.loc, id, kanban.FeedbackOp{Op: "check", ID: a.Feedback, Done: a.Action == "done"}, kanban.ByClaude); err != nil {
+			if _, err := s.kb().Kanban.Feedback(sc.loc, id, kanban.FeedbackOp{Op: "check", ID: a.Feedback, Done: a.Action == "done"}, kanban.ByClaude); err != nil {
 				return "", err
 			}
 			return fmt.Sprintf("Feedback %d marked %s.", a.Feedback, map[string]string{"done": "done", "reopen": "open"}[a.Action]), nil
@@ -602,17 +602,17 @@ var mcpTools = []mcpTool{
 			if strings.TrimSpace(a.TestSummary) == "" {
 				return "", fmt.Errorf(`test_summary is required to move to "To test"`)
 			}
-			t, err := s.Kanban.Get(sc.loc, id)
+			t, err := s.kb().Kanban.Get(sc.loc, id)
 			if err != nil {
 				return "", err
 			}
 			if !kanban.CanMove(t.Status, a.Status, kanban.ByClaude) {
 				return "", fmt.Errorf("you cannot move the ticket from %q to %q", kanban.StatusNames[t.Status], kanban.StatusNames[a.Status])
 			}
-			if err := s.Kanban.Update(sc.loc, id, kanban.Patch{TestSummary: &a.TestSummary}, kanban.ByClaude); err != nil {
+			if err := s.kb().Kanban.Update(sc.loc, id, kanban.Patch{TestSummary: &a.TestSummary}, kanban.ByClaude); err != nil {
 				return "", err
 			}
-			if err := s.Kanban.Move(sc.loc, id, a.Status, kanban.ByClaude, a.Comment); err != nil {
+			if err := s.kb().Kanban.Move(sc.loc, id, a.Status, kanban.ByClaude, a.Comment); err != nil {
 				return "", err
 			}
 			return fmt.Sprintf("Ticket #%d moved to %q.", id, kanban.StatusNames[a.Status]), nil

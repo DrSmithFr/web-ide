@@ -34,7 +34,7 @@ func (s *A) kanbanGit(r *assistantRun) kbp.GitCtx {
 
 // ticketPrompt is the ticket part of the system prompt of a conversation linked to a ticket.
 func (s *A) ticketPrompt(r *assistantRun, link *assistant.TicketLink) string {
-	t, err := s.Kanban.Get(kanbanLocOf(r.loc), link.ID)
+	t, err := s.kb().Kanban.Get(kanbanLocOf(r.loc), link.ID)
 	if err != nil {
 		return fmt.Sprintf("# Linked ticket\nTicket #%d cannot be found (%s).", link.ID, err)
 	}
@@ -81,7 +81,7 @@ func links(a assistant.Args, p *kanban.Patch) {
 // doodles of the user (the page stores the PNG of a doodle when it sends it) and the pages
 // drawn by the model.
 func (s *A) attachDoodles(r *assistantRun, id int64) int {
-	t, err := s.Kanban.Get(kanbanLocOf(r.loc), id)
+	t, err := s.kb().Kanban.Get(kanbanLocOf(r.loc), id)
 	if err != nil {
 		return 0
 	}
@@ -113,7 +113,7 @@ func (s *A) attachDoodles(r *assistantRun, id int64) int {
 		if err != nil {
 			continue
 		}
-		if _, err := s.Kanban.AddAttachment(kanbanLocOf(r.loc), id, name, "image/png", data); err == nil {
+		if _, err := s.kb().Kanban.AddAttachment(kanbanLocOf(r.loc), id, name, "image/png", data); err == nil {
 			added++
 		}
 	}
@@ -144,7 +144,7 @@ func (s *A) kanbanCall(r *assistantRun, name string, a assistant.Args, mode stri
 	changed := func(id int64) { s.kb().Emit(r.root, id) }
 	switch name {
 	case "kanban_list":
-		list, err := s.Kanban.List(loc)
+		list, err := s.kb().Kanban.List(loc)
 		if err != nil {
 			return assistant.ToolResult{}, err
 		}
@@ -181,7 +181,7 @@ func (s *A) kanbanCall(r *assistantRun, name string, a assistant.Args, mode stri
 		}
 		return assistant.OK(strings.Join(lines, "\n"), assistant.Tn(len(lines), "{n} ticket", "{n} tickets", nil)), nil
 	case "kanban_get":
-		t, err := s.Kanban.Get(loc, int64(a.Num("id")))
+		t, err := s.kb().Kanban.Get(loc, int64(a.Num("id")))
 		if err != nil {
 			return assistant.ToolResult{}, err
 		}
@@ -199,7 +199,7 @@ func (s *A) kanbanCall(r *assistantRun, name string, a assistant.Args, mode stri
 		}
 		p := kanban.Patch{Title: &title, Description: a.OptStr("description"), Priority: a.OptStr("priority"), AddFiles: a.Strs("files")}
 		links(a, &p)
-		id, err := s.Kanban.Create(loc, p, kanban.ByModel)
+		id, err := s.kb().Kanban.Create(loc, p, kanban.ByModel)
 		if err != nil {
 			return assistant.ToolResult{}, err
 		}
@@ -217,7 +217,7 @@ func (s *A) kanbanCall(r *assistantRun, name string, a assistant.Args, mode stri
 			s.publish(r, -1)
 			return assistant.OK(done+" This conversation is now linked to it: kanban_update and kanban_add_note refine it.", sum), nil
 		}
-		_ = s.Kanban.LinkChat(loc, id, r.chat.ID, "briefing", r.chat.Title)
+		_ = s.kb().Kanban.LinkChat(loc, id, r.chat.ID, "briefing", r.chat.Title)
 		return assistant.OK(fmt.Sprintf("%s It lists this conversation as its briefing; this conversation stays linked to ticket #%d.", done, r.chat.Ticket.ID), sum), nil
 	}
 	r.mu.Lock()
@@ -253,7 +253,7 @@ func (s *A) kanbanCall(r *assistantRun, name string, a assistant.Args, mode stri
 		p := kanban.Patch{Title: a.OptStr("title"), Description: a.OptStr("description"), Priority: a.OptStr("priority"), TestSummary: a.OptStr("test_summary"),
 			Size: a.OptStr("size"), Complexity: a.OptStr("complexity"), AddFiles: a.Strs("add_files"), RemoveFiles: a.Strs("remove_files")}
 		links(a, &p)
-		if err := s.Kanban.Update(loc, id, p, kanban.ByModel); err != nil {
+		if err := s.kb().Kanban.Update(loc, id, p, kanban.ByModel); err != nil {
 			return assistant.ToolResult{}, err
 		}
 		return assistant.OK(fmt.Sprintf("Ticket #%d updated.%s", id, doodlesNote(s.attachDoodles(r, id))), assistant.T("#{id} updated", map[string]any{"id": id})), nil
@@ -263,7 +263,7 @@ func (s *A) kanbanCall(r *assistantRun, name string, a assistant.Args, mode stri
 			return assistant.ToolResult{Content: fmt.Sprintf("Error: note too long (%d characters, %d max). Keep only what is worth remembering, in a few lines; the details belong in the description (kanban_update) or the plan.", n, assistant.MaxNote),
 				Summary: assistant.T("note too long", nil).Raw(), Status: "error"}, nil
 		}
-		if err := s.Kanban.AddNote(loc, id, text, kanban.ByModel, chatID); err != nil {
+		if err := s.kb().Kanban.AddNote(loc, id, text, kanban.ByModel, chatID); err != nil {
 			return assistant.ToolResult{}, err
 		}
 		return assistant.OK("Note added.", assistant.T("note added", nil)), nil
@@ -288,13 +288,13 @@ func (s *A) kanbanCall(r *assistantRun, name string, a assistant.Args, mode stri
 		if complexity == "" {
 			return assistant.ToolResult{}, assistant.Usagef("complexity is required: low, medium or high")
 		}
-		if err := s.Kanban.Update(loc, id, kanban.Patch{Size: &size, Complexity: &complexity, PlanSize: true}, kanban.ByModel); err != nil {
+		if err := s.kb().Kanban.Update(loc, id, kanban.Patch{Size: &size, Complexity: &complexity, PlanSize: true}, kanban.ByModel); err != nil {
 			return assistant.ToolResult{}, err
 		}
-		if err := s.Kanban.SetPlan(loc, id, plan, kept, kanban.ByModel); err != nil {
+		if err := s.kb().Kanban.SetPlan(loc, id, plan, kept, kanban.ByModel); err != nil {
 			return assistant.ToolResult{}, err
 		}
-		t, err := s.Kanban.Get(loc, id)
+		t, err := s.kb().Kanban.Get(loc, id)
 		if err != nil {
 			return assistant.ToolResult{}, err
 		}
@@ -314,10 +314,10 @@ func (s *A) kanbanCall(r *assistantRun, name string, a assistant.Args, mode stri
 			if title == "" {
 				title = a.Str("text")
 			}
-			if err := s.Kanban.Goal(loc, id, kanban.GoalOp{Op: "add", Text: title, Description: a.Str("description"), Source: "plan"}); err != nil {
+			if err := s.kb().Kanban.Goal(loc, id, kanban.GoalOp{Op: "add", Text: title, Description: a.Str("description"), Source: "plan"}); err != nil {
 				return assistant.ToolResult{}, err
 			}
-			t, _ := s.Kanban.Get(loc, id)
+			t, _ := s.kb().Kanban.Get(loc, id)
 			gid := int64(0)
 			if t != nil && len(t.GoalList) > 0 {
 				gid = t.GoalList[len(t.GoalList)-1].ID
@@ -325,10 +325,10 @@ func (s *A) kanbanCall(r *assistantRun, name string, a assistant.Args, mode stri
 			return assistant.OK(fmt.Sprintf("Goal added (id %d).", gid), assistant.T("goal added", nil)), nil
 		case "check", "uncheck":
 			gid := int64(a.Num("id"))
-			if err := s.Kanban.Goal(loc, id, kanban.GoalOp{Op: "check", ID: gid, Done: action == "check"}); err != nil {
+			if err := s.kb().Kanban.Goal(loc, id, kanban.GoalOp{Op: "check", ID: gid, Done: action == "check"}); err != nil {
 				return assistant.ToolResult{}, err
 			}
-			t, err := s.Kanban.Get(loc, id)
+			t, err := s.kb().Kanban.Get(loc, id)
 			if err != nil {
 				return assistant.ToolResult{}, err
 			}
@@ -347,12 +347,12 @@ func (s *A) kanbanCall(r *assistantRun, name string, a assistant.Args, mode stri
 			}
 			return assistant.OKPlain(fmt.Sprintf("Goal %s: %s. %d goal(s) left.", word, text, left), mark+" "+text), nil
 		case "edit":
-			if err := s.Kanban.GoalEdit(loc, id, int64(a.Num("id")), a.Str("title"), a.Str("description")); err != nil {
+			if err := s.kb().Kanban.GoalEdit(loc, id, int64(a.Num("id")), a.Str("title"), a.Str("description")); err != nil {
 				return assistant.ToolResult{}, err
 			}
 			return assistant.OK("Goal edited.", assistant.T("goal edited", nil)), nil
 		case "delete":
-			if err := s.Kanban.Goal(loc, id, kanban.GoalOp{Op: "delete", ID: int64(a.Num("id"))}); err != nil {
+			if err := s.kb().Kanban.Goal(loc, id, kanban.GoalOp{Op: "delete", ID: int64(a.Num("id"))}); err != nil {
 				return assistant.ToolResult{}, err
 			}
 			return assistant.OK("Goal deleted.", assistant.T("goal deleted", nil)), nil
@@ -365,21 +365,21 @@ func (s *A) kanbanCall(r *assistantRun, name string, a assistant.Args, mode stri
 			if a.Str("complexity") == "" {
 				return assistant.ToolResult{}, assistant.Usagef("complexity is required: low, medium or high")
 			}
-			fid, err := s.Kanban.Feedback(loc, id, kanban.FeedbackOp{Op: "add", Kind: a.Str("kind"), Text: a.Str("text"), Complexity: a.Str("complexity"), ChatID: chatID}, kanban.ByModel)
+			fid, err := s.kb().Kanban.Feedback(loc, id, kanban.FeedbackOp{Op: "add", Kind: a.Str("kind"), Text: a.Str("text"), Complexity: a.Str("complexity"), ChatID: chatID}, kanban.ByModel)
 			if err != nil {
 				return assistant.ToolResult{}, err
 			}
-			s.pod.NotifyFeedback(loc, id, a.Str("text"))
+			s.kb().NotifyFeedback(loc, id, a.Str("text"))
 			return assistant.OK(fmt.Sprintf("Feedback added (id %d).", fid), assistant.T("feedback added", nil)), nil
 		}
 		if action != "done" && action != "reopen" {
 			return assistant.ToolResult{}, assistant.Usagef("unknown action: %s", action)
 		}
 		fid := int64(a.Num("id"))
-		if _, err := s.Kanban.Feedback(loc, id, kanban.FeedbackOp{Op: "check", ID: fid, Done: action == "done"}, kanban.ByModel); err != nil {
+		if _, err := s.kb().Kanban.Feedback(loc, id, kanban.FeedbackOp{Op: "check", ID: fid, Done: action == "done"}, kanban.ByModel); err != nil {
 			return assistant.ToolResult{}, err
 		}
-		t, err := s.Kanban.Get(loc, id)
+		t, err := s.kb().Kanban.Get(loc, id)
 		if err != nil {
 			return assistant.ToolResult{}, err
 		}
@@ -405,14 +405,14 @@ func (s *A) kanbanCall(r *assistantRun, name string, a assistant.Args, mode stri
 			if summary == "" {
 				return assistant.ToolResult{}, failf(`test_summary is required to move to "To test"`)
 			}
-			if err := s.Kanban.Update(loc, id, kanban.Patch{TestSummary: &summary}, kanban.ByModel); err != nil {
+			if err := s.kb().Kanban.Update(loc, id, kanban.Patch{TestSummary: &summary}, kanban.ByModel); err != nil {
 				return assistant.ToolResult{}, err
 			}
 		}
-		if err := s.Kanban.Move(loc, id, status, kanban.ByModel, a.Str("comment")); err != nil {
+		if err := s.kb().Kanban.Move(loc, id, status, kanban.ByModel, a.Str("comment")); err != nil {
 			return assistant.ToolResult{}, err
 		}
-		t, err := s.Kanban.Get(loc, id)
+		t, err := s.kb().Kanban.Get(loc, id)
 		if err != nil {
 			return assistant.ToolResult{}, err
 		}
@@ -435,7 +435,7 @@ func (s *A) assistantMilestone(r *assistantRun, loc kanban.Location, a assistant
 	switch args.Action {
 	case "list", "get", "create":
 	default:
-		if !s.Kanban.MilestoneLinked(loc, args.ID, chatID) {
+		if !s.kb().Kanban.MilestoneLinked(loc, args.ID, chatID) {
 			return assistant.ToolResult{}, failf("this conversation is not linked to milestone %d: only list, get and create are available on it", args.ID)
 		}
 	}
@@ -444,7 +444,7 @@ func (s *A) assistantMilestone(r *assistantRun, loc kanban.Location, a assistant
 		return assistant.ToolResult{}, err
 	}
 	if created != 0 && mode == assistant.Briefing {
-		if err := s.Kanban.LinkMilestoneChat(loc, created, chatID, "briefing", chatTitle); err == nil {
+		if err := s.kb().Kanban.LinkMilestoneChat(loc, created, chatID, "briefing", chatTitle); err == nil {
 			out += " This conversation is linked to it: it can change it."
 		}
 	}

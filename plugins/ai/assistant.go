@@ -113,7 +113,7 @@ func (s *A) saveChat(loc llm.ChatLocation, c *assistant.Chat) error {
 		return err
 	}
 	if c.Ticket != nil {
-		_ = s.Kanban.LinkChat(kanbanLocOf(loc), c.Ticket.ID, c.ID, c.Ticket.Role, c.Title)
+		_ = s.kb().Kanban.LinkChat(kanbanLocOf(loc), c.Ticket.ID, c.ID, c.Ticket.Role, c.Title)
 	}
 	return nil
 }

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	kbp "github.com/DrSmithFr/web-ide/plugins/kanban"
-	"github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
 	"github.com/DrSmithFr/web-ide/pod/acp"
 	"github.com/DrSmithFr/web-ide/pod/commands"
 
@@ -415,12 +414,7 @@ func (p podLend) RunAssistantTool(ctx context.Context, rt *runtime.Runtime, name
 	return res, true, err
 }
 
-func (p podLend) Notify(asks bool, root, chatID, title string) {
-	p.s.notifyAssistant(asks, root, chatID, title)
-}
-func (p podLend) NotifyFeedback(loc kanban.Location, id int64, text string) {
-	p.s.notifyFeedback(loc, id, text)
-}
+func (p podLend) Notify(n plugins.Note)                             { go p.s.notify(n) }
 func (p podLend) NoteAsks(root string, c *assistant.Chat, from int) { p.s.noteAsks(root, c, from) }
 func (p podLend) CommandsText(rt *runtime.Runtime) (string, int, error) {
 	return p.s.commandsText(rt)
@@ -431,7 +425,7 @@ func (p podLend) StartSaved(rt *runtime.Runtime, id string, restart bool) (comma
 
 func (p podLend) Services() *plugins.Services {
 	s := p.s
-	return &plugins.Services{Store: s.Store, Projects: s.Projects, Cfg: s.Cfg, Keeper: s.Keeper, LLM: s.LLM, Desks: s.Desks, Kanban: s.Kanban,
+	return &plugins.Services{Store: s.Store, Projects: s.Projects, Cfg: s.Cfg, Keeper: s.Keeper, LLM: s.LLM, Desks: s.Desks,
 		Token: s.Token, MCPBase: s.MCPBase, Commands: s.projectCommands, ChatLoc: s.chatLoc, AgentsMCP: s.agentsMCP, Models: s.Models}
 }
 

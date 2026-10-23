@@ -1,8 +1,8 @@
 // Package kanban is the Kanban plugin: the tickets of a project, their lineages, milestones and
 // objectives, the git workflow of a ticket (worktree, diff, merge) and the dev sessions of the
-// agents (docs/design/kanban.md). The tickets are kept by its package kanban/; its manager is the
-// pod's, lent to the plugin, since the assistant and the push notifications read it too. The
-// plugin provides tickets and requires terminal (setup commands) and worktrees (Git).
+// agents (docs/design/kanban.md). The tickets are kept by its package kanban/, whose manager
+// the plugin makes and closes; the AI reads it through the plugin. The plugin provides tickets
+// and requires terminal (setup commands) and worktrees (Git).
 package kanban
 
 import (
@@ -10,6 +10,7 @@ import (
 	_ "embed"
 	"encoding/json"
 
+	kb "github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 )
@@ -20,9 +21,11 @@ var manifest []byte
 // K is the plugin: its methods run with the services the pod lends it.
 type K struct {
 	*plugins.Services
-	m    plugins.Manifest
-	pod  plugins.Pod
-	host plugins.Host
+	// Kanban keeps the tickets of every project (one base each), for the pod's life.
+	Kanban *kb.Manager
+	m      plugins.Manifest
+	pod    plugins.Pod
+	host   plugins.Host
 }
 
 func New() *K {
@@ -38,6 +41,9 @@ func (s *K) Manifest() plugins.Manifest { return s.m }
 func (s *K) Register(h plugins.Host) {
 	s.host, s.pod = h, h.Pod()
 	s.Services = s.pod.Services()
+	s.Kanban = kb.NewManager(s.Store)
+	h.OnStop(s.Kanban.Close)
+	h.OnProjectOpen(func(rt *runtime.Runtime) { _, _ = s.projectCommands(rt) })
 	s.registerKanban()
 	s.registerKanbanGit()
 	s.registerKanbanAgent()

@@ -27,7 +27,7 @@ type linkedChat struct {
 }
 
 func (s *Server) linkedChat(sc mcpScope, id int64, chatID string) (linkedChat, error) {
-	t, err := s.Kanban.Get(sc.loc, id)
+	t, err := s.kb().Kanban.Get(sc.loc, id)
 	if err != nil {
 		return linkedChat{}, err
 	}
@@ -59,7 +59,7 @@ func (s *Server) ticketChatProject(sc mcpScope, t *kanban.Ticket, chatID string)
 	}
 	wt := t.Worktree
 	if wt == "" && t.Parent != 0 {
-		if p, err := s.Kanban.Get(sc.loc, t.Parent); err == nil {
+		if p, err := s.kb().Kanban.Get(sc.loc, t.Parent); err == nil {
 			wt = p.Worktree
 		}
 	}

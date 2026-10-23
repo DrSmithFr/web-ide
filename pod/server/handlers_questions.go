@@ -12,6 +12,7 @@ import (
 	"github.com/DrSmithFr/web-ide/lib/i18n"
 	"github.com/DrSmithFr/web-ide/pod/acp"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"github.com/DrSmithFr/web-ide/pod/push"
 )
 
@@ -148,8 +149,8 @@ func (s *Server) questionsChanged(projectID, asked string) {
 // notifyQuestion: an agent asks the user (an ACP session, an MCP client).
 func (s *Server) notifyQuestion(root, who string) {
 	name := s.projectName(root)
-	go s.notify(pushNote{kind: push.Asks, path: "/project/" + url.PathEscape(root) + "?questions", tag: "questions-" + root, urgency: "high",
-		text: func(lang string) (string, string) { return i18n.T(lang, "The agent needs you"), name + " · " + who }})
+	go s.notify(plugins.Note{Kind: push.Asks, Path: "/project/" + url.PathEscape(root) + "?questions", Tag: "questions-" + root, Urgency: "high",
+		Text: func(lang string) (string, string) { return i18n.T(lang, "The agent needs you"), name + " · " + who }})
 }
 
 // noteAsks: a conversation of the assistant was saved; its questions changed when it asks

@@ -579,7 +579,7 @@ func (s *K) ignoreWorktrees(root *projects.Project, rt *runtime.Runtime) error {
 
 // setupScript is what sets a new worktree of the project of rt up: its setup commands.
 func (s *K) setupScript(rt *runtime.Runtime) (string, error) {
-	list, err := s.Commands(rt)
+	list, err := s.projectCommands(rt)
 	if err != nil {
 		return "", err
 	}

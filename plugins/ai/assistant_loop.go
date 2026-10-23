@@ -461,7 +461,7 @@ func (s *A) loop(r *assistantRun) {
 		// A turn of a root conversation that ends by itself is a push notification: the assistant
 		// finished, or asks the user (a question, a plan).
 		if parent == "" && !again && r.ctx.Err() == nil {
-			s.pod.Notify(waitsForUser(r.chat), r.root, r.id, r.chat.Title)
+			s.notifyChat(waitsForUser(r.chat), r.root, r.id, r.chat.Title)
 		}
 		from := -1
 		if again && r.chat.Agent != nil {
