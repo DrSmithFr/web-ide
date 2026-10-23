@@ -1,4 +1,4 @@
-package assistant
+package engine
 
 import (
 	"regexp"
@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/pod/llm"
+	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
 )
 
 // DefaultTemplates are the templates of the modes when the user wrote none.

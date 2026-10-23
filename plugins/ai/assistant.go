@@ -8,8 +8,9 @@ import (
 	"time"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
+	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/llm"
 )
 
 // The assistant runs in the pod (docs/design/architecture.md): a conversation goes on
@@ -29,7 +30,7 @@ type assistantRun struct {
 	cancel  context.CancelFunc
 
 	mu      sync.Mutex
-	chat    *assistant.Chat
+	chat    *engine.Chat
 	state   string // queued | running | waiting_user | compacting
 	ahead   int    // conversations before this one for the model server (queued)
 	approve chan bool
@@ -37,9 +38,9 @@ type assistantRun struct {
 	done bool
 	// A run taken back after a restart of the pod (assistant_resume.go): the completion to read
 	// again, the tool calls to end first, the command of one of them to follow.
-	resumeStream *assistant.Running
-	resumeCalls  []assistant.ToolCall
-	follow       *assistant.Running
+	resumeStream *engine.Running
+	resumeCalls  []engine.ToolCall
+	follow       *engine.Running
 }
 
 func contextWithCancel() (context.Context, context.CancelFunc) {
@@ -69,13 +70,13 @@ func (s *A) assistantRuntime(project string) (*runtimeRef, error) {
 }
 
 // loadChat reads a conversation of a location.
-func (s *A) loadChat(loc llm.ChatLocation, id string) (*assistant.Chat, error) {
-	return assistant.LoadChat(s.LLM, loc, id)
+func (s *A) loadChat(loc llm.ChatLocation, id string) (*engine.Chat, error) {
+	return engine.LoadChat(s.LLM, loc, id)
 }
 
 // saveChat writes a conversation (its title from its first message when it has none) and
 // lists it in its ticket.
-func (s *A) saveChat(loc llm.ChatLocation, c *assistant.Chat) error {
+func (s *A) saveChat(loc llm.ChatLocation, c *engine.Chat) error {
 	c.Updated = time.Now().UnixMilli()
 	if c.Created == 0 {
 		c.Created = c.Updated
@@ -121,33 +122,33 @@ func (s *A) saveChat(loc llm.ChatLocation, c *assistant.Chat) error {
 // update is what the windows receive about a conversation: its state, its fields, and its
 // messages from an index (all of them with from 0, none with from -1).
 type assistantUpdate struct {
-	ID        string                    `json:"id"`
-	State     string                    `json:"state"`
-	Ahead     int                       `json:"ahead,omitempty"`
-	Stream    string                    `json:"stream,omitempty"`
-	Title     string                    `json:"title"`
-	Mode      string                    `json:"mode,omitempty"`
-	Ticket    *assistant.TicketLink     `json:"ticket,omitempty"`
-	Queue     []assistant.QueuedMessage `json:"queue"`
-	Approval  *assistant.Approval       `json:"approval,omitempty"`
-	ResetAt   int                       `json:"resetAt,omitempty"`
-	Nested    []assistant.NestedFile    `json:"nested,omitempty"`
-	Server    string                    `json:"server"`
-	Model     string                    `json:"model"`
-	Parent    string                    `json:"parent,omitempty"`
-	Agent     *assistant.SubAgent       `json:"agent,omitempty"`
-	Children  []string                  `json:"children,omitempty"`
-	Dismissed bool                      `json:"dismissed,omitempty"`
-	From      int                       `json:"from"`
-	Count     int                       `json:"count"`
-	Messages  []*assistant.Message      `json:"messages,omitempty"`
+	ID        string                 `json:"id"`
+	State     string                 `json:"state"`
+	Ahead     int                    `json:"ahead,omitempty"`
+	Stream    string                 `json:"stream,omitempty"`
+	Title     string                 `json:"title"`
+	Mode      string                 `json:"mode,omitempty"`
+	Ticket    *engine.TicketLink     `json:"ticket,omitempty"`
+	Queue     []engine.QueuedMessage `json:"queue"`
+	Approval  *engine.Approval       `json:"approval,omitempty"`
+	ResetAt   int                    `json:"resetAt,omitempty"`
+	Nested    []engine.NestedFile    `json:"nested,omitempty"`
+	Server    string                 `json:"server"`
+	Model     string                 `json:"model"`
+	Parent    string                 `json:"parent,omitempty"`
+	Agent     *engine.SubAgent       `json:"agent,omitempty"`
+	Children  []string               `json:"children,omitempty"`
+	Dismissed bool                   `json:"dismissed,omitempty"`
+	From      int                    `json:"from"`
+	Count     int                    `json:"count"`
+	Messages  []*engine.Message      `json:"messages,omitempty"`
 }
 
-func updateOf(c *assistant.Chat, state string, ahead, from int) assistantUpdate {
+func updateOf(c *engine.Chat, state string, ahead, from int) assistantUpdate {
 	u := assistantUpdate{ID: c.ID, State: state, Ahead: ahead, Title: c.Title, Mode: c.Mode, Ticket: c.Ticket, Queue: c.Queue, Approval: c.Approval,
 		ResetAt: c.ResetAt, Nested: c.Nested, Server: c.Server, Model: c.Model, Parent: c.Parent, Agent: c.Agent, Children: c.Children, Dismissed: c.Dismissed, From: from, Count: len(c.Messages)}
 	if u.Queue == nil {
-		u.Queue = []assistant.QueuedMessage{}
+		u.Queue = []engine.QueuedMessage{}
 	}
 	if c.Running != nil {
 		u.Stream = c.Running.Stream
@@ -168,16 +169,16 @@ func (s *A) publish(r *assistantRun, from int) {
 		s.emitAssistant(r.root, "assistant.error", map[string]string{"id": r.id, "error": i18n.Translate(r.lang, err)})
 	}
 	s.emitAssistant(r.root, "assistant.update", updateOf(r.chat, r.state, r.ahead, from))
-	s.pod.NoteAsks(r.root, r.chat, from)
+	s.noteAsks(r.root, r.chat, from)
 }
 
 // publishIdle saves a conversation that does not run and announces it.
-func (s *A) publishIdle(loc llm.ChatLocation, root string, c *assistant.Chat, from int) error {
+func (s *A) publishIdle(loc llm.ChatLocation, root string, c *engine.Chat, from int) error {
 	if err := s.saveChat(loc, c); err != nil {
 		return err
 	}
 	s.emitAssistant(root, "assistant.update", updateOf(c, "idle", 0, from))
-	s.pod.NoteAsks(root, c, from)
+	s.noteAsks(root, c, from)
 	return nil
 }
 

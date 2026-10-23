@@ -29,7 +29,6 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/hfcache"
 	"github.com/DrSmithFr/web-ide/pod/keeper"
 	"github.com/DrSmithFr/web-ide/pod/lan"
-	"github.com/DrSmithFr/web-ide/pod/llm"
 	"github.com/DrSmithFr/web-ide/pod/multipod"
 	"github.com/DrSmithFr/web-ide/pod/pair"
 	"github.com/DrSmithFr/web-ide/pod/plugins/builtin"
@@ -179,7 +178,6 @@ func main() {
 		Projects:    reg,
 		Settings:    sets,
 		Desks:       desks.New(st),
-		LLM:         llm.New(st),
 		Models:      hfcache.New(st.Path("models", "hf")),
 		Pool:        sshx.NewPool(sshx.NewHostKeys(st.Path("known_hosts"))),
 		Static:      webdist.FS(),
@@ -197,9 +195,6 @@ func main() {
 		srv.Static = os.DirFS(*static)
 	}
 	srv.Keeper = dialKeeper(*keeperPath, st.Path("keeper.sock"))
-	if srv.Keeper != nil {
-		srv.LLM.Relay = llm.KeeperRelay{C: srv.Keeper} // the answers being written survive the pod too
-	}
 	srv.Init()
 	srv.Started()
 
@@ -239,8 +234,7 @@ func main() {
 			func(e settings.Entry) { srv.Broadcast("settings.changed", e) })); err != nil {
 			check(err)
 		}
-		if _, err := hub.AddSource(settingsync.NewVaultSource(st, srv.LLM, func() bool { return flags.On(identity.KindVault) },
-			func() { srv.Broadcast("llm.config", srv.LLM.View()) })); err != nil {
+		if _, err := hub.AddSource(settingsync.NewVaultSource(st, srv.VaultMaps(), func() bool { return flags.On(identity.KindVault) }, nil)); err != nil {
 			check(err)
 		}
 		src := multipod.NewProjectsSource(podID.ID(), hostname(), version, func() []multipod.Project { return projectList(st, reg) })

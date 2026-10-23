@@ -4,9 +4,9 @@ The packages of the pod, in five blocks. Each section has the map of its package
 
 | Block | Packages |
 |---|---|
-| [Server and protocol](#server-and-protocol) | `server`, `runtime`, `store`, `settings`, `projects`, `desks`, `idedir`, `config`, `stats`, `update`, `i18n`, `plugins` |
+| [Server and protocol](#server-and-protocol) | `server`, `runtime`, `store`, `settings`, `projects`, `desks`, `idedir`, `config`, `update`, `i18n`, `plugins` |
 | [Files and processes](#files-and-processes) | `fsx`, `execx`, `sshx`, `sshtest`, `console`, `keeper`, `clipboard`, `commands` |
-| [AI](#ai) | `llm`, `assistant`, `acp`, `hfcache` |
+| [AI](#ai) | `assistant`, `hfcache` |
 | [Kanban and git](#kanban-and-git) | `kanban`, `git` |
 | [Network and identity](#network-and-identity) | `relay`, `relayclient`, `relayload`, `tunnel`, `multipod`, `lan`, `identity`, `pair`, `settingsync`, `push`, `power` |
 
@@ -21,7 +21,6 @@ flowchart LR
   subgraph g_Otherblocks["Other blocks"]
     fsx["fsx"]
     identity["identity"]
-    llm["llm"]
     assistant["assistant"]
   end
   server["server<br/>HTTP, pairing, WebSocket RPC, MCP"]
@@ -32,7 +31,6 @@ flowchart LR
   store["store<br/>JSON files"]
   config["config<br/>config.json, token"]
   idedir["idedir<br/>.ide out of git"]
-  stats["stats<br/>assistant measures"]
   update["update<br/>signed update request"]
   plugins["plugins<br/>manifests, registry, enabling"]
   server --> assistant
@@ -40,12 +38,10 @@ flowchart LR
   server --> fsx
   server --> idedir
   server --> identity
-  server --> llm
   server --> projects
   server -->|"opens, serves"| runtime
   server --> desks
   server --> settings
-  server --> stats
   server --> store
   server -->|"registers, runs"| plugins
   plugins --> runtime
@@ -61,18 +57,14 @@ flowchart LR
   settings --> store
   config --> store
   idedir --> fsx
-  stats --> assistant
-  stats --> llm
   update --> identity
-  llm --> idedir
-  llm --> store
   classDef other stroke-dasharray: 4 3
-  class fsx,identity,llm,assistant other
+  class fsx,identity,assistant other
 ```
 
 **Packages**
 
-- `server`: HTTP, pairing, WebSocket RPC; handlers per domain (`handlers*.go`); the Questions tool (`handlers_questions.go`: the questions of the ACP sessions of a root and its worktrees, of the assistant's conversations, of the MCP `ask_user` of `mcp_ask.go`, built when asked; `questions.changed` goes to the windows of the root, a new one is a push)
+- `server`: HTTP, pairing, WebSocket RPC; handlers per domain (`handlers*.go`); the Questions tool (`handlers_questions.go`: the questions of a root and its worktrees from the sources of the plugins, `Host.Questions` (the ACP sessions and the assistant's conversations, the AI's), and of the MCP `ask_user` of `mcp_ask.go`, built when asked; `questions.changed` goes to the windows of the root, a new one is a push)
 - `runtime`: One per open project: file system, watches, revisions, buffers shared between windows, consoles, git, folder marks, the *parts* of the plugins (`parts.go`: the per-project state a plugin keeps there, made on first use, stopped with the project, told when it is idle: the language servers, the database connections, docker), the shell commands run without a terminal (`shell.go`: the assistant, the MCP, `exec.run`); text files decoded to UTF-8 with LF and encoded back in their format (`textfmt.go`)
 - `store`: JSON files under `~/.web-ide` (the shared persistence of the pod)
 - `settings`: IDE settings as an append-only history of full snapshots (`~/.web-ide/settings.json`); a rollback appends a copy of an older entry
@@ -80,12 +72,11 @@ flowchart LR
 - `desks`: State of the desks of each project: open files, cursors, consoles, split layout, in `~/.web-ide/desks/<project>.json`; one file per desk (`desks.go`); the files of the former `sessions/` are moved there when read
 - `idedir`: Keeps the `.ide` folder of a project out of git: its `.gitignore` is `*`, written whenever the pod writes there (`Ensure`)
 - `config`: Pod configuration (`config.json`) and the access token
-- `stats`: Measures how the assistant worked in a conversation: speeds, time generating, thinking and in each tool, failures of tools, context and compactions (token counts by part are estimates)
 - `update`: *Update this pod*: what a pod does with a signed update request that reached it (`relay.md`, *Versions and updates*) — `identity.CheckUpdate`, then the installer run detached (`systemd-run --user` as the service, `setsid` otherwise)
 - `i18n` ([`lib/`](../lib/README.md)): Translation of the messages sent to the page
 - `plugins`: The plugin system ([plugins.md](../docs/design/plugins.md)): the manifest (`plugin.json`, checked by `Parse`), the `Plugin` interface a built-in implements (`Register` adds its RPC methods `<id>.<method>` and its assistant tools through a `Host`), the `Registry` (`Resolve`: the plugins a project runs, given those disabled and the capabilities provided), `.ide/plugins.json`; `plugins/builtin` lists the built-ins, whose Go packages are `plugins/<id>` at the root of the repository, each described by its README ([plugins/](../plugins/README.md)). The server side (`server/handlers_plugins.go`) caches the disabled list per main project and offers the tools of the enabled plugins to the assistant
 
-**Tests**: `go test ./pod/server ./pod/runtime ./pod/projects ./pod/desks ./pod/settings ./pod/store ./pod/config ./pod/idedir ./pod/stats ./pod/update ./lib/i18n ./pod/plugins/...`; e2e: `features`, `restore+`, `projects`, `desks`, `i18n`, `plugins`.
+**Tests**: `go test ./pod/server ./pod/runtime ./pod/projects ./pod/desks ./pod/settings ./pod/store ./pod/config ./pod/idedir ./pod/update ./lib/i18n ./pod/plugins/...`; e2e: `features`, `restore+`, `projects`, `desks`, `i18n`, `plugins`.
 
 
 ## Files and processes
@@ -138,51 +129,33 @@ flowchart LR
 
 ## AI
 
-The assistant and the agents. `llm` talks to the model servers and keeps the conversations; `assistant` is what the assistant needs apart from the AI plugin, shared with the MCP (the loop itself is `plugins/ai/assistant*.go`); `acp` is the client of the CLI agents (Claude Code, opencode, pi), which run in the keeper. The way they interact is told in [architecture.md](../docs/design/architecture.md#assistant) and [kanban.md](../docs/design/kanban.md#claude-code).
+What the core keeps of the assistant and the agents: `assistant`, the tool kit shared by the assistant of the AI plugin and the MCP endpoint, and `hfcache`. The model servers, the conversations, the engine of the assistant, the client of the CLI agents and the statistics are the AI plugin's since #138 (`plugins/ai/llm`, `engine`, `acp`, `internal/stats`: [its README](../plugins/ai/README.md)); the core reaches them through hooks only (the Questions tool, the synced vault, the `agents` capability: [plugins.md](../docs/design/plugins.md)). The way they interact is told in [architecture.md](../docs/design/architecture.md#assistant) and [kanban.md](../docs/design/kanban.md#claude-code).
 
 ```mermaid
 flowchart LR
   subgraph g_Otherblocks["Other blocks"]
     server["server"]
+    plugins["plugins"]
+    caps["caps"]
     runtime["runtime"]
-    stats["stats"]
-    settingsync["settingsync"]
-    keeper["keeper"]
-    fsx["fsx"]
-    idedir["idedir"]
-    store["store"]
   end
-  llm["llm<br/>model servers, conversations"]
-  assistant["assistant<br/>turn tools, modes, sub-agents"]
-  acp["acp<br/>ACP client of CLI agents"]
+  assistant["assistant<br/>tool kit"]
   hfcache["hfcache<br/>offline model files"]
-  llm --> fsx
-  llm --> idedir
-  llm -->|"completions relayed"| keeper
-  llm --> store
-  assistant -->|"chat jobs"| llm
-  acp -->|"agent processes"| keeper
-  server --> acp
   server --> assistant
   server --> hfcache
-  server --> llm
-  runtime --> acp
-  stats --> assistant
-  stats --> llm
-  settingsync --> llm
+  plugins --> assistant
+  caps --> assistant
+  assistant --> runtime
   classDef other stroke-dasharray: 4 3
-  class server,runtime,stats,settingsync,keeper,fsx,idedir,store other
+  class server,plugins,caps,runtime other
 ```
 
 **Packages**
 
-- `llm`: Model servers, chat completions as jobs that survive the page, conversations (SQLite), instructions and skills
-- `assistant`: What the assistant needs apart from the AI plugin, the MCP's tools sharing it (`tools.go`: the arguments and the result of a tool, `consoles.go`: the console tools, `chat.go`: a conversation read): the stored conversation, the prompts and tool definitions, the Plan mode command rules, the line diff of a change, the questions of `ask_user`, the sub-agents (`subagents.go`); the loop itself is in `server/assistant*.go`
-- `acp`: Agents tool: ACP client of the CLI agents (Claude Code, opencode, pi), one process per session in the keeper (piped, `sh -c 'exec "$@" 2>>log'` so that stderr stays apart) or in the pod without keeper; the JSON-RPC lines go through a queue per session (the reader of the keeper never waits); the thread built from `session/update` (`transcript.go`, the relative paths of tool calls made absolute from the cwd), saved with the output offset and the awaited prompt id so that the next pod follows the process again; a process that ends is restarted and `session/load`ed (3 ends in a minute stop it); the catalog finds the adapters in the `PATH` or `<data>/acp` and installs them with npm; each turn is timed (the open permissions apart) and recorded with its tokens per model in `turns.jsonl` (`stats.go`: Claude's `_meta.quota.model_usage`, opencode's `usage` and running cost, pi's session file through `~/.pi/pi-acp/session-map.json`), priced by `prices.go` (embedded table + `<data>/prices.json`) when summed; the context ring takes `usage_update`, and during a turn of pi or opencode (which tell it only at its end) `live.go` reads the tokens of the last step (pi's session file, opencode's `opencode.db` read only); `Agent.Hidden` adds the commands an agent runs without listing them (opencode's `/compact`); `Deps.MCP` is the MCP server of the IDE given to the agents that speak MCP over HTTP (`Server.agentsMCP`: the listen address, or `MCPBase` in tests); `prompt.go`: the content blocks of a prompt (text, `resource_link` per existing `@path`, images when `promptCapabilities.image`, texts), its images kept as files next to the session (`<id>/img-N`, served by `agents.image`) so the session file stays small, and the queue of the prompts sent during a turn (saved, sent by `endTurn` and after a start); the questions of the agent (`ask.go`): permissions and the forms of `elicitation/create` (declared in `clientCapabilities`: Claude's AskUserQuestion) are entries open until answered, withdrawn by `$/cancel_request`, cancelled by Stop, listed by `Manager.Questions` with the last agent message
+- `assistant`: The tool kit of the assistant (the AI plugin) and of the MCP endpoint (`server`): the definition of a tool (`Def`, `Func`) and of `ask_user`, the kanban schemas the MCP shares (`MilestoneProps`, `ObjectiveProps`), the arguments and the result of a tool (`tools.go`), the texts the page translates (`T`, `Tn`), the console tools (`consoles.go`), the Plan mode command rules (`commands.go`), the line diff of a change, the questions of `ask_user` and their graph; the conversation, the prompts, the tools of each mode and the sub-agents are the engine of the AI plugin (`plugins/ai/engine`)
 - `hfcache`: Hugging Face files downloaded once and served offline (speech models)
 
-**Tests**: `go test ./pod/llm ./pod/assistant ./pod/acp ./pod/hfcache` and `./pod/server` (the loop, the MCP endpoint); e2e: `llm`, `agent`, `chat`, `plan`, `orchestrator`, `subagents`, `agents`, `questions`, `speech`, `doodle`.
-
+**Tests**: `go test ./pod/assistant ./pod/hfcache`; the AI's are in `plugins/ai` (its README).
 
 ## Kanban and git
 
@@ -211,7 +184,7 @@ flowchart LR
 
 **Packages**
 
-- `kanban` (`plugins/kanban/kanban`): Tickets, milestones and objectives (SQLite), workflow rules, ticket git operations (worktrees, diff, merge, rebase); the methods are in `plugins/kanban`, the development by an ACP agent included (`kanban_agent.go`: a session of the worktree's `acp.Manager` per ticket, `Info.Ticket`)
+- `kanban` (`plugins/kanban/kanban`): Tickets, milestones and objectives (SQLite), workflow rules, ticket git operations (worktrees, diff, merge, rebase); the methods are in `plugins/kanban`, the development by an ACP agent included (`kanban_agent.go`: a session of the worktree per ticket, through the `agents` capability of the AI plugin)
 - `git`: What the Git plugin (`plugins/git`) runs, and `Slug`, the branch-friendly name of a title (the `b-<branch>` worktrees, the ticket branches)
 
 **Invariants and pitfalls**
@@ -231,7 +204,6 @@ flowchart LR
     update["update"]
     server["server"]
     settings["settings"]
-    llm["llm"]
   end
   relay["relay<br/>signaling, TURN, blobs"]
   relayclient["relayclient<br/>the pod link"]
@@ -265,7 +237,6 @@ flowchart LR
   pair --> identity
   pair --> lan
   settingsync --> identity
-  settingsync --> llm
   settingsync --> settings
   power --> identity
   power --> update
@@ -275,7 +246,7 @@ flowchart LR
   server --> settingsync
   server --> tunnel
   classDef other stroke-dasharray: 4 3
-  class update,server,settings,llm other
+  class update,server,settings other
 ```
 
 **Packages**

@@ -10,12 +10,13 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
+	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/config"
 	"github.com/DrSmithFr/web-ide/pod/desks"
 	"github.com/DrSmithFr/web-ide/pod/hfcache"
 	"github.com/DrSmithFr/web-ide/pod/keeper"
-	"github.com/DrSmithFr/web-ide/pod/llm"
 	"github.com/DrSmithFr/web-ide/pod/projects"
 	"github.com/DrSmithFr/web-ide/pod/settings"
 	"github.com/DrSmithFr/web-ide/pod/sshx"
@@ -31,13 +32,13 @@ func podAt(t *testing.T, dir, sock string) (*Server, *httptest.Server) {
 	reg, _ := projects.Load(st)
 	sets, _ := settings.Load(st)
 	s := &Server{Cfg: cfg, Store: st, Token: "secret-token-0123456789abcdef0123", Projects: reg, Settings: sets,
-		Desks: desks.New(st), LLM: llm.New(st), Models: hfcache.New(st.Path("models", "hf")), Pool: sshx.NewPool(sshx.NewHostKeys(st.Path("known_hosts"))),
+		Desks: desks.New(st), Models: hfcache.New(st.Path("models", "hf")), Pool: sshx.NewPool(sshx.NewHostKeys(st.Path("known_hosts"))),
 		Static: fstest.MapFS{"index.html": {Data: []byte("<html>app</html>")}}}
 	c, _, err := keeper.Dial(sock)
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.Keeper, s.LLM.Relay = c, llm.KeeperRelay{C: c}
+	s.Keeper = c
 	s.Init()
 	s.Started()
 	ts := httptest.NewServer(s)
@@ -66,8 +67,8 @@ func keeperFor(t *testing.T) string {
 }
 
 func chatOf(t *testing.T, s *Server, project, id string) []map[string]any {
-	loc, _, _ := s.chatLoc(project)
-	raw, err := s.LLM.GetChat(loc, id)
+	loc, _, _ := aiOf(s).ChatLoc(project)
+	raw, err := llmOf(s).GetChat(loc, id)
 	if err != nil {
 		return nil
 	}
@@ -129,7 +130,7 @@ func TestResumeRuns(t *testing.T) {
 	requests := func() int { model.mu.Lock(); defer model.mu.Unlock(); return len(model.requests) }
 
 	s1, ts1 := podAt(t, data, sock)
-	if err := s1.LLM.SaveServer(llm.Server{ID: "s1", Kind: "llamacpp", URL: mts.URL}, false); err != nil {
+	if err := llmOf(s1).SaveServer(llm.Server{ID: "s1", Kind: "llamacpp", URL: mts.URL}, false); err != nil {
 		t.Fatal(err)
 	}
 	a, _ := dial(t, ts1, "secret-token-0123456789abcdef0123")
@@ -198,9 +199,9 @@ func TestResumeWithoutRelay(t *testing.T) {
 	s1, ts1 := podAt(t, data, sock)
 	a, _ := dial(t, ts1, "secret-token-0123456789abcdef0123")
 	id := a.call("projects.create", map[string]any{"type": "local", "path": t.TempDir()})["result"].(map[string]any)["id"].(string)
-	loc, root, _ := s1.chatLoc(id)
-	if err := saveTestChat(s1, loc, &assistant.Chat{ID: "gone", Server: "s1", Model: "m", Running: &assistant.Running{Stream: "unknown"},
-		Messages: []*assistant.Message{{Role: "user", Content: assistant.String("Go")}}}); err != nil {
+	loc, root, _ := aiOf(s1).ChatLoc(id)
+	if err := saveTestChat(s1, loc, &engine.Chat{ID: "gone", Server: "s1", Model: "m", Running: &engine.Running{Stream: "unknown"},
+		Messages: []*engine.Message{{Role: "user", Content: assistant.String("Go")}}}); err != nil {
 		t.Fatal(err)
 	}
 	stopPod(s1, ts1)

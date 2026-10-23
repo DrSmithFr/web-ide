@@ -31,7 +31,6 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/desks"
 	"github.com/DrSmithFr/web-ide/pod/hfcache"
 	"github.com/DrSmithFr/web-ide/pod/keeper"
-	"github.com/DrSmithFr/web-ide/pod/llm"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"github.com/DrSmithFr/web-ide/pod/projects"
 	"github.com/DrSmithFr/web-ide/pod/push"
@@ -57,7 +56,6 @@ type Server struct {
 	// Keeper runs the local terminals so that they survive the updates of the pod (nil: the
 	// pod runs them).
 	Keeper *keeper.Client
-	LLM    *llm.Manager
 	// Models caches the speech recognition models downloaded for the page.
 	Models *hfcache.Cache
 	// Sync is the settings sync loop of the pod (nil: the pod has no relay, so nothing is synced).
@@ -1086,5 +1084,4 @@ func (s *Server) Shutdown() {
 	}
 	s.Desks.FlushAll()
 	s.Pool.CloseAll()
-	s.LLM.Close()
 }

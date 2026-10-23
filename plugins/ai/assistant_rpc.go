@@ -7,8 +7,9 @@ import (
 	"github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
+	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/llm"
 	"github.com/DrSmithFr/web-ide/pod/projects"
 )
 
@@ -28,7 +29,7 @@ func (s *A) chatOf(c *Client) (chatCtx, error) {
 
 // runProject is where the tools of a conversation work: a ticket conversation stays in the
 // project it started in, the others work in the worktree the window names.
-func (s *A) runProject(chat *assistant.Chat, root, project string) string {
+func (s *A) runProject(chat *engine.Chat, root, project string) string {
 	if chat.Ticket == nil {
 		return project
 	}
@@ -55,9 +56,9 @@ func (s *A) runProject(chat *assistant.Chat, root, project string) string {
 
 // adoptedBy makes a conversation started from a card of an Orchestrator its sub-agent
 // (agent_adopt from the start: it announces itself as its prompt says).
-func (s *A) adoptedBy(cc chatCtx, parent string, chat *assistant.Chat) error {
-	err := s.change(cc, parent, func(p *assistant.Chat, _ *assistantRun) (int, error) {
-		if p.Mode != assistant.Orchestrator || p.Parent != "" {
+func (s *A) adoptedBy(cc chatCtx, parent string, chat *engine.Chat) error {
+	err := s.change(cc, parent, func(p *engine.Chat, _ *assistantRun) (int, error) {
+		if p.Mode != engine.Orchestrator || p.Parent != "" {
 			return -1, i18n.New("only an Orchestrator conversation adopts another one")
 		}
 		p.Children = append(p.Children, chat.ID)
@@ -67,13 +68,13 @@ func (s *A) adoptedBy(cc chatCtx, parent string, chat *assistant.Chat) error {
 		return err
 	}
 	chat.Parent = parent
-	chat.Agent = &assistant.SubAgent{Task: chat.Title, Status: assistant.AgentRunning, Depth: 1, Orchestrated: true, Adopted: true}
+	chat.Agent = &engine.SubAgent{Task: chat.Title, Status: engine.AgentRunning, Depth: 1, Orchestrated: true, Adopted: true}
 	return nil
 }
 
 // resumeFrom sets aside the failed answer of a conversation (kept on screen, not sent back)
 // and closes the tool calls left open: it goes on from its last completed step. Returns the first message changed.
-func resumeFrom(chat *assistant.Chat) int {
+func resumeFrom(chat *engine.Chat) int {
 	n := len(chat.Messages)
 	if n > 0 {
 		if last := chat.Messages[n-1]; last.Role == "assistant" && last.Error != "" && len(last.ToolCalls) == 0 {
@@ -85,8 +86,8 @@ func resumeFrom(chat *assistant.Chat) int {
 }
 
 // failed tells a conversation whose last answer ended in an error (or a sub-agent in error).
-func failed(chat *assistant.Chat) bool {
-	if chat.Agent != nil && chat.Agent.Status == assistant.AgentError {
+func failed(chat *engine.Chat) bool {
+	if chat.Agent != nil && chat.Agent.Status == engine.AgentError {
 		return true
 	}
 	n := len(chat.Messages)
@@ -95,16 +96,16 @@ func failed(chat *assistant.Chat) bool {
 
 // revive: an adopted conversation the user goes on with works again for its parent (its
 // end, a stop or an error, is reported again).
-func revive(chat *assistant.Chat) {
-	if chat.Agent != nil && chat.Agent.Adopted && assistant.AgentEnded(chat.Agent.Status) {
-		chat.Agent.Status, chat.Agent.Error = assistant.AgentRunning, ""
+func revive(chat *engine.Chat) {
+	if chat.Agent != nil && chat.Agent.Adopted && engine.AgentEnded(chat.Agent.Status) {
+		chat.Agent.Status, chat.Agent.Error = engine.AgentRunning, ""
 	}
 }
 
 // change applies f to a conversation: under the lock of its run when it runs (then the run
 // saves and announces it), else loaded, changed, saved and announced here. f returns the
 // index of the first message it changed (-1: none).
-func (s *A) change(cc chatCtx, id string, f func(c *assistant.Chat, r *assistantRun) (int, error)) error {
+func (s *A) change(cc chatCtx, id string, f func(c *engine.Chat, r *assistantRun) (int, error)) error {
 	if r := s.run(id); r != nil {
 		r.mu.Lock()
 		defer r.mu.Unlock()
@@ -128,7 +129,7 @@ func (s *A) change(cc chatCtx, id string, f func(c *assistant.Chat, r *assistant
 
 // skipQuestions: a message sent instead of answering leaves the pending questions (and a
 // capture of the screen waiting for the user) aside.
-func skipQuestions(c *assistant.Chat) int {
+func skipQuestions(c *engine.Chat) int {
 	from := -1
 	for i, m := range c.Messages {
 		if m.Capture == "pending" {
@@ -151,7 +152,7 @@ func skipQuestions(c *assistant.Chat) int {
 	return from
 }
 
-func lastUserIndex(c *assistant.Chat) int {
+func lastUserIndex(c *engine.Chat) int {
 	i := len(c.Messages) - 1
 	for i >= 0 && (c.Messages[i].Role != "user" || c.Messages[i].Kind == "summary") {
 		i--
@@ -171,7 +172,7 @@ func minFrom(a, b int) int {
 
 // openChat reads a conversation for a window. A conversation left running by a pod that
 // stopped is closed as interrupted.
-func (s *A) openChat(cc chatCtx, id string) (*assistant.Chat, error) {
+func (s *A) openChat(cc chatCtx, id string) (*engine.Chat, error) {
 	if r := s.run(id); r != nil {
 		return s.readChat(cc, id)
 	}
@@ -181,11 +182,11 @@ func (s *A) openChat(cc chatCtx, id string) (*assistant.Chat, error) {
 	}
 	if c.Running != nil || c.Approval != nil {
 		c.Running, c.Approval = nil, nil
-		if c.Agent != nil && c.Agent.Status == assistant.AgentRunning {
-			c.Agent.Status, c.Agent.Error = assistant.AgentError, "Interrupted: the pod stopped."
+		if c.Agent != nil && c.Agent.Status == engine.AgentRunning {
+			c.Agent.Status, c.Agent.Error = engine.AgentError, "Interrupted: the pod stopped."
 		}
 		closeToolCalls(c, "Interrupted: the pod stopped before this tool ended.")
-		c.Messages = append(c.Messages, &assistant.Message{Role: "assistant", Error: "Interrupted: the pod stopped."})
+		c.Messages = append(c.Messages, &engine.Message{Role: "assistant", Error: "Interrupted: the pod stopped."})
 		_ = s.saveChat(cc.loc, c)
 	}
 	return c, nil
@@ -250,17 +251,17 @@ func (s *A) registerAssistant() {
 	// assistant.send: a message of the user (queued while the conversation runs).
 	s.handle("assistant.send", withChat(func(ctx context.Context, c *Client, cc chatCtx, p json.RawMessage) (any, error) {
 		a, err := bind[struct {
-			ID          string                `json:"id"`
-			Text        string                `json:"text"`
-			Parts       json.RawMessage       `json:"parts"`
-			Attachments json.RawMessage       `json:"attachments"`
-			Display     string                `json:"display"`
-			Server      string                `json:"server"`
-			Model       string                `json:"model"`
-			Mode        string                `json:"mode"`
-			Options     *assistant.Options    `json:"options"`
-			Ticket      *assistant.TicketLink `json:"ticket"`
-			Title       string                `json:"title"`
+			ID          string             `json:"id"`
+			Text        string             `json:"text"`
+			Parts       json.RawMessage    `json:"parts"`
+			Attachments json.RawMessage    `json:"attachments"`
+			Display     string             `json:"display"`
+			Server      string             `json:"server"`
+			Model       string             `json:"model"`
+			Mode        string             `json:"mode"`
+			Options     *assistant.Options `json:"options"`
+			Ticket      *engine.TicketLink `json:"ticket"`
+			Title       string             `json:"title"`
 			// Project: where the tools work (a worktree of the project of the window).
 			Project string `json:"project"`
 			// From: the conversation restarts from this message (an edited message).
@@ -284,7 +285,7 @@ func (s *A) registerAssistant() {
 		if r := s.run(a.ID); r != nil {
 			r.mu.Lock()
 			if !r.done {
-				r.chat.Queue = append(r.chat.Queue, assistant.QueuedMessage{ID: assistant.NewID(), Text: a.Text, Parts: a.Parts, Attachments: a.Attachments, Display: a.Display})
+				r.chat.Queue = append(r.chat.Queue, engine.QueuedMessage{ID: assistant.NewID(), Text: a.Text, Parts: a.Parts, Attachments: a.Attachments, Display: a.Display})
 				if a.Options != nil {
 					r.chat.Options = a.Options
 				}
@@ -299,7 +300,7 @@ func (s *A) registerAssistant() {
 		}
 		chat, err := s.openChat(cc, a.ID)
 		if err != nil {
-			chat = &assistant.Chat{ID: a.ID, Title: a.Title}
+			chat = &engine.Chat{ID: a.ID, Title: a.Title}
 		}
 		from := len(chat.Messages)
 		if a.From != nil && *a.From >= 0 && *a.From < len(chat.Messages) {
@@ -329,7 +330,7 @@ func (s *A) registerAssistant() {
 			chat.Ticket.Project = project
 		}
 		from = minFrom(from, skipQuestions(chat))
-		chat.Messages = append(chat.Messages, &assistant.Message{Role: "user", Content: userContent(a.Text, a.Parts), Display: displayOf(a.Text, a.Display, a.Parts), Attachments: a.Attachments})
+		chat.Messages = append(chat.Messages, &engine.Message{Role: "user", Content: userContent(a.Text, a.Parts), Display: displayOf(a.Text, a.Display, a.Parts), Attachments: a.Attachments})
 		s.startRun(cc.loc, cc.root, project, c.language(), chat, from)
 		return map[string]any{"queued": false}, nil
 	}))
@@ -338,7 +339,7 @@ func (s *A) registerAssistant() {
 		if err != nil {
 			return nil, err
 		}
-		return nil, s.change(cc, a.ID, func(chat *assistant.Chat, _ *assistantRun) (int, error) {
+		return nil, s.change(cc, a.ID, func(chat *engine.Chat, _ *assistantRun) (int, error) {
 			kept := chat.Queue[:0]
 			for _, q := range chat.Queue {
 				if q.ID != a.Queued {
@@ -366,7 +367,7 @@ func (s *A) registerAssistant() {
 		Model  string `json:"model"`
 	}
 	// restart runs a conversation that does not run, after f changed it.
-	restart := func(c *Client, cc chatCtx, a restartArg, f func(chat *assistant.Chat) (int, error)) error {
+	restart := func(c *Client, cc chatCtx, a restartArg, f func(chat *engine.Chat) (int, error)) error {
 		if s.run(a.ID) != nil {
 			return nil
 		}
@@ -392,7 +393,7 @@ func (s *A) registerAssistant() {
 		if err != nil {
 			return nil, err
 		}
-		return nil, restart(c, cc, a, func(chat *assistant.Chat) (int, error) {
+		return nil, restart(c, cc, a, func(chat *engine.Chat) (int, error) {
 			return resumeFrom(chat), nil
 		})
 	}))
@@ -402,7 +403,7 @@ func (s *A) registerAssistant() {
 		if err != nil {
 			return nil, err
 		}
-		return nil, restart(c, cc, a, func(chat *assistant.Chat) (int, error) {
+		return nil, restart(c, cc, a, func(chat *engine.Chat) (int, error) {
 			last := lastUserIndex(chat)
 			if last < 0 {
 				return -1, i18n.New("nothing to retry")
@@ -424,7 +425,7 @@ func (s *A) registerAssistant() {
 		if err != nil {
 			return nil, err
 		}
-		return nil, restart(c, cc, restartArg{ID: a.ID}, func(chat *assistant.Chat) (int, error) {
+		return nil, restart(c, cc, restartArg{ID: a.ID}, func(chat *engine.Chat) (int, error) {
 			if a.Index < 0 || a.Index >= len(chat.Messages) || chat.Messages[a.Index].AskState != "pending" {
 				return -1, i18n.New("these questions are not waiting for an answer")
 			}
@@ -455,7 +456,7 @@ func (s *A) registerAssistant() {
 		if err != nil {
 			return nil, err
 		}
-		return nil, restart(c, cc, restartArg{ID: a.ID}, func(chat *assistant.Chat) (int, error) {
+		return nil, restart(c, cc, restartArg{ID: a.ID}, func(chat *engine.Chat) (int, error) {
 			if a.Index < 0 || a.Index >= len(chat.Messages) || chat.Messages[a.Index].Capture != "pending" {
 				return -1, i18n.New("no capture of the screen is waiting here")
 			}
@@ -484,13 +485,13 @@ func (s *A) registerAssistant() {
 		if err != nil {
 			return nil, err
 		}
-		return nil, s.change(cc, a.ID, func(chat *assistant.Chat, _ *assistantRun) (int, error) {
+		return nil, s.change(cc, a.ID, func(chat *engine.Chat, _ *assistantRun) (int, error) {
 			if a.Index < 0 || a.Index >= len(chat.Messages) || chat.Messages[a.Index].Plan == "" {
 				return -1, i18n.New("no plan here")
 			}
 			chat.Messages[a.Index].PlanState = a.State
 			if a.State == "accepted" {
-				chat.Mode = assistant.Build
+				chat.Mode = engine.Build
 			}
 			return a.Index, nil
 		})
@@ -506,7 +507,7 @@ func (s *A) registerAssistant() {
 		if err != nil {
 			return nil, err
 		}
-		return nil, s.change(cc, a.ID, func(chat *assistant.Chat, _ *assistantRun) (int, error) {
+		return nil, s.change(cc, a.ID, func(chat *engine.Chat, _ *assistantRun) (int, error) {
 			if a.Index < 0 || a.Index >= len(chat.Messages) || chat.Messages[a.Index].Card == nil {
 				return -1, i18n.New("no action card here")
 			}
@@ -532,12 +533,12 @@ func (s *A) registerAssistant() {
 		}
 		chat.Dismissed = true
 		from := -1
-		var ev *assistant.AgentEvent
+		var ev *engine.AgentEvent
 		// A sub-agent that did not report nor was stopped (an error leaves it working).
-		if sa := chat.Agent; sa != nil && sa.Status != assistant.AgentDone && sa.Status != assistant.AgentBlocked && sa.Status != assistant.AgentStopped {
-			sa.Status, sa.Question = assistant.AgentStopped, ""
+		if sa := chat.Agent; sa != nil && sa.Status != engine.AgentDone && sa.Status != engine.AgentBlocked && sa.Status != engine.AgentStopped {
+			sa.Status, sa.Question = engine.AgentStopped, ""
 			from = skipParentWait(chat)
-			ev = &assistant.AgentEvent{Child: chat.ID, Title: chat.Title, Type: "report", Status: assistant.AgentStopped, Text: "Abandoned by the user after an error."}
+			ev = &engine.AgentEvent{Child: chat.ID, Title: chat.Title, Type: "report", Status: engine.AgentStopped, Text: "Abandoned by the user after an error."}
 		}
 		if err := s.publishIdle(cc.loc, cc.root, chat, from); err != nil {
 			return nil, err
@@ -552,7 +553,7 @@ func (s *A) registerAssistant() {
 		if err != nil {
 			return nil, err
 		}
-		return nil, s.change(cc, a.ID, func(chat *assistant.Chat, _ *assistantRun) (int, error) {
+		return nil, s.change(cc, a.ID, func(chat *engine.Chat, _ *assistantRun) (int, error) {
 			chat.Draft = ""
 			return -1, nil
 		})
@@ -633,15 +634,15 @@ func (s *A) registerAssistant() {
 	// assistant.set: the mode, the options or the ticket of a conversation.
 	s.handle("assistant.set", withChat(func(ctx context.Context, c *Client, cc chatCtx, p json.RawMessage) (any, error) {
 		a, err := bind[struct {
-			ID      string                `json:"id"`
-			Mode    string                `json:"mode"`
-			Options *assistant.Options    `json:"options"`
-			Ticket  *assistant.TicketLink `json:"ticket"`
+			ID      string             `json:"id"`
+			Mode    string             `json:"mode"`
+			Options *assistant.Options `json:"options"`
+			Ticket  *engine.TicketLink `json:"ticket"`
 		}](p)
 		if err != nil {
 			return nil, err
 		}
-		return nil, s.change(cc, a.ID, func(chat *assistant.Chat, _ *assistantRun) (int, error) {
+		return nil, s.change(cc, a.ID, func(chat *engine.Chat, _ *assistantRun) (int, error) {
 			if a.Mode != "" {
 				chat.Mode = a.Mode
 			}
@@ -664,7 +665,7 @@ func (s *A) registerAssistant() {
 		if err != nil {
 			return nil, err
 		}
-		chat := &assistant.Chat{Mode: a.Mode, Options: &assistant.Options{ActiveFile: a.ActiveFile}}
+		chat := &engine.Chat{Mode: a.Mode, Options: &assistant.Options{ActiveFile: a.ActiveFile}}
 		return s.systemPrompt(&assistantRun{loc: cc.loc, root: cc.root, project: c.project}, ref, chat, true), nil
 	}))
 }

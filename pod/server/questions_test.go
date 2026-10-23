@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 )
 
@@ -47,7 +48,7 @@ func TestQuestions(t *testing.T) {
 
 	// An ACP session asks a form: listed with the message of the agent before it.
 	sid := a.call("agents.create", map[string]any{"agent": "claude"})["result"].(map[string]any)["id"].(string)
-	sess, _ := s.runtimes[id].Agents.Get(sid)
+	sess, _ := aiOf(s).AgentsOf(s.runtimes[id]).Get(sid)
 	waitList("session ready", func([]Question) bool { return sess.Info().State == "ready" })
 	a.call("agents.prompt", map[string]any{"id": sid, "text": "ask me"})
 	a.waitEvent("questions.changed", nil)
@@ -107,8 +108,8 @@ func TestQuestions(t *testing.T) {
 	}
 
 	// A conversation of the assistant asking.
-	loc, root, _ := s.chatLoc(id)
-	chat := &assistant.Chat{ID: "c1", Title: "Plan the cache", Messages: []*assistant.Message{
+	loc, root, _ := aiOf(s).ChatLoc(id)
+	chat := &engine.Chat{ID: "c1", Title: "Plan the cache", Messages: []*engine.Message{
 		{Role: "user", Content: assistant.String("Plan it")},
 		{Role: "assistant", Content: assistant.String("Two ways to do it.")},
 		{Role: "tool", ToolCallID: "x", Name: "ask_user", AskState: "pending", At: 5, Questions: []assistant.Question{{Question: "Which one?", Options: []assistant.Option{{Label: "A"}, {Label: "B"}}}}},
@@ -116,7 +117,7 @@ func TestQuestions(t *testing.T) {
 	if err := saveTestChat(s, loc, chat); err != nil {
 		t.Fatal(err)
 	}
-	s.noteAsks(root, chat, 0) // as the AI plugin does when a turn ends
+	aiOf(s).NoteAsks(root, chat, 0) // as the AI plugin does when a turn ends
 	a.waitEvent("questions.changed", nil)
 	l = list()
 	if len(l) != 1 || l[0].Source != "assistant" || l[0].ID != "chat:c1:2" || l[0].Last != "Two ways to do it." || l[0].Title != "Plan the cache" {

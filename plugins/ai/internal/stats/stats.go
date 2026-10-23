@@ -8,8 +8,9 @@ import (
 	"encoding/json"
 	"sort"
 
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
+	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/llm"
 )
 
 // CharsPerToken estimates the tokens of a text from its length (code and English).
@@ -113,19 +114,19 @@ func New(f Filter) *Acc {
 	return &Acc{f: f, s: Stats{Failures: map[string]int{}}, think: map[string][]int64{}, tools: map[string]*Tool{}}
 }
 
-func (f Filter) keeps(m *assistant.Message) bool {
+func (f Filter) keeps(m *engine.Message) bool {
 	return (f.Model == "" || m.Model == f.Model) && (f.Effort == "" || m.Effort == f.Effort) &&
 		(f.From == 0 || m.At >= f.From) && (f.To == 0 || m.At > 0 && m.At < f.To)
 }
 
-func usageOf(m *assistant.Message) llm.Usage {
+func usageOf(m *engine.Message) llm.Usage {
 	var u llm.Usage
 	_ = json.Unmarshal(m.Usage, &u)
 	return u
 }
 
 // Add counts the messages of a conversation.
-func (a *Acc) Add(c *assistant.Chat) {
+func (a *Acc) Add(c *engine.Chat) {
 	a.s.Conversations++
 	kept := false
 	seen := map[string]bool{}
@@ -148,7 +149,7 @@ func (a *Acc) Add(c *assistant.Chat) {
 	}
 }
 
-func (a *Acc) answer(m *assistant.Message, seen map[string]bool) {
+func (a *Acc) answer(m *engine.Message, seen map[string]bool) {
 	s := &a.s
 	s.Answers++
 	if m.At > 0 {
@@ -188,7 +189,7 @@ func (a *Acc) answer(m *assistant.Message, seen map[string]bool) {
 }
 
 // reasoningTokens: the share of the generated tokens spent thinking, by the length of the texts.
-func reasoningTokens(m *assistant.Message, completion int) int {
+func reasoningTokens(m *engine.Message, completion int) int {
 	r := len(m.Reasoning)
 	rest := len(assistant.ContentText(m.Content))
 	for _, c := range m.ToolCalls {
@@ -200,7 +201,7 @@ func reasoningTokens(m *assistant.Message, completion int) int {
 	return completion * r / (r + rest)
 }
 
-func (a *Acc) tool(m *assistant.Message) {
+func (a *Acc) tool(m *engine.Message) {
 	t := a.tools[m.Name]
 	if t == nil {
 		t = &Tool{Name: m.Name, Failures: map[string]int{}}
@@ -228,7 +229,7 @@ func (a *Acc) tool(m *assistant.Message) {
 }
 
 // Result: the statistics gathered, with the context of c (nil: none, for several conversations).
-func (a *Acc) Result(c *assistant.Chat) Stats {
+func (a *Acc) Result(c *engine.Chat) Stats {
 	s := a.s
 	s.Read.PerSecond = perSecond(s.Read)
 	s.Write.PerSecond = perSecond(s.Write)
@@ -279,9 +280,9 @@ func effortRank(e string) int {
 }
 
 // contextOf: the context of the conversation now, estimated by part, and its history.
-func contextOf(c *assistant.Chat) *Context {
+func contextOf(c *engine.Chat) *Context {
 	ctx := &Context{Curve: []Point{}, Compactions: []Gap{}}
-	var last *assistant.Message
+	var last *engine.Message
 	start := int64(0)
 	steps, peak, tokens := 0, 0, 0
 	for _, m := range c.Messages {

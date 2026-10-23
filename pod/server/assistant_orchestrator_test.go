@@ -7,14 +7,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/pod/llm"
+	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
 )
 
 func TestOrchestrator(t *testing.T) {
 	s, ts := newServer(t)
 	model := &fakeModel{}
 	mts := model.serve(t)
-	if err := s.LLM.SaveServer(llm.Server{ID: "s1", Kind: "llamacpp", URL: mts.URL, Parallel: 4}, false); err != nil {
+	if err := llmOf(s).SaveServer(llm.Server{ID: "s1", Kind: "llamacpp", URL: mts.URL, Parallel: 4}, false); err != nil {
 		t.Fatal(err)
 	}
 	a, _ := dial(t, ts, "secret-token-0123456789abcdef0123")

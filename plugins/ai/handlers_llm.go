@@ -7,12 +7,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
 	"github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
 
+	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
 	"github.com/DrSmithFr/web-ide/pod/fsx"
 	"github.com/DrSmithFr/web-ide/pod/idedir"
-	"github.com/DrSmithFr/web-ide/pod/llm"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 )
 
@@ -224,7 +224,7 @@ func (s *A) registerLLM() {
 		return struct {
 			*llm.Context
 			Defaults map[string]string `json:"defaults"`
-		}{s.LLM.LoadContext(proj(rt)), assistant.DefaultTemplates}, nil
+		}{s.LLM.LoadContext(proj(rt)), engine.DefaultTemplates}, nil
 	}))
 	s.handle("llm.skill.read", withProject(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
 		a, err := bind[struct{ Name string }](p)

@@ -6,12 +6,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 )
 
 func TestBoardDrawChecks(t *testing.T) {
 	s, _ := newTestA(t, t.TempDir())
-	r := &assistantRun{id: "c", ctx: context.Background(), chat: &assistant.Chat{}}
+	r := &assistantRun{id: "c", ctx: context.Background(), chat: &engine.Chat{}}
 	args := func(js string) assistant.Args {
 		var a assistant.Args
 		if err := json.Unmarshal([]byte(js), &a); err != nil {
@@ -43,7 +44,7 @@ func TestBoardDrawChecks(t *testing.T) {
 		}
 	}
 	// A copy of an image whose data is not kept (an old attachment) is refused.
-	r.chat.Messages = []*assistant.Message{{Role: "user", Attachments: json.RawMessage(`[{"name":"old.png","kind":"image","w":4,"h":3}]`)}}
+	r.chat.Messages = []*engine.Message{{Role: "user", Attachments: json.RawMessage(`[{"name":"old.png","kind":"image","w":4,"h":3}]`)}}
 	if _, err := s.boardDoodle(r, args(`{"title":"x","elements":[],"clone":1}`)); err == nil || !strings.Contains(err.Error(), "not kept") {
 		t.Errorf("copy of a lost image: %v", err)
 	}
@@ -51,7 +52,7 @@ func TestBoardDrawChecks(t *testing.T) {
 
 func TestPageImages(t *testing.T) {
 	page := &assistant.Page{Name: "Flow", PNG: "data:image/png;base64,AA"}
-	msgs := []*assistant.Message{
+	msgs := []*engine.Message{
 		{Role: "user", Content: assistant.String("draw")},
 		{Role: "assistant"},
 		{Role: "tool", ToolCallID: "a", Content: assistant.String("Page 1"), Page: page},

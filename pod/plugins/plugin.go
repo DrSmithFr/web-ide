@@ -9,14 +9,13 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/hfcache"
 
-	"github.com/DrSmithFr/web-ide/pod/acp"
 	"github.com/DrSmithFr/web-ide/pod/commands"
 	"github.com/DrSmithFr/web-ide/pod/config"
 	"github.com/DrSmithFr/web-ide/pod/desks"
 	"github.com/DrSmithFr/web-ide/pod/keeper"
-	"github.com/DrSmithFr/web-ide/pod/llm"
 	"github.com/DrSmithFr/web-ide/pod/projects"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"github.com/DrSmithFr/web-ide/pod/settingsync"
 	"github.com/DrSmithFr/web-ide/pod/store"
 )
 
@@ -57,6 +56,12 @@ type Host interface {
 	// HandlePreview serves the previews the page asks through the tunnel of the relay (the
 	// Previews plugin): f is the handler of a preview id, false when there is none.
 	HandlePreview(f func(id string) (http.Handler, bool))
+	// Questions adds a source of the Questions tool (the sessions of the agents, the
+	// conversations of the assistant); Pod.QuestionsChanged tells the windows to ask again.
+	Questions(q Questions)
+	// Vault adds a map of the synced vault (the API keys of the model servers): its entries go
+	// to the other pods of the account when the vault is on (docs/design/relay.md).
+	Vault(m settingsync.VaultMap)
 }
 
 // Pod is the pod as a built-in plugin sees it: the projects, the events to every window, and
@@ -98,8 +103,9 @@ type Pod interface {
 	// Notify sends a push notification to the devices that want its kind and show no window
 	// (a conversation that ended, a test feedback added to a ticket).
 	Notify(n Note)
-	// NoteAsks records the questions a conversation asks from message from (the Questions tool).
-	NoteAsks(root string, c *assistant.Chat, from int)
+	// QuestionsChanged tells the windows of the root of project that its questions changed;
+	// asked names who just asked one (a push notification), "" for none.
+	QuestionsChanged(project, asked string)
 	// The saved commands of a project, as the tools read them, and one started (a console).
 	CommandsText(rt *runtime.Runtime) (text string, n int, err error)
 	StartSaved(rt *runtime.Runtime, id string, restart bool) (cmd commands.Command, console, running string, err error)
@@ -125,17 +131,14 @@ type Services struct {
 	Projects *projects.Registry
 	Cfg      *config.Config
 	Keeper   *keeper.Client
-	LLM      *llm.Manager
 	Desks    *desks.Store
-	// Token of the pod and MCPBase, the address of its MCP endpoint for the agents.
+	// Token of the pod and MCPBase, the address of its MCP endpoint for the agents (else the
+	// listen address of Cfg); Version of the pod, told to the agents.
 	Token   string
 	MCPBase string
+	Version string
 	// Commands are the saved commands of the project of rt.
 	Commands func(rt *runtime.Runtime) ([]commands.Command, error)
-	// ChatLoc is where the conversations of a project are kept.
-	ChatLoc func(project string) (llm.ChatLocation, string, error)
-	// AgentsMCP is the MCP server of the IDE as the sessions of the agents reach it.
-	AgentsMCP func() []acp.MCPServer
 	// Models caches the speech recognition models downloaded for the page.
 	Models *hfcache.Cache
 }

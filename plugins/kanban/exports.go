@@ -8,7 +8,6 @@ import (
 	"github.com/DrSmithFr/web-ide/lib/i18n"
 
 	kb "github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
-	"github.com/DrSmithFr/web-ide/pod/acp"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"github.com/DrSmithFr/web-ide/pod/projects"
 	"github.com/DrSmithFr/web-ide/pod/push"
@@ -41,10 +40,6 @@ func (s *K) FillBlockers(ctx context.Context, k GitCtx, list []kb.Summary) {
 
 func (s *K) TicketBlockers(ctx context.Context, k GitCtx, id int64) ([]kb.Blocker, error) {
 	return s.ticketBlockers(ctx, k, id)
-}
-
-func (s *K) TicketSession(root *projects.Project, t *kb.Ticket) (string, acp.Info, []acp.Entry, bool) {
-	return s.ticketSession(root, t)
 }
 
 func (s *K) MilestoneTool(root string, loc kb.Location, a MilestoneArgs, by, chatID string) (string, int64, error) {

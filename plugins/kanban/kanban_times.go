@@ -2,24 +2,26 @@ package kanban
 
 import (
 	kb "github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
-	"github.com/DrSmithFr/web-ide/pod/llm"
+	"github.com/DrSmithFr/web-ide/pod/caps"
+	"github.com/DrSmithFr/web-ide/pod/runtime"
 )
 
 // Time of work on a ticket: the time of the answers of its linked conversations and of
 // their sub-agents (the assistant of the IDE only: Claude Code runs in a terminal).
 
 type chatTimes struct {
-	times    map[string]llm.ChatTime
+	times    map[string]caps.ChatTime
 	children map[string][]string
 }
 
-// chatTimes of the conversations of a project (nil when they cannot be read).
-func (s *K) chatTimes(projectID string) *chatTimes {
-	loc, _, err := s.ChatLoc(projectID)
-	if err != nil {
+// chatTimes of the conversations of a project (nil when they cannot be read, or the AI plugin is
+// off on the project of rt).
+func (s *K) chatTimes(rt *runtime.Runtime, projectID string) *chatTimes {
+	ag := s.agents(rt)
+	if ag == nil {
 		return nil
 	}
-	times, err := s.LLM.ChatTimes(loc)
+	times, err := ag.ChatTimes(projectID)
 	if err != nil {
 		return nil
 	}
@@ -54,10 +56,10 @@ func (ct *chatTimes) of(ids ...string) int64 {
 }
 
 // withTimes fills the times of a ticket answered by a handler.
-func (s *K) withTimes(projectID string) func(any, error) (any, error) {
+func (s *K) withTimes(rt *runtime.Runtime, projectID string) func(any, error) (any, error) {
 	return func(res any, err error) (any, error) {
 		if t, ok := res.(*kb.Ticket); ok && err == nil && t != nil {
-			if ct := s.chatTimes(projectID); ct != nil {
+			if ct := s.chatTimes(rt, projectID); ct != nil {
 				ids := make([]string, len(t.ChatList))
 				for i := range t.ChatList {
 					c := &t.ChatList[i]

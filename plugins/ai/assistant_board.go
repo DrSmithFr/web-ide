@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/fsx"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
@@ -26,20 +27,20 @@ func (s *A) boardDoodle(r *assistantRun, a assistant.Args) (assistant.ToolResult
 	if err := json.Unmarshal(a["elements"], &elements); err != nil {
 		return assistant.ToolResult{}, fmt.Errorf("elements must be a list of elements")
 	}
-	if len(elements) > assistant.MaxPageElements {
-		return assistant.ToolResult{}, fmt.Errorf("%d elements: %d at most", len(elements), assistant.MaxPageElements)
+	if len(elements) > engine.MaxPageElements {
+		return assistant.ToolResult{}, fmt.Errorf("%d elements: %d at most", len(elements), engine.MaxPageElements)
 	}
 	for i, el := range elements {
 		var pts []json.RawMessage
-		if json.Unmarshal(el["points"], &pts) == nil && len(pts) > assistant.MaxStrokePoints {
-			return assistant.ToolResult{}, fmt.Errorf("element %d: %d points, %d at most", i+1, len(pts), assistant.MaxStrokePoints)
+		if json.Unmarshal(el["points"], &pts) == nil && len(pts) > engine.MaxStrokePoints {
+			return assistant.ToolResult{}, fmt.Errorf("element %d: %d points, %d at most", i+1, len(pts), engine.MaxStrokePoints)
 		}
 	}
 	if a.Has("clone") && a.Str("size") != "" {
 		return assistant.ToolResult{}, fmt.Errorf("size and clone cannot go together: a clone keeps the size of its page")
 	}
 	r.mu.Lock()
-	pages := assistant.Pages(r.chat.Messages)
+	pages := engine.Pages(r.chat.Messages)
 	r.mu.Unlock()
 	args := map[string]any{"title": a.Str("title"), "size": a.Str("size"), "elements": elements, "number": len(pages) + 1}
 	if a.Has("clone") {
@@ -79,7 +80,7 @@ func (s *A) boardImage(r *assistantRun, rt *runtime.Runtime, a assistant.Args) (
 		return assistant.ToolResult{}, fmt.Errorf("the SVG may not contain %q (no script, event handler, foreignObject or external reference)", m)
 	}
 	r.mu.Lock()
-	n := len(assistant.Pages(r.chat.Messages)) + 1
+	n := len(engine.Pages(r.chat.Messages)) + 1
 	r.mu.Unlock()
 	return s.drawPage(r, map[string]any{"title": a.Str("title"), "svg": svg, "number": n})
 }
@@ -112,7 +113,7 @@ func (s *A) boardFile(r *assistantRun, rt *runtime.Runtime, title, path string) 
 		}
 	}
 	r.mu.Lock()
-	n := len(assistant.Pages(r.chat.Messages)) + 1
+	n := len(engine.Pages(r.chat.Messages)) + 1
 	r.mu.Unlock()
 	src := "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)
 	return s.drawPage(r, map[string]any{"title": title, "src": src, "origin": "the image " + assistant.RelPath(rt.Root, abs), "number": n})

@@ -3,14 +3,14 @@ package server
 import (
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/pod/llm"
+	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
 )
 
 func TestAssistantEffort(t *testing.T) {
 	s, ts := newServer(t)
 	model := &fakeModel{models: []string{"m"}}
 	mts := model.serve(t)
-	if err := s.LLM.SaveServer(llm.Server{ID: "effort", Kind: "llamacpp", URL: mts.URL}, false); err != nil {
+	if err := llmOf(s).SaveServer(llm.Server{ID: "effort", Kind: "llamacpp", URL: mts.URL}, false); err != nil {
 		t.Fatal(err)
 	}
 	a, _ := dial(t, ts, "secret-token-0123456789abcdef0123")

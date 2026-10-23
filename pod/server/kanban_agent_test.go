@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/pod/acp"
+	"github.com/DrSmithFr/web-ide/plugins/ai/acp"
 	"github.com/DrSmithFr/web-ide/pod/projects"
 )
 

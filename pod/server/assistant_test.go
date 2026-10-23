@@ -14,7 +14,7 @@ import (
 
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 
-	"github.com/DrSmithFr/web-ide/pod/llm"
+	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
 )
 
 // The projects of the tests are in /tmp: an other scratch folder keeps their approvals.
@@ -118,7 +118,7 @@ func TestAssistantLoop(t *testing.T) {
 	s, ts := newServer(t)
 	model := &fakeModel{}
 	mts := model.serve(t)
-	if err := s.LLM.SaveServer(llm.Server{ID: "s1", Kind: "llamacpp", URL: mts.URL}, false); err != nil {
+	if err := llmOf(s).SaveServer(llm.Server{ID: "s1", Kind: "llamacpp", URL: mts.URL}, false); err != nil {
 		t.Fatal(err)
 	}
 	a, _ := dial(t, ts, "secret-token-0123456789abcdef0123")

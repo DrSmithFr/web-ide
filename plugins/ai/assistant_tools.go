@@ -12,11 +12,12 @@ import (
 	"time"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
+	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/caps"
 	"github.com/DrSmithFr/web-ide/pod/console"
 	"github.com/DrSmithFr/web-ide/pod/fsx"
-	"github.com/DrSmithFr/web-ide/pod/llm"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"github.com/DrSmithFr/web-ide/pod/projects"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
@@ -42,7 +43,7 @@ func fail(r *assistantRun, err error) assistant.ToolResult {
 func failf(format string, a ...any) error { return fmt.Errorf(format, a...) }
 
 // assistantTool runs a tool call of the model.
-func (s *A) assistantTool(r *assistantRun, ref *runtimeRef, call assistant.ToolCall, mode string) (res assistant.ToolResult) {
+func (s *A) assistantTool(r *assistantRun, ref *runtimeRef, call engine.ToolCall, mode string) (res assistant.ToolResult) {
 	name := call.Function.Name
 	defer func() {
 		if p := recover(); p != nil {
@@ -56,7 +57,7 @@ func (s *A) assistantTool(r *assistantRun, ref *runtimeRef, call assistant.ToolC
 	if res, ok := s.followed(r, ref, call, a); ok {
 		return res
 	}
-	if assistant.KanbanTools[name] {
+	if engine.KanbanTools[name] {
 		return s.kanbanTool(r, name, a, mode)
 	}
 	if err := s.missingFor(ref.rt, name); err != nil {
@@ -72,13 +73,13 @@ func (s *A) assistantTool(r *assistantRun, ref *runtimeRef, call assistant.ToolC
 		return res
 	}
 	root := ref.rt.Root
-	which := map[string]string{assistant.Plan: "Plan", assistant.Briefing: "Briefing", assistant.Orchestrator: "Orchestrator"}[mode]
+	which := map[string]string{engine.Plan: "Plan", engine.Briefing: "Briefing", engine.Orchestrator: "Orchestrator"}[mode]
 	// Out of Build mode, files change only in the scratch folder.
-	if mode != assistant.Build && assistant.WriteTools[name] && !assistant.InZone(assistant.AbsPath(root, a.Str("path")), assistant.Scratch) {
+	if mode != engine.Build && engine.WriteTools[name] && !assistant.InZone(assistant.AbsPath(root, a.Str("path")), assistant.Scratch) {
 		then := map[string]string{
-			assistant.Plan:         "Present the plan with exit_plan_mode; it will be carried out in Build mode.",
-			assistant.Briefing:     "Clarify the need and write it in tickets (kanban_create).",
-			assistant.Orchestrator: "Propose the work with action_card, or open a conversation for it with open_conversation.",
+			engine.Plan:         "Present the plan with exit_plan_mode; it will be carried out in Build mode.",
+			engine.Briefing:     "Clarify the need and write it in tickets (kanban_create).",
+			engine.Orchestrator: "Propose the work with action_card, or open a conversation for it with open_conversation.",
 		}[mode]
 		return fail(r, failf("%s mode: files of the project cannot be changed (only scratch files in %s). %s", which, assistant.Scratch, then))
 	}
@@ -91,12 +92,12 @@ func (s *A) assistantTool(r *assistantRun, ref *runtimeRef, call assistant.ToolC
 			cwd = assistant.AbsPath(root, a.Str("cwd"))
 		}
 		free := assistant.StaysIn(cmd, cwd, root, assistant.Scratch)
-		if mode != assistant.Build {
+		if mode != engine.Build {
 			free = assistant.RunsFreely(cmd, root, cwd) || assistant.StaysIn(cmd, cwd, assistant.Scratch)
 		}
-		if !free && !s.confirm(r, root, assistant.Approval{Call: call, Kind: "command", Command: cmd}) {
+		if !free && !s.confirm(r, root, engine.Approval{Call: call, Kind: "command", Command: cmd}) {
 			why := "Build mode: commands that touch nothing out of the project and " + assistant.Scratch + " run freely"
-			if mode != assistant.Build {
+			if mode != engine.Build {
 				why = which + " mode: only reading commands, the build and test commands of the project, and commands confined to " + assistant.Scratch + ", run freely"
 			}
 			return assistant.ToolResult{Content: "The user refused this command (" + why + ").", Summary: assistant.T("command refused", nil).Raw(), Status: "denied"}
@@ -104,9 +105,9 @@ func (s *A) assistantTool(r *assistantRun, ref *runtimeRef, call assistant.ToolC
 	}
 	// A saved command was written by the user: it runs freely in Build mode, and its builds,
 	// tests and lints in the other modes.
-	if name == "run_saved_command" && mode != assistant.Build {
+	if name == "run_saved_command" && mode != engine.Build {
 		if cmd, err := s.findCommand(ref.rt, a.Str("id")); err == nil && cmd.Flag != "build" && cmd.Flag != "test" && cmd.Flag != "lint" &&
-			!s.confirm(r, root, assistant.Approval{Call: call, Kind: "command", Command: cmd.Command}) {
+			!s.confirm(r, root, engine.Approval{Call: call, Kind: "command", Command: cmd.Command}) {
 			why := which + " mode: only the build, test and lint commands of the project run freely"
 			return assistant.ToolResult{Content: "The user refused this command (" + why + ").", Summary: assistant.T("command refused", nil).Raw(), Status: "denied"}
 		}
@@ -211,7 +212,7 @@ func (s *A) toolProgress(r *assistantRun, callID string) func(string) {
 // confirm asks the user before a file change or a command; false when refused or stopped.
 // Changes in the project or the scratch folder apply without asking; "Apply without asking"
 // covers the others; commands always ask.
-func (s *A) confirm(r *assistantRun, root string, req assistant.Approval) bool {
+func (s *A) confirm(r *assistantRun, root string, req engine.Approval) bool {
 	r.mu.Lock()
 	if req.Kind == "edit" && (opt(r.chat).AutoApply || assistant.InZone(req.Path, root, assistant.Scratch)) {
 		r.mu.Unlock()
@@ -439,7 +440,7 @@ func counts(d []assistant.DiffLine) (int, int) {
 	return add, del
 }
 
-func (s *A) editFile(r *assistantRun, rt *runtime.Runtime, call assistant.ToolCall, a assistant.Args) (assistant.ToolResult, error) {
+func (s *A) editFile(r *assistantRun, rt *runtime.Runtime, call engine.ToolCall, a assistant.Args) (assistant.ToolResult, error) {
 	p := a.Str("path")
 	if p == "" {
 		return assistant.ToolResult{}, assistant.Usagef("path is missing")
@@ -467,7 +468,7 @@ func (s *A) editFile(r *assistantRun, rt *runtime.Runtime, call assistant.ToolCa
 	}
 	next := text[:at] + newStr + text[at+len(oldStr):]
 	diff := assistant.DiffLines(text, next)
-	if !s.confirm(r, rt.Root, assistant.Approval{Call: call, Kind: "edit", Path: abs, Diff: diff}) {
+	if !s.confirm(r, rt.Root, engine.Approval{Call: call, Kind: "edit", Path: abs, Diff: diff}) {
 		return assistant.ToolResult{Content: "The user refused this change.", Summary: assistant.T("change refused", nil).Raw(), Status: "denied", Diff: diff}, nil
 	}
 	if err := save(rt, abs, next, f.Format); err != nil {
@@ -495,7 +496,7 @@ func save(rt *runtime.Runtime, abs, content string, f runtime.Format) error {
 	return rt.FS.Write(abs, data)
 }
 
-func (s *A) writeFile(r *assistantRun, rt *runtime.Runtime, call assistant.ToolCall, a assistant.Args) (assistant.ToolResult, error) {
+func (s *A) writeFile(r *assistantRun, rt *runtime.Runtime, call engine.ToolCall, a assistant.Args) (assistant.ToolResult, error) {
 	p := a.Str("path")
 	if p == "" {
 		return assistant.ToolResult{}, assistant.Usagef("path is missing")
@@ -524,7 +525,7 @@ func (s *A) writeFile(r *assistantRun, rt *runtime.Runtime, call assistant.ToolC
 	if created && len(diff) > 0 && diff[0].T == "-" {
 		diff = diff[1:] // the empty line of "nothing"
 	}
-	if !s.confirm(r, rt.Root, assistant.Approval{Call: call, Kind: "edit", Path: abs, Diff: diff, Created: created}) {
+	if !s.confirm(r, rt.Root, engine.Approval{Call: call, Kind: "edit", Path: abs, Diff: diff, Created: created}) {
 		return assistant.ToolResult{Content: "The user refused this write.", Summary: assistant.T("write refused", nil).Raw(), Status: "denied", Diff: diff}, nil
 	}
 	if created {
@@ -651,7 +652,7 @@ func (s *A) runCommand(r *assistantRun, rt *runtime.Runtime, command, cwd string
 	go s.uiTool(r, "focus", assistant.Args{"target": json.RawMessage(`"console"`), "console_id": jsonString(info.ID), "quiet": json.RawMessage("true")})
 	until := time.Now().Add(limit)
 	if rt.Keeper != nil {
-		s.toolRunning(r, func(run *assistant.Running) { run.Console, run.Until = info.ID, until.UnixMilli() })
+		s.toolRunning(r, func(run *engine.Running) { run.Console, run.Until = info.ID, until.UnixMilli() })
 	}
 	return s.waitCommand(r, rt, command, info.ID, until, progress)
 }

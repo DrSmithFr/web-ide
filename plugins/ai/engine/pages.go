@@ -1,4 +1,4 @@
-package assistant
+package engine
 
 import "encoding/json"
 

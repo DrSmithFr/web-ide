@@ -20,7 +20,7 @@ import (
 // HTTP transport without streaming: each POST carries JSON-RPC messages and gets its
 // answers as JSON. Authenticated by the token of the pod as a bearer.
 
-const mcpPath = "/mcp"
+const mcpPath = plugins.MCPPath
 
 // mcpProtocol is answered when the client asks for a version this server does not know.
 const mcpProtocol = "2025-06-18"

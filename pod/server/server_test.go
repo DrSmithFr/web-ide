@@ -17,7 +17,6 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/config"
 	"github.com/DrSmithFr/web-ide/pod/desks"
 	"github.com/DrSmithFr/web-ide/pod/hfcache"
-	"github.com/DrSmithFr/web-ide/pod/llm"
 	"github.com/DrSmithFr/web-ide/pod/plugins/builtin"
 	"github.com/DrSmithFr/web-ide/pod/projects"
 	"github.com/DrSmithFr/web-ide/pod/settings"
@@ -42,7 +41,7 @@ func newServerWith(t *testing.T, set func(*Server)) (*Server, *httptest.Server) 
 	reg, _ := projects.Load(st)
 	sets, _ := settings.Load(st)
 	s := &Server{Cfg: cfg, Store: st, Token: "secret-token-0123456789abcdef0123", Projects: reg, Settings: sets,
-		Desks: desks.New(st), LLM: llm.New(st), Models: hfcache.New(st.Path("models", "hf")), Pool: sshx.NewPool(sshx.NewHostKeys(st.Path("known_hosts"))),
+		Desks: desks.New(st), Models: hfcache.New(st.Path("models", "hf")), Pool: sshx.NewPool(sshx.NewHostKeys(st.Path("known_hosts"))),
 		Static: fstest.MapFS{"index.html": {Data: []byte(`<html><link rel="manifest" href="./manifest.webmanifest"><script src="./assets/app.js"></script>app</html>`)}, "manifest.webmanifest": {Data: []byte(`{"name":"Web IDE"}`)}}}
 	s.Plugins = builtin.Registry(false)
 	if set != nil {

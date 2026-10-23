@@ -6,9 +6,9 @@ import (
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
 	kb "github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
-	"github.com/DrSmithFr/web-ide/pod/acp"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"github.com/DrSmithFr/web-ide/pod/caps"
 	"github.com/DrSmithFr/web-ide/pod/projects"
+	"github.com/DrSmithFr/web-ide/pod/runtime"
 )
 
 // The development of a ticket by an ACP agent (kanban setting devAgent): one session of the
@@ -37,16 +37,24 @@ func (s *K) ticketWorktree(root *projects.Project, t *kb.Ticket) (string, error)
 	return id, nil
 }
 
+// agents is the agents capability of the project of rt (the AI plugin), nil when it is off.
+func (s *K) agents(rt *runtime.Runtime) caps.Agents {
+	ag, _ := s.pod.Capability(rt, "agents").(caps.Agents)
+	return ag
+}
+
 // ticketSession finds the session of a ticket in the files of the Agents tool of its
 // worktree (open or not).
-func (s *K) ticketSession(root *projects.Project, t *kb.Ticket) (project string, info acp.Info, entries []acp.Entry, ok bool) {
+func (s *K) ticketSession(rt *runtime.Runtime, root *projects.Project, t *kb.Ticket) (project string, sess caps.AgentSession, ok bool) {
 	owner := t.ID
 	if t.Parent != 0 {
 		owner = t.Parent
 	}
 	project = projects.ChildID(root.ID, owner)
-	info, entries, ok = acp.Find(s.Store.Path("agents", project), t.ID)
-	return project, info, entries, ok
+	if ag := s.agents(rt); ag != nil {
+		sess, ok = ag.TicketSession(project, t.ID)
+	}
+	return project, sess, ok
 }
 
 func (s *K) registerKanbanAgent() {
@@ -79,8 +87,9 @@ func (s *K) registerKanbanAgent() {
 		if name == "" {
 			return nil, i18n.New("the kanban develops with the assistant: no development agent is set")
 		}
-		if _, ok := assistant.RoleInstructions[a.Role]; !ok {
-			return nil, i18n.Errorf("unknown role: %s", a.Role)
+		ag := s.agents(k.rt)
+		if ag == nil {
+			return nil, i18n.Errorf("the %s plugin is disabled on this project", "AI")
 		}
 		t, err := s.Kanban.Get(k.loc, a.ID)
 		if err != nil {
@@ -90,38 +99,17 @@ func (s *K) registerKanbanAgent() {
 		if err != nil {
 			return nil, err
 		}
-		rt, err := s.pod.Runtime(project)
+		sess, created, err := ag.Develop(project, name, caps.TicketBrief{ID: t.ID, Parent: t.Parent, Feedback: a.Feedback,
+			Role: a.Role, Title: t.Title, Branch: t.Branch, Markdown: kb.Markdown(t), Text: a.Text})
 		if err != nil {
 			return nil, err
 		}
-		if rt.Agents == nil {
-			return nil, i18n.New("agents run on local projects only")
+		if !created {
+			return map[string]any{"project": project, "session": sess.ID}, nil
 		}
-		prompt := assistant.TicketPrompt(t.ID, a.Role, t.Branch, t.Parent, a.Feedback, kb.Markdown(t))
-		if a.Text != "" {
-			prompt += "\n\n---\n\n" + a.Text
-		}
-		for _, info := range rt.Agents.List() {
-			if info.Ticket != t.ID {
-				continue
-			}
-			sess, err := rt.Agents.Get(info.ID)
-			if err != nil {
-				break
-			}
-			if err := sess.Prompt(prompt); err != nil {
-				return nil, err
-			}
-			return map[string]any{"project": project, "session": info.ID}, nil
-		}
-		info, err := rt.Agents.CreateWith(name, "", acp.Options{Title: "#" + itoa(t.ID) + " " + t.Title, Ticket: t.ID, Prompt: prompt})
-		if err != nil {
-			return nil, err
-		}
-		s.pod.Emit(project, "agents.created", info)
-		_ = s.Kanban.Event(k.loc, t.ID, kb.ByUser, "Development given to {agent}", kb.Params{"agent": info.Name})
+		_ = s.Kanban.Event(k.loc, t.ID, kb.ByUser, "Development given to {agent}", kb.Params{"agent": sess.Name})
 		s.emitKanban(k.root.ID, t.ID, nil)
-		return map[string]any{"project": project, "session": info.ID}, nil
+		return map[string]any{"project": project, "session": sess.ID}, nil
 	}))
 	// kanban.agent.find tells where the session of a ticket is ({} when it has none).
 	s.handle("kanban.agent.find", h(func(ctx context.Context, c *client, k gctx, p json.RawMessage) (any, error) {
@@ -135,10 +123,10 @@ func (s *K) registerKanbanAgent() {
 		if err != nil {
 			return nil, err
 		}
-		project, info, _, ok := s.ticketSession(k.root, t)
+		project, sess, ok := s.ticketSession(k.rt, k.root, t)
 		if !ok {
 			return map[string]any{}, nil
 		}
-		return map[string]any{"project": project, "session": info.ID, "name": info.Name, "state": info.State}, nil
+		return map[string]any{"project": project, "session": sess.ID, "name": sess.Name, "state": sess.State}, nil
 	}))
 }

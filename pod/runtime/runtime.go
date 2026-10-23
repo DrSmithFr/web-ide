@@ -1,6 +1,6 @@
 // Package runtime holds everything the pod keeps alive for an open project: file system,
-// watches, open files and their revisions, buffers shared between windows, consoles,
-// language servers and database connections.
+// watches, open files and their revisions, buffers shared between windows, consoles, and the
+// parts of the plugins (language servers, database connections, sessions of the agents).
 package runtime
 
 import (
@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/acp"
 	"github.com/DrSmithFr/web-ide/pod/console"
 	"github.com/DrSmithFr/web-ide/pod/execx"
 	"github.com/DrSmithFr/web-ide/pod/fsx"
@@ -39,10 +38,6 @@ type Deps struct {
 	// SettingsRoot is the folder of the main project of a worktree: its .ide holds the
 	// settings ("" for the project itself).
 	SettingsRoot string
-	// Version of the pod, told to the agents.
-	Version string
-	// AgentsMCP is the MCP server of the IDE, given to the sessions of the Agents tool.
-	AgentsMCP []acp.MCPServer
 }
 
 type fileState struct {
@@ -68,8 +63,6 @@ type Runtime struct {
 	IdeDir string
 
 	Consoles *console.Manager
-	// Agents are the sessions of the Agents tool (nil on an SSH project: local only for now).
-	Agents *acp.Manager
 	// Keeper runs the processes that survive the pod, else nil; KeeperTarget is where: ""
 	// (local) or "ssh:<key>" (its own connection to the host of an SSH project).
 	Keeper       *keeper.Client
@@ -172,10 +165,6 @@ func Open(p projects.Project, creds sshx.Creds, d Deps, emit Emit) (*Runtime, er
 			}
 		}
 	}
-	if r.Local && d.Store != nil {
-		r.Agents = acp.NewManager(acp.Deps{Keeper: d.Keeper, Owner: p.ID, Dir: d.Store.Path("agents", p.ID), Root: root,
-			Catalog: acp.Catalog{Dir: d.Store.Path("acp")}, Version: d.Version, MCP: d.AgentsMCP, Emit: func(ev string, data any) { r.emit(ev, data, "") }})
-	}
 	r.Git = git.New(r.Runner, root)
 	return r, nil
 }
@@ -205,9 +194,6 @@ func (r *Runtime) Detach() {
 // Close ends everything the project runs (the project is closed).
 func (r *Runtime) Close() {
 	r.Consoles.CloseAll()
-	if r.Agents != nil {
-		r.Agents.CloseAll()
-	}
 	r.stopParts(false)
 	r.release()
 }
@@ -216,9 +202,6 @@ func (r *Runtime) Close() {
 // adopts them again when it starts).
 func (r *Runtime) Release() {
 	r.Consoles.Release()
-	if r.Agents != nil {
-		r.Agents.Release()
-	}
 	r.stopParts(true)
 	r.release()
 }

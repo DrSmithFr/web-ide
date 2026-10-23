@@ -6,27 +6,28 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 )
 
-func answer(at int64, effort string, usage string, thinkMs, elapsedMs int64, reasoning string, calls ...[2]string) *assistant.Message {
-	m := &assistant.Message{Role: "assistant", At: at, Effort: effort, Model: "m", Usage: json.RawMessage(usage), ThinkMs: thinkMs, ElapsedMs: elapsedMs, Reasoning: reasoning}
+func answer(at int64, effort string, usage string, thinkMs, elapsedMs int64, reasoning string, calls ...[2]string) *engine.Message {
+	m := &engine.Message{Role: "assistant", At: at, Effort: effort, Model: "m", Usage: json.RawMessage(usage), ThinkMs: thinkMs, ElapsedMs: elapsedMs, Reasoning: reasoning}
 	for _, c := range calls {
-		var tc assistant.ToolCall
+		var tc engine.ToolCall
 		tc.Function.Name, tc.Function.Arguments = c[0], c[1]
 		m.ToolCalls = append(m.ToolCalls, tc)
 	}
 	return m
 }
 
-func result(name, status, failure string, elapsed, wait int64, content string) *assistant.Message {
-	return &assistant.Message{Role: "tool", Name: name, Status: status, Failure: failure, ElapsedMs: elapsed, WaitMs: wait, Content: assistant.String(content)}
+func result(name, status, failure string, elapsed, wait int64, content string) *engine.Message {
+	return &engine.Message{Role: "tool", Name: name, Status: status, Failure: failure, ElapsedMs: elapsed, WaitMs: wait, Content: assistant.String(content)}
 }
 
 // A conversation: a message, an answer reading two files at once (one read twice), an edit
 // approved after a wait, a command that fails, a compaction, a forgotten parameter, the end.
-func fixture() *assistant.Chat {
-	return &assistant.Chat{ID: "c", Messages: []*assistant.Message{
+func fixture() *engine.Chat {
+	return &engine.Chat{ID: "c", Messages: []*engine.Message{
 		{Role: "user", At: 1000, Content: assistant.String(strings.Repeat("u", 70))},
 		answer(2000, "xhigh", `{"prompt":1000,"completion":100,"cached":0,"perSecond":50,"promptPerSecond":500}`, 800, 1200, strings.Repeat("r", 30),
 			[2]string{"read_file", `{"path":"a"}`}, [2]string{"read_file", `{"path":"b"}`}),

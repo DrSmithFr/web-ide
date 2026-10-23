@@ -3,16 +3,17 @@ package ai
 import (
 	"testing"
 
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
+	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/llm"
 )
 
 func TestReasoningOfTheTurn(t *testing.T) {
-	msgs := []*assistant.Message{
+	msgs := []*engine.Message{
 		{Role: "user", Content: assistant.String("a")},
 		{Role: "assistant", Content: assistant.String("A"), Reasoning: "old"},
 		{Role: "user", Content: assistant.String("b")},
-		{Role: "assistant", Reasoning: "think", ToolCalls: []assistant.ToolCall{{ID: "1"}}},
+		{Role: "assistant", Reasoning: "think", ToolCalls: []engine.ToolCall{{ID: "1"}}},
 		{Role: "tool", ToolCallID: "1", Content: assistant.String("ok")},
 		{Role: "assistant", Content: assistant.String(""), Reasoning: "stuck", Error: "Answer ended in its reasoning, without text or action."},
 	}
@@ -23,11 +24,11 @@ func TestReasoningOfTheTurn(t *testing.T) {
 }
 
 func TestEmptyAnswer(t *testing.T) {
-	for m, want := range map[*assistant.Message]bool{
-		{Content: assistant.String(" \n")}:           true,
-		{Reasoning: "x"}:                             true,
-		{Content: assistant.String("ok")}:            false,
-		{ToolCalls: []assistant.ToolCall{{ID: "1"}}}: false,
+	for m, want := range map[*engine.Message]bool{
+		{Content: assistant.String(" \n")}:        true,
+		{Reasoning: "x"}:                          true,
+		{Content: assistant.String("ok")}:         false,
+		{ToolCalls: []engine.ToolCall{{ID: "1"}}}: false,
 	} {
 		if emptyAnswer(m) != want {
 			t.Errorf("%+v: %v", m, !want)
@@ -36,18 +37,18 @@ func TestEmptyAnswer(t *testing.T) {
 }
 
 func TestCompactCut(t *testing.T) {
-	step := func() []*assistant.Message {
-		return []*assistant.Message{
-			{Role: "assistant", Reasoning: "think", ToolCalls: []assistant.ToolCall{{ID: "1"}}},
+	step := func() []*engine.Message {
+		return []*engine.Message{
+			{Role: "assistant", Reasoning: "think", ToolCalls: []engine.ToolCall{{ID: "1"}}},
 			{Role: "tool", ToolCallID: "1", Content: assistant.String("ok")},
 		}
 	}
 	// A summary, one turn of 10 steps, then an exchange: the last 10 steps stay.
-	msgs := []*assistant.Message{{Role: "user", Kind: "summary"}, {Role: "user", Content: assistant.String("go")}}
+	msgs := []*engine.Message{{Role: "user", Kind: "summary"}, {Role: "user", Content: assistant.String("go")}}
 	for range 10 {
 		msgs = append(msgs, step()...)
 	}
-	msgs = append(msgs, &assistant.Message{Role: "user", Content: assistant.String("next")}, &assistant.Message{Role: "assistant", Content: assistant.String("ok")})
+	msgs = append(msgs, &engine.Message{Role: "user", Content: assistant.String("next")}, &engine.Message{Role: "assistant", Content: assistant.String("ok")})
 	if cut := compactCut(msgs, 0); cut != 4 || msgs[cut].Role != "assistant" {
 		t.Fatalf("last steps kept: cut at %d of %d", cut, len(msgs))
 	}
@@ -57,8 +58,8 @@ func TestCompactCut(t *testing.T) {
 }
 
 func TestResumeKeepsTheFailedAnswer(t *testing.T) {
-	failed := &assistant.Message{Role: "assistant", Content: assistant.String("half"), Reasoning: "long", Error: "cut", Usage: []byte(`{"prompt":100,"completion":90000}`)}
-	chat := &assistant.Chat{Messages: []*assistant.Message{
+	failed := &engine.Message{Role: "assistant", Content: assistant.String("half"), Reasoning: "long", Error: "cut", Usage: []byte(`{"prompt":100,"completion":90000}`)}
+	chat := &engine.Chat{Messages: []*engine.Message{
 		{Role: "user", Content: assistant.String("go")},
 		{Role: "assistant", Content: assistant.String("ok"), Usage: []byte(`{"prompt":50,"completion":10}`)},
 		failed,
@@ -99,7 +100,7 @@ func TestReasoningLoop(t *testing.T) {
 }
 
 func TestStuckNudge(t *testing.T) {
-	msgs := []*assistant.Message{
+	msgs := []*engine.Message{
 		{Role: "user", Content: assistant.String("go")},
 		{Role: "assistant", Reasoning: "round", Error: "loop", Stuck: true, Resumed: true},
 	}
@@ -107,7 +108,7 @@ func TestStuckNudge(t *testing.T) {
 	if len(out) != 3 || out[2].Role != "user" || assistant.ContentText(out[2].Content) != stuckNudge {
 		t.Fatalf("asked again with the nudge: %+v", out)
 	}
-	msgs = append(msgs, &assistant.Message{Role: "assistant", Content: assistant.String("done")})
+	msgs = append(msgs, &engine.Message{Role: "assistant", Content: assistant.String("done")})
 	if out := apiMessages("sys", msgs, false); len(out) != 3 || out[2].Role != "assistant" {
 		t.Fatalf("the nudge only while it is the last: %+v", out)
 	}
