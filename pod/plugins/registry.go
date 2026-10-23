@@ -3,6 +3,8 @@ package plugins
 import (
 	"fmt"
 	"slices"
+	"sort"
+	"sync"
 )
 
 // CoreCapabilities are provided by the core itself: none since Git is a plugin (#118).
@@ -12,13 +14,113 @@ var CoreCapabilities = []string{}
 var CoreTools = []string{
 	"questions", "conflicts", "info"}
 
-// Registry holds the built-in plugins, in their order of registration.
+// Registry holds the built-in plugins, in their order of registration, and the external plugins
+// installed on the pod (pod/plugins/install), by id.
 type Registry struct {
 	list  []Plugin
 	tools map[string]string // assistant tool -> plugin
+
+	mu        sync.RWMutex
+	externals map[string]External
 }
 
-func NewRegistry() *Registry { return &Registry{tools: map[string]string{}} }
+func NewRegistry() *Registry {
+	return &Registry{tools: map[string]string{}, externals: map[string]External{}}
+}
+
+// External is an external plugin installed on the pod: its manifest, where it comes from, its
+// version and the grants the user accepted. Listed, not runnable yet (its views: #129, its
+// backend: #130).
+type External struct {
+	Manifest Manifest `json:"-"`
+	URL      string   `json:"url"`
+	Version  string   `json:"version"`
+	Grants   []string `json:"grants"`
+	// Installed is false for a plugin a project uses that this pod lacks.
+	Installed bool `json:"installed"`
+}
+
+// Builtin tells whether id is the one of a built-in plugin.
+func (r *Registry) Builtin(id string) bool {
+	_, ok := r.Get(id)
+	return ok
+}
+
+// CheckExternal tells whether an external plugin can sit beside the built-ins: its id, its
+// tools and its assistant tools are not theirs.
+func (r *Registry) CheckExternal(m Manifest) error {
+	if r.Builtin(m.ID) {
+		return fmt.Errorf("plugin %s: the id of a built-in plugin", m.ID)
+	}
+	for _, t := range m.Contributes.Tools {
+		if slices.Contains(CoreTools, t.ID) {
+			return fmt.Errorf("plugin %s: tool %s is a tool of the core", m.ID, t.ID)
+		}
+		for _, o := range r.list {
+			if slices.ContainsFunc(o.Manifest().Contributes.Tools, func(x Tool) bool { return x.ID == t.ID }) {
+				return fmt.Errorf("plugin %s: tool %s is already the one of %s", m.ID, t.ID, o.Manifest().ID)
+			}
+		}
+	}
+	for _, name := range m.Contributes.toolNames() {
+		if o, ok := r.tools[name]; ok {
+			return fmt.Errorf("plugin %s: assistant tool %s is already the one of %s", m.ID, name, o)
+		}
+	}
+	return nil
+}
+
+// SetExternal adds or replaces an installed external plugin.
+func (r *Registry) SetExternal(e External) error {
+	if err := r.CheckExternal(e.Manifest); err != nil {
+		return err
+	}
+	e.Installed = true
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.externals[e.Manifest.ID] = e
+	return nil
+}
+
+// RemoveExternal forgets an external plugin removed from the pod.
+func (r *Registry) RemoveExternal(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.externals, id)
+}
+
+// External is an installed external plugin by id.
+func (r *Registry) External(id string) (External, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	e, ok := r.externals[id]
+	return e, ok
+}
+
+// Externals are the installed external plugins, by id.
+func (r *Registry) Externals() []External {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]External, 0, len(r.externals))
+	for _, e := range r.externals {
+		out = append(out, e)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Manifest.ID < out[j].Manifest.ID })
+	return out
+}
+
+// Versions are the plugins of the pod and their versions, built-ins and externals (what the
+// requirements of an external plugin are checked against).
+func (r *Registry) Versions() map[string]string {
+	out := map[string]string{}
+	for _, p := range r.list {
+		out[p.Manifest().ID] = p.Manifest().Version
+	}
+	for _, e := range r.Externals() {
+		out[e.Manifest.ID] = e.Version
+	}
+	return out
+}
 
 // Add checks a plugin against the others and keeps it.
 func (r *Registry) Add(p Plugin) error {
@@ -51,7 +153,7 @@ func (r *Registry) Add(p Plugin) error {
 	return nil
 }
 
-// All returns the plugins in their order of registration.
+// All returns the built-in plugins in their order of registration.
 func (r *Registry) All() []Plugin { return r.list }
 
 // Get returns a plugin by id.
@@ -76,12 +178,42 @@ type State struct {
 	Disabled bool `json:"disabled"`
 	// Missing are the capabilities it requires that nothing enabled provides.
 	Missing []string `json:"missing,omitempty"`
+	// External: an external plugin (never enabled in this step: not runnable yet); Disabled
+	// is then false when the project uses it.
+	External *External `json:"external,omitempty"`
 }
 
 // Resolve tells which plugins run on a project, given the ones the user disabled: a plugin
 // whose requirement is not provided (by the core or an enabled plugin) is off too, which may
 // turn off the plugins that required it in turn.
 func (r *Registry) Resolve(disabled []string) []State {
+	return r.ResolveChoices(Choices{Disabled: disabled})
+}
+
+// ResolveChoices is Resolve with the external plugins: those installed, then those the project
+// uses that this pod lacks.
+func (r *Registry) ResolveChoices(ch Choices) []State {
+	out := r.resolveBuiltins(ch.Disabled)
+	for _, e := range r.Externals() {
+		e := e
+		_, used := ch.External[e.Manifest.ID]
+		out = append(out, State{Manifest: e.Manifest, Disabled: !used, External: &e})
+	}
+	ids := make([]string, 0, len(ch.External))
+	for id := range ch.External {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		if _, ok := r.External(id); ok || r.Builtin(id) {
+			continue
+		}
+		out = append(out, State{Manifest: Manifest{ID: id, Name: id, APIVersion: APIVersion}, External: &External{URL: ch.External[id]}})
+	}
+	return out
+}
+
+func (r *Registry) resolveBuiltins(disabled []string) []State {
 	out := make([]State, len(r.list))
 	for i, p := range r.list {
 		m := p.Manifest()

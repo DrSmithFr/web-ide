@@ -794,3 +794,12 @@ button.sb-item:hover { background: var(--bg-3); color: var(--fg); }
 .help-link { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 6px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: transparent; color: var(--fg-muted); font-size: 12px; line-height: 1; cursor: pointer; vertical-align: middle; }
 .help-link:hover, .help-link:focus-visible { color: var(--accent); border-color: var(--accent); }
 .settings-help { float: right; }
+
+/* Settings > Plugins: the external plugins (settings/PluginInstall.tsx). */
+.plugin-install { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; border-top: 1px solid var(--line); padding-top: 12px; }
+.plugin-install h3, .plugin-install p { flex-basis: 100%; margin: 0; }
+.plugin-install input:first-of-type { flex: 1 1 260px; }
+.plugin-install input + input { flex: 0 1 140px; }
+.plugin-external { margin-left: 24px; display: flex; flex-direction: column; gap: 4px; }
+.plugin-external .row { display: flex; gap: 8px; }
+.plugin-grants label.check { display: flex; gap: 8px; align-items: center; margin: 6px 0; }

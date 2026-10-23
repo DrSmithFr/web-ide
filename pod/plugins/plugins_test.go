@@ -101,12 +101,22 @@ func TestEnabledFile(t *testing.T) {
 	if _, err := SetEnabled(fs, dir, "database", false); err != nil {
 		t.Fatal(err)
 	}
-	list, err := SetEnabled(fs, dir, "docker", true)
-	if err != nil || !slices.Equal(list, []string{"database"}) {
-		t.Fatal(list, err)
+	ch, err := SetEnabled(fs, dir, "docker", true)
+	if err != nil || !slices.Equal(ch.Disabled, []string{"database"}) {
+		t.Fatal(ch, err)
 	}
-	if again, _ := LoadDisabled(fs, dir); !slices.Equal(again, list) {
+	if again, _ := LoadDisabled(fs, dir); !slices.Equal(again, ch.Disabled) {
 		t.Fatal(again)
+	}
+	// An external plugin used by the project: kept beside the disabled ones.
+	if ch, err = SetExternal(fs, dir, "greet", "https://example.test/greet"); err != nil || ch.External["greet"] == "" {
+		t.Fatal(ch, err)
+	}
+	if ch, _ = SetEnabled(fs, dir, "git", false); ch.External["greet"] == "" || !slices.Equal(ch.Disabled, []string{"database", "git"}) {
+		t.Fatal("the externals are kept", ch)
+	}
+	if ch, _ = SetExternal(fs, dir, "greet", ""); ch.External != nil {
+		t.Fatal(ch)
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".gitignore")); err != nil {
 		t.Fatal(".ide kept out of git", err)
@@ -131,5 +141,37 @@ func TestBuiltinManifests(t *testing.T) {
 		if _, err := Parse(data); err != nil {
 			t.Fatal(f, err)
 		}
+	}
+}
+
+// The external plugins are listed after the built-ins, never enabled in this step; one a
+// project uses that the pod lacks shows as not installed.
+func TestExternals(t *testing.T) {
+	r := NewRegistry()
+	if err := r.Add(fake{Manifest{ID: "git", Name: "Git", Version: "1.0.0", APIVersion: APIVersion, Contributes: Contributions{Tools: []Tool{{ID: "git", Label: "Git", Icon: "git", Zone: "left"}}}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.SetExternal(External{Manifest: Manifest{ID: "git", APIVersion: APIVersion}}); err == nil {
+		t.Fatal("the id of a built-in")
+	}
+	if err := r.SetExternal(External{Manifest: Manifest{ID: "x", APIVersion: APIVersion, Contributes: Contributions{Tools: []Tool{{ID: "git", Zone: "left"}}}}}); err == nil {
+		t.Fatal("a tool of a built-in")
+	}
+	if err := r.SetExternal(External{Manifest: Manifest{ID: "greet", Name: "Greet", Version: "1.1.0", APIVersion: APIVersion}, URL: "u", Version: "1.1.0"}); err != nil {
+		t.Fatal(err)
+	}
+	states := r.ResolveChoices(Choices{External: map[string]string{"greet": "u", "other": "v"}})
+	if len(states) != 3 || states[1].Manifest.ID != "greet" || states[1].Enabled || states[1].Disabled || !states[1].External.Installed {
+		t.Fatalf("states: %+v", states)
+	}
+	if states[2].Manifest.ID != "other" || states[2].External.Installed || states[2].External.URL != "v" {
+		t.Fatalf("not installed: %+v", states[2])
+	}
+	if v := r.Versions(); v["greet"] != "1.1.0" || v["git"] != "1.0.0" {
+		t.Fatal(v)
+	}
+	r.RemoveExternal("greet")
+	if len(r.Externals()) != 0 || !r.ResolveChoices(Choices{})[0].Enabled {
+		t.Fatal("removed")
 	}
 }

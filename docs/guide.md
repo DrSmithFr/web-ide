@@ -136,6 +136,8 @@ All shortcuts are in *Settings → Keyboard*, with QWERTY and AZERTY presets.
 
 *Settings → Plugins*, with a project open, turns the plugins of the IDE on or off for that project and its worktrees: a plugin turned off takes away its tool, its commands and the tools it gives the assistant, and gets its place back when turned on again. Docker is one of them.
 
+*Install a plugin* (same page) adds an external plugin from its git repository: its address (https, ssh, or a folder of the machine) and a version constraint (`^1.2`, `~1.2`, empty for the latest). The IDE takes the highest version that fits it, shows the permissions it asks, and installs it with the ones you tick, one by one: it gets nothing else. It is installed on this pod only; *Update* takes the newest version of its constraint and asks again for any new permission, *Remove* takes it off the pod. A project that uses it (its box ticked) and is opened on a pod without it says *Not installed on this pod*, with *Install*. External plugins are listed but do not run yet.
+
 ## Help
 
 This documentation is inside the IDE, read only, and always the one of the version you run: *Help › Documentation* (also in the command palette) opens the index in a tab; links between pages, *Back* and the headings work as in a browser. A **?** next to a setting (Remote access, Notifications…), the kanban or the Agents tool opens the page that explains it, at its heading.
@@ -143,7 +145,7 @@ This documentation is inside the IDE, read only, and always the one of the versi
 ## Where the data lives
 
 - `~/.web-ide/`: settings (with their history), projects, the state of the desks, model servers, secrets (mode 0600), the access token.
-- `<project>/.ide/`: conversations (`chats.db`), kanban (`kanban.db`), worktrees of the tickets, database connections, folder marks, the plugins turned off (`plugins.json`), icon. The whole folder is ignored by git (its `.gitignore` is `*`); the worktrees use the `.ide` of the main project.
+- `<project>/.ide/`: conversations (`chats.db`), kanban (`kanban.db`), worktrees of the tickets, database connections, folder marks, the plugins turned off and the external ones it uses (`plugins.json`), icon. The whole folder is ignored by git (its `.gitignore` is `*`); the worktrees use the `.ide` of the main project.
 - Audio and private keys never leave your machine.
 
 To work on Web IDE itself, `make dev` runs a separate pod (port 4434, data in `~/.web-ide-dev`) next to the installed one: see [CONTRIBUTING.md](../CONTRIBUTING.md).
