@@ -103,6 +103,35 @@ run(
     console.log(boot)
     assert(first.app > 0 && first.ready !== undefined && first.channels > 0, 'the phases of the load are measured: ' + JSON.stringify(first))
 
+    // The bootstrap page hears only the app's frame (#129): a sandboxed frame inside the app (an
+    // external plugin's view) asking it for the entry pod gets no answer, the app does.
+    const heard = await app.evaluate(
+      () =>
+        new Promise((resolve) => {
+          const f = document.createElement('iframe')
+          f.setAttribute('sandbox', 'allow-scripts')
+          f.srcdoc = `<script>const c = new MessageChannel(); c.port1.onmessage = (e) => parent.postMessage({ heard: e.data }, '*'); top.postMessage({ kind: 'entry', port: c.port2 }, '*', [c.port2]); setTimeout(() => parent.postMessage({ heard: null }, '*'), 1500)<\/script>`
+          addEventListener('message', function on(e) {
+            if (e.source !== f.contentWindow) return
+            removeEventListener('message', on)
+            f.remove()
+            resolve(e.data.heard)
+          })
+          document.body.append(f)
+        }),
+    )
+    assert(heard === null, 'a foreign frame gets nothing from the bootstrap page: ' + JSON.stringify(heard))
+    const own = await app.evaluate(
+      () =>
+        new Promise((resolve) => {
+          const c = new MessageChannel()
+          c.port1.onmessage = (e) => resolve(e.data)
+          window.parent.postMessage({ kind: 'entry', port: c.port2 }, '*', [c.port2])
+          setTimeout(() => resolve(null), 1500)
+        }),
+    )
+    assert(typeof own === 'string', 'the app is heard: ' + JSON.stringify(own))
+
     // Editing: typing and saving go through the rpc channel, the file lands on disk.
     await page.keyboard.press('Control+Shift+n')
     await app.waitForSelector('.pick-input')

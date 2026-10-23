@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"path/filepath"
 	"slices"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
@@ -110,6 +111,17 @@ func (s *Server) registerPluginInstall() {
 		}
 		return s.installPlugin(ctx, cand, l.Constraint, grants)
 	})
+	// plugins.bundle: what the page runs of an external plugin, in its sandboxed frames (#129):
+	// its web/index.js and its catalogs.
+	s.handle("plugins.bundle", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		a, err := bind[struct {
+			ID string `json:"id"`
+		}](p)
+		if err != nil {
+			return nil, err
+		}
+		return s.pluginBundle(a.ID)
+	})
 	s.handle("plugins.remove", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
 		a, err := bind[struct {
 			ID string `json:"id"`
@@ -126,6 +138,41 @@ func (s *Server) registerPluginInstall() {
 		s.externalsChanged()
 		return nil, nil
 	})
+}
+
+// maxBundle caps the page module of an external plugin (one file, its own Solid and CSS).
+const maxBundle = 5 << 20
+
+// pluginBundle reads the page module and the catalogs of an installed external plugin.
+func (s *Server) pluginBundle(id string) (any, error) {
+	e, ok := s.Plugins.External(id)
+	if !ok {
+		return nil, i18n.Errorf("the plugin %s is not installed", id)
+	}
+	dir := filepath.Join(s.plugins.installer.Dir(id), e.Version)
+	st, err := os.Stat(filepath.Join(dir, "web", "index.js"))
+	if err != nil || !st.Mode().IsRegular() {
+		return nil, i18n.Errorf("the plugin %s has no web/index.js", id)
+	}
+	if st.Size() > maxBundle {
+		return nil, i18n.Errorf("the page module of %s is larger than %d MB", id, maxBundle>>20)
+	}
+	js, err := os.ReadFile(filepath.Join(dir, "web", "index.js"))
+	if err != nil {
+		return nil, err
+	}
+	catalogs := map[string]map[string]string{}
+	for _, lang := range i18n.Languages[1:] {
+		data, err := os.ReadFile(filepath.Join(dir, "i18n", lang+".json"))
+		if err != nil || len(data) > maxBundle {
+			continue
+		}
+		c := map[string]string{}
+		if json.Unmarshal(data, &c) == nil {
+			catalogs[lang] = c
+		}
+	}
+	return map[string]any{"version": e.Version, "js": string(js), "catalogs": catalogs}, nil
 }
 
 // resolvePlugin resolves a version of a repository, which must fit beside the built-ins.

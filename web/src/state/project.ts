@@ -1073,6 +1073,17 @@ export function navigate(dir: -1 | 1) {
 
 // ---------- project lifecycle ----------
 
+/**
+ * The plugins of the pod changed (an external one installed, removed): their tools take their
+ * default zone, those of the plugins gone leave the placement.
+ */
+export function placePluginTools(plugins: { manifest: { contributes: { tools?: { id: string; zone: Zone; before?: string }[] } } }[]) {
+  setPluginZones(plugins)
+  if (!project()) return
+  const next = normalizePlacement(session.placement)
+  if (JSON.stringify(next) !== JSON.stringify(session.placement)) mutate((s) => (s.placement = next))
+}
+
 export async function openProject(id: string, creds?: { password?: string; passphrase?: string }, desk = 1) {
   const r = await request('project.open', { id, creds, desk })
   loadDesks(id, r.desks as DeskList, r.desk ?? 1)

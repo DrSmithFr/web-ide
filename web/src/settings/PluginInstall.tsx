@@ -142,7 +142,9 @@ export function ExternalRow(props: { s: PluginState }) {
   }
   return (
     <div class="plugin-external" data-testid={`plugin-external-${props.s.manifest.id}`}>
-      <span class="badge">{t('External')}</span> <span class="muted small">{ext().url}</span>
+      <div>
+        <span class="badge">{t('External')}</span> <span class="muted small">{ext().url}</span>
+      </div>
       <Show
         when={ext().installed}
         fallback={
@@ -151,10 +153,9 @@ export function ExternalRow(props: { s: PluginState }) {
             <button onClick={() => void askInstall(ext().url, '').catch(errorToast)}>{t('Install')}</button>
           </p>
         }>
-        <p class="muted small">
-          {t('Not runnable yet.')}
-          <Show when={ext().grants.length}> {t('Granted: {list}', { list: ext().grants.join(', ') })}</Show>
-        </p>
+        <Show when={ext().grants.length}>
+          <p class="muted small">{t('Granted: {list}', { list: ext().grants.join(', ') })}</p>
+        </Show>
         <div class="row">
           <button onClick={() => void update().catch(errorToast)} data-testid={`plugin-update-${props.s.manifest.id}`}>
             {t('Update')}
