@@ -31,6 +31,13 @@ type Manifest struct {
 	// (console and commands for exec: their names were kept when the tool became a plugin).
 	Namespaces  []string      `json:"namespaces,omitempty"`
 	Contributes Contributions `json:"contributes"`
+	// The fields of an external plugin (phase 3, pod/plugins/install): IDE is a semver
+	// constraint on the version of the IDE (^1.24), Plugins the versions of the plugins it needs
+	// (id -> constraint), Assets the address of its release archive, with {version} and {arch}
+	// (linux-amd64, linux-arm64).
+	IDE     string            `json:"ide,omitempty"`
+	Plugins map[string]string `json:"plugins,omitempty"`
+	Assets  string            `json:"assets,omitempty"`
 }
 
 // Owns tells whether a method or action name (prefix.name) belongs to the plugin.

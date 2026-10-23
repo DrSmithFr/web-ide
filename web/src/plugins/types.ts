@@ -44,6 +44,8 @@ export interface PluginState {
   enabled: boolean
   disabled: boolean
   missing?: string[]
+  /** An external plugin (not runnable yet): disabled is false when the project uses it. */
+  external?: { url: string; version: string; grants: string[]; installed: boolean }
 }
 
 /** What the module of a plugin gives for the contributions of its manifest, by id. */

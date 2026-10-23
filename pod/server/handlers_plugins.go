@@ -16,6 +16,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"github.com/DrSmithFr/web-ide/pod/plugins/builtin"
+	"github.com/DrSmithFr/web-ide/pod/plugins/install"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 	"github.com/DrSmithFr/web-ide/pod/settingsync"
 	"github.com/DrSmithFr/web-ide/pod/sshx"
@@ -42,8 +43,8 @@ type pluginSet struct {
 	// The pod ready, the pod stopping.
 	onStart, onStop []func()
 	mu              sync.Mutex
-	// disabled caches .ide/plugins.json per main project; written by plugins.set.
-	disabled map[string][]string
+	// choices caches .ide/plugins.json per main project; written by plugins.set.
+	choices map[string]plugins.Choices
 	// provided are the capabilities the plugins gave (Host.Provide), by name; set at registration.
 	provided map[string]any
 	// preview serves a preview asked through the tunnel (Host.HandlePreview: the Previews plugin).
@@ -52,6 +53,10 @@ type pluginSet struct {
 	// synced vault (Host.Vault).
 	questions []pluginQuestions
 	vault     []settingsync.VaultMap
+	// installer installs the external plugins (handlers_plugins_install.go), one change of the
+	// lock at a time.
+	installer *install.Installer
+	installMu sync.Mutex
 }
 
 // pluginQuestions is a source of the Questions tool given by a plugin.
@@ -151,11 +156,12 @@ func (s *Server) registerPlugins() {
 	if s.Plugins == nil {
 		s.Plugins = builtin.Registry(false)
 	}
-	s.plugins.disabled = map[string][]string{}
+	s.plugins.choices = map[string]plugins.Choices{}
 	for _, p := range s.Plugins.All() {
 		m := p.Manifest()
 		p.Register(pluginHost{s: s, id: m.ID, m: m})
 	}
+	s.registerPluginInstall()
 	s.handle("plugins.list", withRuntime(func(ctx context.Context, c *Client, rt *runtime.Runtime, p json.RawMessage) (any, error) {
 		return map[string]any{"plugins": s.pluginStates(rt)}, nil
 	}))
@@ -167,17 +173,27 @@ func (s *Server) registerPlugins() {
 		if err != nil {
 			return nil, err
 		}
-		pl, ok := s.Plugins.Get(a.ID)
-		if !ok {
+		var ch plugins.Choices
+		url := s.externalURL(rt, a.ID)
+		s.plugins.mu.Lock()
+		if pl, ok := s.Plugins.Get(a.ID); ok {
+			if pl.Manifest().Required && !a.Enabled {
+				s.plugins.mu.Unlock()
+				return nil, i18n.Errorf("the %s plugin is always on: the IDE needs it", pl.Manifest().Name)
+			}
+			ch, err = plugins.SetEnabled(rt.FS, rt.IdeDir, a.ID, a.Enabled)
+		} else if url != "" {
+			// An external plugin: the project uses it or not (it runs from #129 on).
+			if !a.Enabled {
+				url = ""
+			}
+			ch, err = plugins.SetExternal(rt.FS, rt.IdeDir, a.ID, url)
+		} else {
+			s.plugins.mu.Unlock()
 			return nil, i18n.Errorf("unknown plugin: %s", a.ID)
 		}
-		if pl.Manifest().Required && !a.Enabled {
-			return nil, i18n.Errorf("the %s plugin is always on: the IDE needs it", pl.Manifest().Name)
-		}
-		s.plugins.mu.Lock()
-		list, err := plugins.SetEnabled(rt.FS, rt.IdeDir, a.ID, a.Enabled)
 		if err == nil {
-			s.plugins.disabled[mainID(rt)] = list
+			s.plugins.choices[mainID(rt)] = ch
 		}
 		s.plugins.mu.Unlock()
 		if err != nil {
@@ -191,20 +207,34 @@ func (s *Server) registerPlugins() {
 
 // pluginStates are the plugins as the project of rt sees them (its main project's settings).
 func (s *Server) pluginStates(rt *runtime.Runtime) []plugins.State {
+	return s.Plugins.ResolveChoices(s.pluginChoices(rt))
+}
+
+// pluginChoices are the choices of .ide/plugins.json of the main project of rt, cached.
+func (s *Server) pluginChoices(rt *runtime.Runtime) plugins.Choices {
 	key := mainID(rt)
 	s.plugins.mu.Lock()
-	list, ok := s.plugins.disabled[key]
+	ch, ok := s.plugins.choices[key]
 	s.plugins.mu.Unlock()
 	if !ok {
 		var err error
-		if list, err = plugins.LoadDisabled(rt.FS, rt.IdeDir); err != nil {
-			list = nil // an invalid file enables every plugin; it is left as it is
+		if ch, err = plugins.LoadChoices(rt.FS, rt.IdeDir); err != nil {
+			ch = plugins.Choices{} // an invalid file enables every plugin; it is left as it is
 		}
 		s.plugins.mu.Lock()
-		s.plugins.disabled[key] = list
+		s.plugins.choices[key] = ch
 		s.plugins.mu.Unlock()
 	}
-	return s.Plugins.Resolve(list)
+	return ch
+}
+
+// externalURL is the repository of an external plugin: the pod's installed one, else the one
+// the project names ("" when neither knows it).
+func (s *Server) externalURL(rt *runtime.Runtime, id string) string {
+	if e, ok := s.Plugins.External(id); ok {
+		return e.URL
+	}
+	return s.pluginChoices(rt).External[id]
 }
 
 func (s *Server) pluginOn(rt *runtime.Runtime, id string) bool {

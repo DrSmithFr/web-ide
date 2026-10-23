@@ -1,9 +1,11 @@
 // Settings > Plugins, with a project open: the plugins of the pod, enabled or disabled on the
-// project (.ide/plugins.json of its main project), their permissions and capabilities.
+// project (.ide/plugins.json of its main project), their permissions and capabilities; the
+// external ones are installed, updated and removed for the pod (PluginInstall.tsx).
 import { Index, Show } from 'solid-js'
 import { pluginStates, setPluginEnabled } from '../plugins/registry'
 import type { PluginState } from '../plugins/types'
 import { errorToast } from '../ui/toast'
+import { ExternalRow, InstallForm, PluginDialogs } from './PluginInstall'
 import { t } from '../i18n'
 
 /** The enabled plugins requiring a capability that the plugin provides (and the core does not). */
@@ -41,12 +43,17 @@ export function PluginsSection() {
             <Show when={s().missing?.length}>
               <p class="err small">{t('Off: needs {list}', { list: s().missing!.join(', ') })}</p>
             </Show>
-            <Show when={s().manifest.permissions?.length}>
+            <Show when={s().manifest.permissions?.length && !s().external}>
               <p class="muted small">{t('Permissions: {list}', { list: s().manifest.permissions!.join(', ') })}</p>
+            </Show>
+            <Show when={s().external}>
+              <ExternalRow s={s()} />
             </Show>
           </div>
         )}
       </Index>
+      <InstallForm />
+      <PluginDialogs />
     </section>
   )
 }

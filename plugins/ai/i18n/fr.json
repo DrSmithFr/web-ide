@@ -598,7 +598,6 @@
   "Not installed: {command}": "Non installé : {command}",
   "Installed": "Installé",
   "Installing…": "Installation…",
-  "Install": "Installer",
   "The agent kept ending, it is not restarted anymore.": "L'agent s'est arrêté plusieurs fois de suite, il n'est plus relancé.",
   "The agent stopped.": "L'agent s'est arrêté.",
   "Starting {name}…": "Démarrage de {name}…",
