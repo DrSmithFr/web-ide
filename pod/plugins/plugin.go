@@ -9,11 +9,11 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/hfcache"
 
+	"github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
 	"github.com/DrSmithFr/web-ide/pod/acp"
 	"github.com/DrSmithFr/web-ide/pod/commands"
 	"github.com/DrSmithFr/web-ide/pod/config"
 	"github.com/DrSmithFr/web-ide/pod/desks"
-	"github.com/DrSmithFr/web-ide/pod/kanban"
 	"github.com/DrSmithFr/web-ide/pod/keeper"
 	"github.com/DrSmithFr/web-ide/pod/llm"
 	"github.com/DrSmithFr/web-ide/pod/projects"

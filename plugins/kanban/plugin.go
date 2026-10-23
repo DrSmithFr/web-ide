@@ -1,6 +1,6 @@
 // Package kanban is the Kanban plugin: the tickets of a project, their lineages, milestones and
 // objectives, the git workflow of a ticket (worktree, diff, merge) and the dev sessions of the
-// agents (docs/design/kanban.md). The tickets are kept by pod/kanban; its manager is the
+// agents (docs/design/kanban.md). The tickets are kept by its package kanban/; its manager is the
 // pod's, lent to the plugin, since the assistant and the push notifications read it too. The
 // plugin provides tickets and requires terminal (setup commands) and worktrees (Git).
 package kanban

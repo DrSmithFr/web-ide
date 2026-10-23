@@ -10,8 +10,8 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/sshx"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/kanban"
 )
 
 // Claude Code takes part in a conversation of the assistant linked to a ticket: it

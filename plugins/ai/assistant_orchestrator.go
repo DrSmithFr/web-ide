@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/kanban"
 )
 
 // Tools of the Orchestrator mode (assistant/orchestrator.go): what to do next, what was done,

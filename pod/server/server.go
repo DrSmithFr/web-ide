@@ -27,10 +27,10 @@ import (
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
 	"github.com/DrSmithFr/web-ide/lib/tunnel"
+	"github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
 	"github.com/DrSmithFr/web-ide/pod/config"
 	"github.com/DrSmithFr/web-ide/pod/desks"
 	"github.com/DrSmithFr/web-ide/pod/hfcache"
-	"github.com/DrSmithFr/web-ide/pod/kanban"
 	"github.com/DrSmithFr/web-ide/pod/keeper"
 	"github.com/DrSmithFr/web-ide/pod/llm"
 	"github.com/DrSmithFr/web-ide/pod/plugins"

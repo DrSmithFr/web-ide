@@ -9,7 +9,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/commands"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/kanban"
+	"github.com/DrSmithFr/web-ide/pod/git"
 	"github.com/DrSmithFr/web-ide/pod/projects"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 	"github.com/DrSmithFr/web-ide/pod/sshx"
@@ -164,7 +164,7 @@ func (s *Server) registerWorktrees() {
 		if !a.Create && !rt.Git.HasLocal(ctx, local) {
 			_, local, _ = strings.Cut(a.Branch, "/") // origin/x → x
 		}
-		dir := path.Join(rt.Root, ".ide", "worktrees", "b-"+kanban.Slug(local))
+		dir := path.Join(rt.Root, ".ide", "worktrees", "b-"+git.Slug(local))
 		if err := rt.Git.AddWorktree(ctx, dir, a.Branch, a.Create); err != nil {
 			return nil, err
 		}

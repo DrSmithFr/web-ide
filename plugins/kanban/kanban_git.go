@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
+	kb "github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
 	"github.com/DrSmithFr/web-ide/pod/commands"
 	"github.com/DrSmithFr/web-ide/pod/execx"
-	kb "github.com/DrSmithFr/web-ide/pod/kanban"
 	"github.com/DrSmithFr/web-ide/pod/projects"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 )

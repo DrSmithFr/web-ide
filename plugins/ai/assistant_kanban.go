@@ -8,8 +8,8 @@ import (
 
 	kbp "github.com/DrSmithFr/web-ide/plugins/kanban"
 
+	"github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/kanban"
 	"github.com/DrSmithFr/web-ide/pod/llm"
 )
 

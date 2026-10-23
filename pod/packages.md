@@ -186,7 +186,7 @@ flowchart LR
 
 ## Kanban and git
 
-Tickets and the Git tool. `kanban` keeps the tickets, the milestones and the objectives (SQLite) and the git operations of a ticket (worktree, diff, merge, rebase); it runs `git` itself through `execx`, it does not import `git`. Its RPC methods (`kanban.*`), the git workflow of a ticket and its development by an agent are the Kanban plugin's (`plugins/kanban`); the workflow is in [kanban.md](../docs/design/kanban.md).
+Tickets and the Git tool. `kanban` keeps the tickets, the milestones and the objectives (SQLite) and the git operations of a ticket (worktree, diff, merge, rebase); since #135 it is the Kanban plugin's, in `plugins/kanban/kanban` (not `internal/`: the AI plugin uses its types), and only `git.Slug` of the core is shared with it. It runs `git` itself through `execx`. Its RPC methods (`kanban.*`), the git workflow of a ticket and its development by an agent are the Kanban plugin's (`plugins/kanban`); the workflow is in [kanban.md](../docs/design/kanban.md).
 
 ```mermaid
 flowchart LR
@@ -211,14 +211,14 @@ flowchart LR
 
 **Packages**
 
-- `kanban`: Tickets, milestones and objectives (SQLite), workflow rules, ticket git operations (worktrees, diff, merge, rebase); the methods are in `plugins/kanban`, the development by an ACP agent included (`kanban_agent.go`: a session of the worktree's `acp.Manager` per ticket, `Info.Ticket`)
-- `git`: What the Git plugin (`plugins/git`) runs
+- `kanban` (`plugins/kanban/kanban`): Tickets, milestones and objectives (SQLite), workflow rules, ticket git operations (worktrees, diff, merge, rebase); the methods are in `plugins/kanban`, the development by an ACP agent included (`kanban_agent.go`: a session of the worktree's `acp.Manager` per ticket, `Info.Ticket`)
+- `git`: What the Git plugin (`plugins/git`) runs, and `Slug`, the branch-friendly name of a title (the `b-<branch>` worktrees, the ticket branches)
 
 **Invariants and pitfalls**
 
 - **Git**: git speaks the language of the user, so its messages are never parsed (`git.Show` asks `cat-file -e` first); ticket commits start with `#<n>`, so `rebase --continue` and `commit --no-edit` run with `core.commentChar=auto`; diff prefixes are forced (`--src-prefix=a/ --dst-prefix=b/`) because user settings such as `diff.mnemonicPrefix` change them; after a merge the branch has nothing left against its base, so the change is frozen in the ticket at merge time.
 
-**Tests**: `go test ./pod/kanban ./pod/git ./pod/server`; e2e: `kanban`, `kanbangit`, `kanbanagents`, `kanbanai`, `git`.
+**Tests**: `go test ./plugins/kanban/... ./pod/git ./pod/server`; e2e: `kanban`, `kanbangit`, `kanbanagents`, `kanbanai`, `git`.
 
 
 ## Network and identity

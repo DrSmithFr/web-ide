@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	kb "github.com/DrSmithFr/web-ide/pod/kanban"
+	kb "github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
 )
 
 // The kanban_objective tool, shared by the MCP endpoint and the assistant (its schema:

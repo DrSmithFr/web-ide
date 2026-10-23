@@ -7,12 +7,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
-
-	"golang.org/x/text/unicode/norm"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
 	"github.com/DrSmithFr/web-ide/pod/execx"
+	"github.com/DrSmithFr/web-ide/pod/git"
 )
 
 // Git runs the git operations of the tickets in the main folder of a project (locally or
@@ -30,34 +28,10 @@ func (g Git) git(ctx context.Context, dir string, args ...string) (string, error
 	return string(out), nil
 }
 
-// Slug turns a title into a short branch-friendly name.
-func Slug(title string) string {
-	var b strings.Builder
-	dash := false
-	for _, r := range norm.NFD.String(strings.ToLower(title)) {
-		switch {
-		case unicode.Is(unicode.Mn, r):
-			continue
-		case r < 128 && (unicode.IsLetter(r) || unicode.IsDigit(r)):
-			b.WriteRune(r)
-			dash = false
-		default:
-			if !dash && b.Len() > 0 {
-				b.WriteByte('-')
-				dash = true
-			}
-		}
-		if b.Len() >= 40 {
-			break
-		}
-	}
-	return strings.Trim(b.String(), "-")
-}
-
 // Names returns the branch and the worktree folder of a ticket.
 func (g Git) Names(id int64, title string) (branch, dir string) {
 	name := strconv.FormatInt(id, 10)
-	if s := Slug(title); s != "" {
+	if s := git.Slug(title); s != "" {
 		name += "-" + s
 	}
 	return "ticket/" + name, path.Join(g.Root, ".ide", "worktrees", name)

@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
+	kb "github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
 	"github.com/DrSmithFr/web-ide/pod/acp"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
-	kb "github.com/DrSmithFr/web-ide/pod/kanban"
 	"github.com/DrSmithFr/web-ide/pod/projects"
 )
 

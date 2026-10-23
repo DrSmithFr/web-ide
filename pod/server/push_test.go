@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/pod/kanban"
+	"github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
 
 	"github.com/DrSmithFr/web-ide/lib/identity"
 	"github.com/DrSmithFr/web-ide/pod/push"

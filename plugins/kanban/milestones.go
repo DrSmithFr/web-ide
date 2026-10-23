@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	kb "github.com/DrSmithFr/web-ide/pod/kanban"
+	kb "github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
 )
 
 // emitMilestone tells the windows of a project that a milestone changed (kanban.changed with

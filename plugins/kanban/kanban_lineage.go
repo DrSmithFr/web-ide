@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
-	kb "github.com/DrSmithFr/web-ide/pod/kanban"
+	kb "github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
 	"github.com/DrSmithFr/web-ide/pod/projects"
 )
 
