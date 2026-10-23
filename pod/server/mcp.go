@@ -8,13 +8,15 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/DrSmithFr/web-ide/lib/i18n"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
-
+	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 )
 
 // MCP endpoint: Claude Code (or any MCP client) reads and changes the tickets of the
-// kanban, with the rules of the model and the author "claude" (docs/design/kanban.md). Streamable
+// kanban (the tools of the Kanban and AI plugins), with the rules of the model and the author
+// "claude" (docs/design/kanban.md), runs the saved commands and reaches the IDE. Streamable
 // HTTP transport without streaming: each POST carries JSON-RPC messages and gets its
 // answers as JSON. Authenticated by the token of the pod as a bearer.
 
@@ -151,6 +153,9 @@ func (s *Server) mcpCall(ctx context.Context, m mcpMessage) mcpReply {
 			t := mcpTool{props: p.tool.Props, required: p.tool.Required}
 			tools = append(tools, map[string]any{"name": p.tool.Name, "description": p.tool.Description, "inputSchema": t.schema()})
 		}
+		for _, p := range s.plugins.mcp {
+			tools = append(tools, map[string]any{"name": p.tool.Name, "description": p.tool.Description, "inputSchema": plugins.MCPSchema(p.tool.Props, p.tool.Required)})
+		}
 		reply.Result = map[string]any{"tools": tools}
 	case "tools/call":
 		a, err := bind[struct {
@@ -161,6 +166,11 @@ func (s *Server) mcpCall(ctx context.Context, m mcpMessage) mcpReply {
 			return fail(-32602, err.Error())
 		}
 		t := findMCPTool(a.Name)
+		if p := s.findPluginMCPTool(a.Name); t == nil && p != nil {
+			t = &mcpTool{run: func(ctx context.Context, s *Server, raw json.RawMessage) (string, error) {
+				return s.runPluginMCPTool(ctx, p, raw)
+			}}
+		}
 		if p := s.findPluginTool(a.Name); t == nil && p != nil {
 			t = &mcpTool{run: ideTool(func(ctx context.Context, s *Server, _ assistant.Args, _ mcpScope, rt *runtime.Runtime) (assistant.ToolResult, error) {
 				return s.runPluginTool(ctx, rt, p, a.Arguments, "en", nil)
@@ -257,4 +267,14 @@ func (s *Server) localURL() string {
 		addr = "127.0.0.1:" + addr[strings.LastIndex(addr, ":")+1:]
 	}
 	return "http://" + addr
+}
+
+// uiLanguage is the language of the interface, for the errors shown in the conversation.
+func (s *Server) uiLanguage() string {
+	var set struct{ Language string }
+	_ = json.Unmarshal(s.Settings.Current().Settings, &set)
+	if i18n.Supported(set.Language) {
+		return set.Language
+	}
+	return "en"
 }

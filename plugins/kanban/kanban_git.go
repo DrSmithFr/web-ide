@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
+	kb "github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
 	"github.com/DrSmithFr/web-ide/pod/commands"
 	"github.com/DrSmithFr/web-ide/pod/execx"
-	kb "github.com/DrSmithFr/web-ide/pod/kanban"
 	"github.com/DrSmithFr/web-ide/pod/projects"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 )
@@ -579,7 +579,7 @@ func (s *K) ignoreWorktrees(root *projects.Project, rt *runtime.Runtime) error {
 
 // setupScript is what sets a new worktree of the project of rt up: its setup commands.
 func (s *K) setupScript(rt *runtime.Runtime) (string, error) {
-	list, err := s.Commands(rt)
+	list, err := s.projectCommands(rt)
 	if err != nil {
 		return "", err
 	}

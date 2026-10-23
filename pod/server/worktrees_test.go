@@ -114,8 +114,10 @@ func TestWorktrees(t *testing.T) {
 	if gitIn(t, dir, "branch", "--list", "feature/x") == "" {
 		t.Fatal("branch deleted")
 	}
-	// The setup command of the kanban comes with a new worktree.
+	// The setup command of the kanban settings, moved to a saved command by the Kanban plugin
+	// when the project opens, comes with a new worktree.
 	a.call("kanban.meta.set", map[string]any{"values": map[string]string{"setup": "npm install"}})
+	a.call("project.open", map[string]any{"id": id})
 	if r := a.call("worktrees.add", map[string]any{"branch": "feature/x"})["result"].(map[string]any); !strings.Contains(r["setup"].(string), "bash -lc 'npm install'") {
 		t.Fatalf("add = %+v", r)
 	}

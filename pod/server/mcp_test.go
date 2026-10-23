@@ -92,7 +92,7 @@ func TestMCPKanban(t *testing.T) {
 	if res, _ := m.post(map[string]any{"jsonrpc": "2.0", "method": "notifications/initialized"}); res.StatusCode != http.StatusAccepted {
 		t.Fatalf("notification: %d", res.StatusCode)
 	}
-	if tools := m.rpc("tools/list", nil)["tools"].([]any); len(tools) != len(mcpTools)+len(s.plugins.tools) {
+	if tools := m.rpc("tools/list", nil)["tools"].([]any); len(tools) != len(mcpTools)+len(s.plugins.tools)+len(s.plugins.mcp) {
 		t.Fatalf("tools: %d", len(tools))
 	}
 
@@ -223,6 +223,16 @@ func TestMCPKanban(t *testing.T) {
 		t.Fatalf("default ticket of the lineage: %s", md)
 	}
 
+	// The Kanban off: its tools are refused, and those of the AI that read the tickets.
+	a.call("plugins.set", map[string]any{"id": "kanban", "enabled": false})
+	if text, failed := m.tool("kanban_list", map[string]any{"cwd": dir}); !failed || !strings.Contains(text, "the Kanban plugin is disabled") {
+		t.Fatalf("kanban off: %s", text)
+	}
+	if text, failed := m.tool("kanban_conversation", map[string]any{"cwd": dir, "id": 1, "chat": "x"}); !failed || !strings.Contains(text, "needs the tickets capability") {
+		t.Fatalf("conversation without tickets: %s", text)
+	}
+	a.call("plugins.set", map[string]any{"id": "kanban", "enabled": true})
+
 	// Prompts.
 	if prompts := m.rpc("prompts/list", nil)["prompts"].([]any); len(prompts) != len(mcpRoles) {
 		t.Fatalf("prompts: %v", prompts)
@@ -246,42 +256,6 @@ func TestMCPKanban(t *testing.T) {
 	}
 	if msg := promptText(m.rpc("prompts/get", map[string]any{"name": "coverage", "arguments": map[string]string{"milestone": "1"}})); !strings.Contains(msg, "**Review the e2e coverage** of milestone 1") || !strings.Contains(msg, "feedback_add") {
 		t.Fatalf("coverage prompt: %s", msg)
-	}
-}
-
-func TestMCPConversation(t *testing.T) {
-	raw := json.RawMessage(`{"title":"Export","messages":[
-		{"role":"user","content":"I need an export","display":"I need an export"},
-		{"role":"assistant","content":"","tool_calls":[{"id":"c1","function":{"name":"ask_user","arguments":"{\"questions\":[{\"question\":\"Format?\"}]}"}}]},
-		{"role":"tool","tool_call_id":"c1","content":"Format?: CSV"},
-		{"role":"assistant","content":[{"type":"text","text":"Noted: CSV."}]},
-		{"role":"assistant","content":"","tool_calls":[{"id":"c2","function":{"name":"read_file","arguments":"{}"}}]},
-		{"role":"tool","tool_call_id":"c2","content":"secret file content"}]}`)
-	text := conversationText(raw, 0, false)
-	for _, want := range []string{"# Conversation: Export", "## User\nI need an export", "Format?", "## Answers of the user\nFormat?: CSV", "Noted: CSV."} {
-		if !strings.Contains(text, want) {
-			t.Errorf("missing %q in:\n%s", want, text)
-		}
-	}
-	if strings.Contains(text, "secret file content") || strings.Contains(text, "call read_file") {
-		t.Error("other tool results are left out")
-	}
-	// For a review: the last messages, with the calls, their errors and a failed answer.
-	raw = json.RawMessage(`{"title":"Dev","messages":[
-		{"role":"user","content":"Develop"},
-		{"role":"assistant","content":"","tool_calls":[{"id":"b1","function":{"name":"bash","arguments":"{\"command\":\"pkill -x web-ide-pod\"}"}}]},
-		{"role":"tool","tool_call_id":"b1","name":"bash","status":"ok","content":"Exit code 0"},
-		{"role":"assistant","content":"","tool_calls":[{"id":"b2","function":{"name":"bash","arguments":"{\"command\":\"make\"}"}}]},
-		{"role":"tool","tool_call_id":"b2","name":"bash","status":"ok","content":"Interrupted: the pod stopped before this tool ended."},
-		{"role":"assistant","content":"","error":"Interrupted: the pod stopped."}]}`)
-	text = conversationText(raw, 5, true)
-	for _, want := range []string{"(1 earlier messages left out)", "- call bash {\"command\":\"pkill -x web-ide-pod\"}", "→ ok: Interrupted: the pod stopped before", "## The answer failed\nInterrupted: the pod stopped."} {
-		if !strings.Contains(text, want) {
-			t.Errorf("missing %q in:\n%s", want, text)
-		}
-	}
-	if strings.Contains(text, "## User\nDevelop") || strings.Contains(text, "Exit code 0") {
-		t.Errorf("earlier messages or plain results kept:\n%s", text)
 	}
 }
 

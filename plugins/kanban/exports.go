@@ -2,15 +2,21 @@ package kanban
 
 import (
 	"context"
+	"net/url"
+	"strconv"
 
+	"github.com/DrSmithFr/web-ide/lib/i18n"
+
+	kb "github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
 	"github.com/DrSmithFr/web-ide/pod/acp"
-	kb "github.com/DrSmithFr/web-ide/pod/kanban"
+	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"github.com/DrSmithFr/web-ide/pod/projects"
+	"github.com/DrSmithFr/web-ide/pod/push"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 )
 
-// What the rest of the pod still asks the kanban: the kanban tools of the assistant and of the
-// MCP (their declarations move with AI, #123), the Orchestrator, the worktrees of a window.
+// What the AI asks the kanban: the kanban tools of the assistant, the Orchestrator, the
+// conversation tools of the MCP (with TicketTool, mcp.go).
 
 // GitCtx is a kanban, its main project, its runtime and its git.
 type GitCtx = gctx
@@ -49,9 +55,20 @@ func (s *K) ObjectiveTool(root string, loc kb.Location, a ObjectiveArgs, by, cha
 	return s.objectiveTool(root, loc, a, by, chatID)
 }
 
-func (s *K) StartTicket(ctx context.Context, k GitCtx, id int64, base, by string, force bool) (*kb.Ticket, string, error) {
-	return s.startTicket(ctx, k, id, base, by, force)
+// NotifyFeedback sends the push notification of a test feedback the assistant or Claude Code
+// added to a ticket.
+func (s *K) NotifyFeedback(loc kb.Location, id int64, text string) {
+	ticket := ""
+	if t, err := s.Kanban.Get(loc, id); err == nil {
+		ticket = t.Title
+	}
+	name, _, _ := s.pod.Project(loc.Project)
+	if name == "" {
+		name = loc.Project
+	}
+	n := strconv.FormatInt(id, 10)
+	s.pod.Notify(plugins.Note{Kind: push.Feedback, Path: "/project/" + url.PathEscape(loc.Project) + "?ticket=" + n, Tag: "ticket-" + n, Urgency: "normal",
+		Text: func(lang string) (string, string) {
+			return i18n.T(lang, "Feedback on #%d %s", id, ticket), name + " · " + text
+		}})
 }
-
-// ActiveStep is the step of a lineage its worktree works on.
-func (s *K) ActiveStep(loc kb.Location, id int64) int64 { return s.activeStep(loc, id) }

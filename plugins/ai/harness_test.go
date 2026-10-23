@@ -11,7 +11,6 @@ import (
 	kbp "github.com/DrSmithFr/web-ide/plugins/kanban"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/commands"
-	"github.com/DrSmithFr/web-ide/pod/kanban"
 	"github.com/DrSmithFr/web-ide/pod/llm"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"github.com/DrSmithFr/web-ide/pod/projects"
@@ -44,8 +43,7 @@ func (p *fakePod) CapabilityOn(*runtime.Runtime, string) bool        { return tr
 func (p *fakePod) Capability(*runtime.Runtime, string) any           { return nil }
 func (p *fakePod) Stopping() bool                                    { return false }
 func (p *fakePod) AssistantTools(*runtime.Runtime) []json.RawMessage { return nil }
-func (p *fakePod) Notify(bool, string, string, string)               {}
-func (p *fakePod) NotifyFeedback(kanban.Location, int64, string)     {}
+func (p *fakePod) Notify(plugins.Note)                               {}
 func (p *fakePod) NoteAsks(string, *assistant.Chat, int)             {}
 func (p *fakePod) Plugin(id string) (plugins.Plugin, bool) {
 	if id == "kanban" {
@@ -69,6 +67,7 @@ type fakeHost struct{ pod *fakePod }
 func (h fakeHost) Handle(string, plugins.Handler)                  {}
 func (h fakeHost) HandleGlobal(string, plugins.Handler)            {}
 func (h fakeHost) AssistantTool(plugins.AssistantTool)             {}
+func (h fakeHost) MCPTool(plugins.MCPTool)                         {}
 func (h fakeHost) Pod() plugins.Pod                                { return h.pod }
 func (h fakeHost) OnProjectOpen(func(rt *runtime.Runtime))         {}
 func (h fakeHost) OnWindows(func(n int))                           {}
@@ -89,7 +88,7 @@ func newTestA(t *testing.T, dir string) (*A, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pod := &fakePod{svc: &plugins.Services{Store: st, Projects: reg, LLM: llm.New(st), Kanban: kanban.NewManager(st)}}
+	pod := &fakePod{svc: &plugins.Services{Store: st, Projects: reg, LLM: llm.New(st)}}
 	pod.kb = kbp.New()
 	pod.kb.Register(fakeHost{pod})
 	s := New()

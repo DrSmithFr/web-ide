@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/kanban"
 
 	"github.com/DrSmithFr/web-ide/pod/fsx"
 	"github.com/DrSmithFr/web-ide/pod/idedir"
@@ -216,7 +216,7 @@ func (s *A) registerLLM() {
 		}
 		// The tickets linking this conversation show its new title.
 		if root, err := s.Projects.Root(c.project); err == nil {
-			s.Kanban.RenameChat(kanban.LocationOf(root), a.ID, a.Title)
+			s.kb().Kanban.RenameChat(kanban.LocationOf(root), a.ID, a.Title)
 		}
 		return nil, nil
 	}))

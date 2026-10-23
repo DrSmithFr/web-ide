@@ -225,7 +225,7 @@ func (s *A) confirm(r *assistantRun, root string, req assistant.Approval) bool {
 	r.state = "waiting_user"
 	s.publish(r, -1)
 	s.emitAssistant(r.root, "assistant.attention", map[string]any{"id": r.id, "title": r.chat.Title, "kind": req.Kind, "sub": r.chat.Parent != ""})
-	s.pod.Notify(true, r.root, r.id, r.chat.Title)
+	s.notifyChat(true, r.root, r.id, r.chat.Title)
 	r.mu.Unlock()
 	asked := time.Now()
 	var allowed bool

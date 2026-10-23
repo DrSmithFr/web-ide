@@ -13,7 +13,6 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/commands"
 	"github.com/DrSmithFr/web-ide/pod/config"
 	"github.com/DrSmithFr/web-ide/pod/desks"
-	"github.com/DrSmithFr/web-ide/pod/kanban"
 	"github.com/DrSmithFr/web-ide/pod/keeper"
 	"github.com/DrSmithFr/web-ide/pod/llm"
 	"github.com/DrSmithFr/web-ide/pod/projects"
@@ -35,6 +34,8 @@ type Host interface {
 	// AssistantTool adds a tool offered to the assistant and the MCP; its name must be listed
 	// in the manifest.
 	AssistantTool(t AssistantTool)
+	// MCPTool adds a tool offered to the MCP only; its name must be listed in the manifest.
+	MCPTool(t MCPTool)
 	// HandleGlobal adds a method without a project (Call.Runtime nil: the home page), always
 	// answered: the switch of a project hides the plugin there, not the state of the pod.
 	HandleGlobal(method string, h Handler)
@@ -46,7 +47,8 @@ type Host interface {
 	// the pod is locked meanwhile: f must not call it back (it arms a timer, say).
 	OnWindows(f func(n int))
 	// OnStart is called once the pod is ready (the conversations that ran are resumed), OnStop
-	// when it stops (they are saved for the next pod).
+	// when it stops (they are saved for the next pod), the last registered first: a plugin
+	// stops before the ones it uses (AI before Kanban, whose bases it writes).
 	OnStart(f func())
 	OnStop(f func())
 	// Provide gives a capability of the manifest's provides to the others and the core: an
@@ -74,7 +76,7 @@ type Pod interface {
 	EmitFamily(root, event string, data any, except string)
 	// CloseRuntime closes the runtime of a project (a worktree removed).
 	CloseRuntime(project string)
-	// Services are the stores and managers of the pod (the kanban, the conversations…).
+	// Services are the stores and managers of the pod (the conversations, the desks…).
 	Services() *Services
 	// CapabilityOn tells whether a project has a capability (worktrees, terminal…).
 	CapabilityOn(rt *runtime.Runtime, capability string) bool
@@ -93,10 +95,9 @@ type Pod interface {
 	// project of rt; RunAssistantTool runs one (found: a plugin has it).
 	AssistantTools(rt *runtime.Runtime) []json.RawMessage
 	RunAssistantTool(ctx context.Context, rt *runtime.Runtime, name string, args json.RawMessage, lang string, opts assistant.Options) (res assistant.ToolResult, found bool, err error)
-	// Notify sends the push notification of a conversation that ended or asks (asks), and
-	// NotifyFeedback the one of a test feedback added to a ticket.
-	Notify(asks bool, root, chatID, title string)
-	NotifyFeedback(loc kanban.Location, id int64, text string)
+	// Notify sends a push notification to the devices that want its kind and show no window
+	// (a conversation that ended, a test feedback added to a ticket).
+	Notify(n Note)
 	// NoteAsks records the questions a conversation asks from message from (the Questions tool).
 	NoteAsks(root string, c *assistant.Chat, from int)
 	// The saved commands of a project, as the tools read them, and one started (a console).
@@ -126,11 +127,10 @@ type Services struct {
 	Keeper   *keeper.Client
 	LLM      *llm.Manager
 	Desks    *desks.Store
-	Kanban   *kanban.Manager
 	// Token of the pod and MCPBase, the address of its MCP endpoint for the agents.
 	Token   string
 	MCPBase string
-	// Commands are the saved commands of the project of rt (the kanban settings migrated).
+	// Commands are the saved commands of the project of rt.
 	Commands func(rt *runtime.Runtime) ([]commands.Command, error)
 	// ChatLoc is where the conversations of a project are kept.
 	ChatLoc func(project string) (llm.ChatLocation, string, error)
@@ -138,6 +138,14 @@ type Services struct {
 	AgentsMCP func() []acp.MCPServer
 	// Models caches the speech recognition models downloaded for the page.
 	Models *hfcache.Cache
+}
+
+// Note is a push notification (docs/design/relay.md): its kind (a switch of the devices,
+// pod/push), the path of the app it opens, its tag (a newer one with the same tag replaces
+// it), its urgency (normal, high) and its texts in a language.
+type Note struct {
+	Kind, Path, Tag, Urgency string
+	Text                     func(lang string) (title, body string)
 }
 
 // Call is one call of a plugin: the project it runs in (local or SSH, through its runtime),

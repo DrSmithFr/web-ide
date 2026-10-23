@@ -145,14 +145,14 @@ The text of an open file, shared live by every window and AI.
 _Avoid_: document
 
 **Plugin** ([plugins](docs/design/plugins.md))
-A part of the IDE enabled per project, declared by a manifest: tools, tab views, assistant tools, commands, and an optional backend in the pod.
+A part of the IDE enabled per project, declared by a manifest: tools, tab views, assistant tools, MCP tools, commands, and an optional backend in the pod.
 _Avoid_: extension, add-on, module
 
 **Built-in plugin**
 A plugin that ships compiled into the IDE, with the same manifest and API as an external one.
 
 **Contribution**
-What a plugin adds at one contribution point of the IDE: a tool, a tab view, an assistant tool, a command, a settings section…
+What a plugin adds at one contribution point of the IDE: a tool, a tab view, an assistant tool, a tool of the MCP only, a command, a settings section…
 
 **External plugin** ([plugins](docs/design/plugins.md#phase-3-external-plugins))
 A plugin installed from its own git repository, at a version of the plugin lock; confined: its views in a sandboxed iframe, its backend under Landlock.

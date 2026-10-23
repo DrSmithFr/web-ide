@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/kanban"
 )
 
 // Tools of the Orchestrator mode (assistant/orchestrator.go): what to do next, what was done,
@@ -41,12 +41,12 @@ func ticketLine(t kanban.Summary) string {
 }
 
 func (s *A) kanbanNext(r *assistantRun) (assistant.ToolResult, error) {
-	list, err := s.Kanban.List(kanbanLocOf(r.loc))
+	list, err := s.kb().Kanban.List(kanbanLocOf(r.loc))
 	if err != nil {
 		return assistant.ToolResult{}, err
 	}
 	s.kb().FillBlockers(r.ctx, s.kanbanGit(r), list)
-	objectives, err := s.Kanban.Objectives(kanbanLocOf(r.loc))
+	objectives, err := s.kb().Kanban.Objectives(kanbanLocOf(r.loc))
 	if err != nil {
 		return assistant.ToolResult{}, err
 	}
@@ -96,7 +96,7 @@ func parseDay(s string) (time.Time, error) {
 }
 
 func (s *A) kanbanHistory(r *assistantRun, fromArg, toArg string) (assistant.ToolResult, error) {
-	now := time.UnixMilli(s.Kanban.Now()).In(time.Local)
+	now := time.UnixMilli(s.kb().Kanban.Now()).In(time.Local)
 	y, mo, d := now.Date()
 	from, to := time.Date(y, mo, d-1, 0, 0, 0, 0, time.Local), now
 	var err error
@@ -110,7 +110,7 @@ func (s *A) kanbanHistory(r *assistantRun, fromArg, toArg string) (assistant.Too
 			return assistant.ToolResult{}, err
 		}
 	}
-	list, err := s.Kanban.History(kanbanLocOf(r.loc), from.UnixMilli(), to.UnixMilli())
+	list, err := s.kb().Kanban.History(kanbanLocOf(r.loc), from.UnixMilli(), to.UnixMilli())
 	if err != nil {
 		return assistant.ToolResult{}, err
 	}
@@ -196,7 +196,7 @@ func (s *A) actionCard(r *assistantRun, a assistant.Args) (assistant.ToolResult,
 		if _, err := s.loadChat(r.loc, card.Chat); err != nil {
 			return assistant.ToolResult{}, assistant.Usagef("unknown conversation %q (see list_conversations)", card.Chat)
 		}
-	} else if _, err := s.Kanban.Get(kanbanLocOf(r.loc), card.Ticket); err != nil {
+	} else if _, err := s.kb().Kanban.Get(kanbanLocOf(r.loc), card.Ticket); err != nil {
 		return assistant.ToolResult{}, failf("ticket #%d not found", card.Ticket)
 	}
 	res := assistant.OKPlain("Card shown to the user; the action runs only if they click it.", card.Label)
@@ -234,7 +234,7 @@ func (s *A) openConversation(r *assistantRun, a assistant.Args) (assistant.ToolR
 			if mode == assistant.Build {
 				return assistant.ToolResult{}, failf("to develop a ticket, propose action_card start_dev: it runs in the worktree of the ticket")
 			}
-			t, err := s.Kanban.Get(kanbanLocOf(r.loc), n)
+			t, err := s.kb().Kanban.Get(kanbanLocOf(r.loc), n)
 			if err != nil {
 				return assistant.ToolResult{}, failf("ticket #%d not found", n)
 			}

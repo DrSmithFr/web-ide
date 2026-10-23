@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/pod/kanban"
-
 	"github.com/DrSmithFr/web-ide/lib/identity"
 	"github.com/DrSmithFr/web-ide/pod/push"
 )
@@ -111,15 +109,14 @@ func TestPushNotifications(t *testing.T) {
 	a.call("kanban.create", map[string]any{"title": "Export"})
 	a.call("kanban.feedback", map[string]any{"id": 1, "feedback": map[string]any{"op": "add", "kind": "info", "text": "mine"}})
 	none("feedback by the user")
-	p, _ := s.Projects.Get(id)
-	s.notifyFeedback(kanban.LocationOf(p), 1, "the export fails")
+	mc := &mcpClient{t: t, url: ts.URL, token: s.Token}
+	mc.tool("kanban_feedback", map[string]any{"cwd": dir, "id": 1, "action": "add", "kind": "bug", "complexity": "low", "text": "the export fails"})
 	m = read("feedback")
 	if m["title"] != "Retour sur #1 Export" || !strings.HasSuffix(m["body"], "the export fails") || !strings.Contains(m["url"], "ticket%3D1") {
 		t.Fatalf("feedback: %+v", m)
 	}
 
 	// A question of an agent through MCP (Questions tool): the agent asks.
-	mc := &mcpClient{t: t, url: ts.URL, token: s.Token}
 	done := make(chan string, 1)
 	go func() {
 		text, _ := mc.tool("ask_user", map[string]any{"cwd": dir, "questions": []map[string]any{{"question": "Go on?", "options": []string{"Yes", "No"}}}})

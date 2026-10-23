@@ -45,8 +45,15 @@ type Contributions struct {
 	TabViews []TabView `json:"tabViews,omitempty"`
 	// AssistantTools are the names of the tools the plugin offers to the assistant and the MCP;
 	// each one is registered with its handler (Host.AssistantTool).
-	AssistantTools []string  `json:"assistantTools,omitempty"`
-	Commands       []Command `json:"commands,omitempty"`
+	AssistantTools []string `json:"assistantTools,omitempty"`
+	// MCPTools are the names of the tools it offers to the MCP only (Host.MCPTool).
+	MCPTools []string  `json:"mcpTools,omitempty"`
+	Commands []Command `json:"commands,omitempty"`
+}
+
+// toolNames are its tools of the assistant and of the MCP: one namespace.
+func (c Contributions) toolNames() []string {
+	return append(append([]string{}, c.AssistantTools...), c.MCPTools...)
 }
 
 // Tool is a tool of the window, shown from a rail icon. Its command tool.<id> is implied.
@@ -128,7 +135,7 @@ func (m Manifest) Check() error {
 			return fmt.Errorf("plugin %s: command %s is out of its namespaces", m.ID, c.ID)
 		}
 	}
-	for _, name := range m.Contributes.AssistantTools {
+	for _, name := range m.Contributes.toolNames() {
 		if !toolRe.MatchString(name) {
 			return fmt.Errorf("plugin %s: invalid assistant tool name %q", m.ID, name)
 		}

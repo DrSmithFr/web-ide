@@ -30,7 +30,6 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/config"
 	"github.com/DrSmithFr/web-ide/pod/desks"
 	"github.com/DrSmithFr/web-ide/pod/hfcache"
-	"github.com/DrSmithFr/web-ide/pod/kanban"
 	"github.com/DrSmithFr/web-ide/pod/keeper"
 	"github.com/DrSmithFr/web-ide/pod/llm"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
@@ -59,7 +58,6 @@ type Server struct {
 	// pod runs them).
 	Keeper *keeper.Client
 	LLM    *llm.Manager
-	Kanban *kanban.Manager
 	// Models caches the speech recognition models downloaded for the page.
 	Models *hfcache.Cache
 	// Sync is the settings sync loop of the pod (nil: the pod has no relay, so nothing is synced).
@@ -135,9 +133,6 @@ func (s *Server) Init() {
 	s.opening = map[string]*sync.Mutex{}
 	s.handlers = map[string]handler{}
 	s.uiWait = map[string]chan plugins.UIResult{}
-	if s.Kanban == nil {
-		s.Kanban = kanban.NewManager(s.Store)
-	}
 	if s.Clipboard == nil {
 		s.Clipboard = clipboard.Load(s.Store)
 	}
@@ -1079,8 +1074,8 @@ func (s *Server) broadcast(name string, data any, except *Client) {
 // terminals of the keeper keep running.
 func (s *Server) Shutdown() {
 	s.stopped.Store(true)
-	for _, f := range s.plugins.onStop {
-		f()
+	for i := len(s.plugins.onStop) - 1; i >= 0; i-- {
+		s.plugins.onStop[i]()
 	}
 	s.mu.Lock()
 	rts := s.runtimes
@@ -1092,5 +1087,4 @@ func (s *Server) Shutdown() {
 	s.Desks.FlushAll()
 	s.Pool.CloseAll()
 	s.LLM.Close()
-	s.Kanban.Close()
 }
