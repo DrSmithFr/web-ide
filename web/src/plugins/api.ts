@@ -1,7 +1,7 @@
 // The API a plugin's page module receives (docs/design/plugins.md): the only door to the core,
 // so that a built-in plugin uses nothing an external one could not.
 import { notifyIn, notifyOn, on, openChannel, request, requestIn, type Channel } from '../pod/rpc'
-import { fmtAgo, fmtDate, fmtSize, t, tn } from '../i18n'
+import { fmtAgo, fmtDate, fmtSize, pluginT } from '../i18n'
 import { podPath } from '../app/base'
 import { Markdown } from '../ui/Markdown'
 import { Switch } from '../ui/Switch'
@@ -56,6 +56,7 @@ export const API_VERSION = 1
 
 export function makeApi(id: string) {
   const full = (method: string) => (method.includes('.') ? method : `${id}.${method}`)
+  const { t, tn } = pluginT(id)
   return {
     id,
     /**

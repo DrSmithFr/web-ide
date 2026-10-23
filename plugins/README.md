@@ -23,7 +23,7 @@ The plugin system itself stays in the core: `pod/plugins` (manifest, registry, e
 
 - A page module imports only the plugin API, as `@ide/api`, `@ide/types` and `@ide/capabilities` (an alias of `web/src/plugins`, in `web/tsconfig.json` and `web/vite.config.ts`). One `node_modules` at the root (npm workspaces) gives it the page's `solid-js`.
 - Only the files of `plugins/<id>/web` go to its chunk; what the core shares with it stays in the core bundle.
-- The texts of its page go through `t()` and the catalogs of `web/src/i18n` (checked by `web/scripts/i18n-check.mjs`, which reads the plugins too).
+- Its texts (page module, manifest labels, messages of its Go package) are in its own catalogs, `plugins/<id>/i18n/<lang>.json`; a text shared with the core stays in the core's (`web/src/i18n`, `lib/i18n`), where `api.t()` looks second. Its Go package adds them in `init` (`i18n.go`: `i18n.Add`); a sub-package tested alone adds them in its tests (`plugins/ai/llm/i18n_test.go`). Checked by `web/scripts/i18n-check.mjs` and the `lib/i18n` tests ([plugins.md](../docs/design/plugins.md#shape-of-a-plugin)).
 - A new e2e suite goes into the list of `e2e/run.sh`, which refuses a suite file missing from it.
 
 ## Tests

@@ -1,0 +1,6 @@
+{
+  "Files: *.go, *.ts": "Fichiers : *.go, *.ts",
+  "Regular expression (RE2 syntax)": "Expression régulière (syntaxe RE2)",
+  "{n} result(s) in {files} file(s)": "{n} résultat(s) dans {files} fichier(s)",
+  "Search the text of the project": "Chercher dans le texte du projet"
+}

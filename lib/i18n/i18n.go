@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"strings"
 )
 
@@ -23,7 +24,18 @@ var catalogs = map[string]map[string]string{}
 
 func init() {
 	for _, lang := range Languages[1:] {
-		data, err := files.ReadFile(lang + ".json")
+		catalogs[lang] = map[string]string{}
+	}
+	Add(files)
+}
+
+// Add merges the catalogs `<code>.json` of fsys into the lookup: a built-in plugin adds its
+// own (plugins/<id>/i18n, shared with its page module) in the init of its package, before the
+// pod reads them. A key already known keeps its text (the test of the catalogs reports a key
+// given two texts).
+func Add(fsys fs.FS) {
+	for _, lang := range Languages[1:] {
+		data, err := fs.ReadFile(fsys, lang+".json")
 		if err != nil {
 			panic("i18n: " + err.Error())
 		}
@@ -31,7 +43,11 @@ func init() {
 		if err := json.Unmarshal(data, &c); err != nil {
 			panic("i18n: " + lang + ".json: " + err.Error())
 		}
-		catalogs[lang] = c
+		for k, v := range c {
+			if _, ok := catalogs[lang][k]; !ok {
+				catalogs[lang][k] = v
+			}
+		}
 	}
 }
 
