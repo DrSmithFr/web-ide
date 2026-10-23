@@ -8,8 +8,9 @@ import (
 
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
+	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/llm"
 )
 
 // With a keeper, the conversations running when the pod stops are taken back when it starts:
@@ -49,7 +50,7 @@ func (s *A) saveRunning() {
 // records it on the conversation for a resume.
 func (s *A) keptFor(r *assistantRun) *runtime.Kept {
 	return &runtime.Kept{Owner: r.project, Started: func(id string, until time.Time) {
-		s.toolRunning(r, func(run *assistant.Running) { run.Proc, run.Until = id, until.UnixMilli() })
+		s.toolRunning(r, func(run *engine.Running) { run.Proc, run.Until = id, until.UnixMilli() })
 	}, Ended: s.forgetProc}
 }
 
@@ -62,11 +63,11 @@ func (s *A) forgetProc(id string) {
 }
 
 // toolRunning records what the tool call running needs to be followed after a restart.
-func (s *A) toolRunning(r *assistantRun, set func(*assistant.Running)) {
+func (s *A) toolRunning(r *assistantRun, set func(*engine.Running)) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.chat.Running == nil {
-		r.chat.Running = &assistant.Running{}
+		r.chat.Running = &engine.Running{}
 	}
 	set(r.chat.Running)
 	s.publish(r, -1)
@@ -108,10 +109,10 @@ func (s *A) ResumeRuns() {
 
 // resumeRun starts the run of c again where it was; "" when it cannot (it is then closed as
 // interrupted when opened, as without keeper).
-func (s *A) resumeRun(e runningEntry, c *assistant.Chat, relays map[string]bool) string {
+func (s *A) resumeRun(e runningEntry, c *engine.Chat, relays map[string]bool) string {
 	run := c.Running
 	if run == nil {
-		run = &assistant.Running{}
+		run = &engine.Running{}
 	}
 	r := &assistantRun{id: c.ID, loc: e.Loc, root: e.Root, project: e.Project, lang: e.Lang, chat: c, state: "running"}
 	how := "next step"
@@ -136,7 +137,7 @@ func (s *A) resumeRun(e runningEntry, c *assistant.Chat, relays map[string]bool)
 			c.Messages = kept
 			r.resumeCalls = calls
 			if run.Proc != "" || run.Console != "" {
-				r.follow = &assistant.Running{Proc: run.Proc, Console: run.Console, Until: run.Until}
+				r.follow = &engine.Running{Proc: run.Proc, Console: run.Console, Until: run.Until}
 			}
 			how = "tool calls"
 		}
@@ -156,7 +157,7 @@ func (s *A) resumeRun(e runningEntry, c *assistant.Chat, relays map[string]bool)
 
 // unfinishedCalls are the tool calls of the last answer without a result (or with the
 // result of a call still running), in order; pending names those with such a result.
-func unfinishedCalls(c *assistant.Chat) ([]assistant.ToolCall, map[string]bool) {
+func unfinishedCalls(c *engine.Chat) ([]engine.ToolCall, map[string]bool) {
 	last := -1
 	for i := len(c.Messages) - 1; i >= 0; i-- {
 		if m := c.Messages[i]; m.Role == "assistant" {
@@ -179,7 +180,7 @@ func unfinishedCalls(c *assistant.Chat) ([]assistant.ToolCall, map[string]bool) 
 			}
 		}
 	}
-	var calls []assistant.ToolCall
+	var calls []engine.ToolCall
 	for _, call := range c.Messages[last].ToolCalls {
 		if !done[call.ID] {
 			calls = append(calls, call)
@@ -190,7 +191,7 @@ func unfinishedCalls(c *assistant.Chat) ([]assistant.ToolCall, map[string]bool) 
 
 // followed is the result of a command a run was waiting for when the pod stopped, followed
 // again in the keeper; ok false when it is not one.
-func (s *A) followed(r *assistantRun, ref *runtimeRef, call assistant.ToolCall, a assistant.Args) (assistant.ToolResult, bool) {
+func (s *A) followed(r *assistantRun, ref *runtimeRef, call engine.ToolCall, a assistant.Args) (assistant.ToolResult, bool) {
 	r.mu.Lock()
 	f := r.follow
 	r.follow = nil
@@ -201,7 +202,7 @@ func (s *A) followed(r *assistantRun, ref *runtimeRef, call assistant.ToolCall, 
 	until := time.UnixMilli(f.Until)
 	switch {
 	case call.Function.Name == "bash" && f.Proc != "":
-		s.toolRunning(r, func(run *assistant.Running) { run.Proc, run.Until = f.Proc, f.Until })
+		s.toolRunning(r, func(run *engine.Running) { run.Proc, run.Until = f.Proc, f.Until })
 		res, err := ref.rt.FollowShell(r.ctx, f.Proc, time.Now(), until, s.toolProgress(r, call.ID))
 		s.forgetProc(f.Proc)
 		if err != nil {
@@ -212,7 +213,7 @@ func (s *A) followed(r *assistantRun, ref *runtimeRef, call assistant.ToolCall, 
 		if _, _, err := assistant.ConsoleText(ref.rt, f.Console); err != nil {
 			return assistant.ToolResult{}, false // the console is gone: the command runs again
 		}
-		s.toolRunning(r, func(run *assistant.Running) { run.Console, run.Until = f.Console, f.Until })
+		s.toolRunning(r, func(run *engine.Running) { run.Console, run.Until = f.Console, f.Until })
 		command := a.Str("command")
 		if call.Function.Name == "run_saved_command" {
 			command = a.Str("id")

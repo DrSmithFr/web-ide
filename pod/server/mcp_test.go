@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/pod/llm"
+	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
 )
 
 type mcpClient struct {

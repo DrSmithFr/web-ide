@@ -11,8 +11,9 @@ import (
 	"time"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
+	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/llm"
 )
 
 // The turn loop of the assistant: send the conversation, stream the answer, run the tool calls
@@ -21,7 +22,7 @@ import (
 
 // startRun saves a conversation and runs it in the background, its messages announced from
 // the index from; false when it already runs.
-func (s *A) startRun(loc llm.ChatLocation, root, project, lang string, c *assistant.Chat, from int) bool {
+func (s *A) startRun(loc llm.ChatLocation, root, project, lang string, c *engine.Chat, from int) bool {
 	s.assistants.mu.Lock()
 	if s.assistants.runs[c.ID] != nil {
 		s.assistants.mu.Unlock()
@@ -33,7 +34,7 @@ func (s *A) startRun(loc llm.ChatLocation, root, project, lang string, c *assist
 	s.assistants.mu.Unlock()
 	s.saveRunning()
 	r.mu.Lock()
-	c.Running = &assistant.Running{}
+	c.Running = &engine.Running{}
 	c.Dismissed = false
 	s.publish(r, from)
 	r.mu.Unlock()
@@ -95,7 +96,7 @@ const summaryPrefix = "Summary of the earlier conversation (automatic compaction
 //
 // The reasoning goes back for the answers of the current turn (after the last user
 // message): models thinking between their tool calls need it, older turns drop it.
-func apiMessages(system string, msgs []*assistant.Message, vision bool) []llm.Message {
+func apiMessages(system string, msgs []*engine.Message, vision bool) []llm.Message {
 	out := []llm.Message{{Role: "system", Content: assistant.String(system)}}
 	turn := 0
 	for i, m := range msgs {
@@ -103,7 +104,7 @@ func apiMessages(system string, msgs []*assistant.Message, vision bool) []llm.Me
 			turn = i
 		}
 	}
-	var images []*assistant.Message
+	var images []*engine.Message
 	flush := func() {
 		if len(images) == 0 {
 			return
@@ -155,7 +156,7 @@ func apiMessages(system string, msgs []*assistant.Message, vision bool) []llm.Me
 }
 
 // estimateTokens is a rough count of a message (images count for a fixed amount).
-func estimateTokens(m *assistant.Message) int {
+func estimateTokens(m *engine.Message) int {
 	chars, media := 0, 0
 	var s string
 	if json.Unmarshal(m.Content, &s) == nil {
@@ -184,7 +185,7 @@ func estimateTokens(m *assistant.Message) int {
 
 // contextUsed is the size the next request will use: the last reported usage plus what
 // came after it.
-func contextUsed(c *assistant.Chat) int {
+func contextUsed(c *engine.Chat) int {
 	extra := 0
 	for i := len(c.Messages) - 1; i >= 0; i-- {
 		m := c.Messages[i]
@@ -209,14 +210,14 @@ var contextError = regexp.MustCompile(`(?i)context|exceed|too long|too many toke
 
 // target is the server and the model of the next request: the Plan model in Plan mode when
 // one is chosen.
-func target(c *assistant.Chat) (string, string) {
-	if c.Mode == assistant.Plan && c.Options != nil && c.Options.PlanServer != "" && c.Options.PlanModel != "" {
+func target(c *engine.Chat) (string, string) {
+	if c.Mode == engine.Plan && c.Options != nil && c.Options.PlanServer != "" && c.Options.PlanModel != "" {
 		return c.Options.PlanServer, c.Options.PlanModel
 	}
 	return c.Server, c.Model
 }
 
-func opt(c *assistant.Chat) assistant.Options {
+func opt(c *engine.Chat) assistant.Options {
 	if c.Options == nil {
 		return assistant.Options{}
 	}
@@ -231,16 +232,16 @@ func boolOr(b *bool, def bool) bool {
 }
 
 // drainQueue moves the messages written during an answer into the conversation.
-func drainQueue(c *assistant.Chat) bool {
+func drainQueue(c *engine.Chat) bool {
 	if len(c.Queue) == 0 {
 		return false
 	}
 	for _, q := range c.Queue {
 		if q.Event != nil {
-			c.Messages = append(c.Messages, &assistant.Message{Role: "user", Kind: "agent_event", Content: assistant.String(q.Text), Event: q.Event})
+			c.Messages = append(c.Messages, &engine.Message{Role: "user", Kind: "agent_event", Content: assistant.String(q.Text), Event: q.Event})
 			continue
 		}
-		c.Messages = append(c.Messages, &assistant.Message{Role: "user", Content: userContent(q.Text, q.Parts), Display: displayOf(q.Text, q.Display, q.Parts), Attachments: q.Attachments, Author: q.Author})
+		c.Messages = append(c.Messages, &engine.Message{Role: "user", Content: userContent(q.Text, q.Parts), Display: displayOf(q.Text, q.Display, q.Parts), Attachments: q.Attachments, Author: q.Author})
 	}
 	c.Queue = nil
 	return true
@@ -274,7 +275,7 @@ func displayOf(text, display string, parts json.RawMessage) string {
 
 // closeToolCalls gives a result to the tool calls left without one (interrupted run): the
 // API expects it.
-func closeToolCalls(c *assistant.Chat, reason string) {
+func closeToolCalls(c *engine.Chat, reason string) {
 	done := map[string]bool{}
 	for _, m := range c.Messages {
 		if m.Role == "tool" {
@@ -288,7 +289,7 @@ func closeToolCalls(c *assistant.Chat, reason string) {
 		if m := c.Messages[i]; m.Role == "assistant" {
 			for _, call := range m.ToolCalls {
 				if !done[call.ID] {
-					c.Messages = append(c.Messages, &assistant.Message{Role: "tool", ToolCallID: call.ID, Name: call.Function.Name, Content: assistant.String(reason), Status: "error", Summary: assistant.T("interrupted", nil).Raw()})
+					c.Messages = append(c.Messages, &engine.Message{Role: "tool", ToolCallID: call.ID, Name: call.Function.Name, Content: assistant.String(reason), Status: "error", Summary: assistant.T("interrupted", nil).Raw()})
 				}
 			}
 			break
@@ -366,7 +367,7 @@ func (a *answer) isLooped() bool {
 }
 
 // timing sets the time spent thinking and the time of the answer on its message.
-func (a *answer) timing(m *assistant.Message) {
+func (a *answer) timing(m *engine.Message) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	now := time.Now()
@@ -402,7 +403,7 @@ func (s *A) complete(r *assistantRun, req llm.ChatRequest, stream string, resume
 
 // systemPrompt builds the system prompt of a run: the template of its mode, the
 // instructions and skills of the project, the ticket linked to the conversation.
-func (s *A) systemPrompt(r *assistantRun, ref *runtimeRef, c *assistant.Chat, tools bool) string {
+func (s *A) systemPrompt(r *assistantRun, ref *runtimeRef, c *engine.Chat, tools bool) string {
 	ctx := s.LLM.LoadContext(llm.Project{Root: ref.rt.Root, FS: ref.rt.FS, IdeDir: ref.rt.IdeDir})
 	// A compaction dropped the tool results that carried the instructions of the subfolders:
 	// they come back with the others.
@@ -414,7 +415,7 @@ func (s *A) systemPrompt(r *assistantRun, ref *runtimeRef, c *assistant.Chat, to
 			}
 		}
 	}
-	vars := assistant.PromptVars{Root: ref.rt.Root, ActiveFile: opt(c).ActiveFile}
+	vars := engine.PromptVars{Root: ref.rt.Root, ActiveFile: opt(c).ActiveFile}
 	if ref.project != nil {
 		vars.Project = ref.project.Name()
 		if ref.project.SSH != nil {
@@ -427,16 +428,16 @@ func (s *A) systemPrompt(r *assistantRun, ref *runtimeRef, c *assistant.Chat, to
 	}
 	mode := c.Mode
 	if mode == "" {
-		mode = assistant.Build
+		mode = engine.Build
 	}
-	text := assistant.SystemPrompt(ctx, vars, tools, mode, ticket)
+	text := engine.SystemPrompt(ctx, vars, tools, mode, ticket)
 	if tools && c.Agent != nil && c.Agent.Adopted {
-		text += "\n\n" + assistant.AdoptedText
+		text += "\n\n" + engine.AdoptedText
 	} else if tools && c.Parent != "" {
-		text += "\n\n" + assistant.SubAgentText
+		text += "\n\n" + engine.SubAgentText
 	}
-	if tools && assistant.CanSpawn(c) {
-		text += "\n\n" + assistant.ParentText
+	if tools && engine.CanSpawn(c) {
+		text += "\n\n" + engine.ParentText
 		if servers := s.childServers(); servers != "" {
 			text += "\n" + servers
 		}
@@ -466,7 +467,7 @@ func (s *A) loop(r *assistantRun) {
 		from := -1
 		if again && r.chat.Agent != nil {
 			from = skipParentWait(r.chat)
-			r.chat.Agent.Status, r.chat.Agent.Question = assistant.AgentRunning, ""
+			r.chat.Agent.Status, r.chat.Agent.Question = engine.AgentRunning, ""
 		}
 		r.done = true
 		s.assistants.mu.Lock()
@@ -488,7 +489,7 @@ func (s *A) loop(r *assistantRun) {
 	ref, err := s.assistantRuntime(r.project)
 	if err != nil {
 		r.mu.Lock()
-		r.chat.Messages = append(r.chat.Messages, &assistant.Message{Role: "assistant", Error: i18n.Translate(r.lang, err)})
+		r.chat.Messages = append(r.chat.Messages, &engine.Message{Role: "assistant", Error: i18n.Translate(r.lang, err)})
 		r.mu.Unlock()
 		return
 	}
@@ -503,7 +504,7 @@ func (s *A) loop(r *assistantRun) {
 		mode := r.chat.Mode
 		r.mu.Unlock()
 		if mode == "" {
-			mode = assistant.Build
+			mode = engine.Build
 		}
 		if stop := s.runCalls(r, ref, calls, mode); stop || r.ctx.Err() != nil {
 			return
@@ -555,7 +556,7 @@ func (s *A) loop(r *assistantRun) {
 			req = llm.ChatRequest{Server: server, Model: model, Messages: apiMessages(system, r.chat.Messages, !info.found || info.caps.Vision)}
 			if tools {
 				adopted := r.chat.Agent != nil && r.chat.Agent.Adopted
-				req.Tools = append(s.offered(ref.rt, assistant.ToolsFor(mode, r.chat.Ticket, r.chat.Parent != "" && !adopted, assistant.CanSpawn(r.chat), adopted)), s.pod.AssistantTools(ref.rt)...)
+				req.Tools = append(s.offered(ref.rt, engine.ToolsFor(mode, r.chat.Ticket, r.chat.Parent != "" && !adopted, engine.CanSpawn(r.chat), adopted)), s.pod.AssistantTools(ref.rt)...)
 			}
 			if info.caps.Thinking {
 				think := boolOr(o.Think, true)
@@ -564,18 +565,18 @@ func (s *A) loop(r *assistantRun) {
 					effort = effortFor(r.chat, o)
 					req.Effort = effort
 					if tools && o.EffortTool && dynamicEffort(o) {
-						req.Tools = append(req.Tools, assistant.SetEffortDef.JSON)
+						req.Tools = append(req.Tools, engine.SetEffortDef.JSON)
 					}
 				}
 			}
 			stream = assistant.NewID()
-			r.chat.Running = &assistant.Running{Stream: ""}
+			r.chat.Running = &engine.Running{Stream: ""}
 			r.state = "running"
 			s.publish(r, from)
 			r.mu.Unlock()
 		}
 		if mode == "" {
-			mode = assistant.Build
+			mode = engine.Build
 		}
 
 		release, err := s.slot(r, server)
@@ -587,7 +588,7 @@ func (s *A) loop(r *assistantRun) {
 		}
 		r.mu.Lock()
 		// Saved: a pod that restarts takes the completion back from the relay.
-		r.chat.Running = &assistant.Running{Stream: stream, StartedAt: started.UnixMilli(), Effort: effort}
+		r.chat.Running = &engine.Running{Stream: stream, StartedAt: started.UnixMilli(), Effort: effort}
 		s.publish(r, -1)
 		r.mu.Unlock()
 		res, ans, err := s.complete(r, req, stream, resumed, started)
@@ -595,7 +596,7 @@ func (s *A) loop(r *assistantRun) {
 
 		looped := err != nil && r.ctx.Err() == nil && ans.isLooped()
 		r.mu.Lock()
-		r.chat.Running = &assistant.Running{}
+		r.chat.Running = &engine.Running{}
 		if err != nil && !looped {
 			canceled := r.ctx.Err() != nil
 			r.mu.Unlock()
@@ -607,7 +608,7 @@ func (s *A) loop(r *assistantRun) {
 			}
 			r.mu.Lock()
 			if ans.content != "" || ans.reasoning != "" || !canceled {
-				msg := &assistant.Message{Role: "assistant", Content: assistant.String(ans.content), Reasoning: ans.reasoning, Model: model, Mode: mode}
+				msg := &engine.Message{Role: "assistant", Content: assistant.String(ans.content), Reasoning: ans.reasoning, Model: model, Mode: mode}
 				ans.timing(msg)
 				if canceled {
 					msg.Error = "Stopped."
@@ -623,9 +624,9 @@ func (s *A) loop(r *assistantRun) {
 		if looped {
 			res = &llm.ChatResult{Message: llm.Message{Content: assistant.String(ans.content), Reasoning: ans.reasoning}, Finish: "loop"}
 		}
-		msg := &assistant.Message{Role: "assistant", Content: assistant.String(assistant.ContentText(res.Message.Content)), Reasoning: res.Message.Reasoning, Model: model, Mode: mode, Effort: effort}
+		msg := &engine.Message{Role: "assistant", Content: assistant.String(assistant.ContentText(res.Message.Content)), Reasoning: res.Message.Reasoning, Model: model, Mode: mode, Effort: effort}
 		for _, c := range res.Message.ToolCalls {
-			var tc assistant.ToolCall
+			var tc engine.ToolCall
 			tc.ID, tc.Type = c.ID, c.Type
 			if tc.Type == "" {
 				tc.Type = "function"
@@ -663,7 +664,7 @@ func (s *A) loop(r *assistantRun) {
 		s.publish(r, len(r.chat.Messages)-1)
 		calls := msg.ToolCalls
 		more := len(r.chat.Queue) > 0 || retry
-		var report *assistant.AgentEvent
+		var report *engine.AgentEvent
 		if len(calls) == 0 && !more && msg.Error == "" {
 			// A sub-agent ends with a report.
 			var again bool
@@ -695,7 +696,7 @@ func (s *A) loop(r *assistantRun) {
 }
 
 // emptyAnswer: an answer without text nor tool call.
-func emptyAnswer(m *assistant.Message) bool {
+func emptyAnswer(m *engine.Message) bool {
 	return strings.TrimSpace(assistant.ContentText(m.Content)) == "" && len(m.ToolCalls) == 0
 }
 
@@ -703,18 +704,18 @@ func emptyAnswer(m *assistant.Message) bool {
 const stuckNudge = "Your previous answer was stopped: its reasoning went round in circles, or ended without text nor action. Do not start the analysis over: take the next concrete step now (call a tool, or answer), with a short reasoning."
 
 // lastStuck: the last message is an answer that got stuck.
-func lastStuck(c *assistant.Chat) bool {
+func lastStuck(c *engine.Chat) bool {
 	n := len(c.Messages)
 	return n > 0 && c.Messages[n-1].Stuck
 }
 
 // unsent: a failed answer the model does not read again (empty, or set aside by a resume).
-func unsent(m *assistant.Message) bool {
+func unsent(m *engine.Message) bool {
 	return m.Role == "assistant" && m.Error != "" && (m.Resumed || emptyAnswer(m))
 }
 
 // runCalls runs the tool calls of an answer; true when the turn ends (questions, a plan).
-func (s *A) runCalls(r *assistantRun, ref *runtimeRef, calls []assistant.ToolCall, mode string) bool {
+func (s *A) runCalls(r *assistantRun, ref *runtimeRef, calls []engine.ToolCall, mode string) bool {
 	stop := false
 	for _, call := range calls {
 		if s.stopping() {
@@ -722,7 +723,7 @@ func (s *A) runCalls(r *assistantRun, ref *runtimeRef, calls []assistant.ToolCal
 		}
 		r.mu.Lock()
 		if r.ctx.Err() != nil {
-			r.chat.Messages = append(r.chat.Messages, &assistant.Message{Role: "tool", ToolCallID: call.ID, Name: call.Function.Name, Content: assistant.String("Canceled by the user."), Status: "denied", Summary: assistant.T("canceled", nil).Raw()})
+			r.chat.Messages = append(r.chat.Messages, &engine.Message{Role: "tool", ToolCallID: call.ID, Name: call.Function.Name, Content: assistant.String("Canceled by the user."), Status: "denied", Summary: assistant.T("canceled", nil).Raw()})
 			s.publish(r, len(r.chat.Messages)-1)
 			r.mu.Unlock()
 			continue
@@ -736,7 +737,7 @@ func (s *A) runCalls(r *assistantRun, ref *runtimeRef, calls []assistant.ToolCal
 			var plan string
 			_ = json.Unmarshal(args["plan"], &plan)
 			plan = strings.TrimSpace(plan)
-			m := &assistant.Message{Role: "tool", ToolCallID: call.ID, Name: name}
+			m := &engine.Message{Role: "tool", ToolCallID: call.ID, Name: name}
 			if plan != "" {
 				m.Content, m.Status, m.Summary, m.Plan, m.PlanState = assistant.String("Plan presented to the user, who will accept it or ask for changes. Wait for their answer."), "ok", assistant.T("plan proposed", nil).Raw(), plan, "pending"
 				stop = true
@@ -754,7 +755,7 @@ func (s *A) runCalls(r *assistantRun, ref *runtimeRef, calls []assistant.ToolCal
 			if json.Unmarshal(args["image"], &image) != nil || strings.TrimSpace(image) != "screen" {
 				break
 			}
-			m := &assistant.Message{Role: "tool", ToolCallID: call.ID, Name: name, Status: "ok", Capture: "pending",
+			m := &engine.Message{Role: "tool", ToolCallID: call.ID, Name: name, Status: "ok", Capture: "pending",
 				Content: assistant.String("Waiting for the user to share their screen."), Summary: assistant.T("waiting for a capture of the screen", nil).Raw()}
 			r.chat.Messages = append(r.chat.Messages, m)
 			s.publish(r, len(r.chat.Messages)-1)
@@ -763,8 +764,8 @@ func (s *A) runCalls(r *assistantRun, ref *runtimeRef, calls []assistant.ToolCal
 			continue
 		case "agent_ask", "agent_report":
 			// A sub-agent asks its parent (its turn ends until the answer) or reports (it ends).
-			var m *assistant.Message
-			var ev *assistant.AgentEvent
+			var m *engine.Message
+			var ev *engine.AgentEvent
 			if name == "agent_ask" {
 				var q string
 				_ = json.Unmarshal(args["question"], &q)
@@ -784,7 +785,7 @@ func (s *A) runCalls(r *assistantRun, ref *runtimeRef, calls []assistant.ToolCal
 		case "ask_user":
 			// The questions go to the user; the turn ends until they answer.
 			qs, err := assistant.NormalizeQuestions(args["questions"])
-			m := &assistant.Message{Role: "tool", ToolCallID: call.ID, Name: name}
+			m := &engine.Message{Role: "tool", ToolCallID: call.ID, Name: name}
 			if err == nil {
 				m.Content, m.Status, m.Summary, m.Questions, m.AskState = assistant.String("Questions asked to the user: waiting for their answers."), "ok", assistant.Tn(len(qs), "{n} question", "{n} questions", nil).Raw(), qs, "pending"
 				stop = true
@@ -797,11 +798,11 @@ func (s *A) runCalls(r *assistantRun, ref *runtimeRef, calls []assistant.ToolCal
 			continue
 		}
 		running := assistant.T("running…", nil)
-		if assistant.WriteTools[name] {
+		if engine.WriteTools[name] {
 			running = assistant.T("waiting…", nil)
 		}
 		start := time.Now()
-		m := &assistant.Message{Role: "tool", ToolCallID: call.ID, Name: name, Content: assistant.String(""), Summary: running.Raw(), StartedAt: start.UnixMilli()}
+		m := &engine.Message{Role: "tool", ToolCallID: call.ID, Name: name, Content: assistant.String(""), Summary: running.Raw(), StartedAt: start.UnixMilli()}
 		r.chat.Messages = append(r.chat.Messages, m)
 		idx := len(r.chat.Messages) - 1
 		s.publish(r, idx)
@@ -867,7 +868,7 @@ Write a structured summary in Markdown, in the language of the conversation, wit
 - the current state and the next planned steps.
 Be precise (paths, names, values) and concise. Do not answer the conversation: summarize it.`
 
-func transcriptOf(m *assistant.Message, budget int) string {
+func transcriptOf(m *engine.Message, budget int) string {
 	text := assistant.ContentText(m.Content)
 	switch m.Role {
 	case "user":
@@ -915,7 +916,7 @@ const keepSteps = 10
 
 // compactCut is the first message a compaction keeps: the last keepSteps steps, start when
 // there are no more (nothing to compact).
-func compactCut(msgs []*assistant.Message, start int) int {
+func compactCut(msgs []*engine.Message, start int) int {
 	from, steps := len(msgs), 0
 	for i := len(msgs) - 1; i > start && steps < keepSteps; i-- {
 		if msgs[i].Role == "assistant" {
@@ -1014,8 +1015,8 @@ func (s *A) compact(r *assistantRun, manual bool, instructions string) error {
 	for i := start; i < keepFrom && i < len(r.chat.Messages); i++ {
 		r.chat.Messages[i].Compacted = true
 	}
-	sm := &assistant.Message{Role: "user", Kind: "summary", Content: assistant.String(summary), Summarized: keepFrom - start, Model: model}
-	r.chat.Messages = append(r.chat.Messages[:keepFrom], append([]*assistant.Message{sm}, r.chat.Messages[keepFrom:]...)...)
+	sm := &engine.Message{Role: "user", Kind: "summary", Content: assistant.String(summary), Summarized: keepFrom - start, Model: model}
+	r.chat.Messages = append(r.chat.Messages[:keepFrom], append([]*engine.Message{sm}, r.chat.Messages[keepFrom:]...)...)
 	r.chat.ResetAt = len(r.chat.Messages)
 	s.publish(r, 0)
 	return nil

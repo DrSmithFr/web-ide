@@ -3,6 +3,7 @@ package ai
 import (
 	"encoding/json"
 
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 )
@@ -29,7 +30,7 @@ func (s *A) runSavedTool(r *assistantRun, rt *runtime.Runtime, a assistant.Args,
 	go s.uiTool(r, "focus", assistant.Args{"target": json.RawMessage(`"console"`), "console_id": jsonString(console), "quiet": json.RawMessage("true")})
 	until := assistant.CommandWait(a.Num("timeout"))
 	if rt.Keeper != nil {
-		s.toolRunning(r, func(run *assistant.Running) { run.Console, run.Until = console, until.UnixMilli() })
+		s.toolRunning(r, func(run *engine.Running) { run.Console, run.Until = console, until.UnixMilli() })
 	}
 	return s.waitCommand(r, rt, cmd.Name, console, until, progress)
 }

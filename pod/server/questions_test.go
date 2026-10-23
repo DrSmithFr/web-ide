@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 )
 
@@ -108,7 +109,7 @@ func TestQuestions(t *testing.T) {
 
 	// A conversation of the assistant asking.
 	loc, root, _ := aiOf(s).ChatLoc(id)
-	chat := &assistant.Chat{ID: "c1", Title: "Plan the cache", Messages: []*assistant.Message{
+	chat := &engine.Chat{ID: "c1", Title: "Plan the cache", Messages: []*engine.Message{
 		{Role: "user", Content: assistant.String("Plan it")},
 		{Role: "assistant", Content: assistant.String("Two ways to do it.")},
 		{Role: "tool", ToolCallID: "x", Name: "ask_user", AskState: "pending", At: 5, Questions: []assistant.Question{{Question: "Which one?", Options: []assistant.Option{{Label: "A"}, {Label: "B"}}}}},

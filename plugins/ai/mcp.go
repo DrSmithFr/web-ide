@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/DrSmithFr/web-ide/plugins/ai/acp"
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
+	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
 	kbp "github.com/DrSmithFr/web-ide/plugins/kanban"
 	"github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
-	"github.com/DrSmithFr/web-ide/pod/acp"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/llm"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
 )
 
@@ -63,7 +64,7 @@ func (s *A) mcpTools() []plugins.MCPTool {
 				if s.Running(a.Chat) {
 					return text + "\n\n(The assistant is answering now: read the conversation again later.)", nil
 				}
-				var chat assistant.Chat
+				var chat engine.Chat
 				_ = json.Unmarshal(raw, &chat)
 				return text + pendingQuestions(&chat), nil
 			}),
@@ -170,7 +171,7 @@ func (s *A) reply(loc llm.ChatLocation, root, project, lang, id, text string) (s
 	if r := s.run(id); r != nil {
 		r.mu.Lock()
 		if !r.done {
-			r.chat.Queue = append(r.chat.Queue, assistant.QueuedMessage{ID: assistant.NewID(), Text: text, Author: assistant.AuthorClaude})
+			r.chat.Queue = append(r.chat.Queue, engine.QueuedMessage{ID: assistant.NewID(), Text: text, Author: assistant.AuthorClaude})
 			s.publish(r, -1)
 			r.mu.Unlock()
 			return "The conversation is running: your message is queued and sent at its next step.", nil
@@ -185,7 +186,7 @@ func (s *A) reply(loc llm.ChatLocation, root, project, lang, id, text string) (s
 		return "", fmt.Errorf("this conversation has no model yet: the user must send its first message")
 	}
 	from := minFrom(len(chat.Messages), skipQuestions(chat))
-	chat.Messages = append(chat.Messages, &assistant.Message{Role: "user", Content: assistant.String(text), Display: text, Author: assistant.AuthorClaude})
+	chat.Messages = append(chat.Messages, &engine.Message{Role: "user", Content: assistant.String(text), Display: text, Author: assistant.AuthorClaude})
 	if !s.startRun(loc, root, project, lang, chat, from) {
 		return "", fmt.Errorf("the conversation started meanwhile: send your message again")
 	}
@@ -234,7 +235,7 @@ func (s *A) answer(loc llm.ChatLocation, root, project, lang, id string, answers
 }
 
 // pendingQuestions lists the questions waiting in a conversation, for kanban_conversation.
-func pendingQuestions(c *assistant.Chat) string {
+func pendingQuestions(c *engine.Chat) string {
 	for i := len(c.Messages) - 1; i >= 0; i-- {
 		m := c.Messages[i]
 		if m.AskState != "pending" {

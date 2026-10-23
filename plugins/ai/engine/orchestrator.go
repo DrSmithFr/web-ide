@@ -1,4 +1,6 @@
-package assistant
+package engine
+
+import "github.com/DrSmithFr/web-ide/pod/assistant"
 
 // Orchestrator mode: the default of a new conversation. It steers the work instead of doing
 // it: it reads the project and the kanban, proposes actions as cards the user clicks, sends
@@ -60,8 +62,8 @@ var (
 		obj{"chat": str("Id of the conversation (list_conversations)")}, "chat")
 	resumeDef = fn("agent_resume", "Resumes a conversation whose last answer failed (list_conversations marks it failed), from its last completed step, like the Resume button of the user. One that runs on its own is adopted on the way: it becomes your sub-agent.",
 		obj{"chat": str("Id of the failed conversation")}, "chat")
-	orchestratorDefs = []Def{kanbanNextDef, kanbanHistDef, listConvsDef, actionCardDef, openConvDef, adoptDef, resumeDef}
+	orchestratorDefs = []assistant.Def{kanbanNextDef, kanbanHistDef, listConvsDef, actionCardDef, openConvDef, adoptDef, resumeDef}
 )
 
-// OrchestratorTools are handled by the server (assistant_orchestrator.go).
+// OrchestratorTools are handled by the plugin (assistant_orchestrator.go).
 var OrchestratorTools = names(orchestratorDefs)

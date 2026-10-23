@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"sort"
 
-	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/stats"
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
+	"github.com/DrSmithFr/web-ide/plugins/ai/internal/stats"
 )
 
 type childStats struct {
@@ -56,8 +56,8 @@ func (s *A) assistantStats(ctx context.Context, c *Client, cc chatCtx, p json.Ra
 	total.Add(chat)
 	var children []childStats
 	seen := map[string]bool{chat.ID: true}
-	var walk func(c *assistant.Chat)
-	walk = func(c *assistant.Chat) {
+	var walk func(c *engine.Chat)
+	walk = func(c *engine.Chat) {
 		for _, id := range c.Children {
 			if seen[id] {
 				continue
@@ -81,12 +81,12 @@ func (s *A) assistantStats(ctx context.Context, c *Client, cc chatCtx, p json.Ra
 }
 
 // readChat: a conversation as it is now (the running one from memory), without changing it.
-func (s *A) readChat(cc chatCtx, id string) (*assistant.Chat, error) {
+func (s *A) readChat(cc chatCtx, id string) (*engine.Chat, error) {
 	if r := s.run(id); r != nil {
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		data, _ := json.Marshal(r.chat)
-		var copy assistant.Chat
+		var copy engine.Chat
 		_ = json.Unmarshal(data, &copy)
 		return &copy, nil
 	}

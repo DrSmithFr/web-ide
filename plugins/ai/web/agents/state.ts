@@ -1,4 +1,4 @@
-// State of the Agents tool: the ACP sessions of the worktrees of the window (pod/acp),
+// State of the Agents tool: the ACP sessions of the worktrees of the window (plugins/ai/acp),
 // their threads loaded when a tab is shown and kept up to date by the events of the pod.
 import { createEffect, createRoot, createSignal, on } from 'solid-js'
 import { createStore, produce, reconcile } from 'solid-js/store'

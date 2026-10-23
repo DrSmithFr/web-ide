@@ -1,7 +1,8 @@
 package ai
 
 import (
-	"github.com/DrSmithFr/web-ide/pod/acp"
+	"github.com/DrSmithFr/web-ide/plugins/ai/acp"
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 )
@@ -13,7 +14,7 @@ import (
 func (s *A) Running(id string) bool { return s.run(id) != nil }
 
 // RunProject is the project the tools of a conversation work in (runProject).
-func (s *A) RunProject(chat *assistant.Chat, root, project string) string {
+func (s *A) RunProject(chat *engine.Chat, root, project string) string {
 	return s.runProject(chat, root, project)
 }
 
@@ -44,4 +45,4 @@ func hasGraph(qs []assistant.Question) bool {
 func (s *A) AgentsOf(rt *runtime.Runtime) *acp.Manager { return s.agentsOf(rt) }
 
 // NoteAsks records the questions of a conversation saved from message from (noteAsks).
-func (s *A) NoteAsks(root string, c *assistant.Chat, from int) { s.noteAsks(root, c, from) }
+func (s *A) NoteAsks(root string, c *engine.Chat, from int) { s.noteAsks(root, c, from) }

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/llm"
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
+	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
 )
 
@@ -35,7 +35,7 @@ type asking struct {
 
 // noteAsks: a conversation of the assistant was saved; its questions changed when it asks
 // or stops asking, or when a message with questions is among those published.
-func (s *A) noteAsks(root string, c *assistant.Chat, from int) {
+func (s *A) noteAsks(root string, c *engine.Chat, from int) {
 	pending, touched := false, false
 	for i, m := range c.Messages {
 		if m.AskState == "pending" {

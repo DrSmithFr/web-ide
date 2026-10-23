@@ -20,7 +20,7 @@ func fakeAgent(t *testing.T) string {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node is needed by the fake agent")
 	}
-	p, err := filepath.Abs("../../e2e/bin/claude-agent-acp")
+	p, err := filepath.Abs("../../../e2e/bin/claude-agent-acp")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/acp"
+	"github.com/DrSmithFr/web-ide/plugins/ai/acp"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 )
 

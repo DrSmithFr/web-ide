@@ -8,9 +8,10 @@ import (
 
 	kbp "github.com/DrSmithFr/web-ide/plugins/kanban"
 
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
+	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
 	"github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/llm"
 )
 
 // Kanban tools of the assistant (docs/design/kanban.md): every conversation reads the tickets and
@@ -33,12 +34,12 @@ func (s *A) kanbanGit(r *assistantRun) kbp.GitCtx {
 }
 
 // ticketPrompt is the ticket part of the system prompt of a conversation linked to a ticket.
-func (s *A) ticketPrompt(r *assistantRun, link *assistant.TicketLink) string {
+func (s *A) ticketPrompt(r *assistantRun, link *engine.TicketLink) string {
 	t, err := s.kb().Kanban.Get(kanbanLocOf(r.loc), link.ID)
 	if err != nil {
 		return fmt.Sprintf("# Linked ticket\nTicket #%d cannot be found (%s).", link.ID, err)
 	}
-	return assistant.TicketPrompt(t.ID, link.Role, t.Branch, t.Parent, link.Feedback, kanban.Markdown(t))
+	return engine.TicketPrompt(t.ID, link.Role, t.Branch, t.Parent, link.Feedback, kanban.Markdown(t))
 }
 
 func tooLongDescription(text string) *assistant.ToolResult {
@@ -90,7 +91,7 @@ func (s *A) attachDoodles(r *assistantRun, id int64) int {
 		existing[a.Name] = true
 	}
 	r.mu.Lock()
-	pages := assistant.Pages(r.chat.Messages)
+	pages := engine.Pages(r.chat.Messages)
 	r.mu.Unlock()
 	seen := map[string]int{}
 	added := 0
@@ -206,14 +207,14 @@ func (s *A) kanbanCall(r *assistantRun, name string, a assistant.Args, mode stri
 		changed(id)
 		done := fmt.Sprintf("Ticket #%d created in the backlog (status New).%s", id, doodlesNote(s.attachDoodles(r, id)))
 		sum := assistant.T("#{id} created", map[string]any{"id": id})
-		if mode != assistant.Briefing {
+		if mode != engine.Briefing {
 			return assistant.OK(done, sum), nil
 		}
 		// Briefing: the ticket lists this conversation; the first one created is linked to it.
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		if r.chat.Ticket == nil {
-			r.chat.Ticket = &assistant.TicketLink{ID: id, Role: "briefing"}
+			r.chat.Ticket = &engine.TicketLink{ID: id, Role: "briefing"}
 			s.publish(r, -1)
 			return assistant.OK(done+" This conversation is now linked to it: kanban_update and kanban_add_note refine it.", sum), nil
 		}
@@ -443,7 +444,7 @@ func (s *A) assistantMilestone(r *assistantRun, loc kanban.Location, a assistant
 	if err != nil {
 		return assistant.ToolResult{}, err
 	}
-	if created != 0 && mode == assistant.Briefing {
+	if created != 0 && mode == engine.Briefing {
 		if err := s.kb().Kanban.LinkMilestoneChat(loc, created, chatID, "briefing", chatTitle); err == nil {
 			out += " This conversation is linked to it: it can change it."
 		}

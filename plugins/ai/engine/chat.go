@@ -1,9 +1,9 @@
-package assistant
+package engine
 
 import (
 	"encoding/json"
 
-	"github.com/DrSmithFr/web-ide/pod/llm"
+	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
 )
 
 // LoadChat reads a conversation of the assistant kept by m.

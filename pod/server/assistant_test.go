@@ -14,7 +14,7 @@ import (
 
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 
-	"github.com/DrSmithFr/web-ide/pod/llm"
+	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
 )
 
 // The projects of the tests are in /tmp: an other scratch folder keeps their approvals.

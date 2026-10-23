@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
 	"github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 )
@@ -153,7 +154,7 @@ func (s *A) listConversations(r *assistantRun, query string, limit int) (assista
 		}
 		mode := c.Mode
 		if mode == "" {
-			mode = assistant.Build
+			mode = engine.Build
 		}
 		line := fmt.Sprintf("- %s %q · %s · %s", c.ID, c.Title, mode, time.UnixMilli(c.Updated).In(time.Local).Format("2006-01-02 15:04"))
 		if c.Ticket != 0 {
@@ -183,11 +184,11 @@ func (s *A) listConversations(r *assistantRun, query string, limit int) (assista
 func (s *A) actionCard(r *assistantRun, a assistant.Args) (assistant.ToolResult, error) {
 	card := &assistant.ActionCard{Kind: a.Str("kind"), Ticket: int64(a.Num("ticket")), Chat: a.Str("chat"), Label: strings.TrimSpace(a.Str("label")), Reason: strings.TrimSpace(a.Str("reason"))}
 	known := false
-	for _, k := range assistant.ActionKinds {
+	for _, k := range engine.ActionKinds {
 		known = known || k == card.Kind
 	}
 	if !known {
-		return assistant.ToolResult{}, assistant.Usagef("unknown kind %q (%s)", card.Kind, strings.Join(assistant.ActionKinds, ", "))
+		return assistant.ToolResult{}, assistant.Usagef("unknown kind %q (%s)", card.Kind, strings.Join(engine.ActionKinds, ", "))
 	}
 	if card.Label == "" {
 		return assistant.ToolResult{}, assistant.Usagef("label is missing")
@@ -216,8 +217,8 @@ func (s *A) openConversation(r *assistantRun, a assistant.Args) (assistant.ToolR
 		mode := a.Str("mode")
 		switch mode {
 		case "":
-			mode = assistant.Briefing
-		case assistant.Briefing, assistant.Plan, assistant.Build:
+			mode = engine.Briefing
+		case engine.Briefing, engine.Plan, engine.Build:
 		default:
 			return assistant.ToolResult{}, assistant.Usagef("mode must be briefing, plan or build")
 		}
@@ -229,23 +230,23 @@ func (s *A) openConversation(r *assistantRun, a assistant.Args) (assistant.ToolR
 			opts = &o
 		}
 		r.mu.Unlock()
-		c := &assistant.Chat{ID: assistant.NewID(), Title: strings.TrimSpace(a.Str("title")), Server: server, Model: model, Mode: mode, Options: opts}
+		c := &engine.Chat{ID: assistant.NewID(), Title: strings.TrimSpace(a.Str("title")), Server: server, Model: model, Mode: mode, Options: opts}
 		if n := int64(a.Num("ticket")); n > 0 {
-			if mode == assistant.Build {
+			if mode == engine.Build {
 				return assistant.ToolResult{}, failf("to develop a ticket, propose action_card start_dev: it runs in the worktree of the ticket")
 			}
 			t, err := s.kb().Kanban.Get(kanbanLocOf(r.loc), n)
 			if err != nil {
 				return assistant.ToolResult{}, failf("ticket #%d not found", n)
 			}
-			c.Ticket = &assistant.TicketLink{ID: n, Role: mode}
+			c.Ticket = &engine.TicketLink{ID: n, Role: mode}
 			if c.Title == "" {
 				c.Title = fmt.Sprintf("#%d %s", n, t.Title)
 			}
 		}
 		message := strings.TrimSpace(a.Str("message"))
 		if a.Bool("send", false) && message != "" {
-			c.Messages = []*assistant.Message{{Role: "user", Content: assistant.String(message)}}
+			c.Messages = []*engine.Message{{Role: "user", Content: assistant.String(message)}}
 			s.startRun(r.loc, r.root, r.project, r.lang, c, 0)
 		} else {
 			c.Draft = message

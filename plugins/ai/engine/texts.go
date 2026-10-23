@@ -1,4 +1,4 @@
-package assistant
+package engine
 
 // Prompt texts of the assistant (moved from web/src/llm/prompt.ts): the default templates of
 // the modes, the text describing the tools of each mode, and the instructions of the roles of

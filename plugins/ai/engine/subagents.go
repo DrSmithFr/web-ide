@@ -1,6 +1,8 @@
-package assistant
+package engine
 
 import (
+	"github.com/DrSmithFr/web-ide/pod/assistant"
+
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -139,8 +141,8 @@ const AdoptText = "You are now followed by this Orchestrator conversation. Annou
 // ParentText tells a conversation how to delegate.
 const ParentText = `Sub-agents: delegate a well-defined, self-contained task (an exploration, a change in a few files, a review) with spawn_agent: a child conversation with a fresh context and your rights runs it in the background while you go on. Give it a precise task and the files to read. Its questions and its report come back to you as messages; answer a question with agent_reply, or ask the user first with ask_user when the answer is theirs. agent_message writes to a running child, agent_stop stops it, agent_status lists them. Relay the reports to the user.`
 
-func agentDefs() (parent, child []Def) {
-	parent = []Def{
+func agentDefs() (parent, child []assistant.Def) {
+	parent = []assistant.Def{
 		fn("spawn_agent", "Delegates a task to a sub-agent: a child conversation with a fresh context and your rights (same mode, same ticket), running in the background. Returns its id at once; its questions and its report come back as messages. At most 5 running at once.",
 			obj{
 				"title":  str("Short title of the task, e.g. \"Find the login code\""),
@@ -157,7 +159,7 @@ func agentDefs() (parent, child []Def) {
 		fn("agent_stop", "Stops a sub-agent.", obj{"child": str("Id of the sub-agent")}, "child"),
 		fn("agent_status", "Lists your sub-agents: status, latest note, open question, report.", obj{}),
 	}
-	child = []Def{
+	child = []assistant.Def{
 		fn("agent_note", "Tells your parent where you are (a milestone, a finding). Returns at once.",
 			obj{"title": str("Short title"), "text": str("What you did or found")}, "title", "text"),
 		fn("agent_ask", "Asks your parent a question when you are blocked or a choice is not yours; your turn stops until it answers (the answer is the result of this call).",
@@ -174,7 +176,7 @@ func agentDefs() (parent, child []Def) {
 
 var parentAgentDefs, childAgentDefs = agentDefs()
 
-// ParentTools and ChildTools: the tools of each side, handled by the server.
+// ParentTools and ChildTools: the tools of each side, handled by the plugin (assistant_sub.go).
 var (
 	ParentTools = names(parentAgentDefs)
 	ChildTools  = names(childAgentDefs)

@@ -3,6 +3,7 @@ package ai
 import (
 	"encoding/json"
 
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 )
 
@@ -26,7 +27,7 @@ func dynamicEffort(o assistant.Options) bool {
 }
 
 // effortFor is the reasoning effort of the next answer of c.
-func effortFor(c *assistant.Chat, o assistant.Options) string {
+func effortFor(c *engine.Chat, o assistant.Options) string {
 	// A session of a ticket keeps the effort of its complexity.
 	if c.Ticket != nil && c.Ticket.Effort != "" {
 		o.Effort = c.Ticket.Effort
@@ -71,7 +72,7 @@ func effortFor(c *assistant.Chat, o assistant.Options) string {
 
 // isUserTurn: a message the model has not seen answered yet comes from outside (the user, a
 // parent or a sub-agent); the summary of a compaction is not one.
-func isUserTurn(m *assistant.Message) bool {
+func isUserTurn(m *engine.Message) bool {
 	return m.Role == "user" && m.Kind != "summary"
 }
 

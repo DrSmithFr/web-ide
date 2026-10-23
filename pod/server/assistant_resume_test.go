@@ -10,12 +10,13 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
+	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/config"
 	"github.com/DrSmithFr/web-ide/pod/desks"
 	"github.com/DrSmithFr/web-ide/pod/hfcache"
 	"github.com/DrSmithFr/web-ide/pod/keeper"
-	"github.com/DrSmithFr/web-ide/pod/llm"
 	"github.com/DrSmithFr/web-ide/pod/projects"
 	"github.com/DrSmithFr/web-ide/pod/settings"
 	"github.com/DrSmithFr/web-ide/pod/sshx"
@@ -199,8 +200,8 @@ func TestResumeWithoutRelay(t *testing.T) {
 	a, _ := dial(t, ts1, "secret-token-0123456789abcdef0123")
 	id := a.call("projects.create", map[string]any{"type": "local", "path": t.TempDir()})["result"].(map[string]any)["id"].(string)
 	loc, root, _ := aiOf(s1).ChatLoc(id)
-	if err := saveTestChat(s1, loc, &assistant.Chat{ID: "gone", Server: "s1", Model: "m", Running: &assistant.Running{Stream: "unknown"},
-		Messages: []*assistant.Message{{Role: "user", Content: assistant.String("Go")}}}); err != nil {
+	if err := saveTestChat(s1, loc, &engine.Chat{ID: "gone", Server: "s1", Model: "m", Running: &engine.Running{Stream: "unknown"},
+		Messages: []*engine.Message{{Role: "user", Content: assistant.String("Go")}}}); err != nil {
 		t.Fatal(err)
 	}
 	stopPod(s1, ts1)

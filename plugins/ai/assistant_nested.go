@@ -4,8 +4,9 @@ import (
 	"path"
 	"strings"
 
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
+	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/llm"
 )
 
 // nestedFolder is the folder a tool call enters: the one of the file it reads or writes, or
@@ -47,7 +48,7 @@ func (s *A) addNested(r *assistantRun, ref *runtimeRef, name string, a assistant
 	r.mu.Lock()
 	for _, f := range files {
 		if !known[f.Path] {
-			r.chat.Nested = append(r.chat.Nested, assistant.NestedFile{Path: f.Path, At: len(r.chat.Messages)})
+			r.chat.Nested = append(r.chat.Nested, engine.NestedFile{Path: f.Path, At: len(r.chat.Messages)})
 		}
 	}
 	r.mu.Unlock()

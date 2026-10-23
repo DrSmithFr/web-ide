@@ -1,6 +1,8 @@
-package assistant
+package engine
 
 import (
+	"github.com/DrSmithFr/web-ide/pod/assistant"
+
 	"encoding/json"
 	"strings"
 	"testing"
@@ -10,7 +12,7 @@ func TestPages(t *testing.T) {
 	msgs := []*Message{
 		{Role: "user", Attachments: json.RawMessage(`[{"name":"a.png","kind":"image"},{"name":"Doodle 1","kind":"doodle","doodle":{"v":1},"png":"data:x"}]`)},
 		{Role: "assistant"},
-		{Role: "tool", Page: &Page{Name: "Flow", Doc: json.RawMessage(`{"v":1}`)}},
+		{Role: "tool", Page: &assistant.Page{Name: "Flow", Doc: json.RawMessage(`{"v":1}`)}},
 		{Role: "user", Attachments: json.RawMessage(`[{"name":"Doodle 1","kind":"doodle","doodle":{"v":1}},{"name":"Doodle 2","kind":"doodle","doodle":{"v":1}}]`)},
 	}
 	msgs = append(msgs, &Message{Role: "user",

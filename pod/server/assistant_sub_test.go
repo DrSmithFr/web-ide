@@ -10,8 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
+	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/llm"
 )
 
 // isChild tells a request of a sub-agent (its system prompt) from one of its parent.
@@ -385,8 +386,8 @@ func TestAssistantAdopt(t *testing.T) {
 	}
 	// A sub-agent that failed, abandoned by the user: stopped, no longer failed, its parent told.
 	loc, _, _ := aiOf(s).ChatLoc(id)
-	if err := saveTestChat(s, loc, &assistant.Chat{ID: "kid", Title: "Kid", Parent: "orc", Agent: &assistant.SubAgent{Task: "t", Status: assistant.AgentError, Depth: 1},
-		Messages: []*assistant.Message{{Role: "user", Content: assistant.String("go")}, {Role: "assistant", Error: "boom"}}}); err != nil {
+	if err := saveTestChat(s, loc, &engine.Chat{ID: "kid", Title: "Kid", Parent: "orc", Agent: &engine.SubAgent{Task: "t", Status: engine.AgentError, Depth: 1},
+		Messages: []*engine.Message{{Role: "user", Content: assistant.String("go")}, {Role: "assistant", Error: "boom"}}}); err != nil {
 		t.Fatal(err)
 	}
 	a.waitUpdate("orc", idle)
@@ -403,8 +404,8 @@ func TestAssistantAdopt(t *testing.T) {
 
 	// A conversation that failed on its own: resumed by the Orchestrator from its last step,
 	// adopted on the way; one that did not fail is not resumed.
-	if err := saveTestChat(s, loc, &assistant.Chat{ID: "broken", Title: "Broken", Server: "s1", Model: "m", Mode: "build",
-		Messages: []*assistant.Message{{Role: "user", Content: assistant.String("go")}, {Role: "assistant", Error: "Interrupted: the pod stopped."}}}); err != nil {
+	if err := saveTestChat(s, loc, &engine.Chat{ID: "broken", Title: "Broken", Server: "s1", Model: "m", Mode: "build",
+		Messages: []*engine.Message{{Role: "user", Content: assistant.String("go")}, {Role: "assistant", Error: "Interrupted: the pod stopped."}}}); err != nil {
 		t.Fatal(err)
 	}
 	a.waitUpdate("orc", idle)

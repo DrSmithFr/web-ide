@@ -7,9 +7,9 @@ import (
 	"sync"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"github.com/DrSmithFr/web-ide/plugins/ai/acp"
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
 	kb "github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
-	"github.com/DrSmithFr/web-ide/pod/acp"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/caps"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"github.com/DrSmithFr/web-ide/pod/projects"
@@ -168,7 +168,7 @@ type agentsCap struct{ s *A }
 
 func (c agentsCap) Develop(project, agent string, t caps.TicketBrief) (caps.AgentSession, bool, error) {
 	s := c.s
-	if _, ok := assistant.RoleInstructions[t.Role]; !ok {
+	if _, ok := engine.RoleInstructions[t.Role]; !ok {
 		return caps.AgentSession{}, false, i18n.Errorf("unknown role: %s", t.Role)
 	}
 	rt, err := s.pod.Runtime(project)
@@ -179,7 +179,7 @@ func (c agentsCap) Develop(project, agent string, t caps.TicketBrief) (caps.Agen
 	if m == nil {
 		return caps.AgentSession{}, false, i18n.New("agents run on local projects only")
 	}
-	prompt := assistant.TicketPrompt(t.ID, t.Role, t.Branch, t.Parent, t.Feedback, t.Markdown)
+	prompt := engine.TicketPrompt(t.ID, t.Role, t.Branch, t.Parent, t.Feedback, t.Markdown)
 	if t.Text != "" {
 		prompt += "\n\n---\n\n" + t.Text
 	}

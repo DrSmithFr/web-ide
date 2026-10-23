@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
+	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/llm"
 )
 
 // A run records when each message came, the approval waits and the kind of the failures;
@@ -54,9 +55,9 @@ func TestAssistantStats(t *testing.T) {
 
 	// A sub-agent of the conversation, and another conversation of the project.
 	loc, _, _ := aiOf(s).ChatLoc(id)
-	kid := &assistant.Chat{ID: "kid", Title: "Kid", Parent: "st", Messages: []*assistant.Message{
+	kid := &engine.Chat{ID: "kid", Title: "Kid", Parent: "st", Messages: []*engine.Message{
 		{Role: "user", Content: assistant.String("task")},
-		{Role: "assistant", Model: "other", ToolCalls: []assistant.ToolCall{{ID: "k1"}}},
+		{Role: "assistant", Model: "other", ToolCalls: []engine.ToolCall{{ID: "k1"}}},
 		{Role: "tool", Name: "read_file", Status: "denied"},
 	}}
 	kid.Messages[1].ToolCalls[0].Function.Name = "read_file"
@@ -66,7 +67,7 @@ func TestAssistantStats(t *testing.T) {
 	if aiOf(s).Running("st") {
 		t.Fatal("still running")
 	}
-	st, _ := assistant.LoadChat(llmOf(s), loc, "st")
+	st, _ := engine.LoadChat(llmOf(s), loc, "st")
 	st.Children = []string{"kid"}
 	if err := saveTestChat(s, loc, st); err != nil {
 		t.Fatal(err)

@@ -1,8 +1,8 @@
 // Package ai is the AI plugin: the assistant (local models, the turn loop and its tools,
 // sub-agents, the Orchestrator, compaction, doodles and the board of a conversation) and the
 // Agents tool (the sessions of the CLI agents, ACP). The plugin keeps the model servers, their
-// keys and the conversations (pod/llm), and the sessions of the agents as a part of the runtime
-// of a project (pod/acp); the core reaches them through hooks only: the Questions tool
+// keys and the conversations (llm/), and the sessions of the agents as a part of the runtime
+// of a project (acp/); the core reaches them through hooks only: the Questions tool
 // (Host.Questions), the synced vault (Host.Vault), the Kanban (caps.Agents). Off on a project:
 // no assistant nor agents; the MCP for Claude Code stays the core's.
 package ai
@@ -14,10 +14,10 @@ import (
 	"time"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
 	kbp "github.com/DrSmithFr/web-ide/plugins/kanban"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/commands"
-	"github.com/DrSmithFr/web-ide/pod/llm"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 	"github.com/DrSmithFr/web-ide/pod/settingsync"
 

@@ -200,6 +200,10 @@ _Avoid_: backend, provider
 The AI built into the IDE: it runs in the pod against a model server, in the Assistant tool.
 _Avoid_: AI assistant, integrated assistant, local assistant, agent
 
+**Tool kit**
+What the tools of the assistant and those of the MCP share, kept in the core (`pod/assistant`): the definition of a tool, its arguments and result, the console tools, `ask_user`. The rest of the assistant (conversation, prompts, the tools of each mode) is the *engine* of the AI plugin.
+_Avoid_: toolbox, SDK
+
 **Agent**
 A coding agent program (Claude Code, opencode, pi) the IDE runs through ACP, in the Agents tool.
 _Avoid_: CLI agent, external agent; for the assistant
