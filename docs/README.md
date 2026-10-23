@@ -18,6 +18,7 @@ These pages are also in the IDE, embedded in the pod: *Help › Documentation* (
 - [Self-host a relay](howto/self-host-relay.md): reach your pods from anywhere through your own relay.
 - [Notifications on the phone](howto/notifications.md).
 - [Add a language](howto/add-translation.md): the interface and the pod's messages.
+- [Write a plugin](howto/write-a-plugin.md): an external plugin in its own repository, its views, its backend, its grants, its releases.
 - [Modify the IDE](howto/modify-the-ide.md): change the installed version with its own assistant.
 
 ## Guide
