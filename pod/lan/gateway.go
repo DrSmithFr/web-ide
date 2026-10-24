@@ -116,6 +116,21 @@ func (m *Manager) ServeGateway(w http.ResponseWriter, r *http.Request, base stri
 	rp.ServeHTTP(w, r)
 }
 
+// PeerTransport is the way to the pod of key on the LAN, when it is a peer this pod dialed: its
+// address and a transport pinned to its certificate (the routes of the pods, /_peer/, ride it).
+func (m *Manager) PeerTransport(key string) (addr string, t *http.Transport, ok bool) {
+	m.mu.Lock()
+	var fp string
+	if p := m.peers[key]; p != nil && p.out != nil {
+		addr, fp = p.out.addr, p.out.serverFP
+	}
+	m.mu.Unlock()
+	if addr == "" {
+		return "", nil, false
+	}
+	return addr, m.transport(fp), true
+}
+
 // transport reaches a peer with our TLS certificate, and accepts only the certificate the
 // handshake bound: a machine that took the peer's address meanwhile is refused.
 func (m *Manager) transport(fp string) *http.Transport {

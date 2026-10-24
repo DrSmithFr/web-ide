@@ -234,5 +234,6 @@
   "the backend of the plugin did not answer %s in time": "el backend del plugin no respondió a %s a tiempo",
   "the backend of the plugin ended: %v": "el backend del plugin terminó: %v",
   "the plugin %s has no backend": "el plugin %s no tiene backend",
-  "this kernel has no Landlock: an external plugin's backend cannot run confined": "este núcleo no tiene Landlock: el backend de un plugin externo no puede ejecutarse confinado"
+  "this kernel has no Landlock: an external plugin's backend cannot run confined": "este núcleo no tiene Landlock: el backend de un plugin externo no puede ejecutarse confinado",
+  "this pod is not paired": "este pod no está emparejado"
 }

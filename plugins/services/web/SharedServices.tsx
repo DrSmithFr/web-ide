@@ -3,9 +3,10 @@
 // and the pods attached to it, each with Cut.
 import { createResource, createSignal, For, onCleanup, Show } from 'solid-js'
 import { api, errorToast, Icon, t } from './plugin'
+import { RouteBadge, type Route } from './RouteBadge'
 import './services.css'
 
-type Attached = { key: string; name: string; since: number; last?: number; requests: number; bytes: number }
+type Attached = { key: string; name: string; since: number; last?: number; requests: number; bytes: number; route?: Route }
 type Service = { id: string; name: string; port: number; enabled: boolean; attached: Attached[] }
 
 /** The form of a new service, or of one edited. */
@@ -90,6 +91,7 @@ export function SharedServices() {
                     {(a) => (
                       <div class="svc-pod" data-testid={`service-pod-${a.name}`}>
                         <span>{a.name}</span>
+                        <RouteBadge route={a.route} />
                         <span class="muted small">
                           {t('attached {when}', { when: api.fmtAgo(a.since) })} · {api.tn(a.requests, '{n} request', '{n} requests')} · {api.fmtSize(a.bytes)}
                           <Show when={a.last}> · {t('last request {when}', { when: api.fmtAgo(a.last!) })}</Show>

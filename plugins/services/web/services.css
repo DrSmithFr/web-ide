@@ -11,3 +11,13 @@
 .svc-form label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
 .svc-form input.input { width: 160px; }
 .svc-form input.input.port { width: 90px; }
+.svc-link { padding: 4px 0; }
+.svc-link + .svc-link { border-top: 1px solid var(--line); }
+.svc-opts { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px 10px; margin: 4px 0 2px 26px; }
+.svc-opts label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.svc-opts input.input.port { width: 90px; }
+.svc-route.lan { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.svc-route.relay-direct { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.svc-route.relay-turn { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.svc-route.idle { color: var(--fg-muted); }
+.svc-row .pod-dot.on { background: var(--ok); }

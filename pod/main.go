@@ -23,6 +23,7 @@ import (
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
 	"github.com/DrSmithFr/web-ide/lib/identity"
+	"github.com/DrSmithFr/web-ide/lib/tunnel"
 	"github.com/DrSmithFr/web-ide/pod/config"
 	"github.com/DrSmithFr/web-ide/pod/desks"
 	"github.com/DrSmithFr/web-ide/pod/docsdist"
@@ -31,6 +32,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/lan"
 	"github.com/DrSmithFr/web-ide/pod/multipod"
 	"github.com/DrSmithFr/web-ide/pod/pair"
+	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"github.com/DrSmithFr/web-ide/pod/plugins/builtin"
 	"github.com/DrSmithFr/web-ide/pod/plugins/confine"
 	"github.com/DrSmithFr/web-ide/pod/power"
@@ -333,6 +335,16 @@ func main() {
 		}
 	}
 	dir = multipod.New(hub, lanView{m: lanMgr})
+	// The plugins reach the routes of the other pods (the linked services): the LAN first, else
+	// pod to pod through the relay. WEBIDE_PEER_IDLE shortens the idle time of a tunnel (e2e).
+	peerCli := multipod.NewPeerClient(relayDialer{cli: &relayCli, dir: &dir})
+	if lanMgr != nil {
+		peerCli.LAN = lanMgr.PeerTransport
+	}
+	if d, err := time.ParseDuration(os.Getenv("WEBIDE_PEER_IDLE")); err == nil && d > 0 {
+		peerCli.Idle = d
+	}
+	srv.PeerNet = peerNet{c: peerCli, dir: dir}
 	if hub != nil {
 		hub.SetOther(func(m settingsync.Msg) { dir.HandleBlob(m) })
 		// The key of the epoch arrived: this pod can publish its own list, and read the others.
@@ -540,6 +552,22 @@ func remoteGateway(cli *atomic.Pointer[relayclient.Client], dir **multipod.Direc
 		}
 		return "", "", 0
 	})
+}
+
+// peerNet is the way to the other pods lent to the plugins (plugins.Peers).
+type peerNet struct {
+	c   *multipod.PeerClient
+	dir *multipod.Directory
+}
+
+func (p peerNet) Transport() http.RoundTripper  { return p.c }
+func (p peerNet) Route(key string) tunnel.Route { return p.c.Route(key) }
+func (p peerNet) List() []plugins.PeerPod {
+	var out []plugins.PeerPod
+	for _, v := range p.dir.List() {
+		out = append(out, plugins.PeerPod{Key: v.Key, Name: v.Name, Online: v.Online, Advertised: v.Advertised})
+	}
+	return out
 }
 
 // relayDialer dials a pod of the account the relay reports online, by its device key.

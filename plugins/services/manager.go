@@ -13,6 +13,7 @@ import (
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
 	"github.com/DrSmithFr/web-ide/lib/identity"
+	"github.com/DrSmithFr/web-ide/lib/tunnel"
 	"github.com/DrSmithFr/web-ide/pod/store"
 )
 
@@ -36,6 +37,8 @@ type Attached struct {
 	Last     int64  `json:"last,omitempty"`
 	Requests int64  `json:"requests"`
 	Bytes    int64  `json:"bytes"`
+	// Route is the way its last request came (the badge).
+	Route tunnel.Route `json:"route"`
 }
 
 // View is a service with the pods attached to it, as the home page shows it.
@@ -59,12 +62,15 @@ type Manager struct {
 	mu       sync.Mutex
 	list     []Service
 	attached map[string]map[string]*Attached // service id → pod key
+	// cut are the pods this pod cut, by service: they attach again only when their user turns
+	// the link on (relink), not by themselves.
+	cut map[string]map[string]bool
 }
 
 // Load reads the services of the pod; changed is called after each change (an event to the
 // windows, the list published again).
 func Load(st *store.Store, changed func()) (*Manager, error) {
-	m := &Manager{st: st, changed: changed, attached: map[string]map[string]*Attached{}}
+	m := &Manager{st: st, changed: changed, attached: map[string]map[string]*Attached{}, cut: map[string]map[string]bool{}}
 	if err := st.ReadJSON(File, &m.list); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return m, err
 	}
@@ -157,13 +163,21 @@ func (m *Manager) Delete(id string) error {
 	return nil
 }
 
-// Attach links a pod to a service that is on.
-func (m *Manager) Attach(id string, pod *identity.Cert) error {
+// Attach links a pod to a service that is on, and gives the port of the service (the default
+// port of the link). A pod this pod cut attaches again only when its user asked (relink).
+func (m *Manager) Attach(id string, pod *identity.Cert, route tunnel.Route, relink bool) (int, error) {
 	m.mu.Lock()
 	s, ok := m.find(id)
 	if !ok || !s.Enabled {
 		m.mu.Unlock()
-		return errOff
+		return 0, errOff
+	}
+	if m.cut[id][pod.Key] {
+		if !relink {
+			m.mu.Unlock()
+			return 0, errCut
+		}
+		delete(m.cut[id], pod.Key)
 	}
 	if m.attached[id] == nil {
 		m.attached[id] = map[string]*Attached{}
@@ -173,9 +187,21 @@ func (m *Manager) Attach(id string, pod *identity.Cert) error {
 	} else {
 		m.attached[id][pod.Key] = &Attached{Key: pod.Key, Name: pod.Name, Since: time.Now().UnixMilli()}
 	}
+	m.attached[id][pod.Key].Route = route
 	m.mu.Unlock()
 	m.changed()
-	return nil
+	return s.Port, nil
+}
+
+// Cut detaches a pod and keeps it out until its user turns its link on again.
+func (m *Manager) Cut(id, key string) {
+	m.mu.Lock()
+	if m.cut[id] == nil {
+		m.cut[id] = map[string]bool{}
+	}
+	m.cut[id][key] = true
+	m.mu.Unlock()
+	m.Detach(id, key)
 }
 
 // Detach unlinks a pod (it turned its link off, or this pod cut it).
@@ -191,6 +217,9 @@ func (m *Manager) Detach(id, key string) {
 
 // errOff: the service does not exist or is off (the same answer: a pod learns nothing more).
 var errOff = errors.New("no such service")
+
+// errCut: this pod cut the pod asking; its link turns off.
+var errCut = errors.New("cut by this pod")
 
 // errDetached: the pod did not link the service, or was cut.
 var errDetached = errors.New("not attached to this service")
@@ -209,14 +238,17 @@ func (m *Manager) target(id, key string) (int, error) {
 	return s.Port, nil
 }
 
-// count adds a request and its bytes to what a pod asked.
-func (m *Manager) count(id, key string, requests, bytes int64) {
+// count adds a request, its bytes and its route to what a pod asked.
+func (m *Manager) count(id, key string, requests, bytes int64, route tunnel.Route) {
 	m.mu.Lock()
 	a := m.attached[id][key]
 	if a != nil {
 		a.Requests += requests
 		a.Bytes += bytes
 		a.Last = time.Now().UnixMilli()
+		if route.Name != "" {
+			a.Route = route
+		}
 	}
 	m.mu.Unlock()
 }

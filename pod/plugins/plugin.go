@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/DrSmithFr/web-ide/lib/tunnel"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/hfcache"
 
@@ -122,6 +123,27 @@ type Pod interface {
 	Authorized(r *http.Request) bool
 	// AdvertiseChanged publishes again what the plugins advertise (Host.Advertise).
 	AdvertiseChanged()
+	// Peers is the way to the other pods of the account: their routes of the pods (/_peer/).
+	Peers() Peers
+}
+
+// Peers reaches the other pods of the account (the linked services).
+type Peers interface {
+	// Transport sends a request to http://<device key>/_peer/… of another pod: the LAN when it is
+	// a peer, else pod to pod through the relay, chosen per request.
+	Transport() http.RoundTripper
+	// Route is the way a request to the pod at key goes now (tunnel.Route*).
+	Route(key string) tunnel.Route
+	// List is the pods of the account, online or not, with what they advertise.
+	List() []PeerPod
+}
+
+// PeerPod is another pod of the account.
+type PeerPod struct {
+	Key        string                     `json:"key"`
+	Name       string                     `json:"name"`
+	Online     bool                       `json:"online"`
+	Advertised map[string]json.RawMessage `json:"advertised,omitempty"`
 }
 
 // UIResult is the answer of a window to a tool of the interface.

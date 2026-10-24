@@ -10,12 +10,14 @@ import (
 	"sync/atomic"
 
 	"github.com/DrSmithFr/web-ide/lib/identity"
+	"github.com/DrSmithFr/web-ide/lib/tunnel"
 )
 
 // Handler serves the requests of the other pods (Host.HandlePeer: the core let only a pod of
 // the account through, its certificate in the context):
 //
-//	POST /<id>/$attach, /<id>/$detach  the pod links or unlinks the service
+//	POST /<id>/$attach, /<id>/$detach  the pod links or unlinks the service ($attach answers
+//	                                   {port}; 409 to a pod this pod cut, unless RelinkHeader)
 //	/<id>/<path>                       a request to the service, for an attached pod
 func (m *Manager) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -33,15 +35,26 @@ func (m *Manager) Handler() http.Handler {
 			}
 			if rest == "$detach" {
 				m.Detach(id, pod.Key)
-			} else if err := m.Attach(id, pod); err != nil {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			port, err := m.Attach(id, pod, tunnel.RouteOf(r.Context()), r.Header.Get(RelinkHeader) != "")
+			if err == errCut {
+				http.Error(w, err.Error(), http.StatusConflict)
+				return
+			}
+			if err != nil {
+				w.Header().Set(ServiceHeader, "off")
 				http.Error(w, err.Error(), http.StatusNotFound)
 				return
 			}
-			w.WriteHeader(http.StatusNoContent)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"port":` + strconv.Itoa(port) + `}`))
 			return
 		}
 		port, err := m.target(id, pod.Key)
 		if err == errOff {
+			w.Header().Set(ServiceHeader, "off")
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
@@ -77,8 +90,16 @@ func (m *Manager) proxy(w http.ResponseWriter, r *http.Request, id, key string, 
 		},
 	}
 	rp.ServeHTTP(w, r)
-	m.count(id, key, 1, bytes.Load()+max(r.ContentLength, 0))
+	m.count(id, key, 1, bytes.Load()+max(r.ContentLength, 0), tunnel.RouteOf(r.Context()))
 }
+
+// RelinkHeader marks an $attach the user asked (the link turned on), not one the linking pod
+// makes by itself: only it brings back a pod this pod cut.
+const RelinkHeader = "X-Webide-Relink"
+
+// ServiceHeader is "off" on the refusal of a service that is off or unknown here (a 404 of the
+// pod, not of the service): the link of the other pod shows it gone.
+const ServiceHeader = "X-Webide-Service"
 
 // countBody counts the bytes of an answer.
 type countBody struct {

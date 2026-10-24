@@ -13,6 +13,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/commands"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"github.com/DrSmithFr/web-ide/lib/tunnel"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"github.com/DrSmithFr/web-ide/pod/plugins/builtin"
@@ -441,6 +442,26 @@ func (s *Server) Advertised() map[string]any {
 	}
 	return out
 }
+
+func (p podLend) Peers() plugins.Peers {
+	if p.s.PeerNet == nil {
+		return noPeers{}
+	}
+	return p.s.PeerNet
+}
+
+// noPeers: the pod is not paired, it reaches no other pod.
+type noPeers struct{}
+
+func (noPeers) Transport() http.RoundTripper {
+	return roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, i18n.New("this pod is not paired") })
+}
+func (noPeers) Route(string) tunnel.Route { return tunnel.Route{Name: tunnel.RouteIdle} }
+func (noPeers) List() []plugins.PeerPod   { return nil }
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func (p podLend) AdvertiseChanged() {
 	if p.s.AdvertiseChanged != nil {

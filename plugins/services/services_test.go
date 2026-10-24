@@ -110,7 +110,7 @@ func TestHandler(t *testing.T) {
 	if w := ask(h, alpha, "POST", "/nope/$attach"); w.Code != http.StatusNotFound {
 		t.Fatalf("attach to no service: %d", w.Code)
 	}
-	if w := ask(h, alpha, "POST", "/"+s.ID+"/$attach"); w.Code != http.StatusNoContent {
+	if w := ask(h, alpha, "POST", "/"+s.ID+"/$attach"); w.Code != http.StatusOK || w.Body.String() != `{"port":`+strconv.Itoa(s.Port)+`}` {
 		t.Fatalf("attach: %d %s", w.Code, w.Body)
 	}
 	w := ask(h, alpha, "GET", "/"+s.ID+"/api/tags?a=1")
@@ -128,18 +128,28 @@ func TestHandler(t *testing.T) {
 		t.Fatalf("counters: %+v", l)
 	}
 
-	// Cut: the next request is refused.
-	m.Detach(s.ID, alpha.Key)
+	// Cut: the next request is refused, and so is an attach the pod makes by itself; one its
+	// user asked brings it back.
+	m.Cut(s.ID, alpha.Key)
 	if w := ask(h, alpha, "GET", "/"+s.ID+"/x"); w.Code != http.StatusForbidden {
 		t.Fatalf("after Cut: %d", w.Code)
 	}
+	if w := ask(h, alpha, "POST", "/"+s.ID+"/$attach"); w.Code != http.StatusConflict {
+		t.Fatalf("attach by itself after Cut: %d", w.Code)
+	}
+	r := httptest.NewRequest("POST", "/"+s.ID+"/$attach", nil)
+	r.Header.Set(RelinkHeader, "1")
+	rw := httptest.NewRecorder()
+	h.ServeHTTP(rw, r.WithContext(identity.WithPeer(r.Context(), alpha)))
+	if rw.Code != http.StatusOK {
+		t.Fatalf("attach the user asked after Cut: %d", rw.Code)
+	}
 	// Off: refused, and attaching too.
-	ask(h, alpha, "POST", "/"+s.ID+"/$attach")
 	s.Enabled = false
 	if _, err := m.Save(s); err != nil {
 		t.Fatal(err)
 	}
-	if w := ask(h, alpha, "GET", "/"+s.ID+"/x"); w.Code != http.StatusNotFound {
+	if w := ask(h, alpha, "GET", "/"+s.ID+"/x"); w.Code != http.StatusNotFound || w.Header().Get(ServiceHeader) != "off" {
 		t.Fatalf("off: %d", w.Code)
 	}
 	if w := ask(h, alpha, "POST", "/"+s.ID+"/$attach"); w.Code != http.StatusNotFound {
@@ -181,7 +191,7 @@ func TestStreamAndWebSocket(t *testing.T) {
 	s, _ := m.Save(Service{Name: "ollama", Port: portOf(t, back.URL), Enabled: true})
 	front := serve(m.Handler(), alpha)
 	defer front.Close()
-	if resp, err := http.Post(front.URL+"/"+s.ID+"/$attach", "", nil); err != nil || resp.StatusCode != http.StatusNoContent {
+	if resp, err := http.Post(front.URL+"/"+s.ID+"/$attach", "", nil); err != nil || resp.StatusCode != http.StatusOK {
 		t.Fatalf("attach: %v %v", resp, err)
 	}
 

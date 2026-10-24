@@ -436,7 +436,13 @@ func (m *Manager) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Who asks goes with the request: the routes of the pods only (/_svc/) read it.
-	m.cfg.Handler.ServeHTTP(w, r.WithContext(identity.WithPeer(r.Context(), t.cert)))
+	ctx := identity.WithPeer(r.Context(), t.cert)
+	route := tunnel.Route{Name: tunnel.RouteLAN, Peer: r.RemoteAddr}
+	if a, ok := r.Context().Value(http.LocalAddrContextKey).(net.Addr); ok {
+		route.Local = a.String()
+	}
+	ctx = tunnel.WithRoute(ctx, func() tunnel.Route { return route })
+	m.cfg.Handler.ServeHTTP(w, r.WithContext(ctx))
 }
 
 // serveHello runs the pod side of the handshake for a pod that dialed us.

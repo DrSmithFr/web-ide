@@ -106,7 +106,7 @@ func TestPeerConnChannel(t *testing.T) {
 	conn := newMsgPipe()
 	chans <- tunnel.LabeledConn{Label: "conn:1", Conn: conn.server}
 	client := &http.Client{Transport: &http.Transport{DialContext: func(context.Context, string, string) (net.Conn, error) {
-		return newMsgNetConn(conn.client), nil
+		return tunnel.NetConn(conn.client), nil
 	}}}
 	c, _, err := websocket.Dial(ctx, "ws://pod/_peer/svc/ws", &websocket.DialOptions{HTTPClient: client})
 	if err != nil {

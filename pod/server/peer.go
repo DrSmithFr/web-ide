@@ -40,7 +40,7 @@ func (s *Server) servePeer(w http.ResponseWriter, r *http.Request) {
 // serveConnChannel runs HTTP/1.1 on a conn:<n> channel of a pod-to-pod tunnel: a request whose
 // connection outlives its answer (a WebSocket) on the routes of the pods, and only them.
 func (c *Client) serveConnChannel(ctx context.Context, conn tunnel.MsgConn) {
-	nc := newMsgNetConn(conn)
+	nc := tunnel.NetConn(conn)
 	srv := &http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !strings.HasPrefix(r.URL.Path, podsOnly) {
@@ -52,67 +52,15 @@ func (c *Client) serveConnChannel(ctx context.Context, conn tunnel.MsgConn) {
 		BaseContext:       func(net.Listener) context.Context { return ctx },
 		ReadHeaderTimeout: 30 * time.Second,
 	}
-	_ = srv.Serve(&oneConnListener{conn: nc})
+	_ = srv.Serve(&oneConnListener{conn: nc, addr: nc.LocalAddr()})
 	_ = conn.Close()
 }
-
-// msgNetConn is a byte stream over a whole-message channel: each Write one message.
-type msgNetConn struct {
-	conn tunnel.MsgConn
-	buf  []byte
-	once sync.Once
-}
-
-func newMsgNetConn(conn tunnel.MsgConn) *msgNetConn { return &msgNetConn{conn: conn} }
-
-func (m *msgNetConn) Read(b []byte) (int, error) {
-	for len(m.buf) == 0 {
-		msg, err := m.conn.Read()
-		if err != nil {
-			return 0, err
-		}
-		m.buf = msg
-	}
-	n := copy(b, m.buf)
-	m.buf = m.buf[n:]
-	return n, nil
-}
-
-func (m *msgNetConn) Write(b []byte) (int, error) {
-	n := len(b)
-	for len(b) > 0 {
-		c := min(len(b), 64*1024)
-		chunk := make([]byte, c)
-		copy(chunk, b[:c])
-		if err := m.conn.Write(chunk); err != nil {
-			return 0, err
-		}
-		b = b[c:]
-	}
-	return n, nil
-}
-
-func (m *msgNetConn) Close() error {
-	var err error
-	m.once.Do(func() { err = m.conn.Close() })
-	return err
-}
-
-func (m *msgNetConn) LocalAddr() net.Addr                { return tunnelAddr{} }
-func (m *msgNetConn) RemoteAddr() net.Addr               { return tunnelAddr{} }
-func (m *msgNetConn) SetDeadline(t time.Time) error      { return nil }
-func (m *msgNetConn) SetReadDeadline(t time.Time) error  { return nil }
-func (m *msgNetConn) SetWriteDeadline(t time.Time) error { return nil }
-
-type tunnelAddr struct{}
-
-func (tunnelAddr) Network() string { return "tunnel" }
-func (tunnelAddr) String() string  { return "tunnel" }
 
 // oneConnListener hands one connection to http.Server, then reports it closed.
 type oneConnListener struct {
 	mu   sync.Mutex
 	conn net.Conn
+	addr net.Addr
 	done chan struct{}
 }
 
@@ -133,7 +81,7 @@ func (l *oneConnListener) Accept() (net.Conn, error) {
 }
 
 func (l *oneConnListener) Close() error   { return nil }
-func (l *oneConnListener) Addr() net.Addr { return tunnelAddr{} }
+func (l *oneConnListener) Addr() net.Addr { return l.addr }
 
 // closeNotify ends the listener when the server closes its only connection.
 type closeNotify struct {

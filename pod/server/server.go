@@ -93,6 +93,8 @@ type Server struct {
 	// AdvertiseChanged is called when what the plugins advertise changed (Host.Advertise): the
 	// project list published again, the LAN peers told.
 	AdvertiseChanged func()
+	// PeerNet reaches the other pods of the account (nil: not paired), lent to the plugins.
+	PeerNet plugins.Peers
 	// Push holds the push subscriptions of the browsers, PushSend gives an encrypted
 	// notification to the relay (both nil: no push, push.go).
 	Push     *push.Store
