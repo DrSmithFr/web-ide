@@ -10,6 +10,7 @@ import (
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
+	"github.com/DrSmithFr/web-ide/pod/plugins/confine"
 	"github.com/DrSmithFr/web-ide/pod/plugins/install"
 	"github.com/DrSmithFr/web-ide/pod/runtime"
 )
@@ -110,6 +111,44 @@ func (s *Server) registerPluginInstall() {
 			}
 		}
 		return s.installPlugin(ctx, cand, l.Constraint, grants)
+	})
+	// plugins.grants: the permissions the user grants an installed plugin (Settings > Plugins: a
+	// grant revoked or given again); its backends start again with them.
+	s.handle("plugins.grants", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		a, err := bind[struct {
+			ID     string   `json:"id"`
+			Grants []string `json:"grants"`
+		}](p)
+		if err != nil {
+			return nil, err
+		}
+		s.plugins.installMu.Lock()
+		defer s.plugins.installMu.Unlock()
+		e, ok := s.Plugins.External(a.ID)
+		if !ok {
+			return nil, i18n.Errorf("the plugin %s is not installed", a.ID)
+		}
+		for _, g := range a.Grants {
+			if !slices.Contains(e.Manifest.Permissions, g) {
+				return nil, i18n.Errorf("%s does not ask the permission %s", a.ID, g)
+			}
+		}
+		l, err := install.SetGrants(s.Store, a.ID, a.Grants)
+		if err != nil {
+			return nil, err
+		}
+		e.Grants = l.Grants
+		if err := s.Plugins.SetExternal(e); err != nil {
+			return nil, err
+		}
+		s.dropBackends(a.ID)
+		s.externalsChanged()
+		return map[string]any{"grants": l.Grants}, nil
+	})
+	// plugins.host: what this pod can run of an external plugin (the Landlock ABI of its kernel:
+	// 0, no backend runs).
+	s.handle("plugins.host", func(ctx context.Context, c *Client, p json.RawMessage) (any, error) {
+		return map[string]any{"landlock": confine.ABI()}, nil
 	})
 	// plugins.bundle: what the page runs of an external plugin, in its sandboxed frames (#129):
 	// its web/index.js and its catalogs.

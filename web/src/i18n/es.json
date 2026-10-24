@@ -938,7 +938,12 @@
   "Update": "Actualizar",
   "External": "Externo",
   "Not installed on this pod.": "No instalado en este pod.",
-  "Granted: {list}": "Concedido: {list}",
   "Remove {name} from this pod?": "¿Quitar {name} de este pod?",
-  "{method} is not granted to {name}": "{method} no está concedido a {name}"
+  "{method} is not granted to {name}": "{method} no está concedido a {name}",
+  "Its backend cannot run on this pod: its kernel has no Landlock.": "Su backend no puede ejecutarse en este pod: su núcleo no tiene Landlock.",
+  "Installing…": "Instalando…",
+  "Updating…": "Actualizando…",
+  "Removing…": "Eliminando…",
+  "Forget": "Olvidar",
+  "Accept all": "Aceptar todo"
 }

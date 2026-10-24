@@ -25,7 +25,8 @@ export function PluginsSection() {
         {(s) => (
           <div class="plugin-row" data-plugin={s().manifest.id}>
             <label class="check">
-              <input type="checkbox" checked={!s().disabled || !!s().manifest.required} disabled={!!s().manifest.required} data-testid={`plugin-${s().manifest.id}`}
+              <input type="checkbox" checked={(!s().disabled && s().external?.installed !== false) || !!s().manifest.required}
+                disabled={!!s().manifest.required || s().external?.installed === false} data-testid={`plugin-${s().manifest.id}`}
                 onChange={(e) => {
                   const on = e.currentTarget.checked
                   const deps = dependents(s())

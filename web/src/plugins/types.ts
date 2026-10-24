@@ -25,6 +25,8 @@ export interface PluginManifest {
   /** Locked: always enabled, the IDE does not run without it (Files, Code). */
   required?: boolean
   permissions?: string[]
+  /** The executable of the confined backend of an external plugin (bin/<name>). */
+  backend?: string
   provides?: string[]
   requires?: string[]
   namespaces?: string[]

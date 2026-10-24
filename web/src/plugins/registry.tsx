@@ -48,7 +48,7 @@ const hasModule = (s: PluginState) => !!builtins[s.manifest.id] || !!s.external?
 /** The page module of a plugin, loaded once (undefined when it cannot be). */
 function load(id: string): Promise<PluginModule | undefined> {
   const external = states().find((s) => s.manifest.id === id && s.external?.installed)
-  const get = builtins[id] ?? (external ? () => externalModule(external) : () => Promise.reject(new Error('no page module')))
+  const get = builtins[id] ?? (external ? () => externalModule(external, () => states().find((s) => s.manifest.id === id)) : () => Promise.reject(new Error('no page module')))
   return (loading[id] ??= get().then(
     (m) => (modules[id] = m),
     (e) => {

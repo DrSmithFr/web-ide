@@ -11,8 +11,8 @@ import (
 // The external plugins of the lock join the registry when the pod starts; one whose folder is
 // gone is left out.
 func TestExternalsAtStart(t *testing.T) {
-	s, _ := newServerWith(t, func(s *Server) {
-		manifest := `{"id": "greet", "name": "Greet", "version": "1.0.0", "apiVersion": 1, "assets": "https://x/{version}/{arch}.tar.gz", "contributes": {}}`
+	s, ts := newServerWith(t, func(s *Server) {
+		manifest := `{"id": "greet", "name": "Greet", "version": "1.0.0", "apiVersion": 1, "permissions": ["files:read", "net"], "assets": "https://x/{version}/{arch}.tar.gz", "contributes": {}}`
 		dir := s.Store.Path("plugins", "greet", "1.0.0")
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatal(err)
@@ -43,5 +43,19 @@ func TestExternalsAtStart(t *testing.T) {
 	}
 	if _, err := s.pluginBundle("gone"); err == nil {
 		t.Fatal("not installed")
+	}
+
+	// Its grants, changed in Settings: a permission it does not ask is refused; the lock follows.
+	a, _ := dial(t, ts, s.Token)
+	if r := a.callRaw("plugins.grants", map[string]any{"id": "greet", "grants": []string{"exec"}}); r["error"] == nil {
+		t.Fatal("a permission it does not ask")
+	}
+	a.call("plugins.grants", map[string]any{"id": "greet", "grants": []string{"net"}})
+	lock, _ := install.ReadLock(s.Store)
+	if e, _ := s.Plugins.External("greet"); len(e.Grants) != 1 || e.Grants[0] != "net" || lock.Plugins["greet"].Grants[0] != "net" {
+		t.Fatalf("grants: %v %v", e.Grants, lock.Plugins["greet"].Grants)
+	}
+	if h := a.call("plugins.host", nil)["result"].(map[string]any); h["landlock"] == nil {
+		t.Fatal("plugins.host")
 	}
 }

@@ -4,6 +4,18 @@ import { Portal } from 'solid-js/web'
 import { t } from '../i18n'
 
 export function Modal(props: { title: string; onClose: () => void; children: JSX.Element; class?: string; footer?: JSX.Element }) {
+  // On close, the focus goes back to where it was, else to the modal below (Settings), so that
+  // Escape still reaches it.
+  const prev = document.activeElement as HTMLElement | null
+  let self: HTMLDivElement | undefined
+  onCleanup(() => {
+    const below = [...document.querySelectorAll<HTMLElement>('.modal')].filter((m) => m !== self).pop()
+    queueMicrotask(() => {
+      if (document.activeElement && document.activeElement !== document.body) return
+      if (prev && prev !== document.body && prev.isConnected) prev.focus()
+      else below?.isConnected && below.focus()
+    })
+  })
   const key = (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
       e.stopPropagation()
@@ -13,7 +25,7 @@ export function Modal(props: { title: string; onClose: () => void; children: JSX
   return (
     <Portal>
       <div class="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && props.onClose()} onKeyDown={key}>
-        <div class={`modal ${props.class ?? ''}`} role="dialog" aria-modal="true" aria-label={props.title}>
+        <div ref={self} class={`modal ${props.class ?? ''}`} role="dialog" aria-modal="true" aria-label={props.title} tabindex="-1">
           <header class="modal-head">
             <h2>{props.title}</h2>
             <button class="icon-btn" title={t('Close (Esc)')} onClick={props.onClose}>

@@ -102,7 +102,8 @@ export function frameDoc(js: string): string {
 export type FrameHost = {
   plugin: string
   name: string
-  grants: string[]
+  /** Its grants now: a grant revoked in Settings is refused at once. */
+  grants: () => string[]
   catalogs: Record<string, Record<string, string>>
   /** The view of the frame ("" for the hidden one of the commands) and its tab (a tab view). */
   view: string
@@ -126,7 +127,7 @@ export function serveFrame(frame: HTMLIFrameElement, host: FrameHost) {
       case 'rpc': {
         const method = String(m.method ?? '')
         const own = method.startsWith(host.plugin + '.')
-        if (!own && !host.grants.includes('core:' + method)) {
+        if (!own && !host.grants().includes('core:' + method)) {
           reply(m.id, { error: t('{method} is not granted to {name}', { method, name: host.name }) })
           return
         }

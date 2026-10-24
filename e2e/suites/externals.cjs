@@ -31,12 +31,13 @@ ide.register({
       try { void parent.document.title; out.parent = 'open' } catch { out.parent = 'blocked' }
       try { await ide.rpc('fs.list', { path: '' }); out.rpc = 'answered' } catch (e) { out.rpc = 'refused: ' + e.message }
       el.innerHTML = '<p id="hello">' + ide.t('Hello from the frame') + '</p><pre id="checks">' + JSON.stringify(out) + '</pre><button id="open">open</button><button id="view">view</button>'
-      el.innerHTML += '<button id="backend">backend</button><button id="probe">probe</button><button id="core">core</button><pre id="answer"></pre><pre id="event"></pre>'
+      el.innerHTML += '<button id="backend">backend</button><button id="probe">probe</button><button id="core">core</button><button id="list">list</button><pre id="answer"></pre><pre id="event"></pre>'
       const show = (p) => p.then((r) => (el.querySelector('#answer').textContent = typeof r === 'string' ? r : JSON.stringify(r)), (e) => (el.querySelector('#answer').textContent = 'error: ' + e.message))
       ide.on('greet.said', (d) => (el.querySelector('#event').textContent = d))
       el.querySelector('#backend').onclick = () => show(ide.rpc('greet.hello'))
       el.querySelector('#probe').onclick = () => show(ide.rpc('greet.probe', { key: ${JSON.stringify(path.join(WS, '..', 'data', 'device.key'))} }))
       el.querySelector('#core').onclick = () => show(ide.rpc('greet.core'))
+      el.querySelector('#list').onclick = () => show(ide.rpc('fs.list', { path: '' }).then(() => 'answered'))
       el.querySelector('#open').onclick = () => ide.openFile('notes.txt')
       el.querySelector('#view').onclick = () => ide.openView('note', { text: 'kept' }, 'Note')
     },
@@ -123,11 +124,9 @@ run(async ({ page, errors }) => {
   let lock = readLock()
   assert(lock.greet?.version === '1.0.0' && lock.greet.grants.join() === 'files:read' && lock.greet.sha256.length === 64 && lock.greet.url === repo, 'the lock: ' + JSON.stringify(lock))
   assert(fs.existsSync(path.join(WS, '..', 'data', 'plugins', 'greet', '1.0.0', 'web', 'index.js')), 'extracted')
-  assert(!(await page.$('.rail-btn[data-id=greet]')), 'not used by the project: no tool')
 
-  // Used by the project: listed in .ide/plugins.json with its repository; its tool comes.
-  await page.check('[data-testid=plugin-greet]')
-  await page.waitForTimeout(300)
+  // Used by the project once installed: listed in .ide/plugins.json with its repository; its tool comes.
+  await page.waitForFunction(() => document.querySelector('[data-testid=plugin-greet]')?.checked)
   const choices = JSON.parse(fs.readFileSync(WS + '/demo/.ide/plugins.json', 'utf8'))
   assert(choices.external?.greet === repo, 'used by the project: ' + JSON.stringify(choices))
   await closeSettings()
@@ -206,25 +205,50 @@ run(async ({ page, errors }) => {
   await page.click('[data-testid=plugin-install-find]')
   await page.waitForSelector('.toast-error:has-text("needs the IDE ^99")')
 
-  // Removed: the row, the lock entry and the folder go; the project still names it.
+  // Removed: the row, the lock entry and the folder go, and the project stops naming it.
   await page.click('[data-testid=plugin-remove-greet]')
-  await page.waitForSelector('[data-testid=plugin-external-greet] >> text=Not installed on this pod.')
+  await page.waitForSelector('.plugin-row[data-plugin=greet]', { state: 'detached' })
   assert(!readLock().greet && !fs.existsSync(path.join(WS, '..', 'data', 'plugins', 'greet')), 'removed from the pod')
+  assert(!JSON.parse(fs.readFileSync(WS + '/demo/.ide/plugins.json', 'utf8')).external?.greet, 'removed from the project')
   assert(!(await page.$('.rail-btn[data-id=greet]')), 'its tool gone')
 
-  // Installed again from the row, fs.list granted: the frame gets its answer.
+  // Installed again, fs.list granted, used again: the frame gets its answer.
   await page.fill('[data-testid=plugin-install-constraint]', '')
-  await page.click(row + ' button:has-text("Install")')
+  await page.click('[data-testid=plugin-install-find]')
   await page.waitForSelector('.plugin-grants')
-  for (const g of ['files:read', 'net', 'core:fs.list']) await page.check(`[data-testid="plugin-grant-${g}"]`)
+  await page.check('[data-testid=plugin-grants-all]')
+  const all = await page.$$eval('.plugin-grants input[data-testid^="plugin-grant-"]', (l) => l.map((i) => i.checked))
+  assert(all.length === 3 && all.every(Boolean), 'Accept all ticks each permission: ' + all)
   await page.click('[data-testid=plugin-grants-accept]')
   await page.waitForFunction(() => document.querySelector('.plugin-row[data-plugin=greet]')?.textContent.includes('core:fs.list'))
+  assert(readLock().greet.grants.length === 3, 'all granted: ' + readLock().greet.grants)
+  await page.waitForFunction(() => document.querySelector('[data-testid=plugin-greet]')?.checked)
   await closeSettings()
   await page.reload()
   await showGreet()
   await frame(page, 'greet').locator('#checks').waitFor()
   checks = JSON.parse(await frame(page, 'greet').locator('#checks').textContent())
   assert(checks.rpc === 'answered', 'a core method with its grant: ' + checks.rpc)
+  got = await answer('core')
+  assert(got === 'answered', 'the core call of the backend with its grant: ' + got)
+
+  // A grant revoked in Settings: refused at once, by the frame and the backend; given again.
+  await openSettings()
+  await page.uncheck('[data-testid="plugin-granted-greet-core:fs.list"]')
+  await page.waitForFunction(() => !document.querySelector('.plugin-row[data-plugin=greet] [data-testid="plugin-granted-greet-core:fs.list"]')?.checked)
+  await page.waitForTimeout(300)
+  assert(readLock().greet.grants.join() === 'files:read,net', 'revoked in the lock: ' + readLock().greet.grants)
+  await closeSettings()
+  got = await answer('list')
+  assert(got.includes('fs.list is not granted to Greet'), 'the frame, once revoked: ' + got)
+  got = await answer('core')
+  assert(got.includes('fs.list is not granted to Greet'), 'the backend, once revoked: ' + got)
+  await openSettings()
+  await page.check('[data-testid="plugin-granted-greet-core:fs.list"]')
+  await page.waitForTimeout(300)
+  await closeSettings()
+  got = await answer('list')
+  assert(got === 'answered', 'granted again: ' + got)
 
   server.close()
   fs.rmSync(tmp, { recursive: true, force: true })
