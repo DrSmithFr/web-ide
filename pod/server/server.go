@@ -90,6 +90,9 @@ type Server struct {
 	// ProjectsChanged is called when the projects of this pod changed: the debounced publish of
 	// its list to the other pods.
 	ProjectsChanged func()
+	// AdvertiseChanged is called when what the plugins advertise changed (Host.Advertise): the
+	// project list published again, the LAN peers told.
+	AdvertiseChanged func()
 	// Push holds the push subscriptions of the browsers, PushSend gives an encrypted
 	// notification to the relay (both nil: no push, push.go).
 	Push     *push.Store
@@ -263,6 +266,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.serveWS(w, r)
 		return
 	}
+	// The routes of the pods: a pod of the LAN came through ServeTrusted with its certificate.
+	if strings.HasPrefix(r.URL.Path, podsOnly) {
+		s.servePeer(w, r)
+		return
+	}
 	if strings.HasPrefix(r.URL.Path, peerPrefix) && s.LAN != nil {
 		s.LAN.ServeGateway(w, r, "")
 		return
@@ -424,6 +432,12 @@ func (c *Client) channel(label string) *transport {
 
 // openChannel registers an extra channel of the tunnel and starts serving it.
 func (c *Client) openChannel(ctx context.Context, label string, conn tunnel.MsgConn) {
+	// A conn:<n> channel is a byte stream of HTTP/1.1 for the routes of the pods (a WebSocket
+	// of a shared service): it writes on its own.
+	if strings.HasPrefix(label, "conn:") {
+		c.serveConnChannel(ctx, conn)
+		return
+	}
 	tr := newTransport(c, conn)
 	c.mu.Lock()
 	c.channels[label] = tr
@@ -476,7 +490,8 @@ func (c *Client) serveHTTPChannel(ctx context.Context, tr *transport) {
 		return
 	}
 	w := &channelWriter{c: c, tr: tr}
-	r, err := http.NewRequest(req.Method, "http://"+c.srv.host()+req.Path, strings.NewReader(req.Body))
+	// ctx carries who asks when a pod opened the tunnel (the routes of the pods read it).
+	r, err := http.NewRequestWithContext(ctx, req.Method, "http://"+c.srv.host()+req.Path, strings.NewReader(req.Body))
 	if err != nil {
 		c.sendRaw(tr, mustJSON(httpHead{Status: http.StatusBadRequest, Headers: map[string]string{}}))
 		return
@@ -508,6 +523,9 @@ func (s *Server) httpHandler(req httpRequest) (http.Handler, bool) {
 			return nil, false
 		}
 		return s.plugins.preview(req.Preview)
+	}
+	if strings.HasPrefix(req.Path, podsOnly) {
+		return http.HandlerFunc(s.servePeer), true
 	}
 	// A window of the tunnel can open a pod of this pod's LAN too: the same gateway as on the
 	// origin of this pod.
@@ -563,6 +581,14 @@ func (w *channelWriter) WriteHeader(code int) {
 		headers[k] = strings.Join(v, ", ")
 	}
 	w.c.sendRaw(w.tr, mustJSON(httpHead{Status: code, Headers: headers}))
+}
+
+// Flush sends the head if it is not sent yet; each Write already sends its chunks (a streamed
+// answer: httputil.ReverseProxy flushes).
+func (w *channelWriter) Flush() {
+	if !w.head {
+		w.WriteHeader(http.StatusOK)
+	}
 }
 
 func (w *channelWriter) Write(b []byte) (int, error) {

@@ -216,6 +216,9 @@ type List struct {
 	// pod shut it down (relay.md, *Power*). A pod older than them writes neither.
 	Wake  []power.Target `json:"wake,omitempty"`
 	Power *bool          `json:"power,omitempty"`
+	// Advertised is what the plugins of the pod publish (Host.Advertise), by name: services,
+	// [{id, name}] of the HTTP services it shares (relay.md, *Services*).
+	Advertised map[string]json.RawMessage `json:"advertised,omitempty"`
 }
 
 // Project is one entry of a published list.

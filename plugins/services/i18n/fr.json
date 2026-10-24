@@ -1,0 +1,21 @@
+{
+  "Services": "Services",
+  "a service needs a name": "un service a besoin d’un nom",
+  "the port must be between 1 and 65535": "le port doit être entre 1 et 65535",
+  "this service no longer exists": "ce service n’existe plus",
+  "the port %d is shared already, as %s": "le port %d est déjà partagé, sous le nom %s",
+  "Port of this machine": "Port de cette machine",
+  "Share": "Partager",
+  "Stop sharing {name}? The pods using it lose it.": "Arrêter de partager {name} ? Les pods qui l’utilisent le perdent.",
+  "Shared services": "Services partagés",
+  "HTTP services of this machine the other pods of your account can reach.": "Services HTTP de cette machine que les autres pods de votre compte peuvent joindre.",
+  "Share a service": "Partager un service",
+  "Nothing shared. A service you share is reached only by the pods of your account, and only while it is on.": "Rien de partagé. Un service partagé n’est joignable que par les pods de votre compte, et seulement quand il est activé.",
+  "Shared: turn off": "Partagé : désactiver",
+  "Off: share it": "Désactivé : le partager",
+  "Stop sharing": "Arrêter de partager",
+  "Detach this pod: its next request is refused": "Détacher ce pod : sa prochaine requête est refusée",
+  "Cut": "Couper",
+  "attached {when}": "attaché {when}",
+  "last request {when}": "dernière requête {when}"
+}

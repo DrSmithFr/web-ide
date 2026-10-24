@@ -981,7 +981,8 @@ func (s *session) serveRPC() {
 	}
 	log.Printf("relayclient: tunnel %s: handshake done (%s)", s.short(), mode)
 	close(s.authed)
-	s.client.cfg.Server.ServeTunnel(s.ctx, conn, s.chans)
+	// Who asks goes with its requests: the routes of the pods only (/_svc/) read it.
+	s.client.cfg.Server.ServeTunnel(identity.WithPeer(s.ctx, hs.PeerCert), conn, s.chans)
 	// ServeTunnel returned: the browser closed the tunnel.
 	s.close()
 }

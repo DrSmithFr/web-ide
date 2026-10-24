@@ -247,6 +247,8 @@ func main() {
 		src := multipod.NewProjectsSource(podID.ID(), hostname(), version, func() []multipod.Project { return projectList(st, reg) })
 		// The other pods read in the list what they can do to this machine: wake it, power it off.
 		src.Power = func() ([]power.Target, bool) { return power.Interfaces(), power.Allowed() }
+		// And what its plugins advertise (the services it shares).
+		src.Advertised = srv.Advertised
 		if _, err := hub.AddSource(src); err != nil {
 			check(err)
 		}
@@ -356,6 +358,15 @@ func main() {
 		go watchAllowed(ctx, pub.Touch)
 	}
 	srv.Pods.(*podsView).lan = lanMgr
+	// What the plugins advertise changed: the list published again, the LAN peers told.
+	srv.AdvertiseChanged = func() {
+		if pub != nil {
+			pub.Touch()
+		}
+		if lanMgr != nil {
+			lanMgr.Announce()
+		}
+	}
 	onLANChange()
 	// The link to the relay is a function of its URL: the Settings page turns remote access on or
 	// off while the pod runs (milestone 5), so starting it and ending it live here.
@@ -591,6 +602,7 @@ func startLAN(ctx context.Context, st *store.Store, cfg *config.Config, srv *ser
 		OnUpdate:      onUpdate,
 		OnPower:       onPower,
 		Power:         func() ([]power.Target, bool) { return power.Interfaces(), power.Allowed() },
+		Advertised:    srv.Advertised,
 		OnWrap: func(w *identity.WrapRecord) {
 			// The wrap the relay pushed for this pod, carried back by a peer of its cluster: it is the
 			// only way a pod with no link of its own gets the key of the epoch.

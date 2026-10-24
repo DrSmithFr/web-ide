@@ -66,6 +66,7 @@ flowchart LR
 - `relay`: Relay (milestone 1): a browser on another network opens a project of a pod through the relay, and installs as an app (PWA)
 - `renew`: TURN renewal (#86): run.sh starts the relay with credentials valid 10 s and the pod with -force-turn; the page renews them and restarts ICE on the same tunnel
 - `restore`: Session restored after a reload (runs after features, same pod), detached windows
+- `services` [services]: Shared services (#78) on the home page: shared (services.json, 0600), a port shared twice refused, off and on, renamed, its route `/_peer/` refused to the pod's own origin with the token, removed; the section in French
 - `speech` [ai]: Local speech recognition: Whisper (tiny) in the browser, fed by a fake microphone playing e2e/audio/jfk.wav
 - `subagents` [ai]: Sub-agents: the parent delegates with spawn_agent (a card in its thread); the child notes and asks; the parent
 - `sync`: Settings sync (milestone 4): two pods of one account

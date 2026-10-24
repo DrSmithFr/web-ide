@@ -30,9 +30,10 @@ const builtins: Record<string, () => Promise<PluginModule>> = {
   languages: () => import('../../../plugins/languages/web').then((m) => m.languages),
   previews: () => import('../../../plugins/previews/web').then((m) => m.previews),
   search: () => import('../../../plugins/search/web').then((m) => m.search),
+  services: () => import('../../../plugins/services/web').then((m) => m.services),
 }
 /** The built-ins with a part of the home page (no project there: no states to wait for). */
-const homeIds = ['previews']
+const homeIds = ['previews', 'services']
 
 const [states, setStates] = createSignal<PluginState[]>([])
 export const pluginStates = states

@@ -58,6 +58,10 @@ A device proves it holds its key when it registers with the relay (a signature o
 
 Each pod also says which **multi-pod protocol** it speaks. A pod of another one is listed with *older version* or *newer version* and is never routed to: its projects are listed without a link, the two would not understand each other. Update it as above.
 
+## Share a service with your other pods
+
+An HTTP service of one machine (Ollama, the web UI of a daemon) can be reached by the other pods of your account. On the home page of the pod that runs it, *Shared services* > *Share a service*: a name and the port it listens on, on this machine (`127.0.0.1`). Nothing is shared by default; the switch of a service turns it off without deleting it, and the pods attached to it are listed under it (since when, requests, bytes) with *Cut*, which detaches one. Only the pods of the account reach it, through the LAN or the relay — never a browser, nor a window of the pod. Linking it on the other pod, to a port of its machine, comes next (#79).
+
 ## See also
 
 [Account and devices](account-and-devices.md) · [Self-host a relay](self-host-relay.md) · [Windows with WSL](../install/windows-wsl.md) · [Relay design](../design/relay.md)

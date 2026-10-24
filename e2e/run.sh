@@ -17,7 +17,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 # The longest first: the workers end together.
-ALL=(kanban milestones chat agents kanbanagents questions features restore+ docker lan identity multipod sync push keeper doodle speech relay quota renew preview git editor agent llm subagents orchestrator kanbanai editing lsp mousenav kanbangit commands mcptools plugins externals projects popups desks keyboard mobile forwards explorer plan i18n help perf)
+ALL=(kanban milestones chat agents kanbanagents questions features restore+ docker lan identity multipod sync push keeper doodle speech relay quota renew preview git editor agent llm subagents orchestrator kanbanai editing lsp mousenav kanbangit commands mcptools plugins externals projects popups desks keyboard mobile forwards services explorer plan i18n help perf)
 # A suite is suites/<name>.cjs (the core) or plugins/<id>/e2e/<name>.cjs (a built-in plugin).
 suite_file() {
   local f
