@@ -207,19 +207,22 @@ run(async ({ page, errors }) => {
   await page.click('[data-testid=plugin-install-find]')
   await page.waitForSelector('.toast-error:has-text("needs the IDE ^99")')
 
-  // Removed: the row, the lock entry and the folder go; the project still names it.
+  // Removed: the row, the lock entry and the folder go, and the project stops naming it.
   await page.click('[data-testid=plugin-remove-greet]')
-  await page.waitForSelector('[data-testid=plugin-external-greet] >> text=Not installed on this pod.')
+  await page.waitForSelector('.plugin-row[data-plugin=greet]', { state: 'detached' })
   assert(!readLock().greet && !fs.existsSync(path.join(WS, '..', 'data', 'plugins', 'greet')), 'removed from the pod')
+  assert(!JSON.parse(fs.readFileSync(WS + '/demo/.ide/plugins.json', 'utf8')).external?.greet, 'removed from the project')
   assert(!(await page.$('.rail-btn[data-id=greet]')), 'its tool gone')
 
-  // Installed again from the row, fs.list granted: the frame gets its answer.
+  // Installed again, fs.list granted, used again: the frame gets its answer.
   await page.fill('[data-testid=plugin-install-constraint]', '')
-  await page.click(row + ' button:has-text("Install")')
+  await page.click('[data-testid=plugin-install-find]')
   await page.waitForSelector('.plugin-grants')
   for (const g of ['files:read', 'net', 'core:fs.list']) await page.check(`[data-testid="plugin-grant-${g}"]`)
   await page.click('[data-testid=plugin-grants-accept]')
   await page.waitForFunction(() => document.querySelector('.plugin-row[data-plugin=greet]')?.textContent.includes('core:fs.list'))
+  assert(!(await page.isChecked('[data-testid=plugin-greet]')), 'installed again, not used yet')
+  await page.check('[data-testid=plugin-greet]')
   await closeSettings()
   await page.reload()
   await showGreet()

@@ -940,5 +940,9 @@
   "Not installed on this pod.": "No instalado en este pod.",
   "Remove {name} from this pod?": "¿Quitar {name} de este pod?",
   "{method} is not granted to {name}": "{method} no está concedido a {name}",
-  "Its backend cannot run on this pod: its kernel has no Landlock.": "Su backend no puede ejecutarse en este pod: su núcleo no tiene Landlock."
+  "Its backend cannot run on this pod: its kernel has no Landlock.": "Su backend no puede ejecutarse en este pod: su núcleo no tiene Landlock.",
+  "Installing…": "Instalando…",
+  "Updating…": "Actualizando…",
+  "Removing…": "Eliminando…",
+  "Forget": "Olvidar"
 }

@@ -3,6 +3,7 @@
 // it (a new permission is asked again), remove it. Pod-wide: the lock is the pod's.
 import { createSignal, For, Show } from 'solid-js'
 import { request } from '../pod/rpc'
+import { setPluginEnabled } from '../plugins/registry'
 import type { PluginManifest, PluginState } from '../plugins/types'
 import { Modal } from '../ui/overlay'
 import { errorToast, toast } from '../ui/toast'
@@ -24,11 +25,20 @@ function grantText(g: string): string {
   )
 }
 
+/** A button's text while the pod works: git and the downloads take seconds. */
+function Working(props: { busy: boolean; label: string; text: string }) {
+  return (
+    <Show when={props.busy} fallback={props.label}>
+      <span class="spinner" /> {props.text}
+    </Show>
+  )
+}
+
 /**
  * The grants dialog: each permission is a checkbox, none checked; the plugin gets the ones the
  * user accepted.
  */
-function GrantsDialog(props: { title: string; resolved: Resolved; action: string; onClose: () => void; onAccept: (grants: string[]) => Promise<void> }) {
+function GrantsDialog(props: { title: string; resolved: Resolved; action: string; working: string; onClose: () => void; onAccept: (grants: string[]) => Promise<void> }) {
   const [accepted, setAccepted] = createSignal<string[]>([])
   const [busy, setBusy] = createSignal(false)
   const toggle = (g: string, on: boolean) => setAccepted((l) => (on ? [...l, g] : l.filter((x) => x !== g)))
@@ -48,7 +58,7 @@ function GrantsDialog(props: { title: string; resolved: Resolved; action: string
               setBusy(true)
               props.onAccept(accepted()).then(props.onClose, (e) => (setBusy(false), errorToast(e)))
             }}>
-            {props.action}
+            <Working busy={busy()} label={props.action} text={props.working} />
           </button>
         </>
       }>
@@ -79,11 +89,11 @@ const askHost = () => {
   void request<{ landlock: number }>('plugins.host').then((r) => setLandlock(r.landlock), () => (hostAsked = false))
 }
 
-const [dialog, setDialog] = createSignal<{ title: string; resolved: Resolved; action: string; accept: (grants: string[]) => Promise<void> } | null>(null)
+const [dialog, setDialog] = createSignal<{ title: string; resolved: Resolved; action: string; working: string; accept: (grants: string[]) => Promise<void> } | null>(null)
 
 /** The dialog of an install or an update, when one is open. */
 export function PluginDialogs() {
-  return <Show when={dialog()}>{(d) => <GrantsDialog title={d().title} resolved={d().resolved} action={d().action} onAccept={d().accept} onClose={() => setDialog(null)} />}</Show>
+  return <Show when={dialog()}>{(d) => <GrantsDialog title={d().title} resolved={d().resolved} action={d().action} working={d().working} onAccept={d().accept} onClose={() => setDialog(null)} />}</Show>
 }
 
 /** Resolves a repository, then asks the grants of the version found and installs it. */
@@ -93,6 +103,7 @@ async function askInstall(url: string, constraint: string) {
     title: t('Install a plugin'),
     resolved: r,
     action: t('Install'),
+    working: t('Installing…'),
     accept: async (grants) => {
       await request('plugins.install', { url, constraint, version: r.version, grants })
       toast(t('{name} {version} installed', { name: r.manifest.name, version: r.version }))
@@ -121,7 +132,7 @@ export function InstallForm() {
       <input placeholder={t('Repository address')} value={url()} onInput={(e) => setUrl(e.currentTarget.value)} data-testid="plugin-install-url" />
       <input placeholder={t('Version (latest)')} value={constraint()} onInput={(e) => setConstraint(e.currentTarget.value)} data-testid="plugin-install-constraint" />
       <button class="primary" type="submit" disabled={busy() || !url().trim()} data-testid="plugin-install-find">
-        {t('Find')}
+        <Working busy={busy()} label={t('Find')} text={t('Searching…')} />
       </button>
     </form>
   )
@@ -131,6 +142,14 @@ export function InstallForm() {
 export function ExternalRow(props: { s: PluginState }) {
   askHost()
   const ext = () => props.s.external!
+  // What the row waits for from the pod: its buttons say it.
+  const [busy, setBusy] = createSignal<'' | 'install' | 'update' | 'remove'>('')
+  const work = (what: 'install' | 'update' | 'remove', f: () => Promise<unknown>) => {
+    setBusy(what)
+    void f()
+      .catch(errorToast)
+      .finally(() => setBusy(''))
+  }
   const update = async () => {
     const id = props.s.manifest.id
     const r = await request<Resolved & { upToDate?: boolean }>('plugins.update', { id })
@@ -141,6 +160,7 @@ export function ExternalRow(props: { s: PluginState }) {
         title: t('Update {name}', { name: props.s.manifest.name }),
         resolved: r,
         action: t('Update'),
+        working: t('Updating…'),
         accept: async (grants) => {
           await request('plugins.update', { id, grants })
           toast(t('{name} {version} installed', { name: r.manifest.name, version: r.version }))
@@ -160,7 +180,13 @@ export function ExternalRow(props: { s: PluginState }) {
         fallback={
           <p class="err small">
             {t('Not installed on this pod.')}{' '}
-            <button onClick={() => void askInstall(ext().url, '').catch(errorToast)}>{t('Install')}</button>
+            <button disabled={!!busy()} onClick={() => work('install', () => askInstall(ext().url, ''))}>
+              <Working busy={busy() === 'install'} label={t('Install')} text={t('Searching…')} />
+            </button>{' '}
+            {/* The project stops naming it. */}
+            <button disabled={!!busy()} onClick={() => work('remove', () => setPluginEnabled(props.s.manifest.id, false))} data-testid={`plugin-forget-${props.s.manifest.id}`}>
+              {t('Forget')}
+            </button>
           </p>
         }>
         <Show when={props.s.manifest.backend && landlock() === 0}>
@@ -185,16 +211,20 @@ export function ExternalRow(props: { s: PluginState }) {
           )}
         </For>
         <div class="row">
-          <button onClick={() => void update().catch(errorToast)} data-testid={`plugin-update-${props.s.manifest.id}`}>
-            {t('Update')}
+          <button disabled={!!busy()} onClick={() => work('update', update)} data-testid={`plugin-update-${props.s.manifest.id}`}>
+            <Working busy={busy() === 'update'} label={t('Update')} text={t('Updating…')} />
           </button>
           <button
             class="danger"
             data-testid={`plugin-remove-${props.s.manifest.id}`}
+            disabled={!!busy()}
             onClick={() => {
-              if (confirm(t('Remove {name} from this pod?', { name: props.s.manifest.name }))) void request('plugins.remove', { id: props.s.manifest.id }).catch(errorToast)
+              const id = props.s.manifest.id
+              // Gone from the pod, and from this project's list, as when disabled.
+              if (confirm(t('Remove {name} from this pod?', { name: props.s.manifest.name })))
+                work('remove', () => request('plugins.remove', { id }).then(() => setPluginEnabled(id, false)))
             }}>
-            {t('Remove')}
+            <Working busy={busy() === 'remove'} label={t('Remove')} text={t('Removing…')} />
           </button>
         </div>
       </Show>

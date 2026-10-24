@@ -597,7 +597,6 @@
   "Not installed: the IDE installs {package}.": "No instalado: el IDE instala {package}.",
   "Not installed: {command}": "No instalado: {command}",
   "Installed": "Instalado",
-  "Installing…": "Instalando…",
   "The agent kept ending, it is not restarted anymore.": "El agente seguía terminando, ya no se reinicia.",
   "The agent stopped.": "El agente se detuvo.",
   "Starting {name}…": "Iniciando {name}…",
