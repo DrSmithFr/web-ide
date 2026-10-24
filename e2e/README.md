@@ -34,7 +34,7 @@ flowchart LR
 - `editing`: Editing: typing, undo, auto-indent, save, remote changes (merge, conflict), find bar, sub-words
 - `editor` [code]: Editor: text against the gutter, indentation guides, whitespace, multiple carets, folding, soft wrap
 - `explorer` [files]: File explorer: file type icons, click to select and double click to open, git colors (untracked, added, ignored), folder marks
-- `features`: Navigation, splits, global search, terminal, palette, settings, SQLite explorer and console
+- `features`: Navigation, splits, global search, terminal (a paste into `cat` after `?2004h` shows no bracketed paste marker, a multi-line paste into bash waits for Enter), palette, settings, SQLite explorer and console
 - `git` [git]: Git tool: Commit tab (tree of changes with check boxes, diff, commit, commit and push), History tab
 - `help`: Help: the docs embedded in the pod open read only from the Help menu and the palette; relative links, Back, anchors and pictures; the "?" of the settings, the Agents tool and the kanban at their headings; the tab after a reload
 - `i18n`: Languages: a French browser gets the French interface; the language setting switches it at once (English, Spanish)

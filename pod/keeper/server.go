@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/DrSmithFr/web-ide/pod/paste"
 	"github.com/creack/pty"
 	"golang.org/x/crypto/ssh"
 )
@@ -515,6 +516,13 @@ func (sc *serverConn) act(op string, p *proc, a procArgs, payload []byte) error 
 		}
 		if w == nil || p.Exited {
 			return errors.New("the process has ended")
+		}
+		// The paste markers fitted to the program's mode (pod/paste); a remote one is unknown.
+		switch {
+		case p.sess != nil:
+			payload = paste.Filter(payload, nil)
+		case p.pty != nil:
+			payload = paste.Filter(payload, p.pty)
 		}
 		_, err := w.Write(payload)
 		return err
