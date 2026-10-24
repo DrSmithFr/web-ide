@@ -5,6 +5,11 @@
 // gateway of the cluster and the home page lists the three pods with their projects. The relay only
 // caches ciphertext, so a dump of its base holds no project name.
 //
+// Shared services (#78, #79): bravo (LAN) and charlie (relay only) each share a fake HTTP service;
+// alpha links both to ports of its machine: answers streamed, a WebSocket echoes, the badge says
+// LAN for bravo and Relay · TURN for charlie, then idle once the tunnel closed (WEBIDE_PEER_IDLE);
+// bravo cuts alpha from its own home page, and alpha's link turns off; off frees the port.
+//
 // Relay 3b (routing): every project opens with the front end of the pod that holds it, on the one
 // origin of the relay — /pod/<key>/ for a pod registered there, and the same path carried by the
 // gateway for a LAN-only one; /_lan/pod/<key>/ on 127.0.0.1, pod to pod over WebRTC for a pod of
@@ -46,6 +51,62 @@ async function pickPort(from) {
   for (let p = from; p < from + 20; p++) if (await portFree(p)) return p
   throw new Error('no free port from ' + from)
 }
+
+// A service of a pod: a plain answer, a streamed one, a WebSocket-like upgrade that echoes.
+function fakeService(name) {
+  const srv = http.createServer((req, res) => {
+    if (req.url === '/stream') {
+      res.writeHead(200, { 'Content-Type': 'text/plain' })
+      let i = 0
+      const tick = () => {
+        res.write(`token ${i}\n`)
+        if (++i < 3) setTimeout(tick, 600)
+        else res.end()
+      }
+      return tick()
+    }
+    res.end(`${name} ${req.url}`)
+  })
+  srv.on('upgrade', (req, sock) => {
+    sock.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n')
+    sock.on('data', (d) => sock.write('echo ' + d))
+  })
+  return srv
+}
+const getText = (port, p) =>
+  new Promise((resolve) => {
+    http
+      .get({ host: '127.0.0.1', port, path: p, timeout: 30000 }, (res) => {
+        let body = ''
+        let first = 0
+        const t0 = Date.now()
+        res.on('data', (d) => {
+          if (!first) first = Date.now() - t0
+          body += d
+        })
+        res.on('end', () => resolve({ status: res.statusCode, body, first, total: Date.now() - t0 }))
+      })
+      .on('timeout', function () {
+        this.destroy(new Error('timeout'))
+      })
+      .on('error', (e) => resolve({ status: 0, body: String(e) }))
+  })
+const upgrade = (port) =>
+  new Promise((resolve) => {
+    const req = http.request({ host: '127.0.0.1', port, path: '/ws', headers: { Connection: 'Upgrade', Upgrade: 'websocket' }, timeout: 30000 })
+    req.on('upgrade', (res, sock) => {
+      sock.once('data', (d) => {
+        resolve(String(d))
+        sock.destroy()
+      })
+      sock.write('hi')
+    })
+    req.on('response', (res) => resolve('status ' + res.statusCode))
+    req.on('timeout', () => req.destroy(new Error('timeout')))
+    req.on('error', (e) => resolve(String(e)))
+    setTimeout(() => resolve('no echo in 30 s'), 30000)
+    req.end()
+  })
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const listen = (srv, port = 0) => new Promise((resolve) => srv.listen(port, '127.0.0.1', () => resolve(srv.address().port)))
@@ -309,6 +370,15 @@ run(
       dataC = path.join(TMP, 'mp-charlie', 'data')
       const portB = await pickPort(LAN_PORT + 70)
       const portC = await pickPort(LAN_PORT + 72)
+      // Each shares a service of its machine (services.json written before it starts).
+      const svcB = fakeService('bravo-api')
+      const svcC = fakeService('charlie-api')
+      const svcPortB = await listen(svcB)
+      const svcPortC = await listen(svcC)
+      for (const [data, id, name, port] of [[dataB, 'svcb', 'bravo-api', svcPortB], [dataC, 'svcc', 'charlie-api', svcPortC]]) {
+        fs.mkdirSync(data, { recursive: true })
+        fs.writeFileSync(path.join(data, 'services.json'), JSON.stringify([{ id, name, port, enabled: true }]))
+      }
       const powerMark = (name) => path.join(TMP, `${name}-power-`)
       bravo = await startPod('bravo', dataB, portB, { lan: `127.0.0.1:${lanPeerPort}`, powerCmd: `touch ${powerMark('bravo')}$WEBIDE_POWER_ACTION`, wake: `${WAKE_MAC}@127.0.0.0/8` })
       charlie = await startPod('charlie', dataC, portC, { relay: true })
@@ -375,6 +445,61 @@ run(
       const regB = () => JSON.parse(fs.readFileSync(path.join(dataB, 'projects.json'), 'utf8'))
       assert(await waitFor(() => (regB().some((p) => p.description === 'edited through the relay') ? true : null), 20000), 'bravo saved the change asked through the relay: ' + JSON.stringify(regB()))
       await app.waitForSelector('.project-card[data-pod=bravo]:has-text("edited through the relay")', { timeout: 30000 })
+
+      // 4b. Shared services: alpha lists those of bravo (its LAN $info) and charlie (its list).
+      const linkB = '[data-testid="link-bravo-bravo-api"]'
+      const linkC = '[data-testid="link-charlie-charlie-api"]'
+      await app.waitForSelector(linkB, { timeout: 60000 })
+      await app.waitForSelector(linkC, { timeout: 60000 })
+      const linkPort = async (sel) => {
+        await app.waitForSelector(`${sel} [data-testid=link-address]`, { timeout: 60000 })
+        return Number((await app.textContent(`${sel} [data-testid=link-address]`)).split(':').pop())
+      }
+      await app.check(`${linkB} [data-testid=link-on]`)
+      const lpB = await linkPort(linkB)
+      // The port of the service is taken on this machine (the same one runs here): the next one.
+      assert(lpB > svcPortB && lpB <= svcPortB + 20, `bravo's service on the next free port: ${lpB} (service ${svcPortB})`)
+      let got = await getText(lpB, '/api/tags')
+      assert(got.status === 200 && got.body === 'bravo-api /api/tags', 'bravo answers through the link: ' + JSON.stringify(got))
+      const directB = await getText(svcPortB, '/stream')
+      got = await getText(lpB, '/stream')
+      // The link holds nothing back: each token comes when it does from the service itself.
+      assert(got.body === 'token 0\ntoken 1\ntoken 2\n' && got.first <= directB.first + 300 && got.total >= 1100, 'streamed, token by token: ' + JSON.stringify(got) + ' direct: ' + JSON.stringify(directB))
+      assert((await upgrade(lpB)) === 'echo hi', 'a WebSocket through the LAN link')
+      await app.waitForSelector(`${linkB} [data-route=lan]`, { timeout: 15000 })
+
+      await app.check(`${linkC} [data-testid=link-on]`)
+      const lpC = await linkPort(linkC)
+      got = await getText(lpC, '/api/tags')
+      assert(got.status === 200 && got.body === 'charlie-api /api/tags', 'charlie answers through the relay: ' + JSON.stringify(got))
+      assert((await upgrade(lpC)) === 'echo hi', 'a WebSocket through the relay')
+      got = await getText(lpC, '/stream')
+      assert(got.body === 'token 0\ntoken 1\ntoken 2\n' && got.first <= directB.first + 500 && got.total >= 1100, 'streamed through the relay: ' + JSON.stringify(got))
+      await app.waitForSelector(`${linkC} [data-route=relay-turn]`, { timeout: 15000 })
+      // No request for WEBIDE_PEER_IDLE (4 s): the tunnel closes, the link stays on.
+      await app.waitForSelector(`${linkC} [data-route=idle]`, { timeout: 30000 })
+      got = await getText(lpC, '/again')
+      assert(got.body === 'charlie-api /again', 'the tunnel opens again on the next request: ' + JSON.stringify(got))
+
+      // Bravo sees alpha attached, by the LAN, and cuts it: alpha's link turns off, its port freed.
+      const tokenB = fs.readFileSync(path.join(dataB, 'token'), 'utf8').trim()
+      const pageB = await ctx.newPage()
+      await pageB.goto(`http://127.0.0.1:${portB}/?token=${tokenB}`)
+      await pageB.waitForSelector('[data-testid=service-pod-alpha] [data-route=lan]', { timeout: 20000 })
+      await pageB.click('[data-testid=service-pod-alpha] button:has-text("Cut")')
+      await pageB.waitForSelector('[data-testid=service-pod-alpha]', { state: 'detached' })
+      await pageB.close()
+      got = await getText(lpB, '/after-cut')
+      assert(got.status === 403, 'refused once cut: ' + JSON.stringify(got))
+      await app.waitForSelector(`${linkB} [data-testid=link-state]:has-text("cut by bravo")`, { timeout: 15000 })
+      assert(!(await app.isChecked(`${linkB} [data-testid=link-on]`)), 'the cut link is off')
+      assert(await portFree(lpB), 'the port of the cut link is freed')
+      // Off frees the port.
+      await app.uncheck(`${linkC} [data-testid=link-on]`)
+      await app.waitForSelector(`${linkC} [data-testid=link-address]`, { state: 'detached' })
+      assert(await portFree(lpC), 'off frees the port')
+      svcB.close()
+      svcC.close()
 
       // 5. Notifications are enabled on this device, on the page of alpha: every pod of the
       // account gets the subscription, not only the one the window shows (a project of charlie

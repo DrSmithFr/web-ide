@@ -19,6 +19,9 @@ type ProjectsSource struct {
 	read    func() []Project
 	// Power gives the cards of the machine and whether the pod may power it off (nil: neither).
 	Power func() ([]power.Target, bool)
+	// Advertised is what the plugins publish about this pod (Host.Advertise: the shared
+	// services; nil: nothing).
+	Advertised func() map[string]any
 }
 
 // NewProjectsSource makes the source of the list of this pod. read gives its projects, with the
@@ -40,6 +43,16 @@ func (s *ProjectsSource) Read() json.RawMessage {
 	if s.Power != nil {
 		wake, allowed := s.Power()
 		l.Wake, l.Power = wake, &allowed
+	}
+	if s.Advertised != nil {
+		for k, v := range s.Advertised() {
+			if b, err := json.Marshal(v); err == nil {
+				if l.Advertised == nil {
+					l.Advertised = map[string]json.RawMessage{}
+				}
+				l.Advertised[k] = b
+			}
+		}
 	}
 	b, err := json.Marshal(l)
 	if err != nil {

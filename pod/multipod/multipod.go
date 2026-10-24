@@ -53,6 +53,9 @@ type PodView struct {
 	// the power requests, which the page offers nothing.
 	Wake  bool  `json:"wake,omitempty"`
 	Power *bool `json:"power,omitempty"`
+	// Advertised is what the plugins of the pod publish (its shared services): live from its LAN
+	// link, else from its list.
+	Advertised map[string]json.RawMessage `json:"advertised,omitempty"`
 }
 
 // Directory merges the three views of the pods of the account and answers pods.list.
@@ -216,6 +219,9 @@ type List struct {
 	// pod shut it down (relay.md, *Power*). A pod older than them writes neither.
 	Wake  []power.Target `json:"wake,omitempty"`
 	Power *bool          `json:"power,omitempty"`
+	// Advertised is what the plugins of the pod publish (Host.Advertise), by name: services,
+	// [{id, name}] of the HTTP services it shares (relay.md, *Services*).
+	Advertised map[string]json.RawMessage `json:"advertised,omitempty"`
 }
 
 // Project is one entry of a published list.
@@ -261,8 +267,11 @@ func (d *Directory) List() []PodView {
 			}
 			v := PodView{Key: p.ID, Name: p.Name, Version: p.Version, Fingerprint: p.Fingerprint,
 				Online: p.Online, Path: p.Path, Projects: p.Projects, Protocol: p.Protocol, OneWay: p.OneWay,
-				Wake: len(p.Wake) > 0, Power: p.Power}
+				Wake: len(p.Wake) > 0, Power: p.Power, Advertised: p.Advertised}
 			if l := d.lists[p.ID]; l != nil {
+				if v.Advertised == nil {
+					v.Advertised = l.Advertised
+				}
 				v.Name, v.Version = first(l.Name, v.Name), first(l.Version, v.Version)
 				v.Projects = withIcons(v.Projects, l)
 				// What the link told is live; the list fills in what an older link did not say.
@@ -385,6 +394,7 @@ func (d *Directory) fill(v *PodView, key, name string) {
 	v.Name, v.Version = first(l.Name, name), first(l.Version, v.Version)
 	v.Seen = d.seen[key]
 	v.Wake, v.Power = len(l.Wake) > 0, l.Power
+	v.Advertised = l.Advertised
 	projects := []map[string]string{}
 	for _, p := range l.Projects {
 		e := map[string]string{"id": p.ID, "name": p.Title, "description": p.Description, "type": p.Type, "path": p.Path, "icon": p.Icon}

@@ -80,6 +80,8 @@ type info struct {
 	// wake is needed. An older pod tells neither.
 	Wake  []power.Target `json:"wake,omitempty"`
 	Power *bool          `json:"power,omitempty"`
+	// Adverts is what its plugins publish (Host.Advertise: the shared services), by name.
+	Adverts map[string]json.RawMessage `json:"advertised,omitempty"`
 }
 
 // updateMsg is the body of $update: a signed update request of a browser of the account, carried

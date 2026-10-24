@@ -58,6 +58,12 @@ A device proves it holds its key when it registers with the relay (a signature o
 
 Each pod also says which **multi-pod protocol** it speaks. A pod of another one is listed with *older version* or *newer version* and is never routed to: its projects are listed without a link, the two would not understand each other. Update it as above.
 
+## Share a service with your other pods
+
+An HTTP service of one machine (Ollama, the web UI of a daemon) can be reached by the other pods of your account. On the home page of the pod that runs it, *Shared services* > *Share a service*: a name and the port it listens on, on this machine (`127.0.0.1`). Nothing is shared by default; the switch of a service turns it off without deleting it, and the pods attached to it are listed under it (since when, requests, bytes) with *Cut*, which detaches one. Only the pods of the account reach it, through the LAN or the relay — never a browser, nor a window of the pod.
+
+On the other pods, *Services of your other pods* lists it with a switch: on, it listens on a port of that machine — the port of the service, the next free one when it is taken, or one you type — for this machine only, or for the local network (anyone there reaches it with no authentication). Your tools use `http://127.0.0.1:<port>` as if the service ran there; answers stream, WebSockets work. A badge shows the way it goes: **LAN** when the two pods see each other on the network, else **Relay · direct** or **Relay · TURN** (copied by the relay, counted in your quota), **idle** when nothing is open (the tunnel closes after 10 minutes without a request and opens again on the next one). A link stays on across restarts, with no window open; it says when its pod is offline (502 meanwhile), when the service is no longer shared, and when the other pod cut it (*Cut*: it turns off until you turn it on again).
+
 ## See also
 
 [Account and devices](account-and-devices.md) · [Self-host a relay](self-host-relay.md) · [Windows with WSL](../install/windows-wsl.md) · [Relay design](../design/relay.md)

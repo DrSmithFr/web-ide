@@ -16,6 +16,7 @@ The built-in plugins of the IDE, one folder each, in the shape of an external pl
 | [languages](languages/README.md) | Language servers, Problems, Structure |
 | [previews](previews/README.md) | Port forwards and app previews |
 | [search](search/README.md) | The Search tool |
+| [services](services/README.md) | HTTP services shared with the other pods |
 
 The plugin system itself stays in the core: `pod/plugins` (manifest, registry, enabling) and `web/src/plugins` (registry, the `api`, types, capabilities).
 

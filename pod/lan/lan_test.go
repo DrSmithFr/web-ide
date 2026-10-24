@@ -592,3 +592,68 @@ func TestPowerOverTheLAN(t *testing.T) {
 		t.Fatalf("the answer of bravo comes back whole: %+v", ans)
 	}
 }
+
+// TestAdvertisedAndPeerIdentity: what a pod advertises reaches its peers in $info, again when it
+// changes (Announce); its handler knows the pod that asks; a gateway never forwards the routes of
+// the pods (/_peer/), whatever the path says.
+func TestAdvertisedAndPeerIdentity(t *testing.T) {
+	a := account(t, 1)
+	id, dir := podIdentity(t, a, "bravo")
+	var mu sync.Mutex
+	services := `[{"id":"s1","name":"Ollama"}]`
+	m, err := New(Config{Dir: dir, Addr: "127.0.0.1:0", Identity: id, Name: "bravo", Version: "test", Tick: 50 * time.Millisecond,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			name := "nobody"
+			if c := identity.PeerOf(r.Context()); c != nil {
+				name = c.Name
+			}
+			_, _ = w.Write([]byte("asked by " + name))
+		}),
+		Advertised: func() map[string]any {
+			mu.Lock()
+			defer mu.Unlock()
+			return map[string]any{"services": json.RawMessage(services)}
+		}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	m.Start(ctx)
+	b := &pod{m: m, id: id, dir: dir}
+	al := startPod(t, a, "alpha", b.addr())
+
+	st := waitFor(t, al, "alpha sees the services of bravo", func(st Status) bool {
+		p := online(st, "bravo")
+		return p != nil && strings.Contains(string(p.Advertised["services"]), "Ollama")
+	})
+	mu.Lock()
+	services = `[{"id":"s2","name":"Cooling"}]`
+	mu.Unlock()
+	b.m.Announce()
+	waitFor(t, al, "alpha sees the new services of bravo", func(st Status) bool {
+		p := online(st, "bravo")
+		return p != nil && strings.Contains(string(p.Advertised["services"]), "Cooling")
+	})
+
+	base := online(st, "bravo").Path
+	gw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { al.m.ServeGateway(w, r, "") }))
+	defer gw.Close()
+	get := func(path string) (int, string) {
+		res, err := http.Get(gw.URL + base + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		return res.StatusCode, string(body)
+	}
+	if code, body := get("/x"); code != 200 || body != "asked by alpha" {
+		t.Fatalf("the handler of bravo: %d %q", code, body)
+	}
+	for _, p := range []string{"/_peer/services/s2/", "/x/../_peer/services/s2/", "/_peer"} {
+		if code, _ := get(p); code != http.StatusForbidden {
+			t.Fatalf("the gateway forwarded %s: %d", p, code)
+		}
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -22,6 +23,11 @@ const GatewayPath = "/_lan/gateway"
 // The page of a peer runs under it, on the origin of the gateway: one origin for the
 // installed app, and the browser sends the token cookie of the gateway, which checks it.
 const PeerPrefix = "/_lan/pod/"
+
+// PodsOnly is the start of the paths a pod serves to the other pods of the account only
+// (/_peer/<plugin>/: the shared services): it reads who asks from the transport. A gateway never
+// forwards them: the end pod would take the browser's request for the gateway's own.
+const PodsOnly = "/_peer/"
 
 // BaseHeader tells a peer the path its page runs under (server.ServeTrusted).
 const BaseHeader = "X-Webide-Base"
@@ -56,6 +62,10 @@ func (m *Manager) ServeGateway(w http.ResponseWriter, r *http.Request, base stri
 	}
 	if rest == "" && !strings.HasSuffix(r.URL.Path, "/") {
 		http.Redirect(w, r, base+"/", http.StatusFound)
+		return
+	}
+	if strings.HasPrefix(path.Clean("/"+rest)+"/", PodsOnly) {
+		http.Error(w, "for the pods of the account only", http.StatusForbidden)
 		return
 	}
 	if "/"+rest == GatewayPath {
@@ -104,6 +114,21 @@ func (m *Manager) ServeGateway(w http.ResponseWriter, r *http.Request, base stri
 		},
 	}
 	rp.ServeHTTP(w, r)
+}
+
+// PeerTransport is the way to the pod of key on the LAN, when it is a peer this pod dialed: its
+// address and a transport pinned to its certificate (the routes of the pods, /_peer/, ride it).
+func (m *Manager) PeerTransport(key string) (addr string, t *http.Transport, ok bool) {
+	m.mu.Lock()
+	var fp string
+	if p := m.peers[key]; p != nil && p.out != nil {
+		addr, fp = p.out.addr, p.out.serverFP
+	}
+	m.mu.Unlock()
+	if addr == "" {
+		return "", nil, false
+	}
+	return addr, m.transport(fp), true
 }
 
 // transport reaches a peer with our TLS certificate, and accepts only the certificate the

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/DrSmithFr/web-ide/lib/tunnel"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/hfcache"
 
@@ -56,6 +57,15 @@ type Host interface {
 	// HandlePreview serves the previews the page asks through the tunnel of the relay (the
 	// Previews plugin): f is the handler of a preview id, false when there is none.
 	HandlePreview(f func(id string) (http.Handler, bool))
+	// HandlePeer serves the requests the other pods of the account send to /_peer/<plugin id>/
+	// (the prefix stripped): the shared services. Who asks is a pod that proved its certificate
+	// on the transport (identity.PeerOf of the request's context); anything else is refused
+	// before h.
+	HandlePeer(h http.Handler)
+	// Advertise publishes a part of what the other pods of the account know of this pod, under
+	// name: in its encrypted project list and in the $info of its LAN links (the shared
+	// services). f gives it at each publication; Pod.AdvertiseChanged publishes it again.
+	Advertise(name string, f func() any)
 	// Questions adds a source of the Questions tool (the sessions of the agents, the
 	// conversations of the assistant); Pod.QuestionsChanged tells the windows to ask again.
 	Questions(q Questions)
@@ -111,6 +121,29 @@ type Pod interface {
 	StartSaved(rt *runtime.Runtime, id string, restart bool) (cmd commands.Command, console, running string, err error)
 	// Authorized tells whether an HTTP request carries the token of the pod (a private preview).
 	Authorized(r *http.Request) bool
+	// AdvertiseChanged publishes again what the plugins advertise (Host.Advertise).
+	AdvertiseChanged()
+	// Peers is the way to the other pods of the account: their routes of the pods (/_peer/).
+	Peers() Peers
+}
+
+// Peers reaches the other pods of the account (the linked services).
+type Peers interface {
+	// Transport sends a request to http://<device key>/_peer/… of another pod: the LAN when it is
+	// a peer, else pod to pod through the relay, chosen per request.
+	Transport() http.RoundTripper
+	// Route is the way a request to the pod at key goes now (tunnel.Route*).
+	Route(key string) tunnel.Route
+	// List is the pods of the account, online or not, with what they advertise.
+	List() []PeerPod
+}
+
+// PeerPod is another pod of the account.
+type PeerPod struct {
+	Key        string                     `json:"key"`
+	Name       string                     `json:"name"`
+	Online     bool                       `json:"online"`
+	Advertised map[string]json.RawMessage `json:"advertised,omitempty"`
 }
 
 // UIResult is the answer of a window to a tool of the interface.

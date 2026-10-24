@@ -23,6 +23,7 @@ import (
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
 	"github.com/DrSmithFr/web-ide/lib/identity"
+	"github.com/DrSmithFr/web-ide/lib/tunnel"
 	"github.com/DrSmithFr/web-ide/pod/config"
 	"github.com/DrSmithFr/web-ide/pod/desks"
 	"github.com/DrSmithFr/web-ide/pod/docsdist"
@@ -31,6 +32,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/lan"
 	"github.com/DrSmithFr/web-ide/pod/multipod"
 	"github.com/DrSmithFr/web-ide/pod/pair"
+	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"github.com/DrSmithFr/web-ide/pod/plugins/builtin"
 	"github.com/DrSmithFr/web-ide/pod/plugins/confine"
 	"github.com/DrSmithFr/web-ide/pod/power"
@@ -247,6 +249,8 @@ func main() {
 		src := multipod.NewProjectsSource(podID.ID(), hostname(), version, func() []multipod.Project { return projectList(st, reg) })
 		// The other pods read in the list what they can do to this machine: wake it, power it off.
 		src.Power = func() ([]power.Target, bool) { return power.Interfaces(), power.Allowed() }
+		// And what its plugins advertise (the services it shares).
+		src.Advertised = srv.Advertised
 		if _, err := hub.AddSource(src); err != nil {
 			check(err)
 		}
@@ -331,6 +335,16 @@ func main() {
 		}
 	}
 	dir = multipod.New(hub, lanView{m: lanMgr})
+	// The plugins reach the routes of the other pods (the linked services): the LAN first, else
+	// pod to pod through the relay. WEBIDE_PEER_IDLE shortens the idle time of a tunnel (e2e).
+	peerCli := multipod.NewPeerClient(relayDialer{cli: &relayCli, dir: &dir})
+	if lanMgr != nil {
+		peerCli.LAN = lanMgr.PeerTransport
+	}
+	if d, err := time.ParseDuration(os.Getenv("WEBIDE_PEER_IDLE")); err == nil && d > 0 {
+		peerCli.Idle = d
+	}
+	srv.PeerNet = peerNet{c: peerCli, dir: dir}
 	if hub != nil {
 		hub.SetOther(func(m settingsync.Msg) { dir.HandleBlob(m) })
 		// The key of the epoch arrived: this pod can publish its own list, and read the others.
@@ -356,6 +370,15 @@ func main() {
 		go watchAllowed(ctx, pub.Touch)
 	}
 	srv.Pods.(*podsView).lan = lanMgr
+	// What the plugins advertise changed: the list published again, the LAN peers told.
+	srv.AdvertiseChanged = func() {
+		if pub != nil {
+			pub.Touch()
+		}
+		if lanMgr != nil {
+			lanMgr.Announce()
+		}
+	}
 	onLANChange()
 	// The link to the relay is a function of its URL: the Settings page turns remote access on or
 	// off while the pod runs (milestone 5), so starting it and ending it live here.
@@ -531,6 +554,22 @@ func remoteGateway(cli *atomic.Pointer[relayclient.Client], dir **multipod.Direc
 	})
 }
 
+// peerNet is the way to the other pods lent to the plugins (plugins.Peers).
+type peerNet struct {
+	c   *multipod.PeerClient
+	dir *multipod.Directory
+}
+
+func (p peerNet) Transport() http.RoundTripper  { return p.c }
+func (p peerNet) Route(key string) tunnel.Route { return p.c.Route(key) }
+func (p peerNet) List() []plugins.PeerPod {
+	var out []plugins.PeerPod
+	for _, v := range p.dir.List() {
+		out = append(out, plugins.PeerPod{Key: v.Key, Name: v.Name, Online: v.Online, Advertised: v.Advertised})
+	}
+	return out
+}
+
 // relayDialer dials a pod of the account the relay reports online, by its device key.
 type relayDialer struct {
 	cli *atomic.Pointer[relayclient.Client]
@@ -591,6 +630,7 @@ func startLAN(ctx context.Context, st *store.Store, cfg *config.Config, srv *ser
 		OnUpdate:      onUpdate,
 		OnPower:       onPower,
 		Power:         func() ([]power.Target, bool) { return power.Interfaces(), power.Allowed() },
+		Advertised:    srv.Advertised,
 		OnWrap: func(w *identity.WrapRecord) {
 			// The wrap the relay pushed for this pod, carried back by a peer of its cluster: it is the
 			// only way a pod with no link of its own gets the key of the epoch.

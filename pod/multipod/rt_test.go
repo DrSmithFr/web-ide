@@ -16,6 +16,10 @@ func TestPublishRoundTrip(t *testing.T) {
 	src := NewProjectsSource(p.ID(), "this pod", "1.0", func() []Project {
 		return []Project{{ID: "a", Title: "quiet reader", Description: "d", Type: "local", Path: "/x"}}
 	})
+	// What the plugins advertise goes with it (the shared services).
+	src.Advertised = func() map[string]any {
+		return map[string]any{"services": []map[string]string{{"id": "s1", "name": "Ollama"}}}
+	}
 	if _, err := hub.AddSource(src); err != nil {
 		t.Fatal(err)
 	}
@@ -50,6 +54,9 @@ func TestPublishRoundTrip(t *testing.T) {
 	}
 	if len(l.Projects) != 1 || l.Projects[0].Title != "quiet reader" {
 		t.Fatalf("the list lost its projects: %s", plain)
+	}
+	if string(l.Advertised["services"]) != `[{"id":"s1","name":"Ollama"}]` {
+		t.Fatalf("the list lost what the plugins advertise: %s", content)
 	}
 }
 

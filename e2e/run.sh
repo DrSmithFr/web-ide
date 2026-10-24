@@ -17,7 +17,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 # The longest first: the workers end together.
-ALL=(kanban milestones chat agents kanbanagents questions features restore+ docker lan identity multipod sync push keeper doodle speech relay quota renew preview git editor agent llm subagents orchestrator kanbanai editing lsp mousenav kanbangit commands mcptools plugins externals projects popups desks keyboard mobile forwards explorer plan i18n help perf)
+ALL=(kanban milestones chat agents kanbanagents questions features restore+ docker lan identity multipod sync push keeper doodle speech relay quota renew preview git editor agent llm subagents orchestrator kanbanai editing lsp mousenav kanbangit commands mcptools plugins externals projects popups desks keyboard mobile forwards services explorer plan i18n help perf)
 # A suite is suites/<name>.cjs (the core) or plugins/<id>/e2e/<name>.cjs (a built-in plugin).
 suite_file() {
   local f
@@ -183,7 +183,7 @@ PY
   # /tmp: another scratch folder keeps the approvals of the changes out of the projects.
   cat >"$TMP/launch-pod.sh" <<EOF
 GIT_AUTHOR_NAME=e2e GIT_AUTHOR_EMAIL=e2e@x GIT_COMMITTER_NAME=e2e GIT_COMMITTER_EMAIL=e2e@x \\
-WEBIDE_TEST_PLUGINS=1 WEBIDE_INSTRUCTIONS_HOME="$TMP/home" WEBIDE_SCRATCH="$TMP/scratch" WEBIDE_CLAUDE="$ROOT/e2e/bin/claude" PATH="$ROOT/e2e/bin:$HOME/go/bin:$HOME/sdk/go/bin:$PATH" "$ROOT/bin/web-ide-pod" -addr "127.0.0.1:$PORT" -data "$TMP/data" -projects "$TMP/ws" \\
+WEBIDE_TEST_PLUGINS=1 WEBIDE_PEER_IDLE=4s WEBIDE_INSTRUCTIONS_HOME="$TMP/home" WEBIDE_SCRATCH="$TMP/scratch" WEBIDE_CLAUDE="$ROOT/e2e/bin/claude" PATH="$ROOT/e2e/bin:$HOME/go/bin:$HOME/sdk/go/bin:$PATH" "$ROOT/bin/web-ide-pod" -addr "127.0.0.1:$PORT" -data "$TMP/data" -projects "$TMP/ws" \\
   -static "$ROOT/pod/webdist/dist" ${EXTRA[@]+"${EXTRA[@]}"} >>"$TMP/pod.log" 2>&1 </dev/null &
 echo \$! >"$TMP/pod.pid"
 for _ in \$(seq 50); do [ -s "$TMP/data/token" ] && curl -s -o /dev/null "http://127.0.0.1:$PORT/" && break; sleep 0.1; done

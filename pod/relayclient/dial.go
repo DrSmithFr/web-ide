@@ -302,6 +302,9 @@ func (p *Peer) Open(ctx context.Context, label string) (tunnel.MsgConn, error) {
 func (p *Peer) closedDone() <-chan struct{} { return p.done }
 
 // Close ends the tunnel: the pod is told on the signaling link, and the PeerConnection closed.
+// Route is the way this tunnel goes now (direct or through TURN), with the addresses of the pair.
+func (p *Peer) Route() tunnel.Route { return pairRoute(p.pc) }
+
 func (p *Peer) Close() {
 	p.mu.Lock()
 	if p.closed {

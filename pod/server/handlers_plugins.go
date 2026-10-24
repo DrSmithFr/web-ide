@@ -13,6 +13,7 @@ import (
 	"github.com/DrSmithFr/web-ide/pod/commands"
 
 	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"github.com/DrSmithFr/web-ide/lib/tunnel"
 	"github.com/DrSmithFr/web-ide/pod/assistant"
 	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"github.com/DrSmithFr/web-ide/pod/plugins/builtin"
@@ -49,6 +50,10 @@ type pluginSet struct {
 	provided map[string]any
 	// preview serves a preview asked through the tunnel (Host.HandlePreview: the Previews plugin).
 	preview func(id string) (http.Handler, bool)
+	// peers serve the requests of the other pods (Host.HandlePeer), by plugin id: peer.go.
+	peers map[string]http.Handler
+	// adverts are what the plugins publish about the pod (Host.Advertise), by name.
+	adverts map[string]func() any
 	// questions are the sources of the Questions tool (Host.Questions), vault the maps of the
 	// synced vault (Host.Vault).
 	questions []pluginQuestions
@@ -421,6 +426,55 @@ func (h pluginHost) OnWindows(f func(n int)) {
 }
 
 func (h pluginHost) HandlePreview(f func(id string) (http.Handler, bool)) { h.s.plugins.preview = f }
+
+func (h pluginHost) Advertise(name string, f func() any) {
+	if h.s.plugins.adverts == nil {
+		h.s.plugins.adverts = map[string]func() any{}
+	}
+	h.s.plugins.adverts[name] = f
+}
+
+// Advertised is what the plugins publish about the pod (the project list, the LAN $info).
+func (s *Server) Advertised() map[string]any {
+	out := map[string]any{}
+	for name, f := range s.plugins.adverts {
+		out[name] = f()
+	}
+	return out
+}
+
+func (p podLend) Peers() plugins.Peers {
+	if p.s.PeerNet == nil {
+		return noPeers{}
+	}
+	return p.s.PeerNet
+}
+
+// noPeers: the pod is not paired, it reaches no other pod.
+type noPeers struct{}
+
+func (noPeers) Transport() http.RoundTripper {
+	return roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, i18n.New("this pod is not paired") })
+}
+func (noPeers) Route(string) tunnel.Route { return tunnel.Route{Name: tunnel.RouteIdle} }
+func (noPeers) List() []plugins.PeerPod   { return nil }
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func (p podLend) AdvertiseChanged() {
+	if p.s.AdvertiseChanged != nil {
+		p.s.AdvertiseChanged()
+	}
+}
+
+func (h pluginHost) HandlePeer(handler http.Handler) {
+	if h.s.plugins.peers == nil {
+		h.s.plugins.peers = map[string]http.Handler{}
+	}
+	h.s.plugins.peers[h.id] = handler
+}
 
 func (h pluginHost) Provide(c string, impl any) {
 	if !slices.Contains(h.m.Provides, c) {

@@ -70,6 +70,9 @@ type Config struct {
 	OnPower func(*identity.PowerRequest) update.Answer
 	// Power tells the cards of this machine and whether the pod may power it off, in $info.
 	Power func() ([]power.Target, bool)
+	// Advertised is what the plugins publish about this pod (Host.Advertise: the shared
+	// services), told in $info; Announce tells it again when it changes.
+	Advertised func() map[string]any
 	// Tick is the pace of the dial loop (default 2 s); Browse runs every 5 ticks.
 	Tick time.Duration
 }
@@ -124,6 +127,7 @@ type peer struct {
 	protocol int // the multi-pod protocol it told in its $info (0: older than #60)
 	wake     []power.Target
 	power    *bool
+	adverts  map[string]json.RawMessage
 	links    map[*link]bool
 	out      *link // the link we dialed: the gateway goes through it
 	projects json.RawMessage
@@ -431,7 +435,14 @@ func (m *Manager) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		m.serveTunnel(w, r, fp)
 		return
 	}
-	m.cfg.Handler.ServeHTTP(w, r)
+	// Who asks goes with the request: the routes of the pods only (/_svc/) read it.
+	ctx := identity.WithPeer(r.Context(), t.cert)
+	route := tunnel.Route{Name: tunnel.RouteLAN, Peer: r.RemoteAddr}
+	if a, ok := r.Context().Value(http.LocalAddrContextKey).(net.Addr); ok {
+		route.Local = a.String()
+	}
+	ctx = tunnel.WithRoute(ctx, func() tunnel.Route { return route })
+	m.cfg.Handler.ServeHTTP(w, r.WithContext(ctx))
 }
 
 // serveHello runs the pod side of the handshake for a pod that dialed us.
@@ -512,12 +523,7 @@ func (m *Manager) run(l *link, peerFP string) {
 	m.attach(l, peerFP)
 	defer m.detach(l, peerFP)
 	_, _, rev := m.cfg.Identity.State()
-	in := info{Name: m.cfg.Name, Version: m.cfg.Version, Protocol: m.cfg.Protocol, Port: m.Port()}
-	if m.cfg.Power != nil {
-		wake, allowed := m.cfg.Power()
-		in.Wake, in.Power = wake, &allowed
-	}
-	_ = l.send("$info", in)
+	_ = l.send("$info", m.info())
 	if rev != nil {
 		_ = l.send("$revocations", rev)
 	}
@@ -667,6 +673,49 @@ func (m *Manager) detach(l *link, peerFP string) {
 	m.changed()
 }
 
+// info is what this pod tells about itself on a control link.
+func (m *Manager) info() info {
+	in := info{Name: m.cfg.Name, Version: m.cfg.Version, Protocol: m.cfg.Protocol, Port: m.Port()}
+	if m.cfg.Power != nil {
+		wake, allowed := m.cfg.Power()
+		in.Wake, in.Power = wake, &allowed
+	}
+	if m.cfg.Advertised != nil {
+		in.Adverts = rawAdverts(m.cfg.Advertised())
+	}
+	return in
+}
+
+// rawAdverts is what the plugins advertise, each part as JSON.
+func rawAdverts(adv map[string]any) map[string]json.RawMessage {
+	if len(adv) == 0 {
+		return nil
+	}
+	out := map[string]json.RawMessage{}
+	for k, v := range adv {
+		if b, err := json.Marshal(v); err == nil {
+			out[k] = b
+		}
+	}
+	return out
+}
+
+// Announce tells every peer this pod's $info again (what it advertises changed).
+func (m *Manager) Announce() {
+	in := m.info()
+	m.mu.Lock()
+	var links []*link
+	for _, p := range m.peers {
+		for l := range p.links {
+			links = append(links, l)
+		}
+	}
+	m.mu.Unlock()
+	for _, l := range links {
+		_ = l.send("$info", in)
+	}
+}
+
 // setInfo records what a peer told about itself; a peer that dialed us gives the port to
 // dial it back.
 func (m *Manager) setInfo(l *link, i info) {
@@ -677,6 +726,7 @@ func (m *Manager) setInfo(l *link, i info) {
 		}
 		p.version, p.protocol = i.Version, i.Protocol
 		p.wake, p.power = i.Wake, i.Power
+		p.adverts = i.Adverts
 	}
 	m.mu.Unlock()
 	if l.inbound && i.Port > 0 && l.remoteHost != "" {
@@ -905,6 +955,8 @@ type PeerView struct {
 	// Wake and Power are what the peer told in its $info (relay.md, *Power*).
 	Wake  []power.Target `json:"wake,omitempty"`
 	Power *bool          `json:"power,omitempty"`
+	// Advertised is what the plugins of the peer publish (its shared services).
+	Advertised map[string]json.RawMessage `json:"advertised,omitempty"`
 }
 
 // AddrView is an address that did not lead to a pod of the account.
@@ -935,7 +987,7 @@ func (m *Manager) Status() Status {
 		if m.cfg.Identity.PeerError(p.cert) != nil {
 			continue
 		}
-		v := PeerView{ID: key, Name: p.name, Fingerprint: identity.Fingerprint(key), Version: p.version, Protocol: p.protocol, Online: p.out != nil, OneWay: p.out == nil && len(p.links) > 0, Projects: p.projects, Wake: p.wake, Power: p.power}
+		v := PeerView{ID: key, Name: p.name, Fingerprint: identity.Fingerprint(key), Version: p.version, Protocol: p.protocol, Online: p.out != nil, OneWay: p.out == nil && len(p.links) > 0, Projects: p.projects, Wake: p.wake, Power: p.power, Advertised: p.adverts}
 		if p.out != nil {
 			v.Addr = p.out.addr
 		}

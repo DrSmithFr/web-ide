@@ -929,6 +929,26 @@ func selectedPair(pc *webrtc.PeerConnection) string {
 	return fmt.Sprintf("pod %s/%s ↔ browser %s/%s", p.Local.Typ, p.Local.Protocol, p.Remote.Typ, p.Remote.Protocol)
 }
 
+// pairRoute is the route of a tunnel: through the TURN server when either side is a relay
+// candidate, else direct; the addresses of the selected pair.
+func pairRoute(pc *webrtc.PeerConnection) tunnel.Route {
+	r := tunnel.Route{Name: tunnel.RouteRelayDirect}
+	sctp := pc.SCTP()
+	if sctp == nil || sctp.Transport() == nil || sctp.Transport().ICETransport() == nil {
+		return r
+	}
+	p, err := sctp.Transport().ICETransport().GetSelectedCandidatePair()
+	if err != nil || p == nil || p.Local == nil || p.Remote == nil {
+		return r
+	}
+	if p.Local.Typ == webrtc.ICECandidateTypeRelay || p.Remote.Typ == webrtc.ICECandidateTypeRelay {
+		r.Name = tunnel.RouteRelayTURN
+	}
+	r.Local = fmt.Sprintf("%s:%d", p.Local.Address, p.Local.Port)
+	r.Peer = fmt.Sprintf("%s:%d", p.Remote.Address, p.Remote.Port)
+	return r
+}
+
 func (s *session) addBrowserCandidate(raw json.RawMessage) {
 	init, ok := candidateInit(raw)
 	if !ok {
@@ -981,7 +1001,13 @@ func (s *session) serveRPC() {
 	}
 	log.Printf("relayclient: tunnel %s: handshake done (%s)", s.short(), mode)
 	close(s.authed)
-	s.client.cfg.Server.ServeTunnel(s.ctx, conn, s.chans)
+	// Who asks goes with its requests: the routes of the pods only (/_svc/) read it.
+	ctx := identity.WithPeer(s.ctx, hs.PeerCert)
+	s.mu.Lock()
+	pc := s.pc
+	s.mu.Unlock()
+	ctx = tunnel.WithRoute(ctx, func() tunnel.Route { return pairRoute(pc) })
+	s.client.cfg.Server.ServeTunnel(ctx, conn, s.chans)
 	// ServeTunnel returned: the browser closed the tunnel.
 	s.close()
 }

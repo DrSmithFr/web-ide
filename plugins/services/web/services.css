@@ -1,0 +1,23 @@
+/* The shared services of the home page. */
+.home-services { margin-top: 28px; }
+.home-services .home-bar { margin-bottom: 6px; }
+.home-services .home-sub { margin: 0; }
+.svc-row { padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; margin-bottom: 6px; background: var(--bg-2); }
+.svc-head { display: flex; align-items: center; gap: 8px; min-height: 26px; flex-wrap: wrap; }
+.svc-row.off .svc-name, .svc-row.off .mono { opacity: 0.6; }
+.svc-pods { margin: 4px 0 2px 18px; display: flex; flex-direction: column; gap: 2px; }
+.svc-pod { display: flex; align-items: center; gap: 8px; font-size: 12.5px; flex-wrap: wrap; }
+.svc-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 10px; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 6px; margin-bottom: 6px; }
+.svc-form label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.svc-form input.input { width: 160px; }
+.svc-form input.input.port { width: 90px; }
+.svc-link { padding: 4px 0; }
+.svc-link + .svc-link { border-top: 1px solid var(--line); }
+.svc-opts { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px 10px; margin: 4px 0 2px 26px; }
+.svc-opts label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.svc-opts input.input.port { width: 90px; }
+.svc-route.lan { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.svc-route.relay-direct { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.svc-route.relay-turn { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.svc-route.idle { color: var(--fg-muted); }
+.svc-row .pod-dot.on { background: var(--ok); }
