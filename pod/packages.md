@@ -5,7 +5,7 @@ The packages of the pod, in five blocks. Each section has the map of its package
 | Block | Packages |
 |---|---|
 | [Server and protocol](#server-and-protocol) | `server`, `runtime`, `store`, `settings`, `projects`, `desks`, `idedir`, `config`, `update`, `i18n`, `plugins` |
-| [Files and processes](#files-and-processes) | `fsx`, `execx`, `sshx`, `sshtest`, `console`, `keeper`, `clipboard`, `commands` |
+| [Files and processes](#files-and-processes) | `fsx`, `execx`, `paste`, `sshx`, `sshtest`, `console`, `keeper`, `clipboard`, `commands` |
 | [AI](#ai) | `assistant`, `hfcache` |
 | [Kanban and git](#kanban-and-git) | `kanban`, `git` |
 | [Network and identity](#network-and-identity) | `relay`, `relayclient`, `relayload`, `tunnel`, `multipod`, `lan`, `identity`, `pair`, `settingsync`, `push`, `power` |
@@ -92,6 +92,7 @@ flowchart LR
   console["console<br/>terminals, tasks"]
   keeper["keeper<br/>process holder"]
   execx["execx<br/>local or SSH processes"]
+  paste["paste<br/>bracketed paste markers"]
   sshx["sshx<br/>SSH connections"]
   fsx["fsx<br/>local and SFTP files"]
   commands["commands<br/>project commands"]
@@ -101,6 +102,8 @@ flowchart LR
   console -->|"adopts its processes"| keeper
   keeper -->|"SSH targets"| sshx
   execx -->|"runs through it"| keeper
+  execx --> paste
+  keeper --> paste
   commands --> execx
   commands --> fsx
   commands --> idedir
@@ -114,6 +117,7 @@ flowchart LR
 
 - `fsx`: Local and SFTP file systems, watching (fsnotify or polling)
 - `execx`: Local or SSH processes, PTYs
+- `paste`: The bracketed paste markers (`ESC[200~ … ESC[201~`) of a terminal's input, fitted to the program at the write (#61): none for a program reading lines (`ICANON` set: `cat`, `dash`, a shell after a TUI left `?2004h` on), else the outer pair only; a remote PTY keeps the outer pair. Used by the local and SSH PTYs of `execx` and by the keeper
 - `sshx`: SSH agent, keys, passwords, host keys (TOFU), connection pool
 - `sshtest`: SSH server for tests (in memory; `sshtestd` runs it for the browser tests)
 - `console`: Terminals and commands with scrollback and output offsets; run by the keeper when there is one, adopted again after a restart of the pod. The consoles are core (decision 6 of [plugins.md](../docs/design/plugins.md)): the Exec plugin (`plugins/exec`) carries the `console.*` methods and the Console tool, and is locked
@@ -124,7 +128,7 @@ flowchart LR
 
 `sshtest` is the in-memory SSH server of the tests; `sshtest/sshtestd` runs it for the `forwards` suite. `commands` runs its commands through `execx`; the text search is the Search plugin's (`plugins/search`), the list of the files of a project the runtime's (`runtime/files.go`).
 
-**Tests**: `go test ./pod/fsx ./pod/execx ./pod/sshx ./pod/console ./pod/keeper ./pod/clipboard ./pod/commands` and `./plugins/search ./plugins/previews`; e2e: `keeper`, `features`, `commands`, `docker`, `forwards`, `lsp`, `preview`, `popups`.
+**Tests**: `go test ./pod/fsx ./pod/execx ./pod/paste ./pod/sshx ./pod/console ./pod/keeper ./pod/clipboard ./pod/commands` and `./plugins/search ./plugins/previews`; e2e: `keeper`, `features`, `commands`, `docker`, `forwards`, `lsp`, `preview`, `popups`.
 
 
 ## AI

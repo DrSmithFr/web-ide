@@ -12,6 +12,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/DrSmithFr/web-ide/pod/paste"
 	"github.com/creack/pty"
 	"golang.org/x/crypto/ssh"
 )
@@ -104,6 +105,14 @@ type localPTY struct {
 	cmd  *exec.Cmd
 	once sync.Once
 	code int
+}
+
+// Write sends the input, its paste markers fitted to the program's mode (pod/paste).
+func (p *localPTY) Write(b []byte) (int, error) {
+	if _, err := p.File.Write(paste.Filter(b, p.File)); err != nil {
+		return 0, err
+	}
+	return len(b), nil
 }
 
 func (p *localPTY) Resize(cols, rows int) error {
@@ -240,8 +249,13 @@ type sshPTY struct {
 	code int
 }
 
-func (p *sshPTY) Read(b []byte) (int, error)  { return p.out.Read(b) }
-func (p *sshPTY) Write(b []byte) (int, error) { return p.in.Write(b) }
+func (p *sshPTY) Read(b []byte) (int, error) { return p.out.Read(b) }
+func (p *sshPTY) Write(b []byte) (int, error) {
+	if _, err := p.in.Write(paste.Filter(b, nil)); err != nil { // a remote mode: unknown
+		return 0, err
+	}
+	return len(b), nil
+}
 func (p *sshPTY) Resize(cols, rows int) error { return p.s.WindowChange(rows, cols) }
 func (p *sshPTY) Kill() error                 { return p.s.Close() }
 func (p *sshPTY) Wait() int {
