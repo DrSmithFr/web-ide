@@ -35,8 +35,8 @@ function Working(props: { busy: boolean; label: string; text: string }) {
 }
 
 /**
- * The grants dialog: each permission is a checkbox, none checked; the plugin gets the ones the
- * user accepted.
+ * The grants dialog: each permission is a checkbox, none checked (Accept all ticks them at
+ * once); the plugin gets the ones the user accepted.
  */
 function GrantsDialog(props: { title: string; resolved: Resolved; action: string; working: string; onClose: () => void; onAccept: (grants: string[]) => Promise<void> }) {
   const [accepted, setAccepted] = createSignal<string[]>([])
@@ -67,10 +67,21 @@ function GrantsDialog(props: { title: string; resolved: Resolved; action: string
       </p>
       <Show when={props.resolved.grants.length} fallback={<p class="muted">{t('It asks no permission.')}</p>}>
         <p class="muted small">{t('It asks these permissions. Accept each one you grant it; it gets nothing else.')}</p>
+        <Show when={props.resolved.grants.length > 1}>
+          <label class="check">
+            <input
+              type="checkbox"
+              data-testid="plugin-grants-all"
+              checked={accepted().length === props.resolved.grants.length}
+              onChange={(e) => setAccepted(e.currentTarget.checked ? [...props.resolved.grants] : [])}
+            />
+            <strong>{t('Accept all')}</strong>
+          </label>
+        </Show>
         <For each={props.resolved.grants}>
           {(g) => (
             <label class="check">
-              <input type="checkbox" data-testid={`plugin-grant-${g}`} onChange={(e) => toggle(g, e.currentTarget.checked)} />
+              <input type="checkbox" data-testid={`plugin-grant-${g}`} checked={accepted().includes(g)} onChange={(e) => toggle(g, e.currentTarget.checked)} />
               {grantText(g)} <code class="muted small">{g}</code>
             </label>
           )}
@@ -96,7 +107,7 @@ export function PluginDialogs() {
   return <Show when={dialog()}>{(d) => <GrantsDialog title={d().title} resolved={d().resolved} action={d().action} working={d().working} onAccept={d().accept} onClose={() => setDialog(null)} />}</Show>
 }
 
-/** Resolves a repository, then asks the grants of the version found and installs it. */
+/** Resolves a repository, then asks the grants of the version found, installs it and uses it in the project. */
 async function askInstall(url: string, constraint: string) {
   const r = await request<Resolved>('plugins.resolve', { url, constraint })
   setDialog({
@@ -106,6 +117,7 @@ async function askInstall(url: string, constraint: string) {
     working: t('Installing…'),
     accept: async (grants) => {
       await request('plugins.install', { url, constraint, version: r.version, grants })
+      await setPluginEnabled(r.manifest.id, true)
       toast(t('{name} {version} installed', { name: r.manifest.name, version: r.version }))
     },
   })

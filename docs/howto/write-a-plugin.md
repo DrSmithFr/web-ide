@@ -115,4 +115,4 @@ The IDE resolves like Composer: it lists the tags of the repository, takes the h
 
 ## Install it
 
-*Settings → Plugins → Install a plugin*: the address of the repository (https, ssh, or a folder of the machine) and a version constraint (empty: the latest). Then tick its box on a project: it is installed on this pod, used by the projects that tick it.
+*Settings → Plugins → Install a plugin*: the address of the repository (https, ssh, or a folder of the machine) and a version constraint (empty: the latest). It is installed on this pod and used at once by the open project; another project uses it once its box is ticked.
