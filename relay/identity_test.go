@@ -11,7 +11,7 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
+	"antennae.space/ide/lib/identity"
 )
 
 // testAccount is the account of the shared vectors, with a device key.

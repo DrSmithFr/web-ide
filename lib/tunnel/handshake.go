@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
+	"antennae.space/ide/lib/identity"
 )
 
 // The tunnel protocol of the rpc channel. Both sides prove who they are by signing a

@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/pod/projects"
-	"github.com/DrSmithFr/web-ide/pod/sshx"
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/pod/projects"
+	"antennae.space/ide/pod/sshx"
+	"antennae.space/ide/pod/store"
 )
 
 // A worktree reads and writes the settings in the .ide of its main project.

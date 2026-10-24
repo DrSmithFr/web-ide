@@ -20,7 +20,7 @@ How to install Web IDE, connect a model, and take a change from an idea to a mer
 Web IDE is one program, the **pod**, that serves the interface to your browser and does the work on your machine (files, git, terminals, language servers, model calls).
 
 - [Linux](install/linux.md): the script installs the pod as a unit started at boot, optionally served on your Tailscale network.
-- [macOS](install/macos.md): download the archive of the [latest release](https://github.com/DrSmithFr/web-ide/releases/latest) and run `./web-ide-pod`.
+- [macOS](install/macos.md): download the archive of the [latest release](https://github.com/antennae-space/web-ide/releases/latest) and run `./web-ide-pod`.
 - [Windows with WSL](install/windows-wsl.md): the Linux install inside WSL 2, started at your logon.
 - [From the sources](install/from-sources.md).
 

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/pod/store"
 )
 
 const DefaultAddr = "127.0.0.1:4433"

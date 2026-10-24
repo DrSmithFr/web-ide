@@ -3,7 +3,7 @@ package server
 import (
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
+	"antennae.space/ide/plugins/ai/llm"
 )
 
 func TestAssistantEffort(t *testing.T) {

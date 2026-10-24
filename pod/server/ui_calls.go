@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/pod/plugins"
+	"antennae.space/ide/pod/plugins"
 
-	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"antennae.space/ide/pod/assistant"
 )
 
 // Tools that act on the interface (open_file, focus) run in a window of the project: the

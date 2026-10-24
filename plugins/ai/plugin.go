@@ -13,15 +13,15 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
-	kbp "github.com/DrSmithFr/web-ide/plugins/kanban"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/commands"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
-	"github.com/DrSmithFr/web-ide/pod/settingsync"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/plugins/ai/llm"
+	kbp "antennae.space/ide/plugins/kanban"
+	"antennae.space/ide/pod/assistant"
+	"antennae.space/ide/pod/commands"
+	"antennae.space/ide/pod/runtime"
+	"antennae.space/ide/pod/settingsync"
 
-	"github.com/DrSmithFr/web-ide/pod/plugins"
+	"antennae.space/ide/pod/plugins"
 )
 
 //go:embed plugin.json

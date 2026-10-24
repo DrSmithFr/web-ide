@@ -8,13 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/caps"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/assistant"
+	"antennae.space/ide/pod/caps"
+	"antennae.space/ide/pod/plugins"
 
-	"github.com/DrSmithFr/web-ide/pod/runtime"
-	"github.com/DrSmithFr/web-ide/pod/sshx"
+	"antennae.space/ide/pod/runtime"
+	"antennae.space/ide/pod/sshx"
 )
 
 // Tools of the MCP endpoint on the IDE itself, moved from the assistant so that the CLI

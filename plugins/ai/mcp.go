@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/plugins/ai/acp"
-	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
-	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
-	kbp "github.com/DrSmithFr/web-ide/plugins/kanban"
-	"github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
+	"antennae.space/ide/plugins/ai/acp"
+	"antennae.space/ide/plugins/ai/engine"
+	"antennae.space/ide/plugins/ai/llm"
+	kbp "antennae.space/ide/plugins/kanban"
+	"antennae.space/ide/plugins/kanban/kanban"
+	"antennae.space/ide/pod/assistant"
+	"antennae.space/ide/pod/plugins"
 )
 
 // Tools of the MCP endpoint on the conversations linked to a ticket (Host.MCPTool): Claude

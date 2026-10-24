@@ -1,8 +1,8 @@
 package runtime
 
 import (
-	"github.com/DrSmithFr/web-ide/pod/sshx"
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/pod/sshx"
+	"antennae.space/ide/pod/store"
 )
 
 // The parts of a runtime are the state a plugin keeps per project (its manager, its

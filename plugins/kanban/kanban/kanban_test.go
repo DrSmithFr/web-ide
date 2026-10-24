@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/pod/store"
 )
 
 func newManager(t *testing.T) (*Manager, Location) {

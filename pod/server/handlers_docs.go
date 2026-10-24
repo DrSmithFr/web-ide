@@ -8,9 +8,9 @@ import (
 	"path"
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"antennae.space/ide/pod/assistant"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"antennae.space/ide/lib/i18n"
 )
 
 // registerDocs serves the documentation embedded in the binary (pod/docsdist), read only and

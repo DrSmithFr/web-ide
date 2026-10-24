@@ -9,7 +9,7 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/DrSmithFr/web-ide/pod/keeper"
+	"antennae.space/ide/pod/keeper"
 )
 
 // proc is the process of an agent: in the keeper (it survives the pod), or a child of the pod.

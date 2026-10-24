@@ -4,7 +4,7 @@ import (
 	"html/template"
 	"net/http"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"antennae.space/ide/lib/i18n"
 )
 
 // A gateway cannot serve the page of a pod that does not speak its multi-pod protocol: the front

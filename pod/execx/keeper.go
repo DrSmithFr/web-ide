@@ -5,7 +5,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/DrSmithFr/web-ide/pod/keeper"
+	"antennae.space/ide/pod/keeper"
 )
 
 // KeeperProcess is a piped process run by the keeper: it survives the pod, and a pod that

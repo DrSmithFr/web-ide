@@ -10,17 +10,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/pod/commands"
+	"antennae.space/ide/pod/commands"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/lib/tunnel"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
-	"github.com/DrSmithFr/web-ide/pod/plugins/builtin"
-	"github.com/DrSmithFr/web-ide/pod/plugins/install"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
-	"github.com/DrSmithFr/web-ide/pod/settingsync"
-	"github.com/DrSmithFr/web-ide/pod/sshx"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/lib/tunnel"
+	"antennae.space/ide/pod/assistant"
+	"antennae.space/ide/pod/plugins"
+	"antennae.space/ide/pod/plugins/builtin"
+	"antennae.space/ide/pod/plugins/install"
+	"antennae.space/ide/pod/runtime"
+	"antennae.space/ide/pod/settingsync"
+	"antennae.space/ide/pod/sshx"
 )
 
 // The plugins of the pod (docs/design/plugins.md): their RPC methods and assistant tools,

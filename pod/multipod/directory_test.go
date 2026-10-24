@@ -6,13 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/pod/lan"
-	"github.com/DrSmithFr/web-ide/pod/power"
-	"github.com/DrSmithFr/web-ide/pod/relayclient"
-	"github.com/DrSmithFr/web-ide/pod/settings"
-	"github.com/DrSmithFr/web-ide/pod/settingsync"
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/lib/identity"
+	"antennae.space/ide/pod/lan"
+	"antennae.space/ide/pod/power"
+	"antennae.space/ide/pod/relayclient"
+	"antennae.space/ide/pod/settings"
+	"antennae.space/ide/pod/settingsync"
+	"antennae.space/ide/pod/store"
 )
 
 // The directory of the pods: what the home page shows. The relay reports who is online and in which

@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"antennae.space/ide/lib/i18n"
 )
 
 // UpdateRequest is what a browser signs to ask one pod of its account to update itself

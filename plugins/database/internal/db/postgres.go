@@ -10,7 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"antennae.space/ide/lib/i18n"
 )
 
 type dialFunc func(ctx context.Context, network, addr string) (net.Conn, error)

@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/pod/keeper"
+	"antennae.space/ide/pod/keeper"
 )
 
 // The fake agent of the browser tests (a node script).

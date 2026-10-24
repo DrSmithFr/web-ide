@@ -6,13 +6,13 @@ import (
 	"path"
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/pod/commands"
+	"antennae.space/ide/pod/commands"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/git"
-	"github.com/DrSmithFr/web-ide/pod/projects"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
-	"github.com/DrSmithFr/web-ide/pod/sshx"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/git"
+	"antennae.space/ide/pod/projects"
+	"antennae.space/ide/pod/runtime"
+	"antennae.space/ide/pod/sshx"
 )
 
 // Worktrees of the repository of a project, for the branch selector of the menu bar: the

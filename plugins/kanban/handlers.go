@@ -5,9 +5,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	kb "github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
-	"github.com/DrSmithFr/web-ide/pod/projects"
+	"antennae.space/ide/lib/i18n"
+	kb "antennae.space/ide/plugins/kanban/kanban"
+	"antennae.space/ide/pod/projects"
 )
 
 // kanbanProject is the project whose kanban (and conversations) a project uses: itself,

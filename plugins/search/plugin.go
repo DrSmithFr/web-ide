@@ -8,10 +8,10 @@ import (
 	_ "embed"
 	"encoding/json"
 
-	lib "github.com/DrSmithFr/web-ide/plugins/search/internal/search"
-	"github.com/DrSmithFr/web-ide/pod/caps"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	lib "antennae.space/ide/plugins/search/internal/search"
+	"antennae.space/ide/pod/caps"
+	"antennae.space/ide/pod/plugins"
+	"antennae.space/ide/pod/runtime"
 )
 
 //go:embed plugin.json

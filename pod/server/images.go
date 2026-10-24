@@ -5,10 +5,10 @@ import (
 	"path"
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"antennae.space/ide/pod/assistant"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/fsx"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/fsx"
 )
 
 // readImage gives an image file as a data URL (the page shows it in an img, where an SVG

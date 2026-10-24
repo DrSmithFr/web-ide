@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/pod/execx"
-	"github.com/DrSmithFr/web-ide/pod/fsx"
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/pod/execx"
+	"antennae.space/ide/pod/fsx"
+	"antennae.space/ide/pod/store"
 )
 
 // Closing the manager must not wait for the connections held by the SQL consoles.

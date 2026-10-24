@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
+	"antennae.space/ide/lib/identity"
 )
 
 // TestUpdateCarried: the relay carries a signed update request to the online pod of its account the

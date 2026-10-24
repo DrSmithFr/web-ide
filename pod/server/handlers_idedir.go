@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/DrSmithFr/web-ide/pod/projects"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/pod/projects"
+	"antennae.space/ide/pod/runtime"
 )
 
 // The .ide folder is ignored by git (package idedir), but a project may have committed

@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/runtime"
 )
 
 // toolNeeds are the tools of the assistant that need a capability of another plugin: the

@@ -4,8 +4,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/plugins"
 )
 
 // Grants are the permissions an external plugin may ask, each accepted by the user

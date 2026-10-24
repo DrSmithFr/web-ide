@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"antennae.space/ide/pod/assistant"
 )
 
 // The tools offered to the model in each mode (OpenAI function format). The texts are read by

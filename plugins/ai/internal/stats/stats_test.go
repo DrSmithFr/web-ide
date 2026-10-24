@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"antennae.space/ide/plugins/ai/engine"
+	"antennae.space/ide/pod/assistant"
 )
 
 func answer(at int64, effort string, usage string, thinkMs, elapsedMs int64, reasoning string, calls ...[2]string) *engine.Message {

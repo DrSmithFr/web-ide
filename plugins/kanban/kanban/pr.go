@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"antennae.space/ide/lib/i18n"
 )
 
 // Pull request of a ticket: its branch is pushed to origin, then gh opens the pull request

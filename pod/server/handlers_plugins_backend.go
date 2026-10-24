@@ -11,12 +11,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
-	"github.com/DrSmithFr/web-ide/pod/plugins/backend"
-	"github.com/DrSmithFr/web-ide/pod/plugins/confine"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/assistant"
+	"antennae.space/ide/pod/plugins"
+	"antennae.space/ide/pod/plugins/backend"
+	"antennae.space/ide/pod/plugins/confine"
+	"antennae.space/ide/pod/runtime"
 )
 
 // The backends of the external plugins (docs/design/plugins.md, *Confined backend*): one

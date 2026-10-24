@@ -5,13 +5,13 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"antennae.space/ide/lib/i18n"
 
-	kb "github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
-	"github.com/DrSmithFr/web-ide/pod/projects"
-	"github.com/DrSmithFr/web-ide/pod/push"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	kb "antennae.space/ide/plugins/kanban/kanban"
+	"antennae.space/ide/pod/plugins"
+	"antennae.space/ide/pod/projects"
+	"antennae.space/ide/pod/push"
+	"antennae.space/ide/pod/runtime"
 )
 
 // What the AI asks the kanban: the kanban tools of the assistant, the Orchestrator, the

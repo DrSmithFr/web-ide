@@ -3,9 +3,9 @@ package ai
 import (
 	"encoding/json"
 
-	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/plugins/ai/engine"
+	"antennae.space/ide/pod/assistant"
+	"antennae.space/ide/pod/runtime"
 )
 
 // Saved commands of the project for the assistant: list_commands and run_saved_command. The

@@ -10,9 +10,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/commands"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/commands"
+	"antennae.space/ide/pod/plugins"
 )
 
 //go:embed plugin.json

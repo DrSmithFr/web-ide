@@ -5,9 +5,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/lib/identity"
+	"antennae.space/ide/pod/store"
 )
 
 // Hub is the sync identity of a pod: the X25519 key of its device, the key of the current epoch as

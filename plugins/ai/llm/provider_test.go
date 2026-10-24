@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/store"
 )
 
 // A cloud provider: the key on every request, no llama.cpp fields, reasoning and cost in

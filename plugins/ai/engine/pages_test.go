@@ -1,7 +1,7 @@
 package engine
 
 import (
-	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"antennae.space/ide/pod/assistant"
 
 	"encoding/json"
 	"strings"

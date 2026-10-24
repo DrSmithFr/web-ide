@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/pod/settingsync"
+	"antennae.space/ide/lib/identity"
+	"antennae.space/ide/pod/settingsync"
 )
 
 // TestPublishRoundTrip: what a pod writes under its kind is what another pod reads back.

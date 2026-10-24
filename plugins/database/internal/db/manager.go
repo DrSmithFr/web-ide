@@ -15,12 +15,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/execx"
-	"github.com/DrSmithFr/web-ide/pod/fsx"
-	"github.com/DrSmithFr/web-ide/pod/idedir"
-	"github.com/DrSmithFr/web-ide/pod/sshx"
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/execx"
+	"antennae.space/ide/pod/fsx"
+	"antennae.space/ide/pod/idedir"
+	"antennae.space/ide/pod/sshx"
+	"antennae.space/ide/pod/store"
 )
 
 // SSHForward is the SSH host a connection goes through (saved as `ssh`, a name kept from before the glossary).

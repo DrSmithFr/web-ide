@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/DrSmithFr/web-ide/pod/plugins"
-	"github.com/DrSmithFr/web-ide/pod/projects"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
-	"github.com/DrSmithFr/web-ide/pod/sshx"
+	"antennae.space/ide/pod/plugins"
+	"antennae.space/ide/pod/projects"
+	"antennae.space/ide/pod/runtime"
+	"antennae.space/ide/pod/sshx"
 )
 
 // Tools of the MCP endpoint of the core: the saved commands here, the IDE in mcp_ide.go and

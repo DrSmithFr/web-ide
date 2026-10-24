@@ -21,8 +21,8 @@ import (
 	"github.com/coder/websocket"
 	"github.com/pion/webrtc/v4"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/lib/tunnel"
+	"antennae.space/ide/lib/identity"
+	"antennae.space/ide/lib/tunnel"
 )
 
 // Peer is one pod-to-pod tunnel. Its rpc channel already passed the handshake; Open adds a

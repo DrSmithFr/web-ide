@@ -14,10 +14,10 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/DrSmithFr/web-ide/pod/plugins"
-	"github.com/DrSmithFr/web-ide/pod/plugins/builtin"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
-	"github.com/DrSmithFr/web-ide/pod/sshx"
+	"antennae.space/ide/pod/plugins"
+	"antennae.space/ide/pod/plugins/builtin"
+	"antennae.space/ide/pod/runtime"
+	"antennae.space/ide/pod/sshx"
 )
 
 // The test plugin hello: its RPC method, its assistant tool (assistant and MCP) and its

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/commands"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/pod/assistant"
+	"antennae.space/ide/pod/commands"
+	"antennae.space/ide/pod/runtime"
 )
 
 // Saved commands of the project for the models: list_commands and run_saved_command of the MCP

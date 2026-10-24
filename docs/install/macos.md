@@ -9,7 +9,7 @@ Run the pod from the release archive: there is no unit that starts it, you launc
 
 ## Steps
 
-1. Download the archive for your Mac from the [latest release](https://github.com/DrSmithFr/web-ide/releases/latest): `web-ide-pod-darwin-arm64.tar.gz` (Apple silicon) or `web-ide-pod-darwin-amd64.tar.gz` (Intel).
+1. Download the archive for your Mac from the [latest release](https://github.com/antennae-space/web-ide/releases/latest): `web-ide-pod-darwin-arm64.tar.gz` (Apple silicon) or `web-ide-pod-darwin-amd64.tar.gz` (Intel).
 2. Extract it and run the pod:
 
    ```sh

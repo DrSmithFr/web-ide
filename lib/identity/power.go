@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"antennae.space/ide/lib/i18n"
 )
 
 // The actions a power request may ask for (relay.md, *Power*): wake a machine that sleeps, shut it

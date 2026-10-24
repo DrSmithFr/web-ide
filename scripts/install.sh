@@ -13,7 +13,7 @@
 # and then updates itself in place (re-exec, same process): its terminals stay.
 set -eu
 
-REPO=DrSmithFr/web-ide
+REPO=antennae-space/web-ide
 ADDR=${WEBIDE_ADDR:-127.0.0.1:4433}
 VERSION=latest
 BINARY=

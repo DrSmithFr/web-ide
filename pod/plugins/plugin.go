@@ -6,18 +6,18 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/tunnel"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/hfcache"
+	"antennae.space/ide/lib/tunnel"
+	"antennae.space/ide/pod/assistant"
+	"antennae.space/ide/pod/hfcache"
 
-	"github.com/DrSmithFr/web-ide/pod/commands"
-	"github.com/DrSmithFr/web-ide/pod/config"
-	"github.com/DrSmithFr/web-ide/pod/desks"
-	"github.com/DrSmithFr/web-ide/pod/keeper"
-	"github.com/DrSmithFr/web-ide/pod/projects"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
-	"github.com/DrSmithFr/web-ide/pod/settingsync"
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/pod/commands"
+	"antennae.space/ide/pod/config"
+	"antennae.space/ide/pod/desks"
+	"antennae.space/ide/pod/keeper"
+	"antennae.space/ide/pod/projects"
+	"antennae.space/ide/pod/runtime"
+	"antennae.space/ide/pod/settingsync"
+	"antennae.space/ide/pod/store"
 )
 
 // Plugin is a built-in plugin: its manifest, and what it registers in the pod.

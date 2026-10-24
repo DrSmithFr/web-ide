@@ -13,8 +13,8 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/DrSmithFr/web-ide/lib/tunnel"
-	"github.com/DrSmithFr/web-ide/pod/lan"
+	"antennae.space/ide/lib/tunnel"
+	"antennae.space/ide/pod/lan"
 )
 
 // The local pod is the gateway of its own origin (127.0.0.1, a LAN address): a pod of another

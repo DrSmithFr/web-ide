@@ -8,8 +8,8 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/lib/identity"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/lib/identity"
 )
 
 // The pairing and admin link of the Members panel when the pod has no relay: the same

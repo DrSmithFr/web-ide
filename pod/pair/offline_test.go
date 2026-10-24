@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
+	"antennae.space/ide/lib/identity"
 )
 
 // join --phrase pairs a pod under its own key, with no relay: two pods joined so are two

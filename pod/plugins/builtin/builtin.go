@@ -2,20 +2,20 @@
 package builtin
 
 import (
-	"github.com/DrSmithFr/web-ide/plugins/ai"
-	"github.com/DrSmithFr/web-ide/plugins/code"
-	"github.com/DrSmithFr/web-ide/plugins/database"
-	"github.com/DrSmithFr/web-ide/plugins/docker"
-	"github.com/DrSmithFr/web-ide/plugins/exec"
-	"github.com/DrSmithFr/web-ide/plugins/files"
-	"github.com/DrSmithFr/web-ide/plugins/git"
-	"github.com/DrSmithFr/web-ide/plugins/hello"
-	"github.com/DrSmithFr/web-ide/plugins/kanban"
-	"github.com/DrSmithFr/web-ide/plugins/languages"
-	"github.com/DrSmithFr/web-ide/plugins/previews"
-	"github.com/DrSmithFr/web-ide/plugins/search"
-	"github.com/DrSmithFr/web-ide/plugins/services"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
+	"antennae.space/ide/plugins/ai"
+	"antennae.space/ide/plugins/code"
+	"antennae.space/ide/plugins/database"
+	"antennae.space/ide/plugins/docker"
+	"antennae.space/ide/plugins/exec"
+	"antennae.space/ide/plugins/files"
+	"antennae.space/ide/plugins/git"
+	"antennae.space/ide/plugins/hello"
+	"antennae.space/ide/plugins/kanban"
+	"antennae.space/ide/plugins/languages"
+	"antennae.space/ide/plugins/previews"
+	"antennae.space/ide/plugins/search"
+	"antennae.space/ide/plugins/services"
+	"antennae.space/ide/pod/plugins"
 )
 
 // Registry holds the built-in plugins; tests adds the plugins of the browser tests.

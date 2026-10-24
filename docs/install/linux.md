@@ -17,7 +17,7 @@ On Windows, follow [Windows with WSL](windows-wsl.md); on macOS, [macOS](macos.m
 1. Run the installer:
 
    ```sh
-   curl -fsSL https://raw.githubusercontent.com/DrSmithFr/web-ide/main/scripts/install.sh | sh
+   curl -fsSL https://raw.githubusercontent.com/antennae-space/web-ide/main/scripts/install.sh | sh
    ```
 
    It downloads the latest release into `~/.local/bin/web-ide-pod`, writes two units in `~/.config/systemd/user/` (`web-ide-pod` and `web-ide-keeper`, the keeper runs the terminals), enables *lingering* for your user so they start at boot even before you log in, and starts them. A given version: `… | sh -s -- v1.0.0`.
@@ -33,7 +33,7 @@ On Windows, follow [Windows with WSL](windows-wsl.md); on macOS, [macOS](macos.m
 3. Optional, to use the pod from your laptop, phone or tablet: serve it on your tailnet.
 
    ```sh
-   curl -fsSL https://raw.githubusercontent.com/DrSmithFr/web-ide/main/scripts/install.sh | sh -s -- --tailscale
+   curl -fsSL https://raw.githubusercontent.com/antennae-space/web-ide/main/scripts/install.sh | sh -s -- --tailscale
    ```
 
    This runs `tailscale serve`, which gives the pod an HTTPS address with a real certificate, printed at the end (`On the tailnet: https://my-desktop.my-tailnet.ts.net/?token=…`). HTTPS matters: browsers give the microphone (dictation) and the clipboard to secure pages only.

@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
-	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/plugins/ai/engine"
+	"antennae.space/ide/plugins/ai/llm"
+	"antennae.space/ide/pod/assistant"
 )
 
 // The turn loop of the assistant: send the conversation, stream the answer, run the tool calls

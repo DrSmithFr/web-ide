@@ -6,10 +6,10 @@ import (
 	"path"
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/fsx"
-	"github.com/DrSmithFr/web-ide/pod/idedir"
-	"github.com/DrSmithFr/web-ide/pod/projects"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/fsx"
+	"antennae.space/ide/pod/idedir"
+	"antennae.space/ide/pod/projects"
 )
 
 // Project icons: the page draws them (glyph or text on a shape), the pod keeps the image

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/pod/fsx"
+	"antennae.space/ide/pod/fsx"
 )
 
 func TestReadImage(t *testing.T) {

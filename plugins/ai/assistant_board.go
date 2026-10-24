@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/fsx"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/plugins/ai/engine"
+	"antennae.space/ide/pod/assistant"
+	"antennae.space/ide/pod/fsx"
+	"antennae.space/ide/pod/runtime"
 )
 
 // The model draws new pages on the board of the conversation: board_draw_doodle (a frame or

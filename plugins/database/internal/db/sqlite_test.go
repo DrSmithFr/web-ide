@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/pod/execx"
+	"antennae.space/ide/pod/execx"
 )
 
 func TestSQLite(t *testing.T) {

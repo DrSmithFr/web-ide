@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"antennae.space/ide/pod/assistant"
 
-	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
+	"antennae.space/ide/plugins/ai/llm"
 )
 
 // The projects of the tests are in /tmp: an other scratch folder keeps their approvals.

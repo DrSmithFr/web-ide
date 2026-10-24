@@ -10,9 +10,9 @@ import (
 	_ "embed"
 	"encoding/json"
 
-	kb "github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	kb "antennae.space/ide/plugins/kanban/kanban"
+	"antennae.space/ide/pod/plugins"
+	"antennae.space/ide/pod/runtime"
 )
 
 //go:embed plugin.json

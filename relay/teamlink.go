@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"antennae.space/ide/lib/i18n"
 )
 
 // The team side of the panel (#88). The admin of a person's team is that person; the admin of an

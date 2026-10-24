@@ -23,7 +23,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/skip2/go-qrcode"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
+	"antennae.space/ide/lib/identity"
 )
 
 // Env is the environment of the command: the data folder, the relay, the terminal.

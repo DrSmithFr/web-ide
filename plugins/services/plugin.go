@@ -13,9 +13,9 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/DrSmithFr/web-ide/lib/tunnel"
+	"antennae.space/ide/lib/tunnel"
 
-	"github.com/DrSmithFr/web-ide/pod/plugins"
+	"antennae.space/ide/pod/plugins"
 )
 
 //go:embed plugin.json

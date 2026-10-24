@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"sort"
 
-	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
-	"github.com/DrSmithFr/web-ide/plugins/ai/internal/stats"
+	"antennae.space/ide/plugins/ai/engine"
+	"antennae.space/ide/plugins/ai/internal/stats"
 )
 
 type childStats struct {

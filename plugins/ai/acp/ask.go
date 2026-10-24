@@ -3,7 +3,7 @@ package acp
 import (
 	"encoding/json"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"antennae.space/ide/lib/i18n"
 )
 
 // The questions an agent asks the user: a permission (session/request_permission, its

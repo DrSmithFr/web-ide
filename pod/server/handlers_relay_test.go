@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"antennae.space/ide/lib/i18n"
 )
 
 // TestRelaySet: Settings > Remote access changes the relay the pod registers with — the handler

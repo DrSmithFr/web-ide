@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/pod/keeper"
+	"antennae.space/ide/pod/keeper"
 )
 
 func startKeeper(t *testing.T) string {

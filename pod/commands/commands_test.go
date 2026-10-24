@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/pod/fsx"
+	"antennae.space/ide/pod/fsx"
 )
 
 func TestSaveLoad(t *testing.T) {

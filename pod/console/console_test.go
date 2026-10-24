@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/pod/execx"
-	"github.com/DrSmithFr/web-ide/pod/keeper"
+	"antennae.space/ide/pod/execx"
+	"antennae.space/ide/pod/keeper"
 )
 
 type events struct {

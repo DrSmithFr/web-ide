@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	kb "github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
-	"github.com/DrSmithFr/web-ide/pod/caps"
-	"github.com/DrSmithFr/web-ide/pod/projects"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/lib/i18n"
+	kb "antennae.space/ide/plugins/kanban/kanban"
+	"antennae.space/ide/pod/caps"
+	"antennae.space/ide/pod/projects"
+	"antennae.space/ide/pod/runtime"
 )
 
 // The development of a ticket by an ACP agent (kanban setting devAgent): one session of the

@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/pod/store"
 )
 
 func TestDesks(t *testing.T) {

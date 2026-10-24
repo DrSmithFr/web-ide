@@ -11,16 +11,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
-	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/caps"
-	"github.com/DrSmithFr/web-ide/pod/console"
-	"github.com/DrSmithFr/web-ide/pod/fsx"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
-	"github.com/DrSmithFr/web-ide/pod/projects"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/plugins/ai/engine"
+	"antennae.space/ide/plugins/ai/llm"
+	"antennae.space/ide/pod/assistant"
+	"antennae.space/ide/pod/caps"
+	"antennae.space/ide/pod/console"
+	"antennae.space/ide/pod/fsx"
+	"antennae.space/ide/pod/plugins"
+	"antennae.space/ide/pod/projects"
+	"antennae.space/ide/pod/runtime"
 )
 
 // Tools of the assistant that work on the project: files, search, shell commands, consoles,

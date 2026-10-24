@@ -4,8 +4,8 @@ import (
 	"context"
 	"net"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/sshx"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/sshx"
 )
 
 // Dial reaches an address from the SSH host, reconnecting when the connection was lost.

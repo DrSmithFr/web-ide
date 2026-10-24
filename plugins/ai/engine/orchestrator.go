@@ -1,6 +1,6 @@
 package engine
 
-import "github.com/DrSmithFr/web-ide/pod/assistant"
+import "antennae.space/ide/pod/assistant"
 
 // Orchestrator mode: the default of a new conversation. It steers the work instead of doing
 // it: it reads the project and the kanban, proposes actions as cards the user clicks, sends

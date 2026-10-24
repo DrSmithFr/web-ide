@@ -1,4 +1,4 @@
-module github.com/DrSmithFr/web-ide
+module antennae.space/ide
 
 go 1.27.0
 

@@ -7,7 +7,7 @@ import (
 	"crypto/rand"
 	"fmt"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"antennae.space/ide/lib/i18n"
 )
 
 // The sync key of an account comes from the sync seed: the key of an epoch is HKDF over the

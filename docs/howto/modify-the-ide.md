@@ -13,7 +13,7 @@ Change Web IDE itself from the sources of your installed version, with its own a
 
    ```sh
    web-ide-pod -version
-   git clone https://github.com/DrSmithFr/web-ide.git ~/Apps/web-ide && cd ~/Apps/web-ide
+   git clone https://github.com/antennae-space/web-ide.git ~/Apps/web-ide && cd ~/Apps/web-ide
    git checkout <version>
    ```
 

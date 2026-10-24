@@ -18,8 +18,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/lib/identity"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/lib/identity"
 )
 
 // Web Push (RFC 8030) through the relay. The pod encrypts the payload for the subscription of
@@ -113,7 +113,7 @@ func LoadPush(dataDir, subject string) (*Push, error) {
 		return nil, err
 	}
 	if subject == "" {
-		subject = "https://github.com/DrSmithFr/web-ide"
+		subject = "https://github.com/antennae-space/web-ide"
 	}
 	return &Push{key: key, pub: identity.B64u(pub), subject: subject, buckets: map[string]*bucket{},
 		// No redirect: the relay POSTs to the registered endpoint and nowhere else.

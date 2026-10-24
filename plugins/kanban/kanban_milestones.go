@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	kb "github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
+	kb "antennae.space/ide/plugins/kanban/kanban"
 )
 
 // The kanban_milestone tool, shared by the MCP endpoint and the assistant (its schema:

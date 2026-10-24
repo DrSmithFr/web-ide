@@ -18,8 +18,8 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/pod/update"
+	"antennae.space/ide/lib/identity"
+	"antennae.space/ide/pod/update"
 )
 
 // account makes an account from a fixed entropy byte.

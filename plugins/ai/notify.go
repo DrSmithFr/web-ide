@@ -3,9 +3,9 @@ package ai
 import (
 	"net/url"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
-	"github.com/DrSmithFr/web-ide/pod/push"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/plugins"
+	"antennae.space/ide/pod/push"
 )
 
 // notifyChat sends the push notification of a turn of a root conversation that ended (asks:

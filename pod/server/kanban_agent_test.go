@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/plugins/ai/acp"
-	"github.com/DrSmithFr/web-ide/pod/projects"
+	"antennae.space/ide/plugins/ai/acp"
+	"antennae.space/ide/pod/projects"
 )
 
 // A ticket developed by an ACP agent: its session in the worktree, opened with the briefing

@@ -29,17 +29,17 @@ import (
 	"github.com/coder/websocket"
 	"github.com/pion/webrtc/v4"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/lib/tunnel"
-	"github.com/DrSmithFr/web-ide/pod/config"
-	"github.com/DrSmithFr/web-ide/pod/desks"
-	"github.com/DrSmithFr/web-ide/pod/hfcache"
-	"github.com/DrSmithFr/web-ide/pod/projects"
-	"github.com/DrSmithFr/web-ide/pod/server"
-	"github.com/DrSmithFr/web-ide/pod/settings"
-	"github.com/DrSmithFr/web-ide/pod/sshx"
-	"github.com/DrSmithFr/web-ide/pod/store"
-	"github.com/DrSmithFr/web-ide/relay"
+	"antennae.space/ide/lib/identity"
+	"antennae.space/ide/lib/tunnel"
+	"antennae.space/ide/pod/config"
+	"antennae.space/ide/pod/desks"
+	"antennae.space/ide/pod/hfcache"
+	"antennae.space/ide/pod/projects"
+	"antennae.space/ide/pod/server"
+	"antennae.space/ide/pod/settings"
+	"antennae.space/ide/pod/sshx"
+	"antennae.space/ide/pod/store"
+	"antennae.space/ide/relay"
 )
 
 const (

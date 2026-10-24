@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/lib/tunnel"
+	"antennae.space/ide/lib/identity"
+	"antennae.space/ide/lib/tunnel"
 )
 
 // LANRouter reaches a pod of this pod's cluster over its LAN link (pod/lan.OpenTunnel).

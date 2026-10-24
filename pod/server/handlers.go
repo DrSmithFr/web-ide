@@ -9,13 +9,13 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/config"
-	"github.com/DrSmithFr/web-ide/pod/desks"
-	"github.com/DrSmithFr/web-ide/pod/fsx"
-	"github.com/DrSmithFr/web-ide/pod/projects"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
-	"github.com/DrSmithFr/web-ide/pod/sshx"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/config"
+	"antennae.space/ide/pod/desks"
+	"antennae.space/ide/pod/fsx"
+	"antennae.space/ide/pod/projects"
+	"antennae.space/ide/pod/runtime"
+	"antennae.space/ide/pod/sshx"
 )
 
 func bind[T any](p json.RawMessage) (T, error) {

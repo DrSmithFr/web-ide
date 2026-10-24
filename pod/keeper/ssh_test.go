@@ -10,8 +10,8 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"github.com/DrSmithFr/web-ide/pod/sshtest"
-	"github.com/DrSmithFr/web-ide/pod/sshx"
+	"antennae.space/ide/pod/sshtest"
+	"antennae.space/ide/pod/sshx"
 )
 
 // The keeper dials SSH with the host key the pod accepted; terminals and commands run on it.

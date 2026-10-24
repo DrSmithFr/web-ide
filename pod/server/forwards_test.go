@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/plugins/previews"
+	"antennae.space/ide/plugins/previews"
 
-	"github.com/DrSmithFr/web-ide/pod/sshtest"
+	"antennae.space/ide/pod/sshtest"
 )
 
 // echoServer answers each line with "echo:<line>"; it stands for a service of the SSH host.

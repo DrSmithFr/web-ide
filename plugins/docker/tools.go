@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	dk "github.com/DrSmithFr/web-ide/plugins/docker/internal/docker"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
+	"antennae.space/ide/lib/i18n"
+	dk "antennae.space/ide/plugins/docker/internal/docker"
+	"antennae.space/ide/pod/assistant"
+	"antennae.space/ide/pod/plugins"
 )
 
 // Docker tools of the assistant and the MCP, read-only in every mode: state of the Compose

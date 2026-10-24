@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/DrSmithFr/web-ide/pod/keeper"
+	"antennae.space/ide/pod/keeper"
 )
 
 // Relay runs the streamed completions outside the pod (the keeper): a pod that restarts reads

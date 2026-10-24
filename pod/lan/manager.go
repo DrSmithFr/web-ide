@@ -16,11 +16,11 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/lib/tunnel"
-	"github.com/DrSmithFr/web-ide/pod/power"
-	"github.com/DrSmithFr/web-ide/pod/update"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/lib/identity"
+	"antennae.space/ide/lib/tunnel"
+	"antennae.space/ide/pod/power"
+	"antennae.space/ide/pod/update"
 )
 
 // DefaultAddr is the LAN listen address when config.json sets none.

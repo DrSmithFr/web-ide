@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
+	"antennae.space/ide/lib/identity"
 )
 
 // The project lists of the pods (milestone 3): each pod writes its list under its own kind

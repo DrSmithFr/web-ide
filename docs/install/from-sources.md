@@ -13,7 +13,7 @@ Build the pod yourself, to run it, to install it as a unit, or to change it.
 1. Clone and build (front end first, then the pod with the front end embedded):
 
    ```sh
-   git clone https://github.com/DrSmithFr/web-ide.git && cd web-ide
+   git clone https://github.com/antennae-space/web-ide.git && cd web-ide
    make build
    ```
 

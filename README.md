@@ -39,17 +39,17 @@ The full walk-through is in the **[user guide](docs/guide.md)**; every page of t
 Linux, as a systemd unit started at boot ([details](docs/install/linux.md)):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/DrSmithFr/web-ide/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/antennae-space/web-ide/main/scripts/install.sh | sh
 # from your other devices, over HTTPS on your Tailscale network:
-curl -fsSL https://raw.githubusercontent.com/DrSmithFr/web-ide/main/scripts/install.sh | sh -s -- --tailscale
+curl -fsSL https://raw.githubusercontent.com/antennae-space/web-ide/main/scripts/install.sh | sh -s -- --tailscale
 ```
 
-It prints the address to open once, with the access token. On macOS, download the archive of the [latest release](https://github.com/DrSmithFr/web-ide/releases/latest) and run `./web-ide-pod` ([details](docs/install/macos.md)). On Windows, install it inside WSL 2 ([steps](docs/install/windows-wsl.md)).
+It prints the address to open once, with the access token. On macOS, download the archive of the [latest release](https://github.com/antennae-space/web-ide/releases/latest) and run `./web-ide-pod` ([details](docs/install/macos.md)). On Windows, install it inside WSL 2 ([steps](docs/install/windows-wsl.md)).
 
 From the sources (Go 1.27+, Node.js 20.19+):
 
 ```sh
-git clone https://github.com/DrSmithFr/web-ide.git && cd web-ide
+git clone https://github.com/antennae-space/web-ide.git && cd web-ide
 make build && ./bin/web-ide-pod
 ```
 

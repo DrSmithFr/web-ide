@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"antennae.space/ide/lib/i18n"
 )
 
 // Usage is one line of docker system df: images, containers, local volumes, build cache.

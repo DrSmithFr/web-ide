@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/plugins/ai/acp"
+	"antennae.space/ide/plugins/ai/acp"
 )
 
 // agents.stats: the work time and the cost of the agents, for the project of the window (its

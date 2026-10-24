@@ -16,7 +16,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/pod/store"
 )
 
 // fixture is the repository of a plugin "greet" with its tags, and the server of its archives.

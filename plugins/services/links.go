@@ -17,10 +17,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/lib/tunnel"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/lib/tunnel"
+	"antennae.space/ide/pod/plugins"
+	"antennae.space/ide/pod/store"
 )
 
 // LinksFile is the links of this pod to the services of the other pods (relay.md, *Services*).

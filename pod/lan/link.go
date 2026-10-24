@@ -10,8 +10,8 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/pod/power"
+	"antennae.space/ide/lib/identity"
+	"antennae.space/ide/pod/power"
 )
 
 // The path of the control link: the handshake, then the exchange of the pod infos and of

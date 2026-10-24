@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"strings"
 
-	kb "github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
+	kb "antennae.space/ide/plugins/kanban/kanban"
+	"antennae.space/ide/pod/assistant"
+	"antennae.space/ide/pod/plugins"
 )
 
 // Tools of the MCP endpoint on the tickets (Host.MCPTool): those of the assistant with the

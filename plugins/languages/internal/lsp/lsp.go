@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/DrSmithFr/web-ide/pod/caps"
 	"io"
 	"net/url"
 	"os"
@@ -19,8 +18,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/execx"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/caps"
+	"antennae.space/ide/pod/execx"
 )
 
 type Spec struct {

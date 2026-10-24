@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"antennae.space/ide/plugins/ai/engine"
+	"antennae.space/ide/pod/assistant"
 )
 
 // The Questions tool lists what waits for the user — a form of an ACP session, ask_user of a

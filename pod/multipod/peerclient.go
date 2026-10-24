@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/tunnel"
+	"antennae.space/ide/lib/tunnel"
 )
 
 // PeerClient reaches the routes of the pods (/_peer/<plugin>/, relay.md *Services*) on another pod

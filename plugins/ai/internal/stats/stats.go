@@ -8,9 +8,9 @@ import (
 	"encoding/json"
 	"sort"
 
-	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
-	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"antennae.space/ide/plugins/ai/engine"
+	"antennae.space/ide/plugins/ai/llm"
+	"antennae.space/ide/pod/assistant"
 )
 
 // CharsPerToken estimates the tokens of a text from its length (code and English).

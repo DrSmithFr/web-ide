@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
+	"antennae.space/ide/lib/identity"
 )
 
 // pairingTTL is how long a pairing code stays open.

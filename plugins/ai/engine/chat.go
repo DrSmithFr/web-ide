@@ -3,7 +3,7 @@ package engine
 import (
 	"encoding/json"
 
-	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
+	"antennae.space/ide/plugins/ai/llm"
 )
 
 // LoadChat reads a conversation of the assistant kept by m.

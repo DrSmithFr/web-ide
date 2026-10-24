@@ -17,10 +17,10 @@ import (
 	"unicode/utf16"
 	"unicode/utf8"
 
-	"github.com/DrSmithFr/web-ide/pod/caps"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/pod/caps"
+	"antennae.space/ide/pod/runtime"
 
-	"github.com/DrSmithFr/web-ide/pod/execx"
+	"antennae.space/ide/pod/execx"
 )
 
 const maxFileSize = 2 << 20

@@ -11,8 +11,8 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/pod/assistant"
+	"antennae.space/ide/pod/runtime"
 )
 
 // Language is the language capability (the Languages plugin): the language servers of a

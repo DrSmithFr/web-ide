@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/relay"
+	"antennae.space/ide/relay"
 )
 
 // testRelay starts a relay of its own (its store, its TURN server on 127.0.0.1) and serves it:

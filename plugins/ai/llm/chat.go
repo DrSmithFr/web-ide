@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"antennae.space/ide/lib/i18n"
 )
 
 // Message is an OpenAI chat message. Content is a string or an array of parts

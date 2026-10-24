@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/caps"
-	"github.com/DrSmithFr/web-ide/pod/sshx"
+	"antennae.space/ide/pod/assistant"
+	"antennae.space/ide/pod/caps"
+	"antennae.space/ide/pod/sshx"
 )
 
 // The saved commands seen by the models (list_commands, run_saved_command, share_preview,

@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/assistant"
+	"antennae.space/ide/pod/plugins"
+	"antennae.space/ide/pod/runtime"
 )
 
 // MCP endpoint: Claude Code (or any MCP client) reads and changes the tickets of the

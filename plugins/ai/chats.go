@@ -7,9 +7,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
-	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
+	"antennae.space/ide/plugins/ai/engine"
+	"antennae.space/ide/plugins/ai/llm"
+	"antennae.space/ide/pod/plugins"
 )
 
 // ChatLoc is where the conversations of a project are kept, and the project whose windows

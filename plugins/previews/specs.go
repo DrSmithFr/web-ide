@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"path"
 
-	"github.com/DrSmithFr/web-ide/plugins/previews/internal/forwards"
-	"github.com/DrSmithFr/web-ide/pod/idedir"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/plugins/previews/internal/forwards"
+	"antennae.space/ide/pod/idedir"
+	"antennae.space/ide/pod/runtime"
 )
 
 // The port forwards of an SSH project, kept in .ide/forwards.json (of the main project for a

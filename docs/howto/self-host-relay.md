@@ -13,7 +13,7 @@ pod or in a passkey, only the URL of the relay.
 - A machine with a public address (IPv4, and IPv6 if you publish an AAAA), Linux with systemd, and root on it.
 - A domain or subdomain pointing at it: an `A` record, an `AAAA` one if you serve IPv6, and a `CAA` allowing `letsencrypt.org`.
 - Ports 80, 443 and 3478 open, and a range of UDP ports for the TURN sockets (see *Firewall*).
-- The `web-ide-pod` binary of the [release](https://github.com/DrSmithFr/web-ide/releases/latest) for the machine (`web-ide-pod-linux-amd64.tar.gz` or `-arm64`), or one built [from the sources](../install/from-sources.md).
+- The `web-ide-pod` binary of the [release](https://github.com/antennae-space/web-ide/releases/latest) for the machine (`web-ide-pod-linux-amd64.tar.gz` or `-arm64`), or one built [from the sources](../install/from-sources.md).
 
 ## Steps
 

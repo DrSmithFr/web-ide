@@ -3,8 +3,8 @@ package relay
 import (
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/lib/identity"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/lib/identity"
 )
 
 // The sync messages, on the pod link and on the admin link. The relay stores encrypted blobs and

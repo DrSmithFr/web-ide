@@ -5,9 +5,9 @@ import (
 	"path"
 	"slices"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/fsx"
-	"github.com/DrSmithFr/web-ide/pod/idedir"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/fsx"
+	"antennae.space/ide/pod/idedir"
 )
 
 const fileName = "plugins.json"

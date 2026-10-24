@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/plugins/ai/engine"
+	"antennae.space/ide/pod/assistant"
 )
 
 // Sub-agents (assistant/subagents.go): a conversation starts children that run in the background

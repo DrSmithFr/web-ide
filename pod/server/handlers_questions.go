@@ -8,9 +8,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
-	"github.com/DrSmithFr/web-ide/pod/push"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/plugins"
+	"antennae.space/ide/pod/push"
 )
 
 // Questions tool: every question waiting for the user in the projects of a window, whatever

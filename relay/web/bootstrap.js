@@ -750,7 +750,7 @@ function showPhraseForm() {
       fail(text(err.message))
     }
   })
-  const install = 'curl -fsSL https://raw.githubusercontent.com/DrSmithFr/web-ide/main/scripts/install.sh | sh'
+  const install = 'curl -fsSL https://raw.githubusercontent.com/antennae-space/web-ide/main/scripts/install.sh | sh'
   draw('welcome',
     h('h1', {}, words.welcome),
     h('p', { class: 'lead' }, words.lead),
@@ -762,7 +762,7 @@ function showPhraseForm() {
         words.newHow, h('code', { class: 'code' }, install),
         words.newCreate, h('code', { class: 'code' }, 'web-ide-pod pair create'),
         words.newBack, ' ',
-        h('a', { href: 'https://github.com/DrSmithFr/web-ide', target: '_blank', rel: 'noopener' }, words.docs)))),
+        h('a', { href: 'https://github.com/antennae-space/web-ide', target: '_blank', rel: 'noopener' }, words.docs)))),
   )
 }
 

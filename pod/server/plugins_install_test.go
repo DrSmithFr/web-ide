@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/pod/plugins/install"
+	"antennae.space/ide/pod/plugins/install"
 )
 
 // The external plugins of the lock join the registry when the pod starts; one whose folder is

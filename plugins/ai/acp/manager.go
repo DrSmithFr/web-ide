@@ -17,8 +17,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/keeper"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/keeper"
 )
 
 type Deps struct {

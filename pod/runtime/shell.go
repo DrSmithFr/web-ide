@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/execx"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/execx"
 )
 
 // Output kept of a command run for the assistant: its start and its end.

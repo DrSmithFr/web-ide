@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/DrSmithFr/web-ide/pod/caps"
+	"antennae.space/ide/pod/caps"
 
-	"github.com/DrSmithFr/web-ide/plugins/languages/internal/lsp"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/plugins/languages/internal/lsp"
+	"antennae.space/ide/pod/runtime"
 )
 
 // servers is the part of a runtime holding its language servers: they stop with the project,

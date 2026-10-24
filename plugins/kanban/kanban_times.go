@@ -1,9 +1,9 @@
 package kanban
 
 import (
-	kb "github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
-	"github.com/DrSmithFr/web-ide/pod/caps"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	kb "antennae.space/ide/plugins/kanban/kanban"
+	"antennae.space/ide/pod/caps"
+	"antennae.space/ide/pod/runtime"
 )
 
 // Time of work on a ticket: the time of the answers of its linked conversations and of

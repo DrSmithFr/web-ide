@@ -15,11 +15,11 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/plugins/previews/internal/forwards"
-	"github.com/DrSmithFr/web-ide/plugins/previews/internal/preview"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/plugins/previews/internal/forwards"
+	"antennae.space/ide/plugins/previews/internal/preview"
+	"antennae.space/ide/pod/plugins"
+	"antennae.space/ide/pod/runtime"
 )
 
 //go:embed plugin.json

@@ -27,7 +27,7 @@ The pod is a Linux program: on Windows it runs in a WSL 2 distribution, as the s
 2. Install the pod inside WSL, as on Linux (`systemctl --user` must work, see *Check*):
 
    ```sh
-   curl -fsSL https://raw.githubusercontent.com/DrSmithFr/web-ide/main/scripts/install.sh | sh
+   curl -fsSL https://raw.githubusercontent.com/antennae-space/web-ide/main/scripts/install.sh | sh
    ```
 
 3. Start WSL at your logon, so the units run without you opening a terminal. In the Windows **Task Scheduler**, create a task:

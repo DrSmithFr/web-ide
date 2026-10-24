@@ -7,7 +7,7 @@ import (
 	"log"
 	"net"
 
-	"github.com/DrSmithFr/web-ide/pod/sshtest"
+	"antennae.space/ide/pod/sshtest"
 )
 
 func main() {

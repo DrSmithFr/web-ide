@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"antennae.space/ide/lib/i18n"
 )
 
 // PromptCaps are the content blocks the agent takes besides text and resource links.

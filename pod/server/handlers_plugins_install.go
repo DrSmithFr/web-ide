@@ -8,11 +8,11 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
-	"github.com/DrSmithFr/web-ide/pod/plugins/confine"
-	"github.com/DrSmithFr/web-ide/pod/plugins/install"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/plugins"
+	"antennae.space/ide/pod/plugins/confine"
+	"antennae.space/ide/pod/plugins/install"
+	"antennae.space/ide/pod/runtime"
 )
 
 // The external plugins of the pod (docs/design/plugins.md, *Phase 3*): resolved from their git

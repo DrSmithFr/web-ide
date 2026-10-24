@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/tunnel"
+	"antennae.space/ide/lib/tunnel"
 )
 
 // pipeMsg is a whole-message channel over one end of a net.Pipe: what the other end serves.

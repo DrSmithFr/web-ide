@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
+	"antennae.space/ide/lib/identity"
 )
 
 // TestMagicPacket: six 0xFF then sixteen times the MAC, 102 bytes.

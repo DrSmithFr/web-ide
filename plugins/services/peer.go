@@ -9,8 +9,8 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/lib/tunnel"
+	"antennae.space/ide/lib/identity"
+	"antennae.space/ide/lib/tunnel"
 )
 
 // Handler serves the requests of the other pods (Host.HandlePeer: the core let only a pod of

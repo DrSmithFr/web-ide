@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"net/url"
 
-	"github.com/DrSmithFr/web-ide/pod/projects"
+	"antennae.space/ide/pod/projects"
 )
 
 // MCPTool is a tool a plugin offers to the MCP clients only (Claude Code, the ACP agents),

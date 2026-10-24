@@ -10,8 +10,8 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/execx"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/execx"
 )
 
 // querier runs one statement. Local SQLite uses database/sql, a file on an SSH host

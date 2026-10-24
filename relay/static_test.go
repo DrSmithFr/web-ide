@@ -156,3 +156,31 @@ func TestPodLink(t *testing.T) {
 		t.Fatalf("%d %q", r.StatusCode, loc)
 	}
 }
+
+// TestGoImport: `go get antennae.space/ide/...` finds the repository, a browser goes to it.
+func TestGoImport(t *testing.T) {
+	st, _ := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
+	t.Cleanup(func() { st.Close() })
+	ts := httptest.NewServer(New(st, nil).Handler())
+	t.Cleanup(ts.Close)
+	for _, p := range []string{"/ide?go-get=1", "/ide/lib/i18n?go-get=1"} {
+		r, err := http.Get(ts.URL + p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(r.Body)
+		r.Body.Close()
+		if !strings.Contains(string(b), `<meta name="go-import" content="antennae.space/ide git https://github.com/antennae-space/web-ide">`) {
+			t.Fatalf("%s: %s", p, b)
+		}
+	}
+	c := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	r, err := c.Get(ts.URL + "/ide")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Body.Close()
+	if r.StatusCode != http.StatusFound || r.Header.Get("Location") != "https://github.com/antennae-space/web-ide" {
+		t.Fatalf("a browser: %d %q", r.StatusCode, r.Header.Get("Location"))
+	}
+}

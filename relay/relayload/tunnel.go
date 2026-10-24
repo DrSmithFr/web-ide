@@ -12,7 +12,7 @@ import (
 
 	"github.com/pion/webrtc/v4"
 
-	"github.com/DrSmithFr/web-ide/lib/tunnel"
+	"antennae.space/ide/lib/tunnel"
 )
 
 // The tunnel tier is the one that costs the relay: each session is a real WebRTC connection

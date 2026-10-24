@@ -2,12 +2,12 @@ package kanban
 
 import (
 	"context"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	kb "github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
-	"github.com/DrSmithFr/web-ide/pod/projects"
+	"antennae.space/ide/lib/i18n"
+	kb "antennae.space/ide/plugins/kanban/kanban"
+	"antennae.space/ide/pod/plugins"
+	"antennae.space/ide/pod/projects"
 )
 
 // Lineages and dependencies on the git side (docs/design/kanban.md): a dependency resolves once

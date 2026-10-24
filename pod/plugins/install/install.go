@@ -20,9 +20,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/plugins"
+	"antennae.space/ide/pod/store"
 )
 
 // The release archive of a version (a .tar.gz per architecture, its address in the manifest's

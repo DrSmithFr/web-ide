@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"sort"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"antennae.space/ide/lib/i18n"
 )
 
 // Lineages and dependencies (docs/design/kanban.md). The children of a ticket form its lineage:

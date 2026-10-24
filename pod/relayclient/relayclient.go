@@ -27,12 +27,12 @@ import (
 	"github.com/coder/websocket"
 	"github.com/pion/webrtc/v4"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/lib/tunnel"
-	"github.com/DrSmithFr/web-ide/pod/server"
-	"github.com/DrSmithFr/web-ide/pod/settingsync"
-	"github.com/DrSmithFr/web-ide/pod/update"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/lib/identity"
+	"antennae.space/ide/lib/tunnel"
+	"antennae.space/ide/pod/server"
+	"antennae.space/ide/pod/settingsync"
+	"antennae.space/ide/pod/update"
 )
 
 // sigMsg is one signaling message between the relay and the pod (mirrored by the relay).

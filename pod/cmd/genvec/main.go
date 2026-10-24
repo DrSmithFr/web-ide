@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
+	"antennae.space/ide/lib/identity"
 )
 
 type vectors struct {

@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/plugins/previews/internal/preview"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/caps"
-	"github.com/DrSmithFr/web-ide/pod/commands"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/plugins/previews/internal/preview"
+	"antennae.space/ide/pod/assistant"
+	"antennae.space/ide/pod/caps"
+	"antennae.space/ide/pod/commands"
+	"antennae.space/ide/pod/plugins"
+	"antennae.space/ide/pod/runtime"
 )
 
 // previewsCap is the previews capability (caps.Previews) the plugin provides.

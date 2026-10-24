@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/pod/fsx"
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/pod/fsx"
+	"antennae.space/ide/pod/store"
 )
 
 func newManager(t *testing.T, url, kind string) (*Manager, string) {

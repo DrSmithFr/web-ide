@@ -5,9 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/lib/identity"
+	"antennae.space/ide/pod/store"
 )
 
 // Sync is the loop of one kind for one pod. It keeps three states: the base (the last state the

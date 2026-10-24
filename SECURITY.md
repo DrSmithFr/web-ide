@@ -14,4 +14,4 @@ The pod runs with the rights of the user who starts it: it reads and writes file
 
 ## Reporting a vulnerability
 
-Please report vulnerabilities privately through [GitHub security advisories](https://github.com/DrSmithFr/web-ide/security/advisories/new) rather than in a public issue. Include the version (`web-ide-pod -version`), the steps to reproduce and the impact. You should get an answer within a week.
+Please report vulnerabilities privately through [GitHub security advisories](https://github.com/antennae-space/web-ide/security/advisories/new) rather than in a public issue. Include the version (`web-ide-pod -version`), the steps to reproduce and the impact. You should get an answer within a week.

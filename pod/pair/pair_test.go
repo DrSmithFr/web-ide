@@ -18,8 +18,8 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/relay"
+	"antennae.space/ide/lib/identity"
+	"antennae.space/ide/relay"
 )
 
 // The phrase of the shared vectors, so the ids checked here are the ones of vectors.json.

@@ -6,11 +6,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/pod/runtime"
 
-	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
-	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"antennae.space/ide/plugins/ai/engine"
+	"antennae.space/ide/plugins/ai/llm"
+	"antennae.space/ide/pod/assistant"
 )
 
 // With a keeper, the conversations running when the pod stops are taken back when it starts:

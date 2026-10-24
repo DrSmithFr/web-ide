@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/desks"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/desks"
 )
 
 // Desks of a project (docs/design/desks.md): each desk has a state of its own; a window shows one

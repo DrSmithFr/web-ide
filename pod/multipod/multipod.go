@@ -11,11 +11,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/pod/lan"
-	"github.com/DrSmithFr/web-ide/pod/power"
-	"github.com/DrSmithFr/web-ide/pod/relayclient"
-	"github.com/DrSmithFr/web-ide/pod/settingsync"
+	"antennae.space/ide/lib/identity"
+	"antennae.space/ide/pod/lan"
+	"antennae.space/ide/pod/power"
+	"antennae.space/ide/pod/relayclient"
+	"antennae.space/ide/pod/settingsync"
 )
 
 // LAN is the LAN link of the pod, seen from the directory: the pods it reached on the local

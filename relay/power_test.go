@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
+	"antennae.space/ide/lib/identity"
 )
 
 // TestPowerCarried: a shutdown is carried to the pod it names with a hop id of the relay, and the

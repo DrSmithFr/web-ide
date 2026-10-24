@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
+	"antennae.space/ide/lib/identity"
 )
 
 // pipe is an in-memory whole-message MsgConn for both ends of a tunnel.

@@ -3,7 +3,7 @@ package commands
 import (
 	"path"
 
-	"github.com/DrSmithFr/web-ide/pod/console"
+	"antennae.space/ide/pod/console"
 )
 
 // Run is what running a saved command did: Running, the console of the command still running

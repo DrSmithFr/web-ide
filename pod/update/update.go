@@ -15,8 +15,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/lib/identity"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/lib/identity"
 )
 
 // What the pod answers to the one that carried the request. The page shows the command for

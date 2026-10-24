@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
+	"antennae.space/ide/lib/identity"
 )
 
 // A pod with no link to the relay publishes through a peer of its cluster: the peer puts the record on

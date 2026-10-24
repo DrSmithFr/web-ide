@@ -1,7 +1,7 @@
 package install
 
 import (
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/pod/store"
 )
 
 // LockFile is the lock of the external plugins of the pod, in its data folder: per pod, not

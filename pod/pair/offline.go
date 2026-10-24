@@ -10,8 +10,8 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/pod/lan"
+	"antennae.space/ide/lib/identity"
+	"antennae.space/ide/pod/lan"
 )
 
 // The commands that need no admin device: the phrase typed is the authority. It signs, then

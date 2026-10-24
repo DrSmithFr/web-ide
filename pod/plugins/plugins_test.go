@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/pod/fsx"
+	"antennae.space/ide/pod/fsx"
 )
 
 type fake struct{ m Manifest }

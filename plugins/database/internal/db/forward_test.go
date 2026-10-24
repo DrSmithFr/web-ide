@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/pod/sshtest"
-	"github.com/DrSmithFr/web-ide/pod/sshx"
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/pod/sshtest"
+	"antennae.space/ide/pod/sshx"
+	"antennae.space/ide/pod/store"
 )
 
 // The database connection goes through the SSH host: the pod opens the port forward, then dials the

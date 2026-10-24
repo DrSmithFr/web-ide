@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/lib/identity"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/lib/identity"
 )
 
 // Pods is the view of the other pods of the account (pod/multipod): the home page shows

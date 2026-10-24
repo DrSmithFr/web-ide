@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/pod/keeper"
-	"github.com/DrSmithFr/web-ide/pod/projects"
-	"github.com/DrSmithFr/web-ide/pod/sshtest"
-	"github.com/DrSmithFr/web-ide/pod/sshx"
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/pod/keeper"
+	"antennae.space/ide/pod/projects"
+	"antennae.space/ide/pod/sshtest"
+	"antennae.space/ide/pod/sshx"
+	"antennae.space/ide/pod/store"
 )
 
 // An SSH terminal runs in the keeper on its own connection: it survives the pod, whose next

@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
-	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"antennae.space/ide/plugins/ai/engine"
+	"antennae.space/ide/plugins/ai/llm"
+	"antennae.space/ide/pod/assistant"
 )
 
 // isChild tells a request of a sub-agent (its system prompt) from one of its parent.

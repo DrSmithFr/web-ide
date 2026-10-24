@@ -6,14 +6,14 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/plugins/ai/acp"
-	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
-	kb "github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
-	"github.com/DrSmithFr/web-ide/pod/caps"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
-	"github.com/DrSmithFr/web-ide/pod/projects"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/plugins/ai/acp"
+	"antennae.space/ide/plugins/ai/engine"
+	kb "antennae.space/ide/plugins/kanban/kanban"
+	"antennae.space/ide/pod/caps"
+	"antennae.space/ide/pod/plugins"
+	"antennae.space/ide/pod/projects"
+	"antennae.space/ide/pod/runtime"
 )
 
 // The sessions of the Agents tool of a project are a part of its runtime (pod/runtime parts):

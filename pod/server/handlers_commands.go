@@ -1,9 +1,9 @@
 package server
 
 import (
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/commands"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/commands"
+	"antennae.space/ide/pod/runtime"
 )
 
 // Saved commands of a project (package commands): kept in the .ide of the main project,

@@ -5,15 +5,15 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"github.com/DrSmithFr/web-ide/pod/idedir"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
+	"antennae.space/ide/pod/idedir"
 	_ "modernc.org/sqlite"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"antennae.space/ide/lib/i18n"
 )
 
 // Conversations are kept in a SQLite base: <project>/.ide/chats.db for a local project

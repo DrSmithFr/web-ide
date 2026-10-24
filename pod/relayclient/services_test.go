@@ -16,8 +16,8 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/lib/tunnel"
+	"antennae.space/ide/lib/identity"
+	"antennae.space/ide/lib/tunnel"
 )
 
 // TestServicesPodToPod: a service bravo shares is reached by alpha pod to pod through the relay,

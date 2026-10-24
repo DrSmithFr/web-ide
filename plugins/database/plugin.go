@@ -9,9 +9,9 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/plugins/database/internal/db"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/plugins/database/internal/db"
+	"antennae.space/ide/pod/plugins"
 )
 
 //go:embed plugin.json

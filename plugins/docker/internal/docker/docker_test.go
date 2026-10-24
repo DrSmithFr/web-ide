@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/pod/execx"
+	"antennae.space/ide/pod/execx"
 )
 
 // fake answers commands by their joined argv.

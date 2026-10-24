@@ -3,7 +3,7 @@ package llm
 import (
 	"os"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"antennae.space/ide/lib/i18n"
 )
 
 // The messages of the package are in the catalog of the AI plugin, added by its package in a pod.

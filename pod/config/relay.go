@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/pod/store"
 )
 
 // RelayIDs is the identity of the pod with its relay: an id and a secret, generated on

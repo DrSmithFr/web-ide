@@ -3,8 +3,8 @@ package settingsync
 import (
 	"encoding/json"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/pod/settings"
+	"antennae.space/ide/lib/identity"
+	"antennae.space/ide/pod/settings"
 )
 
 // Flags reads the sync switches from the settings document (the "sync" object): settings sync is on

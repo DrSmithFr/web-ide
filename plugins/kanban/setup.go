@@ -5,9 +5,9 @@ import (
 	"strings"
 	"sync"
 
-	kb "github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
-	"github.com/DrSmithFr/web-ide/pod/commands"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	kb "antennae.space/ide/plugins/kanban/kanban"
+	"antennae.space/ide/pod/commands"
+	"antennae.space/ide/pod/runtime"
 )
 
 // migrateMu keeps two loads from moving the setup command of the kanban twice.

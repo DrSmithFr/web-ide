@@ -3,9 +3,9 @@ package settingsync
 import (
 	"encoding/json"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/pod/settings"
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/lib/identity"
+	"antennae.space/ide/pod/settings"
+	"antennae.space/ide/pod/store"
 )
 
 // Source is one kind of data a pod syncs: how to read its content and how to apply a merged one.

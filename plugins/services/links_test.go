@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/tunnel"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/lib/tunnel"
+	"antennae.space/ide/pod/plugins"
+	"antennae.space/ide/pod/store"
 )
 
 // fakePeers reaches one sharing pod (bravo, a real server of its routes) as alpha, or nothing

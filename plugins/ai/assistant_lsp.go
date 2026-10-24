@@ -9,11 +9,11 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/DrSmithFr/web-ide/pod/caps"
+	"antennae.space/ide/pod/caps"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/assistant"
+	"antennae.space/ide/pod/runtime"
 )
 
 // Language server tools of the assistant. A file is opened in its server for the request (the pod

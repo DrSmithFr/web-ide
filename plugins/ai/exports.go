@@ -1,10 +1,10 @@
 package ai
 
 import (
-	"github.com/DrSmithFr/web-ide/plugins/ai/acp"
-	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/plugins/ai/acp"
+	"antennae.space/ide/plugins/ai/engine"
+	"antennae.space/ide/pod/assistant"
+	"antennae.space/ide/pod/runtime"
 )
 
 // What the tests of the pod ask of the conversations of the assistant: whether one runs, where

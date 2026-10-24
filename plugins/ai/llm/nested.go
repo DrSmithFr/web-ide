@@ -4,7 +4,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/pod/fsx"
+	"antennae.space/ide/pod/fsx"
 )
 
 // Instructions of the folders the assistant works in: like Claude Code, it reads the

@@ -5,7 +5,6 @@ package kanban
 
 import (
 	"database/sql"
-	"github.com/DrSmithFr/web-ide/pod/idedir"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -13,11 +12,12 @@ import (
 	"sync"
 	"time"
 
+	"antennae.space/ide/pod/idedir"
 	_ "modernc.org/sqlite"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/projects"
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/projects"
+	"antennae.space/ide/pod/store"
 )
 
 // Statuses of a ticket.

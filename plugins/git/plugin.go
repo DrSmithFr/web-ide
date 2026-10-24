@@ -8,7 +8,7 @@ import (
 	_ "embed"
 	"encoding/json"
 
-	"github.com/DrSmithFr/web-ide/pod/plugins"
+	"antennae.space/ide/pod/plugins"
 )
 
 //go:embed plugin.json

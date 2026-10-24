@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"antennae.space/ide/lib/i18n"
 )
 
 // Errors of a certificate check. The handshake maps them to the codes sent to the browser.

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/relay/relayload"
+	"antennae.space/ide/relay/relayload"
 )
 
 func main() {

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/pod/push"
+	"antennae.space/ide/lib/identity"
+	"antennae.space/ide/pod/push"
 )
 
 type sentPush struct {

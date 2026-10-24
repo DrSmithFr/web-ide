@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"antennae.space/ide/plugins/ai/engine"
+	"antennae.space/ide/pod/assistant"
 )
 
 func TestBoardDrawChecks(t *testing.T) {

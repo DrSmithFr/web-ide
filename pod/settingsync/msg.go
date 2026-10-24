@@ -1,7 +1,7 @@
 package settingsync
 
 import (
-	"github.com/DrSmithFr/web-ide/lib/identity"
+	"antennae.space/ide/lib/identity"
 )
 
 // Msg is one sync message between a pod and the relay: the published X25519 key of the device, the

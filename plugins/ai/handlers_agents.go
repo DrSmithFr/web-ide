@@ -5,9 +5,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/plugins/ai/acp"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/plugins/ai/acp"
+	"antennae.space/ide/pod/runtime"
 )
 
 // Agents tool: sessions of CLI agents through ACP (package acp), one per tab.

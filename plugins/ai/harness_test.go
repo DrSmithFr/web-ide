@@ -8,14 +8,14 @@ import (
 	"testing"
 	"time"
 
-	kbp "github.com/DrSmithFr/web-ide/plugins/kanban"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
-	"github.com/DrSmithFr/web-ide/pod/commands"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
-	"github.com/DrSmithFr/web-ide/pod/projects"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
-	"github.com/DrSmithFr/web-ide/pod/settingsync"
-	"github.com/DrSmithFr/web-ide/pod/store"
+	kbp "antennae.space/ide/plugins/kanban"
+	"antennae.space/ide/pod/assistant"
+	"antennae.space/ide/pod/commands"
+	"antennae.space/ide/pod/plugins"
+	"antennae.space/ide/pod/projects"
+	"antennae.space/ide/pod/runtime"
+	"antennae.space/ide/pod/settingsync"
+	"antennae.space/ide/pod/store"
 )
 
 // The unit tests of the plugin run on a pod of their own: real stores, no window, the Kanban

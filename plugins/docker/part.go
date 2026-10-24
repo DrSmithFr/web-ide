@@ -1,8 +1,8 @@
 package docker
 
 import (
-	dk "github.com/DrSmithFr/web-ide/plugins/docker/internal/docker"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	dk "antennae.space/ide/plugins/docker/internal/docker"
+	"antennae.space/ide/pod/runtime"
 )
 
 // dockerOf is the docker command of the project of rt, a part of its runtime made on first use.

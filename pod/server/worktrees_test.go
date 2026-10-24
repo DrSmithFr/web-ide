@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
+	"antennae.space/ide/plugins/ai/engine"
 )
 
 func TestWorktrees(t *testing.T) {

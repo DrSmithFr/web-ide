@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/pod/settings"
-	"github.com/DrSmithFr/web-ide/pod/store"
-	"github.com/DrSmithFr/web-ide/relay"
+	"antennae.space/ide/lib/identity"
+	"antennae.space/ide/pod/settings"
+	"antennae.space/ide/pod/store"
+	"antennae.space/ide/relay"
 )
 
 // The loop tested against the real relay store: two pods of one account, and an admin that wraps

@@ -7,7 +7,7 @@ package engine
 import (
 	"encoding/json"
 
-	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"antennae.space/ide/pod/assistant"
 )
 
 // Mode of a conversation: Build (default) acts, Plan explores and proposes, Briefing

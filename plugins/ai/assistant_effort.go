@@ -3,8 +3,8 @@ package ai
 import (
 	"encoding/json"
 
-	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"antennae.space/ide/plugins/ai/engine"
+	"antennae.space/ide/pod/assistant"
 )
 
 // Reasoning effort of an answer. Fixed by the user, or dynamic: the answer to a message of the

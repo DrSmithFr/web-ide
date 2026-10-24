@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"antennae.space/ide/lib/i18n"
 )
 
 // PodIdentity is the identity of a pod in its data folder: its own device key (device.key,

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
+	"antennae.space/ide/plugins/ai/llm"
 )
 
 func TestOrchestrator(t *testing.T) {

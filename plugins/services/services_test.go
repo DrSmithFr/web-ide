@@ -15,8 +15,8 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/lib/identity"
+	"antennae.space/ide/pod/store"
 )
 
 func newManager(t *testing.T) (*Manager, *store.Store, *int) {

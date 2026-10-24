@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/execx"
-	"github.com/DrSmithFr/web-ide/pod/git"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/execx"
+	"antennae.space/ide/pod/git"
 )
 
 // Git runs the git operations of the tickets in the main folder of a project (locally or

@@ -3,7 +3,7 @@ package relay
 import (
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
+	"antennae.space/ide/lib/identity"
 )
 
 // carryPower routes a power request between two pods of one account, as an update request: to the

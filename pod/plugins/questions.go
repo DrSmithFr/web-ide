@@ -3,7 +3,7 @@ package plugins
 import (
 	"encoding/json"
 
-	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"antennae.space/ide/pod/assistant"
 )
 
 // Question is a question waiting for the user, as the Questions tool shows it.

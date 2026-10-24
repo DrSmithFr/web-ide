@@ -19,9 +19,9 @@ import (
 
 	"github.com/pion/webrtc/v4"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/lib/tunnel"
-	"github.com/DrSmithFr/web-ide/pod/lan"
+	"antennae.space/ide/lib/identity"
+	"antennae.space/ide/lib/tunnel"
+	"antennae.space/ide/pod/lan"
 )
 
 // gateway is a gateway pod with a relay link, and a pod of its cluster with none: the two are

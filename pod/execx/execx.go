@@ -12,7 +12,7 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/DrSmithFr/web-ide/pod/paste"
+	"antennae.space/ide/pod/paste"
 	"github.com/creack/pty"
 	"golang.org/x/crypto/ssh"
 )

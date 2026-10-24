@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/plugins"
 )
 
 // Resolution like Composer: the tags of the repository of a plugin (vX.Y.Z), the highest one

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
+	"antennae.space/ide/lib/identity"
 )
 
 // pod makes a paired pod identity in a folder of its own, and the browser device of the same

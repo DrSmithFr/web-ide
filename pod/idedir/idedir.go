@@ -6,7 +6,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/pod/fsx"
+	"antennae.space/ide/pod/fsx"
 )
 
 // Gitignore is the .ide/.gitignore the IDE writes.

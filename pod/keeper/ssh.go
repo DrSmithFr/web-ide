@@ -9,7 +9,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"github.com/DrSmithFr/web-ide/pod/sshx"
+	"antennae.space/ide/pod/sshx"
 )
 
 // The keeper opens its own SSH connections, so that the terminals and commands of an SSH

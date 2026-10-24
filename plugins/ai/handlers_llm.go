@@ -7,13 +7,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/plugins/ai/engine"
-	"github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
+	"antennae.space/ide/plugins/ai/engine"
+	"antennae.space/ide/plugins/kanban/kanban"
 
-	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
-	"github.com/DrSmithFr/web-ide/pod/fsx"
-	"github.com/DrSmithFr/web-ide/pod/idedir"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/plugins/ai/llm"
+	"antennae.space/ide/pod/fsx"
+	"antennae.space/ide/pod/idedir"
+	"antennae.space/ide/pod/runtime"
 )
 
 func (s *A) registerLLM() {

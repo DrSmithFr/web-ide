@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/lib/identity"
-	"github.com/DrSmithFr/web-ide/lib/tunnel"
+	"antennae.space/ide/lib/identity"
+	"antennae.space/ide/lib/tunnel"
 )
 
 // fakePods records the power requests the handler passes on, and signs as a pod would.

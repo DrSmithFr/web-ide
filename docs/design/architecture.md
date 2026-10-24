@@ -66,7 +66,7 @@ The keeper also relays HTTP requests (`keeper/http.go`): the completions of the 
 | [`pod/`](../../pod/README.md) | The pod: `main.go` (flags, wiring, subcommands), its [packages](../../pod/packages.md) one folder each, `webdist/` (embedded front end), `docsdist/` (embedded docs) |
 | [`relay/`](../../relay/README.md) | The relay, run by the same binary (`web-ide-pod relay`): its package, `relayload/`, the bootstrap page (`web/`) |
 | [`lib/`](../../lib/README.md) | The Go code the pod and the relay share: `identity`, `tunnel`, `i18n` |
-| `go.mod` | One Go module for `pod/`, `relay/` and `lib/` (`github.com/DrSmithFr/web-ide`) |
+| `go.mod` | One Go module for `pod/`, `relay/` and `lib/` (`antennae.space/ide`, its go-import tag served by the relay) |
 | [`web/`](../../web/README.md) | The front end (SolidJS + TypeScript, Vite), [`src/`](../../web/src/README.md): the shell of the page and the plugin API |
 | [`plugins/`](../../plugins/README.md) | The built-in plugins, one folder each: `plugin.json`, its Go package, `web/` (its page module), `e2e/` (its suites), `README.md` |
 | `package.json` | npm workspaces (`web`): one `node_modules` at the root, so the page and `plugins/*/web` share `solid-js` |

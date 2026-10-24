@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"antennae.space/ide/lib/i18n"
 )
 
 // Teams (#88): a monthly sponsorship of $50 or more is the Team tier, $5 a seat (floor(amount /

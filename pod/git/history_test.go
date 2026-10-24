@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/pod/execx"
+	"antennae.space/ide/pod/execx"
 )
 
 func TestHistory(t *testing.T) {

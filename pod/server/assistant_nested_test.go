@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
+	"antennae.space/ide/plugins/ai/llm"
 )
 
 // The AGENTS.md of a folder reaches the model with the first read there, once, and comes

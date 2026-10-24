@@ -1,8 +1,8 @@
 package database
 
 import (
-	"github.com/DrSmithFr/web-ide/plugins/database/internal/db"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/plugins/database/internal/db"
+	"antennae.space/ide/pod/runtime"
 )
 
 // conns is the part of a runtime holding its database connections: they close with the project.

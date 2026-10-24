@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/pod/store"
+	"antennae.space/ide/pod/store"
 )
 
 func load(t *testing.T, body string) (*Config, *store.Store) {

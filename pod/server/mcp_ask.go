@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/assistant"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/assistant"
 )
 
 // ask_user of the MCP endpoint: a CLI agent asks the user questions of the assistant's types;

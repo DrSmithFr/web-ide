@@ -2,7 +2,7 @@
 
 Write an external plugin in its own repository: views that run in the IDE, a backend if it needs one, published as tagged releases that the IDE installs, checks and confines.
 
-An external plugin is untrusted by design ([plugins.md](../design/plugins.md#phase-3-external-plugins)): its views run in a sandboxed frame without network, its backend under Landlock and seccomp, and both reach the IDE only through what the user granted. Start from the example, [web-ide-plugin-greet](https://github.com/DrSmithFr/web-ide-plugin-greet): fork it, rename it, change it.
+An external plugin is untrusted by design ([plugins.md](../design/plugins.md#phase-3-external-plugins)): its views run in a sandboxed frame without network, its backend under Landlock and seccomp, and both reach the IDE only through what the user granted. Start from the example, [plugin-greet](https://github.com/antennae-space/plugin-greet): fork it, rename it, change it.
 
 ## The repository
 
@@ -26,7 +26,7 @@ A release carries one archive per architecture, `<id>-linux-amd64.tar.gz` and `<
   "apiVersion": 1,
   "ide": ">=1.23.0 <2",
   "plugins": { "git": "^1" },
-  "assets": "https://github.com/you/web-ide-plugin-greet/releases/download/v{version}/greet-{arch}.tar.gz",
+  "assets": "https://github.com/you/plugin-greet/releases/download/v{version}/greet-{arch}.tar.gz",
   "backend": "bin/greet",
   "permissions": ["files:read", "core:fs.list"],
   "contributes": {

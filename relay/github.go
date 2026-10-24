@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"antennae.space/ide/lib/i18n"
 )
 
 // The GitHub link of milestone 5: an account links a GitHub login, and the relay checks that

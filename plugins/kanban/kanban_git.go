@@ -3,17 +3,17 @@ package kanban
 import (
 	"context"
 	"encoding/json"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	kb "github.com/DrSmithFr/web-ide/plugins/kanban/kanban"
-	"github.com/DrSmithFr/web-ide/pod/commands"
-	"github.com/DrSmithFr/web-ide/pod/execx"
-	"github.com/DrSmithFr/web-ide/pod/projects"
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/lib/i18n"
+	kb "antennae.space/ide/plugins/kanban/kanban"
+	"antennae.space/ide/pod/commands"
+	"antennae.space/ide/pod/execx"
+	"antennae.space/ide/pod/plugins"
+	"antennae.space/ide/pod/projects"
+	"antennae.space/ide/pod/runtime"
 )
 
 // Git side of the tickets: worktree and branch of a ticket, its changes, and the end of

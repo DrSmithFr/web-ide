@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/pod/execx"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
+	"antennae.space/ide/pod/execx"
+	"antennae.space/ide/pod/plugins"
 )
 
 // Lines of a log stream go to the window in batches (every 100 ms or 500 lines).

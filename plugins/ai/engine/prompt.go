@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/plugins/ai/llm"
+	"antennae.space/ide/plugins/ai/llm"
 )
 
 // DefaultTemplates are the templates of the modes when the user wrote none.

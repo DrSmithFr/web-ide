@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"antennae.space/ide/lib/i18n"
 )
 
 // A job is a completion that runs in the pod independently of the page that asked for it:

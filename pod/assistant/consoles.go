@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DrSmithFr/web-ide/pod/runtime"
+	"antennae.space/ide/pod/runtime"
 )
 
 // ListConsoles lists the consoles of the project of rt.

@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
+	"antennae.space/ide/lib/i18n"
 )
 
 // RulePath is the polkit rule `web-ide-pod allow-shutdown` writes: the pod runs as the user, and

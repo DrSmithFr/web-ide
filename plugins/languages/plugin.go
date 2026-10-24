@@ -10,8 +10,8 @@ import (
 	_ "embed"
 	"encoding/json"
 
-	"github.com/DrSmithFr/web-ide/plugins/languages/internal/lsp"
-	"github.com/DrSmithFr/web-ide/pod/plugins"
+	"antennae.space/ide/plugins/languages/internal/lsp"
+	"antennae.space/ide/pod/plugins"
 )
 
 //go:embed plugin.json

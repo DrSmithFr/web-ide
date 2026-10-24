@@ -9,10 +9,10 @@ import (
 	"path"
 	"strings"
 
-	"github.com/DrSmithFr/web-ide/lib/i18n"
-	"github.com/DrSmithFr/web-ide/pod/execx"
-	"github.com/DrSmithFr/web-ide/pod/fsx"
-	"github.com/DrSmithFr/web-ide/pod/idedir"
+	"antennae.space/ide/lib/i18n"
+	"antennae.space/ide/pod/execx"
+	"antennae.space/ide/pod/fsx"
+	"antennae.space/ide/pod/idedir"
 )
 
 // Flags say what a command is for; the IDE relies on some of them (setup, serve).

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/DrSmithFr/web-ide/lib/tunnel"
+	"antennae.space/ide/lib/tunnel"
 )
 
 // msgChannel is one end of an in-memory whole-message transport: a Read returns one

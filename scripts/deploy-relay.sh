@@ -22,7 +22,7 @@
 # it again changes nothing.
 set -eu
 
-REPO=DrSmithFr/web-ide
+REPO=antennae-space/web-ide
 HOST=${RELAY_HOST:-john@5.196.7.104}
 UNIT=${RELAY_UNIT:-antennae-relay}
 URL=${RELAY_URL:-https://antennae.space}
